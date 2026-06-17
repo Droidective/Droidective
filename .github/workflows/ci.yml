@@ -46,9 +46,11 @@ jobs:
           xcodegen generate
           xcodebuild -project Droidective.xcodeproj -scheme App -configuration Release -derivedDataPath DerivedData build CODE_SIGNING_ALLOWED=NO
           ./scripts/package-dmg.sh "${GITHUB_REF_NAME}"
+      - name: Extract notes for this release
+        run: awk '/^## /{c++} c==1{print} c==2{exit}' RELEASE_NOTES.md > release-body.md
       - name: Publish release with build
         uses: softprops/action-gh-release@c062e08bd532815e2082a85e87e3ef29c3e6d191  # v2.0.8
         with:
           files: DerivedData/Build/Products/Release/Droidective-*.dmg
-          body_path: RELEASE_NOTES.md
+          body_path: release-body.md
           fail_on_unmatched_files: true
