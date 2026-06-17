@@ -107,6 +107,34 @@ import Testing
         #expect(result.message.contains("ADBKeyboard"))
     }
 
+    @Test func networkTogglesReportsSuccessWhenAllCommandsSucceed() async {
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["-s"], stdout: "")
+        let engine = await makeEngine(runner)
+
+        let result = await engine.run(
+            featureID: "network-toggles", serial: "S1",
+            params: ["wifi": .bool(false), "data": .bool(true), "airplane": .bool(false)]
+        )
+        #expect(result.ok)
+        #expect(result.message.contains("Wi-Fi off"))
+    }
+
+    @Test func networkTogglesReportsFailureInsteadOfFalseSuccess() async {
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["-s"], stdout: "")
+        // `svc data disable` is rejected on this ROM.
+        runner.script(argsPrefix: ["-s", "S1", "shell", "svc", "data"], stderr: "Permission denial", exitCode: 1)
+        let engine = await makeEngine(runner)
+
+        let result = await engine.run(
+            featureID: "network-toggles", serial: "S1",
+            params: ["wifi": .bool(true), "data": .bool(false), "airplane": .bool(false)]
+        )
+        #expect(!result.ok)
+        #expect(result.message.contains("data"))
+    }
+
     @Test func unimplementedFeatureReportsPlaceholder() async {
         let runner = MockProcessRunner()
         let engine = await makeEngine(runner)
@@ -118,17 +146,18 @@ import Testing
 }
 
 @Suite struct FeatureRegistryTests {
-    @Test func hasAll37Features() {
-        #expect(FeatureRegistry.all.count == 37)
-        #expect(FeatureRegistry.byID.count == 37)
+    @Test func hasAll39Features() {
+        #expect(FeatureRegistry.all.count == 39)
+        #expect(FeatureRegistry.byID.count == 39)
     }
 
-    @Test func exactly14DefaultEnabled() {
-        #expect(FeatureRegistry.defaultEnabledIDs.count == 14)
+    @Test func exactly16DefaultEnabled() {
+        #expect(FeatureRegistry.defaultEnabledIDs.count == 16)
         let expected: Set<String> = [
             "send-text", "get-ip", "reverse-port", "disconnect",
             "open-dev-menu", "reload-js", "deep-link", "scrcpy", "screenshot",
             "app-management", "logcat", "file-explorer", "apps", "emulators",
+            "performance", "network-speed",
         ]
         #expect(Set(FeatureRegistry.defaultEnabledIDs) == expected)
     }
@@ -136,6 +165,23 @@ import Testing
     @Test func everyFeatureHasAHowToNote() {
         for feature in FeatureRegistry.all {
             #expect(FeatureRegistry.howTo(for: feature.id) != nil, "missing howTo for \(feature.id)")
+        }
+    }
+
+    @Test func everyFeatureHasACommandReference() {
+        for feature in FeatureRegistry.all {
+            #expect(!FeatureRegistry.commands(for: feature.id).isEmpty, "missing commands for \(feature.id)")
+        }
+    }
+
+    @Test func commandReferenceLeadsWithTheTool() {
+        for feature in FeatureRegistry.all {
+            for command in FeatureRegistry.commands(for: feature.id) {
+                let leadsWithTool = ["adb ", "scrcpy ", "emulator ", "ffmpeg "].contains {
+                    command.command.hasPrefix($0)
+                }
+                #expect(leadsWithTool, "\(feature.id): unexpected command \"\(command.command)\"")
+            }
         }
     }
 
