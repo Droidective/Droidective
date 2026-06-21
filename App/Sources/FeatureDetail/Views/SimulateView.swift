@@ -94,7 +94,9 @@ struct SimulateView: View {
                 HStack {
                     Button("Set") { run("http-proxy", ["proxy": .string(proxy.trimmingCharacters(in: .whitespaces))]) }
                         .disabled(proxy.trimmingCharacters(in: .whitespaces).isEmpty)
-                    Button("Clear") { state.resetOverride(.proxy) }
+                    // Clear via the feature (empty proxy → engine resets it) so it
+                    // lands in the command log like Set, instead of a silent reset.
+                    Button("Clear") { run("http-proxy", ["proxy": .string("")]) }
                 }
             }
         }

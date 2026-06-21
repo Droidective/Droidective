@@ -39,17 +39,17 @@ struct FormActionView: View {
             LastResultCard(featureID: feature.id)
         }
         .centeredCard()
-        .onAppear {
-            seedDefaults()
+        .onAppear { seedDefaults() }
+        .task(id: feature.id) {
             // Put the cursor in the first text-like field so the user can type
             // right away. The delay lets the field mount and the window become
-            // key first, mirroring the command palette's focus timing.
-            if let first = firstFocusableField {
-                Task { @MainActor in
-                    try? await Task.sleep(for: .milliseconds(120))
-                    focusedField = first
-                }
-            }
+            // key first, mirroring the command palette's focus timing; running
+            // it as a .task ties it to the view's life so a feature switch
+            // cancels it instead of focusing a torn-down field.
+            guard let first = firstFocusableField else { return }
+            try? await Task.sleep(for: .milliseconds(120))
+            guard !Task.isCancelled else { return }
+            focusedField = first
         }
         .task {
             presets = await state.env.stores.presets.load()
@@ -97,32 +97,31 @@ struct FormActionView: View {
         }
     }
 
-    /// A preset field: a text field with recent values tucked into a dropdown
-    /// chevron *inside* the field's trailing edge (combo-box style), so it reads
-    /// as one control instead of a floating arrow beside the field.
+    /// A preset field: a text field with a recent-values menu at its trailing
+    /// edge. The chevron sits just outside the field (not overlaid on it) so a
+    /// long typed value never renders underneath the chevron.
     @ViewBuilder
     private func presetField(for field: FieldDef) -> some View {
         let values = presetValues(for: field.presetKey ?? "")
-        TextField("", text: binding(for: field), prompt: field.placeholder.map(Text.init))
-            .textFieldStyle(.roundedBorder)
-            .focused($focusedField, equals: field.name)
-            .overlay(alignment: .trailing) {
-                if !values.isEmpty {
-                    Menu {
-                        ForEach(values, id: \.self) { value in
-                            Button(value) { textValues[field.name] = value }
-                        }
-                    } label: {
-                        Image(systemName: "chevron.down")
-                            .foregroundStyle(.textMuted)
+        HStack(spacing: 4) {
+            TextField("", text: binding(for: field), prompt: field.placeholder.map(Text.init))
+                .textFieldStyle(.roundedBorder)
+                .focused($focusedField, equals: field.name)
+            if !values.isEmpty {
+                Menu {
+                    ForEach(values, id: \.self) { value in
+                        Button(value) { textValues[field.name] = value }
                     }
-                    .menuStyle(.borderlessButton)
-                    .menuIndicator(.hidden)
-                    .fixedSize()
-                    .padding(.trailing, 5)
-                    .help("Recent values")
+                } label: {
+                    Image(systemName: "chevron.down")
+                        .foregroundStyle(.textMuted)
                 }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("Recent values")
             }
+        }
     }
 
     private func presetValues(for key: String) -> [String] {

@@ -153,7 +153,7 @@ public struct FieldDef: Sendable {
 
 public struct FeatureDef: Sendable, Identifiable {
     public let id: String
-    /// Spec feature number (1–37).
+    /// Spec feature number (registry order; 1–49, with gaps from removed features).
     public let num: Int
     public let title: String
     public let subtitle: String?
