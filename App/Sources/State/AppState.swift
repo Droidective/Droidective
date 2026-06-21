@@ -527,8 +527,9 @@ final class AppState {
         defer { isRunningFeature = false }
         Telemetry.shared.track("feature_used", ["feature": feature.id])
 
-        // Screenshot always asks where to save, whichever entry point ran it
-        // (sidebar ⏎, hotkey, menu bar, or the Screenshot view).
+        // A screenshot from a quick path (sidebar ⏎, global hotkey, menu bar)
+        // captures and saves straight to the capture folder; the Screenshot
+        // view instead opens the capture in the editor and saves on demand.
         if feature.id == "screenshot" {
             await runScreenshot()
             return

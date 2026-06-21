@@ -32,6 +32,7 @@ private enum SidebarRow: Identifiable {
 /// Where the drop guideline is drawn during a sidebar drag.
 private enum DropSlot: Equatable {
     case beforeRow(String)    // above a feature row (its id)
+    case afterRow(String)     // below a group's last feature row (its id) — end of group
     case topOfGroup(String)   // below a header (category raw) — group's first slot
     case beforeGroup(String)  // above a header (category raw) — group boundary
 }
@@ -43,24 +44,29 @@ private enum DropSlot: Equatable {
 private struct SidebarDrop: DropDelegate {
     let target: SidebarRow
     let dragID: String?
+    /// The target is the last feature row in its group — its lower half maps to
+    /// `.afterRow` (end of group), the one slot a top guideline can't reach.
+    let isLastFeature: Bool
+    /// Measured height of the target row (0 if not yet measured).
+    let rowHeight: CGFloat
     let setSlot: (DropSlot?) -> Void
     let perform: (DropSlot, String) -> Void
 
-    func validateDrop(info: DropInfo) -> Bool { slot() != nil }
-    func dropEntered(info: DropInfo) { setSlot(slot()) }
+    func validateDrop(info: DropInfo) -> Bool { slot(info) != nil }
+    func dropEntered(info: DropInfo) { setSlot(slot(info)) }
     func dropUpdated(info: DropInfo) -> DropProposal? {
-        let here = slot()
+        let here = slot(info)
         setSlot(here)
         return here == nil ? nil : DropProposal(operation: .move)
     }
     func dropExited(info: DropInfo) { setSlot(nil) }
     func performDrop(info: DropInfo) -> Bool {
-        guard let dragID, let slot = slot() else { return false }
+        guard let dragID, let slot = slot(info) else { return false }
         perform(slot, dragID)
         return true
     }
 
-    private func slot() -> DropSlot? {
+    private func slot(_ info: DropInfo) -> DropSlot? {
         guard let dragID else { return nil }
         let draggingGroup = dragID.hasPrefix("group:")
         switch target {
@@ -69,7 +75,11 @@ private struct SidebarDrop: DropDelegate {
             return featureCategory(dragID) == category ? .topOfGroup(category.rawValue) : nil
         case .feature(let feature):
             if draggingGroup { return .beforeGroup(feature.category.rawValue) }
-            return featureCategory(dragID) == feature.category ? .beforeRow(feature.id) : nil
+            guard featureCategory(dragID) == feature.category else { return nil }
+            if isLastFeature, rowHeight > 0, info.location.y > rowHeight / 2 {
+                return .afterRow(feature.id)
+            }
+            return .beforeRow(feature.id)
         }
     }
 
@@ -94,6 +104,8 @@ struct SidebarPaletteView: View {
     @State private var dragID: String?
     /// Where the insertion guideline shows during a drag.
     @State private var dropSlot: DropSlot?
+    /// Measured feature-row heights (id → height) for top/bottom drop halves.
+    @State private var rowHeights: [String: CGFloat] = [:]
     /// Whether this window is the active (key) one — the ⌘ flags monitor fires
     /// app-wide, so without this the ⌘1–9 hints appear even when Settings or
     /// another window holds focus.
@@ -324,7 +336,15 @@ struct SidebarPaletteView: View {
                 feature: feature, shortcutIndex: shortcutRank[feature.id],
                 dragProvider: { startDrag("feature:" + feature.id) }
             )
+            .background(
+                GeometryReader { geo in
+                    Color.clear.onChange(of: geo.size.height, initial: true) { _, height in
+                        rowHeights[feature.id] = height
+                    }
+                }
+            )
             .overlay(alignment: .top) { guideline(dropSlot == .beforeRow(feature.id)).offset(y: -6) }
+            .overlay(alignment: .bottom) { guideline(dropSlot == .afterRow(feature.id)).offset(y: 6) }
             .onDrop(of: [.text], delegate: dropDelegate(for: row))
         }
     }
@@ -358,9 +378,23 @@ struct SidebarPaletteView: View {
         SidebarDrop(
             target: row,
             dragID: dragID,
+            isLastFeature: isLastFeature(row),
+            rowHeight: rowHeight(for: row),
             setSlot: { dropSlot = $0 },
             perform: { slot, dragged in performSidebarDrop(slot, dragged) }
         )
+    }
+
+    /// Whether `row` is the last shown feature in its category (the only row
+    /// whose lower half offers an end-of-group drop).
+    private func isLastFeature(_ row: SidebarRow) -> Bool {
+        guard case let .feature(feature) = row else { return false }
+        return state.shownFeatures(in: feature.category).last?.id == feature.id
+    }
+
+    private func rowHeight(for row: SidebarRow) -> CGFloat {
+        guard case let .feature(feature) = row else { return 0 }
+        return rowHeights[feature.id] ?? 0
     }
 
     /// Apply a completed sidebar drop, then clear the drag state.
@@ -377,6 +411,7 @@ struct SidebarPaletteView: View {
         let toIndex: Int
         switch slot {
         case .beforeRow(let targetID): toIndex = group.firstIndex { $0.id == targetID } ?? group.count
+        case .afterRow(let targetID): toIndex = group.firstIndex { $0.id == targetID }.map { $0 + 1 } ?? group.count
         case .topOfGroup: toIndex = 0
         case .beforeGroup: return
         }

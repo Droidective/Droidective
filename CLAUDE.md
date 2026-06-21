@@ -22,7 +22,7 @@ When adding a feature: logic + a parser test go in ADBKit; the view goes in
 ## Build / test / run
 
 ```
-make test          # ADBKit unit tests (cd ADBKit && swift test) — 183 tests, keep green
+make test          # ADBKit unit tests (cd ADBKit && swift test) — 186 tests, keep green
 make build         # xcodegen generate + xcodebuild Debug
 make run           # build + open the .app
 ```
@@ -163,7 +163,7 @@ feature for existing users via `knownIds`.
 
 Feature-complete across all planned milestones plus several UX rounds (latest:
 **v2.2.0** — theme/hub overhaul, screenshot annotation editor, all-features-on
-default, live memory graph); 183 tests green; builds clean with zero warnings.
+default, live memory graph); 186 tests green; builds clean with zero warnings.
 Verified live against a physical device and an Android emulator. Open gaps: no
 notarization (ad-hoc signed — see README for the Gatekeeper workaround), the Apps
 list/detail divider isn't drag-resizable.

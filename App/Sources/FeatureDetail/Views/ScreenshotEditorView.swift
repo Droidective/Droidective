@@ -35,6 +35,9 @@ struct ScreenshotEditorView: View {
 
     private static let palette: [Color] = [.red, .orange, .yellow, .green, .blue, .purple, .black, .white]
     private static let widths: [(String, CGFloat)] = [("Thin", 3), ("Medium", 6), ("Thick", 12)]
+    /// Cap the undo history so a long session can't grow it without bound. A crop
+    /// replaces the base image, so a snapshot can hold a full-resolution copy.
+    private static let maxUndo = 50
 
     init(image: NSImage, onClose: @escaping () -> Void) {
         _image = State(initialValue: image)
@@ -57,10 +60,14 @@ struct ScreenshotEditorView: View {
         .focusedSceneValue(\.screenshotEdit, editCommands)
     }
 
+    /// Undo/redo are unavailable while a text label is being typed, so ⌘Z falls
+    /// through to the text field — and the toolbar buttons stay in lockstep with
+    /// the Edit menu.
+    private var canUndo: Bool { textPoint == nil && !undoStack.isEmpty }
+    private var canRedo: Bool { textPoint == nil && !redoStack.isEmpty }
+
     private var editCommands: ScreenshotEditCommands {
-        let canUndo = textPoint == nil && !undoStack.isEmpty
-        let canRedo = textPoint == nil && !redoStack.isEmpty
-        return ScreenshotEditCommands(
+        ScreenshotEditCommands(
             undo: canUndo ? { undo() } : nil,
             redo: canRedo ? { redo() } : nil
         )
@@ -133,11 +140,11 @@ struct ScreenshotEditorView: View {
 
             Button { undo() } label: { Image(systemName: "arrow.uturn.backward") }
                 .buttonStyle(.bordered)
-                .disabled(undoStack.isEmpty)
+                .disabled(!canUndo)
                 .help("Undo (⌘Z)")
             Button { redo() } label: { Image(systemName: "arrow.uturn.forward") }
                 .buttonStyle(.bordered)
-                .disabled(redoStack.isEmpty)
+                .disabled(!canRedo)
                 .help("Redo (⇧⌘Z)")
             Button { clearAll() } label: { Image(systemName: "trash") }
                 .buttonStyle(.bordered)
@@ -206,14 +213,18 @@ struct ScreenshotEditorView: View {
     private func textEditor(display: CGSize) -> some View {
         if let textPoint {
             let point = CGPoint(x: textPoint.x * display.width, y: textPoint.y * display.height)
+            // Mirror the committed annotation's font and top-leading anchor
+            // (ScreenshotMarkup.drawOne) so the text doesn't jump in size or
+            // position the moment it's committed.
+            let fontSize = max(11, display.width * 0.03 * (width / 6))
             let fieldWidth = max(120, display.width - point.x - 8)
             TextField("Type, then ⏎", text: $editingText)
                 .textFieldStyle(.plain)
-                .font(.system(size: max(13, display.width * 0.03 * (width / 6)), weight: .semibold))
+                .font(.system(size: fontSize, weight: .semibold))
                 .foregroundStyle(color)
                 .focused($textFocused)
                 .frame(width: fieldWidth, alignment: .leading)
-                .position(x: point.x + fieldWidth / 2, y: point.y + 10)
+                .position(x: point.x + fieldWidth / 2, y: point.y + fontSize / 2)
                 .onSubmit { commitText() }
                 .onAppear { textFocused = true }
                 .onChange(of: textFocused) { _, focused in if !focused { commitText() } }
@@ -294,6 +305,9 @@ struct ScreenshotEditorView: View {
 
     private func pushUndo() {
         undoStack.append(EditorSnapshot(image: image, annotations: annotations))
+        if undoStack.count > Self.maxUndo {
+            undoStack.removeFirst(undoStack.count - Self.maxUndo)
+        }
         redoStack.removeAll()
     }
 
