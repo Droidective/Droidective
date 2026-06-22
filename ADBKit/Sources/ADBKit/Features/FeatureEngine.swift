@@ -345,14 +345,11 @@ public struct FeatureEngine: Sendable {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: scrcpyPath)
         process.arguments = ["-s", serial] + options.args(recordingPath: recordingPath)
-        var environment = ProcessInfo.processInfo.environment
-        environment["ADB"] = adbPath
-        let extraPaths = [
-            (adbPath as NSString).deletingLastPathComponent,
-            (scrcpyPath as NSString).deletingLastPathComponent,
-        ]
-        environment["PATH"] = (extraPaths + [environment["PATH"] ?? "/usr/bin:/bin"]).joined(separator: ":")
-        process.environment = environment
+        process.environment = ScreenTools.scrcpyEnvironment(
+            base: ProcessInfo.processInfo.environment,
+            scrcpyPath: scrcpyPath,
+            adbPath: adbPath
+        )
         process.standardInput = FileHandle.nullDevice
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
