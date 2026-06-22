@@ -254,7 +254,7 @@ struct ScreenshotEditorView: View {
     private func selectionOverlay(display: CGSize) -> some View {
         Canvas { context, size in
             guard let annotation = selectedAnnotation else { return }
-            let b = annotation.boundingBox
+            let b = ScreenshotMarkup.bounds(annotation, in: size)
             let box = CGRect(
                 x: b.minX * size.width, y: b.minY * size.height,
                 width: b.width * size.width, height: b.height * size.height
@@ -264,7 +264,7 @@ struct ScreenshotEditorView: View {
                 with: .color(.white.opacity(0.95)),
                 style: StrokeStyle(lineWidth: 1.5, dash: [5, 3])
             )
-            for handle in annotation.handlePoints {
+            for handle in annotation.handlePoints(in: size) {
                 let center = CGPoint(x: handle.x * size.width, y: handle.y * size.height)
                 let rect = CGRect(x: center.x - 5, y: center.y - 5, width: 10, height: 10)
                 context.fill(Path(ellipseIn: rect), with: .color(.white))
@@ -393,7 +393,7 @@ struct ScreenshotEditorView: View {
         guard let index = annotations.firstIndex(where: { $0.id == origin.id }) else { return }
         switch selectDragMode {
         case .move: annotations[index] = origin.moved(by: delta)
-        case .resize(let handle): annotations[index] = origin.resizing(handle: handle, to: current)
+        case .resize(let handle): annotations[index] = origin.resizing(handle: handle, to: current, in: display)
         case .none: break
         }
     }
@@ -402,7 +402,7 @@ struct ScreenshotEditorView: View {
     /// the body of an annotation (selecting it), or empty space (deselect).
     private func beginSelectDrag(atDisplay point: CGPoint, display: CGSize) {
         if let selected = selectedAnnotation {
-            for (handle, position) in selected.handlePoints.enumerated() {
+            for (handle, position) in selected.handlePoints(in: display).enumerated() {
                 let inPixels = CGPoint(x: position.x * display.width, y: position.y * display.height)
                 if hypot(point.x - inPixels.x, point.y - inPixels.y) <= 12 {
                     selectDragMode = .resize(handle)
