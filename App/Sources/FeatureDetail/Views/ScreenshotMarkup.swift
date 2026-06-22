@@ -391,7 +391,10 @@ struct RedactBlurLayer: View {
                         .resizable()
                         .interpolation(.high)
                         .frame(width: geo.size.width, height: geo.size.height)
-                        .blur(radius: max(2, region.strength * geo.size.width * 0.06))
+                        // `opaque: true` clamps the edges; without it the blur
+                        // fades to transparent at the borders and the sharp
+                        // original leaks through (corners/edges look unblurred).
+                        .blur(radius: max(2, region.strength * geo.size.width * 0.06), opaque: true)
                         .mask {
                             let r = region.rect
                             Rectangle()
