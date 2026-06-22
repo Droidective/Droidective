@@ -13,7 +13,7 @@ public struct ToolDetectionService: Sendable {
     static let installHints: [Tool: String] = [
         .adb: "Install Android platform-tools — `brew install --cask android-platform-tools` (or Android Studio).",
         .scrcpy: "Install scrcpy to mirror the screen — `brew install scrcpy`.",
-        .ffmpeg: "Install ffmpeg for GIF export — `brew install ffmpeg`.",
+        .ffmpeg: "Install ffmpeg for video editing & export — `brew install ffmpeg`.",
         .emulator: "Bundled with the Android SDK — install it via Android Studio → SDK Manager.",
         .brew: "Install Homebrew from https://brew.sh, then re-check.",
     ]
@@ -35,10 +35,11 @@ public struct ToolDetectionService: Sendable {
         self.runner = runner
     }
 
-    public func detect() async -> (adb: ToolStatus, scrcpy: ToolStatus) {
+    public func detect() async -> (adb: ToolStatus, scrcpy: ToolStatus, ffmpeg: ToolStatus) {
         async let adb = detectOne(.adb, versionArgs: ["version"])
         async let scrcpy = detectOne(.scrcpy, versionArgs: ["--version"])
-        return await (adb, scrcpy)
+        async let ffmpeg = detectOne(.ffmpeg, versionArgs: ["-version"])
+        return await (adb, scrcpy, ffmpeg)
     }
 
     /// Detect every external tool the app can use, for the setup Doctor.
