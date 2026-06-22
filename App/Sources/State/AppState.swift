@@ -591,7 +591,7 @@ final class AppState {
 
     private func show(_ result: FeatureResult) {
         // A result that carries copyText (Copy Device IP, Copy Foreground
-        // Bundle ID, Current Activity) lands on the clipboard immediately — the
+        // Bundle ID, Copy Current Activity) lands on the clipboard immediately — the
         // point of these actions — so a sidebar click is all it takes.
         var message = result.message
         if let copyText = result.copyText {
