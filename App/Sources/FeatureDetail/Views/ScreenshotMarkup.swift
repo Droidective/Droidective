@@ -88,7 +88,7 @@ extension Annotation {
     /// Normalized resize-handle positions. Two-point shapes expose their two
     /// defining points; freehand strokes expose bounding-box corners; text has
     /// none (move only).
-    var handlePoints: [CGPoint] {
+    func handlePoints(in size: CGSize) -> [CGPoint] {
         switch tool {
         case .line, .arrow, .rectangle, .ellipse, .redact:
             return points.count >= 2 ? [points[0], points[1]] : []
@@ -99,7 +99,7 @@ extension Annotation {
                 CGPoint(x: b.maxX, y: b.maxY), CGPoint(x: b.minX, y: b.maxY),
             ]
         case .text:
-            let b = boundingBox
+            let b = ScreenshotMarkup.bounds(self, in: size)
             return [CGPoint(x: b.maxX, y: b.maxY)]
         }
     }
@@ -117,7 +117,7 @@ extension Annotation {
 
     /// Move handle `index` to `target` (normalized). Two-point shapes move that
     /// endpoint; freehand strokes scale every point from the opposite corner.
-    func resizing(handle index: Int, to target: CGPoint) -> Annotation {
+    func resizing(handle index: Int, to target: CGPoint, in size: CGSize) -> Annotation {
         let p = CGPoint(x: min(1, max(0, target.x)), y: min(1, max(0, target.y)))
         var copy = self
         switch tool {
@@ -139,11 +139,15 @@ extension Annotation {
                 )
             }
         case .text:
-            // Drag the corner handle to scale the text: its distance below the
-            // top-left anchor sets the font scale (`width`, which drives font size).
+            // Scale the font so the handle tracks the cursor: grow `width` by the
+            // ratio of the new box height (cursor below the anchor) to the current
+            // measured height.
             if let anchor = points.first {
-                let height = max(0.012, p.y - anchor.y)
-                copy.width = min(60, max(2, height * 120))
+                let currentHeight = ScreenshotMarkup.bounds(self, in: size).height
+                let newHeight = max(0.01, p.y - anchor.y)
+                if currentHeight > 0.0001 {
+                    copy.width = min(80, max(2, width * newHeight / currentHeight))
+                }
             }
         }
         return copy
@@ -247,6 +251,21 @@ enum ScreenshotMarkup {
         return result
     }
 
+    // MARK: - Geometry
+
+    /// Normalized bounding box of an annotation at a given render size. Text is
+    /// measured with its real font so the box wraps the glyphs; other tools use
+    /// their point-based box (render-independent).
+    static func bounds(_ a: Annotation, in size: CGSize) -> CGRect {
+        guard a.tool == .text, let origin = a.points.first, size.width > 0, size.height > 0 else {
+            return a.boundingBox
+        }
+        let fontSize = max(11, size.width * 0.03 * (a.width / 6))
+        let font = NSFont.systemFont(ofSize: fontSize, weight: .semibold)
+        let measured = ((a.text.isEmpty ? "Text" : a.text) as NSString).size(withAttributes: [.font: font])
+        return CGRect(x: origin.x, y: origin.y, width: measured.width / size.width, height: measured.height / size.height)
+    }
+
     // MARK: - Hit-testing (display-pixel space, so it's isotropic)
 
     /// Index of the top-most annotation under `point` (display px), or nil. Area
@@ -261,7 +280,7 @@ enum ScreenshotMarkup {
     private static func hits(_ a: Annotation, _ p: CGPoint, _ display: CGSize, _ tol: CGFloat) -> Bool {
         switch a.tool {
         case .rectangle, .ellipse, .redact, .text:
-            let b = a.boundingBox
+            let b = bounds(a, in: display)
             let box = CGRect(
                 x: b.minX * display.width, y: b.minY * display.height,
                 width: b.width * display.width, height: b.height * display.height
