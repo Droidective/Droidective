@@ -14,13 +14,6 @@ enum VideoSource: Equatable {
         case .recording(let url), .file(let url): return url
         }
     }
-
-    var isTemporary: Bool {
-        if case .recording = self { return true }
-        return false
-    }
-
-    var dismissLabel: String { isTemporary ? "Discard" : "Close" }
 }
 
 /// All reversible edits, snapshotted for undo/redo. Crop mode is a UI state, not
@@ -111,6 +104,8 @@ struct VideoEditorPane: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            editorHeader
+            Divider()
             playerSection
             Divider()
             ScrollView { controls.padding(16) }
@@ -311,14 +306,25 @@ struct VideoEditorPane: View {
         }
     }
 
-    private var bottomBar: some View {
-        HStack(spacing: 12) {
-            Button(role: source.isTemporary ? .destructive : nil) {
+    /// Top bar with a back button that closes the editor (returns to the mirror /
+    /// recorder / file picker that opened it).
+    private var editorHeader: some View {
+        HStack {
+            Button {
                 player.pause()
                 onClose()
-            } label: { Text(source.dismissLabel) }
-                .controlSize(.large)
+            } label: {
+                Label("Back", systemImage: "chevron.backward")
+            }
+            .buttonStyle(.plain)
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+    }
 
+    private var bottomBar: some View {
+        HStack(spacing: 12) {
             Button { undo() } label: { Image(systemName: "arrow.uturn.backward") }
                 .keyboardShortcut("z", modifiers: .command)
                 .disabled(undoStack.isEmpty)
