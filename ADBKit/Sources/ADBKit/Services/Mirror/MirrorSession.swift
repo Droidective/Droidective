@@ -38,9 +38,12 @@ public actor MirrorSession {
 
     private var consumeTask: Task<Void, Never>?
     private var controlConsumeTask: Task<Void, Never>?
+    private var audioConsumeTask: Task<Void, Never>?
     private var displayContinuation: AsyncThrowingStream<DisplaySample, Error>.Continuation?
     private var clipboardStream: AsyncStream<String>?
     private var clipboardContinuation: AsyncStream<String>.Continuation?
+    private var audioPCMStream: AsyncStream<Data>?
+    private var audioPCMContinuation: AsyncStream<Data>.Continuation?
 
     private var recorder: MirrorRecorder?
     private var recorderStarted = false
@@ -61,6 +64,9 @@ public actor MirrorSession {
         let (clipboard, clipboardSink) = AsyncStream.makeStream(of: String.self)
         clipboardStream = clipboard
         clipboardContinuation = clipboardSink
+        let (audio, audioSink) = AsyncStream.makeStream(of: Data.self)
+        audioPCMStream = audio
+        audioPCMContinuation = audioSink
         decoder.onImage = { [weak self] box, _ in
             guard let self else { return }
             Task { await self.storeLatest(box) }
@@ -74,6 +80,8 @@ public actor MirrorSession {
         consumeTask = nil
         controlConsumeTask?.cancel()
         controlConsumeTask = nil
+        audioConsumeTask?.cancel()
+        audioConsumeTask = nil
         decoder.invalidate()
         await transport.stop()
         if recorder != nil {
@@ -85,6 +93,8 @@ public actor MirrorSession {
         displayContinuation = nil
         clipboardContinuation?.finish()
         clipboardContinuation = nil
+        audioPCMContinuation?.finish()
+        audioPCMContinuation = nil
     }
 
     /// The latest decoded frame, for a screenshot.
@@ -103,6 +113,12 @@ public actor MirrorSession {
     /// Clipboard text the device pushed back (a device-side copy, or a reply to
     /// GET_CLIPBOARD). Subscribe and mirror it onto the Mac pasteboard.
     public func incomingClipboards() -> AsyncStream<String>? { clipboardStream }
+
+    /// Raw device audio as interleaved s16le PCM (48 kHz, stereo) when the device
+    /// supplies it, or nil if audio wasn't requested. The stream yields nothing
+    /// and finishes if the device disabled audio (Android < 11) — the mirror then
+    /// stays silent but otherwise unaffected. Feed chunks to a `MirrorAudioPlayer`.
+    public func audioPCM() -> AsyncStream<Data>? { audioPCMStream }
 
     public func isRecording() -> Bool { recorder != nil }
 
@@ -134,6 +150,11 @@ public actor MirrorSession {
                     for await chunk in control {
                         await self?.handleDeviceMessages(deviceDecoder.consume(chunk))
                     }
+                }
+            }
+            if let audio = await transport.audioByteStream() {
+                audioConsumeTask = Task { [weak self] in
+                    await self?.consumeAudio(audio)
                 }
             }
             var streamDecoder = ScrcpyStreamDecoder(tunnelForward: true)
@@ -183,6 +204,30 @@ public actor MirrorSession {
                 }
             }
         }
+    }
+
+    /// Decode the audio socket and forward raw PCM. Only `raw` is forwarded; a
+    /// disabled/errored or unsupported codec just leaves the mirror silent.
+    private func consumeAudio(_ bytes: AsyncThrowingStream<Data, Error>) async {
+        var audioDecoder = ScrcpyAudioStreamDecoder()
+        var isRaw = false
+        do {
+            for try await chunk in bytes {
+                if Task.isCancelled { break }
+                for event in audioDecoder.consume(chunk) {
+                    switch event {
+                    case let .codec(codec, _):
+                        isRaw = codec == .raw
+                        if !isRaw { audioPCMContinuation?.finish() }
+                    case let .packet(header, payload):
+                        if isRaw, !header.isConfig { audioPCMContinuation?.yield(payload) }
+                    }
+                }
+            }
+        } catch {
+            // Audio socket ended; the video mirror continues unaffected.
+        }
+        audioPCMContinuation?.finish()
     }
 
     private func handleDeviceMessages(_ messages: [ScrcpyDeviceMessage]) {
