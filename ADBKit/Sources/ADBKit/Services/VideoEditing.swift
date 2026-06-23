@@ -128,6 +128,13 @@ public enum VideoEditing {
         ["-i", input, "-frames:v", "1", "-vf", "scale=640:-2", "-y", output]
     }
 
+    /// Rewrite the container losslessly (`-c copy`). AVAssetWriter's passthrough
+    /// output decodes in ffmpeg but not AVFoundation (error -11821); a remux fixes
+    /// the timing/index so the editor's player and previews can decode it.
+    public static func remuxArguments(input: String, output: String) -> [String] {
+        ["-i", input, "-c", "copy", "-movflags", "+faststart", "-y", output]
+    }
+
     /// Losslessly concatenate same-codec segments (the concat demuxer) — used to
     /// stitch a paused/resumed recording's segments back into one file. `listFile`
     /// is an ffmpeg concat list (`file '<path>'` per line); `-safe 0` allows the

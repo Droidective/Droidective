@@ -12,6 +12,12 @@ import Testing
         VideoEditing.ffmpegArguments(input: "in.mp4", output: "out", options: options)
     }
 
+    @Test func remuxArgumentsCopyLosslessly() {
+        #expect(VideoEditing.remuxArguments(input: "/tmp/r.mp4", output: "/tmp/o.mp4") == [
+            "-i", "/tmp/r.mp4", "-c", "copy", "-movflags", "+faststart", "-y", "/tmp/o.mp4",
+        ])
+    }
+
     @Test func thumbnailArgumentsGrabOneScaledFrame() {
         #expect(VideoEditing.thumbnailArguments(input: "/tmp/r.mp4", output: "/tmp/t.png") == [
             "-i", "/tmp/r.mp4", "-frames:v", "1", "-vf", "scale=640:-2", "-y", "/tmp/t.png",
