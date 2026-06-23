@@ -1,45 +1,84 @@
 import ADBKit
+import AppKit
+import AVFoundation
 import SwiftUI
 
-/// After a recording stops, ask what to do with it: open it in the video editor,
-/// save it as-is to the capture folder, or discard it. Shared by Screen Record
-/// and Mirror Screen. The recording lives in a temp file until the choice is
-/// made; cancelling the dialog discards it (so nothing is orphaned).
+/// After a recording or screenshot is captured, ask what to do with it — shown
+/// as a sheet with a preview and Edit / Save / Discard. Cancelling the sheet
+/// discards, so nothing is orphaned. Shared by Screen Record and Mirror Screen.
+private struct MediaDecisionView: View {
+    let title: String
+    let preview: NSImage?
+    let loadingPreview: Bool
+    let onEdit: () -> Void
+    let onSave: () -> Void
+    let onDiscard: () -> Void
+
+    var body: some View {
+        VStack(spacing: 18) {
+            Text(title).font(.headline)
+
+            Group {
+                if let preview {
+                    Image(nsImage: preview).resizable().scaledToFit()
+                } else if loadingPreview {
+                    ProgressView()
+                } else {
+                    Image(systemName: "photo").font(.largeTitle).foregroundStyle(.secondary)
+                }
+            }
+            .frame(width: 360, height: 240)
+            .background(.black.opacity(0.25), in: RoundedRectangle(cornerRadius: 8))
+
+            HStack(spacing: 10) {
+                Button(role: .destructive) { onDiscard() } label: {
+                    Text("Discard").frame(maxWidth: .infinity)
+                }
+                Button { onSave() } label: { Text("Save").frame(maxWidth: .infinity) }
+                Button { onEdit() } label: { Text("Edit").frame(maxWidth: .infinity) }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
+            }
+            .controlSize(.large)
+        }
+        .padding(20)
+        .frame(width: 420)
+    }
+}
+
+// MARK: - Recording (video)
+
 private struct RecordingDecisionModifier: ViewModifier {
     @Environment(AppState.self) private var state
     @Binding var url: URL?
     let onEdit: (URL) -> Void
+    @State private var thumbnail: NSImage?
 
     func body(content: Content) -> some View {
-        content.confirmationDialog(
-            "Recording finished", isPresented: presented, titleVisibility: .visible
-        ) {
-            Button("Edit") { act(onEdit) }
-            Button("Save") { act(save) }
-            Button("Discard", role: .destructive) { act(discard) }
-        } message: {
-            Text("Edit it in the video editor, save it to your capture folder, or discard it.")
+        content.sheet(isPresented: presented, onDismiss: { thumbnail = nil }) {
+            if let url {
+                MediaDecisionView(
+                    title: "Recording finished",
+                    preview: thumbnail,
+                    loadingPreview: thumbnail == nil,
+                    onEdit: { act(onEdit) },
+                    onSave: { act(save) },
+                    onDiscard: { act { try? FileManager.default.removeItem(at: $0) } })
+                    .task(id: url) { thumbnail = await Self.thumbnail(for: url) }
+            }
         }
     }
 
-    /// Shown while a recording awaits a decision. Dismissing without a choice
-    /// (Cancel/Escape) discards the temp file.
     private var presented: Binding<Bool> {
         Binding(
             get: { url != nil },
-            set: { shown in if !shown, let pending = url { url = nil; discard(pending) } })
+            set: { shown in if !shown, let pending = url { url = nil; try? FileManager.default.removeItem(at: pending) } })
     }
 
-    /// Clear `url` first so the dialog's dismissal doesn't also fire the
-    /// cancel/discard path, then run the chosen action.
     private func act(_ body: (URL) -> Void) {
         guard let pending = url else { return }
         url = nil
         body(pending)
-    }
-
-    private func discard(_ pending: URL) {
-        try? FileManager.default.removeItem(at: pending)
     }
 
     private func save(_ pending: URL) {
@@ -52,12 +91,80 @@ private struct RecordingDecisionModifier: ViewModifier {
             state.showToast(Toast(message: "Couldn’t save recording: \(error.localizedDescription)", ok: false))
         }
     }
+
+    /// First-frame thumbnail. Returns PNG `Data` from a nonisolated context so no
+    /// non-Sendable CGImage/NSImage crosses back to the main actor.
+    private static func thumbnail(for url: URL) async -> NSImage? {
+        guard let data = await thumbnailPNG(url) else { return nil }
+        return NSImage(data: data)
+    }
+
+    private nonisolated static func thumbnailPNG(_ url: URL) async -> Data? {
+        let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: 800, height: 800)
+        guard let cgImage = try? await generator.image(
+            at: CMTime(seconds: 0.1, preferredTimescale: 600)).image else { return nil }
+        return NSBitmapImageRep(cgImage: cgImage).representation(using: .png, properties: [:])
+    }
+}
+
+// MARK: - Screenshot (image)
+
+private struct ImageDecisionModifier: ViewModifier {
+    @Environment(AppState.self) private var state
+    @Binding var image: NSImage?
+    let onEdit: (NSImage) -> Void
+
+    func body(content: Content) -> some View {
+        content.sheet(isPresented: presented) {
+            if let image {
+                MediaDecisionView(
+                    title: "Screenshot captured",
+                    preview: image,
+                    loadingPreview: false,
+                    onEdit: { act(onEdit) },
+                    onSave: { act(save) },
+                    onDiscard: { act { _ in } })
+            }
+        }
+    }
+
+    private var presented: Binding<Bool> {
+        Binding(get: { image != nil }, set: { if !$0 { image = nil } })
+    }
+
+    private func act(_ body: (NSImage) -> Void) {
+        guard let pending = image else { return }
+        image = nil
+        body(pending)
+    }
+
+    private func save(_ pending: NSImage) {
+        guard let cgImage = pending.cgImage(forProposedRect: nil, context: nil, hints: nil),
+              let png = NSBitmapImageRep(cgImage: cgImage).representation(using: .png, properties: [:]) else {
+            state.showToast(Toast(message: "Couldn’t encode the screenshot.", ok: false))
+            return
+        }
+        do {
+            let dir = try ScreenCaptureService.ensureCaptureDir()
+            let dest = dir.appendingPathComponent("screenshot_\(ScreenCaptureService.stamp()).png")
+            try png.write(to: dest)
+            state.showToast(Toast(message: "Screenshot saved", ok: true, revealPath: dest.path))
+        } catch {
+            state.showToast(Toast(message: "Couldn’t save screenshot: \(error.localizedDescription)", ok: false))
+        }
+    }
 }
 
 extension View {
-    /// Present the Discard/Save/Edit prompt when `url` is set to a finished
-    /// recording. `onEdit` receives the file to open in the editor.
+    /// Prompt Discard/Save/Edit (with a frame preview) for a finished recording.
     func recordingDecision(url: Binding<URL?>, onEdit: @escaping (URL) -> Void) -> some View {
         modifier(RecordingDecisionModifier(url: url, onEdit: onEdit))
+    }
+
+    /// Prompt Discard/Save/Edit (with a preview) for a captured screenshot.
+    func imageDecision(image: Binding<NSImage?>, onEdit: @escaping (NSImage) -> Void) -> some View {
+        modifier(ImageDecisionModifier(image: image, onEdit: onEdit))
     }
 }
