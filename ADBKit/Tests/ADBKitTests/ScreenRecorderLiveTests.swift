@@ -43,3 +43,42 @@ import Testing
         #expect(hasAudio)
     }
 }
+
+@Suite struct ScreenRecorderPauseResumeLiveTests {
+    private static var liveEnabled: Bool {
+        ProcessInfo.processInfo.environment["MIRROR_LIVE_TEST"] == "1"
+    }
+
+    @Test(.enabled(if: liveEnabled))
+    func pauseResumeProducesOneConcatenatedFile() async throws {
+        let serial = ProcessInfo.processInfo.environment["MIRROR_SERIAL"] ?? "emulator-5554"
+        let locator = ToolLocator()
+        let adb = AdbClient(locator: locator)
+        guard let server = await ScrcpyServerLocator.resolve(locator: locator) else {
+            Issue.record("scrcpy not installed"); return
+        }
+        // Resolve the installed ffmpeg for the concat step (the app uses the
+        // bundled one).
+        let ffmpeg = await locator.resolve(.ffmpeg)
+        let recorder = ScreenRecorder(client: adb, server: server, ffmpegPath: ffmpeg)
+
+        try await recorder.start(serial: serial, options: ScreenRecordOptions(maxSize: 800))
+        try await Task.sleep(for: .seconds(2))
+        await recorder.pause()
+        let pausedFlag = await recorder.isPaused
+        try await Task.sleep(for: .seconds(1))
+        try await recorder.resume()
+        try await Task.sleep(for: .seconds(2))
+        let url = try await recorder.stop()
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let asset = AVURLAsset(url: url)
+        let duration = try await asset.load(.duration).seconds
+        let hasVideo = try await !asset.loadTracks(withMediaType: .video).isEmpty
+
+        #expect(pausedFlag)
+        #expect(hasVideo)
+        // Two ~2s segments stitched, paused second excluded → well over one segment.
+        #expect(duration > 2.5)
+    }
+}

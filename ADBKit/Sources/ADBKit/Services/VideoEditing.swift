@@ -121,6 +121,17 @@ public enum VideoEditing {
         return args
     }
 
+    /// Losslessly concatenate same-codec segments (the concat demuxer) — used to
+    /// stitch a paused/resumed recording's segments back into one file. `listFile`
+    /// is an ffmpeg concat list (`file '<path>'` per line); `-safe 0` allows the
+    /// absolute temp paths.
+    public static func concatArguments(listFile: String, output: String) -> [String] {
+        [
+            "-f", "concat", "-safe", "0", "-i", listFile,
+            "-c", "copy", "-movflags", "+faststart", "-y", output,
+        ]
+    }
+
     /// Input-side `-ss`/`-t` so trimming composes correctly with speed changes
     /// (both limit the *input* read; the speed filter then sets output length).
     private static func trimArguments(_ o: VideoExportOptions) -> [String] {

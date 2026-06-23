@@ -12,6 +12,13 @@ import Testing
         VideoEditing.ffmpegArguments(input: "in.mp4", output: "out", options: options)
     }
 
+    @Test func concatArgumentsUseLosslessCopy() {
+        #expect(VideoEditing.concatArguments(listFile: "/tmp/list.txt", output: "/tmp/out.mp4") == [
+            "-f", "concat", "-safe", "0", "-i", "/tmp/list.txt",
+            "-c", "copy", "-movflags", "+faststart", "-y", "/tmp/out.mp4",
+        ])
+    }
+
     // MARK: defaults / identity
 
     @Test func defaultMp4ReencodesWithNoFilters() {
