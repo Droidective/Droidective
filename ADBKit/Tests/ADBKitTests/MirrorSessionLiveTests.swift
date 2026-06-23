@@ -102,4 +102,60 @@ import Testing
 
         await session.stop()
     }
+
+    @Test(.enabled(if: liveEnabled))
+    func audioSocketDeliversRawPcmWhileVideoFlows() async throws {
+        let serial = ProcessInfo.processInfo.environment["MIRROR_SERIAL"] ?? "emulator-5554"
+        let locator = ToolLocator()
+        let adb = AdbClient(locator: locator)
+        guard let server = await ScrcpyServerLocator.resolve(locator: locator) else {
+            Issue.record("scrcpy is not installed")
+            return
+        }
+        // audio + control on -> the server expects 3 sockets in order
+        // (video, audio, control); video must still flow and PCM must arrive.
+        let params = ScrcpyServerParams(
+            scid: UInt32.random(in: 1 ... 0x7fff_ffff),
+            audio: true, control: true, maxSize: 800)
+        let config = MirrorTransport.Configuration(
+            serial: serial, params: params,
+            serverVersion: server.version, localJarPath: server.jarPath)
+        let session = MirrorSession(adb: adb, config: config)
+        let stream = await session.start()
+
+        // Video still flows with the audio socket inserted before control.
+        let gotVideo = try await withThrowingTaskGroup(of: Bool.self) { group in
+            group.addTask {
+                for try await _ in stream { return true }
+                return false
+            }
+            group.addTask {
+                try await Task.sleep(for: .seconds(12))
+                return false
+            }
+            let first = try await group.next() ?? false
+            group.cancelAll()
+            return first
+        }
+        #expect(gotVideo)
+
+        // The device (Android 11+) sends PCM even when silent; expect a chunk.
+        let gotAudio = await withTaskGroup(of: Bool.self) { group in
+            group.addTask {
+                guard let audio = await session.audioPCM() else { return false }
+                for await chunk in audio where !chunk.isEmpty { return true }
+                return false
+            }
+            group.addTask {
+                try? await Task.sleep(for: .seconds(8))
+                return false
+            }
+            let first = await group.next() ?? false
+            group.cancelAll()
+            return first
+        }
+        #expect(gotAudio)
+
+        await session.stop()
+    }
 }

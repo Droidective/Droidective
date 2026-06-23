@@ -120,6 +120,15 @@ private struct MirrorStage: View {
             }
             .buttonStyle(.plain)
             .help(model.isRecording ? "Stop recording — opens the editor" : "Record — keep mirroring")
+
+            Divider().frame(height: 22)
+
+            navButton(
+                model.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill",
+                help: model.isMuted ? "Unmute device audio" : "Mute device audio"
+            ) {
+                model.toggleMute()
+            }
         }
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity)

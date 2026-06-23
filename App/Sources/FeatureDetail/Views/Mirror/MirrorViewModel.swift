@@ -18,6 +18,9 @@ final class MirrorViewModel {
 
     private(set) var status: Status = .connecting
     private(set) var isRecording = false
+    /// Whether device audio playback is muted. Audio plays by default once the
+    /// device starts sending it (Android 11+).
+    private(set) var isMuted = false
     /// Device video dimensions, once known — used to map taps to device coords.
     private(set) var videoSize: CGSize?
     /// Set when a screenshot is captured; the view presents the editor on it.
@@ -35,6 +38,8 @@ final class MirrorViewModel {
     private var session: MirrorSession?
     private var displayTask: Task<Void, Never>?
     private var clipboardTask: Task<Void, Never>?
+    private var audioTask: Task<Void, Never>?
+    private let audioPlayer = MirrorAudioPlayer()
     private var recordingURL: URL?
     private var sendControl: (@Sendable (ScrcpyControlMessage) -> Void)?
 
@@ -59,10 +64,11 @@ final class MirrorViewModel {
             status = .failed("Couldn’t find the scrcpy server.")
             return
         }
-        // Control on (interactive mirror); audio off until phase 4. Cap the size
-        // for smooth, low-latency display.
+        // Interactive mirror: control + audio on. Cap the size for smooth,
+        // low-latency display.
         let params = ScrcpyServerParams(
-            scid: UInt32.random(in: 1 ... 0x7fff_ffff), control: true, maxSize: 1280)
+            scid: UInt32.random(in: 1 ... 0x7fff_ffff),
+            audio: true, control: true, maxSize: 1280)
         let config = MirrorTransport.Configuration(
             serial: serial, params: params,
             serverVersion: server.version, localJarPath: server.jarPath)
@@ -77,6 +83,22 @@ final class MirrorViewModel {
             for await text in clipboards {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(text, forType: .string)
+            }
+        }
+
+        let audio = await session.audioPCM()
+        audioTask = Task { @MainActor [weak self] in
+            guard let self, let audio else { return }
+            var started = false
+            for await pcm in audio {
+                // Start the engine lazily on the first packet — devices without
+                // audio (Android < 11) never get here, so we don't touch Core Audio.
+                if !started {
+                    do { try self.audioPlayer.start() } catch { return }
+                    self.audioPlayer.isMuted = self.isMuted
+                    started = true
+                }
+                self.audioPlayer.enqueue(pcmS16LE: pcm)
             }
         }
 
@@ -110,11 +132,21 @@ final class MirrorViewModel {
         displayTask = nil
         clipboardTask?.cancel()
         clipboardTask = nil
+        audioTask?.cancel()
+        audioTask = nil
+        audioPlayer.stop()
         await session?.stop()
         session = nil
         sendControl = nil
         isRecording = false
         renderer.clear()
+    }
+
+    /// Toggle device-audio playback. Drops the player gain to zero rather than
+    /// stopping the engine, so unmuting resumes instantly.
+    func toggleMute() {
+        isMuted.toggle()
+        audioPlayer.isMuted = isMuted
     }
 
     // MARK: - Input
