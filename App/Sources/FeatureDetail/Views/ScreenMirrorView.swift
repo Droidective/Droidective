@@ -11,15 +11,17 @@ struct ScreenMirrorView: View {
     var body: some View {
         ZStack {
             if let model {
-                // After Stop, take over the whole pane with the video editor
-                // (full screen, not a sheet) so its tools are fully usable; closing
-                // it returns to the live mirror.
+                // After Edit, take over the whole pane with the editor (full
+                // screen, not a sheet) so its tools are fully usable; closing it
+                // returns to the live mirror.
                 if let url = model.finishedRecording {
                     VideoEditorPane(source: .recording(url)) {
                         try? FileManager.default.removeItem(at: url)
                         model.finishedRecording = nil
                     }
                     .id(url)
+                } else if let image = model.editingScreenshot {
+                    ScreenshotEditorView(image: image) { model.editingScreenshot = nil }
                 } else {
                     MirrorStage(model: model)
                 }
@@ -32,6 +34,7 @@ struct ScreenMirrorView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .recordingDecision(url: pendingRecording) { url in model?.finishedRecording = url }
+        .imageDecision(image: pendingScreenshot) { image in model?.editingScreenshot = image }
         .task(id: state.targetSerials.first) {
             await reconnect(to: state.targetSerials.first)
         }
@@ -63,6 +66,10 @@ struct ScreenMirrorView: View {
 
     private var pendingRecording: Binding<URL?> {
         Binding(get: { model?.pendingRecording }, set: { model?.pendingRecording = $0 })
+    }
+
+    private var pendingScreenshot: Binding<NSImage?> {
+        Binding(get: { model?.pendingScreenshot }, set: { model?.pendingScreenshot = $0 })
     }
 }
 
@@ -97,11 +104,6 @@ private struct MirrorStage: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             controlBar
-        }
-        .sheet(isPresented: screenshotPresented) {
-            if let image = model.pendingScreenshot {
-                ScreenshotEditorView(image: image) { model.pendingScreenshot = nil }
-            }
         }
     }
 
@@ -169,12 +171,6 @@ private struct MirrorStage: View {
         .foregroundStyle(.white)
         .padding(24)
         .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 12))
-    }
-
-    private var screenshotPresented: Binding<Bool> {
-        Binding(
-            get: { model.pendingScreenshot != nil },
-            set: { if !$0 { model.pendingScreenshot = nil } })
     }
 }
 
