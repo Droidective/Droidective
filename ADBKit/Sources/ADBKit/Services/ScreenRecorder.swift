@@ -78,8 +78,26 @@ public actor ScreenRecorder {
         let segs = segments
         segments = []
         guard let first = segs.first else { throw RecordingError.notRecording }
-        guard segs.count > 1 else { return first }
+        // Concatenating (>1) already rewrites the container via ffmpeg; a single
+        // segment is remuxed too so AVFoundation can decode it (the editor's
+        // player + previews otherwise fail on AVAssetWriter's passthrough output).
+        guard segs.count > 1 else { return await remux(first) ?? first }
         return try await concatenate(segs)
+    }
+
+    private func remux(_ source: URL) async -> URL? {
+        guard let ffmpegPath else { return nil }
+        let output = Self.tempURL(ext: "mp4")
+        let result = await SystemProcessRunner().run(
+            executable: ffmpegPath,
+            arguments: VideoEditing.remuxArguments(input: source.path, output: output.path),
+            timeout: .seconds(60), maxOutputBytes: 4 * 1024 * 1024)
+        guard result.exitCode == 0 else {
+            try? FileManager.default.removeItem(at: output)
+            return nil
+        }
+        try? FileManager.default.removeItem(at: source)
+        return output
     }
 
     /// Abort and discard everything (view dismissed / app quit).

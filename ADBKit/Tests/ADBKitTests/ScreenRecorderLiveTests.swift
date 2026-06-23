@@ -118,3 +118,38 @@ import Testing
         #expect((size ?? 0) > 0)
     }
 }
+
+@Suite struct RecordingPlayabilityLiveTests {
+    private static var liveEnabled: Bool {
+        ProcessInfo.processInfo.environment["MIRROR_LIVE_TEST"] == "1"
+    }
+
+    private func decodable(_ url: URL) async -> Bool {
+        let gen = AVAssetImageGenerator(asset: AVURLAsset(url: url))
+        gen.appliesPreferredTrackTransform = true
+        gen.requestedTimeToleranceBefore = .positiveInfinity
+        gen.requestedTimeToleranceAfter = .positiveInfinity
+        return (try? await gen.image(at: CMTime(seconds: 0.1, preferredTimescale: 600)).image) != nil
+    }
+
+    /// The finished recording (remuxed via ffmpeg in stop()) must be decodable by
+    /// AVFoundation, so the editor's player and previews work — AVAssetWriter's
+    /// raw passthrough output is not (it fails with -11821).
+    @Test(.enabled(if: liveEnabled))
+    func finishedRecordingIsAVFoundationDecodable() async throws {
+        let serial = ProcessInfo.processInfo.environment["MIRROR_SERIAL"] ?? "emulator-5554"
+        let locator = ToolLocator()
+        let adb = AdbClient(locator: locator)
+        guard let server = await ScrcpyServerLocator.resolve(locator: locator),
+              let ffmpeg = await locator.resolve(.ffmpeg) else { Issue.record("tools missing"); return }
+        // Pass ffmpeg so stop() remuxes, exactly like the app.
+        let recorder = ScreenRecorder(client: adb, server: server, ffmpegPath: ffmpeg)
+        try await recorder.start(serial: serial, options: ScreenRecordOptions(maxSize: 800))
+        try await Task.sleep(for: .seconds(3))
+        let url = try await recorder.stop()
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let ok = await decodable(url)
+        #expect(ok)
+    }
+}
