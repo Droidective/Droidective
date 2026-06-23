@@ -18,6 +18,8 @@ final class MirrorViewModel {
 
     private(set) var status: Status = .connecting
     private(set) var isRecording = false
+    private(set) var isPaused = false
+    private var recordBusy = false
     /// Whether device audio playback is muted. Audio plays by default once the
     /// device starts sending it (Android 11+).
     private(set) var isMuted = false
@@ -25,8 +27,11 @@ final class MirrorViewModel {
     private(set) var videoSize: CGSize?
     /// Set when a screenshot is captured; the view presents the editor on it.
     var pendingScreenshot: NSImage?
-    /// Set when a recording finishes; the view opens the video editor on it.
+    /// Set when the user picks "Edit" from the post-recording prompt; the view
+    /// opens the video editor on it.
     var finishedRecording: URL?
+    /// Set when a recording stops; the view shows the Discard/Save/Edit prompt.
+    var pendingRecording: URL?
     /// Set when recording fails to start; the view surfaces it as a toast.
     var recordingError: String?
 
@@ -206,24 +211,47 @@ final class MirrorViewModel {
         pendingScreenshot = MirrorImage.nsImage(from: snapshot.imageBuffer)
     }
 
-    func toggleRecording() async {
-        if isRecording {
-            guard let recorder = screenRecorder else { return }
-            screenRecorder = nil
-            isRecording = false
-            // Stopping returns the finished temp file; the view opens the editor.
-            if let url = try? await recorder.stop() { finishedRecording = url }
-        } else {
-            guard let server else { return }
-            let recorder = ScreenRecorder(client: adb, server: server)
-            do {
-                try await recorder.start(
-                    serial: serial, options: ScreenRecordOptions(maxSize: 1280, captureAudio: true))
-                screenRecorder = recorder
-                isRecording = true
-            } catch {
-                recordingError = error.localizedDescription
-            }
+    func startRecording() async {
+        guard !isRecording, let server else { return }
+        let recorder = ScreenRecorder(
+            client: adb, server: server, ffmpegPath: BundledTools.ffmpegPath())
+        do {
+            try await recorder.start(
+                serial: serial, options: ScreenRecordOptions(maxSize: 1280, captureAudio: true))
+            screenRecorder = recorder
+            isRecording = true
+            isPaused = false
+        } catch {
+            recordingError = error.localizedDescription
         }
+    }
+
+    func stopRecording() async {
+        guard let recorder = screenRecorder else { return }
+        screenRecorder = nil
+        isRecording = false
+        isPaused = false
+        // Stopping returns the finished temp file; the view prompts discard/save/edit.
+        if let url = try? await recorder.stop() { pendingRecording = url }
+    }
+
+    func pauseRecording() async {
+        guard let recorder = screenRecorder, !recordBusy, !isPaused else { return }
+        recordBusy = true
+        await recorder.pause()
+        isPaused = true
+        recordBusy = false
+    }
+
+    func resumeRecording() async {
+        guard let recorder = screenRecorder, !recordBusy, isPaused else { return }
+        recordBusy = true
+        do {
+            try await recorder.resume()
+            isPaused = false
+        } catch {
+            recordingError = error.localizedDescription
+        }
+        recordBusy = false
     }
 }

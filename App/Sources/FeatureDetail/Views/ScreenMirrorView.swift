@@ -31,6 +31,7 @@ struct ScreenMirrorView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .recordingDecision(url: pendingRecording) { url in model?.finishedRecording = url }
         .task(id: state.targetSerials.first) {
             await reconnect(to: state.targetSerials.first)
         }
@@ -58,6 +59,10 @@ struct ScreenMirrorView: View {
             serial: serial)
         model = viewModel
         await viewModel.start()
+    }
+
+    private var pendingRecording: Binding<URL?> {
+        Binding(get: { model?.pendingRecording }, set: { model?.pendingRecording = $0 })
     }
 }
 
@@ -112,15 +117,22 @@ private struct MirrorStage: View {
             navButton("camera", help: "Screenshot — edit in place") {
                 Task { await model.takeScreenshot() }
             }
-            Button { Task { await model.toggleRecording() } } label: {
-                Image(systemName: model.isRecording ? "stop.circle.fill" : "record.circle")
-                    .font(.title3)
-                    .foregroundStyle(model.isRecording ? .red : .primary)
-                    .frame(width: 44, height: 30)
-                    .contentShape(Rectangle())
+
+            if model.isRecording {
+                navButton(
+                    model.isPaused ? "play.fill" : "pause.fill",
+                    help: model.isPaused ? "Resume recording" : "Pause recording"
+                ) {
+                    Task { model.isPaused ? await model.resumeRecording() : await model.pauseRecording() }
+                }
+                navButton("stop.circle.fill", tint: .red, help: "Stop recording") {
+                    Task { await model.stopRecording() }
+                }
+            } else {
+                navButton("record.circle", help: "Record — keep mirroring") {
+                    Task { await model.startRecording() }
+                }
             }
-            .buttonStyle(.plain)
-            .help(model.isRecording ? "Stop recording — opens the editor" : "Record — keep mirroring")
 
             Divider().frame(height: 22)
 
@@ -137,10 +149,13 @@ private struct MirrorStage: View {
         .disabled(model.status != .streaming)
     }
 
-    private func navButton(_ systemImage: String, help: String, action: @escaping () -> Void) -> some View {
+    private func navButton(
+        _ systemImage: String, tint: Color? = nil, help: String, action: @escaping () -> Void
+    ) -> some View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(.title3)
+                .foregroundStyle(tint ?? .primary)
                 .frame(width: 44, height: 30)
                 .contentShape(Rectangle())
         }
