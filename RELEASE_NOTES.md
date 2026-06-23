@@ -21,6 +21,10 @@ video editor for trimming, rotating, cropping, converting, and compressing clips
 - **Live edit preview** — rotate, flip, crop, speed, and mute reflect in the
   preview as you change them. Crop is a focused mode with the player controls
   hidden and Apply / Cancel / Reset (Esc) actions.
+- **Privacy consent redesigned** — the first-launch telemetry screen is clearer,
+  with iconned rows, a recommendation, and both anonymous crash reports and usage
+  analytics on by default (still nothing is sent until you continue, and it's
+  changeable anytime in Settings → Privacy).
 
 ### Install
 
