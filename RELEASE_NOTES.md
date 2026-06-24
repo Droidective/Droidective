@@ -1,3 +1,12 @@
+## Droidective v2.4.1
+
+### Improvements
+
+- **Sidebar footer** — the "Manage features" button stays on one line, and the
+  sidebar has a higher minimum width so the footer no longer wraps when narrowed.
+
+Installed copies update in place via Sparkle.
+
 ## Droidective v2.4.0
 
 A live in-app screen mirror, a video editor, and self-contained tools — scrcpy
