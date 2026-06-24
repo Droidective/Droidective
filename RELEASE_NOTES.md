@@ -1,3 +1,21 @@
+## Droidective v2.4.2
+
+A fix for the in-app updater's release notes, plus a couple of first-run changes.
+
+### Fixes
+
+- **Update notes** — the in-app updater now shows the release notes in its own
+  window instead of opening the GitHub release web page.
+
+### Improvements
+
+- **First-run privacy screen** — appears after a few launches instead of on the
+  first one. Anonymous crash reports and usage analytics are on by default in
+  the meantime; both stay opt-out anytime in Settings → Privacy.
+- **Star prompt** — a one-time nudge to star the project on GitHub.
+
+Installed copies update in place via Sparkle.
+
 ## Droidective v2.4.1
 
 ### Improvements
