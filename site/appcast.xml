@@ -7,12 +7,12 @@
     <language>en</language>
     <item>
       <title>Droidective 2.4.0</title>
-      <sparkle:version>69</sparkle:version>
+      <sparkle:version>76</sparkle:version>
       <sparkle:shortVersionString>2.4.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <sparkle:releaseNotesLink>https://github.com/Droidective/Droidective/releases/tag/v2.4.0</sparkle:releaseNotesLink>
-      <pubDate>Wed, 24 Jun 2026 09:11:44 +0000</pubDate>
-      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v2.4.0/Droidective-v2.4.0.dmg" sparkle:edSignature="H+IwWl3NkKrdp2Wue5bJ+gTsfWGLxOmBI62+QEqjh9DnlK1mjRFaJWja8qFnzbATnY9ca6wwokUZ5O+fPoDNDA==" length="44317257" type="application/octet-stream" />
+      <pubDate>Wed, 24 Jun 2026 11:19:41 +0000</pubDate>
+      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v2.4.0/Droidective-v2.4.0.dmg" sparkle:edSignature="giUfF3S4eJGF8oJwEQ4ajy77B/mSqxXaYcmJeRwxKOtJ1wO3jsWgLCB32fzeQJoriW+4mHRZXw8Lo2Bck9X5DQ==" length="44365489" type="application/octet-stream" />
     </item>
   </channel>
 </rss>
