@@ -88,9 +88,9 @@ struct RootView: View {
         HStack(spacing: 0) {
             if state.sidebarVisible {
                 SidebarPaletteView()
-                    .frame(width: sidebarWidth)
+                    .frame(width: min(max(sidebarWidth, 250), 460))
                     .transition(.move(edge: .leading).combined(with: .opacity))
-                ResizeHandle(value: $sidebarWidth, range: 200...460)
+                ResizeHandle(value: $sidebarWidth, range: 250...460)
             }
             VStack(spacing: 0) {
                 // The catalog has no device context, so its device bar is hidden.

@@ -266,6 +266,7 @@ struct SidebarPaletteView: View {
                     systemImage: "square.grid.2x2"
                 )
                 .font(.body)
+                .lineLimit(1)
             }
             .buttonStyle(.plain)
             .foregroundStyle(state.selectedFeatureID == "catalog" ? AnyShapeStyle(.brandAccent) : AnyShapeStyle(.textMuted))
