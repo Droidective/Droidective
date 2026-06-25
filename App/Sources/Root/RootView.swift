@@ -73,6 +73,9 @@ struct RootView: View {
             .onAppear {
                 state.openMainWindow = { openWindow(id: "main") }
                 state.openPalette = { PaletteController.shared.show(appState: state) }
+                InstallInbox.shared.onReceive = { urls in
+                    InstallPickerController.shared.present(apks: urls, state: state)
+                }
                 migrateDefaultsIfNeeded()
                 applyStoredTheme()
                 updateDockIcon()

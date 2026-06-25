@@ -664,6 +664,29 @@ final class AppState {
         ))
     }
 
+    /// Install one or more APKs on the given device serials, one toast per APK.
+    /// Shared by the Install App screen and the Finder-drop device picker.
+    func installAPKs(_ urls: [URL], onSerials serials: [String]) {
+        guard !urls.isEmpty, !serials.isEmpty else { return }
+        Task {
+            await CommandLog.userInitiated(feature: "install-app") {
+                for url in urls {
+                    let name = url.lastPathComponent
+                    var ok = 0
+                    for serial in serials {
+                        let result = (try? await env.engine.appInstall.install(apkPath: url.path, serial: serial))
+                            ?? FeatureResult(ok: false, message: "adb not found")
+                        if result.ok { ok += 1 }
+                    }
+                    let message = serials.count == 1
+                        ? (ok == 1 ? "Installed \(name)" : "Couldn't install \(name)")
+                        : "Installed \(name) on \(ok)/\(serials.count) devices"
+                    showToast(Toast(message: message, ok: ok > 0))
+                }
+            }
+        }
+    }
+
     func showToast(_ toast: Toast) {
         toasts.append(toast)
         if toast.important {
