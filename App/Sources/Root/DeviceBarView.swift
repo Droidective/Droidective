@@ -275,8 +275,6 @@ struct DeviceBarView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             } else {
-                Image(systemName: "shippingbox")
-                    .foregroundStyle(.secondary)
                 Text("Choose app bundle…")
                     .foregroundStyle(.secondary)
             }

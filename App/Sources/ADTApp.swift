@@ -11,7 +11,11 @@ struct ADTApp: App {
         // hot-key registration needs a running event loop, which App.init
         // predates.
         _appState = State(initialValue: AppState(env: AppEnvironment()))
-        // Start crash reporting as early as possible; analytics only if opted in.
+        // Count this launch so the first-run privacy disclosure can be deferred
+        // (gated in RootView). Telemetry is anonymous and on by default; start
+        // it as early as possible.
+        let defaults = UserDefaults.standard
+        defaults.set(defaults.integer(forKey: "launchCount") + 1, forKey: "launchCount")
         Telemetry.shared.start()
     }
 
@@ -90,16 +94,6 @@ struct ADTApp: App {
                 .keyboardShortcut("0", modifiers: .command)
             }
         }
-
-        Window("Search", id: "palette") {
-            PaletteWindowView()
-                .environment(appState)
-                .tint(.brandAccent)
-        }
-        .windowStyle(.hiddenTitleBar)
-        .windowResizability(.contentSize)
-        .defaultPosition(.center)
-        .commandsRemoved()
 
         Settings {
             SettingsView()

@@ -51,6 +51,49 @@ public enum FeatureCategory: String, Sendable, Codable, CaseIterable {
     }
 }
 
+/// The persona a user picks on first launch to get a focused, curated set of
+/// features instead of all of them. Drives `FeatureRegistry.featuresByRole`.
+/// UI strings and the icon (an SF Symbol *name*) live here so the picker stays
+/// declarative and ADBKit stays free of UI frameworks. A `nil` selected role
+/// means "show everything".
+public enum UserRole: String, Sendable, Codable, CaseIterable, Identifiable {
+    case androidDeveloper = "android-dev"
+    case reactNativeDeveloper = "rn-dev"
+    case qaTester = "qa"
+    case supportTriage = "support"
+
+    public var id: String { rawValue }
+
+    public var label: String {
+        switch self {
+        case .androidDeveloper: return "Android Developer"
+        case .reactNativeDeveloper: return "React Native Developer"
+        case .qaTester: return "QA / Tester"
+        case .supportTriage: return "Support / Triage"
+        }
+    }
+
+    /// One line shown under the role name on its picker card.
+    public var blurb: String {
+        switch self {
+        case .androidDeveloper: return "Logs, app internals, files, and device connection."
+        case .reactNativeDeveloper: return "Metro reload, dev menu, logs, and performance."
+        case .qaTester: return "Capture, recording, crash hunting, and state simulation."
+        case .supportTriage: return "Device diagnostics, connection, and quick checks."
+        }
+    }
+
+    /// SF Symbol name (ADBKit stays UI-framework free).
+    public var icon: String {
+        switch self {
+        case .androidDeveloper: return "hammer"
+        case .reactNativeDeveloper: return "atom"
+        case .qaTester: return "checkmark.seal"
+        case .supportTriage: return "lifepreserver"
+        }
+    }
+}
+
 public enum OverrideKind: String, Sendable, Codable, CaseIterable {
     case proxy
     case layout
@@ -231,7 +274,7 @@ public struct FeatureDef: Sendable, Identifiable {
     /// Links (whose subtitle merely mentions "app"). Used to order search
     /// results in the palette and sidebar.
     public func relevance(for query: String) -> Int {
-        let q = query.lowercased()
+        let q = query.lowercased().trimmingCharacters(in: .whitespaces)
         if q.isEmpty { return 1 }
         let titleLower = title.lowercased()
         if titleLower == q { return 100 }
@@ -240,6 +283,15 @@ public struct FeatureDef: Sendable, Identifiable {
         if keywords.contains(where: { $0.lowercased().hasPrefix(q) }) { return 40 }
         if keywords.contains(where: { $0.lowercased().contains(q) }) { return 30 }
         if let subtitle, subtitle.lowercased().contains(q) { return 10 }
+
+        // Multi-word query: match when every word appears somewhere searchable,
+        // even if not contiguous — so "copy ip" finds "Copy Device IP". Ranks
+        // below any contiguous match above.
+        let tokens = q.split(separator: " ").map(String.init)
+        guard tokens.count > 1 else { return 0 }
+        if tokens.allSatisfy({ titleLower.contains($0) }) { return 50 }
+        let haystacks = keywords.map { $0.lowercased() } + [titleLower, subtitle?.lowercased() ?? ""]
+        if tokens.allSatisfy({ token in haystacks.contains { $0.contains(token) } }) { return 20 }
         return 0
     }
 }

@@ -220,8 +220,8 @@ private struct AppDetailPane: View {
     private var serial: String { state.targetSerials.first ?? "" }
 
     var body: some View {
-        Form {
-            Section {
+        HubColumn {
+            HubSection("App info") {
                 HStack(spacing: 12) {
                     AppIconView(packageId: packageId, name: derivedName, serial: state.targetSerials.first ?? "")
                         .frame(width: 40, height: 40)
@@ -230,15 +230,17 @@ private struct AppDetailPane: View {
                         .textSelection(.enabled)
                 }
                 if let info, info.installed {
-                    LabeledContent("Version", value: info.versionName)
-                    LabeledContent("Target SDK", value: info.targetSdk)
-                    LabeledContent("Min SDK", value: info.minSdk)
-                    LabeledContent("Last Update", value: info.lastUpdate)
-                    if let size = info.apkSizeBytes {
-                        LabeledContent("APK Size", value: ByteCountFormatter.string(
-                            fromByteCount: Int64(size), countStyle: .file
-                        ))
-                    }
+                    HubRowList(
+                        [
+                            ("Version", info.versionName),
+                            ("Target SDK", info.targetSdk),
+                            ("Min SDK", info.minSdk),
+                            ("Last Update", info.lastUpdate),
+                        ]
+                        + (info.apkSizeBytes.map {
+                            [("APK Size", ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .file))]
+                        } ?? [])
+                    )
                 } else if info == nil {
                     HStack {
                         ProgressView().controlSize(.small)
@@ -247,7 +249,7 @@ private struct AppDetailPane: View {
                 }
             }
 
-            Section("Controls") {
+            HubSection("Controls") {
                 HStack(spacing: 8) {
                     Button { runControl(.open) } label: {
                         Label("Open", systemImage: "play.fill")
@@ -265,7 +267,7 @@ private struct AppDetailPane: View {
                 .disabled(managing)
             }
 
-            Section {
+            HubSection("Permissions") {
                 if let permissions {
                     Toggle(isOn: $showPermissions) {
                         Text("Runtime permissions (\(permissions.count))")
@@ -308,7 +310,7 @@ private struct AppDetailPane: View {
                 }
             }
 
-            Section {
+            HubSection("Files & APK") {
                 Button {
                     pullApk()
                 } label: {
@@ -322,7 +324,7 @@ private struct AppDetailPane: View {
                 }
             }
 
-            Section("Manage") {
+            HubSection("Manage") {
                 if lifecycle?.removed == true {
                     Button {
                         manage { try await $0.setRemoved(serial: serial, packageId: packageId, false) }
@@ -358,8 +360,6 @@ private struct AppDetailPane: View {
                 }
             }
         }
-        .formStyle(.grouped)
-        .scrollContentBackground(.hidden)
         .confirmationDialog(
             "Clear all data for \(packageId)? This signs you out and wipes local storage.",
             isPresented: $confirmingClearData

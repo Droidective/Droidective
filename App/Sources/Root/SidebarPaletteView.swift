@@ -50,6 +50,9 @@ private struct SidebarDrop: DropDelegate {
     /// The target is the last feature row in its group — its lower half maps to
     /// `.afterRow` (end of group), the one slot a top guideline can't reach.
     let isLastFeature: Bool
+    /// Flat (ungrouped) sidebar — any row drops above/below any other, no group
+    /// constraint and no header targets.
+    var isFlat = false
     /// Measured height of the target row (0 if not yet measured).
     let rowHeight: CGFloat
     let setSlot: (DropSlot?) -> Void
@@ -71,6 +74,11 @@ private struct SidebarDrop: DropDelegate {
 
     private func slot(_ info: DropInfo) -> DropSlot? {
         guard let dragID else { return nil }
+        if isFlat {
+            guard dragID.hasPrefix("feature:"), case .feature(let feature) = target else { return nil }
+            if rowHeight > 0, info.location.y > rowHeight / 2 { return .afterRow(feature.id) }
+            return .beforeRow(feature.id)
+        }
         let draggingGroup = dragID.hasPrefix("group:")
         switch target {
         case .header(let category):
@@ -99,8 +107,12 @@ private struct SidebarDrop: DropDelegate {
 /// and ⌘<n> jumps to that row.
 struct SidebarPaletteView: View {
     @Environment(AppState.self) private var state
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var searchFocused: Bool
     @AppStorage("groupSidebar") private var groupSidebar = true
+    /// Transient "edit" mode: rows jiggle and become draggable, controlled by the
+    /// reorder button. Not persisted — every launch starts calm.
+    @State private var reorderMode = false
     @State private var commandHeld = false
     @State private var flagsMonitor: Any?
     /// Active sidebar drag: "feature:<id>" or "group:<rawValue>", nil when idle.
@@ -119,36 +131,41 @@ struct SidebarPaletteView: View {
     var body: some View {
         @Bindable var state = state
         VStack(spacing: 0) {
-            TextField("Search features…", text: $state.searchText)
-                .brandField()
-                .controlSize(.large)
-                .font(.title3)
-                .focused($searchFocused)
-                .overlay(alignment: .trailing) {
-                    if state.searchText.isEmpty {
-                        KeyHint("⌘K")
+            HStack(spacing: 6) {
+                TextField("Search features…", text: $state.searchText)
+                    .brandField()
+                    .controlSize(.large)
+                    .font(.title3)
+                    .focused($searchFocused)
+                    .overlay(alignment: .trailing) {
+                        if state.searchText.isEmpty {
+                            KeyHint("⌘K")
+                                .padding(.trailing, 6)
+                                .allowsHitTesting(false)
+                                .help("⌘K opens the full search")
+                        } else {
+                            Button {
+                                state.searchText = ""
+                                searchFocused = true
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundStyle(.textMuted)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
                             .padding(.trailing, 6)
-                            .allowsHitTesting(false)
-                            .help("⌘K opens the full search")
-                    } else {
-                        Button {
-                            state.searchText = ""
-                            searchFocused = true
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.textMuted)
-                                .contentShape(Rectangle())
+                            .help("Clear search")
                         }
-                        .buttonStyle(.plain)
-                        .padding(.trailing, 6)
-                        .help("Clear search")
                     }
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .onSubmit { runTopMatch() }
-                .onKeyPress(.downArrow) { moveSelection(by: 1); return .handled }
-                .onKeyPress(.upArrow) { moveSelection(by: -1); return .handled }
+                    .onSubmit { runTopMatch() }
+                    .onKeyPress(.downArrow) { moveSelection(by: 1); return .handled }
+                    .onKeyPress(.upArrow) { moveSelection(by: -1); return .handled }
+
+                groupToggleButton
+                reorderToggleButton
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
 
             ScrollViewReader { proxy in
             List {
@@ -182,24 +199,22 @@ struct SidebarPaletteView: View {
                     }
                 } else if groupSidebar {
                     // Custom drag-and-drop (not List.onMove, which raced the row
-                    // tap gestures and dropped intermittently). Drag a feature to
-                    // reorder within its group; drag a header to move the whole
-                    // group. The guideline is drawn between rows for a feature
-                    // drag and only at group boundaries for a group drag.
+                    // tap gestures and dropped intermittently). In reorder mode a
+                    // feature drags to reorder within its group and a header drags
+                    // to move the whole group; the guideline is drawn between rows
+                    // for a feature drag and only at group boundaries for a group.
                     Section {
                         ForEach(groupedRows) { row in
                             groupedRow(row, shortcutRank: shortcutRank)
                         }
                     }
                 } else {
-                    // Ungrouped: the user's custom order, drag to reorder.
+                    // Ungrouped: the flat order (its own `flatOrder`, independent
+                    // of groups). Same custom drag/drop as grouped — List.onMove
+                    // fights the jiggle rotation and the row tap gestures.
                     Section {
-                        let ordered = state.orderedEnabledFeatures
-                        ForEach(ordered) { feature in
-                            FeatureRowView(feature: feature, shortcutIndex: shortcutRank[feature.id])
-                        }
-                        .onMove { source, destination in
-                            state.reorderFeatures(ordered, from: source, to: destination)
+                        ForEach(state.orderedEnabledFeatures) { feature in
+                            flatRow(feature, shortcutRank: shortcutRank)
                         }
                     }
                 }
@@ -230,7 +245,6 @@ struct SidebarPaletteView: View {
         .background(.bgSurface)
         .background { shortcutButtons }
         .onChange(of: state.focusSearchToken) { searchFocused = true }
-        .onChange(of: state.selectedFeatureID) { state.persistLastFeature() }
         .onAppear {
             // Track ⌘ so the row hints can appear/disappear as it's held.
             flagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
@@ -311,6 +325,49 @@ struct SidebarPaletteView: View {
         }
     }
 
+    /// Toggles category grouping in the sidebar. Accent-tinted when grouping is
+    /// on; switching off reveals the user's flat drag-to-reorder list.
+    private var groupToggleButton: some View {
+        Button {
+            groupSidebar.toggle()
+        } label: {
+            Image(systemName: groupSidebar ? "list.bullet.indent" : "list.bullet")
+                .font(.title3)
+                .foregroundStyle(groupSidebar ? AnyShapeStyle(.brandAccent) : AnyShapeStyle(.textMuted))
+                .frame(width: 30, height: 30)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(reorderMode)
+        .opacity(reorderMode ? 0.4 : 1)
+        .help(reorderMode
+            ? "Finish reordering to switch grouping"
+            : (groupSidebar
+                ? "Grouped by category — click for a flat, reorderable list"
+                : "Flat list — click to group by category"))
+    }
+
+    /// Enters/leaves reorder mode. While on, rows jiggle and can be dragged to
+    /// reorder (grouped and flat keep separate orders); off keeps rows calm and
+    /// clutter-free.
+    private var reorderToggleButton: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) { reorderMode.toggle() }
+        } label: {
+            Image(systemName: "arrow.up.arrow.down")
+                .font(.title3)
+                .foregroundStyle(reorderMode ? AnyShapeStyle(.brandAccent) : AnyShapeStyle(.textMuted))
+                .frame(width: 30, height: 30)
+                .background(
+                    reorderMode ? AnyShapeStyle(.brandAccent.opacity(0.14)) : AnyShapeStyle(.clear),
+                    in: RoundedRectangle(cornerRadius: 7)
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(reorderMode ? "Done reordering" : "Reorder features — drag rows to rearrange")
+    }
+
     /// The grouped sidebar flattened to a single list: each non-empty category
     /// contributes a header row then its (shown) feature rows.
     private var groupedRows: [SidebarRow] {
@@ -319,18 +376,18 @@ struct SidebarPaletteView: View {
         }
     }
 
-    /// Renders one flattened sidebar row. The drag starts from the row's grip
-    /// handle (not the whole row), so it never competes with the tap-to-open /
-    /// click-to-collapse gesture; the whole row is the drop target.
+    /// Renders one flattened sidebar row. In reorder mode the whole row/header is
+    /// draggable (no per-row grip) and tap-to-open is suspended, so the drag never
+    /// competes with a tap; the whole row is the drop target.
     @ViewBuilder
     private func groupedRow(_ row: SidebarRow, shortcutRank: [String: Int]) -> some View {
         switch row {
         case .header(let category):
             GroupHeaderView(
-                category: category, compact: true, showsDragHandle: true,
+                category: category, compact: true, showsDragHandle: true, reordering: reorderMode,
                 collapsed: state.isCategoryCollapsed(category),
                 onToggleCollapse: { state.toggleCategoryCollapsed(category) },
-                dragProvider: { startDrag("group:" + category.rawValue) }
+                dragProvider: reorderMode ? { startDrag("group:" + category.rawValue) } : nil
             )
             .overlay(alignment: .top) { guideline(dropSlot == .beforeGroup(category.rawValue)).offset(y: -6) }
             .overlay(alignment: .bottom) { guideline(dropSlot == .topOfGroup(category.rawValue)).offset(y: 6) }
@@ -338,7 +395,8 @@ struct SidebarPaletteView: View {
         case .feature(let feature):
             FeatureRowView(
                 feature: feature, shortcutIndex: shortcutRank[feature.id],
-                dragProvider: { startDrag("feature:" + feature.id) }
+                reordering: reorderMode,
+                dragProvider: reorderMode ? { startDrag("feature:" + feature.id) } : nil
             )
             .background(
                 GeometryReader { geo in
@@ -351,6 +409,28 @@ struct SidebarPaletteView: View {
             .overlay(alignment: .bottom) { guideline(dropSlot == .afterRow(feature.id)).offset(y: 6) }
             .onDrop(of: [.text], delegate: dropDelegate(for: row))
         }
+    }
+
+    /// One row of the flat (ungrouped) sidebar. Mirrors `groupedRow`'s feature
+    /// case but with a flat drop delegate — any row can drop above or below any
+    /// other, with no group constraint.
+    @ViewBuilder
+    private func flatRow(_ feature: FeatureDef, shortcutRank: [String: Int]) -> some View {
+        FeatureRowView(
+            feature: feature, shortcutIndex: shortcutRank[feature.id],
+            reordering: reorderMode,
+            dragProvider: reorderMode ? { startDrag("feature:" + feature.id) } : nil
+        )
+        .background(
+            GeometryReader { geo in
+                Color.clear.onChange(of: geo.size.height, initial: true) { _, height in
+                    rowHeights[feature.id] = height
+                }
+            }
+        )
+        .overlay(alignment: .top) { guideline(dropSlot == .beforeRow(feature.id)).offset(y: -6) }
+        .overlay(alignment: .bottom) { guideline(dropSlot == .afterRow(feature.id)).offset(y: 6) }
+        .onDrop(of: [.text], delegate: dropDelegate(for: .feature(feature), isFlat: true))
     }
 
     /// The accent insertion indicator shown at a drop slot — a thin line capped
@@ -378,11 +458,12 @@ struct SidebarPaletteView: View {
         return NSItemProvider(object: payload as NSString)
     }
 
-    private func dropDelegate(for row: SidebarRow) -> SidebarDrop {
+    private func dropDelegate(for row: SidebarRow, isFlat: Bool = false) -> SidebarDrop {
         SidebarDrop(
             target: row,
             dragID: dragID,
             isLastFeature: isLastFeature(row),
+            isFlat: isFlat,
             rowHeight: rowHeight(for: row),
             setSlot: { dropSlot = $0 },
             perform: { slot, dragged in performSidebarDrop(slot, dragged) }
@@ -410,6 +491,17 @@ struct SidebarPaletteView: View {
             return
         }
         let fid = String(dragged.dropFirst("feature:".count))
+        if !groupSidebar {
+            let flat = state.orderedEnabledFeatures
+            let toIndex: Int
+            switch slot {
+            case .beforeRow(let targetID): toIndex = flat.firstIndex { $0.id == targetID } ?? flat.count
+            case .afterRow(let targetID): toIndex = flat.firstIndex { $0.id == targetID }.map { $0 + 1 } ?? flat.count
+            default: return
+            }
+            state.moveFlatFeature(fid, toIndex: toIndex)
+            return
+        }
         guard let category = FeatureRegistry.byID[fid]?.category else { return }
         let group = state.enabledFeatures(in: category)
         let toIndex: Int
@@ -482,15 +574,32 @@ struct SidebarPaletteView: View {
 
 struct FeatureRowView: View {
     @Environment(AppState.self) private var state
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let feature: FeatureDef
     /// 0-based ⌘<n> hint to show trailing (nil = none).
     var shortcutIndex: Int?
     var dimmed = false
-    /// When set, a hover-revealed grip drags this row to reorder it (grouped
-    /// sidebar only). Kept off the row body so it never competes with the tap.
+    /// True while the sidebar is in reorder mode — the row jiggles and tap-to-open
+    /// is suspended so dragging never competes with a tap.
+    var reordering = false
+    /// Set only in reorder mode (grouped sidebar): makes the whole row draggable
+    /// to reorder it. nil otherwise, which is how the drag stays gated.
     var dragProvider: (() -> NSItemProvider)?
     @State private var showingHotkey = false
-    @State private var hovering = false
+
+    private static let jiggleTilt = 1.3
+
+    private var jiggleActive: Bool { reordering && !reduceMotion }
+
+    /// iOS-style edit jiggle as a continuous function of the clock, so it can't
+    /// stall the way a `repeatForever` animation does when the sidebar re-renders.
+    /// Each row gets a stable phase offset from its id so they don't sway in
+    /// lockstep. Off (angle 0) under Reduce Motion — the accent button is the cue.
+    private func jiggleAngle(at date: Date) -> Double {
+        guard jiggleActive else { return 0 }
+        let phase = Double(abs(feature.id.hashValue % 360)) * .pi / 180
+        return sin(date.timeIntervalSinceReferenceDate * 8.5 + phase) * Self.jiggleTilt
+    }
 
     private var isPinned: Bool { state.layout.favorites.contains(feature.id) }
     private var isEnabled: Bool { state.layout.effectiveEnabledIDs.contains(feature.id) }
@@ -500,60 +609,30 @@ struct FeatureRowView: View {
     /// a screen, which just runs (feedback is the toast + clipboard) and leaves
     /// the current detail pane untouched.
     private func activate() {
-        if feature.firesWithoutScreen {
-            Task { await state.run(feature: feature, params: [:]) }
-        } else {
-            state.selectedFeatureID = feature.id
-        }
+        state.openFeature(feature)
     }
 
-    /// Trailing edge of a row: a hover-revealed pin button, then a live switch
-    /// for toggle features (flip the override without opening a screen) or the
-    /// ⌘<n> jump hint.
+    /// Trailing edge of a row: a live switch for toggle features (flip the
+    /// override without opening a screen) or the ⌘<n> jump hint. Pinning and
+    /// reordering moved off the row — pin lives on the right-click menu (and ⌘P
+    /// in the palette), reordering is the sidebar's reorder mode.
     @ViewBuilder private var trailingControl: some View {
-        HStack(spacing: 4) {
-            if let dragProvider {
-                Image(systemName: "line.3.horizontal")
-                    .foregroundStyle(.textMuted)
-                    .opacity(hovering ? 1 : 0)
-                    .onDrag(dragProvider)
-                    .help("Drag to reorder")
-            }
-            if !dimmed {
-                pinButton
-                    .opacity(hovering ? 1 : 0)
-                    .allowsHitTesting(hovering)
-            }
-            if feature.kind == .toggleAction {
-                OverrideToggleControl(feature: feature) { _ in EmptyView() }
-                    .labelsHidden()
-                    .controlSize(.mini)
-            } else if let shortcutIndex {
-                KeyHint("⌘\(shortcutIndex + 1)")
-            }
+        if feature.kind == .toggleAction {
+            OverrideToggleControl(feature: feature) { _ in EmptyView() }
+                .labelsHidden()
+                .controlSize(.mini)
+                .padding(.leading, 6)
+        } else if let shortcutIndex {
+            KeyHint("⌘\(shortcutIndex + 1)")
+                .padding(.leading, 6)
         }
-        .padding(.leading, 6)
     }
 
-    /// Pin/unpin this feature to the top of the sidebar. Hidden until the row
-    /// is hovered (the pinned rows live in their own section, so the filled pin
-    /// is only needed as the unpin affordance on hover).
-    private var pinButton: some View {
-        Button {
-            state.toggleFavorite(feature.id)
-        } label: {
-            Image(systemName: isPinned ? "pin.fill" : "pin")
-                .foregroundStyle(isPinned ? AnyShapeStyle(.orange) : AnyShapeStyle(.textMuted))
-        }
-        .buttonStyle(.plain)
-        .help(isPinned ? "Unpin from top" : "Pin to top")
-    }
-
-    /// Icon tint: brand green for the active row, quiet gray otherwise. Static
-    /// asset colors (not `.tint`), so they keep their color when the window is
-    /// inactive.
+    /// Icon tint: brand green for every live feature, quiet gray only when the
+    /// row is dimmed (disabled). Static asset colors (not `.tint`), so they keep
+    /// their color when the window is inactive.
     private var iconStyle: AnyShapeStyle {
-        (isSelected && !dimmed) ? AnyShapeStyle(.brandAccent) : AnyShapeStyle(.textMuted)
+        dimmed ? AnyShapeStyle(.textMuted) : AnyShapeStyle(.brandAccent)
     }
 
     /// Selection highlight drawn by us, not the system list. The native sidebar
@@ -570,6 +649,25 @@ struct FeatureRowView: View {
     }
 
     var body: some View {
+        // Paused (no ticks, zero cost) unless reordering; the row keeps a stable
+        // identity either way so toggling the mode doesn't recreate it.
+        TimelineView(.animation(paused: !jiggleActive)) { timeline in
+            rowContent
+                .rotationEffect(.degrees(jiggleAngle(at: timeline.date)))
+        }
+    }
+
+    /// The row itself, made draggable as a whole only when `dragProvider` is set
+    /// (reorder mode, grouped sidebar) — no per-row grip.
+    @ViewBuilder private var rowContent: some View {
+        if let dragProvider {
+            row.onDrag(dragProvider)
+        } else {
+            row
+        }
+    }
+
+    private var row: some View {
         HStack(spacing: 0) {
             Label {
                 VStack(alignment: .leading, spacing: 1) {
@@ -588,17 +686,17 @@ struct FeatureRowView: View {
                     .foregroundStyle(iconStyle)
             }
             // Tap target is the label/icon only, so a toggle row's switch keeps
-            // its own taps and flips without navigating.
+            // its own taps and flips without navigating. Tap is suspended in
+            // reorder mode so it never competes with the drag.
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
-            .onTapGesture { activate() }
+            .onTapGesture { if !reordering { activate() } }
 
             trailingControl
         }
         .opacity(dimmed ? 0.75 : 1)
         .listRowBackground(rowBackground)
         .padding(.vertical, 2)
-        .onHover { hovering = $0 }
         .contextMenu {
             // Hub members live in their hub, so pinning/enabling them as
             // standalone rows doesn't apply — only the hotkey does.

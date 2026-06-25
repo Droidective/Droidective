@@ -70,6 +70,12 @@ public struct LayoutState: Codable, Sendable, Equatable {
     /// not listed fall back to `displayOrder` after the listed ones. Optional
     /// so older files decode.
     public var categoryOrder: [String]?
+    /// User's custom order for the *ungrouped* (flat) sidebar — kept separate
+    /// from `sidebarOrder` (which drives grouped/within-group order) so the two
+    /// layouts are independent. nil until the user reorders the flat list, at
+    /// which point the flat sidebar seeds from the grouped order. Optional so
+    /// older files decode.
+    public var flatOrder: [String]?
     /// Categories the user collapsed in the sidebar (`FeatureCategory` raw
     /// values) — only their header shows. Optional so older files decode.
     public var collapsedCategories: [String]?
@@ -81,6 +87,15 @@ public struct LayoutState: Codable, Sendable, Equatable {
     /// nil on layouts written before the switch, so they catch up once. Optional
     /// so older files decode.
     public var didEnableAll: Bool?
+    /// The role the user picked on first launch (`UserRole` raw value), or nil
+    /// for "show everything". Drives the curated enabled set + sidebar order.
+    /// Optional so older files decode.
+    public var selectedRole: String?
+    /// True once the user has been through the role picker (picked a role or
+    /// chose "everything"). Gates the one-time picker; set together with
+    /// `didEnableAll`/`knownIds` so the legacy migrations can't re-expand a
+    /// curated role back to all-on. Optional so older files decode.
+    public var roleChosen: Bool?
 
     public init(
         enabledIds: [String]? = nil,
@@ -88,18 +103,24 @@ public struct LayoutState: Codable, Sendable, Equatable {
         knownIds: [String]? = nil,
         sidebarOrder: [String]? = nil,
         categoryOrder: [String]? = nil,
+        flatOrder: [String]? = nil,
         collapsedCategories: [String]? = nil,
         menuBarItems: [String]? = nil,
-        didEnableAll: Bool? = nil
+        didEnableAll: Bool? = nil,
+        selectedRole: String? = nil,
+        roleChosen: Bool? = nil
     ) {
         self.enabledIds = enabledIds
         self.favorites = favorites
         self.knownIds = knownIds
         self.sidebarOrder = sidebarOrder
         self.categoryOrder = categoryOrder
+        self.flatOrder = flatOrder
         self.collapsedCategories = collapsedCategories
         self.menuBarItems = menuBarItems
         self.didEnableAll = didEnableAll
+        self.selectedRole = selectedRole
+        self.roleChosen = roleChosen
     }
 
     /// The effective enabled set: explicit user choice or registry defaults,
@@ -147,6 +168,31 @@ public struct LayoutState: Codable, Sendable, Equatable {
         }
         return true
     }
+
+    /// Curate the layout to a role: enable exactly the role's features (system
+    /// features stay on regardless via `effectiveEnabledIDs`) and match the
+    /// sidebar order to the curated order. Marks `knownIds`/`didEnableAll` so
+    /// `adoptNewDefaults`/`adoptAllEnabled` can't re-expand the set back to
+    /// all-on. Used at first-run pick and when changing role later.
+    public mutating func seedRole(_ role: UserRole) {
+        let ids = FeatureRegistry.featureIDs(for: role)
+        selectedRole = role.rawValue
+        roleChosen = true
+        enabledIds = ids
+        sidebarOrder = ids
+        knownIds = FeatureRegistry.all.map(\.id)
+        didEnableAll = true
+    }
+
+    /// The "show me everything" choice: leave every feature on, just record that
+    /// the user has been through the picker. Clears any prior role curation.
+    public mutating func seedEverything() {
+        selectedRole = nil
+        roleChosen = true
+        enabledIds = nil
+        knownIds = FeatureRegistry.all.map(\.id)
+        didEnableAll = true
+    }
 }
 
 public struct Presets: Codable, Sendable, Equatable {
@@ -178,24 +224,19 @@ public struct Prefs: Codable, Sendable, Equatable {
     public var runOnAll: Bool
     /// The active saved bundle id (used by every app-scoped feature).
     public var selectedBundleId: String?
-    /// Feature id selected when the app was last used (restored at launch).
-    /// Optional so files written before the field existed still decode.
-    public var lastFeatureId: String?
 
     public init(
         selectedSerial: String? = nil,
         runOnAll: Bool = false,
-        selectedBundleId: String? = nil,
-        lastFeatureId: String? = nil
+        selectedBundleId: String? = nil
     ) {
         self.selectedSerial = selectedSerial
         self.runOnAll = runOnAll
         self.selectedBundleId = selectedBundleId
-        self.lastFeatureId = lastFeatureId
     }
 }
 
-/// All seven durable stores, built once at app startup.
+/// All eight durable stores, built once at app startup.
 public struct AppStores: Sendable {
     public let bundles: JSONStore<[AppBundle]>
     public let deepLinks: JSONStore<DeepLinksMap>
@@ -204,6 +245,7 @@ public struct AppStores: Sendable {
     public let presets: JSONStore<Presets>
     public let overrides: JSONStore<OverridesMap>
     public let prefs: JSONStore<Prefs>
+    public let usage: JSONStore<UsageStats>
 
     public init(directory: URL = AppPaths.supportDir) {
         bundles = JSONStore(filename: "bundles.json", default: [], directory: directory)
@@ -213,5 +255,6 @@ public struct AppStores: Sendable {
         presets = JSONStore(filename: "presets.json", default: Presets(), directory: directory)
         overrides = JSONStore(filename: "overrides.json", default: [:], directory: directory)
         prefs = JSONStore(filename: "prefs.json", default: Prefs(), directory: directory)
+        usage = JSONStore(filename: "usage.json", default: UsageStats(), directory: directory)
     }
 }

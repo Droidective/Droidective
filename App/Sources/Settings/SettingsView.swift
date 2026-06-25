@@ -42,8 +42,6 @@ func applyStoredTheme() {
 struct GeneralSettingsView: View {
     @Environment(AppState.self) private var state
     @AppStorage("theme") private var theme = "auto"
-    @AppStorage("groupSidebar") private var groupSidebar = true
-    @AppStorage("restoreLastFeature") private var restoreLastFeature = true
     @AppStorage("showFeatureNotes") private var showFeatureNotes = false
     @AppStorage(ScreenCaptureService.captureFolderDefaultsKey) private var captureFolderPath = ""
     @AppStorage("showMenuBarExtra") private var showMenuBar = true
@@ -92,6 +90,10 @@ struct GeneralSettingsView: View {
         )
     }
 
+    private var roleBinding: Binding<UserRole?> {
+        Binding(get: { state.selectedRole }, set: { state.chooseRole($0) })
+    }
+
     var body: some View {
         Form {
             Section("Appearance") {
@@ -109,15 +111,23 @@ struct GeneralSettingsView: View {
                     .foregroundStyle(.textMuted)
             }
 
-            Section("Sidebar") {
-                Toggle("Group features by category", isOn: $groupSidebar)
-                Text("Turn off to drag features into your own order.")
+            Section("Role") {
+                Picker("Role", selection: roleBinding) {
+                    Text("All features").tag(Optional<UserRole>.none)
+                    ForEach(UserRole.allCases) { role in
+                        Text(role.label).tag(Optional(role))
+                    }
+                }
+                Text("Curates which features start visible — switching re-curates your set. Nothing is deleted; add any feature back from Home or the catalog.")
                     .font(.footnote)
                     .foregroundStyle(.textMuted)
+                Button("Open the role picker…") {
+                    state.activateMainWindow()
+                    state.presentRolePicker = true
+                }
             }
 
             Section("Startup") {
-                Toggle("Reopen the last used feature", isOn: $restoreLastFeature)
                 Toggle("Open at login", isOn: openAtLogin)
             }
 
