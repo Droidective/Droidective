@@ -203,7 +203,7 @@ struct HomeView: View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: shortcut.icon)
                 .font(.title2)
-                .foregroundStyle(.textMuted)
+                .foregroundStyle(.brandAccent)
                 .frame(width: 26)
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
@@ -298,7 +298,7 @@ private struct FeatureCard: View {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: feature.icon)
                     .font(.title2)
-                    .foregroundStyle(hovering ? AnyShapeStyle(.brandAccent) : AnyShapeStyle(.textMuted))
+                    .foregroundStyle(.brandAccent)
                     .frame(width: 26)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(feature.title)

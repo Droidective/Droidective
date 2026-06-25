@@ -64,14 +64,15 @@ struct GroupHeaderView: View {
     var compact = false
     /// Show the grip glyph that hints the row can be dragged (sidebar only).
     var showsDragHandle = false
+    /// Sidebar reorder mode — the grip shows and the group becomes draggable only
+    /// while this holds, so headers stay clean the rest of the time.
+    var reordering = false
     var collapsed = false
     /// When set, a single click toggles collapse and a disclosure chevron shows.
     var onToggleCollapse: (() -> Void)?
     /// When set, dragging the grip reorders this group (sidebar only). Kept on
     /// the grip, not the whole header, so it never competes with the tap.
     var dragProvider: (() -> NSItemProvider)?
-
-    @State private var hovering = false
 
     var body: some View {
         if state.canToggleGroup(category) {
@@ -96,21 +97,15 @@ struct GroupHeaderView: View {
             }
             Text(category.label)
             Spacer(minLength: 0)
-            if showsDragHandle {
+            if showsDragHandle, reordering {
                 let grip = Image(systemName: "line.3.horizontal")
-                    .foregroundStyle(.textMuted)
+                    .foregroundStyle(.brandAccent)
                     .font(.body)
-                Group {
-                    if let dragProvider {
-                        grip.onDrag(dragProvider).help("Drag to reorder this group")
-                    } else {
-                        grip
-                    }
+                if let dragProvider {
+                    grip.onDrag(dragProvider).help("Drag to reorder this group")
+                } else {
+                    grip
                 }
-                // Only hint the grip while hovering the header, so it isn't
-                // always-on clutter next to every group title.
-                .opacity(hovering ? 1 : 0)
-                .allowsHitTesting(hovering)
             }
         }
         .font(compact ? .caption : nil)
@@ -120,7 +115,6 @@ struct GroupHeaderView: View {
         // edge during a drag) sits clear of the label instead of touching it.
         .padding(.vertical, compact ? 6 : 0)
         .contentShape(Rectangle())
-        .onHover { hovering = $0 }
         .onTapGesture { onToggleCollapse?() }
         .help(onToggleCollapse != nil
             ? "Click to collapse · drag to reorder · right-click to enable/disable the group"

@@ -42,7 +42,6 @@ func applyStoredTheme() {
 struct GeneralSettingsView: View {
     @Environment(AppState.self) private var state
     @AppStorage("theme") private var theme = "auto"
-    @AppStorage("groupSidebar") private var groupSidebar = true
     @AppStorage("showFeatureNotes") private var showFeatureNotes = false
     @AppStorage(ScreenCaptureService.captureFolderDefaultsKey) private var captureFolderPath = ""
     @AppStorage("showMenuBarExtra") private var showMenuBar = true
@@ -108,13 +107,6 @@ struct GeneralSettingsView: View {
 
                 Toggle("Show how-it-works notes", isOn: $showFeatureNotes)
                 Text("The info text beneath each feature, above the command bar.")
-                    .font(.footnote)
-                    .foregroundStyle(.textMuted)
-            }
-
-            Section("Sidebar") {
-                Toggle("Group features by category", isOn: $groupSidebar)
-                Text("Turn off to drag features into your own order.")
                     .font(.footnote)
                     .foregroundStyle(.textMuted)
             }

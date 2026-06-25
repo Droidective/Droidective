@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import ADBKit
 
@@ -213,6 +214,18 @@ import Testing
         #expect(!logcat.matches("battery"))
     }
 
+    @Test func multiWordSearchMatchesNonContiguousTokens() {
+        // "copy ip" must surface Copy Device IP even though "Device" sits between
+        // the two words; it should outrank the Connection hub, whose subtitle
+        // only mentions "Copy IP".
+        let copyIP = FeatureRegistry.byID["get-ip"]!
+        let connection = FeatureRegistry.byID["connection"]!
+        #expect(copyIP.matches("copy ip"))
+        #expect(copyIP.relevance(for: "copy ip") > connection.relevance(for: "copy ip"))
+        // Every word still has to appear somewhere — gibberish doesn't match.
+        #expect(!copyIP.matches("copy battery"))
+    }
+
     @Test func hubsStaySearchableByTheirMembersPrimaryKeyword() {
         // Absorbed members no longer surface as standalone search results, so
         // each hub must carry its members' identity: searching a member's
@@ -272,6 +285,18 @@ import Testing
         #expect(layout.adoptAllEnabled() == false)
         #expect(layout.adoptNewDefaults() == false)
         #expect(layout.enabledIds == curated)
+    }
+
+    @Test func flatOrderPersistsIndependentlyOfGroupedOrder() throws {
+        var layout = LayoutState()
+        layout.sidebarOrder = ["a", "b", "c"]
+        layout.flatOrder = ["c", "a", "b"]
+        let decoded = try JSONDecoder().decode(LayoutState.self, from: JSONEncoder().encode(layout))
+        #expect(decoded.sidebarOrder == ["a", "b", "c"])
+        #expect(decoded.flatOrder == ["c", "a", "b"])
+        // A fresh layout has no flat order, so the flat sidebar mirrors the
+        // grouped order until the user reorders it.
+        #expect(LayoutState().flatOrder == nil)
     }
 
     @Test func seedEverythingLeavesEverythingOn() {

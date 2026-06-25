@@ -70,6 +70,12 @@ public struct LayoutState: Codable, Sendable, Equatable {
     /// not listed fall back to `displayOrder` after the listed ones. Optional
     /// so older files decode.
     public var categoryOrder: [String]?
+    /// User's custom order for the *ungrouped* (flat) sidebar — kept separate
+    /// from `sidebarOrder` (which drives grouped/within-group order) so the two
+    /// layouts are independent. nil until the user reorders the flat list, at
+    /// which point the flat sidebar seeds from the grouped order. Optional so
+    /// older files decode.
+    public var flatOrder: [String]?
     /// Categories the user collapsed in the sidebar (`FeatureCategory` raw
     /// values) — only their header shows. Optional so older files decode.
     public var collapsedCategories: [String]?
@@ -97,6 +103,7 @@ public struct LayoutState: Codable, Sendable, Equatable {
         knownIds: [String]? = nil,
         sidebarOrder: [String]? = nil,
         categoryOrder: [String]? = nil,
+        flatOrder: [String]? = nil,
         collapsedCategories: [String]? = nil,
         menuBarItems: [String]? = nil,
         didEnableAll: Bool? = nil,
@@ -108,6 +115,7 @@ public struct LayoutState: Codable, Sendable, Equatable {
         self.knownIds = knownIds
         self.sidebarOrder = sidebarOrder
         self.categoryOrder = categoryOrder
+        self.flatOrder = flatOrder
         self.collapsedCategories = collapsedCategories
         self.menuBarItems = menuBarItems
         self.didEnableAll = didEnableAll

@@ -471,10 +471,25 @@ final class AppState {
         ordered(FeatureRegistry.all.filter { $0.category == category && !$0.isAbsorbedByHub })
     }
 
-    /// Enabled, non-pinned features in the user's order. Drives the flat
-    /// (ungrouped) sidebar and its drag-to-reorder.
+    /// Enabled, non-pinned features in grouped display order, flattened — the
+    /// seed for the flat sidebar before the user reorders it.
+    private var groupedFlatFeatures: [FeatureDef] {
+        orderedCategories.flatMap { enabledFeatures(in: $0) }
+    }
+
+    /// Enabled, non-pinned features in the flat sidebar's own order. Until the
+    /// user reorders the flat list (`flatOrder` is nil), it mirrors the grouped
+    /// order so toggling grouping off doesn't reshuffle anything.
     var orderedEnabledFeatures: [FeatureDef] {
-        ordered(enabledFeatures.filter { !layout.favorites.contains($0.id) })
+        guard let flatOrder = layout.flatOrder else { return groupedFlatFeatures }
+        let rank = Dictionary(flatOrder.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
+        let registryIndex = Dictionary(
+            uniqueKeysWithValues: FeatureRegistry.all.enumerated().map { ($1.id, $0) }
+        )
+        return enabledFeatures.filter { !layout.favorites.contains($0.id) }.sorted {
+            (rank[$0.id] ?? Int.max, registryIndex[$0.id] ?? 0)
+                < (rank[$1.id] ?? Int.max, registryIndex[$1.id] ?? 0)
+        }
     }
 
     /// Genuinely-disabled features — not on the sidebar and not folded into a
@@ -733,6 +748,15 @@ final class AppState {
         persistLayout()
     }
 
+    /// Reorder the flat (ungrouped) sidebar. `displayed` is the whole flat list,
+    /// so the moved sequence is stored verbatim as the independent `flatOrder` —
+    /// leaving the grouped order (`sidebarOrder`/`categoryOrder`) untouched.
+    func reorderFlatFeatures(_ displayed: [FeatureDef], from source: IndexSet, to destination: Int) {
+        let ids = displayed.map(\.id)
+        layout.flatOrder = SidebarOrdering.reorder(displayed: ids, from: source, to: destination, within: ids)
+        persistLayout()
+    }
+
     /// Move a feature to `toIndex` within its group (sidebar drag-and-drop).
     /// `toIndex` is the insertion position in the group's enabled-feature list
     /// (0 = top, count = end).
@@ -740,6 +764,15 @@ final class AppState {
         let group = enabledFeatures(in: category)
         guard let from = group.firstIndex(where: { $0.id == id }) else { return }
         reorderFeatures(group, from: IndexSet(integer: from), to: toIndex)
+    }
+
+    /// Move a feature to `toIndex` within the flat (ungrouped) sidebar, writing
+    /// the independent `flatOrder`. `toIndex` is the insertion position in the
+    /// flat list (0 = top, count = end).
+    func moveFlatFeature(_ id: String, toIndex: Int) {
+        let flat = orderedEnabledFeatures
+        guard let from = flat.firstIndex(where: { $0.id == id }) else { return }
+        reorderFlatFeatures(flat, from: IndexSet(integer: from), to: toIndex)
     }
 
     /// Move a whole group before `targetRawValue` (nil = to the end).
