@@ -110,13 +110,13 @@ struct RootView: View {
         NSApp.applicationIconImage = NSImage(named: dark ? "AppLogoDark" : "AppLogoLight")
     }
 
-    /// One-time switch to the v2 defaults — Auto appearance and how-it-works
+    /// One-time switch to the v2 defaults — dark appearance and how-it-works
     /// notes hidden — for users who installed before they changed. Runs once;
     /// any later manual change in Settings sticks.
     private func migrateDefaultsIfNeeded() {
         let defaults = UserDefaults.standard
         guard !defaults.bool(forKey: "didMigrateDefaultsV2") else { return }
-        defaults.set("auto", forKey: "theme")
+        defaults.set("dark", forKey: "theme")
         defaults.set(false, forKey: "showFeatureNotes")
         defaults.set(true, forKey: "didMigrateDefaultsV2")
     }
