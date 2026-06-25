@@ -247,6 +247,7 @@ final class AppState {
             layout = loadedLayout
             var layoutChanged = layout.adoptNewDefaults()
             layoutChanged = layout.adoptAllEnabled() || layoutChanged
+            layoutChanged = layout.adoptNewRoleFeatures() || layoutChanged
             if layoutChanged {
                 persistLayout()
             }

@@ -453,12 +453,12 @@ public enum FeatureRegistry {
     public static let featuresByRole: [UserRole: [String]] = [
         .androidDeveloper: [
             "logcat", "crash-catcher", "device-info", "current-activity", "foreground-package",
-            "file-explorer", "sandbox-browser", "apps", "connection", "get-ip",
+            "file-explorer", "sandbox-browser", "apps", "emulators", "connection", "get-ip",
             "meminfo", "monkey", "scrcpy", "screenshot", "send-text", "custom-commands",
         ],
         .reactNativeDeveloper: [
             "react-native", "logcat", "crash-catcher", "performance", "network-speed",
-            "apps", "connection", "device-info", "scrcpy", "screenshot", "send-text", "custom-commands",
+            "apps", "emulators", "connection", "device-info", "scrcpy", "screenshot", "send-text", "custom-commands",
         ],
         .qaTester: [
             "screenshot", "screen-record", "scrcpy", "video-editor", "bug-report",

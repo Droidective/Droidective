@@ -299,6 +299,25 @@ import Testing
         #expect(LayoutState().flatOrder == nil)
     }
 
+    @Test func adoptNewRoleFeaturesEnablesFeaturesAddedToTheRole() {
+        var layout = LayoutState()
+        layout.seedRole(.androidDeveloper)
+        // Simulate a layout seeded before "emulators" joined the Android role.
+        layout.enabledIds?.removeAll { $0 == "emulators" }
+        layout.seededRoleIds?.removeAll { $0 == "emulators" }
+        #expect(layout.enabledIds?.contains("emulators") == false)
+
+        #expect(layout.adoptNewRoleFeatures() == true)
+        #expect(layout.enabledIds?.contains("emulators") == true)
+        // Idempotent once the baseline catches up.
+        #expect(layout.adoptNewRoleFeatures() == false)
+
+        // "Everything" users aren't role-curated — no-op.
+        var everything = LayoutState()
+        everything.seedEverything()
+        #expect(everything.adoptNewRoleFeatures() == false)
+    }
+
     @Test func seedEverythingLeavesEverythingOn() {
         var layout = LayoutState()
         layout.seedRole(.qaTester)
