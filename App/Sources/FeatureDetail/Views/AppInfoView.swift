@@ -38,27 +38,31 @@ struct AppInfoView: View {
     }
 
     private func details(_ info: AppInfo) -> some View {
-        Form {
-            LabeledContent("Version", value: info.versionName)
-            LabeledContent("Version Code", value: info.versionCode)
-            LabeledContent("Target SDK", value: info.targetSdk)
-            LabeledContent("Min SDK", value: info.minSdk)
-            LabeledContent("First Install", value: info.firstInstall)
-            LabeledContent("Last Update", value: info.lastUpdate)
-            if let size = info.apkSizeBytes {
-                LabeledContent("APK Size", value: ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))
+        HubColumn {
+            HubSection("App info") {
+                HubRowList(
+                    [
+                        ("Version", info.versionName),
+                        ("Version Code", info.versionCode),
+                        ("Target SDK", info.targetSdk),
+                        ("Min SDK", info.minSdk),
+                        ("First Install", info.firstInstall),
+                        ("Last Update", info.lastUpdate),
+                    ]
+                    + (info.apkSizeBytes.map {
+                        [("APK Size", ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .file))]
+                    } ?? [])
+                )
             }
 
-            Button {
-                pullApk()
-            } label: {
-                Label(pulling ? "Pulling…" : "Pull APK", systemImage: "arrow.down.circle")
+            HubSection("APK") {
+                Button { pullApk() } label: {
+                    Label(pulling ? "Pulling…" : "Pull APK", systemImage: "arrow.down.circle")
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(pulling)
             }
-            .disabled(pulling)
         }
-        .formStyle(.grouped)
-        .scrollContentBackground(.hidden)
-        .centeredColumn(maxWidth: 460)
     }
 
     private func load() async {

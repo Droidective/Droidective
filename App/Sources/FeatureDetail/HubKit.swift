@@ -8,27 +8,47 @@ import SwiftUI
 /// A titled content card: a header (title + optional one-line subtitle) above
 /// its controls, on a single lifted surface. The consistent container for every
 /// section, so the whole screen reads as one rhythm instead of mismatched bars.
-struct HubSection<Content: View>: View {
+struct HubSection<Content: View, Accessory: View>: View {
     private let title: String
     private let subtitle: String?
+    @ViewBuilder private let accessory: () -> Accessory
     @ViewBuilder private let content: () -> Content
 
-    init(_ title: String, subtitle: String? = nil, @ViewBuilder content: @escaping () -> Content) {
+    init(_ title: String, subtitle: String? = nil, @ViewBuilder content: @escaping () -> Content)
+        where Accessory == EmptyView {
         self.title = title
         self.subtitle = subtitle
+        self.accessory = { EmptyView() }
+        self.content = content
+    }
+
+    /// Variant with a trailing accessory in the header (e.g. a refresh button).
+    init(
+        _ title: String,
+        subtitle: String? = nil,
+        @ViewBuilder accessory: @escaping () -> Accessory,
+        @ViewBuilder content: @escaping () -> Content
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        self.accessory = accessory
         self.content = content
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.headline).foregroundStyle(.textMain)
-                if let subtitle {
-                    Text(subtitle)
-                        .font(.callout)
-                        .foregroundStyle(.textMuted)
-                        .fixedSize(horizontal: false, vertical: true)
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(.headline).foregroundStyle(.textMain)
+                    if let subtitle {
+                        Text(subtitle)
+                            .font(.callout)
+                            .foregroundStyle(.textMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
+                Spacer(minLength: 12)
+                accessory()
             }
             content()
         }
@@ -104,6 +124,23 @@ struct HubRow: View {
                 .foregroundStyle(.textMuted)
                 .multilineTextAlignment(.trailing)
                 .textSelection(.enabled)
+        }
+    }
+}
+
+/// A divider-separated list of label/value `HubRow`s — the read-only data block
+/// inside a `HubSection` (device properties, app info, …).
+struct HubRowList: View {
+    private let rows: [(String, String)]
+
+    init(_ rows: [(String, String)]) { self.rows = rows }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
+                if index > 0 { Divider() }
+                HubRow(row.0, row.1).padding(.vertical, 7)
+            }
         }
     }
 }

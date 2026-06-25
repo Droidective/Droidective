@@ -29,8 +29,13 @@ struct SystemRestrictionsView: View {
     }
 
     private func form(_ state0: RestrictionsState) -> some View {
-        Form {
-            Section {
+        HubColumn {
+            HubSection("Installs & APIs", accessory: {
+                Button { Task { await load() } } label: { Image(systemName: "arrow.clockwise") }
+                    .buttonStyle(.borderless)
+                    .help("Refresh")
+                    .disabled(busy)
+            }) {
                 SwitchRow("Verify apps installed via ADB", isOn: binding(state0.adbInstallVerification) {
                     try await engine.restrictions.setAdbInstallVerification(serial: serial, $0)
                 })
@@ -43,16 +48,9 @@ struct SystemRestrictionsView: View {
                 SwitchRow("Stay awake while charging", isOn: binding(state0.stayAwake) {
                     try await engine.restrictions.setStayAwake(serial: serial, $0)
                 })
-            } header: {
-                HStack {
-                    Text("Installs & APIs")
-                    Spacer()
-                    Button { Task { await load() } } label: { Image(systemName: "arrow.clockwise") }
-                        .buttonStyle(.borderless)
-                        .help("Refresh")
-                }
             }
-            Section("Root") {
+
+            HubSection("Root") {
                 if hasRoot {
                     SwitchRow("SELinux enforcing", isOn: binding(state0.selinuxEnforcing ?? true) {
                         try await engine.restrictions.setSelinuxEnforcing(serial: serial, $0)
@@ -60,6 +58,7 @@ struct SystemRestrictionsView: View {
                     Button("Remount /system read-write") {
                         Task { await apply { try await engine.restrictions.remountSystemReadWrite(serial: serial) } }
                     }
+                    .buttonStyle(.bordered)
                 } else {
                     Text("Connect a rooted device to relax SELinux or remount the system partition.")
                         .font(.callout)
@@ -67,9 +66,6 @@ struct SystemRestrictionsView: View {
                 }
             }
         }
-        .formStyle(.grouped)
-        .scrollContentBackground(.hidden)
-        .centeredColumn()
     }
 
     private var engine: FeatureEngine { state.env.engine }
