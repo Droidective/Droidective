@@ -1,3 +1,16 @@
+## Droidective v2.5.1
+
+### Improvements
+
+- **Dark by default** — new installs start in dark mode. Light mode is now marked
+  **Beta** in Settings → Appearance while a few screens are tuned for it; Auto and
+  your own choice still work as before.
+- **Emulators in the dev roles** — the Android and React Native roles now include
+  the Emulators feature, and existing users on those roles pick it up
+  automatically (no need to re-pick your role).
+
+Installed copies update in place via Sparkle.
+
 ## Droidective v2.5.0
 
 A big UX release: pick your role on first launch and get a focused Home, a faster
