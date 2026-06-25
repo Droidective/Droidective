@@ -66,6 +66,20 @@ targets:
         SUFeedURL: https://droidective.github.io/Droidective/appcast.xml
         SUPublicEDKey: "ma0kTe35r55/PKmemQOEBX7n6SuZPZjOBo973SdJqJ8="
         SUEnableAutomaticChecks: true
+        UTImportedTypeDeclarations:
+          - UTTypeIdentifier: com.android.package-archive
+            UTTypeDescription: Android Package
+            UTTypeConformsTo:
+              - public.data
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - apk
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Android Package
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Owner
+            LSItemContentTypes:
+              - com.android.package-archive
     settings:
       base:
         PRODUCT_NAME: Droidective

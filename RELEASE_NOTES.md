@@ -1,5 +1,12 @@
 ## Droidective v2.5.1
 
+### New features
+
+- **Install App** — install an APK onto your device(s) by dragging it onto the
+  new Install App screen or picking a file (reinstalls keep app data, and it
+  installs on every selected device). Double-clicking an `.apk` in Finder opens
+  Droidective and asks which device to install onto.
+
 ### Improvements
 
 - **Dark by default** — new installs start in dark mode. Light mode is now marked
