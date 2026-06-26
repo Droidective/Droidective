@@ -778,19 +778,30 @@ Pixel 8     device</pre>
     const motionOK = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     /* Point the Download buttons straight at the latest release's .dmg.
-       Falls back to the /releases/latest page if the API call fails or JS is off. */
+       Rewrites the href as soon as the API responds, and also intercepts a
+       click that lands before the request finishes so the first click still
+       gets the .dmg. Falls back to the /releases/latest page (the static href)
+       if the API call fails or JS is off. */
     (function () {
       const btns = document.querySelectorAll("[data-dl-latest]");
       if (!btns.length) return;
-      fetch("https://api.github.com/repos/Droidective/Droidective/releases/latest", {
+      let dmgUrl = null;
+      const pending = fetch("https://api.github.com/repos/Droidective/Droidective/releases/latest", {
         headers: { Accept: "application/vnd.github+json" },
       })
         .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
         .then((rel) => {
           const dmg = (rel.assets || []).find((a) => a.name.toLowerCase().endsWith(".dmg"));
-          if (dmg) btns.forEach((b) => { b.href = dmg.browser_download_url; });
+          if (dmg) { dmgUrl = dmg.browser_download_url; btns.forEach((b) => { b.href = dmgUrl; }); }
+          return dmgUrl;
         })
-        .catch(() => {});
+        .catch(() => null);
+
+      btns.forEach((b) => b.addEventListener("click", (e) => {
+        if (dmgUrl) return; // href already points at the .dmg — let it through
+        e.preventDefault();
+        pending.then((url) => { window.location.href = url || b.href; });
+      }));
     })();
 
     /* Scroll reveal */
