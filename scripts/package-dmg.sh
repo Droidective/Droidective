@@ -54,11 +54,20 @@ ffmpeg="$APP/Contents/Resources/ffmpeg"
 codesign "${opts[@]}" "$APP"
 codesign --verify --deep --strict "$APP"
 
-# Stage the app next to an /Applications symlink so the DMG offers drag-install.
+# Lay out a styled "drag to Applications" DMG. The window background and icon
+# positions live in a Finder-authored .DS_Store committed in dmg-assets (see
+# scripts/dmg-assets/README.md for how it's regenerated). We assemble the volume
+# with hdiutil — no Finder/AppleScript — so it works on a headless CI runner.
+# The .DS_Store's background alias is keyed to volume name "Droidective" and
+# .background/background@2x.png, so both must match exactly.
+assets="$(cd "$(dirname "$0")/dmg-assets" && pwd)"
 staging="$(mktemp -d)"
 trap 'rm -rf "$staging"' EXIT
 cp -R "$APP" "$staging/"
 ln -s /Applications "$staging/Applications"
+mkdir "$staging/.background"
+cp "$assets/background@2x.png" "$staging/.background/background@2x.png"
+cp "$assets/DS_Store" "$staging/.DS_Store"
 
 rm -f "$DMG"
 hdiutil create -volname "Droidective" -srcfolder "$staging" -ov -format UDZO "$DMG"
