@@ -20,6 +20,11 @@ public enum CrashFormat: String, Sendable, CaseIterable {
 public struct CrashExtractor: Sendable {
     public static let crashPattern = "FATAL EXCEPTION|AndroidRuntime|ReactNativeJS|FATAL SIGNAL"
 
+    /// Cap the logcat dump we pull. The crash/main buffers can hold very large
+    /// lines (RN apps log big payloads), and the default 10 MB ceiling is far
+    /// more than the UI can render; 512 KB is plenty to find the latest crash.
+    static let maxLogcatBytes = 512 * 1024
+
     let client: AdbClient
 
     public init(client: AdbClient) {
@@ -41,6 +46,20 @@ public struct CrashExtractor: Sendable {
         return lines[start..<end].joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// Keep the rendered crash small. A fatal log line can be huge (RN payload
+    /// logging) and the crash buffer isn't otherwise trimmed, so the latest
+    /// crash can balloon into a multi-megabyte string that freezes the UI when
+    /// shown as a selectable Text. Keep the most recent lines (crashes are
+    /// chronological, newest last) under a character ceiling.
+    static func boundedBlock(_ block: String, maxLines: Int = 200, maxChars: Int = 64 * 1024) -> String {
+        var lines = block.split(separator: "\n", omittingEmptySubsequences: false)
+        if lines.count > maxLines {
+            lines = Array(lines.suffix(maxLines))
+        }
+        let result = lines.joined(separator: "\n")
+        return result.count > maxChars ? String(result.suffix(maxChars)) : result
+    }
+
     public static func format(_ block: String, as format: CrashFormat) -> String {
         switch format {
         case .slack: return "```\n\(block)\n```"
@@ -51,14 +70,19 @@ public struct CrashExtractor: Sendable {
 
     /// Last crash from the device, formatted — nil when none found.
     public func lastCrash(serial: String, format: CrashFormat) async throws(AdbError) -> String? {
-        let crashBuffer = try await client.run(on: serial, ["logcat", "-d", "-b", "crash", "-t", "300"])
+        let crashBuffer = try await client.run(
+            on: serial, ["logcat", "-d", "-b", "crash", "-t", "300"], maxOutputBytes: Self.maxLogcatBytes
+        )
         var block = crashBuffer.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if block.isEmpty {
-            let mainBuffer = try await client.run(on: serial, ["logcat", "-d", "-b", "main", "-t", "1000"])
+            let mainBuffer = try await client.run(
+                on: serial, ["logcat", "-d", "-b", "main", "-t", "1000"], maxOutputBytes: Self.maxLogcatBytes
+            )
             block = Self.extractLastCrash(mainBuffer.stdout)
         }
 
+        block = Self.boundedBlock(block)
         guard !block.isEmpty else { return nil }
         return Self.format(block, as: format)
     }
