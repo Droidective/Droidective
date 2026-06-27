@@ -10,7 +10,7 @@
   <meta name="author" content="Rohindh R" />
   <meta name="robots" content="index, follow" />
   <meta name="theme-color" content="#0d0f0e" />
-  <link rel="canonical" href="https://droidective.github.io/Droidective/" />
+  <link rel="canonical" href="https://droidective.com/" />
 
   <link rel="icon" type="image/png" href="assets/icon.png" media="(prefers-color-scheme: dark)" />
   <link rel="icon" type="image/png" href="assets/icon-light.png" media="(prefers-color-scheme: light)" />
@@ -21,14 +21,14 @@
   <meta property="og:site_name" content="Droidective" />
   <meta property="og:title" content="Droidective — All-in-One Android & React Native Debugging Tool for macOS" />
   <meta property="og:description" content="A Raycast-style command palette for Android & React Native debugging over adb. Mirror screens, tail logcat, browse files, monitor performance — 48 tools, one keystroke away." />
-  <meta property="og:url" content="https://droidective.github.io/Droidective/" />
-  <meta property="og:image" content="https://droidective.github.io/Droidective/assets/screenshot-home.png" />
+  <meta property="og:url" content="https://droidective.com/" />
+  <meta property="og:image" content="https://droidective.com/assets/screenshot-home.png" />
 
   <!-- Twitter -->
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Droidective — All-in-One Android & React Native Debugging Tool for macOS" />
   <meta name="twitter:description" content="A Raycast-style command palette for Android & React Native debugging over adb. 48 tools, one keystroke away. Free & open source." />
-  <meta name="twitter:image" content="https://droidective.github.io/Droidective/assets/screenshot-home.png" />
+  <meta name="twitter:image" content="https://droidective.com/assets/screenshot-home.png" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -42,14 +42,30 @@
     "applicationCategory": "DeveloperApplication",
     "operatingSystem": "macOS 14.0 or later",
     "description": "A free, open-source macOS command palette for Android & React Native debugging over adb: screen mirroring, logcat, file explorer, performance monitoring, app management — 48 tools in all.",
-    "url": "https://droidective.github.io/Droidective/",
+    "url": "https://droidective.com/",
     "downloadUrl": "https://github.com/Droidective/Droidective/releases/latest",
     "softwareVersion": "2.6.0",
-    "screenshot": "https://droidective.github.io/Droidective/assets/screenshot-home.png",
+    "screenshot": "https://droidective.com/assets/screenshot-home.png",
     "license": "https://github.com/Droidective/Droidective/blob/main/LICENSE",
     "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
     "author": { "@type": "Person", "name": "Rohindh R", "url": "https://github.com/Rohindh-R" }
   }
+  </script>
+
+  <!-- PostHog product analytics — key injected at deploy from the POSTHOG_KEY secret -->
+  <script>
+    !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="init capture register register_once register_for_session unregister unregister_for_session getFeatureFlag getFeatureFlagPayload isFeatureEnabled reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey getNextSurveyStep identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording sessionRecordingStarted captureException loadToolbar get_property getSessionProperty createPersonProfile opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing clear_opt_in_out_capturing debug getPageViewId captureTraceFeedback captureTraceMetric".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+    var PH_KEY = "__POSTHOG_KEY__";
+    if (PH_KEY.indexOf("phc_") === 0) {
+      posthog.init(PH_KEY, {
+        api_host: "https://us.i.posthog.com",
+        capture_pageview: true,
+        capture_pageleave: true,
+        autocapture: true,
+        respect_dnt: true,
+        person_profiles: "identified_only"
+      });
+    }
   </script>
 
   <style>
@@ -713,7 +729,7 @@ Pixel 8     device</pre>
       </details>
       <details class="qa">
         <summary>Does it send my data anywhere?<span class="plus"></span></summary>
-        <div class="a">Anonymous crash reports are on by default (opt-out) and usage analytics are opt-in — both disclosed on first launch and controlled in Settings → Privacy. Device serials, file paths, and command contents are never sent.</div>
+        <div class="a">Anonymous crash reports and usage analytics are on by default (opt-out) — both disclosed on first launch and controlled in Settings → Privacy. Device serials, file paths, and command contents are never sent. See the <a href="/privacy.html">privacy page</a> for details.</div>
       </details>
       <details class="qa">
         <summary>Does it work with React Native?<span class="plus"></span></summary>
@@ -775,6 +791,7 @@ Pixel 8     device</pre>
           <a href="#changelog">Changelog</a>
           <a href="https://github.com/Droidective/Droidective/issues">Issues</a>
           <a href="https://github.com/Droidective/Droidective/blob/main/LICENSE">License</a>
+          <a href="/privacy.html">Privacy</a>
         </div>
       </div>
       <p class="disclaimer">
