@@ -34,12 +34,14 @@ struct RootView: View {
     private let starPromptAfterLaunches = 10
 
     private var shouldPromptConsent: Bool {
-        guard !consentAsked else { return false }
-        return askConsentOnFirstLaunch || launchCount >= consentPromptAfterLaunches
+        LaunchPrompt.consentDue(
+            consentAsked: consentAsked, launchCount: launchCount,
+            askOnFirstLaunch: askConsentOnFirstLaunch, afterLaunches: consentPromptAfterLaunches)
     }
 
     private var shouldPromptStar: Bool {
-        !starPromptShown && launchCount >= starPromptAfterLaunches
+        LaunchPrompt.starDue(
+            starPromptShown: starPromptShown, launchCount: launchCount, afterLaunches: starPromptAfterLaunches)
     }
 
     var body: some View {
@@ -80,35 +82,8 @@ struct RootView: View {
                     StarPromptView(onStar: { state.openRepository() })
                 }
             }
-            .onAppear {
-                state.openMainWindow = { openWindow(id: "main") }
-                state.openPalette = { PaletteController.shared.show(appState: state) }
-                (NSApp.delegate as? AppDelegate)?.appState = state
-                InstallInbox.shared.onReceive = { urls in state.openAPKs(urls) }
-                migrateDefaultsIfNeeded()
-                applyStoredTheme()
-                updateDockIcon()
-                HotkeyManager.install(state: state)
-                if !hasChosenRole && !hasSeenTour {
-                    // Brand-new user: pick a role first, then run the tour.
-                    pickerIsFirstRun = true
-                    state.presentRolePicker = true
-                } else if !hasSeenTour {
-                    state.presentTour = true
-                } else if shouldPromptConsent {
-                    presentConsent = true
-                } else if shouldPromptStar {
-                    presentStar = true
-                }
-            }
-            .onChange(of: state.presentRolePicker) { _, showing in
-                // Only the first-run picker chains into the tour; changing role
-                // later (pill / Settings) must not reopen it.
-                if !showing && pickerIsFirstRun {
-                    pickerIsFirstRun = false
-                    if !hasSeenTour { state.presentTour = true }
-                }
-            }
+            .onAppear { performLaunchSetup() }
+            .onChange(of: state.presentRolePicker) { _, showing in rolePickerVisibilityChanged(showing) }
             .onChange(of: state.presentTour) { _, showing in
                 if !showing && shouldPromptConsent { presentConsent = true }
             }
@@ -128,6 +103,48 @@ struct RootView: View {
             } message: { info in
                 Text(info.message)
             }
+    }
+
+    /// Runs once when the root view appears: wires AppState callbacks, applies
+    /// stored prefs/theme/hotkeys, and shows the first due launch prompt. Kept
+    /// out of `body` so the view-builder expression stays cheap to type-check.
+    private func performLaunchSetup() {
+        state.openMainWindow = { openWindow(id: "main") }
+        state.openPalette = { PaletteController.shared.show(appState: state) }
+        (NSApp.delegate as? AppDelegate)?.appState = state
+        InstallInbox.shared.onReceive = { urls in state.openAPKs(urls) }
+        migrateDefaultsIfNeeded()
+        applyStoredTheme()
+        updateDockIcon()
+        HotkeyManager.install(state: state)
+        switch LaunchPrompt.next(
+            hasChosenRole: hasChosenRole, hasSeenTour: hasSeenTour,
+            consentAsked: consentAsked, starPromptShown: starPromptShown,
+            launchCount: launchCount, askConsentOnFirstLaunch: askConsentOnFirstLaunch,
+            consentAfterLaunches: consentPromptAfterLaunches, starAfterLaunches: starPromptAfterLaunches
+        ) {
+        case .rolePicker:
+            // Brand-new user: pick a role first, then run the tour.
+            pickerIsFirstRun = true
+            state.presentRolePicker = true
+        case .tour:
+            state.presentTour = true
+        case .consent:
+            presentConsent = true
+        case .star:
+            presentStar = true
+        case nil:
+            break
+        }
+    }
+
+    /// Only the first-run role picker chains into the tour; changing role later
+    /// (pill / Settings) must not reopen it.
+    private func rolePickerVisibilityChanged(_ showing: Bool) {
+        if !showing && pickerIsFirstRun {
+            pickerIsFirstRun = false
+            if !hasSeenTour { state.presentTour = true }
+        }
     }
 
     @ViewBuilder

@@ -100,3 +100,20 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         DEAD_CODE_STRIPPING: YES
+  AppTests:
+    type: bundle.unit-test
+    platform: macOS
+    # A logic-test bundle (no app host to launch): it compiles the pure
+    # App-layer sources under test directly, so decision logic like LaunchPrompt
+    # is tested fast and deterministically. Genuinely UI-coupled coordinators
+    # would need a hosted/XCUITest target instead.
+    sources:
+      - App/Tests
+      - App/Sources/State/LaunchPrompt.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.rohindh.droidective.tests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "6.0"
+        SWIFT_STRICT_CONCURRENCY: complete
+        SWIFT_TREAT_WARNINGS_AS_ERRORS: YES
