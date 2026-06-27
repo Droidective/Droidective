@@ -64,4 +64,34 @@ import Testing
 
         #expect(try await extractor.lastCrash(serial: "S1", format: .plain) == nil)
     }
+
+    @Test func boundedBlockKeepsShortInputUnchanged() {
+        let s = "line1\nline2\nline3"
+        #expect(CrashExtractor.boundedBlock(s) == s)
+    }
+
+    @Test func boundedBlockKeepsMostRecentLines() {
+        let many = (1...1000).map { "line \($0)" }.joined(separator: "\n")
+        let bounded = CrashExtractor.boundedBlock(many, maxLines: 50, maxChars: 1_000_000)
+        let lines = bounded.split(separator: "\n")
+        #expect(lines.count == 50)
+        #expect(lines.last == "line 1000")
+        #expect(lines.first == "line 951")
+    }
+
+    @Test func boundedBlockCapsAHugeSingleLine() {
+        let huge = String(repeating: "x", count: 200_000)
+        #expect(CrashExtractor.boundedBlock(huge, maxChars: 64 * 1024).count <= 64 * 1024)
+    }
+
+    @Test func lastCrashBoundsAHugeCrashBuffer() async throws {
+        let runner = MockProcessRunner()
+        let huge = (1...5000).map { "E AndroidRuntime: FATAL EXCEPTION line \($0)" }.joined(separator: "\n")
+        runner.script(argsPrefix: ["-s", "S1", "logcat", "-d", "-b", "crash"], stdout: huge)
+        let extractor = CrashExtractor(client: await makeTestClient(runner: runner))
+
+        let crash = try await extractor.lastCrash(serial: "S1", format: .plain)
+        #expect((crash?.split(separator: "\n").count ?? 0) <= 200)
+        #expect(crash?.contains("line 5000") == true)
+    }
 }
