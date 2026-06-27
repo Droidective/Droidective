@@ -46,4 +46,31 @@ import Testing
             $0.arguments == ["-s", "S1", "shell", "mkdir", "-p", "'/sdcard/a b;c'"]
         })
     }
+
+    @Test func deletePathIsShellQuoted() async throws {
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["-s", "S1", "shell", "rm"], stdout: "", exitCode: 0)
+        _ = try await makeService(runner).delete(serial: "S1", path: "/sdcard/a b;rm -rf /")
+        #expect(runner.invocations.contains {
+            $0.arguments == ["-s", "S1", "shell", "rm", "-rf", "'/sdcard/a b;rm -rf /'"]
+        })
+    }
+
+    @Test func copySourceAndDestinationAreShellQuoted() async throws {
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["-s", "S1", "shell", "cp"], stdout: "", exitCode: 0)
+        _ = try await makeService(runner).copy(serial: "S1", from: "/sdcard/a b", toDir: "/sdcard/c;d")
+        #expect(runner.invocations.contains {
+            $0.arguments == ["-s", "S1", "shell", "cp", "-r", "'/sdcard/a b'", "'/sdcard/c;d'"]
+        })
+    }
+
+    @Test func moveSourceAndDestinationAreShellQuoted() async throws {
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["-s", "S1", "shell", "mv"], stdout: "", exitCode: 0)
+        _ = try await makeService(runner).move(serial: "S1", from: "/sdcard/a b", toDir: "/sdcard/c;d")
+        #expect(runner.invocations.contains {
+            $0.arguments == ["-s", "S1", "shell", "mv", "'/sdcard/a b'", "'/sdcard/c;d'"]
+        })
+    }
 }

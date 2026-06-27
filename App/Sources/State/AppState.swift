@@ -656,7 +656,11 @@ final class AppState {
         guard !urls.isEmpty else { return }
         pendingInstallAPKs = urls
         activateMainWindow()
-        selectedFeatureID = "install-app"
+        // Route through the leave guard like every other feature switch: opening
+        // an APK from Finder mid-recording (or with unsaved edits) must raise the
+        // confirmation, not silently abandon that work. The staged APKs wait in
+        // `pendingInstallAPKs` and are consumed once Install App actually appears.
+        requestFeature("install-app")
     }
 
     /// Install one or more APKs on the given device serials, one toast per APK
