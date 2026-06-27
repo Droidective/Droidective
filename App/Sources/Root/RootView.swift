@@ -37,7 +37,10 @@ struct RootView: View {
 
     var body: some View {
         @Bindable var state = state
-        zoomedContent
+        // Read pendingExit here so body re-renders when a navigation is deferred
+        // (the exitGuard alone is often unchanged), driving the leave dialog.
+        let showExitDialog = state.pendingExit.map { !$0.saving } ?? false
+        return zoomedContent
             .background(WindowAccessor { window in
                 // Fill the screen's usable area on launch — a regular maximized
                 // window, not a native full-screen Space.
@@ -105,6 +108,34 @@ struct RootView: View {
                 if !showing && shouldPromptConsent { presentConsent = true }
             }
             .onChange(of: colorScheme) { _, _ in updateDockIcon() }
+            .confirmationDialog(
+                state.exitGuard?.title ?? "",
+                isPresented: Binding(
+                    get: { showExitDialog },
+                    set: { shown in
+                        if !shown, state.pendingExit?.saving == false { state.cancelExit() }
+                    }
+                ),
+                titleVisibility: .visible,
+                presenting: state.exitGuard
+            ) { info in
+                exitDialogButtons(for: info)
+            } message: { info in
+                Text(info.message)
+            }
+    }
+
+    @ViewBuilder
+    private func exitDialogButtons(for info: AppState.ExitGuard) -> some View {
+        switch info.style {
+        case .recording:
+            Button("Stop & Save") { state.beginExitSave() }
+            Button("Discard", role: .destructive) { state.discardAndExit() }
+            Button("Keep Recording", role: .cancel) { state.cancelExit() }
+        case .edits:
+            Button("Discard", role: .destructive) { state.discardAndExit() }
+            Button("Keep Editing", role: .cancel) { state.cancelExit() }
+        }
     }
 
     /// macOS has no native light/dark app icon, so swap the Dock icon at
