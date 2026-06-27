@@ -34,12 +34,14 @@ struct RootView: View {
     private let starPromptAfterLaunches = 10
 
     private var shouldPromptConsent: Bool {
-        guard !consentAsked else { return false }
-        return askConsentOnFirstLaunch || launchCount >= consentPromptAfterLaunches
+        LaunchPrompt.consentDue(
+            consentAsked: consentAsked, launchCount: launchCount,
+            askOnFirstLaunch: askConsentOnFirstLaunch, afterLaunches: consentPromptAfterLaunches)
     }
 
     private var shouldPromptStar: Bool {
-        !starPromptShown && launchCount >= starPromptAfterLaunches
+        LaunchPrompt.starDue(
+            starPromptShown: starPromptShown, launchCount: launchCount, afterLaunches: starPromptAfterLaunches)
     }
 
     var body: some View {
@@ -89,16 +91,24 @@ struct RootView: View {
                 applyStoredTheme()
                 updateDockIcon()
                 HotkeyManager.install(state: state)
-                if !hasChosenRole && !hasSeenTour {
+                switch LaunchPrompt.next(
+                    hasChosenRole: hasChosenRole, hasSeenTour: hasSeenTour,
+                    consentAsked: consentAsked, starPromptShown: starPromptShown,
+                    launchCount: launchCount, askConsentOnFirstLaunch: askConsentOnFirstLaunch,
+                    consentAfterLaunches: consentPromptAfterLaunches, starAfterLaunches: starPromptAfterLaunches
+                ) {
+                case .rolePicker:
                     // Brand-new user: pick a role first, then run the tour.
                     pickerIsFirstRun = true
                     state.presentRolePicker = true
-                } else if !hasSeenTour {
+                case .tour:
                     state.presentTour = true
-                } else if shouldPromptConsent {
+                case .consent:
                     presentConsent = true
-                } else if shouldPromptStar {
+                case .star:
                     presentStar = true
+                case nil:
+                    break
                 }
             }
             .onChange(of: state.presentRolePicker) { _, showing in
