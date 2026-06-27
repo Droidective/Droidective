@@ -24,7 +24,10 @@ public struct AppInstallService: Sendable {
     static func parse(_ result: AdbResult) -> FeatureResult {
         let combined = (result.stdout + "\n" + result.stderr)
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        if combined.range(of: "Success", options: .caseInsensitive) != nil {
+        // adb prints a bare `Success` line on a successful (streamed) install.
+        // Anchor to the start of a line so an error that merely mentions the word
+        // (e.g. "not successful") isn't misread as success and masked.
+        if combined.range(of: "(?m)^\\s*Success", options: .regularExpression) != nil {
             return FeatureResult(ok: true, message: "Installed")
         }
         let reason: String

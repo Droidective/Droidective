@@ -705,7 +705,10 @@ final class AppState {
             ? "Couldn't install \(name) — \(failures[0].result.message)"
             : "Installed \(name) on \(ok)/\(total) devices — \(failures.count) failed"
         let detail = failures
-            .map { total == 1 ? ($0.result.copyText ?? $0.result.message) : "\($0.serial): \($0.result.copyText ?? $0.result.message)" }
+            .map { failure in
+                let body = failure.result.copyText ?? failure.result.message
+                return total == 1 ? body : "\(failure.serial): \(body)"
+            }
             .joined(separator: "\n\n")
         return Toast(message: message, ok: false, copyText: detail.isEmpty ? nil : detail)
     }

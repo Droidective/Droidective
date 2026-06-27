@@ -46,18 +46,37 @@ public struct CrashExtractor: Sendable {
         return lines[start..<end].joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Keep the rendered crash small. A fatal log line can be huge (RN payload
-    /// logging) and the crash buffer isn't otherwise trimmed, so the latest
-    /// crash can balloon into a multi-megabyte string that freezes the UI when
-    /// shown as a selectable Text. Keep the most recent lines (crashes are
-    /// chronological, newest last) under a character ceiling.
+    /// Keep the rendered crash small without dropping its diagnostic header. A
+    /// fatal log line can be huge (RN payload logging) and the crash buffer
+    /// isn't otherwise trimmed, so the latest crash can balloon into a
+    /// multi-megabyte string that freezes the UI when shown as a selectable
+    /// Text. Android traces lead with the most useful lines (FATAL EXCEPTION,
+    /// the exception type and message) and trail with framework frames, while
+    /// the crash buffer itself is chronological (newest last). Keep both ends —
+    /// the head so the exception is never silently lost, the tail so the newest
+    /// crash survives — and elide the middle, under a character ceiling.
     static func boundedBlock(_ block: String, maxLines: Int = 200, maxChars: Int = 64 * 1024) -> String {
-        var lines = block.split(separator: "\n", omittingEmptySubsequences: false)
+        let lines = block.split(separator: "\n", omittingEmptySubsequences: false)
+        var result = block
         if lines.count > maxLines {
-            lines = Array(lines.suffix(maxLines))
+            let (head, tail) = headTailSplit(count: lines.count, keep: maxLines)
+            let elided = lines.count - head - tail
+            result = (lines.prefix(head) + ["… \(elided) lines elided …"] + lines.suffix(tail))
+                .joined(separator: "\n")
         }
-        let result = lines.joined(separator: "\n")
-        return result.count > maxChars ? String(result.suffix(maxChars)) : result
+        guard result.count > maxChars else { return result }
+        let chars = Array(result)
+        let (head, tail) = headTailSplit(count: chars.count, keep: maxChars)
+        let elided = chars.count - head - tail
+        return String(chars.prefix(head)) + "\n… \(elided) characters elided …\n" + String(chars.suffix(tail))
+    }
+
+    /// Head/tail counts for keeping the first ~2/3 and last ~1/3 of `count`
+    /// items within `keep`, reserving one slot for the elision marker.
+    private static func headTailSplit(count: Int, keep: Int) -> (head: Int, tail: Int) {
+        let budget = max(keep - 1, 0)
+        let head = budget * 2 / 3
+        return (head, budget - head)
     }
 
     public static func format(_ block: String, as format: CrashFormat) -> String {

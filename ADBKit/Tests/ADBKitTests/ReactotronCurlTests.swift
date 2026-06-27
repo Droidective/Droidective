@@ -61,4 +61,41 @@ import Testing
         let curl = ReactotronCurl.command(method: "POST", url: "https://x.test", request: request)
         #expect(curl.contains(#"--data 'it'\''s'"#))
     }
+
+    @Test func objectBodyIsSerializedToJSON() {
+        // Reactotron usually records the body as a JSON object, not a pre-encoded
+        // string — the rawJSON path must serialize it and attach it.
+        let request = JSONValue.object(["data": .object(["a": .number(1)])])
+        let curl = ReactotronCurl.command(method: "POST", url: "https://x.test", request: request)
+        #expect(curl.contains("-X POST"))
+        #expect(curl.contains(#"--data '{"a":1}'"#))
+    }
+
+    @Test func nonEmptyArrayBodyIsAttached() {
+        let request = JSONValue.object(["data": .array([.number(1), .number(2)])])
+        let curl = ReactotronCurl.command(method: "POST", url: "https://x.test", request: request)
+        #expect(curl.contains(#"--data '[1,2]'"#))
+    }
+
+    @Test func emptyArrayDataStaysBodyless() {
+        let request = JSONValue.object(["data": .array([])])
+        let curl = ReactotronCurl.command(method: "GET", url: "https://x.test", request: request)
+        #expect(!curl.contains("--data"))
+        #expect(!curl.contains("-X"))
+    }
+
+    @Test func nullAndEmptyStringDataStayBodyless() {
+        for data: JSONValue in [.null, .string("")] {
+            let request = JSONValue.object(["data": data])
+            let curl = ReactotronCurl.command(method: "GET", url: "https://x.test", request: request)
+            #expect(!curl.contains("--data"))
+            #expect(!curl.contains("-X"))
+        }
+    }
+
+    @Test func nonStringHeaderValueIsSerialized() {
+        let request = JSONValue.object(["headers": .object(["X-Retry": .number(3)])])
+        let curl = ReactotronCurl.command(method: "GET", url: "https://x.test", request: request)
+        #expect(curl.contains("-H 'X-Retry: 3'"))
+    }
 }

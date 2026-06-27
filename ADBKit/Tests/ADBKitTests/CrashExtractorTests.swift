@@ -70,18 +70,39 @@ import Testing
         #expect(CrashExtractor.boundedBlock(s) == s)
     }
 
-    @Test func boundedBlockKeepsMostRecentLines() {
+    @Test func boundedBlockKeepsHeadAndMostRecentTail() {
         let many = (1...1000).map { "line \($0)" }.joined(separator: "\n")
         let bounded = CrashExtractor.boundedBlock(many, maxLines: 50, maxChars: 1_000_000)
         let lines = bounded.split(separator: "\n")
-        #expect(lines.count == 50)
+        #expect(lines.count <= 50)
+        // The head (the exception line in a real crash) is never dropped...
+        #expect(lines.first == "line 1")
+        // ...and the most recent lines survive too, with the middle elided.
         #expect(lines.last == "line 1000")
-        #expect(lines.first == "line 951")
+        #expect(bounded.contains("lines elided"))
     }
 
-    @Test func boundedBlockCapsAHugeSingleLine() {
-        let huge = String(repeating: "x", count: 200_000)
-        #expect(CrashExtractor.boundedBlock(huge, maxChars: 64 * 1024).count <= 64 * 1024)
+    @Test func boundedBlockExactlyAtLineLimitIsUntouched() {
+        let exact = (1...50).map { "line \($0)" }.joined(separator: "\n")
+        #expect(CrashExtractor.boundedBlock(exact, maxLines: 50, maxChars: 1_000_000) == exact)
+    }
+
+    @Test func boundedBlockPreservesTheCrashHeaderOfASingleHugeTrace() {
+        let trace = (["FATAL EXCEPTION: main", "java.lang.IllegalStateException: boom"]
+            + (1...500).map { "  at com.app.Frame\($0).run(Frame.java:\($0))" })
+            .joined(separator: "\n")
+        let bounded = CrashExtractor.boundedBlock(trace, maxLines: 200, maxChars: 1_000_000)
+        #expect(bounded.contains("FATAL EXCEPTION: main"))
+        #expect(bounded.contains("IllegalStateException: boom"))
+        #expect(bounded.split(separator: "\n").count <= 200)
+    }
+
+    @Test func boundedBlockCapsAHugeSingleLineAndKeepsBothEnds() {
+        let huge = "HEAD" + String(repeating: "x", count: 200_000) + "TAIL"
+        let bounded = CrashExtractor.boundedBlock(huge, maxChars: 64 * 1024)
+        #expect(bounded.count <= 64 * 1024 + 64)
+        #expect(bounded.hasPrefix("HEAD"))
+        #expect(bounded.hasSuffix("TAIL"))
     }
 
     @Test func lastCrashBoundsAHugeCrashBuffer() async throws {

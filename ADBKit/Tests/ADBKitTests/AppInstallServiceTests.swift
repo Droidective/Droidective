@@ -45,4 +45,26 @@ import Testing
         #expect(AppInstallService.friendlyReason("INSTALL_FAILED_ALREADY_EXISTS") == "The app is already installed.")
         #expect(AppInstallService.friendlyReason("INSTALL_FAILED_NO_MATCHING_ABIS").contains("CPU"))
     }
+
+    @Test func parseFailureCodeGetsItsOwnMessage() {
+        let r = AppInstallService.parse(result("", "Failure [INSTALL_PARSE_FAILED_NO_CERTIFICATES]"))
+        #expect(!r.ok)
+        #expect(r.message.contains("couldn't be parsed"))
+        #expect(r.copyText?.contains("INSTALL_PARSE_FAILED_NO_CERTIFICATES") == true)
+    }
+
+    @Test func emptyOutputIsUnknownErrorWithNoCopyText() {
+        let r = AppInstallService.parse(result("", ""))
+        #expect(!r.ok)
+        #expect(r.message == "Unknown error.")
+        #expect(r.copyText == nil)
+    }
+
+    @Test func failureMentioningTheWordSuccessIsNotMisreadAsSuccess() {
+        // The word appears mid-line in a failure — it must not be read as the
+        // bare `Success` line adb prints on a real install.
+        let r = AppInstallService.parse(result("", "Failure [INSTALL_FAILED_INVALID_APK]: not successful"))
+        #expect(!r.ok)
+        #expect(r.message == "The APK is invalid or corrupt.")
+    }
 }

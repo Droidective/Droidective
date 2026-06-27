@@ -11,6 +11,8 @@ struct HomeView: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var showMore = false
 
+    private static let welcomeTitle = "Welcome to Droidective"
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 30) {
@@ -43,7 +45,7 @@ struct HomeView: View {
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .center, spacing: 16) {
                     logo
-                    Text("Welcome to Droidective")
+                    Text(Self.welcomeTitle)
                         .font(.largeTitle.bold())
                         .fixedSize()
                     Spacer(minLength: 12)
@@ -52,7 +54,7 @@ struct HomeView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(alignment: .center, spacing: 12) {
                         logo
-                        Text("Welcome to Droidective")
+                        Text(Self.welcomeTitle)
                             .font(.largeTitle.bold())
                             .lineLimit(2)
                             .minimumScaleFactor(0.6)
