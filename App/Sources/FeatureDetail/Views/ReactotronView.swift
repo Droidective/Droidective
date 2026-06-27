@@ -281,7 +281,9 @@ final class ReactotronSession {
             let parsed = ReactotronEvent(command: command)
             switch parsed {
             case .clear:
-                items.removeAll()
+                // Scope to the sending client so one app's clear doesn't wipe
+                // another connected app's timeline.
+                items.removeAll { $0.connectionId == connectionId }
                 return
             case let .customCommandRegister(id, name, title, description, args):
                 registerCommand(RegisteredCommand(id: id, command: name, title: title, description: description, args: args))
@@ -1493,12 +1495,15 @@ private struct JSONNode: Identifiable {
     var children: [JSONNode] {
         switch value {
         case let .object(dict):
-            return dict.sorted { $0.key < $1.key }.map {
-                JSONNode(path: path + "/" + $0.key, key: $0.key, value: $0.value, depth: depth + 1)
+            // Identity is positional (parent path + ordinal), never the key
+            // text, so a key containing "/" or "[0]" can't collide with another
+            // node and toggle the wrong branch.
+            return dict.sorted { $0.key < $1.key }.enumerated().map { offset, entry in
+                JSONNode(path: "\(path).\(offset)", key: entry.key, value: entry.value, depth: depth + 1)
             }
         case let .array(items):
             return items.enumerated().map {
-                JSONNode(path: path + "/\($0.offset)", key: "[\($0.offset)]", value: $0.element, depth: depth + 1)
+                JSONNode(path: "\(path).\($0.offset)", key: "[\($0.offset)]", value: $0.element, depth: depth + 1)
             }
         default:
             return []
