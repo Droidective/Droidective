@@ -55,10 +55,15 @@ final class AppState {
     let env: AppEnvironment
 
     var devices: [Device] = []
-    var selectedSerial: String?
+    /// Switch via `requestDevice(_:)`, not direct assignment — that routes the
+    /// change through the leave guard so an active recording isn't lost.
+    private(set) var selectedSerial: String?
     var runOnAll = false
     var searchText = ""
-    var selectedFeatureID: String?
+    /// Switch via `requestFeature(_:)`, not direct assignment — that routes the
+    /// change through the leave guard so an active recording / unsaved edit isn't
+    /// silently discarded.
+    private(set) var selectedFeatureID: String?
     var layout = LayoutState()
     /// Per-feature usage tally (persisted), used to re-rank the launchpad's
     /// curated feature order by how the user actually works.
@@ -85,6 +90,14 @@ final class AppState {
     /// True while a performance/network recording is in flight — locks the
     /// device and bundle pickers so the captured series stays consistent.
     var recordingActive = false
+
+    /// Registered by a view holding work that navigating away would destroy —
+    /// an active screen recording or unsaved editor edits. While set,
+    /// feature/device switches and app-quit route through `pendingExit` instead
+    /// of proceeding. See `setExitGuard` / `requestFeature`.
+    private(set) var exitGuard: ExitGuard?
+    /// A navigation deferred until the user resolves the active `exitGuard`.
+    private(set) var pendingExit: PendingExit?
     /// The command bar's Terminal tab — a real PTY-backed shell, shared
     /// app-wide so it persists across features.
     let terminalSession = TerminalSession()
@@ -562,6 +575,110 @@ final class AppState {
         devices.filter(\.isReady).count
     }
 
+    // MARK: - Leave guard (protect in-flight recordings / unsaved edits)
+
+    /// Work that navigating away would destroy. `style` picks the confirmation's
+    /// copy and button set: a recording offers Stop & save, an edit doesn't.
+    struct ExitGuard: Equatable, Identifiable {
+        enum Style: Equatable { case recording, edits }
+        let id: UUID
+        var style: Style
+        var title: String
+        var message: String
+    }
+
+    /// A navigation held back until the user resolves the active `ExitGuard`.
+    struct PendingExit: Equatable {
+        enum Target: Equatable { case feature(String), device(String), quit }
+        var target: Target
+        /// Flips true when the user chooses "Stop & save": the active view runs
+        /// its own save, then calls `finishExitSave()`. The dialog hides while
+        /// the save is in flight.
+        var saving = false
+    }
+
+    /// Register (or replace) the active leave guard. A protected view calls this
+    /// when losable work begins, and `clearExitGuard` when it ends.
+    func setExitGuard(_ value: ExitGuard) { exitGuard = value }
+
+    /// Clear the guard only if it's still the one identified by `id`, so a
+    /// torn-down view can't wipe a guard a newer view just registered.
+    func clearExitGuard(_ id: UUID) {
+        if exitGuard?.id == id { exitGuard = nil }
+    }
+
+    /// Switch the selected feature, or hold the switch behind a confirmation
+    /// when a leave guard is active. Every feature switch (sidebar, palette,
+    /// menu, hotkeys) routes through here.
+    func requestFeature(_ id: String) {
+        guard id != selectedFeatureID else { return }
+        if exitGuard == nil {
+            selectedFeatureID = id
+        } else {
+            pendingExit = PendingExit(target: .feature(id))
+        }
+    }
+
+    /// Switch the active device, or hold it behind a confirmation when a guard
+    /// is active.
+    func requestDevice(_ serial: String) {
+        guard serial != selectedSerial else { return }
+        if exitGuard == nil {
+            selectedSerial = serial
+            persistSelection()
+        } else {
+            pendingExit = PendingExit(target: .device(serial))
+        }
+    }
+
+    /// Called from `applicationShouldTerminate`. Returns true to quit now; false
+    /// means losable work is in flight — the leave prompt is shown and the
+    /// resolution drives termination (see `quitNow` / `cancelExit`).
+    func requestQuit() -> Bool {
+        guard exitGuard != nil else { return true }
+        pendingExit = PendingExit(target: .quit)
+        return false
+    }
+
+    /// "Discard" / "Discard changes": drop the work and run the deferred
+    /// navigation. The leaving view's `.onDisappear` aborts recorders / frees
+    /// edits, so nothing extra is needed here.
+    func discardAndExit() { performPendingExit() }
+
+    /// "Keep recording" / "Keep editing": abandon the pending navigation.
+    func cancelExit() {
+        let wasQuit = pendingExit?.target == .quit
+        pendingExit = nil
+        if wasQuit { NSApp.reply(toApplicationShouldTerminate: false) }
+    }
+
+    /// "Stop & save": ask the active view to save (it observes `pendingExit`),
+    /// keeping the dialog hidden until it calls `finishExitSave()`.
+    func beginExitSave() { pendingExit?.saving = true }
+
+    /// Called by the active view once its save-on-leave finished, to proceed.
+    func finishExitSave() { performPendingExit() }
+
+    private func performPendingExit() {
+        guard let pending = pendingExit else { return }
+        exitGuard = nil
+        pendingExit = nil
+        switch pending.target {
+        case .feature(let id): selectedFeatureID = id
+        case .device(let serial): selectedSerial = serial; persistSelection()
+        case .quit: quitNow()
+        }
+    }
+
+    /// Finish a deferred quit: tear down a kept-alive Reactotron session (as the
+    /// normal quit path does), then let termination proceed.
+    private func quitNow() {
+        Task {
+            if reactotronSession.isRunning { await reactotronSession.stopForQuit() }
+            NSApp.reply(toApplicationShouldTerminate: true)
+        }
+    }
+
     // MARK: - Feature running
 
     /// Open or run a feature from a launch surface (launchpad or sidebar),
@@ -573,7 +690,7 @@ final class AppState {
             Task { await run(feature: feature, params: [:]) }
         } else {
             noteFeatureUse(feature.id)
-            selectedFeatureID = feature.id
+            requestFeature(feature.id)
         }
     }
 
