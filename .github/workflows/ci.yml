@@ -53,9 +53,16 @@ jobs:
         with:
           persist-credentials: false
       - name: Assemble site
+        env:
+          POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
         run: |
           mkdir -p _site
           cp -R site/. _site/
+          # Reuse the app's PostHog key (a public client-side token) so the site
+          # shares one project; the page no-ops analytics if the secret is unset.
+          if [ -n "${POSTHOG_KEY:-}" ]; then
+            sed -i "s|__POSTHOG_KEY__|${POSTHOG_KEY}|g" _site/index.html
+          fi
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9  # v5.0.0
         with:
           path: _site
