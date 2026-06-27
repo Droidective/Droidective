@@ -31,16 +31,24 @@ struct EditState: Equatable {
     var format: VideoFormat = .mp4
 }
 
-/// Clips a view to a normalized crop region (full view when crop is nil).
-struct CropClipShape: Shape {
-    let crop: CropRect?
+/// A read-only crop indicator: dims outside the normalized crop region and
+/// outlines it, so an applied crop is previewed without clipping the player or
+/// its transport controls. The actual crop is applied at export via ffmpeg.
+struct CropIndicator: View {
+    let crop: CropRect
 
-    func path(in rect: CGRect) -> Path {
-        guard let crop else { return Path(rect) }
-        return Path(CGRect(
-            x: rect.minX + crop.x * rect.width, y: rect.minY + crop.y * rect.height,
-            width: crop.width * rect.width, height: crop.height * rect.height
-        ))
+    var body: some View {
+        Canvas { context, size in
+            let rect = CGRect(
+                x: crop.x * size.width, y: crop.y * size.height,
+                width: crop.width * size.width, height: crop.height * size.height)
+            context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black.opacity(0.4)))
+            context.blendMode = .destinationOut
+            context.fill(Path(rect), with: .color(.black))
+            context.blendMode = .normal
+            context.stroke(Path(rect), with: .color(.brandAccent), lineWidth: 2)
+        }
+        .allowsHitTesting(false)
     }
 }
 
@@ -132,7 +140,11 @@ struct VideoEditorPane: View {
                     let size = playerSize(in: geo.size)
                     VideoPlayerView(player: player, trimmer: trimmer)
                         .frame(width: size.width, height: size.height)
-                        .clipShape(CropClipShape(crop: transformActive ? edit.crop : nil))
+                        .overlay {
+                            if transformActive, let crop = edit.crop {
+                                CropIndicator(crop: crop)
+                            }
+                        }
                         .rotationEffect(.degrees(transformActive ? Double(edit.rotation) : 0))
                         .scaleEffect(
                             x: transformActive && edit.flipH ? -1 : 1,
