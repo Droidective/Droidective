@@ -110,6 +110,8 @@ struct FeatureDetailView: View {
                 AppsExplorerView()
             case "install-app":
                 InstallAppView()
+            case "apk-studio":
+                ApkStudioView()
             case "apk-inspector":
                 ApkInspectorView()
             case "apk-sign":

@@ -13,11 +13,22 @@ struct ApkInspectorView: View {
     @State private var report: ApkReport?
     @State private var loading = false
     @State private var dropTargeted = false
+    private let embedded: Bool
+
+    /// A non-nil `apkURL` embeds the inspector in APK Studio: it inspects that
+    /// APK and drops its own drop zone / "inspect another" chrome (the workspace
+    /// owns APK selection).
+    init(apkURL: URL? = nil) {
+        _apkURL = State(initialValue: apkURL)
+        embedded = apkURL != nil
+    }
 
     var body: some View {
         Group {
             if let report {
                 reportScroll(report)
+            } else if embedded {
+                ProgressView("Inspecting…").frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 dropZone
             }
@@ -109,7 +120,9 @@ struct ApkInspectorView: View {
                     }
                 }
                 Spacer()
-                Button("Inspect another…") { choose() }
+                if !embedded {
+                    Button("Inspect another…") { choose() }
+                }
             }
             FlowChips {
                 if let version = info.versionName {

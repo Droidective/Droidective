@@ -50,11 +50,19 @@ public struct DecompileService: Sendable {
         self.runner = runner
     }
 
-    /// Decompile `apkPath` into a fresh `<name>-<mode>` dir under `outputRoot`.
-    public func decompile(apkPath: String, mode: Mode, into outputRoot: URL) async throws -> URL {
-        guard let java = await toolchain.java() else { throw DecompileError.toolMissing("Java") }
+    /// Decompile `apkPath` into a `<name>-<mode>` dir under `outputRoot`. With
+    /// `reuseExisting` (the default), a previous decompile of the same APK+mode is
+    /// returned as-is — re-running jadx/apktool on every revisit would be slow and
+    /// the output is deterministic. Pass `false` to force a fresh run.
+    public func decompile(
+        apkPath: String, mode: Mode, into outputRoot: URL, reuseExisting: Bool = true
+    ) async throws -> URL {
         let name = URL(fileURLWithPath: apkPath).deletingPathExtension().lastPathComponent
         let outDir = outputRoot.appendingPathComponent("\(name)-\(mode.rawValue)", isDirectory: true)
+        if reuseExisting, (try? FileManager.default.contentsOfDirectory(atPath: outDir.path).isEmpty) == false {
+            return outDir
+        }
+        guard let java = await toolchain.java() else { throw DecompileError.toolMissing("Java") }
         try? FileManager.default.removeItem(at: outDir)
         try FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
 

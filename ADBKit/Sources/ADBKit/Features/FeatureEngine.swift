@@ -114,7 +114,7 @@ public struct FeatureEngine: Sendable {
         "meminfo", "sandbox-browser", "monkey", "device-info",
         "screen-record", "crash-catcher", "bug-report", "wireless-adb",
         "rn-dev-host", "process-death", "custom-commands",
-        "file-explorer", "apps", "apk-inspector", "apk-sign", "apk-decompile", "frida-console",
+        "file-explorer", "apps", "apk-studio", "apk-inspector", "apk-sign", "apk-decompile", "frida-console",
         "emulators", "performance", "network-speed",
         "root-status", "wifi", "private-dns", "system-restrictions",
         "reactotron",

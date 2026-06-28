@@ -86,6 +86,13 @@ extension FeatureRegistry {
         "install-app": [
             FeatureCommand("adb install -r <path.apk>", note: "install or reinstall (keeps data)"),
         ],
+        "apk-studio": [
+            FeatureCommand("aapt2 dump badging <path.apk>", note: "inspect: package, version, SDK, permissions"),
+            FeatureCommand("jadx -d <out-dir> <path.apk>", note: "decompile dex to readable Java"),
+            FeatureCommand("apktool d -f -o <out-dir> <path.apk>", note: "decompile to smali + decode resources"),
+            FeatureCommand("apktool b <dir> -o <out.apk>", note: "recompile a modified apktool tree"),
+            FeatureCommand("apksigner sign --ks <keystore> <out.apk>", note: "sign the rebuilt APK"),
+        ],
         "apk-inspector": [
             FeatureCommand("aapt2 dump badging <path.apk>", note: "package, version, SDK, permissions, features"),
             FeatureCommand("apksigner verify -v --print-certs <path.apk>", note: "signing schemes and certificate digests"),

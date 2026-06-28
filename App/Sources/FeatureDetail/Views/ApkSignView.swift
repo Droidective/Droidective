@@ -19,6 +19,14 @@ struct ApkSignView: View {
     @State private var resultSchemes: [String] = []
     @State private var signedURL: URL?
     @State private var dropTargeted = false
+    private let embedded: Bool
+
+    /// A non-nil `input` embeds the signer in APK Studio: it signs that APK (e.g.
+    /// the one just recompiled) and drops its own drop zone / file picker.
+    init(input: URL? = nil) {
+        _inputURL = State(initialValue: input)
+        embedded = input != nil
+    }
 
     private var debugKeystore: URL {
         FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".android/debug.keystore")
@@ -70,7 +78,9 @@ struct ApkSignView: View {
         Form {
             Section("APK") {
                 LabeledContent("File", value: inputURL?.lastPathComponent ?? "")
-                Button("Choose a different APK…") { choose() }
+                if !embedded {
+                    Button("Choose a different APK…") { choose() }
+                }
             }
             Section("Signing key") {
                 Picker("Key", selection: $useDebugKey) {

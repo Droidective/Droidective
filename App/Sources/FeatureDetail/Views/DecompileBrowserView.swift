@@ -31,6 +31,15 @@ struct DecompileBrowserView: View {
     @State private var searchScope: SearchScope = .name
     @State private var searchHits: [DecompileService.SearchHit] = []
     @State private var searching = false
+    private let embedded: Bool
+
+    /// A non-nil `apkURL` embeds the browser in APK Studio: it decompiles that
+    /// APK directly (skipping the picker) and drops its "decompile another"
+    /// button — the workspace owns APK selection.
+    init(apkURL: URL? = nil) {
+        _apkURL = State(initialValue: apkURL)
+        embedded = apkURL != nil
+    }
 
     private enum SearchScope: String, CaseIterable { case name = "File name", contents = "Code" }
 
@@ -51,9 +60,13 @@ struct DecompileBrowserView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .task(id: mode) { await checkTool() }
-        .task(id: apkURL) { await decompileIfNeeded() }
+        .task(id: prepKey) { await prepare() }
+        .onChange(of: mode) { _, _ in root = nil; selection = nil; fileText = nil }
     }
+
+    /// Re-key the prepare task on both the APK and the decompiler, so switching
+    /// jadx ⇆ apktool (or loading a new APK) re-checks tools and decompiles.
+    private var prepKey: String { "\(apkURL?.path ?? "")|\(mode.rawValue)" }
 
     // MARK: - Setup gate (shown first)
 
@@ -174,8 +187,9 @@ struct DecompileBrowserView: View {
 
     private func browser(_ root: FileNode) -> some View {
         VStack(spacing: 0) {
-            HStack {
-                Text("\(toolName) · \(apkURL?.lastPathComponent ?? "")").font(.caption).foregroundStyle(.textMuted)
+            HStack(spacing: 10) {
+                modePicker.controlSize(.small)
+                Text(apkURL?.lastPathComponent ?? "").font(.caption).foregroundStyle(.textMuted).lineLimit(1)
                 Spacer()
                 Button { findToken += 1 } label: { Label("Find", systemImage: "magnifyingglass") }
                     .help("Find in file (⌘F)")
@@ -188,7 +202,9 @@ struct DecompileBrowserView: View {
                 .menuStyle(.borderlessButton)
                 .fixedSize()
                 .help("Open the APK in the full jadx GUI, or reveal the files to edit them in another tool")
-                Button("Decompile another") { apkURL = nil; self.root = nil; selection = nil }
+                if !embedded {
+                    Button("Decompile another") { apkURL = nil; self.root = nil; selection = nil }
+                }
             }
             .padding(8)
             Divider()
@@ -221,6 +237,8 @@ struct DecompileBrowserView: View {
             }
         }
         .padding(8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.bgSurface)
     }
 
     @ViewBuilder private func fileTree(_ root: FileNode) -> some View {
@@ -230,7 +248,8 @@ struct DecompileBrowserView: View {
                     Label(node.name, systemImage: node.isDirectory ? "folder" : "doc.text").tag(node.path)
                 }
             }
-            .listStyle(.sidebar)
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
         } else {
             centered { Text("No matching files").font(.callout).foregroundStyle(.textMuted) }
         }
@@ -254,6 +273,8 @@ struct DecompileBrowserView: View {
                 }
                 .buttonStyle(.plain)
             }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
         }
     }
 
@@ -305,6 +326,7 @@ struct DecompileBrowserView: View {
             }
             status = nil
             toolReady = true
+            if apkURL != nil { await runDecompile() }
         } catch {
             status = "Setup failed: \(error.localizedDescription)"
         }
@@ -322,8 +344,9 @@ struct DecompileBrowserView: View {
             ok: true, copyText: path, revealPath: path))
     }
 
-    private func decompileIfNeeded() async {
-        guard apkURL != nil, toolReady, root == nil else { return }
+    private func prepare() async {
+        await checkTool()
+        guard toolReady, apkURL != nil else { return }
         await runDecompile()
     }
 

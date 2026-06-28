@@ -83,6 +83,19 @@ import Testing
         }
     }
 
+    @Test func decompileReusesExistingOutputWithoutNeedingTools() async throws {
+        // A previous decompile of the same APK+mode is reused: with no Java and no
+        // downloaded tool, decompile still returns the cached dir instead of
+        // throwing toolMissing — proving it never tried to run the decompiler.
+        let out = Self.tempDir()
+        let dir = out.appendingPathComponent("a-jadx", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try "class A {}".write(to: dir.appendingPathComponent("A.java"), atomically: true, encoding: .utf8)
+        let service = await Self.makeService(java: nil)
+        let result = try await service.decompile(apkPath: "/x/a.apk", mode: .jadx, into: out)
+        #expect(result == dir)
+    }
+
     private static func makeService(java: String?) async -> DecompileService {
         let locator = ToolLocator(runner: MockProcessRunner(), environment: [:])
         await locator.seedJava(java)

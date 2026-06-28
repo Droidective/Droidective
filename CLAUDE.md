@@ -30,7 +30,7 @@ automated guard, so the failure mode is a non-working feature you only catch by
 opening it — verify those by hand.
 
 1. **Define it** — add a `FeatureDef` to `FeatureRegistry.all` (unique `id`,
-   title, keywords, category, `kind`). **[test: `hasAll48Features` — bump the
+   title, keywords, category, `kind`). **[test: `hasAll53Features` — bump the
    count; `byID` traps on a duplicate id]**
 2. **How-it-works note** — add to `FeatureNotes`. **[test: `everyFeatureHasAHowToNote`]**
 3. **Command reference** — add to `FeatureCommands` (each entry leads with the
@@ -88,7 +88,7 @@ spawn adb/scrcpy/emulator/brew).
 - `Devices/`: `DeviceMonitor` (actor, 2s poll, `AsyncStream<[Device]>`),
   `DeviceListParser`, `DeviceProps` (getprop), `DeviceOverview` (RAM/storage/
   battery/CPU/app counts), `DeviceDetails` (picker enrichment).
-- `Features/`: `FeatureRegistry` (52 `FeatureDef`s, declarative; `absorbedByHub`
+- `Features/`: `FeatureRegistry` (53 `FeatureDef`s, declarative; `absorbedByHub`
   maps a hub screen to the features it gathers, flattened to
   `absorbedFeatureIDs`; `catalogFeatureIDs` is the registry minus those),
   `FeatureModel`,
@@ -128,18 +128,23 @@ spawn adb/scrcpy/emulator/brew).
   toolchain with arg-vector tests: `ApkInspectionService` (aapt2 badging +
   apksigner certs), `ApkSigningService` (zipalign + apksigner; keystore password
   via a 0600 temp file, never argv), `DecompileService` (jadx + apktool + a
-  `FileNode` tree), `FridaService` (ABI→arch match + frida-server push/run).
-  Downloads are point-of-use (a gate in the decompile/Frida views) or from
-  Settings ▸ Tools.
+  `FileNode` tree + `rebuild` via `apktool b`), `FridaService` (ABI→arch match +
+  frida-server push/run). Downloads are point-of-use (a gate in the decompile/
+  Frida views) or from Settings ▸ Tools. **APK Studio** (`apk-studio`) is a hub
+  that folds the three standalone APK tools (`apk-inspector`, `apk-decompile`,
+  `apk-sign`) into one workspace over a single loaded APK — Inspect · Decompile ·
+  Recompile · Sign tabs (the views take an optional injected APK so they embed in
+  the studio and still work standalone via hotkey).
 
-## The 52 features
+## The 53 features
 
 Most `.view` features are full-screen bespoke panels (file-explorer, apps,
 emulators, device-info, logcat, crash-catcher, sandbox-browser, performance,
 network-speed, wifi, root-status, screen-record, scrcpy + the custom-commands/
-catalog system panels). Three are **hub** screens — `react-native`, `simulate`,
-and `connection` — that gather related instant-/form-/toggle-actions into one
-scrollable grouped `Form` (the Apps explorer similarly covers per-app
+catalog system panels). Several are **hub** screens — `react-native`, `simulate`,
+and `connection` gather related instant-/form-/toggle-actions into one scrollable
+grouped `Form`; `apk-studio` is a tabbed workspace over one loaded APK (Inspect/
+Decompile/Recompile/Sign). (The Apps explorer similarly covers per-app
 management — its detail pane carries the old "Manage App" controls: open,
 force-stop, clear cache/data, plus disable/uninstall). A hub's gathered features
 (`FeatureRegistry.absorbedByHub` → `absorbedFeatureIDs`) are managed only from
@@ -153,7 +158,7 @@ Apps hub. They stay hotkey-able (every feature registers a shortcut; the Hotkeys
 tab lists bound members under "Hidden features"). This is a pure display filter —
 no persisted migration — so it also covers a hub that grows later. The rest are generic instant-/form-/toggle-actions
 driven by the registry. The catalog and Home's "All N features" count use
-`catalogFeatureIDs` (34). **Every feature is enabled by default**
+`catalogFeatureIDs` (32). **Every feature is enabled by default**
 (`defaultEnabledIDs == catalogFeatureIDs`); the catalog (Manage features) is for
 turning OFF the ones you don't want, not opting in — there's no Restore button.
 `LayoutState.adoptAllEnabled()` is a one-time migration that turns everything on
