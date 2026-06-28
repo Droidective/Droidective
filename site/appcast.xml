@@ -6,9 +6,9 @@
     <description>Most recent Droidective updates.</description>
     <language>en</language>
     <item>
-      <title>Droidective 2.6.2</title>
-      <sparkle:version>170</sparkle:version>
-      <sparkle:shortVersionString>2.6.2</sparkle:shortVersionString>
+      <title>Droidective 2.7.0</title>
+      <sparkle:version>189</sparkle:version>
+      <sparkle:shortVersionString>2.7.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <description><![CDATA[
 <style>
@@ -24,59 +24,53 @@ pre { background: color-mix(in srgb, currentColor 8%, transparent); padding: .6e
 pre code { background: none; padding: 0; }
 a { color: #2f9e44; }
 </style>
-<p>A bug-fix release with security, correctness, and stability hardening, plus a
-safer navigation flow and a clearer APK install.</p>
+<p>A feature release that adds a full APK toolchain and Frida setup, a custom accent
+color, and emulator launching from the device bar, plus a round of UI and
+hotkey-recording improvements.</p>
 <h3>New features</h3>
 <ul>
 <li>
-<strong>APK pre-install preview</strong> — opening an <code>.apk</code> from Finder (double-click, Open
-With, or drag onto the icon) now stages it in the Install App screen with a card
-showing the app name, package, version, target SDK, and size (read via the SDK's
-<code>aapt2</code>), so you can see what you're about to install before clicking Install.
-Falls back to the file name and size when build-tools aren't installed.</li>
+<strong>APK Studio</strong> — one workspace over a loaded APK: <strong>Inspect</strong> (manifest,
+permissions, SDK, signing certificates), <strong>Decompile</strong> (<code>jadx</code> for readable
+Java or <code>apktool</code> for smali + resources, with an in-app source viewer, code
+search that jumps to the matched line, and "open in jadx-GUI" / reveal for
+external editing), <strong>Recompile</strong> an edited <code>apktool</code> tree, and <strong>Sign</strong> with the
+debug key, your keystore, or a brand-new keystore created right there. jadx,
+apktool, and a Java runtime are downloaded from their GitHub releases on first
+use and managed in Settings ▸ Tools.</li>
+<li>
+<strong>Frida setup</strong> — matches the device architecture and downloads the right
+<code>frida-server</code> / <code>frida-gadget</code>; on a rooted device it pushes and starts
+frida-server so you can attach with your own frida CLI.</li>
+<li>
+<strong>Custom accent color</strong> — pick your own accent in Settings ▸ Appearance; it
+recolors buttons, toggles, selection, and active icons across the app.</li>
+<li>
+<strong>Launch emulators from the device bar</strong> — start an Android Studio AVD, or open
+the Emulators screen, straight from the device menu.</li>
 </ul>
 <h3>Improvements</h3>
 <ul>
 <li>
-<strong>Leave confirmation</strong> — switching feature or device, or quitting, while an
-active screen/mirror recording, performance/network capture, or unsaved
-screenshot/video edit is in flight now asks before discarding it. Recordings
-offer Stop &amp; Save; editors offer Keep or Discard. Background file pulls and
-installs continue uninterrupted.</li>
-</ul>
-<h3>Bug fixes</h3>
-<ul>
+<strong>Settings</strong> is reorganized into <strong>Appearance</strong> and <strong>Privacy</strong> tabs, in a
+roomier window.</li>
 <li>
-<strong>Video editor</strong> — an applied crop no longer clips away the video and its
-playback controls; the crop region is shown as an overlay and still applied on
-export.</li>
+<strong>Connect-a-device prompts</strong> — features that need a device (Send Text, the
+quick actions, Frida, Private DNS…) now show a tailored "connect a device"
+message instead of silently disabled controls.</li>
 <li>
-<strong>Screen mirroring</strong> — the video, audio, and control decoders cap how much they
-buffer, so a corrupt or desynced stream can no longer grow memory toward a crash.</li>
+<strong>Hotkey recording</strong> — the sidebar's Set-Hotkey popover starts recording the
+moment it opens, and both it and the Hotkeys settings show the modifiers live
+as you hold them.</li>
 <li>
-<strong>Network speed</strong> — a <code>/proc/net/dev</code> counter that resets on reboot no longer
-reports a one-off throughput spike.</li>
-<li>
-<strong>Reactotron</strong> — "Take snapshot" times out and reports it instead of waiting
-forever when no store plugin is connected; the built-in server now listens on
-loopback only (off the local network); state-tree nodes whose key contains a
-slash no longer collide; and clearing one connection no longer affects another.</li>
-<li>
-<strong>Device info</strong> — storage reads correctly on devices with dynamic partitions,
-and the battery level ignores an unrelated "Max charging level" line.</li>
-<li>
-<strong>File Explorer</strong> — an operation that prints a warning but still succeeds is no
-longer reported as a failure.</li>
-</ul>
-<h3>Security</h3>
-<ul>
-<li>Proxy and locale values passed to the device shell are quoted, and a cancelled
-action now terminates its underlying <code>adb</code> process instead of leaving it running.</li>
+<strong>Tools settings</strong> show each downloaded tool's on-disk size, with reveal and
+delete; the decompiled-source cache is reused while the app is open and cleared
+on quit.</li>
 </ul>
 <p>Installed copies update in place via Sparkle.</p>
 ]]></description>
-      <pubDate>Sat, 27 Jun 2026 23:14:26 +0000</pubDate>
-      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v2.6.2/Droidective-v2.6.2.dmg" sparkle:edSignature="olGq6EDSdTbRbGk6FJKLl3xWN9FE4YZ5R2x2uYu8A8IeFWFccD7fF/FO+23ShX8vLVnICeLBBtFoFMH4dTCwDA==" length="45177627" type="application/octet-stream" />
+      <pubDate>Sun, 28 Jun 2026 12:55:43 +0000</pubDate>
+      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v2.7.0/Droidective-v2.7.0.dmg" sparkle:edSignature="nHMwcyBIEupDHgGprsPD5P59I8QSYoHmRkcKML3s4bVHDzH8iSoKEG6Tg4acKgPjmBFzwMMgiyxXR1HC8qceAA==" length="45829497" type="application/octet-stream" />
     </item>
   </channel>
 </rss>
