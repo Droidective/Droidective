@@ -23,9 +23,8 @@ struct DecompileBrowserView: View {
         Group {
             if apkURL == nil {
                 dropZone
-            } else if busy && root == nil {
-                progress
             } else if !toolReady {
+                // Stays up during the download too — its progress bar lives here.
                 downloadGate
             } else if let root {
                 browser(root)

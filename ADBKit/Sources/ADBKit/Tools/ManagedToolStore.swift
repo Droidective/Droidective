@@ -260,8 +260,12 @@ public actor ManagedToolStore {
         if spec.kind == .jar {
             return firstEntry(in: dir) { $0.pathExtension == "jar" }
         }
+        // Match by name only: `unzip` doesn't preserve jadx's `bin/jadx` execute
+        // bit, and we don't run that launcher anyway (we invoke `java -cp …`).
+        // The runnables we do execute — the Temurin `java` (tar preserves +x) and
+        // the `.xz` binaries (chmod'd on extraction) — are already executable.
         guard let name = spec.runnableName else { return nil }
-        return firstEntry(in: dir) { $0.lastPathComponent == name && fileManager.isExecutableFile(atPath: $0.path) }
+        return firstEntry(in: dir) { $0.lastPathComponent == name }
     }
 
     private func firstEntry(in dir: URL, where matches: (URL) -> Bool) -> String? {
