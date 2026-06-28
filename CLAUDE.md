@@ -302,11 +302,13 @@ compile or test time* — lean on it instead of manual vigilance.
 ## Status
 
 Feature-complete across all planned milestones plus several UX rounds (latest:
-**v2.6.2** — bug fixes plus security, correctness, and test hardening:
-shell-quoting and process-cancellation audit fixes, scrcpy decoder size caps, a
-navigation leave-guard, opening `.apk` files from Finder with a pre-install
-preview, and the start of an AppState refactor); 350 tests green; builds clean
-with zero warnings (now enforced as errors in CI). Verified live against a physical device and an Android emulator. Release builds
-are Developer ID-signed + notarized and bundle scrcpy/ffmpeg
-(see `RELEASING.md`). Open gaps: the Apps list/detail divider isn't
-drag-resizable.
+**v2.7.0** — a full APK toolchain (APK Studio: inspect, decompile via jadx/
+apktool, recompile, and sign — with keystore creation) plus Frida setup, a custom
+accent color, launching emulators from the device bar, per-feature
+connect-a-device empty states, a live-preview hotkey recorder, and a Settings
+split into Appearance/Privacy; managed tools download from GitHub releases into
+Application Support and are sized/removable in Settings); 406 tests green; builds
+clean with zero warnings (enforced as errors in CI). Verified live against a
+physical device and an Android emulator. Release builds are Developer ID-signed +
+notarized and bundle scrcpy/ffmpeg (see `RELEASING.md`). Open gaps: the Apps
+list/detail divider isn't drag-resizable.
