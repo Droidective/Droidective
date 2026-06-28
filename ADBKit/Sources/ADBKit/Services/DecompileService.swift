@@ -139,4 +139,47 @@ public struct DecompileService: Sendable {
             }
         return FileNode(name: name, path: url.path, children: children)
     }
+
+    // MARK: - Global text search
+
+    /// One line-level match from a content search across decompiled output.
+    public struct SearchHit: Sendable, Equatable, Identifiable {
+        public var path: String
+        public var line: Int
+        public var text: String
+
+        public var id: String { "\(path):\(line)" }
+
+        public init(path: String, line: Int, text: String) {
+            self.path = path
+            self.line = line
+            self.text = text
+        }
+    }
+
+    static let searchableExtensions: Set<String> = [
+        "java", "smali", "xml", "txt", "json", "kt", "kts", "gradle", "properties", "pro", "cfg",
+    ]
+
+    /// Case-insensitive substring search across the decompiled tree, capped at
+    /// `maxResults`. Pure file I/O — call it off the main actor.
+    public static func search(in root: URL, query: String, maxResults: Int = 500) -> [SearchHit] {
+        let needle = query.lowercased()
+        guard !needle.isEmpty,
+              let walker = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil)
+        else { return [] }
+        var hits: [SearchHit] = []
+        for case let url as URL in walker {
+            if hits.count >= maxResults { break }
+            guard searchableExtensions.contains(url.pathExtension.lowercased()),
+                  let content = try? String(contentsOf: url, encoding: .utf8) else { continue }
+            for (index, line) in content.components(separatedBy: .newlines).enumerated() {
+                if line.lowercased().contains(needle) {
+                    hits.append(SearchHit(path: url.path, line: index + 1, text: line.trimmingCharacters(in: .whitespaces)))
+                    if hits.count >= maxResults { break }
+                }
+            }
+        }
+        return hits
+    }
 }

@@ -44,6 +44,23 @@ import Testing
         #expect(node.children?.last?.isDirectory == false)
     }
 
+    // MARK: global search
+
+    @Test func searchFindsMatchesAcrossTextFilesAndSkipsBinaries() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("search-\(UUID().uuidString)")
+        try fm.createDirectory(at: root.appendingPathComponent("com/x"), withIntermediateDirectories: true)
+        try "class A { void hello() {} }".write(to: root.appendingPathComponent("com/x/A.java"), atomically: true, encoding: .utf8)
+        try "<manifest hello=\"1\"/>".write(to: root.appendingPathComponent("AndroidManifest.xml"), atomically: true, encoding: .utf8)
+        try Data([0xFF, 0xD8, 0xFF]).write(to: root.appendingPathComponent("icon.png"))  // binary ext → skipped
+
+        let hits = DecompileService.search(in: root, query: "HELLO")  // case-insensitive
+        #expect(hits.count == 2)
+        #expect(hits.contains { $0.path.hasSuffix("A.java") && $0.line == 1 })
+        #expect(hits.allSatisfy { $0.text.lowercased().contains("hello") })
+        #expect(DecompileService.search(in: root, query: "").isEmpty)
+    }
+
     // MARK: error paths
 
     @Test func decompileThrowsWhenJavaMissing() async throws {
