@@ -141,6 +141,18 @@ struct DeviceBarView: View {
                     }
                 }
             }
+            let launchable = state.availableAvds.filter { $0.runningSerial == nil }
+            if !launchable.isEmpty {
+                Section("Start an emulator") {
+                    ForEach(launchable) { avd in
+                        Button {
+                            state.launchEmulator(avd)
+                        } label: {
+                            Label(avd.displayName, systemImage: "play.circle")
+                        }
+                    }
+                }
+            }
             Divider()
             Button {
                 state.refreshDevices()
@@ -154,6 +166,7 @@ struct DeviceBarView: View {
         .controlSize(.large)
         .disabled(state.runOnAll || state.recordingActive)
         .help(state.recordingActive ? "Stop the recording to change the device" : "Switch the active device")
+        .task(id: state.devices.map(\.serial).joined()) { await state.refreshAvds() }
     }
 
     /// macOS popup buttons flatten their label to one tint, so the status

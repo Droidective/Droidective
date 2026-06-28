@@ -60,6 +60,10 @@ final class AppState {
     let apkStudio = ApkStudioSession()
 
     var devices: [Device] = []
+    /// Android Studio AVDs, for launching an emulator straight from the device
+    /// bar. Refreshed when the connected set changes (see `refreshAvds`); ones
+    /// with a `runningSerial` are already in `devices`.
+    var availableAvds: [Avd] = []
     /// Switch via `requestDevice(_:)`, not direct assignment — that routes the
     /// change through the leave guard so an active recording isn't lost.
     private(set) var selectedSerial: String?
