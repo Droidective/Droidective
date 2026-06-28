@@ -12,6 +12,7 @@ struct FridaConsoleView: View {
     @State private var status: String?
     @State private var busy = false
     @State private var gadgetPath: String?
+    @State private var download = DownloadState()
 
     private var serial: String? { state.targetSerials.first }
 
@@ -52,6 +53,15 @@ struct FridaConsoleView: View {
                         .font(.caption).foregroundStyle(.textMuted)
                 }
             }
+            if download.active {
+                Section {
+                    if let fraction = download.fraction {
+                        ProgressView(value: fraction) { Text(download.label ?? "Downloading…") }
+                    } else {
+                        ProgressView { Text(download.label ?? "Downloading…") }
+                    }
+                }
+            }
             if let status {
                 Section { Text(status).font(.callout).foregroundStyle(.textMuted) }
             }
@@ -73,7 +83,8 @@ struct FridaConsoleView: View {
 
     private func startServer(_ serial: String) async {
         busy = true
-        defer { busy = false }
+        let progress = download
+        defer { busy = false; progress.finish() }
         do {
             status = "Resolving device architecture…"
             guard let deviceArch = try await state.env.engine.frida.deviceArch(serial: serial) else {
@@ -81,8 +92,13 @@ struct FridaConsoleView: View {
                 return
             }
             arch = deviceArch
-            status = "Downloading frida-server (\(deviceArch))…"
-            let local = try await state.env.engine.managedTools.install(.fridaServer, arch: deviceArch)
+            progress.begin("Downloading frida-server (\(deviceArch))…")
+            let onProgress: @Sendable (Double) -> Void = { value in Task { @MainActor in progress.update(value) } }
+            let local = try await state.env.engine.managedTools.install(.fridaServer, arch: deviceArch, onProgress: onProgress)
+            progress.finish()
+            let version = await state.env.engine.managedTools.installedVersion(.fridaServer) ?? ""
+            state.showToast(Toast(message: "Downloaded frida-server \(version)", ok: true, copyText: local, revealPath: local))
+            status = "Pushing and starting frida-server…"
             try await CommandLog.userInitiated(feature: "frida-console") {
                 _ = try await state.env.engine.frida.installServer(localPath: local, serial: serial)
                 _ = try await state.env.engine.frida.startServer(serial: serial)
@@ -110,15 +126,20 @@ struct FridaConsoleView: View {
 
     private func downloadGadget(_ serial: String) async {
         busy = true
-        defer { busy = false }
+        let progress = download
+        defer { busy = false; progress.finish() }
         do {
             guard let deviceArch = try await state.env.engine.frida.deviceArch(serial: serial) else {
                 status = "Couldn't determine a supported device architecture."
                 return
             }
             arch = deviceArch
-            status = "Downloading frida-gadget (\(deviceArch))…"
-            gadgetPath = try await state.env.engine.managedTools.install(.fridaGadget, arch: deviceArch)
+            progress.begin("Downloading frida-gadget (\(deviceArch))…")
+            let onProgress: @Sendable (Double) -> Void = { value in Task { @MainActor in progress.update(value) } }
+            let path = try await state.env.engine.managedTools.install(.fridaGadget, arch: deviceArch, onProgress: onProgress)
+            gadgetPath = path
+            let version = await state.env.engine.managedTools.installedVersion(.fridaGadget) ?? ""
+            state.showToast(Toast(message: "Downloaded frida-gadget \(version)", ok: true, copyText: path, revealPath: path))
             status = "Downloaded frida-gadget."
         } catch {
             status = "Failed: \(error.localizedDescription)"

@@ -12,6 +12,7 @@ struct ManagedToolsSettingsView: View {
     @State private var busy: ManagedTool?
     @State private var checking = false
     @State private var error: String?
+    @State private var download = DownloadState()
 
     private struct Item {
         let tool: ManagedTool
@@ -55,7 +56,11 @@ struct ManagedToolsSettingsView: View {
         let installed = versions[item.tool]
         LabeledContent {
             if busy == item.tool {
-                ProgressView().controlSize(.small)
+                if let fraction = download.fraction {
+                    ProgressView(value: fraction).frame(width: 90)
+                } else {
+                    ProgressView().controlSize(.small)
+                }
             } else if installed == nil {
                 Button("Download") { Task { await install(item.tool) } }.disabled(busy != nil)
             } else if let upgrade = upgrades[item.tool] {
@@ -96,11 +101,18 @@ struct ManagedToolsSettingsView: View {
     private func install(_ tool: ManagedTool) async {
         busy = tool
         error = nil
-        defer { busy = nil }
+        let progress = download
+        progress.begin(tool.rawValue)
+        defer { busy = nil; progress.finish() }
         do {
-            _ = try await state.env.engine.managedTools.install(tool, arch: arch(for: tool))
+            let onProgress: @Sendable (Double) -> Void = { value in Task { @MainActor in progress.update(value) } }
+            let path = try await state.env.engine.managedTools.install(tool, arch: arch(for: tool), onProgress: onProgress)
             versions[tool] = await state.env.engine.managedTools.installedVersion(tool)
             upgrades[tool] = nil
+            if let version = versions[tool] {
+                state.showToast(Toast(
+                    message: "Downloaded \(tool.rawValue) \(version)", ok: true, copyText: path, revealPath: path))
+            }
         } catch {
             self.error = "Couldn't download \(tool.rawValue): \(error.localizedDescription)"
         }

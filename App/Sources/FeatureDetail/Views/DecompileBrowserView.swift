@@ -17,6 +17,7 @@ struct DecompileBrowserView: View {
     @State private var status: String?
     @State private var toolReady = false
     @State private var dropTargeted = false
+    @State private var download = DownloadState()
 
     var body: some View {
         Group {
@@ -77,7 +78,11 @@ struct DecompileBrowserView: View {
             Text("Droidective downloads it from GitHub releases (and a Java runtime if you don't have one) and keeps it up to date.")
                 .font(.callout).foregroundStyle(.textMuted)
                 .multilineTextAlignment(.center).frame(maxWidth: 420)
-            if let status { Text(status).font(.caption).foregroundStyle(.textMuted) }
+            if download.active {
+                downloadProgress
+            } else if let status {
+                Text(status).font(.caption).foregroundStyle(.textMuted)
+            }
             HStack {
                 modePicker
                 Button(busy ? "Setting up…" : "Download & decompile") { Task { await ensureToolsAndDecompile() } }
@@ -86,6 +91,17 @@ struct DecompileBrowserView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(24)
+    }
+
+    @ViewBuilder private var downloadProgress: some View {
+        Group {
+            if let fraction = download.fraction {
+                ProgressView(value: fraction) { Text(download.label ?? "Downloading…") }
+            } else {
+                ProgressView { Text(download.label ?? "Downloading…") }
+            }
+        }
+        .frame(maxWidth: 360)
     }
 
     private func browser(_ root: FileNode) -> some View {
@@ -171,19 +187,31 @@ struct DecompileBrowserView: View {
         defer { busy = false }
         do {
             if await state.env.engine.toolchain.java() == nil {
-                status = "Downloading Java runtime…"
-                _ = try await state.env.engine.managedTools.install(.temurinJre, arch: ManagedToolStore.macArch)
+                try await installTool(.temurinJre, arch: ManagedToolStore.macArch, label: "Java runtime")
             }
             let tool: ManagedTool = mode == .jadx ? .jadx : .apktool
             if await state.env.engine.managedTools.resolve(tool) == nil {
-                status = "Downloading \(tool.rawValue)…"
-                _ = try await state.env.engine.managedTools.install(tool)
+                try await installTool(tool, arch: "", label: tool.rawValue)
             }
             toolReady = true
             await runDecompile()
         } catch {
             status = "Setup failed: \(error.localizedDescription)"
         }
+        download.finish()
+    }
+
+    /// Download a managed tool with progress, then post a notification with the
+    /// installed version and where it was saved.
+    private func installTool(_ tool: ManagedTool, arch: String, label: String) async throws {
+        let progress = download
+        progress.begin("Downloading \(label)…")
+        let onProgress: @Sendable (Double) -> Void = { value in Task { @MainActor in progress.update(value) } }
+        let path = try await state.env.engine.managedTools.install(tool, arch: arch, onProgress: onProgress)
+        let version = await state.env.engine.managedTools.installedVersion(tool) ?? ""
+        state.showToast(Toast(
+            message: "Downloaded \(label) \(version)".trimmingCharacters(in: .whitespaces),
+            ok: true, copyText: path, revealPath: path))
     }
 
     private func runDecompile() async {

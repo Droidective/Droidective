@@ -14,7 +14,8 @@ import Testing
             self.assetBytes = assetBytes
         }
         func data(from url: URL) async throws -> Data { releaseJSON }
-        func download(from url: URL, to destination: URL) async throws {
+        func download(from url: URL, to destination: URL, onProgress: (@Sendable (Double) -> Void)?) async throws {
+            onProgress?(1)
             try assetBytes.write(to: destination, options: .atomic)
         }
     }
