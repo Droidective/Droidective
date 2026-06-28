@@ -11,6 +11,14 @@
 A native macOS companion for Android and React Native debugging. One-click adb
 actions in a Raycast-style command palette — no terminal required.
 
+<p align="center">
+  <a href="https://droidective.com/assets/demo.mp4">
+    <img src="site/assets/demo-poster.webp" width="760" alt="Droidective demo — click to watch">
+  </a>
+  <br>
+  <em>▶ <a href="https://droidective.com/assets/demo.mp4">Watch the demo</a> · <a href="https://droidective.com/">droidective.com</a></em>
+</p>
+
 Built in Swift 6 + SwiftUI, with all logic in a platform-agnostic Swift package
 (`ADBKit`) so the engine stays testable and a future cross-platform port only
 needs a new UI layer.
@@ -119,7 +127,10 @@ ADBKit/   Swift package — all logic, zero UI dependencies (swift test)
   Features/     declarative 53-feature registry + runners + how-to notes
   Services/     logcat streaming, overrides, file/apps explorers, capture,
                 screen record, crash, bug report, wireless, emulators,
-                performance + network monitors, scrcpy/screenrecord options…
+                performance + network monitors, APK inspect/sign/decompile,
+                Frida, scrcpy/screenrecord options…
+  Tools/        managed-tool downloads (jadx, apktool, uber-apk-signer, Java,
+                frida) from GitHub releases + the APK toolchain resolver
   Persistence/  JSON stores in ~/Library/Application Support/Droidective
 App/      SwiftUI macOS app — command palette, device bar, feature views,
           Home + tour, per-feature command bar with an embedded terminal,
