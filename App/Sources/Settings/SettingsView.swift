@@ -11,6 +11,8 @@ struct SettingsView: View {
                 .tabItem { Label("General", systemImage: "gear") }
             DoctorSettingsView()
                 .tabItem { Label("Doctor", systemImage: "stethoscope") }
+            ManagedToolsSettingsView()
+                .tabItem { Label("Tools", systemImage: "shippingbox") }
             HotkeysSettingsView()
                 .tabItem { Label("Hotkeys", systemImage: "keyboard") }
         }
