@@ -155,6 +155,11 @@ struct DeviceBarView: View {
             }
             Divider()
             Button {
+                state.requestFeature("emulators")
+            } label: {
+                Label("Manage emulators…", systemImage: "square.stack.3d.up")
+            }
+            Button {
                 state.refreshDevices()
             } label: {
                 Label("Refresh devices", systemImage: "arrow.triangle.2.circlepath")
