@@ -33,6 +33,8 @@ public struct FeatureResult: Sendable, Equatable {
 public struct FeatureEngine: Sendable {
     public let client: AdbClient
     public let locator: ToolLocator
+    public let managedTools: ManagedToolStore
+    public let toolchain: ApkToolchain
     public let monitor: DeviceMonitor
     public let appControl: AppControlService
     public let appInstall: AppInstallService
@@ -59,13 +61,18 @@ public struct FeatureEngine: Sendable {
     let textInput: TextInputService
     let screenCapture: ScreenCaptureService
 
-    public init(client: AdbClient, locator: ToolLocator, monitor: DeviceMonitor, overridesStore: JSONStore<OverridesMap>) {
+    public init(
+        client: AdbClient, locator: ToolLocator, monitor: DeviceMonitor,
+        overridesStore: JSONStore<OverridesMap>, toolsDirectory: URL
+    ) {
         self.client = client
         self.locator = locator
         self.monitor = monitor
+        self.managedTools = ManagedToolStore(rootDirectory: toolsDirectory)
+        self.toolchain = ApkToolchain(locator: locator, store: managedTools)
         self.appControl = AppControlService(client: client)
         self.appInstall = AppInstallService(client: client)
-        self.apkInspection = ApkInspectionService(client: client)
+        self.apkInspection = ApkInspectionService(client: client, toolchain: toolchain)
         self.inspection = AppInspectionService(client: client)
         self.toolDetection = ToolDetectionService(locator: locator)
         self.overrides = OverridesService(client: client, store: overridesStore)

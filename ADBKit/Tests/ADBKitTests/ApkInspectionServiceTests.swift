@@ -3,6 +3,13 @@ import Testing
 @testable import ADBKit
 
 @Suite struct ApkInspectionServiceTests {
+    /// A toolchain wrapping the (seeded) test locator; its managed store points
+    /// at an empty temp dir, so only the locator's seeded tools resolve.
+    private func toolchain(_ client: AdbClient) -> ApkToolchain {
+        ApkToolchain(locator: client.locator, store: ManagedToolStore(
+            rootDirectory: FileManager.default.temporaryDirectory.appendingPathComponent("tc-\(UUID().uuidString)")))
+    }
+
     // MARK: pm path parsing
 
     @Test func parsePmPathExtractsEveryApk() {
@@ -31,7 +38,8 @@ import Testing
         runner.script(
             argsPrefix: ["-s", "S1", "shell", "pm", "path"],
             stdout: "package:/data/app/com.x-1/base.apk\n")
-        let paths = try await ApkInspectionService(client: client).apkPaths(package: "com.x", serial: "S1")
+        let paths = try await ApkInspectionService(client: client, toolchain: toolchain(client))
+            .apkPaths(package: "com.x", serial: "S1")
         #expect(paths == ["/data/app/com.x-1/base.apk"])
         // The package reaches `adb shell` so it must be single-quoted.
         #expect(runner.invocations.last?.arguments == ["-s", "S1", "shell", "pm", "path", "'com.x'"])
@@ -62,7 +70,8 @@ import Testing
             Signer #1 certificate SHA-256 digest: deadbeef
             """)
 
-        let report = await ApkInspectionService(client: client, runner: runner).inspect(apkPath: "/tmp/app.apk")
+        let report = await ApkInspectionService(client: client, toolchain: toolchain(client), runner: runner)
+            .inspect(apkPath: "/tmp/app.apk")
 
         #expect(report.info.packageName == "com.x")
         #expect(report.info.versionName == "1.2")
@@ -87,7 +96,8 @@ import Testing
         await client.locator.seedBuildToolsDir(nil)
         await client.locator.seedJava(nil)
 
-        let report = await ApkInspectionService(client: client, runner: runner).inspect(apkPath: "/tmp/missing.apk")
+        let report = await ApkInspectionService(client: client, toolchain: toolchain(client), runner: runner)
+            .inspect(apkPath: "/tmp/missing.apk")
 
         #expect(report.info.fileName == "missing.apk")
         #expect(report.info.packageName == nil)

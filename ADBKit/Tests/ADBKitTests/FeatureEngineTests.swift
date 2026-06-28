@@ -9,7 +9,8 @@ import Testing
         let client = await makeTestClient(runner: runner)
         return FeatureEngine(
             client: client, locator: client.locator, monitor: DeviceMonitor(client: client),
-            overridesStore: makeTempOverridesStore()
+            overridesStore: makeTempOverridesStore(),
+            toolsDirectory: FileManager.default.temporaryDirectory.appendingPathComponent("tools-\(UUID().uuidString)")
         )
     }
 

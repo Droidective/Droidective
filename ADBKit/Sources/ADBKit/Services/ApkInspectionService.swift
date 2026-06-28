@@ -12,10 +12,12 @@ import Foundation
 /// then `adb pull` (sync protocol, no shell).
 public struct ApkInspectionService: Sendable {
     let client: AdbClient
+    let toolchain: ApkToolchain
     let runner: any ProcessRunning
 
-    public init(client: AdbClient, runner: any ProcessRunning = SystemProcessRunner()) {
+    public init(client: AdbClient, toolchain: ApkToolchain, runner: any ProcessRunning = SystemProcessRunner()) {
         self.client = client
+        self.toolchain = toolchain
         self.runner = runner
     }
 
@@ -30,7 +32,7 @@ public struct ApkInspectionService: Sendable {
         var schemes: [String] = []
         var signers: [ApkSigner] = []
 
-        if let aapt2 = await client.locator.aapt2Path() {
+        if let aapt2 = await toolchain.aapt2() {
             let output = await runner.run(
                 executable: aapt2, arguments: ["dump", "badging", apkPath],
                 timeout: .seconds(20), maxOutputBytes: 4 * 1024 * 1024)
@@ -48,7 +50,7 @@ public struct ApkInspectionService: Sendable {
             }
         }
 
-        if let java = await client.locator.javaPath(), let jar = await client.locator.apksignerJarPath() {
+        if let java = await toolchain.java(), let jar = await toolchain.apksignerJar() {
             // apksigner exits non-zero when verification fails but still prints
             // the certificate details, so parse stdout regardless of exit code.
             let output = await runner.run(

@@ -16,6 +16,8 @@ struct AppEnvironment: Sendable {
         client = AdbClient(locator: locator, log: commandLog)
         monitor = DeviceMonitor(client: client)
         stores = AppStores()
-        engine = FeatureEngine(client: client, locator: locator, monitor: monitor, overridesStore: stores.overrides)
+        engine = FeatureEngine(
+            client: client, locator: locator, monitor: monitor, overridesStore: stores.overrides,
+            toolsDirectory: AppPaths.supportDir.appendingPathComponent("tools", isDirectory: true))
     }
 }
