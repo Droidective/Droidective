@@ -61,4 +61,43 @@ import Testing
         let rich = ApkInfo(fileName: "app.apk", fileSizeBytes: 1024, packageName: "com.x")
         #expect(rich.hasDetails)
     }
+
+    @Test func parsesPermissionsFeaturesAndDebuggable() {
+        let output = """
+        package: name='com.x' versionCode='1' versionName='1.0'
+        sdkVersion:'24'
+        targetSdkVersion:'34'
+        application-debuggable
+        uses-permission: name='android.permission.INTERNET'
+        uses-permission: name='android.permission.CAMERA'
+        uses-permission-sdk-23: name='android.permission.READ_CONTACTS'
+        uses-feature: name='android.hardware.camera'
+        uses-feature-not-required: name='android.hardware.location'
+        """
+        let fields = ApkBadging.parse(output)
+        #expect(fields.permissions == [
+            "android.permission.INTERNET",
+            "android.permission.CAMERA",
+            "android.permission.READ_CONTACTS",
+        ])
+        #expect(fields.features == ["android.hardware.camera", "android.hardware.location"])
+        #expect(fields.isDebuggable)
+    }
+
+    @Test func releaseApkExposesItsPermissionAndIsNotDebuggable() {
+        let fields = ApkBadging.parse(sample)
+        #expect(fields.permissions == ["android.permission.INTERNET"])
+        #expect(!fields.isDebuggable)
+    }
+
+    @Test func duplicatePermissionsAreCollapsedPreservingOrder() {
+        let output = """
+        uses-permission: name='android.permission.CAMERA'
+        uses-permission: name='android.permission.INTERNET'
+        uses-permission: name='android.permission.CAMERA'
+        """
+        #expect(ApkBadging.parse(output).permissions == [
+            "android.permission.CAMERA", "android.permission.INTERNET",
+        ])
+    }
 }
