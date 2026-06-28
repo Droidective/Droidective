@@ -24,6 +24,7 @@ struct DecompileBrowserView: View {
     @State private var selection: String?
     @State private var fileText: String?
     @State private var fileLanguage = ""
+    @State private var targetLine = 0
     @State private var findToken = 0
 
     @State private var filter = ""
@@ -188,7 +189,7 @@ struct DecompileBrowserView: View {
                 editorPane
             }
         }
-        .onChange(of: selection) { _, path in loadFile(path) }
+        .onChange(of: selection) { _, path in loadInEditor(path, line: 0) }
     }
 
     private func sidebar(_ root: FileNode) -> some View {
@@ -235,7 +236,7 @@ struct DecompileBrowserView: View {
             }
         } else {
             List(searchHits) { hit in
-                Button { selection = hit.path } label: {
+                Button { loadInEditor(hit.path, line: hit.line) } label: {
                     VStack(alignment: .leading, spacing: 1) {
                         Text("\((hit.path as NSString).lastPathComponent):\(hit.line)").font(.caption.weight(.medium))
                         Text(hit.text).font(.caption.monospaced()).foregroundStyle(.textMuted).lineLimit(1)
@@ -248,7 +249,7 @@ struct DecompileBrowserView: View {
 
     @ViewBuilder private var editorPane: some View {
         if let fileText {
-            CodeEditorView(content: fileText, language: fileLanguage, findToken: findToken)
+            CodeEditorView(content: fileText, language: fileLanguage, line: targetLine, findToken: findToken)
         } else {
             centered { Text("Select a file to view its source.").foregroundStyle(.textMuted) }
         }
@@ -336,6 +337,12 @@ struct DecompileBrowserView: View {
         guard !Task.isCancelled else { return }
         searchHits = hits
         searching = false
+    }
+
+    /// Open a file in the editor, optionally jumping to (and highlighting) a line.
+    private func loadInEditor(_ path: String?, line: Int) {
+        targetLine = line
+        loadFile(path)
     }
 
     private func loadFile(_ path: String?) {

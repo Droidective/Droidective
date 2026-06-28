@@ -13,8 +13,9 @@ function languageExtension(name) {
   return [];
 }
 
-// Swift (CodeEditorView) calls these via evaluateJavaScript.
-window.cmLoad = function (text, language) {
+// Swift (CodeEditorView) calls these via evaluateJavaScript. `line` (1-based,
+// 0 = none) jumps to and highlights a search hit.
+window.cmLoad = function (text, language, line) {
   const extensions = [
     basicSetup, // line numbers, fold gutter, search keymap (⌘F), bracket match…
     EditorView.editable.of(false),
@@ -24,7 +25,17 @@ window.cmLoad = function (text, language) {
   ];
   if (view) view.destroy();
   view = new EditorView({ doc: text ?? "", extensions, parent: document.body });
-  view.scrollDOM.scrollTop = 0;
+  const target = typeof line === "number" ? line : 0;
+  if (target > 0 && target <= view.state.doc.lines) {
+    const found = view.state.doc.line(target);
+    view.dispatch({
+      selection: { anchor: found.from, head: found.to }, // selects = highlights the line
+      effects: EditorView.scrollIntoView(found.from, { y: "center" }),
+    });
+    view.focus();
+  } else {
+    view.scrollDOM.scrollTop = 0;
+  }
 };
 
 // Open CodeMirror's find panel (also bound to ⌘F by basicSetup).
