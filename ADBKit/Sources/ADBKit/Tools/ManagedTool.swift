@@ -69,10 +69,10 @@ public struct ManagedToolSpec: Sendable, Equatable {
             assetPattern: #"^uber-apk-signer-.*\.jar$"#),
         .fridaServer: ManagedToolSpec(
             tool: .fridaServer, owner: "frida", repo: "frida", kind: .xzBinary,
-            assetPattern: #"^frida-server-.*-android-{arch}\.xz$"#),
+            assetPattern: #"^frida-server-.*-android-{arch}\.xz$"#, runnableName: "frida-server"),
         .fridaGadget: ManagedToolSpec(
             tool: .fridaGadget, owner: "frida", repo: "frida", kind: .xzBinary,
-            assetPattern: #"^frida-gadget-.*-android-{arch}\.so\.xz$"#),
+            assetPattern: #"^frida-gadget-.*-android-{arch}\.so\.xz$"#, runnableName: "frida-gadget.so"),
         .temurinJre: ManagedToolSpec(
             tool: .temurinJre, owner: "adoptium", repo: "temurin21-binaries", kind: .tarGz,
             assetPattern: #"^OpenJDK21U-jre_{arch}_mac_hotspot_.*\.tar\.gz$"#, runnableName: "java"),

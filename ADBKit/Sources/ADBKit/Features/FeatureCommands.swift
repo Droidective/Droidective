@@ -100,6 +100,11 @@ extension FeatureRegistry {
             FeatureCommand("apktool d -f -o <out-dir> <path.apk>", note: "disassemble to smali + decode resources"),
             FeatureCommand("apktool b <dir> -o <out.apk>", note: "rebuild a modified apktool tree"),
         ],
+        "frida-console": [
+            FeatureCommand("frida-ps -U", note: "list processes on the USB device (frida-server running)"),
+            FeatureCommand("frida -U -n <app>", note: "attach to a running app"),
+            FeatureCommand("frida -U -f <package> -l <script.js>", note: "spawn an app with an instrumentation script"),
+        ],
 
         // ── React Native ─────────────────────────────────────────────────
         "react-native": [

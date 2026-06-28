@@ -116,6 +116,8 @@ struct FeatureDetailView: View {
                 ApkSignView()
             case "apk-decompile":
                 DecompileBrowserView()
+            case "frida-console":
+                FridaConsoleView()
             case "emulators":
                 EmulatorsView()
             case "performance":

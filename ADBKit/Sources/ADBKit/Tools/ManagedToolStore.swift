@@ -136,7 +136,7 @@ public actor ManagedToolStore {
 
         let versionDir = toolRoot(tool).appendingPathComponent(sanitize(release.tagName), isDirectory: true)
         try recreateDirectory(versionDir)
-        try await place(asset: downloaded, kind: spec.kind, into: versionDir)
+        try await place(asset: downloaded, spec: spec, into: versionDir)
         try? fileManager.removeItem(at: stagingDir)
 
         guard let runnablePath = runnable(in: versionDir, spec: spec) else {
@@ -155,8 +155,8 @@ public actor ManagedToolStore {
     }
 
     /// Turn a downloaded asset into its installed form inside `dir`.
-    private func place(asset: URL, kind: ArtifactKind, into dir: URL) async throws {
-        switch kind {
+    private func place(asset: URL, spec: ManagedToolSpec, into dir: URL) async throws {
+        switch spec.kind {
         case .jar:
             try fileManager.moveItem(at: asset, to: dir.appendingPathComponent(asset.lastPathComponent))
         case .zipArchive:
@@ -164,8 +164,14 @@ public actor ManagedToolStore {
         case .tarGz:
             try await extract("/usr/bin/tar", ["-xzf", asset.path, "-C", dir.path])
         case .xzBinary:
-            // frida's bare .xz — handled in the Frida phase (macOS lacks `xz`).
-            throw StoreError.unsupported(.fridaServer)
+            // frida ships a bare .xz (macOS has no `xz` CLI) — decompress with the
+            // system Compression framework into the runnable's fixed name.
+            guard let name = spec.runnableName else { throw StoreError.runnableNotFound(spec.tool) }
+            let compressed = try Data(contentsOf: asset)
+            let decompressed = try (compressed as NSData).decompressed(using: .lzma) as Data
+            let out = dir.appendingPathComponent(name)
+            try decompressed.write(to: out, options: .atomic)
+            try fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: out.path)
         }
     }
 

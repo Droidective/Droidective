@@ -364,6 +364,16 @@ public enum FeatureRegistry {
             category: .appManagement, icon: "curlybraces.square", kind: .view
         ),
         FeatureDef(
+            id: "frida-console", title: "Frida",
+            subtitle: "Set up frida-server or frida-gadget for instrumentation",
+            keywords: [
+                "frida", "instrumentation", "hook", "hooking", "frida-server", "gadget",
+                "frida-gadget", "objection", "ssl pinning", "bypass", "dynamic", "pentest",
+                "reverse engineer", "instrument", "rooted", "non-rooted",
+            ],
+            category: .appManagement, icon: "syringe", kind: .view
+        ),
+        FeatureDef(
             id: "app-management", title: "Manage App",
             subtitle: "Open, stop, clear, or uninstall an app",
             keywords: ["open", "close", "force stop", "clear data", "uninstall", "cache"],
@@ -506,7 +516,8 @@ public enum FeatureRegistry {
         ],
         .reactNativeDeveloper: [
             "react-native", "reactotron", "logcat", "crash-catcher", "performance", "network-speed",
-            "apps", "install-app", "apk-inspector", "emulators", "connection", "device-info", "scrcpy", "screenshot", "send-text", "custom-commands",
+            "apps", "install-app", "apk-inspector", "apk-decompile", "frida-console",
+            "emulators", "connection", "device-info", "scrcpy", "screenshot", "send-text", "custom-commands",
         ],
         .qaTester: [
             "screenshot", "screen-record", "scrcpy", "video-editor", "bug-report",

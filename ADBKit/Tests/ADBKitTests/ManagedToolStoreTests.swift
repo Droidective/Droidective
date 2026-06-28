@@ -96,6 +96,23 @@ import Testing
         #expect(await upgraded.installedVersion(.apktool) == "v2.11.0")
     }
 
+    @Test func decompressesXzAssetIntoTheRunnableBinary() async throws {
+        // frida ships bare .xz; round-trip a payload through the same algorithm
+        // the store uses, then confirm it lands as an executable frida-server.
+        let payload = Data("ELF-ish-frida-server-bytes".utf8)
+        let xz = try (payload as NSData).compressed(using: .lzma) as Data
+        let http = MockHTTP(
+            releaseJSON: releaseJSON(tag: "16.4.0", assetName: "frida-server-16.4.0-android-arm64.xz"),
+            assetBytes: xz)
+        let store = ManagedToolStore(rootDirectory: tempRoot(), http: http)
+
+        let path = try await store.install(.fridaServer, arch: "arm64")
+
+        #expect(path.hasSuffix("/frida-server"))
+        #expect(FileManager.default.contents(atPath: path) == payload)
+        #expect(FileManager.default.isExecutableFile(atPath: path))
+    }
+
     /// A real `.tar.gz` containing a single executable at `runnableRelPath`
     /// under a top-level `jdk-21/` dir, mirroring Temurin's layout.
     private static func makeTarGz(runnableRelPath: String) throws -> Data {
