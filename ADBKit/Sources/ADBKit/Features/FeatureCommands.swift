@@ -88,6 +88,7 @@ extension FeatureRegistry {
         ],
         "apk-studio": [
             FeatureCommand("aapt2 dump badging <path.apk>", note: "inspect: package, version, SDK, permissions"),
+            FeatureCommand("keytool -genkeypair -keystore <ks> -alias <alias> -keyalg RSA -keysize 2048", note: "create a signing keystore"),
             FeatureCommand("jadx -d <out-dir> <path.apk>", note: "decompile dex to readable Java"),
             FeatureCommand("apktool d -f -o <out-dir> <path.apk>", note: "decompile to smali + decode resources"),
             FeatureCommand("apktool b <dir> -o <out.apk>", note: "recompile a modified apktool tree"),
@@ -98,6 +99,7 @@ extension FeatureRegistry {
             FeatureCommand("apksigner verify -v --print-certs <path.apk>", note: "signing schemes and certificate digests"),
         ],
         "apk-sign": [
+            FeatureCommand("keytool -genkeypair -keystore <ks> -alias <alias> -keyalg RSA -keysize 2048", note: "create a signing keystore"),
             FeatureCommand("zipalign -f -p 4 <in.apk> <out.apk>", note: "page-align before signing"),
             FeatureCommand("apksigner sign --ks <keystore> <out.apk>", note: "sign with a debug or release keystore"),
             FeatureCommand("apksigner verify -v --print-certs <out.apk>", note: "confirm the signature"),

@@ -32,6 +32,27 @@ import Testing
             == ["-jar", "j", "verify", "-v", "--print-certs", "t"])
     }
 
+    @Test func createKeystoreArgumentsReferencePasswordsByFileNotValue() {
+        let spec = NewKeystore(
+            path: "/k/my.jks", alias: "release", storePassword: "s3cret",
+            keyPassword: "k3y", commonName: "My App", organization: "Acme", validityDays: 9999)
+        let args = ApkSigningService.createKeystoreArguments(spec: spec, storePassFile: "/tmp/sp", keyPassFile: "/tmp/kp")
+        #expect(args == [
+            "-genkeypair", "-noprompt", "-keystore", "/k/my.jks", "-alias", "release",
+            "-keyalg", "RSA", "-keysize", "2048", "-validity", "9999",
+            "-storepass:file", "/tmp/sp", "-keypass:file", "/tmp/kp",
+            "-dname", "CN=My App, O=Acme",
+        ])
+        // The actual passwords never appear as argv elements.
+        #expect(!args.contains("s3cret"))
+        #expect(!args.contains("k3y"))
+    }
+
+    @Test func newKeystoreDnameOmitsOrganizationWhenBlank() {
+        let spec = NewKeystore(path: "/k.jks", alias: "a", storePassword: "p", commonName: "Solo")
+        #expect(spec.distinguishedName == "CN=Solo")
+    }
+
     // MARK: behaviour
 
     @Test func signPassesPasswordByFileNeverOnTheCommandLine() async throws {

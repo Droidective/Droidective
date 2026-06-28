@@ -29,6 +29,16 @@ public struct ApkToolchain: Sendable {
         return await store.resolve(.temurinJre)
     }
 
+    /// `keytool` for creating signing keystores — it lives beside `java` in the
+    /// same `bin/` (both the JDK and the Temurin JRE ship it). nil when no Java
+    /// runtime is resolved or keytool is missing.
+    public func keytool() async -> String? {
+        guard let java = await java() else { return nil }
+        let path = URL(fileURLWithPath: java).deletingLastPathComponent()
+            .appendingPathComponent("keytool").path
+        return FileManager.default.isExecutableFile(atPath: path) ? path : nil
+    }
+
     // Managed tools — downloaded from GitHub releases on demand.
     public func jadx() async -> String? { await store.resolve(.jadx) }
     public func apktool() async -> String? { await store.resolve(.apktool) }

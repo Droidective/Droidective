@@ -231,7 +231,7 @@ import Testing
             for command in FeatureRegistry.commands(for: feature.id) {
                 let leadsWithTool = [
                     "adb ", "scrcpy ", "emulator ", "ffmpeg ", "aapt2 ", "apksigner ",
-                    "zipalign ", "jadx ", "apktool ", "frida ", "frida-ps ",
+                    "zipalign ", "jadx ", "apktool ", "keytool ", "frida ", "frida-ps ",
                 ].contains {
                     command.command.hasPrefix($0)
                 }
