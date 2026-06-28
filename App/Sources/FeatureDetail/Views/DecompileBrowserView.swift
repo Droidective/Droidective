@@ -179,6 +179,15 @@ struct DecompileBrowserView: View {
                 Spacer()
                 Button { findToken += 1 } label: { Label("Find", systemImage: "magnifyingglass") }
                     .help("Find in file (⌘F)")
+                Menu {
+                    Button("Open APK in jadx-GUI") { Task { await openInJadxGui() } }
+                    Button("Reveal decompiled files in Finder") { revealOutput() }
+                } label: {
+                    Label("Open externally", systemImage: "arrow.up.forward.app")
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .help("Open the APK in the full jadx GUI, or reveal the files to edit them in another tool")
                 Button("Decompile another") { apkURL = nil; self.root = nil; selection = nil }
             }
             .padding(8)
@@ -189,6 +198,7 @@ struct DecompileBrowserView: View {
                 editorPane
             }
         }
+        .background(.bgRoot)
         .onChange(of: selection) { _, path in loadInEditor(path, line: 0) }
     }
 
@@ -250,10 +260,16 @@ struct DecompileBrowserView: View {
     @ViewBuilder private var editorPane: some View {
         if let fileText {
             CodeEditorView(content: fileText, language: fileLanguage, line: targetLine, findToken: findToken)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Self.editorBackground)
         } else {
             centered { Text("Select a file to view its source.").foregroundStyle(.textMuted) }
         }
     }
+
+    /// Matches the editor's `#282c34` (one-dark) so no window vibrancy shows
+    /// through behind the web view.
+    private static let editorBackground = Color(red: 0.157, green: 0.173, blue: 0.204)
 
     // MARK: - Actions
 
@@ -326,6 +342,20 @@ struct DecompileBrowserView: View {
             status = error.localizedDescription
             root = nil
         }
+    }
+
+    /// Hand off to the full jadx GUI for advanced exploration (the in-app viewer
+    /// stays a basic reader). Surfaces the launcher's result as a toast.
+    private func openInJadxGui() async {
+        guard let apkURL else { return }
+        let result = await state.env.engine.decompile.launchJadxGui(apkPath: apkURL.path)
+        state.showToast(Toast(message: result.message, ok: result.ok))
+    }
+
+    /// Reveal the decompiled output so it can be opened in any external editor.
+    private func revealOutput() {
+        guard let root else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: root.path)])
     }
 
     private func runSearch(in root: FileNode) async {

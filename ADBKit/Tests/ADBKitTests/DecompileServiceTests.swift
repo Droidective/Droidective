@@ -10,6 +10,11 @@ import Testing
             == ["-cp", "/t/jadx/lib/*", "jadx.cli.JadxCLI", "-d", "/out", "/a.apk"])
     }
 
+    @Test func jadxGuiArgumentsRunTheGuiMainOffTheLibClasspath() {
+        #expect(DecompileService.jadxGuiArguments(libDir: "/t/jadx/lib", apk: "/a.apk")
+            == ["-cp", "/t/jadx/lib/*", "jadx.gui.JadxGUI", "/a.apk"])
+    }
+
     @Test func apktoolDecodeForcesOverwriteIntoOutput() {
         #expect(DecompileService.apktoolDecodeArguments(jar: "/t/apktool.jar", output: "/out", apk: "/a.apk")
             == ["-jar", "/t/apktool.jar", "d", "-f", "-o", "/out", "/a.apk"])

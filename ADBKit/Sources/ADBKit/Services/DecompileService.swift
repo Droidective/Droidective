@@ -80,6 +80,32 @@ public struct DecompileService: Sendable {
         return outDir
     }
 
+    /// Open `apkPath` in jadx's bundled Swing GUI for advanced exploration —
+    /// detached, so it outlives navigating away (like the emulator launch). We
+    /// run the GUI main class off the same `lib/*` classpath used for the CLI, so
+    /// it doesn't depend on the launcher script or a JDK on `PATH`. Returns a
+    /// non-ok result (for a toast) when jadx or a Java runtime isn't set up yet.
+    public func launchJadxGui(apkPath: String) async -> FeatureResult {
+        guard let java = await toolchain.java() else {
+            return FeatureResult(ok: false, message: "No Java runtime yet — set one up in Settings ▸ Tools.")
+        }
+        guard let jadx = await toolchain.jadx() else {
+            return FeatureResult(ok: false, message: "Download jadx in Settings ▸ Tools to open the GUI.")
+        }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: java)
+        process.arguments = Self.jadxGuiArguments(libDir: Self.jadxLibDir(forRunnable: jadx), apk: apkPath)
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+            return FeatureResult(ok: true, message: "Opening in jadx-GUI…")
+        } catch {
+            return FeatureResult(ok: false, message: "Couldn't launch jadx-GUI: \(error.localizedDescription)")
+        }
+    }
+
     /// Rebuild an apktool source tree back into an APK (then sign it to install).
     public func rebuild(sourceDir: String, to outputApk: String) async throws {
         guard let java = await toolchain.java() else { throw DecompileError.toolMissing("Java") }
@@ -99,6 +125,12 @@ public struct DecompileService: Sendable {
     /// finding a JDK on the app's minimal PATH.
     static func jadxArguments(libDir: String, output: String, apk: String) -> [String] {
         ["-cp", "\(libDir)/*", "jadx.cli.JadxCLI", "-d", output, apk]
+    }
+
+    /// jadx-GUI's main class, run off `lib/*` like the CLI (the GUI jars live in
+    /// the same `lib/`). The APK is an argument-vector element — no shell.
+    static func jadxGuiArguments(libDir: String, apk: String) -> [String] {
+        ["-cp", "\(libDir)/*", "jadx.gui.JadxGUI", apk]
     }
 
     static func apktoolDecodeArguments(jar: String, output: String, apk: String) -> [String] {
