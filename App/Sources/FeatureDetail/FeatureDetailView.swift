@@ -114,6 +114,8 @@ struct FeatureDetailView: View {
                 ApkInspectorView()
             case "apk-sign":
                 ApkSignView()
+            case "apk-decompile":
+                DecompileBrowserView()
             case "emulators":
                 EmulatorsView()
             case "performance":

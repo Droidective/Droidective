@@ -83,6 +83,15 @@ public actor ManagedToolStore {
         self.runner = runner
     }
 
+    /// The Mac's architecture in Adoptium's asset naming — for the Temurin JRE.
+    public static var macArch: String {
+        #if arch(arm64)
+        "aarch64"
+        #else
+        "x64"
+        #endif
+    }
+
     /// The installed version tag of `tool`, or nil when it isn't installed.
     public func installedVersion(_ tool: ManagedTool) -> String? {
         let marker = toolRoot(tool).appendingPathComponent("current.txt")

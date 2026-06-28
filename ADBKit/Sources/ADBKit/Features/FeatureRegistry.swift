@@ -354,6 +354,16 @@ public enum FeatureRegistry {
             category: .appManagement, icon: "signature", kind: .view
         ),
         FeatureDef(
+            id: "apk-decompile", title: "Decompile APK",
+            subtitle: "Browse Java (jadx) or smali + resources (apktool)",
+            keywords: [
+                "decompile", "decompiler", "jadx", "apktool", "smali", "baksmali",
+                "reverse engineer", "reverse engineering", "source", "java", "resources",
+                "disassemble", "manifest", "apk", "dex",
+            ],
+            category: .appManagement, icon: "curlybraces.square", kind: .view
+        ),
+        FeatureDef(
             id: "app-management", title: "Manage App",
             subtitle: "Open, stop, clear, or uninstall an app",
             keywords: ["open", "close", "force stop", "clear data", "uninstall", "cache"],
@@ -491,7 +501,7 @@ public enum FeatureRegistry {
     public static let featuresByRole: [UserRole: [String]] = [
         .androidDeveloper: [
             "logcat", "crash-catcher", "device-info", "current-activity", "foreground-package",
-            "file-explorer", "sandbox-browser", "apps", "install-app", "apk-inspector", "apk-sign", "emulators", "connection", "get-ip",
+            "file-explorer", "sandbox-browser", "apps", "install-app", "apk-inspector", "apk-sign", "apk-decompile", "emulators", "connection", "get-ip",
             "meminfo", "monkey", "scrcpy", "screenshot", "send-text", "custom-commands",
         ],
         .reactNativeDeveloper: [

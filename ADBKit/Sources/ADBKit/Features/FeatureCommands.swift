@@ -95,6 +95,11 @@ extension FeatureRegistry {
             FeatureCommand("apksigner sign --ks <keystore> <out.apk>", note: "sign with a debug or release keystore"),
             FeatureCommand("apksigner verify -v --print-certs <out.apk>", note: "confirm the signature"),
         ],
+        "apk-decompile": [
+            FeatureCommand("jadx -d <out-dir> <path.apk>", note: "decompile dex to Java sources"),
+            FeatureCommand("apktool d -f -o <out-dir> <path.apk>", note: "disassemble to smali + decode resources"),
+            FeatureCommand("apktool b <dir> -o <out.apk>", note: "rebuild a modified apktool tree"),
+        ],
 
         // ── React Native ─────────────────────────────────────────────────
         "react-native": [
