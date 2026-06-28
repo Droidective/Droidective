@@ -71,10 +71,15 @@ public struct FridaService: Sendable {
         ["shell", "chmod", "755", shellQuote(serverRemotePath)]
     }
 
-    /// `su -c '<path> &'` launches the server in the background so the adb call
-    /// returns instead of blocking on the long-lived process.
+    /// Launch frida-server detached so the `adb shell` call returns at once.
+    /// A bare `&` is not enough: the backgrounded server inherits the shell's
+    /// stdout/stderr, so adb's shell service never sees EOF and the call hangs
+    /// until it times out — and the cancelled adb child takes the server down
+    /// with it. `setsid` plus redirecting all three std streams to /dev/null
+    /// severs it from the adb pipe and the shell's session, so the call returns
+    /// immediately and the server survives.
     static func startArguments() -> [String] {
-        ["shell", "su", "-c", shellQuote("\(serverRemotePath) &")]
+        ["shell", "su", "-c", shellQuote("setsid \(serverRemotePath) </dev/null >/dev/null 2>&1 &")]
     }
 
     static func stopArguments() -> [String] {

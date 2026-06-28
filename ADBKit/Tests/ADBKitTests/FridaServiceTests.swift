@@ -15,7 +15,8 @@ import Testing
         #expect(FridaService.pushArguments(localPath: "/tmp/frida-server")
             == ["push", "/tmp/frida-server", "/data/local/tmp/frida-server"])
         #expect(FridaService.chmodArguments() == ["shell", "chmod", "755", "'/data/local/tmp/frida-server'"])
-        #expect(FridaService.startArguments() == ["shell", "su", "-c", "'/data/local/tmp/frida-server &'"])
+        #expect(FridaService.startArguments()
+            == ["shell", "su", "-c", "'setsid /data/local/tmp/frida-server </dev/null >/dev/null 2>&1 &'"])
         #expect(FridaService.stopArguments() == ["shell", "su", "-c", "'pkill -f frida-server'"])
         #expect(FridaService.statusArguments() == ["shell", "pidof", "frida-server"])
     }
