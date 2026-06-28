@@ -445,19 +445,25 @@ struct HotkeysSettingsView: View {
     var body: some View {
         Form {
             Section("Global") {
-                KeyboardShortcuts.Recorder("Show Droidective", name: .globalLaunch)
+                LabeledContent("Show Droidective") {
+                    HotkeyRecorderField(name: .globalLaunch)
+                }
             }
             // Mirrors the sidebar: enabled features in their sidebar order.
             Section("Features") {
                 ForEach(state.sidebarFeatures) { feature in
-                    KeyboardShortcuts.Recorder(feature.title, name: HotkeyManager.featureName(feature.id))
+                    LabeledContent(feature.title) {
+                        HotkeyRecorderField(name: HotkeyManager.featureName(feature.id))
+                    }
                 }
             }
             let orphans = orphanedShortcuts
             if !orphans.isEmpty {
                 Section("Hidden features with shortcuts") {
                     ForEach(orphans) { feature in
-                        KeyboardShortcuts.Recorder(feature.title, name: HotkeyManager.featureName(feature.id))
+                        LabeledContent(feature.title) {
+                            HotkeyRecorderField(name: HotkeyManager.featureName(feature.id))
+                        }
                     }
                 }
             }

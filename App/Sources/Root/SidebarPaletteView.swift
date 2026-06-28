@@ -734,11 +734,10 @@ private struct HotkeyPopover: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Hotkey · \(feature.title)")
                 .font(.headline)
-            Text("Click the field, then press your shortcut — e.g. ⌘⌃Y.")
+            Text("Press your shortcut — e.g. ⌘⌃Y. ⎋ cancels, ⌫ clears.")
                 .font(.caption)
                 .foregroundStyle(.textMuted)
-            KeyboardShortcuts.Recorder("", name: HotkeyManager.featureName(feature.id))
-                .controlSize(.large)
+            HotkeyRecorderField(name: HotkeyManager.featureName(feature.id), autoFocus: true)
             Text("Global — fires even when Droidective is in the background.")
                 .font(.caption)
                 .foregroundStyle(.textMuted)
