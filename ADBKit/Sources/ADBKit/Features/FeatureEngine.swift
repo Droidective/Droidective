@@ -36,6 +36,7 @@ public struct FeatureEngine: Sendable {
     public let monitor: DeviceMonitor
     public let appControl: AppControlService
     public let appInstall: AppInstallService
+    public let apkInspection: ApkInspectionService
     public let inspection: AppInspectionService
     public let toolDetection: ToolDetectionService
     public let overrides: OverridesService
@@ -64,6 +65,7 @@ public struct FeatureEngine: Sendable {
         self.monitor = monitor
         self.appControl = AppControlService(client: client)
         self.appInstall = AppInstallService(client: client)
+        self.apkInspection = ApkInspectionService(client: client)
         self.inspection = AppInspectionService(client: client)
         self.toolDetection = ToolDetectionService(locator: locator)
         self.overrides = OverridesService(client: client, store: overridesStore)
@@ -99,7 +101,7 @@ public struct FeatureEngine: Sendable {
         "meminfo", "sandbox-browser", "monkey", "device-info",
         "screen-record", "crash-catcher", "bug-report", "wireless-adb",
         "rn-dev-host", "process-death", "custom-commands",
-        "file-explorer", "apps", "emulators", "performance", "network-speed",
+        "file-explorer", "apps", "apk-inspector", "emulators", "performance", "network-speed",
         "root-status", "wifi", "private-dns", "system-restrictions",
         "reactotron",
     ]

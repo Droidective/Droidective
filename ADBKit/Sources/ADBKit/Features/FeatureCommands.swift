@@ -86,6 +86,10 @@ extension FeatureRegistry {
         "install-app": [
             FeatureCommand("adb install -r <path.apk>", note: "install or reinstall (keeps data)"),
         ],
+        "apk-inspector": [
+            FeatureCommand("aapt2 dump badging <path.apk>", note: "package, version, SDK, permissions, features"),
+            FeatureCommand("apksigner verify -v --print-certs <path.apk>", note: "signing schemes and certificate digests"),
+        ],
 
         // ── React Native ─────────────────────────────────────────────────
         "react-native": [

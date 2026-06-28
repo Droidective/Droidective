@@ -335,6 +335,16 @@ public enum FeatureRegistry {
             category: .appManagement, icon: "arrow.down.app", kind: .view
         ),
         FeatureDef(
+            id: "apk-inspector", title: "APK Inspector",
+            subtitle: "Inspect an APK — manifest, permissions, SDK, signing",
+            keywords: [
+                "apk", "inspect", "inspector", "manifest", "permissions", "permission",
+                "signing", "signature", "certificate", "cert", "sha", "sdk", "min sdk",
+                "target sdk", "debuggable", "badging", "aapt", "apksigner", "reverse engineer",
+            ],
+            category: .appManagement, icon: "doc.text.magnifyingglass", kind: .view
+        ),
+        FeatureDef(
             id: "app-management", title: "Manage App",
             subtitle: "Open, stop, clear, or uninstall an app",
             keywords: ["open", "close", "force stop", "clear data", "uninstall", "cache"],
@@ -472,12 +482,12 @@ public enum FeatureRegistry {
     public static let featuresByRole: [UserRole: [String]] = [
         .androidDeveloper: [
             "logcat", "crash-catcher", "device-info", "current-activity", "foreground-package",
-            "file-explorer", "sandbox-browser", "apps", "install-app", "emulators", "connection", "get-ip",
+            "file-explorer", "sandbox-browser", "apps", "install-app", "apk-inspector", "emulators", "connection", "get-ip",
             "meminfo", "monkey", "scrcpy", "screenshot", "send-text", "custom-commands",
         ],
         .reactNativeDeveloper: [
             "react-native", "reactotron", "logcat", "crash-catcher", "performance", "network-speed",
-            "apps", "install-app", "emulators", "connection", "device-info", "scrcpy", "screenshot", "send-text", "custom-commands",
+            "apps", "install-app", "apk-inspector", "emulators", "connection", "device-info", "scrcpy", "screenshot", "send-text", "custom-commands",
         ],
         .qaTester: [
             "screenshot", "screen-record", "scrcpy", "video-editor", "bug-report",

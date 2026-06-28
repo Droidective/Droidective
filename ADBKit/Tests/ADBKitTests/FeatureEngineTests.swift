@@ -175,8 +175,8 @@ import Testing
 
 @Suite struct FeatureRegistryTests {
     @Test func hasAll48Features() {
-        #expect(FeatureRegistry.all.count == 48)
-        #expect(FeatureRegistry.byID.count == 48)
+        #expect(FeatureRegistry.all.count == 49)
+        #expect(FeatureRegistry.byID.count == 49)
     }
 
     @Test func everyCatalogFeatureIsEnabledByDefault() {
@@ -228,7 +228,7 @@ import Testing
     @Test func commandReferenceLeadsWithTheTool() {
         for feature in FeatureRegistry.all {
             for command in FeatureRegistry.commands(for: feature.id) {
-                let leadsWithTool = ["adb ", "scrcpy ", "emulator ", "ffmpeg "].contains {
+                let leadsWithTool = ["adb ", "scrcpy ", "emulator ", "ffmpeg ", "aapt2 ", "apksigner "].contains {
                     command.command.hasPrefix($0)
                 }
                 #expect(leadsWithTool, "\(feature.id): unexpected command \"\(command.command)\"")
