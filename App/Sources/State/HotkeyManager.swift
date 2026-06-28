@@ -18,17 +18,6 @@ enum HotkeyManager {
         KeyboardShortcuts.Name("feature-\(featureID)")
     }
 
-    /// "⌃⌥⇧⌘" string for the currently-held modifiers, in macOS display order —
-    /// drives the live preview while recording a hotkey.
-    static func symbolString(for flags: NSEvent.ModifierFlags) -> String {
-        var symbols = ""
-        if flags.contains(.control) { symbols += "⌃" }
-        if flags.contains(.option) { symbols += "⌥" }
-        if flags.contains(.shift) { symbols += "⇧" }
-        if flags.contains(.command) { symbols += "⌘" }
-        return symbols
-    }
-
     /// Register listeners for the global hotkey and every feature. Must run
     /// *after* the app finishes launching: Carbon installs its hot-key event
     /// handler on the dispatcher target live at first registration, so doing

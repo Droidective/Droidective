@@ -722,53 +722,28 @@ struct FeatureRowView: View {
 }
 
 /// Inline global-hotkey recorder reached from a sidebar row's right-click menu.
-/// Shows a live preview of the modifiers being held (press ⌘ and "⌘ …" appears
-/// immediately, before the full combo lands) above the recorder. Writes the
-/// same KeyboardShortcuts name the Hotkeys settings tab uses, so they stay in
-/// sync.
+/// Writes the same KeyboardShortcuts name the Hotkeys settings tab uses, so the
+/// two stay in sync. The recorder itself captures the whole combo (modifiers +
+/// key) and renders it once set — earlier this view layered a `.flagsChanged`
+/// preview on top, which could only ever show modifiers (so ⌘⌃Y looked like
+/// just ⌘⌃) and competed with the recorder's own event capture.
 private struct HotkeyPopover: View {
     let feature: FeatureDef
-    @State private var held = NSEvent.ModifierFlags()
-    @State private var flagsMonitor: Any?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Hotkey · \(feature.title)")
                 .font(.headline)
-            preview
+            Text("Click the field, then press your shortcut — e.g. ⌘⌃Y.")
+                .font(.caption)
+                .foregroundStyle(.textMuted)
             KeyboardShortcuts.Recorder("", name: HotkeyManager.featureName(feature.id))
+                .controlSize(.large)
             Text("Global — fires even when Droidective is in the background.")
                 .font(.caption)
                 .foregroundStyle(.textMuted)
         }
         .padding(14)
         .frame(width: 300)
-        .onAppear {
-            flagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
-                held = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-                return event
-            }
-        }
-        .onDisappear {
-            if let flagsMonitor { NSEvent.removeMonitor(flagsMonitor) }
-            flagsMonitor = nil
-        }
-    }
-
-    private var preview: some View {
-        let symbols = HotkeyManager.symbolString(for: held)
-        return HStack {
-            if symbols.isEmpty {
-                Text("Hold ⌘ / ⌥ / ⌃ / ⇧, then a key")
-                    .foregroundStyle(.textMuted)
-            } else {
-                Text(symbols + " …")
-                    .font(.system(size: 18, weight: .semibold, design: .rounded))
-            }
-            Spacer()
-        }
-        .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
-        .padding(.horizontal, 10)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
     }
 }
