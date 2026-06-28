@@ -4,7 +4,10 @@ import Foundation
 /// asset names (`frida-server-<ver>-android-<arch>.xz`).
 public enum FridaArch {
     public static func from(abilist: String) -> String? {
-        for abi in abilist.components(separatedBy: ",").map({ $0.trimmingCharacters(in: .whitespaces) }) {
+        // Trim newlines too: raw `getprop` output keeps its trailing "\n", and a
+        // single-ABI list (64-bit-only devices, e.g. "arm64-v8a") has no comma to
+        // separate it off, so ".whitespaces" alone would leave "arm64-v8a\n".
+        for abi in abilist.components(separatedBy: ",").map({ $0.trimmingCharacters(in: .whitespacesAndNewlines) }) {
             switch abi {
             case "arm64-v8a": return "arm64"
             case "armeabi-v7a", "armeabi": return "arm"

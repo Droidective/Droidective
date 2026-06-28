@@ -9,6 +9,11 @@ import Testing
         #expect(FridaArch.from(abilist: "x86_64,x86") == "x86_64")
         #expect(FridaArch.from(abilist: "x86") == "x86")
         #expect(FridaArch.from(abilist: "mips,unknown") == nil)
+        // Raw getprop output keeps a trailing newline; a single-ABI list (common
+        // on 64-bit-only devices) has no comma to strip it, so the trim must
+        // cover newlines, not just spaces.
+        #expect(FridaArch.from(abilist: "arm64-v8a\n") == "arm64")
+        #expect(FridaArch.from(abilist: "x86_64\n") == "x86_64")
     }
 
     @Test func serverArgumentsQuoteDeviceShellValues() {
