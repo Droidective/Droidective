@@ -79,6 +79,25 @@ extension Color {
         return lum > 0.35 ? Color.black.opacity(0.85) : .white
     }
 
+    /// Resolve a named asset color to a concrete, appearance-independent color
+    /// for a specific scheme.
+    ///
+    /// SwiftUI hosts a `Menu`'s pop-up-button label in a context whose effective
+    /// appearance we don't control (it flattens the label to one tint resolved
+    /// against the control's own — stuck-dark — appearance), so an env-resolved
+    /// asset like `.textMain` renders near-white there in *both* modes, going
+    /// white-on-white in light mode. Feeding the label a pre-resolved concrete
+    /// color sidesteps that. Falls back to the dynamic asset if resolution fails.
+    static func resolved(_ name: String, for scheme: ColorScheme) -> Color {
+        guard let appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua),
+              let dynamic = NSColor(named: name) else { return Color(name) }
+        var flat = dynamic
+        appearance.performAsCurrentDrawingAppearance {
+            flat = dynamic.usingColorSpace(.sRGB) ?? dynamic
+        }
+        return Color(nsColor: flat)
+    }
+
     /// The foreground color for a static (non-adaptive) color — same WCAG logic
     /// without an appearance context. Use for colors built from explicit RGB/HSB values.
     var contrastingForeground: Color {

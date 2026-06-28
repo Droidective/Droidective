@@ -34,11 +34,30 @@ struct RootView: View {
     /// Launches before the one-time GitHub-star nudge (shown after consent).
     private let starPromptAfterLaunches = 10
 
-    /// Bridges `NSApp.appearance` (native) and SwiftUI's `colorScheme` environment
-    /// (semantic). Setting `NSApp.appearance` changes native control rendering but
-    /// SwiftUI's own color resolution (named assets, `.primary`, etc.) lags until
-    /// the next system-appearance notification. Injecting this explicitly keeps
-    /// SwiftUI in sync as soon as the theme toggle fires.
+    /// Theme color-sync needs two modifiers because they reach different layers,
+    /// and neither alone is enough:
+    ///
+    /// - `.preferredColorScheme(preferredScheme)` sets the hosting NSWindow's
+    ///   appearance, so the *native* menus/popovers presented from this window
+    ///   (the device-picker dropdown, the overrides menu) render in the matching
+    ///   appearance instead of always light.
+    /// - `.environment(\.colorScheme, injectedColorScheme)` forces the value the
+    ///   *SwiftUI-drawn* content resolves named asset colors against. A `Menu`'s
+    ///   label is hosted in a context that doesn't reliably inherit the window
+    ///   appearance for asset resolution, so without this the device-picker title
+    ///   (`.textMain`) renders white-on-white in light mode even though the bar's
+    ///   `.bgSurface` background resolves correctly.
+    ///
+    /// `nil` / system pass-through for "auto" keeps both following the system
+    /// appearance live.
+    private var preferredScheme: ColorScheme? {
+        switch theme {
+        case "light": return .light
+        case "dark": return .dark
+        default: return nil  // "auto" → follow the system appearance
+        }
+    }
+
     private var injectedColorScheme: ColorScheme {
         switch theme {
         case "light": return .light
@@ -65,6 +84,7 @@ struct RootView: View {
         let showExitDialog = state.pendingExit.map { !$0.saving } ?? false
         return zoomedContent
             .environment(\.colorScheme, injectedColorScheme)
+            .preferredColorScheme(preferredScheme)
             .background(WindowAccessor { window in
                 // Fill the screen's usable area on launch — a regular maximized
                 // window, not a native full-screen Space.
@@ -232,24 +252,22 @@ struct RootView: View {
                         OperationProgressStrip(operation: operation)
                     }
                 }
-                FeatureDetailView(featureID: state.selectedFeatureID)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .overlay(alignment: .topTrailing) { ToastOverlay() }
-                    .overlay(alignment: .trailing) {
-                        if state.showNotifications {
-                            HStack(spacing: 0) {
-                                Divider()
-                                NotificationPanelView()
-                                    .frame(width: 320)
-                            }
+                HStack(spacing: 0) {
+                    FeatureDetailView(featureID: state.selectedFeatureID)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .overlay(alignment: .topTrailing) { ToastOverlay() }
+                    if state.showNotifications {
+                        Divider()
+                        NotificationPanelView()
+                            .frame(width: 320)
                             .transition(.move(edge: .trailing).combined(with: .opacity))
-                        }
                     }
-                    .animation(.spring(duration: 0.28), value: state.showNotifications)
-                    .clipped()
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(.bgRoot)
+            .animation(.spring(duration: 0.28), value: state.showNotifications)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .foregroundStyle(.textMain)
