@@ -54,7 +54,16 @@ struct AppNotification: Identifiable, Equatable {
 final class AppState {
     let env: AppEnvironment
 
+    /// APK Studio's loaded-APK session. In-memory, so it resumes across
+    /// navigation within a run and is cleared when the app quits (the decompiled
+    /// cache is wiped alongside it — see `AppDelegate.applicationWillTerminate`).
+    let apkStudio = ApkStudioSession()
+
     var devices: [Device] = []
+    /// Android Studio AVDs, for launching an emulator straight from the device
+    /// bar. Refreshed when the connected set changes (see `refreshAvds`); ones
+    /// with a `runningSerial` are already in `devices`.
+    var availableAvds: [Avd] = []
     /// Switch via `requestDevice(_:)`, not direct assignment — that routes the
     /// change through the leave guard so an active recording isn't lost.
     private(set) var selectedSerial: String?

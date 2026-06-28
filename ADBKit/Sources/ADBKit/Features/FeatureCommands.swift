@@ -86,6 +86,34 @@ extension FeatureRegistry {
         "install-app": [
             FeatureCommand("adb install -r <path.apk>", note: "install or reinstall (keeps data)"),
         ],
+        "apk-studio": [
+            FeatureCommand("aapt2 dump badging <path.apk>", note: "inspect: package, version, SDK, permissions"),
+            FeatureCommand("keytool -genkeypair -keystore <ks> -alias <alias> -keyalg RSA -keysize 2048", note: "create a signing keystore"),
+            FeatureCommand("jadx -d <out-dir> <path.apk>", note: "decompile dex to readable Java"),
+            FeatureCommand("apktool d -f -o <out-dir> <path.apk>", note: "decompile to smali + decode resources"),
+            FeatureCommand("apktool b <dir> -o <out.apk>", note: "recompile a modified apktool tree"),
+            FeatureCommand("apksigner sign --ks <keystore> <out.apk>", note: "sign the rebuilt APK"),
+        ],
+        "apk-inspector": [
+            FeatureCommand("aapt2 dump badging <path.apk>", note: "package, version, SDK, permissions, features"),
+            FeatureCommand("apksigner verify -v --print-certs <path.apk>", note: "signing schemes and certificate digests"),
+        ],
+        "apk-sign": [
+            FeatureCommand("keytool -genkeypair -keystore <ks> -alias <alias> -keyalg RSA -keysize 2048", note: "create a signing keystore"),
+            FeatureCommand("zipalign -f -p 4 <in.apk> <out.apk>", note: "page-align before signing"),
+            FeatureCommand("apksigner sign --ks <keystore> <out.apk>", note: "sign with a debug or release keystore"),
+            FeatureCommand("apksigner verify -v --print-certs <out.apk>", note: "confirm the signature"),
+        ],
+        "apk-decompile": [
+            FeatureCommand("jadx -d <out-dir> <path.apk>", note: "decompile dex to Java sources"),
+            FeatureCommand("apktool d -f -o <out-dir> <path.apk>", note: "disassemble to smali + decode resources"),
+            FeatureCommand("apktool b <dir> -o <out.apk>", note: "rebuild a modified apktool tree"),
+        ],
+        "frida-console": [
+            FeatureCommand("frida-ps -U", note: "list processes on the USB device (frida-server running)"),
+            FeatureCommand("frida -U -n <app>", note: "attach to a running app"),
+            FeatureCommand("frida -U -f <package> -l <script.js>", note: "spawn an app with an instrumentation script"),
+        ],
 
         // ── React Native ─────────────────────────────────────────────────
         "react-native": [

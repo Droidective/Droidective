@@ -30,7 +30,7 @@ automated guard, so the failure mode is a non-working feature you only catch by
 opening it — verify those by hand.
 
 1. **Define it** — add a `FeatureDef` to `FeatureRegistry.all` (unique `id`,
-   title, keywords, category, `kind`). **[test: `hasAll48Features` — bump the
+   title, keywords, category, `kind`). **[test: `hasAll53Features` — bump the
    count; `byID` traps on a duplicate id]**
 2. **How-it-works note** — add to `FeatureNotes`. **[test: `everyFeatureHasAHowToNote`]**
 3. **Command reference** — add to `FeatureCommands` (each entry leads with the
@@ -88,7 +88,7 @@ spawn adb/scrcpy/emulator/brew).
 - `Devices/`: `DeviceMonitor` (actor, 2s poll, `AsyncStream<[Device]>`),
   `DeviceListParser`, `DeviceProps` (getprop), `DeviceOverview` (RAM/storage/
   battery/CPU/app counts), `DeviceDetails` (picker enrichment).
-- `Features/`: `FeatureRegistry` (48 `FeatureDef`s, declarative; `absorbedByHub`
+- `Features/`: `FeatureRegistry` (53 `FeatureDef`s, declarative; `absorbedByHub`
   maps a hub screen to the features it gathers, flattened to
   `absorbedFeatureIDs`; `catalogFeatureIDs` is the registry minus those),
   `FeatureModel`,
@@ -118,15 +118,33 @@ spawn adb/scrcpy/emulator/brew).
   files as `.corrupt`), `Stores` (Bundles, DeepLinks, CustomCommands,
   LayoutState, Presets, OverridesMap, Prefs) in
   `~/Library/Application Support/Droidective/`.
+- `Tools/` + APK services: `ManagedTool`/`ManagedToolStore` (actor) download jadx,
+  apktool, uber-apk-signer, frida-server/-gadget, and a Temurin JRE from their
+  GitHub releases into `Application Support/tools`, verify the asset digest,
+  extract (zip/tar.gz/`.xz` via the Compression framework), version-track, and
+  upgrade in place. `ApkToolchain` resolves SDK build-tools (aapt2/apksigner/
+  zipalign — detected, not downloaded) + the managed tools + `java` (a system JDK
+  first, else the managed Temurin). The APK features are services over the
+  toolchain with arg-vector tests: `ApkInspectionService` (aapt2 badging +
+  apksigner certs), `ApkSigningService` (zipalign + apksigner; keystore password
+  via a 0600 temp file, never argv), `DecompileService` (jadx + apktool + a
+  `FileNode` tree + `rebuild` via `apktool b`), `FridaService` (ABI→arch match +
+  frida-server push/run). Downloads are point-of-use (a gate in the decompile/
+  Frida views) or from Settings ▸ Tools. **APK Studio** (`apk-studio`) is a hub
+  that folds the three standalone APK tools (`apk-inspector`, `apk-decompile`,
+  `apk-sign`) into one workspace over a single loaded APK — Inspect · Decompile ·
+  Recompile · Sign tabs (the views take an optional injected APK so they embed in
+  the studio and still work standalone via hotkey).
 
-## The 48 features
+## The 53 features
 
 Most `.view` features are full-screen bespoke panels (file-explorer, apps,
 emulators, device-info, logcat, crash-catcher, sandbox-browser, performance,
 network-speed, wifi, root-status, screen-record, scrcpy + the custom-commands/
-catalog system panels). Three are **hub** screens — `react-native`, `simulate`,
-and `connection` — that gather related instant-/form-/toggle-actions into one
-scrollable grouped `Form` (the Apps explorer similarly covers per-app
+catalog system panels). Several are **hub** screens — `react-native`, `simulate`,
+and `connection` gather related instant-/form-/toggle-actions into one scrollable
+grouped `Form`; `apk-studio` is a tabbed workspace over one loaded APK (Inspect/
+Decompile/Recompile/Sign). (The Apps explorer similarly covers per-app
 management — its detail pane carries the old "Manage App" controls: open,
 force-stop, clear cache/data, plus disable/uninstall). A hub's gathered features
 (`FeatureRegistry.absorbedByHub` → `absorbedFeatureIDs`) are managed only from
@@ -140,7 +158,7 @@ Apps hub. They stay hotkey-able (every feature registers a shortcut; the Hotkeys
 tab lists bound members under "Hidden features"). This is a pure display filter —
 no persisted migration — so it also covers a hub that grows later. The rest are generic instant-/form-/toggle-actions
 driven by the registry. The catalog and Home's "All N features" count use
-`catalogFeatureIDs` (30). **Every feature is enabled by default**
+`catalogFeatureIDs` (32). **Every feature is enabled by default**
 (`defaultEnabledIDs == catalogFeatureIDs`); the catalog (Manage features) is for
 turning OFF the ones you don't want, not opting in — there's no Restore button.
 `LayoutState.adoptAllEnabled()` is a one-time migration that turns everything on
@@ -284,11 +302,13 @@ compile or test time* — lean on it instead of manual vigilance.
 ## Status
 
 Feature-complete across all planned milestones plus several UX rounds (latest:
-**v2.6.2** — bug fixes plus security, correctness, and test hardening:
-shell-quoting and process-cancellation audit fixes, scrcpy decoder size caps, a
-navigation leave-guard, opening `.apk` files from Finder with a pre-install
-preview, and the start of an AppState refactor); 350 tests green; builds clean
-with zero warnings (now enforced as errors in CI). Verified live against a physical device and an Android emulator. Release builds
-are Developer ID-signed + notarized and bundle scrcpy/ffmpeg
-(see `RELEASING.md`). Open gaps: the Apps list/detail divider isn't
-drag-resizable.
+**v2.7.0** — a full APK toolchain (APK Studio: inspect, decompile via jadx/
+apktool, recompile, and sign — with keystore creation) plus Frida setup, a custom
+accent color, launching emulators from the device bar, per-feature
+connect-a-device empty states, a live-preview hotkey recorder, and a Settings
+split into Appearance/Privacy; managed tools download from GitHub releases into
+Application Support and are sized/removable in Settings); 406 tests green; builds
+clean with zero warnings (enforced as errors in CI). Verified live against a
+physical device and an Android emulator. Release builds are Developer ID-signed +
+notarized and bundle scrcpy/ffmpeg (see `RELEASING.md`). Open gaps: the Apps
+list/detail divider isn't drag-resizable.

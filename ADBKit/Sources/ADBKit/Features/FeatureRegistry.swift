@@ -335,6 +335,58 @@ public enum FeatureRegistry {
             category: .appManagement, icon: "arrow.down.app", kind: .view
         ),
         FeatureDef(
+            id: "apk-studio", title: "APK Studio",
+            subtitle: "Inspect, decompile, recompile, and sign APKs in one place",
+            keywords: [
+                "apk", "studio", "toolkit", "lab", "workbench", "reverse engineer", "reverse engineering",
+                "inspect", "inspector", "manifest", "permissions", "permission", "signature", "certificate",
+                "cert", "sha", "sdk", "min sdk", "target sdk", "debuggable", "badging", "aapt", "apksigner",
+                "decompile", "decompiler", "jadx", "apktool", "smali", "baksmali", "source", "java", "dex",
+                "disassemble", "resources", "recompile", "rebuild", "repackage", "patch", "build",
+                "sign", "signing", "zipalign", "keystore", "key", "debug key", "release", "resign", "re-sign",
+            ],
+            category: .appManagement, icon: "wrench.and.screwdriver", kind: .view
+        ),
+        FeatureDef(
+            id: "apk-inspector", title: "APK Inspector",
+            subtitle: "Inspect an APK — manifest, permissions, SDK, signing",
+            keywords: [
+                "apk", "inspect", "inspector", "manifest", "permissions", "permission",
+                "signing", "signature", "certificate", "cert", "sha", "sdk", "min sdk",
+                "target sdk", "debuggable", "badging", "aapt", "apksigner", "reverse engineer",
+            ],
+            category: .appManagement, icon: "doc.text.magnifyingglass", kind: .view
+        ),
+        FeatureDef(
+            id: "apk-sign", title: "Sign APK",
+            subtitle: "Zipalign and sign an APK — debug key or your keystore",
+            keywords: [
+                "sign", "signing", "apksigner", "zipalign", "keystore", "key", "certificate",
+                "debug key", "release", "resign", "re-sign", "jarsigner", "v2", "apk",
+            ],
+            category: .appManagement, icon: "signature", kind: .view
+        ),
+        FeatureDef(
+            id: "apk-decompile", title: "Decompile APK",
+            subtitle: "Browse Java (jadx) or smali + resources (apktool)",
+            keywords: [
+                "decompile", "decompiler", "jadx", "apktool", "smali", "baksmali",
+                "reverse engineer", "reverse engineering", "source", "java", "resources",
+                "disassemble", "manifest", "apk", "dex",
+            ],
+            category: .appManagement, icon: "curlybraces.square", kind: .view
+        ),
+        FeatureDef(
+            id: "frida-console", title: "Frida",
+            subtitle: "Set up frida-server or frida-gadget for instrumentation",
+            keywords: [
+                "frida", "instrumentation", "hook", "hooking", "frida-server", "gadget",
+                "frida-gadget", "objection", "ssl pinning", "bypass", "dynamic", "pentest",
+                "reverse engineer", "instrument", "rooted", "non-rooted",
+            ],
+            category: .appManagement, icon: "syringe", kind: .view
+        ),
+        FeatureDef(
             id: "app-management", title: "Manage App",
             subtitle: "Open, stop, clear, or uninstall an app",
             keywords: ["open", "close", "force stop", "clear data", "uninstall", "cache"],
@@ -453,6 +505,9 @@ public enum FeatureRegistry {
         // The Apps explorer already shows per-app permissions, info, and
         // management, so the standalone per-bundle screens fold into it.
         "apps": ["app-management", "permissions", "app-info"],
+        // APK Studio is one workspace over a loaded APK — inspect, decompile,
+        // recompile, and sign — so the standalone APK tools fold into it.
+        "apk-studio": ["apk-inspector", "apk-decompile", "apk-sign"],
     ]
 
     /// Flattened hub members — folded into a hub, so hidden from the catalog
@@ -472,12 +527,13 @@ public enum FeatureRegistry {
     public static let featuresByRole: [UserRole: [String]] = [
         .androidDeveloper: [
             "logcat", "crash-catcher", "device-info", "current-activity", "foreground-package",
-            "file-explorer", "sandbox-browser", "apps", "install-app", "emulators", "connection", "get-ip",
+            "file-explorer", "sandbox-browser", "apps", "install-app", "apk-studio", "emulators", "connection", "get-ip",
             "meminfo", "monkey", "scrcpy", "screenshot", "send-text", "custom-commands",
         ],
         .reactNativeDeveloper: [
             "react-native", "reactotron", "logcat", "crash-catcher", "performance", "network-speed",
-            "apps", "install-app", "emulators", "connection", "device-info", "scrcpy", "screenshot", "send-text", "custom-commands",
+            "apps", "install-app", "apk-studio", "frida-console",
+            "emulators", "connection", "device-info", "scrcpy", "screenshot", "send-text", "custom-commands",
         ],
         .qaTester: [
             "screenshot", "screen-record", "scrcpy", "video-editor", "bug-report",

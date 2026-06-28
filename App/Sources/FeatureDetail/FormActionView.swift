@@ -14,6 +14,17 @@ struct FormActionView: View {
     @FocusState private var focusedField: String?
 
     var body: some View {
+        Group {
+            if state.targetSerials.isEmpty {
+                NoDeviceView(feature: feature)
+            } else {
+                formContent
+            }
+        }
+        .id(feature.id)
+    }
+
+    private var formContent: some View {
         VStack(alignment: .leading, spacing: 16) {
             ForEach(feature.fields, id: \.name) { field in
                 fieldRow(for: field)
@@ -54,7 +65,6 @@ struct FormActionView: View {
         .task {
             presets = await state.env.stores.presets.load()
         }
-        .id(feature.id)
     }
 
     /// The first field that takes typed input, focused on open. Features that

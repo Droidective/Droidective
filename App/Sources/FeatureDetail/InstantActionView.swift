@@ -12,6 +12,14 @@ struct InstantActionView: View {
     private var hasResult: Bool { state.lastResults[feature.id] != nil }
 
     var body: some View {
+        if state.targetSerials.isEmpty {
+            NoDeviceView(feature: feature)
+        } else {
+            runner
+        }
+    }
+
+    private var runner: some View {
         VStack(spacing: 16) {
             if hasResult {
                 LastResultCard(featureID: feature.id)

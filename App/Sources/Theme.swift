@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// App color tokens — the "Terminal" (dark) / "Lab" (light) palette, sourced
@@ -24,5 +25,43 @@ extension ShapeStyle where Self == Color {
     /// Subtitles, timestamps, labels, and quiet navigation/input icons.
     static var textMuted: Color { Color("TextMuted") }
     /// "The electricity" — CTAs, active toggles, selection, loaders, logo mark.
-    static var brandAccent: Color { Color("BrandAccent") }
+    /// Honors a user-chosen accent (Settings ▸ General) when set, otherwise the
+    /// bundled asset. A fixed color either way, so it doesn't desaturate on focus
+    /// loss the way the system accent would. Read fresh per render; the app keys
+    /// its root view on the stored accent so a change rebuilds and re-reads it.
+    static var brandAccent: Color {
+        if let hex = UserDefaults.standard.string(forKey: accentColorDefaultsKey),
+           let custom = Color(hex: hex) {
+            return custom
+        }
+        return Color("BrandAccent")
+    }
+}
+
+/// UserDefaults key for the user-chosen accent (hex like "#34C759"). Empty or
+/// unset → the bundled BrandAccent asset.
+let accentColorDefaultsKey = "accentColorHex"
+
+extension Color {
+    /// Parse "#RRGGBB" / "RRGGBB" as sRGB. nil on malformed input.
+    init?(hex: String) {
+        var s = hex.trimmingCharacters(in: .whitespaces)
+        if s.hasPrefix("#") { s.removeFirst() }
+        guard s.count == 6, let value = UInt32(s, radix: 16) else { return nil }
+        self.init(
+            .sRGB,
+            red: Double((value >> 16) & 0xFF) / 255,
+            green: Double((value >> 8) & 0xFF) / 255,
+            blue: Double(value & 0xFF) / 255)
+    }
+
+    /// "#RRGGBB" in sRGB, or nil if the color can't be resolved to RGB.
+    var hexString: String? {
+        guard let resolved = NSColor(self).usingColorSpace(.sRGB) else { return nil }
+        return String(
+            format: "#%02X%02X%02X",
+            Int(round(resolved.redComponent * 255)),
+            Int(round(resolved.greenComponent * 255)),
+            Int(round(resolved.blueComponent * 255)))
+    }
 }

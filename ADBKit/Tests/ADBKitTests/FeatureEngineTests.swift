@@ -9,7 +9,8 @@ import Testing
         let client = await makeTestClient(runner: runner)
         return FeatureEngine(
             client: client, locator: client.locator, monitor: DeviceMonitor(client: client),
-            overridesStore: makeTempOverridesStore()
+            overridesStore: makeTempOverridesStore(),
+            toolsDirectory: FileManager.default.temporaryDirectory.appendingPathComponent("tools-\(UUID().uuidString)")
         )
     }
 
@@ -174,9 +175,9 @@ import Testing
 }
 
 @Suite struct FeatureRegistryTests {
-    @Test func hasAll48Features() {
-        #expect(FeatureRegistry.all.count == 48)
-        #expect(FeatureRegistry.byID.count == 48)
+    @Test func hasAll53Features() {
+        #expect(FeatureRegistry.all.count == 53)
+        #expect(FeatureRegistry.byID.count == 53)
     }
 
     @Test func everyCatalogFeatureIsEnabledByDefault() {
@@ -228,7 +229,10 @@ import Testing
     @Test func commandReferenceLeadsWithTheTool() {
         for feature in FeatureRegistry.all {
             for command in FeatureRegistry.commands(for: feature.id) {
-                let leadsWithTool = ["adb ", "scrcpy ", "emulator ", "ffmpeg "].contains {
+                let leadsWithTool = [
+                    "adb ", "scrcpy ", "emulator ", "ffmpeg ", "aapt2 ", "apksigner ",
+                    "zipalign ", "jadx ", "apktool ", "keytool ", "frida ", "frida-ps ",
+                ].contains {
                     command.command.hasPrefix($0)
                 }
                 #expect(leadsWithTool, "\(feature.id): unexpected command \"\(command.command)\"")

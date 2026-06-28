@@ -11,6 +11,14 @@
 A native macOS companion for Android and React Native debugging. One-click adb
 actions in a Raycast-style command palette — no terminal required.
 
+<p align="center">
+  <a href="https://droidective.com/assets/demo.mp4">
+    <img src="site/assets/demo-poster.webp" width="760" alt="Droidective demo — click to watch">
+  </a>
+  <br>
+  <em>▶ <a href="https://droidective.com/assets/demo.mp4">Watch the demo</a> · <a href="https://droidective.com/">droidective.com</a></em>
+</p>
+
 Built in Swift 6 + SwiftUI, with all logic in a platform-agnostic Swift package
 (`ADBKit`) so the engine stays testable and a future cross-platform port only
 needs a new UI layer.
@@ -21,9 +29,9 @@ needs a new UI layer.
 
 ## Features
 
-A searchable palette (`⌘K`) of 45 adb actions, organised by category and
-gathered into focused hubs (React Native, Simulate, Connection) so the sidebar
-stays short. Every action is on by default; hide the ones you don't want from
+A searchable palette (`⌘K`) of 50 adb actions, organised by category and
+gathered into focused hubs (React Native, Simulate, Connection, APK Studio) so
+the sidebar stays short. Every action is on by default; hide the ones you don't want from
 the in-app catalog.
 
 - **Input & clipboard** — send text (Unicode via ADBKeyboard, auto-offered),
@@ -48,6 +56,11 @@ the in-app catalog.
   name/version/bundle, with live permission control), manage app
   (open/stop/clear/uninstall), permissions, app info + APK pull, current
   activity, foreground bundle id, live memory, run-as sandbox browser, monkey.
+- **APK & security** — **APK Studio** (inspect a local APK's manifest /
+  permissions / SDK / signing certs, decompile with jadx or apktool, recompile,
+  and sign — including creating a keystore) and **Frida** setup (arch-matched
+  frida-server / frida-gadget). jadx, apktool, and a Java runtime download on
+  demand and are managed in Settings.
 - **Logs & diagnostics** — live logcat (level/app/tag/text filters,
   follow-to-bottom, export), crash catcher with Slack/Jira formatting, one-click
   bug-report zip, and a **performance monitor** (per-core CPU, RAM, FPS, network,
@@ -111,10 +124,13 @@ through Sparkle (and `brew upgrade` defers to that).
 ADBKit/   Swift package — all logic, zero UI dependencies (swift test)
   Exec/         adb process execution, tool location, scoped command log
   Devices/      discovery (2s polling), getprop, hardware/usage overview
-  Features/     declarative 48-feature registry + runners + how-to notes
+  Features/     declarative 53-feature registry + runners + how-to notes
   Services/     logcat streaming, overrides, file/apps explorers, capture,
                 screen record, crash, bug report, wireless, emulators,
-                performance + network monitors, scrcpy/screenrecord options…
+                performance + network monitors, APK inspect/sign/decompile,
+                Frida, scrcpy/screenrecord options…
+  Tools/        managed-tool downloads (jadx, apktool, uber-apk-signer, Java,
+                frida) from GitHub releases + the APK toolchain resolver
   Persistence/  JSON stores in ~/Library/Application Support/Droidective
 App/      SwiftUI macOS app — command palette, device bar, feature views,
           Home + tour, per-feature command bar with an embedded terminal,

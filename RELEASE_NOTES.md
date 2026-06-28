@@ -1,3 +1,43 @@
+## Droidective v2.7.0
+
+A feature release that adds a full APK toolchain and Frida setup, a custom accent
+color, and emulator launching from the device bar, plus a round of UI and
+hotkey-recording improvements.
+
+### New features
+
+- **APK Studio** — one workspace over a loaded APK: **Inspect** (manifest,
+  permissions, SDK, signing certificates), **Decompile** (`jadx` for readable
+  Java or `apktool` for smali + resources, with an in-app source viewer, code
+  search that jumps to the matched line, and "open in jadx-GUI" / reveal for
+  external editing), **Recompile** an edited `apktool` tree, and **Sign** with the
+  debug key, your keystore, or a brand-new keystore created right there. jadx,
+  apktool, and a Java runtime are downloaded from their GitHub releases on first
+  use and managed in Settings ▸ Tools.
+- **Frida setup** — matches the device architecture and downloads the right
+  `frida-server` / `frida-gadget`; on a rooted device it pushes and starts
+  frida-server so you can attach with your own frida CLI.
+- **Custom accent color** — pick your own accent in Settings ▸ Appearance; it
+  recolors buttons, toggles, selection, and active icons across the app.
+- **Launch emulators from the device bar** — start an Android Studio AVD, or open
+  the Emulators screen, straight from the device menu.
+
+### Improvements
+
+- **Settings** is reorganized into **Appearance** and **Privacy** tabs, in a
+  roomier window.
+- **Connect-a-device prompts** — features that need a device (Send Text, the
+  quick actions, Frida, Private DNS…) now show a tailored "connect a device"
+  message instead of silently disabled controls.
+- **Hotkey recording** — the sidebar's Set-Hotkey popover starts recording the
+  moment it opens, and both it and the Hotkeys settings show the modifiers live
+  as you hold them.
+- **Tools settings** show each downloaded tool's on-disk size, with reveal and
+  delete; the decompiled-source cache is reused while the app is open and cleared
+  on quit.
+
+Installed copies update in place via Sparkle.
+
 ## Droidective v2.6.2
 
 A bug-fix release with security, correctness, and stability hardening, plus a

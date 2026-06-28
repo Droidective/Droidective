@@ -79,7 +79,13 @@ struct PrivateDnsSection: View {
 
 /// Standalone Private DNS screen — the section on its own in the hub column.
 struct PrivateDnsView: View {
+    @Environment(AppState.self) private var state
+
     var body: some View {
-        HubColumn { PrivateDnsSection() }
+        if state.targetSerials.isEmpty {
+            NoDeviceView("Connect a device to set its Private DNS.")
+        } else {
+            HubColumn { PrivateDnsSection() }
+        }
     }
 }
