@@ -47,6 +47,9 @@ struct ADTApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @AppStorage("showMenuBarExtra") private var showMenuBarExtra = true
     @AppStorage("sidebarWidth") private var sidebarWidth = 300.0
+    /// The user-chosen accent. Read here so changing it re-renders the scene and
+    /// re-keys RootView (`.id`), forcing every `.brandAccent` to re-resolve.
+    @AppStorage(accentColorDefaultsKey) private var accentHex = ""
 
     /// The sidebar and notifications panel are fixed-width, so opening the
     /// notifications panel on a narrow window would otherwise crush the detail
@@ -85,6 +88,10 @@ struct ADTApp: App {
                 // the Mac's system accent color, which otherwise overrides the
                 // AccentColor asset.
                 .tint(.brandAccent)
+                // Re-key on the accent so changing it rebuilds the tree and every
+                // `.brandAccent` re-resolves. AppState (and its device list) is
+                // owned above this view, so the rebuild preserves it.
+                .id(accentHex)
         }
         .windowStyle(.automatic)
         .commands {

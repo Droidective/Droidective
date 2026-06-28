@@ -44,6 +44,7 @@ func applyStoredTheme() {
 struct GeneralSettingsView: View {
     @Environment(AppState.self) private var state
     @AppStorage("theme") private var theme = "dark"
+    @AppStorage(accentColorDefaultsKey) private var accentHex = ""
     @AppStorage("showFeatureNotes") private var showFeatureNotes = false
     @AppStorage(ScreenCaptureService.captureFolderDefaultsKey) private var captureFolderPath = ""
     @AppStorage("showMenuBarExtra") private var showMenuBar = true
@@ -96,6 +97,14 @@ struct GeneralSettingsView: View {
         Binding(get: { state.selectedRole }, set: { state.chooseRole($0) })
     }
 
+    /// The accent ColorPicker reads/writes the stored hex; an empty value shows
+    /// (and resets to) the bundled default.
+    private var accentBinding: Binding<Color> {
+        Binding(
+            get: { Color(hex: accentHex) ?? Color("BrandAccent") },
+            set: { accentHex = $0.hexString ?? "" })
+    }
+
     var body: some View {
         Form {
             Section("Appearance") {
@@ -111,6 +120,18 @@ struct GeneralSettingsView: View {
                         .font(.footnote)
                         .foregroundStyle(.textMuted)
                 }
+
+                LabeledContent("Accent color") {
+                    HStack(spacing: 8) {
+                        ColorPicker("", selection: accentBinding, supportsOpacity: false).labelsHidden()
+                        if !accentHex.isEmpty {
+                            Button("Reset") { accentHex = "" }
+                        }
+                    }
+                }
+                Text("Recolors buttons, toggles, selection, and active icons across the app.")
+                    .font(.footnote)
+                    .foregroundStyle(.textMuted)
 
                 Toggle("Show how-it-works notes", isOn: $showFeatureNotes)
                 Text("The info text beneath each feature, above the command bar.")
