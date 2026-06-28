@@ -103,7 +103,11 @@ struct SystemRestrictionsView: View {
     }
 
     /// Fire-and-forget for checkbox toggles: no busy flag → no whole-form disable flash.
-    /// Reloads only on failure to resync the actual device state.
+    /// Reloads only on failure to resync the actual device state; on success the
+    /// optimistic value is kept. This relies on every toggle's setter writing a value
+    /// that round-trips back to the same boolean through `load()`'s parse — a setter
+    /// the device normalizes differently would leave a stale optimistic value, so a
+    /// new toggle that doesn't round-trip must reload on success here too.
     private func applyToggle(_ operation: @escaping @Sendable () async throws -> AdbResult) async {
         await CommandLog.userInitiated(feature: "system-restrictions") {
             do {

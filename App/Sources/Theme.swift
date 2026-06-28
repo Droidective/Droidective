@@ -65,18 +65,21 @@ extension Color {
             Int(round(resolved.blueComponent * 255)))
     }
 
-    /// The foreground color (white or near-black) that provides adequate contrast against
-    /// this background color when rendered in the given color scheme.
-    /// Uses WCAG relative luminance — picks `.white` for dark backgrounds and
-    /// `Color.black.opacity(0.85)` for light ones (threshold: luminance > 0.35).
+    /// A readable foreground (white or near-black) for text drawn on top of this
+    /// background, resolving the background in the given color scheme first.
+    /// Uses a perceptual luminance estimate — Rec. 709 weights on gamma-encoded
+    /// sRGB, an approximation of WCAG relative luminance (not the linearized form)
+    /// — picking `Color.black.opacity(0.85)` for light backgrounds and `.white` for
+    /// dark ones (threshold: luminance > 0.35). When the background can't be
+    /// resolved, falls back to the scheme's own contrasting default.
     func contrastingForeground(for scheme: ColorScheme) -> Color {
-        guard let appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua) else { return .white }
-        var lum: Double = 0
+        let fallback: Color = scheme == .dark ? .white : Color.black.opacity(0.85)
+        guard let appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua) else { return fallback }
+        var foreground = fallback
         appearance.performAsCurrentDrawingAppearance {
-            guard let nc = NSColor(self).usingColorSpace(.genericRGB) else { return }
-            lum = 0.2126 * nc.redComponent + 0.7152 * nc.greenComponent + 0.0722 * nc.blueComponent
+            if let resolved = Self.luminanceForeground(of: self) { foreground = resolved }
         }
-        return lum > 0.35 ? Color.black.opacity(0.85) : .white
+        return foreground
     }
 
     /// Resolve a named asset color to a concrete, appearance-independent color
@@ -98,10 +101,14 @@ extension Color {
         return Color(nsColor: flat)
     }
 
-    /// The foreground color for a static (non-adaptive) color — same WCAG logic
-    /// without an appearance context. Use for colors built from explicit RGB/HSB values.
-    var contrastingForeground: Color {
-        guard let nc = NSColor(self).usingColorSpace(.genericRGB) else { return .white }
+    /// Same logic without an appearance context — for static (non-adaptive) colors
+    /// built from explicit RGB/HSB values, which have no light/dark variant to resolve.
+    var contrastingForeground: Color { Self.luminanceForeground(of: self) ?? .white }
+
+    /// Returns the contrasting foreground for `color`, or nil if it can't be
+    /// resolved to sRGB (e.g. a catalog color with no current drawing appearance).
+    private static func luminanceForeground(of color: Color) -> Color? {
+        guard let nc = NSColor(color).usingColorSpace(.sRGB) else { return nil }
         let lum = 0.2126 * nc.redComponent + 0.7152 * nc.greenComponent + 0.0722 * nc.blueComponent
         return lum > 0.35 ? Color.black.opacity(0.85) : .white
     }
