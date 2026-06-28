@@ -76,19 +76,19 @@ struct ToggleActionView: View {
     let feature: FeatureDef
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            OverrideToggleControl(feature: feature) { isOn in
-                Text(isOn ? (feature.toggleOnLabel ?? "On") : (feature.toggleOffLabel ?? "Off"))
-            }
-            .controlSize(.large)
-
+        Group {
             if state.targetSerials.isEmpty {
-                Text("Connect a device to toggle.")
-                    .font(.footnote)
-                    .foregroundStyle(.textMuted)
+                NoDeviceView(feature: feature)
+            } else {
+                VStack(alignment: .leading, spacing: 14) {
+                    OverrideToggleControl(feature: feature) { isOn in
+                        Text(isOn ? (feature.toggleOnLabel ?? "On") : (feature.toggleOffLabel ?? "Off"))
+                    }
+                    .controlSize(.large)
+                }
+                .centeredCard()
             }
         }
-        .centeredCard()
         .id(feature.id)
     }
 }

@@ -25,9 +25,7 @@ struct FridaConsoleView: View {
     }
 
     private var noDevice: some View {
-        Label("Connect a device to use Frida", systemImage: "iphone.slash")
-            .font(.callout).foregroundStyle(.textMuted)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        NoDeviceView("Connect a device to set up Frida.")
     }
 
     private func console(_ serial: String) -> some View {
