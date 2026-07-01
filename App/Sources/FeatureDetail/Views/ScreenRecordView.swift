@@ -1,4 +1,5 @@
 import ADBKit
+import CoreImage
 import Foundation
 import SwiftUI
 
@@ -22,6 +23,12 @@ struct ScreenRecordView: View {
     @State private var limitTask: Task<Void, Never>?
     /// Identifies this view's leave guard so a stale clear can't wipe another's.
     @State private var exitGuardID = UUID()
+    /// Live preview of the frames being captured, polled from the recorder's
+    /// session while recording so the user sees what's going into the file.
+    @State private var previewImage: NSImage?
+    @State private var previewTask: Task<Void, Never>?
+    /// Reused across the preview poll — a fresh `CIContext` per frame is costly.
+    @State private var previewContext = CIContext()
 
     @AppStorage("recMaxSize") private var maxSize = 0
     @AppStorage("recBitRate") private var bitRateMbps = 0
@@ -54,6 +61,7 @@ struct ScreenRecordView: View {
         }
         .onDisappear {
             limitTask?.cancel()
+            stopPreviewPolling()
             state.recordingActive = false
             state.clearExitGuard(exitGuardID)
             if isRecording, let recorder { Task { await recorder.abort() } }
@@ -64,7 +72,9 @@ struct ScreenRecordView: View {
     private var recordControls: some View {
         VStack(spacing: 28) {
             hero
-            optionsCard
+            // Options are irrelevant (and locked) once recording starts; hiding
+            // them frees the column for the live preview.
+            if !isRecording { optionsCard }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(28)
@@ -74,14 +84,17 @@ struct ScreenRecordView: View {
 
     private var hero: some View {
         VStack(spacing: 16) {
-            ZStack {
-                Circle()
-                    .fill(isRecording ? Color.red.opacity(0.15) : Color.brandAccent.opacity(0.12))
-                    .frame(width: 96, height: 96)
-                Image(systemName: "video.fill")
-                    .font(.system(size: 38))
-                    .foregroundStyle(isRecording ? .red : .brandAccent)
-                    .symbolEffect(.pulse, isActive: isRecording)
+            if isRecording {
+                recordingPreview
+            } else {
+                ZStack {
+                    Circle()
+                        .fill(Color.brandAccent.opacity(0.12))
+                        .frame(width: 96, height: 96)
+                    Image(systemName: "video.fill")
+                        .font(.system(size: 38))
+                        .foregroundStyle(.brandAccent)
+                }
             }
 
             VStack(spacing: 4) {
@@ -101,6 +114,44 @@ struct ScreenRecordView: View {
             hints
         }
         .frame(maxWidth: 420)
+    }
+
+    /// Live mirror of the frames being captured. The recorder's session already
+    /// decodes every frame for snapshots, so this just renders the latest at a
+    /// preview-friendly rate — it freezes on the last frame (dimmed) while paused.
+    private var recordingPreview: some View {
+        previewContent
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.borderSubtle))
+            .overlay(alignment: .topLeading) { recBadge }
+            .animation(.easeInOut(duration: 0.2), value: isPaused)
+    }
+
+    @ViewBuilder private var previewContent: some View {
+        if let previewImage {
+            Image(nsImage: previewImage)
+                .resizable()
+                .interpolation(.medium)
+                .aspectRatio(contentMode: .fit)
+                .frame(maxHeight: 320)
+                .opacity(isPaused ? 0.55 : 1)
+        } else {
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.black.opacity(0.85))
+                .frame(width: 200, height: 300)
+                .overlay { ProgressView().controlSize(.large).tint(.white) }
+        }
+    }
+
+    private var recBadge: some View {
+        Label(isPaused ? "PAUSED" : "REC", systemImage: isPaused ? "pause.fill" : "record.circle.fill")
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(isPaused ? Color.secondary : Color.red, in: Capsule())
+            .symbolEffect(.pulse, isActive: !isPaused)
+            .padding(8)
     }
 
     @ViewBuilder private var recordControlButtons: some View {
@@ -229,6 +280,7 @@ struct ScreenRecordView: View {
             isRecording = true
             isPaused = false
             startedAt = Date()
+            startPreviewPolling()
             // Lock the device/bundle pickers for the duration, as the
             // performance/network recorders do. A recording targets one device;
             // switching it mid-capture would strand this recorder (the view stays
@@ -265,6 +317,31 @@ struct ScreenRecordView: View {
         isBusy = false
     }
 
+    /// Poll the recorder's latest decoded frame and show it as the preview. Kept
+    /// running across pause (it returns nil then, so the last frame stays, dimmed)
+    /// and cancelled on stop/leave. ~11 fps is plenty to see what's being captured
+    /// without loading the main thread.
+    private func startPreviewPolling() {
+        previewTask?.cancel()
+        guard let recorder else { return }
+        let context = previewContext
+        previewTask = Task { @MainActor in
+            while !Task.isCancelled {
+                if let snap = await recorder.previewFrame(),
+                   let image = MirrorImage.nsImage(from: snap.imageBuffer, context: context) {
+                    previewImage = image
+                }
+                try? await Task.sleep(for: .milliseconds(90))
+            }
+        }
+    }
+
+    private func stopPreviewPolling() {
+        previewTask?.cancel()
+        previewTask = nil
+        previewImage = nil
+    }
+
     /// The server has no time-limit knob, so the UI stops the recording after the
     /// chosen duration (0 = unlimited). Paused time still counts toward the limit.
     private func scheduleTimeLimit(_ seconds: Int) {
@@ -294,6 +371,7 @@ struct ScreenRecordView: View {
         isStopping = false
         startedAt = nil
         self.recorder = nil
+        stopPreviewPolling()
         state.recordingActive = false
         state.clearExitGuard(exitGuardID)
     }
@@ -312,6 +390,7 @@ struct ScreenRecordView: View {
         isRecording = false
         isPaused = false
         startedAt = nil
+        stopPreviewPolling()
         do {
             let temp = try await recorder.stop()
             let dir = try ScreenCaptureService.ensureCaptureDir()

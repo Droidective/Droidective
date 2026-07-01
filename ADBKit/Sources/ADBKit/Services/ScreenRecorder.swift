@@ -52,6 +52,15 @@ public actor ScreenRecorder {
     /// Recording started but currently paused between segments.
     public var isPaused: Bool { session == nil && !segments.isEmpty }
 
+    /// The latest decoded frame of the segment being captured, for a live preview
+    /// of what's being recorded. `nil` between segments (paused) or before the
+    /// first frame decodes. This is free: the session already decodes every frame
+    /// for snapshots (`MirrorSession` does so unconditionally), so it reads the
+    /// latest without a second device connection or draining the record stream.
+    public func previewFrame() async -> MirrorSession.Snapshot? {
+        await session?.snapshot()
+    }
+
     public func start(serial: String, options: ScreenRecordOptions = ScreenRecordOptions()) async throws {
         guard !isRecording else { throw RecordingError.alreadyRecording }
         self.serial = serial
