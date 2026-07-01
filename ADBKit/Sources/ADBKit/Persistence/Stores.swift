@@ -52,6 +52,17 @@ public struct CustomCommand: Codable, Sendable, Equatable, Identifiable {
     }
 }
 
+/// One editor group (a split pane): its open tabs and the active one.
+public struct TabGroupState: Codable, Sendable, Equatable {
+    public var tabs: [String]
+    public var activeTab: String?
+
+    public init(tabs: [String], activeTab: String?) {
+        self.tabs = tabs
+        self.activeTab = activeTab
+    }
+}
+
 /// Feature customization. Hotkey bindings are persisted by the
 /// KeyboardShortcuts library itself, so they don't live here.
 public struct LayoutState: Codable, Sendable, Equatable {
@@ -101,6 +112,14 @@ public struct LayoutState: Codable, Sendable, Equatable {
     /// the user's role turns on for them without re-running the picker. Optional
     /// so older files decode.
     public var seededRoleIds: [String]?
+    /// Open editor groups (VS Code-style split panes), each with its own tabs
+    /// and active tab: one group = no split, two = a left/right split. Restored
+    /// on launch; live sessions (recordings/streams) don't resume — a reopened
+    /// tab is idle. Optional so older files decode (they seed a single Home tab).
+    public var tabGroups: [TabGroupState]?
+    /// Which group holds keyboard focus (index into `tabGroups`). Optional so
+    /// older files decode.
+    public var focusedGroup: Int?
 
     public init(
         enabledIds: [String]? = nil,
@@ -114,7 +133,9 @@ public struct LayoutState: Codable, Sendable, Equatable {
         didEnableAll: Bool? = nil,
         selectedRole: String? = nil,
         roleChosen: Bool? = nil,
-        seededRoleIds: [String]? = nil
+        seededRoleIds: [String]? = nil,
+        tabGroups: [TabGroupState]? = nil,
+        focusedGroup: Int? = nil
     ) {
         self.enabledIds = enabledIds
         self.favorites = favorites
@@ -128,6 +149,8 @@ public struct LayoutState: Codable, Sendable, Equatable {
         self.selectedRole = selectedRole
         self.seededRoleIds = seededRoleIds
         self.roleChosen = roleChosen
+        self.tabGroups = tabGroups
+        self.focusedGroup = focusedGroup
     }
 
     /// The effective enabled set: explicit user choice or registry defaults,

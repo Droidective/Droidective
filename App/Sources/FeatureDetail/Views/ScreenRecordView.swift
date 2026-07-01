@@ -8,6 +8,7 @@ import SwiftUI
 /// in the video editor.
 struct ScreenRecordView: View {
     @Environment(AppState.self) private var state
+    @Environment(\.tabFeatureID) private var tabFeatureID
     @State private var recorder: ScreenRecorder?
     @State private var isRecording = false
     @State private var isPaused = false
@@ -50,7 +51,9 @@ struct ScreenRecordView: View {
         }
         .recordingDecision(url: $decisionURL) { recordedURL = $0 }
         .onChange(of: state.pendingExit?.saving) { _, saving in
-            if saving == true, isRecording { Task { await saveRecordingForLeave() } }
+            if saving == true, isRecording, state.pendingExitConcerns(tabFeatureID) {
+                Task { await saveRecordingForLeave() }
+            }
         }
         .onDisappear {
             limitTask?.cancel()
@@ -145,15 +148,28 @@ struct ScreenRecordView: View {
             VStack(alignment: .leading, spacing: 14) {
                 labeledRow("Resolution") { resolutionPicker }
                 SwitchRow("Capture audio (Android 11+)", isOn: $captureAudio)
-                DisclosureGroup(isExpanded: $showAdvanced) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.15)) { showAdvanced.toggle() }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.textMuted)
+                            .rotationEffect(.degrees(showAdvanced ? 90 : 0))
+                        Text("Advanced options")
+                            .font(.callout.weight(.medium))
+                        Spacer()
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                if showAdvanced {
                     VStack(alignment: .leading, spacing: 14) {
                         labeledRow("Bit rate") { bitRatePicker }
                         labeledRow("Max FPS") { fpsPicker }
                         labeledRow("Time limit") { timeLimitPicker }
                     }
                     .padding(.top, 12)
-                } label: {
-                    Text("Advanced options").font(.callout.weight(.medium))
                 }
             }
             .padding(10)
@@ -235,7 +251,7 @@ struct ScreenRecordView: View {
             // mounted on a device switch, so .onDisappear never fires to abort it).
             state.recordingActive = true
             state.setExitGuard(.init(
-                id: exitGuardID, style: .recording,
+                id: exitGuardID, featureID: tabFeatureID, style: .recording,
                 title: "Recording in progress",
                 message: "Leaving will stop the screen recording. Save it first, or discard it."))
             scheduleTimeLimit(options.timeLimitSeconds)

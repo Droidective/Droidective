@@ -180,6 +180,32 @@ import Testing
         #expect(FeatureRegistry.byID.count == 54)
     }
 
+    @Test func runAllIsTheCuratedFanOutSet() {
+        let runAll = FeatureRegistry.runAllFeatureIDs
+        #expect(!runAll.isEmpty)
+        // The stored flag and the derived set never drift apart.
+        for feature in FeatureRegistry.all {
+            #expect(feature.supportsRunAll == runAll.contains(feature.id))
+        }
+        // Every run-all id is a real feature.
+        for id in runAll {
+            #expect(FeatureRegistry.byID[id] != nil, "run-all id \(id) not in registry")
+        }
+        // The curated product decision: the two hubs that dispatch fan-out
+        // actions plus the two standalone fan-out features.
+        #expect(runAll == ["simulate", "react-native", "send-text", "install-app"])
+        // Single-device / interactive-session features must never be run-all —
+        // their fan-out is meaningless or unimplemented.
+        let singleDevice: Set<String> = [
+            "scrcpy", "screen-record", "file-explorer", "sandbox-browser", "logcat",
+            "crash-catcher", "performance", "network-speed", "device-info", "wifi",
+            "private-dns", "root-status", "system-restrictions", "meminfo", "apps",
+            "reactotron", "js-console", "emulators", "custom-commands", "frida-console",
+            "apk-studio", "screenshot",
+        ]
+        #expect(runAll.isDisjoint(with: singleDevice))
+    }
+
     @Test func everyCatalogFeatureIsEnabledByDefault() {
         // Every feature is on out of the box — the default set is exactly the
         // catalog (non-absorbed) features. Hub members are folded into their

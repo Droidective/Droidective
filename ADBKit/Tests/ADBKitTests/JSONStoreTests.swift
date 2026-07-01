@@ -50,6 +50,39 @@ import Testing
         #expect(bundles.map(\.packageId) == ["com.example", "com.other"])
     }
 
+    @Test func roundTripsTabGroups() async throws {
+        let dir = try tempDir()
+        let store = JSONStore(filename: "layout.json", default: LayoutState(), directory: dir)
+        try await store.update {
+            $0.tabGroups = [
+                TabGroupState(tabs: ["home", "logcat"], activeTab: "logcat"),
+                TabGroupState(tabs: ["performance"], activeTab: "performance"),
+            ]
+            $0.focusedGroup = 1
+        }
+
+        let fresh = JSONStore(filename: "layout.json", default: LayoutState(), directory: dir)
+        let loaded = await fresh.load()
+        #expect(loaded.tabGroups?.count == 2)
+        #expect(loaded.tabGroups?.first?.tabs == ["home", "logcat"])
+        #expect(loaded.tabGroups?.first?.activeTab == "logcat")
+        #expect(loaded.tabGroups?.last?.tabs == ["performance"])
+        #expect(loaded.focusedGroup == 1)
+    }
+
+    @Test func layoutWrittenBeforeTabsDecodesWithNilTabs() async throws {
+        // A layout.json from a build predating tabs must still decode — the new
+        // fields are simply absent (nil), so the app seeds a default tab set.
+        let dir = try tempDir()
+        let legacy = #"{"favorites": ["screenshot"], "enabledIds": null}"#
+        try Data(legacy.utf8).write(to: dir.appendingPathComponent("layout.json"))
+        let store = JSONStore(filename: "layout.json", default: LayoutState(), directory: dir)
+        let loaded = await store.load()
+        #expect(loaded.favorites == ["screenshot"])
+        #expect(loaded.tabGroups == nil)
+        #expect(loaded.focusedGroup == nil)
+    }
+
     @Test func decodesReferenceAppPrefsShape() async throws {
         let dir = try tempDir()
         let referenceShape = #"{"selectedSerial": "X", "runOnAll": false, "selectedBundleId": null}"#
