@@ -197,6 +197,12 @@ struct SidebarPaletteView: View {
                             FeatureRowView(feature: feature, shortcutIndex: shortcutRank[feature.id])
                         }
                     }
+                    // Distinct identity per body branch: the search, grouped, and
+                    // flat sections all occupy the same List slot, and without
+                    // this SwiftUI recycles one branch's lazy rows into the next
+                    // on a browse→search transition — which dropped rows (e.g.
+                    // "Mirror Screen") from the flat→search switch.
+                    .id("sidebar-search")
                 } else if groupSidebar {
                     // Custom drag-and-drop (not List.onMove, which raced the row
                     // tap gestures and dropped intermittently). In reorder mode a
@@ -208,6 +214,7 @@ struct SidebarPaletteView: View {
                             groupedRow(row, shortcutRank: shortcutRank)
                         }
                     }
+                    .id("sidebar-grouped")
                 } else {
                     // Ungrouped: the flat order (its own `flatOrder`, independent
                     // of groups). Same custom drag/drop as grouped — List.onMove
@@ -217,6 +224,7 @@ struct SidebarPaletteView: View {
                             flatRow(feature, shortcutRank: shortcutRank)
                         }
                     }
+                    .id("sidebar-flat")
                 }
 
                 // Disabled features surface only while searching — usable from
@@ -339,6 +347,11 @@ struct SidebarPaletteView: View {
         }
     }
 
+    /// A search query flattens the list to ranked results, so grouping and
+    /// manual reordering don't apply — their controls are disabled while a query
+    /// is active and re-enable the moment it's cleared.
+    private var isSearching: Bool { !state.searchText.isEmpty }
+
     /// Toggles category grouping in the sidebar. Accent-tinted when grouping is
     /// on; switching off reveals the user's flat drag-to-reorder list.
     private var groupToggleButton: some View {
@@ -352,13 +365,15 @@ struct SidebarPaletteView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(reorderMode)
-        .opacity(reorderMode ? 0.4 : 1)
-        .help(reorderMode
-            ? "Finish reordering to switch grouping"
-            : (groupSidebar
-                ? "Grouped by category — click for a flat, reorderable list"
-                : "Flat list — click to group by category"))
+        .disabled(reorderMode || isSearching)
+        .opacity((reorderMode || isSearching) ? 0.4 : 1)
+        .help(isSearching
+            ? "Clear the search to change grouping"
+            : (reorderMode
+                ? "Finish reordering to switch grouping"
+                : (groupSidebar
+                    ? "Grouped by category — click for a flat, reorderable list"
+                    : "Flat list — click to group by category")))
     }
 
     /// Enters/leaves reorder mode. While on, rows jiggle and can be dragged to
@@ -379,7 +394,11 @@ struct SidebarPaletteView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(reorderMode ? "Done reordering" : "Reorder features — drag rows to rearrange")
+        .disabled(isSearching)
+        .opacity(isSearching ? 0.4 : 1)
+        .help(isSearching
+            ? "Clear the search to reorder features"
+            : (reorderMode ? "Done reordering" : "Reorder features — drag rows to rearrange"))
     }
 
     /// The grouped sidebar flattened to a single list: each non-empty category

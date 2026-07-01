@@ -211,6 +211,11 @@ public struct FeatureDef: Sendable, Identifiable {
     public let needsScrcpy: Bool
     /// Disabled unless ffmpeg is installed.
     public let needsFfmpeg: Bool
+    /// Offers a "Run on all devices" toggle. Only true for features whose
+    /// fan-out is meaningful and implemented (the Simulate & React Native hubs
+    /// dispatch through the fan-out `run` path; Send Text and Install App fan
+    /// out too). Single-device / interactive-session features leave it false.
+    public let supportsRunAll: Bool
     public let isStateOverride: Bool
     public let overrideKind: OverrideKind?
     public let isDestructive: Bool
@@ -232,6 +237,7 @@ public struct FeatureDef: Sendable, Identifiable {
         needsDevice: Bool = true,
         needsScrcpy: Bool = false,
         needsFfmpeg: Bool = false,
+        supportsRunAll: Bool = false,
         isStateOverride: Bool = false,
         overrideKind: OverrideKind? = nil,
         isDestructive: Bool = false,
@@ -251,6 +257,7 @@ public struct FeatureDef: Sendable, Identifiable {
         self.needsDevice = needsDevice
         self.needsScrcpy = needsScrcpy
         self.needsFfmpeg = needsFfmpeg
+        self.supportsRunAll = supportsRunAll
         self.isStateOverride = isStateOverride
         self.overrideKind = overrideKind
         self.isDestructive = isDestructive

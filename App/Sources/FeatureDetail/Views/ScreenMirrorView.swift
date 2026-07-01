@@ -39,10 +39,18 @@ struct ScreenMirrorView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .recordingDecision(url: pendingRecording) { url in model?.finishedRecording = url }
         .imageDecision(image: pendingScreenshot) { image in model?.editingScreenshot = image }
-        .task(id: state.targetSerials.first) {
-            // Only stream while this tab is on screen; a hidden mirror is heavy
-            // video encode for nothing. (Returning re-keys via tabIsActive below.)
-            if tabIsActive { await reconnect(to: state.targetSerials.first) }
+        .task {
+            // Connect if the mirror is the tab on screen when it's first
+            // mounted; a hidden tab connects lazily once it becomes active
+            // (below). A hidden mirror is heavy video encode for nothing.
+            if tabIsActive, model == nil { await reconnect(to: state.targetSerials.first) }
+        }
+        .onChange(of: state.targetSerials.first) { _, serial in
+            // Follow the selected device: switching it re-targets the live
+            // mirror — but never mid-recording, which stays on its device
+            // (leaving to switch is gated by the recording exit guard).
+            guard tabIsActive, model?.isRecording != true else { return }
+            Task { await reconnect(to: serial) }
         }
         .onChange(of: tabIsActive) { _, active in
             if active {
