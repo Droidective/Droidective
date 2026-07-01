@@ -9,8 +9,6 @@ struct RootView: View {
     /// Left-pane fraction (0…1) of the editor split; the layout clamps it so
     /// neither pane collapses.
     @AppStorage("tabSplitFraction") private var splitFraction = 0.5
-    /// True while a dragged tab hovers the split-create zone of the sole pane.
-    @State private var splitZoneTargeted = false
     @AppStorage("hasSeenTour") private var hasSeenTour = false
     @AppStorage("hasChosenRole") private var hasChosenRole = false
     @AppStorage("telemetryConsentAsked") private var consentAsked = false
@@ -286,61 +284,14 @@ struct RootView: View {
         GeometryReader { geo in
             let leftW = splitLeftWidth(geo.size.width)
             HStack(spacing: 0) {
-                pane(0).frame(width: state.isSplit ? leftW : geo.size.width)
+                EditorPane(index: 0).frame(width: state.isSplit ? leftW : geo.size.width)
                 if state.isSplit {
                     SplitDivider(fraction: $splitFraction, totalWidth: geo.size.width)
                         .frame(width: 8)
-                    pane(1).frame(maxWidth: .infinity)
+                    EditorPane(index: 1).frame(maxWidth: .infinity)
                 }
             }
             .navigationTitle(activeTitle)
-        }
-    }
-
-    /// One editor pane: its own tab strip above its mounted tabs. Accepts a
-    /// dragged tab dropped onto it (moving it into this pane's group), and — when
-    /// there's only one pane — offers a trailing zone that splits on drop.
-    private func pane(_ index: Int) -> some View {
-        VStack(spacing: 0) {
-            TabStripView(group: index)
-            TabHostView(group: index)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                // Split-drop zone lives over the CONTENT only — never over the
-                // tab strip — so dragging a tab within the strip reorders it and
-                // only a drag down into the content's right half splits.
-                .overlay(alignment: .trailing) {
-                    if !state.isSplit, state.draggingTabID != nil { splitCreateZone }
-                }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onDrop(of: [.text], delegate: TabPaneDrop(
-            draggingID: state.draggingTabID,
-            onDrop: { id in state.dropTab(id, intoGroup: index, before: nil); state.draggingTabID = nil }
-        ))
-    }
-
-    /// Right-half drop zone shown on the sole pane while dragging a tab — drop
-    /// here to open it in a new split pane. Fills the half where the new pane
-    /// will land so the target is obvious.
-    private var splitCreateZone: some View {
-        GeometryReader { geo in
-            Rectangle()
-                .fill(.brandAccent.opacity(splitZoneTargeted ? 0.28 : 0.14))
-                .overlay(alignment: .leading) {
-                    Rectangle().fill(.brandAccent).frame(width: 2) // the seam it'll create
-                }
-                .overlay {
-                    Label("Drop to split", systemImage: "rectangle.split.2x1")
-                        .font(.headline)
-                        .foregroundStyle(.brandAccent)
-                }
-                .frame(width: geo.size.width / 2, height: geo.size.height)
-                .frame(maxWidth: .infinity, alignment: .trailing)
-                .onDrop(of: [.text], delegate: TabPaneDrop(
-                    draggingID: state.draggingTabID,
-                    onDrop: { id in state.splitTab(id); state.draggingTabID = nil },
-                    onTargetedChange: { splitZoneTargeted = $0 }
-                ))
         }
     }
 
@@ -404,6 +355,59 @@ struct TabPaneDrop: DropDelegate {
         guard let id = draggingID else { return false }
         onDrop(id)
         return true
+    }
+}
+
+/// One editor pane: its tab strip above its mounted tabs. Dropping a dragged tab
+/// on the *content* moves it into this pane (when split) or splits the workspace
+/// (when not). The split preview appears only while the drag is actually over
+/// the content — dragging within the strip reorders (with its own guideline) and
+/// shows no split preview.
+private struct EditorPane: View {
+    @Environment(AppState.self) private var state
+    let index: Int
+    @State private var contentTargeted = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            TabStripView(group: index)
+            TabHostView(group: index)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .onDrop(of: [.text], delegate: TabPaneDrop(
+                    draggingID: state.draggingTabID,
+                    onDrop: { id in
+                        if state.isSplit {
+                            state.moveTab(id, toGroup: index)
+                        } else {
+                            state.splitTab(id)
+                        }
+                        state.draggingTabID = nil
+                    },
+                    onTargetedChange: { contentTargeted = $0 }
+                ))
+                .overlay(alignment: .trailing) {
+                    if !state.isSplit, contentTargeted { splitPreview }
+                }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// Non-interactive right-half wash showing where the new split pane will land
+    /// (the content's drop target performs the actual split).
+    private var splitPreview: some View {
+        GeometryReader { geo in
+            Rectangle()
+                .fill(.brandAccent.opacity(0.16))
+                .overlay(alignment: .leading) { Rectangle().fill(.brandAccent).frame(width: 2) }
+                .overlay {
+                    Label("Drop to split", systemImage: "rectangle.split.2x1")
+                        .font(.headline)
+                        .foregroundStyle(.brandAccent)
+                }
+                .frame(width: geo.size.width / 2, height: geo.size.height)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .allowsHitTesting(false)
+        }
     }
 }
 

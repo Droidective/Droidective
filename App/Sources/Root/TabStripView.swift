@@ -15,6 +15,8 @@ struct TabStripView: View {
     @State private var viewportWidth: CGFloat = 0
     /// Index the ‹ › arrows last scrolled to — stepped on each press.
     @State private var scrollAnchor = 0
+    /// Where the insertion guideline shows during a reorder drag (nil = none).
+    @State private var dropSlot: TabDropSlot?
 
     private var tabIDs: [String] { state.openTabIDs(inGroup: group) }
     private var activeID: String? { state.activeTab(inGroup: group) }
@@ -90,6 +92,8 @@ struct TabStripView: View {
         )
         .id(id)
         .background(widthReader { chipWidths[id] = $0 })
+        .overlay(alignment: .leading) { guideline(visible: dropSlot == TabDropSlot(targetID: id, after: false)) }
+        .overlay(alignment: .trailing) { guideline(visible: dropSlot == TabDropSlot(targetID: id, after: true)) }
         .onDrag {
             state.draggingTabID = id
             return NSItemProvider(object: id as NSString)
@@ -99,10 +103,20 @@ struct TabStripView: View {
             width: chipWidths[id] ?? 0,
             order: tabIDs,
             draggingID: state.draggingTabID,
+            setSlot: { dropSlot = $0 },
             move: { dragged, before in state.dropTab(dragged, intoGroup: group, before: before) },
             end: { state.draggingTabID = nil }
         ))
         .contextMenu { tabMenu(for: id) }
+    }
+
+    /// A thin accent bar between chips marking where a reordered tab will land.
+    @ViewBuilder private func guideline(visible: Bool) -> some View {
+        if visible {
+            RoundedRectangle(cornerRadius: 1)
+                .fill(Color.brandAccent)
+                .frame(width: 2, height: 22)
+        }
     }
 
     /// Reports a view's width via a background GeometryReader (the pattern the
@@ -228,21 +242,36 @@ private struct TabChip: View {
     }
 }
 
+/// Where the strip's insertion guideline sits: before or after a target chip.
+struct TabDropSlot: Equatable {
+    let targetID: String
+    let after: Bool
+}
+
 /// Drop delegate for reordering tabs: dropping a dragged tab on a chip's left
-/// half inserts it before that chip, on the right half after it. `move` is a
-/// no-op when the ids resolve to the same slot (handled by `SidebarOrdering`).
+/// half inserts it before that chip, on the right half after it, and reports the
+/// insertion slot so the strip can draw a guideline. `move` is a no-op when the
+/// ids resolve to the same slot (handled by `SidebarOrdering`).
 private struct TabReorderDrop: DropDelegate {
     let targetID: String
     let width: CGFloat
     let order: [String]
     let draggingID: String?
+    let setSlot: (TabDropSlot?) -> Void
     let move: (_ dragged: String, _ beforeTargetID: String?) -> Void
     let end: () -> Void
 
     func validateDrop(info: DropInfo) -> Bool { draggingID != nil }
+    func dropEntered(info: DropInfo) { setSlot(slot(info)) }
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        setSlot(slot(info))
+        return DropProposal(operation: .move)
+    }
+    func dropExited(info: DropInfo) { setSlot(nil) }
 
     func performDrop(info: DropInfo) -> Bool {
-        defer { end() }
+        setSlot(nil)
+        end()
         guard let dragged = draggingID, dragged != targetID else { return false }
         let dropAfter = width > 0 && info.location.x > width / 2
         if dropAfter, let index = order.firstIndex(of: targetID) {
@@ -252,5 +281,11 @@ private struct TabReorderDrop: DropDelegate {
             move(dragged, targetID)
         }
         return true
+    }
+
+    /// The slot under the cursor — nil while over the dragged chip itself.
+    private func slot(_ info: DropInfo) -> TabDropSlot? {
+        guard draggingID != targetID else { return nil }
+        return TabDropSlot(targetID: targetID, after: width > 0 && info.location.x > width / 2)
     }
 }
