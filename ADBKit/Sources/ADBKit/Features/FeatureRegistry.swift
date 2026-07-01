@@ -27,6 +27,7 @@ public enum FeatureRegistry {
             subtitle: "Type text, URLs, or symbols on the device",
             keywords: ["type", "paste", "input", "keyboard", "url"],
             category: .input, icon: "keyboard", kind: .formAction,
+            supportsRunAll: true,
             fields: [
                 FieldDef(name: "text", label: "Text", control: .text, placeholder: "Text, URL, or special characters…")
             ]
@@ -106,7 +107,8 @@ public enum FeatureRegistry {
                 "refresh", "js", "bundle", "url", "intent", "scheme", "universal",
                 "kill", "restore", "background", "dev host", "debug server",
             ],
-            category: .reactNative, icon: "atom", kind: .view, needsDevice: false
+            category: .reactNative, icon: "atom", kind: .view, needsDevice: false,
+            supportsRunAll: true
         ),
         FeatureDef(
             id: "open-dev-menu", title: "Open Dev Menu",
@@ -237,7 +239,8 @@ public enum FeatureRegistry {
                 "wifi", "data", "airplane", "offline", "proxy", "charles", "proxyman",
                 "mitmproxy", "http",
             ],
-            category: .deviceState, icon: "slider.horizontal.3", kind: .view, needsDevice: false
+            category: .deviceState, icon: "slider.horizontal.3", kind: .view, needsDevice: false,
+            supportsRunAll: true
         ),
         FeatureDef(
             id: "fake-battery", title: "Fake Battery",
@@ -343,7 +346,8 @@ public enum FeatureRegistry {
                 "install", "apk", "sideload", "side load", "drag", "drop",
                 "install app", "add app", "package",
             ],
-            category: .appManagement, icon: "arrow.down.app", kind: .view
+            category: .appManagement, icon: "arrow.down.app", kind: .view,
+            supportsRunAll: true
         ),
         FeatureDef(
             id: "apk-studio", title: "APK Studio",
@@ -528,6 +532,14 @@ public enum FeatureRegistry {
     /// Features the user manages individually in the catalog and sidebar:
     /// everything except hub members. The hub screens themselves are included.
     public static let catalogFeatureIDs: [String] = all.map(\.id).filter { !absorbedFeatureIDs.contains($0) }
+
+    /// Features that offer a "Run on all devices" toggle. Fan-out is meaningful
+    /// and implemented for these — the Simulate and React Native hubs dispatch
+    /// their actions through the fan-out `run` path, and Send Text and Install
+    /// App fan out too. Single-device / interactive-session features (mirror,
+    /// file explorer, logcat, …) are intentionally excluded. `FeatureRegistryTests`
+    /// keeps this in lockstep with the `supportsRunAll` flag.
+    public static let runAllFeatureIDs: Set<String> = Set(all.filter(\.supportsRunAll).map(\.id))
 
     /// Curated, ordered catalog features per role — the focused set a newcomer
     /// gets after picking a role on first launch. The order is the recommended

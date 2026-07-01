@@ -56,7 +56,7 @@ struct DeviceBarView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
                 HStack(spacing: 10) {
-                    if state.readyDeviceCount > 1 {
+                    if state.readyDeviceCount > 1, state.activeFeatureSupportsRunAll {
                         Toggle(isOn: $state.runOnAll) {
                             Label("Run on all", systemImage: "square.stack.3d.up.fill")
                         }
@@ -64,7 +64,7 @@ struct DeviceBarView: View {
                         .controlSize(.mini)
                         .disabled(state.recordingActive)
                         .onChange(of: state.runOnAll) { state.persistSelection() }
-                        .help("Run actions on every connected device")
+                        .help("Run this feature on every connected device")
                     }
 
                     Button {
@@ -169,7 +169,7 @@ struct DeviceBarView: View {
         }
         .fixedSize()
         .controlSize(.large)
-        .disabled(state.runOnAll || state.recordingActive)
+        .disabled(state.effectiveRunOnAll || state.recordingActive)
         .help(state.recordingActive ? "Stop the recording to change the device" : "Switch the active device")
         .task(id: state.devices.map(\.serial).joined()) { await state.refreshAvds() }
     }

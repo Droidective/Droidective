@@ -456,7 +456,7 @@ final class AppState {
     var targetSerials: [String] {
         let ready = devices.filter(\.isReady)
         let selected = ready.first { $0.serial == selectedSerial }
-        if runOnAll {
+        if effectiveRunOnAll {
             var serials = ready.map(\.serial)
             if let selected, let index = serials.firstIndex(of: selected.serial) {
                 serials.swapAt(0, index)
@@ -465,6 +465,20 @@ final class AppState {
         }
         return selected.map { [$0.serial] } ?? []
     }
+
+    /// Whether the focused tab's feature offers "Run on all devices". The toggle
+    /// only appears — and only takes effect — for this curated set (see
+    /// `FeatureRegistry.runAllFeatureIDs`); everything else is single-device.
+    var activeFeatureSupportsRunAll: Bool {
+        guard let id = activeTabID, let feature = FeatureRegistry.byID[id] else { return false }
+        return feature.supportsRunAll
+    }
+
+    /// Run-on-all actually in effect: the toggle is on AND the active feature
+    /// supports it. Gating fan-out here (not just on the raw `runOnAll`) means a
+    /// toggle left on from a supported feature can never silently fan out onto a
+    /// single-device one.
+    var effectiveRunOnAll: Bool { runOnAll && activeFeatureSupportsRunAll }
 
     func refreshDevices() {
         Task { await env.monitor.invalidate() }
