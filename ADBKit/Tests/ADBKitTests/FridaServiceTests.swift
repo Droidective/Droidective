@@ -9,13 +9,19 @@ import Testing
         #expect(FridaArch.from(abilist: "x86_64,x86") == "x86_64")
         #expect(FridaArch.from(abilist: "x86") == "x86")
         #expect(FridaArch.from(abilist: "mips,unknown") == nil)
+        // Raw getprop output keeps a trailing newline; a single-ABI list (common
+        // on 64-bit-only devices) has no comma to strip it, so the trim must
+        // cover newlines, not just spaces.
+        #expect(FridaArch.from(abilist: "arm64-v8a\n") == "arm64")
+        #expect(FridaArch.from(abilist: "x86_64\n") == "x86_64")
     }
 
     @Test func serverArgumentsQuoteDeviceShellValues() {
         #expect(FridaService.pushArguments(localPath: "/tmp/frida-server")
             == ["push", "/tmp/frida-server", "/data/local/tmp/frida-server"])
         #expect(FridaService.chmodArguments() == ["shell", "chmod", "755", "'/data/local/tmp/frida-server'"])
-        #expect(FridaService.startArguments() == ["shell", "su", "-c", "'/data/local/tmp/frida-server &'"])
+        #expect(FridaService.startArguments()
+            == ["shell", "su", "-c", "'setsid /data/local/tmp/frida-server </dev/null >/dev/null 2>&1 &'"])
         #expect(FridaService.stopArguments() == ["shell", "su", "-c", "'pkill -f frida-server'"])
         #expect(FridaService.statusArguments() == ["shell", "pidof", "frida-server"])
     }
