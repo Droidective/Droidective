@@ -6,9 +6,9 @@
     <description>Most recent Droidective updates.</description>
     <language>en</language>
     <item>
-      <title>Droidective 2.7.1</title>
-      <sparkle:version>203</sparkle:version>
-      <sparkle:shortVersionString>2.7.1</sparkle:shortVersionString>
+      <title>Droidective 2.8.0</title>
+      <sparkle:version>220</sparkle:version>
+      <sparkle:shortVersionString>2.8.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <description><![CDATA[
 <style>
@@ -24,22 +24,57 @@ pre { background: color-mix(in srgb, currentColor 8%, transparent); padding: .6e
 pre code { background: none; padding: 0; }
 a { color: #2f9e44; }
 </style>
-<p>A bug-fix release: screen mirroring no longer stops when a device can't capture
-audio.</p>
+<p>A feature release that adds a tabbed workspace with split panes and a React
+Native JS Console, curates the "Run on all devices" toggle, and fixes a round of
+light-mode and layout issues.</p>
+<h3>New features</h3>
+<ul>
+<li>
+<strong>Tabbed workspace with split panes</strong> — open features in tabs (up to ten)
+instead of one detail pane at a time. Tabs stay mounted while hidden, so a
+screen recording or a live view keeps running in the background. Split the
+window into two panes and drag tabs between them, reorder tabs by dragging, and
+navigate with ⌘T, ⌘W, ⌃Tab, and ⌃1–9. The open tabs and the split layout are
+restored on the next launch.</li>
+<li>
+<strong>React Native JS Console</strong> — a console over the Hermes runtime via the Chrome
+DevTools Protocol: it connects to a Metro target, streams <code>console.*</code> output
+with syntax-highlighted objects, and evaluates expressions against the running
+app.</li>
+</ul>
+<h3>Improvements</h3>
+<ul>
+<li>
+<strong>Curated "Run on all devices"</strong> — the toggle now appears only for the features
+where running on every device makes sense (send text, React Native, Simulate,
+install app) and is hidden elsewhere.</li>
+<li>
+<strong>Live mirror follows the active device</strong> — switching the device while
+mirroring re-targets the mirror instead of staying on the previous one.</li>
+<li>
+<strong>Command palette opens centered</strong>, the <strong>sidebar search shows all matches</strong> and
+locks the group/reorder controls while a query is active, and the <strong>close button
+on toasts and the notification panel</strong> is a single restyled control.</li>
+</ul>
 <h3>Fixes</h3>
 <ul>
 <li>
-<strong>Screen mirror on emulators</strong> — scrcpy aborts the whole session (video
-included) when its audio encoder can't start, which happens on most emulators,
-where the device can't create an <code>AudioRecord</code>. The in-app mirror requested
-audio unconditionally, so it stopped right after connecting. It now detects an
-audio-only failure — the session ending before the first video frame — and
-reconnects once, video-only, so mirroring keeps working.</li>
+<strong>Light-mode colors</strong> — named colors resolve per color scheme, and foreground
+text now picks black or white by the background's luminance, so labels no longer
+render white-on-white on light or bright-accent backgrounds (device pill,
+palette rows, copy buttons, toggle styles).</li>
+<li>
+<strong>Simulate</strong> shows an empty state when no device is connected; <strong>Home</strong> feature
+cards keep their height with short text; <strong>System Restrictions</strong> cards are
+visible in light mode and no longer reload the whole list on each toggle.</li>
+<li>Fully tappable rows for <strong>Settings</strong> disclosures and <strong>Screen Record</strong> advanced
+options; <strong>form action pickers</strong> fill the available width; the <strong>notification
+panel</strong> slide no longer janks the layout.</li>
 </ul>
 <p>Installed copies update in place via Sparkle.</p>
 ]]></description>
-      <pubDate>Tue, 30 Jun 2026 12:32:50 +0000</pubDate>
-      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v2.7.1/Droidective-v2.7.1.dmg" sparkle:edSignature="gpOW/Kx2qt5xMVyytVhBs7+vON/fGSB1/9HDxd59cJFa6mYs+nbCOV00cgNwef/N2fkzCmgDL5ch4Pvza0EzAA==" length="45809408" type="application/octet-stream" />
+      <pubDate>Wed, 01 Jul 2026 09:30:59 +0000</pubDate>
+      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v2.8.0/Droidective-v2.8.0.dmg" sparkle:edSignature="esX+O+1tDCS1RKM9O0l+1IjnU50qOrAcS/Py9VFwsmFMIgpyffp/JywxpxqDJYBBdGOVMxrfylptJwDeiJF2DQ==" length="46351864" type="application/octet-stream" />
     </item>
   </channel>
 </rss>
