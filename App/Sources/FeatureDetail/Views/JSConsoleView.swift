@@ -132,6 +132,12 @@ final class JSConsoleSession {
     private var welcomedDeviceId: String?
     private var hasWelcomed = false
     private var serials: [String] = []
+    /// port → serials we installed a `reverse tcp:<port>` binding on, so closing
+    /// the tab can remove each. A tab *switch* keeps them — re-adding the reverse
+    /// on every switch would be surprising, and the binding is what lets the
+    /// device keep reaching Metro. Keyed by port so changing the port and
+    /// re-reversing doesn't orphan the earlier binding.
+    @ObservationIgnored private var reversedTunnels: [Int: Set<String>] = [:]
     weak var app: AppState?
 
     var isConnected: Bool { connectedTarget != nil }
@@ -404,16 +410,18 @@ final class JSConsoleSession {
         guard !serials.isEmpty else { return }
         let metroPort = port
         let serials = serials
-        let ok = await CommandLog.userInitiated(feature: "js-console") {
-            var succeeded = 0
+        let reversed = await CommandLog.userInitiated(feature: "js-console") {
+            var reversed: Set<String> = []
             for serial in serials {
                 if let result = try? await adb.run(on: serial, ["reverse", "tcp:\(metroPort)", "tcp:\(metroPort)"]),
                    result.succeeded {
-                    succeeded += 1
+                    reversed.insert(serial)
                 }
             }
-            return succeeded
+            return reversed
         }
+        if !reversed.isEmpty { reversedTunnels[metroPort, default: []].formUnion(reversed) }
+        let ok = reversed.count
         let allOK = ok == serials.count
         app?.showToast(Toast(
             message: allOK
@@ -421,6 +429,19 @@ final class JSConsoleSession {
                 : "Reversed tcp:\(metroPort) on \(ok) of \(serials.count) devices — check the others are connected.",
             ok: allOK
         ))
+    }
+
+    /// Remove the `adb reverse` bindings this console installed. Called when the
+    /// tab closes (mirrors `ReactotronService.stop`), not on a tab switch.
+    func removeReverseTunnels() async {
+        guard !reversedTunnels.isEmpty else { return }
+        let tunnels = reversedTunnels
+        reversedTunnels = [:]
+        for (metroPort, serials) in tunnels {
+            for serial in serials {
+                _ = try? await adb.run(on: serial, ["reverse", "--remove", "tcp:\(metroPort)"])
+            }
+        }
     }
 
     // MARK: Derived feed (cached)

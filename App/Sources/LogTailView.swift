@@ -24,8 +24,9 @@ struct LogTailView<Data: RandomAccessCollection, Row: View>: View
     let entries: Data
     var newestEdge: VerticalEdge = .bottom
     /// Optional externally-driven scroll target (e.g. a ⌘F search match). Jumping
-    /// to it moves off the newest edge, so tailing naturally pauses until the
-    /// user returns. Callers that don't need it leave it nil.
+    /// to a row other than the newest pauses tailing (so an incoming line can't
+    /// yank the view back off the match); returning to the edge resumes. Callers
+    /// that don't need it leave it nil.
     var focusID: Data.Element.ID? = nil
     @ViewBuilder var row: (Data.Element) -> Row
 
@@ -62,6 +63,10 @@ struct LogTailView<Data: RandomAccessCollection, Row: View>: View
             .onChange(of: newestEdge) { isTailing = true; leadingID = newestID }
             .onChange(of: focusID) { _, id in
                 guard let id else { return }
+                // `scrollTo` doesn't write back into `leadingID`, so stop tailing
+                // here unless the target *is* the newest row — otherwise the next
+                // append would fire the follower and snap us off the match.
+                isTailing = (id == newestID)
                 withAnimation(.easeInOut(duration: 0.15)) { proxy.scrollTo(id, anchor: .center) }
             }
             .overlay(alignment: newestEdge == .bottom ? .bottomTrailing : .topTrailing) {

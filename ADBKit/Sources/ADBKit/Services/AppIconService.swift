@@ -40,17 +40,6 @@ public struct AppIconService: Sendable {
         return entries
     }
 
-    /// The entry names out of `unzip -l` output (sizes dropped).
-    public static func parseUnzipListing(_ output: String) -> [String] {
-        parseUnzipEntries(output).map(\.name)
-    }
-
-    /// Name-only convenience — used by the tests; the caller uses the size-aware
-    /// overload so the last-resort fallback can pick the largest raster.
-    public static func pickIconEntry(_ names: [String]) -> String? {
-        pickIconEntry(names.map { IconEntry(name: $0, size: 0) })
-    }
-
     /// Choose the best launcher-icon entry from an APK's file listing. Prefers a
     /// raster `ic_launcher` at the highest density, then round / foreground /
     /// other launcher rasters. When no name matches (resource shrinking flattens

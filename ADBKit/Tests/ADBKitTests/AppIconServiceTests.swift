@@ -2,6 +2,12 @@ import Testing
 @testable import ADBKit
 
 @Suite struct AppIconParsingTests {
+    /// Name-only convenience for the cases that don't exercise the size-aware
+    /// fallback: wrap bare paths as zero-size entries and call the real picker.
+    private func pick(_ names: [String]) -> String? {
+        AppIconService.pickIconEntry(names.map { AppIconService.IconEntry(name: $0, size: 0) })
+    }
+
     @Test func parsesNamesFromUnzipListing() {
         let output = """
         Archive:  /data/app/com.example-abc==/base.apk
@@ -13,7 +19,7 @@ import Testing
         ---------                     -------
             28462                     3 files
         """
-        let names = AppIconService.parseUnzipListing(output)
+        let names = AppIconService.parseUnzipEntries(output).map(\.name)
         #expect(names.contains("res/drawable-mdpi-v4/ic_launcher.png"))
         #expect(names.contains("res/drawable-xxxhdpi-v4/ic_launcher.png"))
         #expect(names.contains("AndroidManifest.xml"))
@@ -29,7 +35,7 @@ import Testing
             "res/drawable-xhdpi-v4/ic_launcher.png",
             "res/drawable-hdpi-v4/ic_launcher.png",
         ]
-        #expect(AppIconService.pickIconEntry(entries) == "res/drawable-xxxhdpi-v4/ic_launcher.png")
+        #expect(pick(entries) == "res/drawable-xxxhdpi-v4/ic_launcher.png")
     }
 
     @Test func prefersPlainLauncherOverRoundAndForeground() {
@@ -43,7 +49,7 @@ import Testing
             "res/mipmap-hdpi-v4/ic_launcher.png",
         ]
         // Highest-density *plain* ic_launcher wins over round/foreground.
-        #expect(AppIconService.pickIconEntry(entries) == "res/mipmap-hdpi-v4/ic_launcher.png")
+        #expect(pick(entries) == "res/mipmap-hdpi-v4/ic_launcher.png")
     }
 
     @Test func handlesWebpIcons() {
@@ -52,7 +58,7 @@ import Testing
             "res/mipmap-xhdpi-v4/ic_launcher.webp",
             "res/mipmap-hdpi-v4/ic_launcher.webp",
         ]
-        #expect(AppIconService.pickIconEntry(entries) == "res/mipmap-xhdpi-v4/ic_launcher.webp")
+        #expect(pick(entries) == "res/mipmap-xhdpi-v4/ic_launcher.webp")
     }
 
     @Test func returnsNilWhenOnlyVectorIcons() {
@@ -62,14 +68,14 @@ import Testing
             "AndroidManifest.xml",
             "classes.dex",
         ]
-        #expect(AppIconService.pickIconEntry(entries) == nil)
+        #expect(pick(entries) == nil)
     }
 
     @Test func matchesLauncherAndIconNameSynonyms() {
         // Apps that don't use the ic_launcher convention still resolve.
-        #expect(AppIconService.pickIconEntry(["res/mipmap-xhdpi-v4/app_icon.png"])
+        #expect(pick(["res/mipmap-xhdpi-v4/app_icon.png"])
             == "res/mipmap-xhdpi-v4/app_icon.png")
-        #expect(AppIconService.pickIconEntry(["res/drawable-hdpi/launcher.webp"])
+        #expect(pick(["res/drawable-hdpi/launcher.webp"])
             == "res/drawable-hdpi/launcher.webp")
     }
 

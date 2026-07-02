@@ -638,6 +638,9 @@ final class AppState {
         if id == "reactotron", reactotronSession.isRunning {
             Task { await reactotronSession.stop() }
         }
+        if id == "js-console" {
+            Task { await jsConsoleSession.removeReverseTunnels() }
+        }
     }
 
     private func persistTabs() {
