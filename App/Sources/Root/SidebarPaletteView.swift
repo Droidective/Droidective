@@ -177,13 +177,6 @@ struct SidebarPaletteView: View {
                             FeatureRowView(feature: feature, shortcutIndex: shortcutRank[feature.id])
                         }
                     }
-                } else if state.searchText.isEmpty {
-                    // No pins yet: keep the header with a one-line hint so the
-                    // pin gesture is discoverable before the user ever hovers.
-                    // Vanishes the moment they pin anything.
-                    Section("Pinned") {
-                        pinnedHint
-                    }
                 }
 
                 let rest = visible.filter { !state.layout.favorites.contains($0.id) }
@@ -338,21 +331,6 @@ struct SidebarPaletteView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-    }
-
-    /// Placeholder row under an empty Pinned header — teaches the pin gesture.
-    private var pinnedHint: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "pin")
-                .font(.caption)
-                .foregroundStyle(.textMuted)
-            Text("Hover a tool and tap the pin to keep it up here.")
-                .font(.footnote)
-                .foregroundStyle(.textMuted)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(.vertical, 2)
-        .listRowBackground(Color.clear)
     }
 
     /// ⌘1–⌘9/⌘0 hints: id → 0-based rank while ⌘ is held in the key window
