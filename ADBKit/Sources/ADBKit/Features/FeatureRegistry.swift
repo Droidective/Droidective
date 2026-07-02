@@ -574,6 +574,19 @@ public enum FeatureRegistry {
             "root-status", "system-restrictions", "scrcpy", "screenshot", "bug-report", "logcat",
             "apps", "emulators",
         ],
+        // Ordered by the assessment workflow: recon/static analysis, then
+        // dynamic instrumentation, then on-device data, then traffic
+        // interception, then utilities. `simulate` is here for its HTTP-proxy
+        // member (route the device through Burp/mitmproxy); `terminal` and
+        // `custom-commands` are always-on system features, so a Frida/adb
+        // shell is available without listing them.
+        .securityTester: [
+            "apk-studio", "apps", "device-info", "root-status",
+            "frida-console", "logcat", "crash-catcher",
+            "sandbox-browser", "file-explorer",
+            "simulate", "connection", "install-app",
+            "scrcpy", "screenshot",
+        ],
     ]
 
     /// The curated, ordered catalog ids for a role (validated to exist in the
