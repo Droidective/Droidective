@@ -68,7 +68,10 @@ public struct EmulatorService: Sendable {
         }
     }
 
-    /// Launch detached — the emulator outlives the app.
+    /// Launch fully decoupled from the app: the emulator is spawned into its own
+    /// session (`POSIX_SPAWN_SETSID`), so it's a standalone process — not in
+    /// Droidective's process group, unaffected by signals aimed at the app, and
+    /// cleanly outliving it. Its window and Dock icon are the emulator's own.
     public func launch(avd: String, options: LaunchOptions = LaunchOptions()) async -> FeatureResult {
         guard let emulatorPath = await locator.resolve(.emulator) else {
             return FeatureResult(ok: false, message: "Android emulator not found — install it via Android Studio's SDK Manager.")
@@ -81,22 +84,60 @@ public struct EmulatorService: Sendable {
             arguments.append("-wipe-data")
         }
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: emulatorPath)
-        process.arguments = arguments
         var environment = ProcessInfo.processInfo.environment
         let sdkRoot = (emulatorPath as NSString).deletingLastPathComponent
         environment["ANDROID_HOME"] = environment["ANDROID_HOME"] ?? (sdkRoot as NSString).deletingLastPathComponent
-        process.environment = environment
-        process.standardInput = FileHandle.nullDevice
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        do {
-            try process.run()
-            return FeatureResult(ok: true, message: "Launching \(avd)…")
-        } catch {
-            return FeatureResult(ok: false, message: "Couldn't launch the emulator: \(error.localizedDescription)")
+
+        return Self.spawnDetached(path: emulatorPath, arguments: arguments, environment: environment)
+            ? FeatureResult(ok: true, message: "Launching \(avd)…")
+            : FeatureResult(ok: false, message: "Couldn't launch the emulator.")
+    }
+
+    /// Spawn a long-lived GUI process in its own session, detached from this app.
+    /// `POSIX_SPAWN_SETSID` makes the child a session/process-group leader, so it
+    /// never receives signals sent to the app's group and survives independently;
+    /// stdio is routed to `/dev/null` so it neither inherits nor holds the app's
+    /// descriptors. Returns false if the spawn fails.
+    static func spawnDetached(path: String, arguments: [String], environment: [String: String]) -> Bool {
+        var attr: posix_spawnattr_t?
+        posix_spawnattr_init(&attr)
+        defer { posix_spawnattr_destroy(&attr) }
+        posix_spawnattr_setflags(&attr, Int16(POSIX_SPAWN_SETSID))
+
+        var fileActions: posix_spawn_file_actions_t?
+        posix_spawn_file_actions_init(&fileActions)
+        defer { posix_spawn_file_actions_destroy(&fileActions) }
+        posix_spawn_file_actions_addopen(&fileActions, 0, "/dev/null", O_RDONLY, 0)
+        posix_spawn_file_actions_addopen(&fileActions, 1, "/dev/null", O_WRONLY, 0)
+        posix_spawn_file_actions_addopen(&fileActions, 2, "/dev/null", O_WRONLY, 0)
+
+        // Duplicate every argv/envp string, bailing (and freeing what we took) if
+        // any allocation fails — a mid-array nil would otherwise make posix_spawn
+        // silently truncate the arguments instead of failing loudly.
+        var allocations: [UnsafeMutablePointer<CChar>] = []
+        defer { for pointer in allocations { free(pointer) } }
+        func dup(_ string: String) -> UnsafeMutablePointer<CChar>? {
+            guard let copy = strdup(string) else { return nil }
+            allocations.append(copy)
+            return copy
         }
+
+        var argv: [UnsafeMutablePointer<CChar>?] = []
+        for argument in [path] + arguments {
+            guard let copy = dup(argument) else { return false }
+            argv.append(copy)
+        }
+        argv.append(nil)
+
+        var envp: [UnsafeMutablePointer<CChar>?] = []
+        for (key, value) in environment {
+            guard let copy = dup("\(key)=\(value)") else { return false }
+            envp.append(copy)
+        }
+        envp.append(nil)
+
+        var pid: pid_t = 0
+        return posix_spawn(&pid, path, &fileActions, &attr, argv, envp) == 0
     }
 
     /// Graceful shutdown via the emulator console.

@@ -755,7 +755,7 @@ struct ReactotronView: View {
                     Text("REPL").font(.system(size: 13, weight: .semibold))
                     Spacer()
                     Button { session.sendReplLs() } label: { Image(systemName: "arrow.clockwise") }
-                        .controlSize(.small)
+                        .buttonStyle(IconButtonStyle())
                         .help("Refresh available values")
                 }
                 Text("Evaluate JS against values your app registered with `Reactotron.repl(name, value)`.")
@@ -901,7 +901,6 @@ private struct TimelinePane: View {
 
     @State private var search = ""
     @State private var filter: RtFilter = .all
-    @State private var following = true
     @State private var newestFirst = true
 
     var body: some View {
@@ -937,16 +936,17 @@ private struct TimelinePane: View {
             } label: {
                 Image(systemName: "square.and.arrow.up")
             }
+            .buttonStyle(IconButtonStyle())
             .help("Export this pane's filtered timeline to JSON")
             .disabled(visibleItems.isEmpty)
 
             Button {
                 newestFirst.toggle()
-                following = true
             } label: {
                 Image(systemName: "arrow.up.arrow.down")
                     .foregroundStyle(newestFirst ? Color.brandAccent : Color.secondary)
             }
+            .buttonStyle(IconButtonStyle())
             .help(newestFirst ? "Newest first — click for oldest first" : "Oldest first — click for newest first")
         }
         .controlSize(.small)
@@ -966,34 +966,15 @@ private struct TimelinePane: View {
         newestFirst ? Array(visibleItems.reversed()) : visibleItems
     }
 
-    private var scrollAnchorID: String { newestFirst ? "rt-top" : "rt-bottom" }
-
     private var timeline: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    Color.clear.frame(height: 1).id("rt-top")
-                    ForEach(orderedItems) { item in
-                        RtRow(item: item)
-                        Divider()
-                    }
-                    Color.clear
-                        .frame(height: 1)
-                        .id("rt-bottom")
-                        .onAppear { if !newestFirst { following = true } }
-                        .onDisappear { if !newestFirst { following = false } }
-                }
-            }
-            .background(.background)
-            .overlay { emptyOverlay }
-            .onChange(of: items.last?.id) {
-                guard following else { return }
-                proxy.scrollTo(scrollAnchorID, anchor: newestFirst ? .top : .bottom)
-            }
-            .onChange(of: newestFirst) {
-                proxy.scrollTo(scrollAnchorID, anchor: newestFirst ? .top : .bottom)
-            }
+        // Newest events land at the top in newest-first, the bottom otherwise —
+        // LogTailView follows whichever edge and pauses when the user scrolls off.
+        LogTailView(entries: orderedItems, newestEdge: newestFirst ? .top : .bottom) { item in
+            RtRow(item: item)
+            Divider()
         }
+        .background(.background)
+        .overlay { emptyOverlay }
     }
 
     @ViewBuilder

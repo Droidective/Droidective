@@ -60,12 +60,18 @@ struct ADTApp: App {
     /// Grow the window's minimum width with whichever side panels are showing,
     /// so the detail pane always keeps at least `detailMinWidth`.
     private var minWindowWidth: CGFloat {
-        let detailMinWidth: CGFloat = 360
+        // A split needs room for two usable panes side by side (2 × 320 + the
+        // seam); a single pane needs one. Without this the split overflows when
+        // the window is small.
+        let detailMinWidth: CGFloat = appState.isSplit ? 648 : 360
         let notifications: CGFloat = appState.showNotifications ? 321 : 0
         let sidebar: CGFloat = appState.sidebarVisible
             ? CGFloat(min(max(sidebarWidth, 300), 460))
             : 0
-        return max(760, sidebar + detailMinWidth + notifications)
+        // The content is laid out at window ÷ fontScale then scaled up, so the
+        // window must be fontScale× wider to give the layout the same logical
+        // room — otherwise zooming in (⌘=) crushes the panes.
+        return max(760, sidebar + detailMinWidth + notifications) * appState.fontScale
     }
 
     init() {

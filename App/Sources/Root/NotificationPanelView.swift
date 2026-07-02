@@ -127,8 +127,6 @@ struct NotificationBell: View {
             state.toggleNotifications()
         } label: {
             Image(systemName: state.showNotifications ? "bell.fill" : "bell")
-                .font(.body)
-                .frame(width: 24, height: 22)
                 .overlay(alignment: .topTrailing) {
                     if state.unreadNotifications > 0 && !state.showNotifications {
                         Text(state.unreadNotifications > 99 ? "99+" : "\(state.unreadNotifications)")
@@ -143,7 +141,7 @@ struct NotificationBell: View {
                 }
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IconButtonStyle())
         .foregroundStyle(state.showNotifications ? AnyShapeStyle(.brandAccent) : AnyShapeStyle(.textMuted))
         .help(state.showNotifications ? "Hide notifications" : "Show notifications")
     }

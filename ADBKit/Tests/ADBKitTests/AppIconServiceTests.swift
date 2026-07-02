@@ -64,4 +64,48 @@ import Testing
         ]
         #expect(AppIconService.pickIconEntry(entries) == nil)
     }
+
+    @Test func matchesLauncherAndIconNameSynonyms() {
+        // Apps that don't use the ic_launcher convention still resolve.
+        #expect(AppIconService.pickIconEntry(["res/mipmap-xhdpi-v4/app_icon.png"])
+            == "res/mipmap-xhdpi-v4/app_icon.png")
+        #expect(AppIconService.pickIconEntry(["res/drawable-hdpi/launcher.webp"])
+            == "res/drawable-hdpi/launcher.webp")
+    }
+
+    @Test func fallsBackToLargestRasterWhenNamesAreObfuscated() {
+        // Resource shrinking flattens names — no ic_launcher/mipmap/icon match,
+        // so the biggest raster in a density dir wins over smaller ones.
+        let entries = [
+            AppIconService.IconEntry(name: "res/xA.png", size: 900),
+            AppIconService.IconEntry(name: "res/xB.png", size: 12000),
+            AppIconService.IconEntry(name: "res/xB.webp", size: 400),
+            AppIconService.IconEntry(name: "classes.dex", size: 50000),
+        ]
+        // Flat `res/` entries aren't density dirs → no fallback, no crash.
+        #expect(AppIconService.pickIconEntry(entries) == nil)
+
+        let densityEntries = [
+            AppIconService.IconEntry(name: "res/drawable-xxhdpi-v4/xA.png", size: 900),
+            AppIconService.IconEntry(name: "res/drawable-xxhdpi-v4/xB.png", size: 12000),
+            AppIconService.IconEntry(name: "classes.dex", size: 50000),
+        ]
+        #expect(AppIconService.pickIconEntry(densityEntries) == "res/drawable-xxhdpi-v4/xB.png")
+    }
+
+    @Test func parsesEntrySizes() {
+        let output = """
+        Archive:  /data/app/com.example-abc==/base.apk
+          Length      Date    Time    Name
+        ---------  ---------- -----   ----
+             4317  01-01-81 01:01   res/drawable-mdpi-v4/ic_launcher.png
+            23633  01-01-81 01:01   res/drawable-xxxhdpi-v4/ic_launcher.png
+        ---------                     -------
+            27950                     2 files
+        """
+        let entries = AppIconService.parseUnzipEntries(output)
+        #expect(entries.count == 2)
+        #expect(entries.first == AppIconService.IconEntry(name: "res/drawable-mdpi-v4/ic_launcher.png", size: 4317))
+        #expect(entries.last?.size == 23633)
+    }
 }

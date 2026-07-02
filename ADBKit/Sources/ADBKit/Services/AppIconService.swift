@@ -18,33 +18,59 @@ public struct AppIconService: Sendable {
         ("hdpi", 3), ("mdpi", 2), ("ldpi", 1), ("nodpi", 0), ("anydpi", 0),
     ]
 
-    /// Parse the `Name` column out of `unzip -l` output, skipping the header,
-    /// separator, and total lines. Each entry line is
-    /// "  <length>  <date>  <time>   <name>" — the header/total lines don't
-    /// start with a numeric length and are dropped.
-    public static func parseUnzipListing(_ output: String) -> [String] {
-        var names: [String] = []
-        for rawLine in output.split(whereSeparator: \.isNewline) {
-            let fields = rawLine.split(separator: " ", omittingEmptySubsequences: true)
-            guard fields.count >= 4, Int(fields[0]) != nil else { continue }
-            let name = fields[3...].joined(separator: " ")
-            if !name.isEmpty {
-                names.append(name)
-            }
-        }
-        return names
+    /// One row of `unzip -l` output: the entry path and its uncompressed size.
+    public struct IconEntry: Sendable, Equatable {
+        public let name: String
+        public let size: Int
     }
 
-    /// Choose the best launcher-icon entry from an APK's file listing. Prefers
-    /// a raster `ic_launcher` at the highest density, then round / foreground /
-    /// any mipmap raster. Returns nil when only vector (.xml) icons exist — the
-    /// caller falls back to a monogram.
-    public static func pickIconEntry(_ entries: [String]) -> String? {
+    /// Parse `unzip -l` rows into (name, size), skipping the header, separator,
+    /// and total lines. Each entry line is "  <length>  <date>  <time>   <name>"
+    /// — header/total lines don't start with a numeric length and are dropped.
+    public static func parseUnzipEntries(_ output: String) -> [IconEntry] {
+        var entries: [IconEntry] = []
+        for rawLine in output.split(whereSeparator: \.isNewline) {
+            let fields = rawLine.split(separator: " ", omittingEmptySubsequences: true)
+            guard fields.count >= 4, let size = Int(fields[0]) else { continue }
+            let name = fields[3...].joined(separator: " ")
+            if !name.isEmpty {
+                entries.append(IconEntry(name: name, size: size))
+            }
+        }
+        return entries
+    }
+
+    /// The entry names out of `unzip -l` output (sizes dropped).
+    public static func parseUnzipListing(_ output: String) -> [String] {
+        parseUnzipEntries(output).map(\.name)
+    }
+
+    /// Name-only convenience — used by the tests; the caller uses the size-aware
+    /// overload so the last-resort fallback can pick the largest raster.
+    public static func pickIconEntry(_ names: [String]) -> String? {
+        pickIconEntry(names.map { IconEntry(name: $0, size: 0) })
+    }
+
+    /// Choose the best launcher-icon entry from an APK's file listing. Prefers a
+    /// raster `ic_launcher` at the highest density, then round / foreground /
+    /// other launcher rasters. When no name matches (resource shrinking flattens
+    /// names to e.g. `res/xY.png`), falls back to the largest raster living in a
+    /// density resource directory. Returns nil only when the APK ships no raster
+    /// at all (vector-only adaptive icons) — the caller then shows a monogram.
+    public static func pickIconEntry(_ entries: [IconEntry]) -> String? {
         var best: (entry: String, score: Int)?
+        var largestRaster: (entry: String, size: Int)?
         for entry in entries {
-            let lower = entry.lowercased()
+            let lower = entry.name.lowercased()
             guard lower.hasSuffix(".png") || lower.hasSuffix(".webp") else { continue }
             let name = (lower as NSString).lastPathComponent
+            // A raster in an icon density dir is a fallback candidate even when
+            // its name matches nothing (obfuscated/flattened resource names).
+            if lower.contains("/mipmap") || lower.contains("/drawable") {
+                if entry.size > (largestRaster?.size ?? 0) {
+                    largestRaster = (entry.name, entry.size)
+                }
+            }
             let baseScore: Int
             if name == "ic_launcher.png" || name == "ic_launcher.webp" {
                 baseScore = 1000
@@ -54,6 +80,9 @@ public struct AppIconService: Sendable {
                 baseScore = 700
             } else if name.contains("ic_launcher") {
                 baseScore = 750
+            } else if name.contains("launcher") || name.contains("app_icon")
+                || name == "icon.png" || name == "icon.webp" {
+                baseScore = 500
             } else if lower.contains("/mipmap") && name.contains("icon") {
                 baseScore = 300
             } else if lower.contains("/mipmap") {
@@ -63,10 +92,10 @@ public struct AppIconService: Sendable {
             }
             let score = baseScore + density(lower)
             if best == nil || score > best!.score {
-                best = (entry, score)
+                best = (entry.name, score)
             }
         }
-        return best?.entry
+        return best?.entry ?? largestRaster?.entry
     }
 
     static func density(_ path: String) -> Int {
@@ -89,7 +118,7 @@ public struct AppIconService: Sendable {
         ), listing.succeeded else {
             return nil
         }
-        guard let entry = Self.pickIconEntry(Self.parseUnzipListing(listing.stdout)) else {
+        guard let entry = Self.pickIconEntry(Self.parseUnzipEntries(listing.stdout)) else {
             Self.cache(packageId: packageId, data: Data()) // sentinel: no raster icon
             return nil
         }

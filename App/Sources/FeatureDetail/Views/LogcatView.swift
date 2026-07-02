@@ -16,9 +16,6 @@ struct LogcatView: View {
     @State private var search = ""
     @State private var waitingForPackage: String?
     @State private var streamingPid: Int?
-    /// True while pinned to the bottom; scrolling up unpins.
-    @State private var following = true
-    @State private var newSinceUnfollow = 0
 
     private static let levels: [(value: String, label: String)] = [
         ("All", "All levels"), ("V", "Verbose"), ("D", "Debug"),
@@ -78,6 +75,7 @@ struct LogcatView: View {
             } label: {
                 Image(systemName: paused ? "play.fill" : "pause.fill")
             }
+            .buttonStyle(IconButtonStyle())
             .help(paused ? "Resume (new lines are dropped while paused)" : "Pause")
 
             Button {
@@ -85,15 +83,16 @@ struct LogcatView: View {
             } label: {
                 Image(systemName: "square.and.arrow.up")
             }
+            .buttonStyle(IconButtonStyle())
             .help("Export buffer to ~/Downloads/Droidective")
             .disabled(lines.isEmpty)
 
             Button {
                 lines.removeAll()
-                newSinceUnfollow = 0
             } label: {
                 Image(systemName: "trash")
             }
+            .buttonStyle(IconButtonStyle())
             .help("Clear")
         }
         .controlSize(.small)
@@ -179,66 +178,27 @@ struct LogcatView: View {
     }
 
     private var logList: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(visibleLines) { line in
-                        Text(attributedDisplay(line))
-                            .font(.system(size: 11, design: .monospaced))
-                            .foregroundStyle(color(for: line.level))
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .id(line.id)
-                            .contextMenu {
-                                if !line.tag.isEmpty {
-                                    Button("Filter by tag \"\(line.tag)\"") {
-                                        tagFilter = line.tag
-                                    }
-                                }
-                                Button("Copy line") {
-                                    NSPasteboard.general.clearContents()
-                                    NSPasteboard.general.setString(line.raw, forType: .string)
-                                }
-                            }
+        // Newest lines append at the bottom; LogTailView follows them while the
+        // user is at the bottom and pauses the moment they scroll up.
+        LogTailView(entries: visibleLines, newestEdge: .bottom) { line in
+            Text(attributedDisplay(line))
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(color(for: line.level))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 8)
+                .contextMenu {
+                    if !line.tag.isEmpty {
+                        Button("Filter by tag \"\(line.tag)\"") { tagFilter = line.tag }
                     }
-                    // Bottom sentinel: visible = pinned to bottom.
-                    Color.clear
-                        .frame(height: 1)
-                        .id("logcat-bottom")
-                        .onAppear {
-                            following = true
-                            newSinceUnfollow = 0
-                        }
-                        .onDisappear { following = false }
-                }
-                .padding(8)
-            }
-            .background(.background)
-            .overlay { emptyOverlay }
-            .overlay(alignment: .bottom) {
-                if !following && newSinceUnfollow > 0 {
-                    Button {
-                        proxy.scrollTo("logcat-bottom", anchor: .bottom)
-                        following = true
-                        newSinceUnfollow = 0
-                    } label: {
-                        Label("\(newSinceUnfollow) new lines", systemImage: "arrow.down")
-                            .font(.caption.weight(.medium))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(Color.bgSurface, in: Capsule())
-                            .shadow(radius: 4, y: 1)
+                    Button("Copy line") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(line.raw, forType: .string)
                     }
-                    .buttonStyle(.plain)
-                    .padding(.bottom, 10)
                 }
-            }
-            .onChange(of: lines.last?.id) {
-                if following, !paused {
-                    proxy.scrollTo("logcat-bottom", anchor: .bottom)
-                }
-            }
         }
+        .background(.background)
+        .overlay { emptyOverlay }
     }
 
     /// Search matches get a highlight instead of vanishing into the filter.
@@ -372,9 +332,6 @@ struct LogcatView: View {
                 if Task.isCancelled { break }
                 if paused { continue }
                 lines.append(contentsOf: batch)
-                if !following {
-                    newSinceUnfollow += batch.count
-                }
                 if lines.count > Self.maxLines {
                     lines.removeFirst(lines.count - Self.maxLines)
                 }

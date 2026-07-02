@@ -32,6 +32,7 @@ struct PrivateDnsSection: View {
                     .disabled(busy || !loaded || state.targetSerials.isEmpty
                         || (mode == .hostname && hostname.trimmingCharacters(in: .whitespaces).isEmpty))
                 Button { Task { await load() } } label: { Image(systemName: "arrow.clockwise") }
+                    .buttonStyle(IconButtonStyle())
                     .help("Refresh")
                     .disabled(busy || state.targetSerials.isEmpty)
                 if busy { ProgressView().controlSize(.small) }

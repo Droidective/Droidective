@@ -28,16 +28,6 @@ enum JSLevel: String, CaseIterable, Hashable, Sendable {
         }
     }
 
-    var color: Color {
-        switch self {
-        case .error: .red
-        case .warning: .orange
-        case .info: .blue
-        case .log: .primary
-        case .debug: .secondary
-        }
-    }
-
     var icon: String {
         switch self {
         case .error: "xmark.octagon.fill"
@@ -559,6 +549,7 @@ struct JSConsoleView: View {
     @State private var input = ""
     @State private var portText = ""
     @State private var inputHeight: CGFloat = 26
+    @State private var showLevels = false
     @FocusState private var findFocused: Bool
 
     private var session: JSConsoleSession { state.jsConsoleSession }
@@ -598,11 +589,13 @@ struct JSConsoleView: View {
                 .onKeyPress(.escape) { session.closeFind(); return .handled }
             Text(session.findCountLabel).font(.caption.monospacedDigit()).foregroundStyle(.secondary).fixedSize()
             Button { session.findPrev() } label: { Image(systemName: "chevron.up") }
+                .buttonStyle(IconButtonStyle(size: .small))
                 .disabled(session.findMatchIDs.isEmpty)
             Button { session.findNext() } label: { Image(systemName: "chevron.down") }
+                .buttonStyle(IconButtonStyle(size: .small))
                 .disabled(session.findMatchIDs.isEmpty)
             Button { session.closeFind() } label: { Image(systemName: "xmark.circle.fill") }
-                .buttonStyle(.plain)
+                .buttonStyle(IconButtonStyle(size: .small))
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
@@ -695,11 +688,7 @@ struct JSConsoleView: View {
     private var filterBar: some View {
         @Bindable var session = state.jsConsoleSession
         return HStack(spacing: 8) {
-            // Inline chips when there's room; a "Levels" dropdown when narrow.
-            ViewThatFits(in: .horizontal) {
-                levelChips
-                levelsMenu
-            }
+            levelFilter
             Spacer(minLength: 8)
             HStack(spacing: 4) {
                 Image(systemName: "line.3.horizontal.decrease.circle").foregroundStyle(.secondary)
@@ -708,104 +697,138 @@ struct JSConsoleView: View {
                     .frame(minWidth: 80, maxWidth: 150)
             }
             Button { session.openFind() } label: { Image(systemName: "text.magnifyingglass") }
+                .buttonStyle(IconButtonStyle())
                 .help("Find & highlight in console (⌘F)")
                 .keyboardShortcut("f", modifiers: .command)
             Button { session.newestFirst.toggle() } label: { Image(systemName: "arrow.up.arrow.down") }
+                .buttonStyle(IconButtonStyle())
                 .help("Order: \(session.newestFirst ? "newest first" : "oldest first") — tap to flip")
             Toggle("Time", isOn: $session.showTimestamps).toggleStyle(.checkbox).font(.caption)
             Button { session.clear() } label: { Image(systemName: "trash") }
+                .buttonStyle(IconButtonStyle())
                 .help("Clear the console")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
     }
 
-    private var levelChips: some View {
-        HStack(spacing: 6) {
-            ForEach(JSLevel.allCases, id: \.self) { level in levelChip(level) }
+    /// Multi-select level filter: one dropdown that toggles several levels at
+    /// once (the popover stays open), with Show-/Hide-all shortcuts. Replaces the
+    /// old per-level chips + reopen-per-toggle menu.
+    private var levelFilter: some View {
+        let shown = JSLevel.allCases.count - session.hiddenLevels.count
+        let allShown = session.hiddenLevels.isEmpty
+        return Button {
+            showLevels.toggle()
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "line.3.horizontal.decrease.circle")
+                Text(allShown ? "All levels" : "Levels \(shown)/\(JSLevel.allCases.count)")
+                    .fixedSize()
+                Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
+            }
+            .font(.caption)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(.quaternary.opacity(allShown ? 0 : 0.7), in: Capsule())
+            .overlay(Capsule().strokeBorder(.secondary.opacity(0.25)))
+            .contentShape(Capsule())
         }
+        .buttonStyle(.plain)
+        .help("Choose which log levels to show")
+        .popover(isPresented: $showLevels, arrowEdge: .bottom) { levelPicker }
     }
 
-    private var levelsMenu: some View {
+    private var levelPicker: some View {
         @Bindable var session = state.jsConsoleSession
-        let shown = JSLevel.allCases.count - session.hiddenLevels.count
-        return Menu {
+        return VStack(alignment: .leading, spacing: 8) {
+            Text("Show levels").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
             ForEach(JSLevel.allCases, id: \.self) { level in
-                Toggle(level.label, isOn: Binding(
+                Toggle(isOn: Binding(
                     get: { !session.hiddenLevels.contains(level) },
                     set: { show in
                         if show { session.hiddenLevels.remove(level) } else { session.hiddenLevels.insert(level) }
                     }
-                ))
+                )) {
+                    Label {
+                        Text(level.label)
+                    } icon: {
+                        Image(systemName: level.icon).foregroundStyle(level.consoleIconColor)
+                    }
+                }
+                .toggleStyle(.checkbox)
             }
-        } label: {
-            Label("Levels (\(shown)/\(JSLevel.allCases.count))", systemImage: "line.3.horizontal.decrease.circle")
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .contentShape(Rectangle())
+            Divider()
+            HStack {
+                Button("Show All") { session.hiddenLevels.removeAll() }
+                    .disabled(session.hiddenLevels.isEmpty)
+                Spacer()
+                Button("Hide All") { session.hiddenLevels = Set(JSLevel.allCases) }
+                    .disabled(session.hiddenLevels.count == JSLevel.allCases.count)
+            }
+            .font(.caption)
+            .buttonStyle(.link)
         }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
-    }
-
-    private func levelChip(_ level: JSLevel) -> some View {
-        let active = !session.hiddenLevels.contains(level)
-        return Button {
-            if active { session.hiddenLevels.insert(level) } else { session.hiddenLevels.remove(level) }
-        } label: {
-            Text(level.label)
-                .font(.caption)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(active ? level.color.opacity(0.18) : .clear, in: Capsule())
-                .foregroundStyle(active ? level.color : .secondary)
-                .overlay(Capsule().strokeBorder(active ? level.color.opacity(0.4) : .secondary.opacity(0.25)))
-        }
-        .buttonStyle(.plain)
-        .help(active ? "Hide \(level.label.lowercased())" : "Show \(level.label.lowercased())")
+        .padding(12)
+        .frame(width: 190)
     }
 
     // MARK: Log area
 
-    @ViewBuilder private var logArea: some View {
+    private var logArea: some View {
         let visible = session.filteredEntries
-        if visible.isEmpty {
-            emptyState.frame(maxWidth: .infinity, maxHeight: .infinity)
+        // The feed is a self-contained Chrome-style dark console: a fixed dark
+        // surface with forced dark scheme, so the rows, level bands, AND the empty
+        // state read the same in the app's light or dark theme.
+        return Group {
+            if visible.isEmpty {
+                emptyState.frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                scrollingLog(visible)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(JSConsoleTheme.background)
+        .environment(\.colorScheme, .dark)
+    }
+
+    /// Newest at the top in "newest first", the bottom otherwise — LogTailView
+    /// tails the correct edge, pauses when the user scrolls off, and drives the
+    /// ⌘F match into view via `focusID`. LazyVStack + `.scrollPosition` (never
+    /// `defaultScrollAnchor`) keeps the big connect-time replay burst from
+    /// laying out every row up front — the 20–30s stall the old flip trick dodged.
+    @ViewBuilder
+    private func scrollingLog(_ visible: [JSEntry]) -> some View {
+        if session.newestFirst {
+            LogTailView(entries: visible.reversed(), newestEdge: .top,
+                        focusID: session.currentFindID) { jsRow($0) }
         } else {
-            scrollingLog(visible)
+            LogTailView(entries: visible, newestEdge: .bottom,
+                        focusID: session.currentFindID) { jsRow($0) }
         }
     }
 
-    /// Inverted-scroll: the LazyVStack iterates newest-first so it only
-    /// materializes the visible (latest) rows — instant even with thousands of
-    /// logs — and a vertical flip makes them read oldest-top / newest-bottom and
-    /// rest at the bottom (Chrome's layout). Newest-first mode drops the flip, so
-    /// the newest stays on top. This avoids `defaultScrollAnchor`, which lays out
-    /// every row up front (the 20–30s stall).
-    private func scrollingLog(_ visible: [JSEntry]) -> some View {
-        let rows = visible.reversed()
-        let inverted = !session.newestFirst
-        let flip: CGFloat = inverted ? -1 : 1
-        return ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(rows) { entry in
-                        JSEntryRow(entry: entry, session: session, showTimestamp: session.showTimestamps)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 3)
-                            .id(entry.id)
-                            .scaleEffect(x: 1, y: flip, anchor: .center)
-                        Divider().opacity(0.25)
-                    }
-                }
-                .padding(.vertical, 4)
-                .frame(maxWidth: .infinity, alignment: .leading)
+    @ViewBuilder
+    private func jsRow(_ entry: JSEntry) -> some View {
+        let band = levelBand(entry)
+        JSEntryRow(entry: entry, session: session, showTimestamp: session.showTimestamps)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 3)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(band?.fill ?? .clear)
+            .overlay(alignment: .leading) {
+                if let band { Rectangle().fill(band.rule).frame(width: 3) }
             }
-            .scaleEffect(x: 1, y: flip, anchor: .center)
-            .onChange(of: session.currentFindID) { _, id in
-                guard let id else { return }
-                withAnimation(.easeInOut(duration: 0.15)) { proxy.scrollTo(id, anchor: .center) }
-            }
+        Divider().opacity(0.18)
+    }
+
+    /// The Chrome-style row band (fill + left rule) for error and warning rows;
+    /// nil for the levels that sit on the plain console surface.
+    private func levelBand(_ entry: JSEntry) -> (fill: Color, rule: Color)? {
+        switch entry.kind {
+        case let .log(level, _, _): level.consoleBand
+        case .evalError: (JSConsoleTheme.errorBackground, JSConsoleTheme.errorRule)
+        default: nil
         }
     }
 
@@ -895,7 +918,7 @@ private struct JSEntryRow: View {
             if showTimestamp {
                 Text(entry.at, format: .dateTime.hour().minute().second())
                     .font(.caption2.monospacedDigit())
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(JSConsoleTheme.muted)
                     .padding(.top, 1)
             }
         }
@@ -925,15 +948,15 @@ private struct JSEntryRow: View {
     @ViewBuilder private var glyph: some View {
         switch entry.kind {
         case .input:
-            icon("chevron.right", .secondary)
+            icon("chevron.right", JSConsoleTheme.muted)
         case .result:
-            icon("arrow.turn.down.right", .secondary)
+            icon("arrow.turn.down.right", JSConsoleTheme.muted)
         case .evalError:
-            icon("xmark.octagon.fill", .red)
+            icon("xmark.octagon.fill", JSConsoleTheme.errorText)
         case let .log(level, _, _):
-            icon(level.icon, level.color)
+            icon(level.icon, level.consoleIconColor)
         case .notice:
-            icon("info.circle", .tertiary)
+            icon("info.circle", JSConsoleTheme.muted)
         }
     }
 
@@ -948,7 +971,7 @@ private struct JSEntryRow: View {
     @ViewBuilder private var content: some View {
         switch entry.kind {
         case let .input(text):
-            line(text, base: .secondary)
+            line(text, base: JSConsoleTheme.muted)
         case let .result(object):
             JSValueView(object: object, session: session)
         case let .evalError(details):
@@ -956,7 +979,7 @@ private struct JSEntryRow: View {
         case let .log(level, args, stack):
             logContent(level: level, args: args, stack: stack)
         case let .notice(text):
-            line(text, base: .secondary)
+            line(text, base: JSConsoleTheme.muted)
         }
     }
 
@@ -972,7 +995,7 @@ private struct JSEntryRow: View {
             // Errors/warnings keep their level tint as a signal; normal logs get
             // VSCode-style per-type syntax colors.
             if level == .error || level == .warning {
-                line(args.map(\.inlineSummary).joined(separator: " "), base: level.color)
+                line(args.map(\.inlineSummary).joined(separator: " "), base: level.consoleTextColor)
             } else {
                 coloredTokenText(argTokens(args), query: query, current: isCurrentFind)
                     .font(.system(.callout, design: .monospaced))
@@ -999,7 +1022,7 @@ private struct JSEntryRow: View {
 
     private func errorContent(_ details: ExceptionDetails) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            line(details.message, base: .red)
+            line(details.message, base: JSConsoleTheme.errorText)
             if let stack = details.stackTrace { StackView(stack: stack) }
         }
     }
@@ -1109,7 +1132,7 @@ private struct StackView: View {
             ForEach(stack.callFrames.prefix(8)) { frame in
                 Text(frame.display)
                     .font(.caption2.monospaced())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(JSConsoleTheme.muted)
             }
         }
         .padding(.leading, 4)
@@ -1247,21 +1270,10 @@ func copyToPasteboard(_ string: String) {
     NSPasteboard.general.setString(string, forType: .string)
 }
 
-/// VSCode/Chrome-style colors per token kind. Mid-tones chosen to read on both
-/// light and dark backgrounds.
+/// Value/token colors — the Chrome dark-console palette (see `JSConsoleTheme`),
+/// since the feed renders on a fixed dark surface.
 func jsColor(_ kind: JSTokenKind) -> Color {
-    switch kind {
-    case .string: Color(red: 0.76, green: 0.30, blue: 0.27)
-    case .number: Color(red: 0.16, green: 0.44, blue: 0.84)
-    case .boolean: Color(red: 0.50, green: 0.30, blue: 0.78)
-    case .null, .undefined: .secondary
-    case .function: Color(red: 0.62, green: 0.40, blue: 0.0)
-    case .symbol: Color(red: 0.0, green: 0.50, blue: 0.45)
-    case .key: Color(red: 0.55, green: 0.18, blue: 0.55)
-    case .className: Color(red: 0.0, green: 0.50, blue: 0.45)
-    case .punctuation: .secondary
-    case .plain: .primary
-    }
+    JSConsoleTheme.token(kind)
 }
 
 /// Syntax-colored `Text` for a value's tokens, with find matches highlighted.
@@ -1301,7 +1313,7 @@ func applyFindHighlight(_ attr: inout AttributedString, query: String, current: 
     for (low, high) in offsets {
         let lower = attr.index(attr.startIndex, offsetByCharacters: low)
         let upper = attr.index(attr.startIndex, offsetByCharacters: high)
-        attr[lower ..< upper].backgroundColor = current ? .orange : .yellow
+        attr[lower ..< upper].backgroundColor = current ? JSConsoleTheme.findCurrent : JSConsoleTheme.findMatch
         attr[lower ..< upper].foregroundColor = .black
     }
 }
