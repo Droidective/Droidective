@@ -177,6 +177,13 @@ struct SidebarPaletteView: View {
                             FeatureRowView(feature: feature, shortcutIndex: shortcutRank[feature.id])
                         }
                     }
+                } else if state.searchText.isEmpty {
+                    // No pins yet: keep the header with a one-line hint so the
+                    // pin gesture is discoverable before the user ever hovers.
+                    // Vanishes the moment they pin anything.
+                    Section("Pinned") {
+                        pinnedHint
+                    }
                 }
 
                 let rest = visible.filter { !state.layout.favorites.contains($0.id) }
@@ -331,6 +338,21 @@ struct SidebarPaletteView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
+    }
+
+    /// Placeholder row under an empty Pinned header — teaches the pin gesture.
+    private var pinnedHint: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "pin")
+                .font(.caption)
+                .foregroundStyle(.textMuted)
+            Text("Hover a tool and tap the pin to keep it up here.")
+                .font(.footnote)
+                .foregroundStyle(.textMuted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.vertical, 2)
+        .listRowBackground(Color.clear)
     }
 
     /// ⌘1–⌘9/⌘0 hints: id → 0-based rank while ⌘ is held in the key window
@@ -580,6 +602,7 @@ struct FeatureRowView: View {
     /// to reorder it. nil otherwise, which is how the drag stays gated.
     var dragProvider: (() -> NSItemProvider)?
     @State private var showingHotkey = false
+    @State private var hovering = false
 
     private static let jiggleTilt = 1.3
 
@@ -610,10 +633,31 @@ struct FeatureRowView: View {
         state.openFeature(feature)
     }
 
+    /// Pin affordance: a filled accent pin on already-pinned rows (so the
+    /// Pinned section is self-explanatory and one click un-pins), and an
+    /// outline pin that appears on hover for the rest — the discoverable path
+    /// that makes pinning obvious without the right-click menu. Hidden for hub
+    /// members (pinned via their hub) and while reordering (no tap contest).
+    @ViewBuilder private var pinControl: some View {
+        if !feature.isAbsorbedByHub, !reordering, isPinned || hovering {
+            Button {
+                state.toggleFavorite(feature.id)
+            } label: {
+                Image(systemName: isPinned ? "pin.fill" : "pin")
+                    .font(.caption)
+                    .foregroundStyle(isPinned ? AnyShapeStyle(.brandAccent) : AnyShapeStyle(.textMuted))
+                    .frame(width: 18, height: 18)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(isPinned ? "Unpin" : "Pin to the top")
+        }
+    }
+
     /// Trailing edge of a row: a live switch for toggle features (flip the
-    /// override without opening a screen) or the ⌘<n> jump hint. Pinning and
-    /// reordering moved off the row — pin lives on the right-click menu (and ⌘P
-    /// in the palette), reordering is the sidebar's reorder mode.
+    /// override without opening a screen) or the ⌘<n> jump hint. Reordering is
+    /// the sidebar's reorder mode; pinning is the hover pin (and the right-click
+    /// menu / ⌘P).
     @ViewBuilder private var trailingControl: some View {
         if feature.kind == .toggleAction {
             OverrideToggleControl(feature: feature) { _ in EmptyView() }
@@ -691,11 +735,13 @@ struct FeatureRowView: View {
             .contentShape(Rectangle())
             .onTapGesture { if !reordering { activate() } }
 
+            pinControl
             trailingControl
         }
         .opacity(dimmed ? 0.75 : 1)
         .listRowBackground(rowBackground)
         .padding(.vertical, 2)
+        .onHover { hovering = $0 }
         .contextMenu {
             // Hub members live in their hub, so pinning/enabling them as
             // standalone rows doesn't apply — only the hotkey does.
