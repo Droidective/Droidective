@@ -620,6 +620,21 @@ public enum FeatureRegistry {
     public static func featureIDs(for role: UserRole) -> [String] {
         (featuresByRole[role] ?? []).filter { byID[$0] != nil }
     }
+
+    /// The grouped-sidebar category order implied by a role: each category in
+    /// the order its first curated feature appears. `seedRole` applies this so
+    /// the sections follow the same workflow order as the features within them,
+    /// instead of the fixed `FeatureCategory.displayOrder`. Categories with no
+    /// curated feature are omitted (they fall back to display order after).
+    public static func categoryOrder(for role: UserRole) -> [String] {
+        var seen = Set<String>()
+        var order: [String] = []
+        for id in featureIDs(for: role) {
+            guard let category = byID[id]?.category.rawValue else { continue }
+            if seen.insert(category).inserted { order.append(category) }
+        }
+        return order
+    }
 }
 
 public extension FeatureDef {

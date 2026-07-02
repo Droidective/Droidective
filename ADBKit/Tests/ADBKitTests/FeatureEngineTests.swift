@@ -450,6 +450,20 @@ import Testing
         #expect(mustCover.isSubset(of: covered), "uncovered catalog features: \(mustCover.subtracting(covered))")
     }
 
+    @Test func seedRoleSetsGroupOrderFromTheCuration() {
+        var layout = LayoutState()
+        layout.seedRole(.securityTester)
+        // Security leads with APK Studio (App Management), so that group sorts
+        // ahead of the fixed display order's earlier categories.
+        let order = layout.categoryOrder ?? []
+        #expect(order.first == FeatureCategory.appManagement.rawValue)
+        // Every seeded category is a first-occurrence walk of the feature list.
+        let expected = FeatureRegistry.categoryOrder(for: .securityTester)
+        #expect(order == expected)
+        // No duplicates.
+        #expect(Set(order).count == order.count)
+    }
+
     @Test func seedRoleCuratesEnabledSetAndOrder() {
         var layout = LayoutState()
         layout.seedRole(.qaTester)

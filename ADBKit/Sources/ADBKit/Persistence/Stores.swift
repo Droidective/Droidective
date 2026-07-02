@@ -239,6 +239,7 @@ public struct LayoutState: Codable, Sendable, Equatable {
         roleChosen = true
         enabledIds = ids
         sidebarOrder = ids
+        categoryOrder = FeatureRegistry.categoryOrder(for: role)
         seededRoleIds = ids
         knownIds = FeatureRegistry.all.map(\.id)
         didEnableAll = true
