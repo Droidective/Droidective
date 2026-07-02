@@ -9,9 +9,14 @@ import SwiftUI
 @MainActor
 @Observable
 final class ReactotronSession {
-    static let maxItems = 2000
+    /// Saved store snapshots kept per session — each is a full store copy, so
+    /// the count is capped and the oldest drops first.
+    static let maxSnapshots = 20
 
     fileprivate var items: [RtItem] = []
+    /// Cumulative wire bytes of `items`, maintained alongside it so the byte
+    /// budget doesn't re-sum the buffer on every append.
+    private var itemsBytes = 0
     fileprivate var commands: [RegisteredCommand] = []
     fileprivate var connection: RtConnection = .idle
     fileprivate var connectedApp: String?
@@ -108,7 +113,12 @@ final class ReactotronSession {
     }
 
     private func reset() {
+        // The timeline/store graphs can be huge (gigabytes of nested JSON
+        // payloads); hand them to a background task instead of freeing them
+        // inline, which hangs the main thread for the whole release cascade.
+        Self.discardInBackground((items, snapshots, storeState, subscriptionValues))
         items.removeAll()
+        itemsBytes = 0
         commands.removeAll()
         subscriptionPaths.removeAll()
         subscriptionValues.removeAll()
@@ -253,8 +263,18 @@ final class ReactotronSession {
         }
     }
 
-    func clearTimeline() { items.removeAll() }
-    fileprivate func deleteSnapshot(_ snapshot: Snapshot) { snapshots.removeAll { $0.id == snapshot.id } }
+    func clearTimeline() {
+        let cleared = items
+        items = []
+        itemsBytes = 0
+        Self.discardInBackground(cleared)
+    }
+
+    fileprivate func deleteSnapshot(_ snapshot: Snapshot) {
+        let previous = snapshots
+        snapshots = previous.filter { $0.id != snapshot.id }
+        Self.discardInBackground(previous)
+    }
 
     fileprivate func export(_ itemsToExport: [RtItem]) {
         guard let file = app?.askSaveLocation(
@@ -276,7 +296,7 @@ final class ReactotronSession {
         switch event {
         case .listening:
             if clients.isEmpty { connection = .listening }
-        case let .connected(connectionId, intro):
+        case let .connected(connectionId, intro, frameBytes):
             let parsed = ReactotronEvent(command: intro)
             var name = "App"
             var platform: String?
@@ -288,14 +308,20 @@ final class ReactotronSession {
             clients.append(ClientInfo(id: connectionId, name: name, platform: platform))
             refreshConnectionState()
             if !subscriptionPaths.isEmpty { sendSubscriptions() }
-            append(RtItem(event: parsed, command: intro, connectionId: connectionId, important: false))
-        case let .command(connectionId, command):
+            append(RtItem(
+                event: parsed, command: intro, connectionId: connectionId,
+                important: false, frameBytes: frameBytes
+            ))
+        case let .command(connectionId, command, frameBytes):
             let parsed = ReactotronEvent(command: command)
             switch parsed {
             case .clear:
                 // Scope to the sending client so one app's clear doesn't wipe
                 // another connected app's timeline.
-                items.removeAll { $0.connectionId == connectionId }
+                let previous = items
+                items = previous.filter { $0.connectionId != connectionId }
+                itemsBytes = items.reduce(0) { $0 + $1.frameBytes }
+                Self.discardInBackground(previous)
                 return
             case let .customCommandRegister(id, name, title, description, args):
                 registerCommand(RegisteredCommand(id: id, command: name, title: title, description: description, args: args))
@@ -307,23 +333,23 @@ final class ReactotronSession {
                 }
             case let .stateBackup(snapshotState):
                 if let snapshotState {
-                    storeState = snapshotState
+                    replaceStoreState(snapshotState)
                     awaitingStateTree = false
                     if pendingSnapshot {
-                        snapshots.append(Snapshot(state: snapshotState))
+                        appendSnapshot(Snapshot(state: snapshotState))
                         pendingSnapshot = false
                     }
                 }
                 return
             case let .stateKeysResponse(path, keys):
                 if isWholeStorePath(path), let keys {
-                    storeState = keys
+                    replaceStoreState(keys)
                     awaitingStateTree = false
                 }
                 return
             case let .stateValuesResponse(path, value):
                 if isWholeStorePath(path), let value {
-                    storeState = value
+                    replaceStoreState(value)
                     awaitingStateTree = false
                 }
                 return
@@ -336,7 +362,10 @@ final class ReactotronSession {
             default:
                 break
             }
-            append(RtItem(event: parsed, command: command, connectionId: connectionId, important: command.isImportant))
+            append(RtItem(
+                event: parsed, command: command, connectionId: connectionId,
+                important: command.isImportant, frameBytes: frameBytes
+            ))
         case let .disconnected(connectionId):
             clients.removeAll { $0.id == connectionId }
             if selectedClient == connectionId { selectedClient = nil }
@@ -369,11 +398,44 @@ final class ReactotronSession {
         }
     }
 
+    /// Ring-buffer append bounded by count *and* cumulative frame bytes
+    /// (`ReactotronTimeline`), so a client streaming huge payloads can't grow
+    /// the retained timeline into gigabytes. Trims oldest-first in batches and
+    /// frees the dropped items off the main actor.
     private func append(_ item: RtItem) {
         items.append(item)
-        if items.count > Self.maxItems {
-            items.removeFirst(items.count - Self.maxItems)
-        }
+        itemsBytes += item.frameBytes
+        let drop = ReactotronTimeline.dropCount(
+            sizes: items.lazy.map(\.frameBytes), count: items.count, totalBytes: itemsBytes
+        )
+        guard drop > 0 else { return }
+        let dropped = Array(items[..<drop])
+        items.removeFirst(drop)
+        itemsBytes -= dropped.reduce(0) { $0 + $1.frameBytes }
+        Self.discardInBackground(dropped)
+    }
+
+    /// Replace the browsed store tree, releasing the old graph off the main actor.
+    private func replaceStoreState(_ state: JSONValue) {
+        if let old = storeState { Self.discardInBackground(old) }
+        storeState = state
+    }
+
+    /// Keep at most `maxSnapshots` store snapshots, dropping the oldest.
+    private func appendSnapshot(_ snapshot: Snapshot) {
+        snapshots.append(snapshot)
+        guard snapshots.count > Self.maxSnapshots else { return }
+        let dropped = Array(snapshots[..<(snapshots.count - Self.maxSnapshots)])
+        snapshots.removeFirst(snapshots.count - Self.maxSnapshots)
+        Self.discardInBackground(dropped)
+    }
+
+    /// Free a possibly-huge value graph (nested JSON dictionaries/arrays) off
+    /// the main actor: the detached task holds the last reference, so the
+    /// release cascade — seconds long for a multi-gigabyte timeline — doesn't
+    /// block the UI.
+    private nonisolated static func discardInBackground<T: Sendable>(_ garbage: T) {
+        Task.detached(priority: .utility) { _ = garbage }
     }
 }
 
@@ -830,12 +892,15 @@ private enum RtConnection: Equatable {
 
 // MARK: - Timeline item
 
-private struct RtItem: Identifiable {
+private struct RtItem: Identifiable, Sendable {
     let id = UUID()
     let event: ReactotronEvent
     let command: ReactotronCommand
     let connectionId: Int
     let important: Bool
+    /// Wire size of the frame this item was decoded from — drives the
+    /// timeline's byte budget.
+    let frameBytes: Int
     let receivedAt = Date()
 
     var searchText: String {
@@ -852,7 +917,7 @@ private struct RegisteredCommand: Identifiable {
     let args: [ReactotronCommandArg]
 }
 
-private struct Snapshot: Identifiable {
+private struct Snapshot: Identifiable, Sendable {
     let id = UUID()
     let state: JSONValue
     let takenAt = Date()

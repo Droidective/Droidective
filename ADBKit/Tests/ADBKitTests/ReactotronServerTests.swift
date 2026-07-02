@@ -23,29 +23,31 @@ import Testing
         task.resume()
         defer { task.cancel(with: .goingAway, reason: nil) }
 
-        try await task.send(.string(
+        let introFrame =
             #"{"type":"client.intro","payload":{"name":"SimApp"},"important":false,"date":"d","deltaTime":0}"#
-        ))
+        try await task.send(.string(introFrame))
 
         let connected = try await nextEvent(&iterator)
-        guard case let .connected(_, intro) = connected else {
+        guard case let .connected(_, intro, introBytes) = connected else {
             Issue.record("expected .connected, got \(connected)"); return
         }
         #expect(intro.commandType == .clientIntro)
+        #expect(introBytes == introFrame.utf8.count)
 
         // The server completes the handshake with setClientId + subscriptions.
         let replies = [try await receiveText(task), try await receiveText(task)].joined(separator: " ")
         #expect(replies.contains("setClientId"))
         #expect(replies.contains("state.values.subscribe"))
 
-        try await task.send(.string(
+        let logFrame =
             #"{"type":"log","payload":{"level":"warn","message":"hi"},"important":false,"date":"d","deltaTime":1}"#
-        ))
+        try await task.send(.string(logFrame))
         let command = try await nextEvent(&iterator)
-        guard case let .command(_, decoded) = command else {
+        guard case let .command(_, decoded, logBytes) = command else {
             Issue.record("expected .command, got \(command)"); return
         }
         #expect(decoded.commandType == .log)
+        #expect(logBytes == logFrame.utf8.count)
 
         // Server → client: a broadcast frame reaches the connected client.
         await server.broadcast(type: "custom", payload: .string("ping"))

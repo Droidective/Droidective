@@ -24,11 +24,13 @@ public actor ReactotronServer {
         }
     }
 
-    /// Events surfaced to the UI as the server runs.
+    /// Events surfaced to the UI as the server runs. `frameBytes` is the wire
+    /// size of the frame a command was decoded from, so the timeline can keep
+    /// its retained payloads within a byte budget.
     public enum Event: Sendable {
         case listening(port: UInt16)
-        case connected(connectionId: Int, intro: ReactotronCommand)
-        case command(connectionId: Int, command: ReactotronCommand)
+        case connected(connectionId: Int, intro: ReactotronCommand, frameBytes: Int)
+        case command(connectionId: Int, command: ReactotronCommand, frameBytes: Int)
         case disconnected(connectionId: Int)
         case failed(reason: String, portInUse: Bool)
     }
@@ -83,7 +85,11 @@ public actor ReactotronServer {
         }
         self.listener = listener
 
-        let (stream, continuation) = AsyncStream.makeStream(of: Event.self)
+        // Bounded so a chatty client can't queue an unbounded backlog of
+        // full-payload events while the consumer (the main actor) is busy —
+        // under heavy backpressure the oldest events drop instead.
+        let (stream, continuation) = AsyncStream.makeStream(
+            of: Event.self, bufferingPolicy: .bufferingNewest(512))
         self.continuation = continuation
 
         listener.stateUpdateHandler = { [weak self] state in
@@ -190,17 +196,19 @@ public actor ReactotronServer {
     private func handleFrame(connectionId id: Int, data: Data) {
         guard let command = try? ReactotronCommand.decode(data) else {
             let raw = String(data: data, encoding: .utf8) ?? "<\(data.count) bytes>"
+            let preview = String(raw.prefix(300))
             continuation?.yield(.command(
                 connectionId: id,
-                command: ReactotronCommand(type: "(undecodable)", payload: .string(String(raw.prefix(300))))
+                command: ReactotronCommand(type: "(undecodable)", payload: .string(preview)),
+                frameBytes: preview.utf8.count
             ))
             return
         }
         if command.commandType == .clientIntro {
             completeHandshake(connectionId: id, intro: command)
-            continuation?.yield(.connected(connectionId: id, intro: command))
+            continuation?.yield(.connected(connectionId: id, intro: command, frameBytes: data.count))
         } else {
-            continuation?.yield(.command(connectionId: id, command: command))
+            continuation?.yield(.command(connectionId: id, command: command, frameBytes: data.count))
         }
     }
 
