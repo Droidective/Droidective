@@ -61,6 +61,17 @@ struct JSEntry: Identifiable {
     let id: Int
     let kind: Kind
     let at: Date
+    /// Lowercased plain-text rendering, derived once at creation so the filter
+    /// and ⌘F never re-tokenize the value tree per flush (a Sentry-reported
+    /// main-thread hang during console bursts).
+    let searchableText: String
+
+    init(id: Int, kind: Kind, at: Date) {
+        self.id = id
+        self.kind = kind
+        self.at = at
+        searchableText = jsEntryPlainText(kind).lowercased()
+    }
 }
 
 // MARK: - Session
@@ -77,12 +88,14 @@ final class JSConsoleSession {
     private static let timestampsKey = "jsConsoleShowTimestamps"
     private static let newestFirstKey = "jsConsoleNewestFirst"
 
-    fileprivate var entries: [JSEntry] = []
-    /// The filtered (level + text) feed, kept in sync imperatively so each render
-    /// reads it in O(1) instead of refiltering the whole buffer — the fix for the
-    /// connect-burst render stall. Chronological (oldest first); the view reverses
-    /// it lazily for the inverted scroll.
-    private(set) var filteredEntries: [JSEntry] = []
+    /// The capped feed plus its filtered (level + text) projection, maintained
+    /// incrementally (ADBKit's `FilteredLogBuffer`): a flush filters only the new
+    /// batch against searchable text cached per entry, and a full recompute
+    /// happens only when the filter itself changes — so a console burst costs
+    /// O(batch) per flush, not O(buffer × object size). Chronological (oldest
+    /// first); the view reverses it lazily for the inverted scroll.
+    private var buffer = FilteredLogBuffer<JSEntry>(capacity: JSConsoleSession.maxEntries)
+    var filteredEntries: [JSEntry] { buffer.filtered }
     fileprivate var phase: JSPhase = .searching
     fileprivate var targets: [CDPTarget] = []
     fileprivate var connectedTarget: CDPTarget?
@@ -90,8 +103,8 @@ final class JSConsoleSession {
     /// The Metro dev-server port. It varies per app, so it's user-editable and
     /// persisted; changing it re-discovers on the new port.
     var port: Int { didSet { UserDefaults.standard.set(port, forKey: Self.portKey) } }
-    var searchText = "" { didSet { rebuildFiltered() } }
-    var hiddenLevels: Set<JSLevel> = [] { didSet { rebuildFiltered() } }
+    var searchText = "" { didSet { refilter() } }
+    var hiddenLevels: Set<JSLevel> = [] { didSet { refilter() } }
     var showTimestamps: Bool { didSet { UserDefaults.standard.set(showTimestamps, forKey: Self.timestampsKey) } }
     /// Newest-first puts new logs at the top (anchored there); otherwise the feed
     /// tails at the bottom. Persisted for the JS console only.
@@ -119,7 +132,7 @@ final class JSConsoleSession {
     private var activateGeneration = 0
     private var nextEntryId = 1
     /// Stream events buffered between flushes; never observed (a flush writes the
-    /// observed `entries`/`filteredEntries`), so a replay burst doesn't render.
+    /// observed `buffer`), so a replay burst doesn't render.
     @ObservationIgnored private var pendingEntries: [JSEntry] = []
     @ObservationIgnored private var flushTask: Task<Void, Never>?
     @ObservationIgnored private var welcomeTask: Task<Void, Never>?
@@ -446,25 +459,33 @@ final class JSConsoleSession {
 
     // MARK: Derived feed (cached)
 
-    private func computeFiltered() -> [JSEntry] {
-        let query = searchText.trimmingCharacters(in: .whitespaces).lowercased()
-        return entries.filter { entry in
-            if case let .log(level, _, _) = entry.kind, hiddenLevels.contains(level) { return false }
-            if query.isEmpty { return true }
-            return jsEntryPlainText(entry.kind).lowercased().contains(query)
+    /// The active row filter, or nil when everything passes — the fast path:
+    /// appends then skip per-entry matching entirely.
+    private var activeFilter: ((JSEntry) -> Bool)? {
+        let query = ConsoleQuery(searchText)
+        let hidden = hiddenLevels
+        guard !query.isEmpty || !hidden.isEmpty else { return nil }
+        return { entry in
+            if case let .log(level, _, _) = entry.kind, hidden.contains(level) { return false }
+            return query.matches(entry.searchableText)
         }
     }
 
-    private func rebuildFiltered() {
-        filteredEntries = computeFiltered()
+    /// Full recompute — only for when the filter itself changes (query text,
+    /// level chips) or the feed is cleared; appends go through `appendEntries`.
+    private func refilter() {
+        buffer.refilter(isIncluded: activeFilter)
         rebuildFindMatches()
     }
 
     private func rebuildFindMatches() {
-        let query = findText.trimmingCharacters(in: .whitespaces).lowercased()
-        guard !query.isEmpty else { findMatchIDs = []; return }
-        findMatchIDs = filteredEntries
-            .filter { jsEntryPlainText($0.kind).lowercased().contains(query) }
+        let query = ConsoleQuery(findText)
+        guard !query.isEmpty else {
+            if !findMatchIDs.isEmpty { findMatchIDs = [] }
+            return
+        }
+        findMatchIDs = buffer.filtered
+            .filter { query.matches($0.searchableText) }
             .map(\.id)
     }
 
@@ -507,19 +528,16 @@ final class JSConsoleSession {
     }
 
     private func appendEntries(_ newEntries: [JSEntry]) {
-        entries.append(contentsOf: newEntries)
-        if entries.count > Self.maxEntries {
-            entries.removeFirst(entries.count - Self.maxEntries)
-        }
-        rebuildFiltered()
+        buffer.append(newEntries, isIncluded: activeFilter)
+        rebuildFindMatches()
     }
 
     private func clearFeedEntries() {
         flushTask?.cancel()
         flushTask = nil
         pendingEntries.removeAll(keepingCapacity: true)
-        entries.removeAll()
-        rebuildFiltered()
+        buffer.removeAll()
+        findMatchIDs = []
     }
 
     // MARK: Welcome banner
@@ -1274,8 +1292,9 @@ private struct JSCodeEditor: NSViewRepresentable {
 // MARK: - Rendering helpers
 
 /// Plain-text rendering of one console entry — the single source for the search
-/// filter, find, and copy, so they never drift. `RemoteObject.inlineSummary`
-/// (pure, in ADBKit) does the value rendering.
+/// filter, find (both via `JSEntry.searchableText`, cached at ingest), and copy,
+/// so they never drift. `RemoteObject.inlineSummary` (pure, in ADBKit) does the
+/// value rendering.
 func jsEntryPlainText(_ kind: JSEntry.Kind) -> String {
     switch kind {
     case let .input(text): text
