@@ -553,39 +553,65 @@ public enum FeatureRegistry {
     /// reference hub ids (`react-native`, `simulate`, `connection`, `apps`), not
     /// the members folded into them. Every non-system catalog feature appears in
     /// at least one role (enforced by `FeatureRegistryTests`).
+    // Each list is the curated set *and* its order (seedRole copies it into
+    // sidebarOrder). Every list is workflow-ordered — the role-defining tools
+    // first, shared utilities last — and ends with the always-on `terminal` /
+    // `custom-commands` so the "tools" tail is consistent. Reference a hub
+    // (`react-native`, `simulate`, `connection`, `apps`, `apk-studio`), never
+    // its absorbed members. Test invariants: ids exist, no hub members, and
+    // the union covers every non-system catalog feature.
     public static let featuresByRole: [UserRole: [String]] = [
+        // Daily loop: logs/crashes/perf → device & app install → app internals
+        // (files, memory, current activity) → interaction/capture → infra.
         .androidDeveloper: [
-            "logcat", "crash-catcher", "device-info", "current-activity", "foreground-package",
-            "file-explorer", "sandbox-browser", "apps", "install-app", "apk-studio", "emulators", "connection", "get-ip",
-            "meminfo", "monkey", "scrcpy", "screenshot", "send-text", "custom-commands",
+            "logcat", "crash-catcher", "performance",
+            "device-info", "apps", "install-app", "apk-studio",
+            "file-explorer", "sandbox-browser", "meminfo",
+            "current-activity", "foreground-package",
+            "scrcpy", "screenshot", "send-text", "monkey",
+            "emulators", "connection",
+            "terminal", "custom-commands",
         ],
+        // RN-specific tools first, then the shared debug loop (logs, crash,
+        // perf, network), app management, and device/capture.
         .reactNativeDeveloper: [
-            "react-native", "reactotron", "js-console", "logcat", "crash-catcher", "performance", "network-speed",
-            "apps", "install-app", "apk-studio", "frida-console",
-            "emulators", "connection", "device-info", "scrcpy", "screenshot", "send-text", "custom-commands",
+            "react-native", "reactotron", "js-console",
+            "logcat", "crash-catcher", "performance", "network-speed",
+            "apps", "install-app", "apk-studio",
+            "device-info", "scrcpy", "screenshot", "send-text",
+            "emulators", "connection",
+            "terminal", "custom-commands",
         ],
+        // Capture first (the QA staple), then repro/report, state simulation,
+        // perf/fuzz, app install, and device context.
         .qaTester: [
-            "screenshot", "screen-record", "scrcpy", "video-editor", "bug-report",
-            "crash-catcher", "logcat", "simulate", "performance", "apps",
-            "device-info", "demo-mode", "monkey",
+            "screenshot", "screen-record", "scrcpy", "video-editor",
+            "bug-report", "crash-catcher", "logcat",
+            "simulate", "performance", "monkey",
+            "apps", "install-app", "send-text", "demo-mode",
+            "device-info", "connection",
+            "terminal", "custom-commands",
         ],
+        // Identify the device, get it connected, run health checks, observe,
+        // then collect diagnostics.
         .supportTriage: [
-            "device-info", "connection", "wifi", "get-ip", "network-speed",
-            "root-status", "system-restrictions", "scrcpy", "screenshot", "bug-report", "logcat",
-            "apps", "emulators",
+            "device-info", "connection", "wifi", "network-speed", "get-ip",
+            "root-status", "system-restrictions",
+            "apps", "scrcpy", "screenshot",
+            "bug-report", "logcat", "emulators",
+            "terminal", "custom-commands",
         ],
         // Ordered by the assessment workflow: recon/static analysis, then
         // dynamic instrumentation, then on-device data, then traffic
         // interception, then utilities. `simulate` is here for its HTTP-proxy
-        // member (route the device through Burp/mitmproxy); `terminal` and
-        // `custom-commands` are always-on system features, so a Frida/adb
-        // shell is available without listing them.
+        // member (route the device through Burp/mitmproxy).
         .securityTester: [
             "apk-studio", "apps", "device-info", "root-status",
             "frida-console", "logcat", "crash-catcher",
             "sandbox-browser", "file-explorer",
             "simulate", "connection", "install-app",
             "scrcpy", "screenshot",
+            "terminal", "custom-commands",
         ],
     ]
 
