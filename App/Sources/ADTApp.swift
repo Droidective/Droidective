@@ -14,6 +14,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         InstallInbox.shared.receive(apks)
     }
 
+    /// Delete any decompiled-cache directories the previous quit set aside
+    /// (see `applicationWillTerminate`). The tree walk is slow, so it runs
+    /// detached — never on the main thread's launch path.
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        Task.detached(priority: .utility) {
+            CacheTrash.sweep(around: AppPaths.decompiledCacheDir)
+        }
+    }
+
     /// Block quit when losable work is in flight (an active recording / unsaved
     /// edit) to show the leave prompt; otherwise stop a kept-alive Reactotron
     /// session so we don't orphan the listener or the reverse tunnel. Both defer
@@ -32,12 +41,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// On quit, wipe the decompiled cache. The APK Studio session is in-memory
-    /// (gone with the process) and its decompiled output is regenerable, so it
-    /// shouldn't linger in ~/Library/Caches between runs. Downloaded tools live
-    /// in Application Support and are kept — they're expensive to re-fetch.
+    /// On quit, discard the decompiled cache. The APK Studio session is
+    /// in-memory (gone with the process) and its decompiled output is
+    /// regenerable, so it shouldn't linger in ~/Library/Caches between runs.
+    /// Downloaded tools live in Application Support and are kept — they're
+    /// expensive to re-fetch. Deleting the tree here hung quit for seconds
+    /// (tens of thousands of jadx files, unlinked one by one on the main
+    /// thread — Sentry DROIDECTIVE-MAC-R), so it's a constant-time rename; the
+    /// next launch sweeps the renamed leftovers in the background.
     func applicationWillTerminate(_ notification: Notification) {
-        try? FileManager.default.removeItem(at: AppPaths.decompiledCacheDir)
+        CacheTrash.setAside(AppPaths.decompiledCacheDir)
     }
 }
 

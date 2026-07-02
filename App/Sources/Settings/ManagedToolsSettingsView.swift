@@ -203,9 +203,15 @@ struct ManagedToolsSettingsView: View {
         }
     }
 
+    /// Rename the cache aside (constant time), then delete the renamed tree
+    /// detached — a full decompile tree unlinked on the main actor would hang
+    /// the Settings window for seconds.
     private func clearCache() {
-        try? FileManager.default.removeItem(at: AppPaths.decompiledCacheDir)
+        CacheTrash.setAside(AppPaths.decompiledCacheDir)
         cacheSize = 0
+        Task.detached(priority: .utility) {
+            CacheTrash.sweep(around: AppPaths.decompiledCacheDir)
+        }
     }
 
     /// Total bytes under the decompiled cache. Pure file I/O — call it off the
