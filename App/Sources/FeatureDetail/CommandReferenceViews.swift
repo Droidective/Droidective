@@ -21,8 +21,9 @@ struct CommandCopyButton: View {
             Image(systemName: copied ? "checkmark" : "doc.on.doc")
                 .foregroundStyle(copied ? Color.brandAccent : Color.textMuted)
         }
-        .buttonStyle(.borderless)
-        .controlSize(.small)
+        // Inline beside caption-sized command text — the small token keeps it on
+        // the text baseline instead of inflating the row.
+        .buttonStyle(IconButtonStyle(size: .small))
         .help("Copy command")
     }
 }
@@ -148,8 +149,7 @@ struct FeatureCommandLog: View {
                     } label: {
                         Image(systemName: "arrow.clockwise")
                     }
-                    .buttonStyle(.borderless)
-                    .controlSize(.small)
+                    .buttonStyle(IconButtonStyle())
                     .help("Refresh")
                     if !entries.isEmpty {
                         Button(role: .destructive) {
@@ -157,8 +157,7 @@ struct FeatureCommandLog: View {
                         } label: {
                             Image(systemName: "trash")
                         }
-                        .buttonStyle(.borderless)
-                        .controlSize(.small)
+                        .buttonStyle(IconButtonStyle())
                         .help("Clear this feature's history")
                     }
                 }
@@ -237,10 +236,8 @@ struct FeatureCommandBar: View {
                     } label: {
                         Image(systemName: "trash")
                             .foregroundStyle(.textMuted)
-                            .frame(width: 30, height: 26)
-                            .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(IconButtonStyle())
                     .help("Kill the terminal & minimize")
                 }
 
@@ -250,10 +247,8 @@ struct FeatureCommandBar: View {
                     } label: {
                         Image(systemName: showFeatureNotes ? "info.circle.fill" : "info.circle")
                             .foregroundStyle(showFeatureNotes ? AnyShapeStyle(.brandAccent) : AnyShapeStyle(.textMuted))
-                            .frame(width: 30, height: 26)
-                            .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(IconButtonStyle())
                     .help(showFeatureNotes ? "Hide the how-it-works note" : "Show the how-it-works note")
                 }
 
@@ -261,12 +256,9 @@ struct FeatureCommandBar: View {
                     toggleExpanded()
                 } label: {
                     Image(systemName: state.commandBarExpanded ? "chevron.down" : "chevron.up")
-                        .font(.body.weight(.semibold))
                         .foregroundStyle(.textMuted)
-                        .frame(width: 34, height: 26)
-                        .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(IconButtonStyle())
                 .help(state.commandBarExpanded ? "Minimize command bar (⌘J)" : "Expand command bar (⌘J)")
             }
             .padding(.horizontal, 12)

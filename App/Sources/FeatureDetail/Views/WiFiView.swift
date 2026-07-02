@@ -62,7 +62,7 @@ struct WiFiView: View {
             }
             Spacer()
             Button { Task { await load() } } label: { Image(systemName: "arrow.clockwise") }
-                .buttonStyle(.borderless)
+                .buttonStyle(IconButtonStyle())
                 .help("Refresh")
                 .disabled(busy)
             Toggle("", isOn: Binding(get: { status?.enabled ?? false }, set: { on in Task { await setWifi(on) } }))
@@ -153,10 +153,10 @@ struct WiFiView: View {
                 Button { toggleReveal(net.ssid) } label: {
                     Image(systemName: revealed.contains(net.ssid) ? "eye.slash" : "eye")
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(IconButtonStyle())
                 .help(revealed.contains(net.ssid) ? "Hide" : "Reveal")
                 Button { copy(password) } label: { Image(systemName: "doc.on.doc") }
-                    .buttonStyle(.borderless)
+                    .buttonStyle(IconButtonStyle())
                     .help("Copy password")
             }
         }

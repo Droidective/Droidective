@@ -359,12 +359,10 @@ struct SidebarPaletteView: View {
             groupSidebar.toggle()
         } label: {
             Image(systemName: groupSidebar ? "list.bullet.indent" : "list.bullet")
-                .font(.title3)
                 .foregroundStyle(groupSidebar ? AnyShapeStyle(.brandAccent) : AnyShapeStyle(.textMuted))
-                .frame(width: 30, height: 30)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IconButtonStyle())
         .disabled(reorderMode || isSearching)
         .opacity((reorderMode || isSearching) ? 0.4 : 1)
         .help(isSearching
@@ -384,16 +382,14 @@ struct SidebarPaletteView: View {
             withAnimation(.easeInOut(duration: 0.2)) { reorderMode.toggle() }
         } label: {
             Image(systemName: "arrow.up.arrow.down")
-                .font(.title3)
                 .foregroundStyle(reorderMode ? AnyShapeStyle(.brandAccent) : AnyShapeStyle(.textMuted))
-                .frame(width: 30, height: 30)
                 .background(
                     reorderMode ? AnyShapeStyle(.brandAccent.opacity(0.14)) : AnyShapeStyle(.clear),
                     in: RoundedRectangle(cornerRadius: 7)
                 )
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IconButtonStyle())
         .disabled(isSearching)
         .opacity(isSearching ? 0.4 : 1)
         .help(isSearching

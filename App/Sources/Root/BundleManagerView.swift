@@ -37,14 +37,14 @@ struct BundleManagerView: View {
                         } label: {
                             Image(systemName: "pencil")
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(IconButtonStyle())
                         Button {
                             state.removeBundle(id: bundle.id)
                         } label: {
                             Image(systemName: "trash")
                                 .foregroundStyle(.red)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(IconButtonStyle())
                     }
                 }
                 .frame(minHeight: 120, maxHeight: 200)

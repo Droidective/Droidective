@@ -90,9 +90,10 @@ struct HubField: View {
     }
 }
 
-/// The standard scrollable, centered column that holds a screen's `HubSection`s
-/// — a readable max width so content never sprawls across the pane or strands
-/// in a side gutter.
+/// The standard scrollable column that holds a screen's `HubSection`s. It fills
+/// the pane width so the sections never strand in a side gutter — the earlier
+/// fixed max width left a large empty void whenever a pane was wider than it
+/// (a split pane, or the whole window under ⌘= zoom).
 struct HubColumn<Content: View>: View {
     @ViewBuilder private let content: () -> Content
 
@@ -105,8 +106,7 @@ struct HubColumn<Content: View>: View {
             VStack(alignment: .leading, spacing: 16) {
                 content()
             }
-            .frame(maxWidth: 600, alignment: .leading)
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(20)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

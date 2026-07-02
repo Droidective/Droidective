@@ -19,6 +19,7 @@ struct CommandLogView: View {
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }
+                .buttonStyle(IconButtonStyle())
                 Button(role: .destructive) {
                     Task {
                         await state.env.commandLog.clear()
@@ -27,6 +28,7 @@ struct CommandLogView: View {
                 } label: {
                     Image(systemName: "trash")
                 }
+                .buttonStyle(IconButtonStyle())
                 Button("Close") { dismiss() }
             }
             .padding(12)

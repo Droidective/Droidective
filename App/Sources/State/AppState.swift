@@ -625,7 +625,22 @@ final class AppState {
 
     private func performClose(_ id: String) {
         workspace.close(id)
+        stopBackgroundWork(for: id)
         persistTabs()
+    }
+
+    /// Closing a tab fully stops that feature's background work. Most features
+    /// stop when their view unmounts (their `.task` is cancelled on close), but a
+    /// few sessions are owned here and kept alive across tab *switches* — so
+    /// closing their tab has to tear them down explicitly. A feature is open in at
+    /// most one tab, so once it's closed no other tab still needs it.
+    private func stopBackgroundWork(for id: String) {
+        if id == "reactotron", reactotronSession.isRunning {
+            Task { await reactotronSession.stop() }
+        }
+        if id == "js-console" {
+            Task { await jsConsoleSession.removeReverseTunnels() }
+        }
     }
 
     private func persistTabs() {

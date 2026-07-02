@@ -19,11 +19,9 @@ struct DeviceBarView: View {
                 state.toggleSidebar()
             } label: {
                 Image(systemName: "sidebar.left")
-                    .font(.title3)
-                    .frame(width: 30, height: 24)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(IconButtonStyle())
             .help("Show or hide the sidebar (⌘B)")
 
             Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
@@ -75,7 +73,7 @@ struct DeviceBarView: View {
                         Image(systemName: "arrow.triangle.2.circlepath")
                             .rotationEffect(.degrees(refreshSpin))
                     }
-                    .controlSize(.small)
+                    .buttonStyle(IconButtonStyle())
                     .help("Refresh devices")
 
                     NotificationBell()

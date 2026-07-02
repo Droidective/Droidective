@@ -332,9 +332,12 @@ struct RootView: View {
 
     private func splitLeftWidth(_ totalW: CGFloat) -> CGFloat {
         let dividerW: CGFloat = 8
-        let minPane: CGFloat = 320
-        let available = totalW - dividerW
-        return min(max(available * splitFraction, minPane), max(minPane, available - minPane))
+        let available = max(0, totalW - dividerW)
+        // Never claim more than half the width per pane, so a tight pane area — a
+        // small window, or a high font zoom shrinking the logical width — shrinks
+        // both panes evenly instead of overflowing the right one off-screen.
+        let minPane = min(320, available / 2)
+        return min(max(available * splitFraction, minPane), available - minPane)
     }
 
     private var activeTitle: String {

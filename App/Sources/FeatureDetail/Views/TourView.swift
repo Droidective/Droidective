@@ -85,6 +85,9 @@ struct TourView: View {
             Button("Skip") { finish() }
                 .buttonStyle(.plain)
                 .foregroundStyle(.textMuted)
+                // A quiet, secondary action — suppress the accent-colored
+                // keyboard focus ring so it doesn't read as a primary button.
+                .focusEffectDisabled()
                 .opacity(isLast ? 0 : 1)
 
             Spacer()

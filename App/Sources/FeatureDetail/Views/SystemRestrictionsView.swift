@@ -34,7 +34,7 @@ struct SystemRestrictionsView: View {
                 Button {
                     Task { await refresh() }
                 } label: { Image(systemName: "arrow.clockwise") }
-                    .buttonStyle(.borderless)
+                    .buttonStyle(IconButtonStyle())
                     .help("Refresh")
                     .disabled(refreshBusy)
             }) {
