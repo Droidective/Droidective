@@ -102,9 +102,9 @@ private struct SidebarDrop: DropDelegate {
 
 /// Raycast-style command palette: pinned search field on top of the
 /// categorized feature list. ⌘K focuses search from anywhere; ↑/↓ move the
-/// selection from the field; ⏎ runs instant actions straight away. With the
-/// search field focused, holding ⌘ shows ⌘1–⌘9 badges on the first nine rows
-/// and ⌘<n> jumps to that row.
+/// selection from the field; ⏎ runs instant actions straight away. Holding ⌘
+/// shows ⌘1–⌘9/⌘0 badges on the first ten rows; the shortcuts themselves live
+/// on the app-level Go menu, so they jump to a row from anywhere in the app.
 struct SidebarPaletteView: View {
     @Environment(AppState.self) private var state
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -125,8 +125,6 @@ struct SidebarPaletteView: View {
     /// app-wide, so without this the ⌘1–9 hints appear even when Settings or
     /// another window holds focus.
     @Environment(\.controlActiveState) private var controlActive
-
-    private static let digitKeys: [KeyEquivalent] = ["1", "2", "3", "4", "5", "6", "7", "8", "9"]
 
     var body: some View {
         @Bindable var state = state
@@ -171,14 +169,7 @@ struct SidebarPaletteView: View {
             List {
                 let visible = state.visibleFeatures
                 let pinned = visible.filter { state.layout.favorites.contains($0.id) }
-                // ⌘1–⌘9 hints: id → 0-based rank, only while search is focused
-                // and ⌘ is held. Order matches the rows top-to-bottom.
-                let shortcutRank = (searchFocused && commandHeld && controlActive == .key)
-                    ? Dictionary(
-                        orderedMatches.prefix(9).enumerated().map { ($1.id, $0) },
-                        uniquingKeysWith: { first, _ in first }
-                    )
-                    : [:]
+                let shortcutRank = shortcutRank
 
                 if !pinned.isEmpty {
                     Section("Pinned") {
@@ -193,7 +184,7 @@ struct SidebarPaletteView: View {
                     // Searching: one flat list ranked by relevance (best match
                     // first), so "app" surfaces Apps before Deep Links.
                     Section {
-                        ForEach(ranked(rest)) { feature in
+                        ForEach(state.rankedBySearch(rest)) { feature in
                             FeatureRowView(feature: feature, shortcutIndex: shortcutRank[feature.id])
                         }
                     }
@@ -230,7 +221,7 @@ struct SidebarPaletteView: View {
                 // Disabled features surface only while searching — usable from
                 // here without appearing on the home list.
                 if !state.searchText.isEmpty {
-                    let disabled = ranked(state.disabledMatches)
+                    let disabled = state.rankedBySearch(state.disabledMatches)
                     if !disabled.isEmpty {
                         Section("Disabled") {
                             ForEach(disabled) { feature in
@@ -254,15 +245,16 @@ struct SidebarPaletteView: View {
             bottomBar
         }
         .background(.bgSurface)
-        .background { shortcutButtons }
         .onChange(of: state.focusSearchToken) { searchFocused = true }
         // Keyboard highlight: keep the top result highlighted as the query
         // changes, and drop the highlight when the field loses focus (only the
         // active tab's pill remains).
-        .onChange(of: state.searchText) { state.searchHighlightID = orderedMatches.first?.id }
+        .onChange(of: state.searchText) { state.searchHighlightID = state.orderedSidebarMatches.first?.id }
         .onChange(of: searchFocused) { _, focused in
             if focused {
-                if state.searchHighlightID == nil { state.searchHighlightID = orderedMatches.first?.id }
+                if state.searchHighlightID == nil {
+                    state.searchHighlightID = state.orderedSidebarMatches.first?.id
+                }
             } else {
                 state.searchHighlightID = nil
             }
@@ -273,6 +265,12 @@ struct SidebarPaletteView: View {
                 commandHeld = event.modifierFlags.contains(.command)
                 return event
             }
+        }
+        // The local monitor only sees events while this app is active — ⌘Tab
+        // away eats the ⌘-release and the hints stay painted. Re-read the live
+        // hardware state whenever the window's active state flips.
+        .onChange(of: controlActive) { _, _ in
+            commandHeld = NSEvent.modifierFlags.contains(.command)
         }
         .onDisappear {
             if let flagsMonitor { NSEvent.removeMonitor(flagsMonitor) }
@@ -335,16 +333,15 @@ struct SidebarPaletteView: View {
         .padding(.vertical, 10)
     }
 
-    /// Hidden ⌘1–⌘9 accelerators, active only while the search field is
-    /// focused — each jumps to the matching numbered row.
-    private var shortcutButtons: some View {
-        ForEach(Array(Self.digitKeys.enumerated()), id: \.offset) { index, key in
-            Button("") { activate(index) }
-                .keyboardShortcut(key, modifiers: .command)
-                .frame(width: 0, height: 0)
-                .opacity(0)
-                .disabled(!searchFocused)
-        }
+    /// ⌘1–⌘9/⌘0 hints: id → 0-based rank while ⌘ is held in the key window
+    /// (empty otherwise). Order matches the rows top-to-bottom — the same list
+    /// the app-level Go menu shortcuts index into.
+    private var shortcutRank: [String: Int] {
+        guard commandHeld, controlActive == .key else { return [:] }
+        return Dictionary(
+            state.orderedSidebarMatches.prefix(10).enumerated().map { ($1.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
     }
 
     /// A search query flattens the list to ranked results, so grouping and
@@ -543,46 +540,11 @@ struct SidebarPaletteView: View {
         state.moveFeature(fid, toIndex: toIndex, in: category)
     }
 
-    /// All rows in display order (Pinned → grouped/flat body → Disabled), for
-    /// keyboard navigation, ⏎, and the ⌘1–9 hints.
-    private var orderedMatches: [FeatureDef] {
-        let visible = state.visibleFeatures
-        let pinned = visible.filter { state.layout.favorites.contains($0.id) }
-        let rest = visible.filter { !state.layout.favorites.contains($0.id) }
-        let body: [FeatureDef]
-        if !state.searchText.isEmpty {
-            body = ranked(rest)
-        } else if groupSidebar {
-            body = state.sidebarCategories.flatMap { state.shownFeatures(in: $0) }
-        } else {
-            body = state.orderedEnabledFeatures
-        }
-        let disabled = state.searchText.isEmpty ? [] : ranked(state.disabledMatches)
-        return pinned + body + disabled
-    }
-
-    /// Search results ranked by relevance (best first), registry order as the
-    /// tiebreak. `features` arrive in registry order, so `offset` is stable.
-    private func ranked(_ features: [FeatureDef]) -> [FeatureDef] {
-        let query = state.searchText
-        return features.enumerated().sorted { lhs, rhs in
-            let rl = lhs.element.relevance(for: query)
-            let rr = rhs.element.relevance(for: query)
-            return rl != rr ? rl > rr : lhs.offset < rhs.offset
-        }.map(\.element)
-    }
-
-    private func activate(_ index: Int) {
-        let matches = orderedMatches
-        guard matches.indices.contains(index) else { return }
-        state.requestFeature(matches[index].id)
-        searchFocused = false
-    }
-
     /// ⏎ in the search field: fire the top instant action with no screen, else
     /// open the top match's detail.
     private func runTopMatch() {
-        let target = orderedMatches.first { $0.id == state.searchHighlightID } ?? orderedMatches.first
+        let matches = state.orderedSidebarMatches
+        let target = matches.first { $0.id == state.searchHighlightID } ?? matches.first
         guard let target else { return }
         if target.firesWithoutScreen {
             Task { await state.run(feature: target, params: [:]) }
@@ -596,7 +558,7 @@ struct SidebarPaletteView: View {
     /// per keystroke (that would spawn a tab for every arrow press); ⏎ opens the
     /// highlighted one.
     private func moveSelection(by offset: Int) {
-        let matches = orderedMatches
+        let matches = state.orderedSidebarMatches
         guard !matches.isEmpty else { return }
         let currentIndex = matches.firstIndex { $0.id == state.searchHighlightID }
         let next = ((currentIndex ?? -1) + offset + matches.count) % matches.count
@@ -659,7 +621,8 @@ struct FeatureRowView: View {
                 .controlSize(.mini)
                 .padding(.leading, 6)
         } else if let shortcutIndex {
-            KeyHint("⌘\(shortcutIndex + 1)")
+            // Ranks 0–8 are ⌘1…⌘9; the tenth row is ⌘0.
+            KeyHint(shortcutIndex == 9 ? "⌘0" : "⌘\(shortcutIndex + 1)")
                 .padding(.leading, 6)
         }
     }

@@ -151,6 +151,47 @@ extension AppState {
         return pinned + rest
     }
 
+    /// Every sidebar row in the order it's rendered right now — Pinned, then
+    /// the grouped/flat body (collapsed groups contribute nothing), then the
+    /// Disabled search hits. The single list the ⌘1–⌘9/⌘0 jump shortcuts index
+    /// into, shared by the sidebar's row hints, its keyboard navigation, and
+    /// the app-level Go menu so they can never number rows differently.
+    var orderedSidebarMatches: [FeatureDef] {
+        let visible = visibleFeatures
+        let pinned = visible.filter { layout.favorites.contains($0.id) }
+        let rest = visible.filter { !layout.favorites.contains($0.id) }
+        let grouped = UserDefaults.standard.object(forKey: "groupSidebar") as? Bool ?? true
+        let body: [FeatureDef]
+        if !searchText.isEmpty {
+            body = rankedBySearch(rest)
+        } else if grouped {
+            body = sidebarCategories.flatMap { shownFeatures(in: $0) }
+        } else {
+            body = orderedEnabledFeatures
+        }
+        let disabled = searchText.isEmpty ? [] : rankedBySearch(disabledMatches)
+        return pinned + body + disabled
+    }
+
+    /// Search results ranked by relevance (best first); the incoming registry
+    /// order is the tiebreak, so `offset` keeps ranking stable.
+    func rankedBySearch(_ features: [FeatureDef]) -> [FeatureDef] {
+        let query = searchText
+        return features.enumerated().sorted { lhs, rhs in
+            let rl = lhs.element.relevance(for: query)
+            let rr = rhs.element.relevance(for: query)
+            return rl != rr ? rl > rr : lhs.offset < rhs.offset
+        }.map(\.element)
+    }
+
+    /// Open the n-th sidebar row (0-based) — the action behind the app-wide
+    /// ⌘1…⌘9/⌘0 shortcuts. Out-of-range ranks do nothing.
+    func openSidebarFeature(rank: Int) {
+        let matches = orderedSidebarMatches
+        guard matches.indices.contains(rank) else { return }
+        requestFeature(matches[rank].id)
+    }
+
     // MARK: - Layout (catalog customization)
 
     func setFeatureEnabled(_ featureID: String, enabled: Bool) {

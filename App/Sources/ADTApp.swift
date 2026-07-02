@@ -67,6 +67,9 @@ struct ADTApp: App {
     /// ⌃1…⌃9 accelerators for jumping straight to a tab by position.
     private static let tabDigitKeys: [KeyEquivalent] = ["1", "2", "3", "4", "5", "6", "7", "8", "9"]
 
+    /// ⌘1…⌘9 then ⌘0 — the first ten sidebar rows, app-wide (the Go menu).
+    private static let sidebarDigitKeys: [KeyEquivalent] = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]
+
     /// The sidebar and notifications panel are fixed-width, so opening the
     /// notifications panel on a narrow window would otherwise crush the detail
     /// pane to uselessness (the welcome title wrapping one letter per line).
@@ -85,6 +88,20 @@ struct ADTApp: App {
         // window must be fontScale× wider to give the layout the same logical
         // room — otherwise zooming in (⌘=) crushes the panes.
         return max(760, sidebar + detailMinWidth + notifications) * appState.fontScale
+    }
+
+    /// Menu title for the Go menu's n-th slot — the live feature name so the
+    /// menu doubles as a legend for the ⌘-digit shortcuts.
+    /// Terminal-tab commands act on the visible terminal strip, so they enable
+    /// only while the Terminal feature is the active tab and has a shell open.
+    private var terminalCommandsEnabled: Bool {
+        appState.activeTabID == "terminal" && !appState.terminals.tabs.isEmpty
+    }
+
+    private func sidebarShortcutTitle(_ rank: Int) -> String {
+        let features = appState.orderedSidebarMatches
+        guard features.indices.contains(rank) else { return "Sidebar Item \(rank + 1)" }
+        return "Open \(features[rank].title)"
     }
 
     init() {
@@ -119,6 +136,39 @@ struct ADTApp: App {
         .commands {
             ScreenshotEditCommandsMenu()
 
+            // ⌘N belongs to the Terminal, not "New Window" — a second window of
+            // this single-workspace app was never useful. Replacing .newItem
+            // removes the stock New Window item and its shortcut.
+            CommandGroup(replacing: .newItem) {
+                Button("New Terminal") {
+                    appState.activateMainWindow()
+                    appState.requestFeature("terminal")
+                    appState.terminals.newTab()
+                }
+                .keyboardShortcut("n", modifiers: .command)
+
+                Button("Close Terminal") {
+                    if let id = appState.terminals.activeID { appState.closeTerminalShell(id) }
+                }
+                .keyboardShortcut("w", modifiers: [.command, .shift])
+                .disabled(!terminalCommandsEnabled)
+
+                Button("Rename Terminal…") {
+                    appState.terminals.requestRenameActiveTab()
+                }
+                .keyboardShortcut("r", modifiers: [.command, .shift])
+                .disabled(!terminalCommandsEnabled)
+
+                Divider()
+
+                Button("Next Terminal") { appState.terminals.cycle(by: 1) }
+                    .keyboardShortcut("]", modifiers: [.command, .shift])
+                    .disabled(!terminalCommandsEnabled)
+                Button("Previous Terminal") { appState.terminals.cycle(by: -1) }
+                    .keyboardShortcut("[", modifiers: [.command, .shift])
+                    .disabled(!terminalCommandsEnabled)
+            }
+
             CommandMenu("Tab") {
                 // ⌘T / ⌘K both open the search palette; the chosen feature opens
                 // in a tab (a new one, or refocuses it if already open).
@@ -145,6 +195,18 @@ struct ADTApp: App {
                 ForEach(Array(Self.tabDigitKeys.enumerated()), id: \.offset) { index, key in
                     Button("Show Tab \(index + 1)") { appState.selectTab(index: index) }
                         .keyboardShortcut(key, modifiers: .control)
+                }
+            }
+
+            // ⌘1…⌘9/⌘0 open the first ten sidebar rows from anywhere in the
+            // app — the same numbering the sidebar's ⌘-held badges show.
+            CommandMenu("Go") {
+                ForEach(Array(Self.sidebarDigitKeys.enumerated()), id: \.offset) { rank, key in
+                    Button(sidebarShortcutTitle(rank)) {
+                        appState.activateMainWindow()
+                        appState.openSidebarFeature(rank: rank)
+                    }
+                    .keyboardShortcut(key, modifiers: .command)
                 }
             }
 
@@ -184,11 +246,6 @@ struct ADTApp: App {
                     appState.toggleSidebar()
                 }
                 .keyboardShortcut("b", modifiers: .command)
-
-                Button(appState.commandBarExpanded ? "Minimize Command Bar" : "Expand Command Bar") {
-                    appState.commandBarExpanded.toggle()
-                }
-                .keyboardShortcut("j", modifiers: .command)
             }
 
             CommandGroup(after: .toolbar) {
@@ -202,10 +259,11 @@ struct ADTApp: App {
                 }
                 .keyboardShortcut("-", modifiers: .command)
 
+                // ⇧⌘0 — plain ⌘0 belongs to the Go menu's tenth sidebar row.
                 Button("Actual Size") {
                     appState.resetFontSize()
                 }
-                .keyboardShortcut("0", modifiers: .command)
+                .keyboardShortcut("0", modifiers: [.command, .shift])
             }
         }
 

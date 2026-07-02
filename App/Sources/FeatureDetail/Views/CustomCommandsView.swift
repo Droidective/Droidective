@@ -1,7 +1,8 @@
 import ADBKit
 import SwiftUI
 
-/// Define and run adb macros with {bundleId} and {serial} placeholders.
+/// Define and run command macros with {bundleId} and {serial} placeholders —
+/// adb argument vectors, plain terminal command lines, or script files.
 struct CustomCommandsView: View {
     @Environment(AppState.self) private var state
     @State private var commands: [CustomCommand] = []
@@ -10,6 +11,7 @@ struct CustomCommandsView: View {
     @State private var showPresets = false
     @State private var draftName = ""
     @State private var draftCommand = ""
+    @State private var draftKind: CustomCommandKind = .adb
     @State private var draftNeedsBundle = false
 
     var body: some View {
@@ -17,7 +19,7 @@ struct CustomCommandsView: View {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Custom Commands").font(.headline)
-                    Text("Define adb actions with {bundleId} and {serial} placeholders.")
+                    Text("Define adb actions, terminal commands, or script runs with {bundleId} and {serial} placeholders.")
                         .font(.footnote)
                         .foregroundStyle(.textMuted)
                 }
@@ -30,6 +32,7 @@ struct CustomCommandsView: View {
                     editing = nil
                     draftName = ""
                     draftCommand = ""
+                    draftKind = .adb
                     draftNeedsBundle = false
                     showEditor = true
                 } label: {
@@ -51,7 +54,7 @@ struct CustomCommandsView: View {
                     HStack {
                         VStack(alignment: .leading) {
                             Text(command.name)
-                            Text("adb \(command.command)")
+                            Text(command.kind == .adb ? "adb \(command.command)" : "$ \(command.command)")
                                 .font(.system(.footnote, design: .monospaced))
                                 .foregroundStyle(.textMuted)
                         }
@@ -66,6 +69,7 @@ struct CustomCommandsView: View {
                             editing = command
                             draftName = command.name
                             draftCommand = command.command
+                            draftKind = command.kind
                             draftNeedsBundle = command.needsBundle
                             showEditor = true
                         } label: {
@@ -99,9 +103,28 @@ struct CustomCommandsView: View {
             Text(editing == nil ? "New Command" : "Edit Command").font(.headline)
             TextField("Name", text: $draftName)
                 .brandField()
-            TextField("Command (e.g. shell am force-stop {bundleId})", text: $draftCommand)
+            Picker("Runs", selection: $draftKind) {
+                Text("adb").tag(CustomCommandKind.adb)
+                Text("Terminal").tag(CustomCommandKind.shell)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            TextField(draftCommandPrompt, text: $draftCommand)
                 .brandField()
                 .font(.system(.body, design: .monospaced))
+            if draftKind == .shell {
+                HStack(spacing: 8) {
+                    Button {
+                        chooseScript()
+                    } label: {
+                        Label("Choose script…", systemImage: "doc.badge.gearshape")
+                    }
+                    .controlSize(.small)
+                    Text("Runs through your login shell — script files, pipes, and PATH all work.")
+                        .font(.caption)
+                        .foregroundStyle(.textMuted)
+                }
+            }
             SwitchRow("Requires a saved bundle", isOn: $draftNeedsBundle)
             HStack {
                 Spacer()
@@ -119,16 +142,39 @@ struct CustomCommandsView: View {
         .frame(width: 440)
     }
 
+    private var draftCommandPrompt: String {
+        draftKind == .adb
+            ? "Command (e.g. shell am force-stop {bundleId})"
+            : "Command (e.g. ~/scripts/reset.sh {serial})"
+    }
+
+    /// Pick a script file and drop its (quoted) path into the command field,
+    /// keeping anything already typed after it as arguments.
+    private func chooseScript() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.message = "Choose a script or executable to run"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let path = url.path
+        let quoted = path.contains(" ") ? "\"\(path)\"" : path
+        draftCommand = draftCommand.trimmingCharacters(in: .whitespaces).isEmpty
+            ? quoted
+            : "\(quoted) \(draftCommand)"
+    }
+
     private func save() {
         if var command = editing, let index = commands.firstIndex(where: { $0.id == command.id }) {
             command.name = draftName
             command.command = draftCommand
+            command.kind = draftKind
             command.needsBundle = draftNeedsBundle
             commands[index] = command
         } else {
             commands.append(CustomCommand(
                 name: draftName,
                 command: draftCommand,
+                kind: draftKind,
                 needsBundle: draftNeedsBundle,
                 createdAt: Date().timeIntervalSince1970 * 1000
             ))

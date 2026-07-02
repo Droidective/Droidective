@@ -35,20 +35,49 @@ public struct DeepLink: Codable, Sendable, Equatable, Identifiable {
 /// Deep links keyed by saved-bundle id.
 public typealias DeepLinksMap = [String: [DeepLink]]
 
+/// What a custom command runs through.
+public enum CustomCommandKind: String, Codable, Sendable, CaseIterable {
+    /// adb arguments passed straight to the bundled adb — never a shell.
+    case adb
+    /// A Mac command line (or script file path) run through `zsh -lc`.
+    case shell
+}
+
 public struct CustomCommand: Codable, Sendable, Equatable, Identifiable {
     public var id: String
     public var name: String
-    /// adb arguments template; supports {bundleId} and {serial} placeholders.
+    /// Command template; supports {bundleId} and {serial} placeholders. adb
+    /// arguments for `.adb`, a full zsh command line for `.shell`.
     public var command: String
+    public var kind: CustomCommandKind
     public var needsBundle: Bool
     public var createdAt: Double
 
-    public init(id: String = UUID().uuidString, name: String, command: String, needsBundle: Bool, createdAt: Double) {
+    public init(
+        id: String = UUID().uuidString,
+        name: String,
+        command: String,
+        kind: CustomCommandKind = .adb,
+        needsBundle: Bool,
+        createdAt: Double
+    ) {
         self.id = id
         self.name = name
         self.command = command
+        self.kind = kind
         self.needsBundle = needsBundle
         self.createdAt = createdAt
+    }
+
+    /// Saves that predate `kind` decode as adb commands.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        command = try container.decode(String.self, forKey: .command)
+        kind = try container.decodeIfPresent(CustomCommandKind.self, forKey: .kind) ?? .adb
+        needsBundle = try container.decode(Bool.self, forKey: .needsBundle)
+        createdAt = try container.decode(Double.self, forKey: .createdAt)
     }
 }
 

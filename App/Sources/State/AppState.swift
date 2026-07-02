@@ -113,10 +113,8 @@ final class AppState {
     var unreadNotifications = 0
     var isRunningFeature = false
 
-    // Layout toggles: ⌘B (sidebar) and ⌘J (minimize/maximize the command bar).
+    // Layout toggle: ⌘B (sidebar).
     var sidebarVisible = true
-    var commandBarExpanded = false
-    var commandBarTab: CommandBarTab = .recent
     /// Drives the first-launch / replayable welcome tour sheet.
     var presentTour = false
     /// Drives the first-launch role picker (a full-window takeover) and the
@@ -135,10 +133,6 @@ final class AppState {
     /// A navigation deferred until the user resolves the relevant `exitGuards`
     /// entry (close a guarded tab, switch device, or quit with work in flight).
     private(set) var pendingExit: PendingExit?
-    /// The command bar's Terminal tab — a real PTY-backed shell, shared
-    /// app-wide so it persists across features.
-    let terminalSession = TerminalSession()
-
     /// The Reactotron server + timeline, owned here (not by the view) so leaving
     /// the feature can keep the connection alive and return to an intact session.
     let reactotronSession: ReactotronSession
@@ -146,6 +140,10 @@ final class AppState {
     /// The JS Console (Hermes CDP) session — owned here so its log buffer and
     /// connection survive leaving the feature, like the Reactotron session.
     let jsConsoleSession: JSConsoleSession
+
+    /// The Terminal feature's shells — owned here so every tab's PTY session
+    /// and scrollback survive leaving the feature.
+    let terminals = TerminalManager()
 
     func toggleSidebar() {
         withAnimation(.easeInOut(duration: 0.18)) { sidebarVisible.toggle() }
@@ -562,22 +560,28 @@ final class AppState {
     /// Open `id`, or refocus it wherever it's already open. Every feature open
     /// (sidebar, palette, menu, hotkeys, Finder) routes through here; a not-yet-
     /// open feature lands in the focused group. Switching is always safe (tabs
-    /// stay mounted), so there's no leave guard — only the `TabState.maxTabs`
-    /// total cap, which surfaces a toast when a new tab can't open.
+    /// stay mounted), so there's no leave guard.
     func requestFeature(_ id: String) {
-        guard workspace.open(id) else {
-            showToast(Toast(
-                message: "You can have up to \(Workspace.maxTabs) tabs open — close one first.",
-                ok: false))
-            return
-        }
+        workspace.open(id)
         persistTabs()
     }
+
+    /// Set when the Terminal feature tab is closed with live shells — the close
+    /// is held until the user confirms losing them (RootView shows the alert).
+    var confirmTerminalClose = false
 
     /// Close a tab (in whichever pane holds it). A tab whose view holds losable
     /// work routes through the leave confirmation first, since closing unmounts
     /// the view (which would destroy that work). Closing any other is immediate.
     func closeTab(_ id: String) {
+        // Closing the Terminal feature kills every shell — confirm first while
+        // any are open. Peeling shells one at a time (⌘W) only lands here once
+        // none remain, so that path stays prompt-free. Not an ExitGuard: those
+        // also hold device switches, which shells don't care about.
+        if id == "terminal", !terminals.tabs.isEmpty {
+            confirmTerminalClose = true
+            return
+        }
         if exitGuards[id] != nil {
             pendingExit = PendingExit(target: .closeTab(id))
         } else {
@@ -585,9 +589,32 @@ final class AppState {
         }
     }
 
+    /// The user confirmed losing the running shells: close the Terminal
+    /// feature tab (which kills them all).
+    func closeAllTerminalsConfirmed() {
+        confirmTerminalClose = false
+        performClose("terminal")
+    }
+
     /// Close the focused pane's active tab (⌘W).
     func closeActiveTab() {
+        // ⌘W inside the Terminal feature peels one shell tab at a time (focus
+        // slides to its neighbor); the feature tab itself closes only once no
+        // shells remain.
+        if workspace.activeTab == "terminal", let shellID = terminals.activeID {
+            closeTerminalShell(shellID)
+            return
+        }
         if let id = workspace.activeTab { closeTab(id) }
+    }
+
+    /// Close one terminal shell tab (killing its process). Closing the last
+    /// shell closes the Terminal feature tab with it — an empty terminal pane
+    /// is a dead end. Every shell-closing path (⌘W, the chip ×, the menu bar)
+    /// routes through here.
+    func closeTerminalShell(_ id: UUID) {
+        terminals.close(id)
+        if terminals.tabs.isEmpty { closeTab("terminal") }
     }
 
     /// Give a pane keyboard focus — its `+` focuses it so a new tab lands there.
@@ -640,6 +667,9 @@ final class AppState {
         }
         if id == "js-console" {
             Task { await jsConsoleSession.removeReverseTunnels() }
+        }
+        if id == "terminal" {
+            terminals.killAll()
         }
     }
 
@@ -959,7 +989,14 @@ final class AppState {
             layout.seedEverything()
         }
         roleChosenThisSession = true
-        // Start the freshly-chosen role on a single Home tab, no split.
+        // Start the freshly-chosen role on a single Home tab, no split. The
+        // reset drops every open tab without routing through performClose, so
+        // stop each one's background work explicitly — otherwise kept-alive
+        // sessions (terminal shells, the Reactotron server) leak with no UI
+        // left to reach them.
+        for id in workspace.groups.flatMap(\.openTabs) {
+            stopBackgroundWork(for: id)
+        }
         workspace.reset()
         persistTabs()
         presentRolePicker = false

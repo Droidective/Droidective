@@ -134,9 +134,12 @@ extension FeatureRegistry {
         "process-death": [
             FeatureCommand("adb shell input keyevent 3", note: "HOME — send the app to the background"),
             FeatureCommand("adb shell am kill <package>", note: "kill the backgrounded process"),
+            FeatureCommand("adb shell pidof <package>", note: "verify the process actually died"),
         ],
         "rn-dev-host": [
-            FeatureCommand("adb reverse tcp:<port> tcp:<port>", note: "tunnel the Metro port back to your Mac"),
+            FeatureCommand("adb reverse tcp:<port> tcp:<port>", note: "localhost — tunnel the Metro port back to your Mac"),
+            FeatureCommand("adb shell setprop metro.host <host>", note: "remote host — emulators and rooted devices only"),
+            FeatureCommand("adb shell input keyevent 82", note: "fallback — set the host by hand in the dev menu"),
         ],
         "reactotron": [
             FeatureCommand(
@@ -349,10 +352,20 @@ extension FeatureRegistry {
         ],
 
         // ── Tool UX (system) ─────────────────────────────────────────────
+        "terminal": [
+            FeatureCommand(
+                "zsh -l",
+                note: "each tab is its own login shell on a real PTY, with ANDROID_SERIAL set to the selected device"
+            ),
+        ],
         "custom-commands": [
             FeatureCommand(
                 "adb <your command>",
                 note: "{bundleId} and {serial} are substituted, then tokenized as argv — never run through a shell"
+            ),
+            FeatureCommand(
+                "zsh -lc <your command or script>",
+                note: "terminal-kind commands run through your login shell, so scripts, pipes, and PATH work"
             ),
         ],
     ]

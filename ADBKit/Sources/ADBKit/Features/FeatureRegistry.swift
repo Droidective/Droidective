@@ -132,7 +132,7 @@ public enum FeatureRegistry {
             id: "process-death", title: "Simulate Process Death",
             subtitle: "Background then kill the app to test restoration",
             keywords: ["process death", "kill", "restore", "state", "background"],
-            category: .reactNative, icon: "xmark.octagon", kind: .instantAction, needsBundle: true
+            category: .reactNative, icon: "xmark.octagon", kind: .instantAction
         ),
         FeatureDef(
             id: "rn-dev-host", title: "Set Dev Server Host",
@@ -488,9 +488,15 @@ public enum FeatureRegistry {
 
         // ── Tool UX (system) ─────────────────────────────────────────────
         FeatureDef(
+            id: "terminal", title: "Terminal",
+            subtitle: "Real shell tabs with the device on ANDROID_SERIAL",
+            keywords: ["terminal", "shell", "zsh", "bash", "console", "command line", "tab"],
+            category: .toolUX, icon: "apple.terminal", kind: .system, needsDevice: false
+        ),
+        FeatureDef(
             id: "custom-commands", title: "Custom Commands",
-            subtitle: "Define your own adb actions with {bundleId}",
-            keywords: ["custom", "command", "palette", "adb", "macro", "shortcut"],
+            subtitle: "Your own adb, terminal, and script actions",
+            keywords: ["custom", "command", "palette", "adb", "macro", "shortcut", "script", "shell", "terminal"],
             category: .toolUX, icon: "terminal", kind: .system, needsDevice: false
         ),
     ]

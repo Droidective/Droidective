@@ -727,14 +727,14 @@ struct JSConsoleView: View {
     private var filterBar: some View {
         @Bindable var session = state.jsConsoleSession
         return HStack(spacing: 8) {
-            levelFilter
-            Spacer(minLength: 8)
             HStack(spacing: 4) {
                 Image(systemName: "line.3.horizontal.decrease.circle").foregroundStyle(.secondary)
                 TextField("Filter", text: $session.searchText)
                     .textFieldStyle(.plain)
-                    .frame(minWidth: 80, maxWidth: 150)
+                    .frame(minWidth: 120, maxWidth: 240)
             }
+            Spacer(minLength: 8)
+            levelFilter
             Button { session.openFind() } label: { Image(systemName: "text.magnifyingglass") }
                 .buttonStyle(IconButtonStyle())
                 .help("Find & highlight in console (⌘F)")
@@ -852,7 +852,7 @@ struct JSConsoleView: View {
         let band = levelBand(entry)
         JSEntryRow(entry: entry, session: session, showTimestamp: session.showTimestamps)
             .padding(.horizontal, 12)
-            .padding(.vertical, 3)
+            .padding(.vertical, 5)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(band?.fill ?? .clear)
             .overlay(alignment: .leading) {
@@ -1025,29 +1025,69 @@ private struct JSEntryRow: View {
     private func line(_ text: String, base: Color) -> some View {
         highlightedText(text, query: query, base: base, current: isCurrentFind)
             .font(.system(.callout, design: .monospaced))
+            .lineSpacing(2)
             .textSelection(.enabled)
             .fixedSize(horizontal: false, vertical: true)
     }
 
     private func logContent(level: JSLevel, args: [RemoteObject], stack: CDPStackTrace?) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            // Errors/warnings keep their level tint as a signal; normal logs get
-            // VSCode-style per-type syntax colors.
-            if level == .error || level == .warning {
-                line(args.map(\.inlineSummary).joined(separator: " "), base: level.consoleTextColor)
-            } else {
-                coloredTokenText(argTokens(args), query: query, current: isCurrentFind)
-                    .font(.system(.callout, design: .monospaced))
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            ForEach(Array(args.enumerated()), id: \.offset) { _, arg in
-                if arg.isExpandable {
+        VStack(alignment: .leading, spacing: 3) {
+            // Each expandable object renders exactly once, as its own disclosure
+            // row in argument order — it used to appear twice (inline in the
+            // message line AND repeated below), which doubled every logged object.
+            // Scalar runs keep the level tint for errors/warnings and VSCode-style
+            // syntax colors otherwise.
+            ForEach(argRows(args)) { row in
+                switch row.kind {
+                case let .scalars(text, tokens):
+                    if level == .error || level == .warning {
+                        line(text, base: level.consoleTextColor)
+                    } else {
+                        coloredTokenText(tokens, query: query, current: isCurrentFind)
+                            .font(.system(.callout, design: .monospaced))
+                            .lineSpacing(2)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                case let .object(arg):
                     JSValueView(object: arg, session: session)
                 }
             }
             if level == .error, let stack { StackView(stack: stack) }
         }
+    }
+
+    /// The visual rows for one log call's arguments: consecutive scalars merge
+    /// into one line; each expandable object becomes its own row.
+    private struct ArgRow: Identifiable {
+        enum Kind {
+            case scalars(String, [JSToken])
+            case object(RemoteObject)
+        }
+
+        let id: Int
+        let kind: Kind
+    }
+
+    private func argRows(_ args: [RemoteObject]) -> [ArgRow] {
+        var rows: [ArgRow] = []
+        var run: [RemoteObject] = []
+        func flushRun() {
+            guard !run.isEmpty else { return }
+            let text = run.map(\.inlineSummary).joined(separator: " ")
+            rows.append(ArgRow(id: rows.count, kind: .scalars(text, argTokens(run))))
+            run = []
+        }
+        for arg in args {
+            if arg.isExpandable {
+                flushRun()
+                rows.append(ArgRow(id: rows.count, kind: .object(arg)))
+            } else {
+                run.append(arg)
+            }
+        }
+        flushRun()
+        return rows
     }
 
     private func argTokens(_ args: [RemoteObject]) -> [JSToken] {
@@ -1082,6 +1122,8 @@ private struct JSValueView: View {
         if object.isExpandable {
             // Custom disclosure (not macOS DisclosureGroup, which right-aligns its
             // content): a chevron header with children indented straight below.
+            // Collapsed previews truncate Chrome-style instead of wrapping the
+            // whole object — expanding is how you read the rest.
             VStack(alignment: .leading, spacing: 2) {
                 Button {
                     expanded.toggle()
@@ -1089,15 +1131,18 @@ private struct JSValueView: View {
                 } label: {
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
                         Image(systemName: expanded ? "chevron.down" : "chevron.right")
-                            .font(.system(size: 9, weight: .semibold))
+                            .font(.system(size: 10, weight: .bold))
                             .foregroundStyle(.secondary)
-                            .frame(width: 10)
+                            .frame(width: 14)
                         summaryText
+                            .lineLimit(expanded ? 1 : 2)
+                            .truncationMode(.tail)
                     }
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .contextMenu { copyButtons }
-                if expanded { expandedChildren.padding(.leading, 14) }
+                if expanded { expandedChildren.padding(.leading, 18) }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         } else {
@@ -1130,7 +1175,7 @@ private struct JSValueView: View {
         if loading {
             ProgressView().controlSize(.small)
         } else if let children {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 3) {
                 if children.isEmpty {
                     Text("(no enumerable properties)").font(.caption).foregroundStyle(.tertiary)
                 }

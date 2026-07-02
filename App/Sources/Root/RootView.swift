@@ -144,6 +144,7 @@ struct RootView: View {
             } message: { info in
                 Text(info.message)
             }
+            .modifier(TerminalCloseConfirmation(state: state))
     }
 
     /// Runs once when the root view appears: wires AppState callbacks, applies
@@ -346,15 +347,26 @@ struct RootView: View {
     }
 
     /// The editor area: one pane, or two side by side split by a draggable seam.
+    /// Each pane is clipped at its *fixed-width* frame: a tab whose content
+    /// can't compress (a wide toolbar in a hidden tab, a hub grid) makes the
+    /// pane's inner flexible frames grow past the pane, and clipping any of
+    /// those inner frames is a no-op because their bounds grow with the
+    /// content. Only the fixed frame here has the pane's true bounds — without
+    /// this clip the overflow painted over the sidebar and the other pane.
     private var panesArea: some View {
         GeometryReader { geo in
             let leftW = splitLeftWidth(geo.size.width)
+            let rightW = max(0, geo.size.width - leftW - 8)
             HStack(spacing: 0) {
-                EditorPane(index: 0).frame(width: state.isSplit ? leftW : geo.size.width)
+                EditorPane(index: 0)
+                    .frame(width: state.isSplit ? leftW : geo.size.width, alignment: .topLeading)
+                    .clipped()
                 if state.isSplit {
                     SplitDivider(fraction: $splitFraction, totalWidth: geo.size.width)
                         .frame(width: 8)
-                    EditorPane(index: 1).frame(maxWidth: .infinity)
+                    EditorPane(index: 1)
+                        .frame(width: rightW, alignment: .topLeading)
+                        .clipped()
                 }
             }
             .navigationTitle(activeTitle)
@@ -375,6 +387,32 @@ struct RootView: View {
         guard let id = state.activeTabID else { return "" }
         if id == "catalog" { return "Feature Catalog" }
         return FeatureRegistry.byID[id]?.title ?? ""
+    }
+}
+
+/// Confirms closing the Terminal feature tab while shells are still open —
+/// the close kills every one of them. Its own modifier (not part of RootView's
+/// body expression) to keep that body's type-check time in bounds.
+private struct TerminalCloseConfirmation: ViewModifier {
+    let state: AppState
+
+    func body(content: Content) -> some View {
+        content.alert("Close all terminals?", isPresented: Binding(
+            get: { state.confirmTerminalClose },
+            set: { state.confirmTerminalClose = $0 }
+        )) {
+            Button("Close Terminals", role: .destructive) { state.closeAllTerminalsConfirmed() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(message)
+        }
+    }
+
+    private var message: String {
+        let count = state.terminals.tabs.count
+        return count == 1
+            ? "This ends your running shell session — anything still running in it will be killed."
+            : "This ends \(count) running shell sessions — anything still running in them will be killed."
     }
 }
 

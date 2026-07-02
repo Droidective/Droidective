@@ -34,6 +34,113 @@ import Testing
         #expect(runner.invocations.last?.arguments == ["-s", "S1", "shell", "input", "keyevent", "46", "46"])
     }
 
+    @Test func processDeathKillsTheChosenBundleAndVerifiesDeath() async {
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["-s"], stdout: "")
+        runner.script(argsPrefix: ["-s", "S1", "shell", "pidof"], stdout: "")
+        let engine = await makeEngine(runner)
+
+        let result = await engine.run(
+            featureID: "process-death", serial: "S1", params: ["packageId": .string("com.demo.app")]
+        )
+        #expect(result.ok)
+        let args = runner.invocations.map(\.arguments)
+        #expect(args.contains(["-s", "S1", "shell", "input", "keyevent", "3"]))
+        #expect(args.contains(["-s", "S1", "shell", "am", "kill", "'com.demo.app'"]))
+        #expect(args.last == ["-s", "S1", "shell", "pidof", "'com.demo.app'"])
+    }
+
+    @Test func processDeathFallsBackToTheForegroundApp() async {
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["-s"], stdout: "")
+        runner.script(argsPrefix: ["-s", "S1", "shell", "pidof"], stdout: "")
+        runner.script(
+            argsPrefix: ["-s", "S1", "shell", "dumpsys", "activity"],
+            stdout: "    mResumedActivity: ActivityRecord{123 u0 com.front.app/.MainActivity t42}"
+        )
+        let engine = await makeEngine(runner)
+
+        let result = await engine.run(featureID: "process-death", serial: "S1", params: [:])
+        #expect(result.ok)
+        #expect(result.message.contains("com.front.app"))
+        #expect(runner.invocations.map(\.arguments).contains(["-s", "S1", "shell", "am", "kill", "'com.front.app'"]))
+    }
+
+    @Test func processDeathReportsASurvivingProcess() async {
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["-s"], stdout: "")
+        runner.script(argsPrefix: ["-s", "S1", "shell", "pidof"], stdout: "12345\n")
+        let engine = await makeEngine(runner)
+
+        let result = await engine.run(
+            featureID: "process-death", serial: "S1", params: ["packageId": .string("com.demo.app")]
+        )
+        #expect(!result.ok)
+        #expect(result.message.contains("still running"))
+    }
+
+    @Test func devHostLocalhostReversesThePort() async {
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["-s"], stdout: "")
+        let engine = await makeEngine(runner)
+
+        let result = await engine.run(
+            featureID: "rn-dev-host", serial: "S1", params: ["host": .string("localhost:8088")]
+        )
+        #expect(result.ok)
+        #expect(runner.invocations.last?.arguments == ["-s", "S1", "reverse", "tcp:8088", "tcp:8088"])
+    }
+
+    @Test func devHostBarePortMeansLocalhost() async {
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["-s"], stdout: "")
+        let engine = await makeEngine(runner)
+
+        let result = await engine.run(featureID: "rn-dev-host", serial: "S1", params: ["host": .string("8081")])
+        #expect(result.ok)
+        #expect(runner.invocations.last?.arguments == ["-s", "S1", "reverse", "tcp:8081", "tcp:8081"])
+    }
+
+    @Test func devHostRemoteSetsMetroHostWhenTheDeviceAllowsIt() async {
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["-s"], stdout: "")
+        runner.script(argsPrefix: ["-s", "S1", "shell", "getprop"], stdout: "192.168.1.99\n")
+        let engine = await makeEngine(runner)
+
+        let result = await engine.run(
+            featureID: "rn-dev-host", serial: "S1", params: ["host": .string("192.168.1.99:8081")]
+        )
+        #expect(result.ok)
+        #expect(result.message.contains("metro.host=192.168.1.99"))
+        let args = runner.invocations.map(\.arguments)
+        #expect(args.contains(["-s", "S1", "shell", "setprop", "metro.host", "'192.168.1.99'"]))
+    }
+
+    @Test func devHostRemoteFallsBackToTheDevMenuWhenSetpropIsBlocked() async {
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["-s"], stdout: "")
+        runner.script(argsPrefix: ["-s", "S1", "shell", "getprop"], stdout: "")
+        let engine = await makeEngine(runner)
+
+        let result = await engine.run(
+            featureID: "rn-dev-host", serial: "S1", params: ["host": .string("192.168.1.99:8081")]
+        )
+        #expect(!result.ok)
+        #expect(result.message.contains("Change Bundle Location"))
+        #expect(runner.invocations.last?.arguments == ["-s", "S1", "shell", "input", "keyevent", "82"])
+    }
+
+    @Test func devHostRejectsAnInvalidPort() async {
+        let runner = MockProcessRunner()
+        let engine = await makeEngine(runner)
+
+        let result = await engine.run(
+            featureID: "rn-dev-host", serial: "S1", params: ["host": .string("192.168.1.99:http")]
+        )
+        #expect(!result.ok)
+        #expect(runner.invocations.isEmpty)
+    }
+
     @Test func reversePortValidatesAndRuns() async {
         let runner = MockProcessRunner()
         runner.script(argsPrefix: ["-s"], stdout: "")
@@ -175,9 +282,9 @@ import Testing
 }
 
 @Suite struct FeatureRegistryTests {
-    @Test func hasAll54Features() {
-        #expect(FeatureRegistry.all.count == 54)
-        #expect(FeatureRegistry.byID.count == 54)
+    @Test func hasAll55Features() {
+        #expect(FeatureRegistry.all.count == 55)
+        #expect(FeatureRegistry.byID.count == 55)
     }
 
     @Test func runAllIsTheCuratedFanOutSet() {
@@ -257,7 +364,7 @@ import Testing
             for command in FeatureRegistry.commands(for: feature.id) {
                 let leadsWithTool = [
                     "adb ", "scrcpy ", "emulator ", "ffmpeg ", "aapt2 ", "apksigner ",
-                    "zipalign ", "jadx ", "apktool ", "keytool ", "frida ", "frida-ps ",
+                    "zipalign ", "jadx ", "apktool ", "keytool ", "frida ", "frida-ps ", "zsh ",
                 ].contains {
                     command.command.hasPrefix($0)
                 }

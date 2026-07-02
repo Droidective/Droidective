@@ -12,34 +12,29 @@ import Testing
         )
     }
 
-    // MARK: - open / focus-or-create + cap
+    // MARK: - open / focus-or-create
 
     @Test func opensNewTabsInTheFocusedPane() {
         var ws = Workspace(fallback: "home")
-        let ok = ws.open("logcat")
-        #expect(ok)
+        ws.open("logcat")
         #expect(ws.openTabs(inGroup: 0) == ["home", "logcat"])
         #expect(ws.activeTab == "logcat")
     }
 
     @Test func openingATabInTheOtherPaneFocusesThatPane() {
         var ws = make([["home", "logcat"], ["performance"]], focused: 0)
-        let ok = ws.open("performance") // lives in pane 1
-        #expect(ok)
+        ws.open("performance") // lives in pane 1
         #expect(ws.focusedGroup == 1)
         #expect(ws.activeTab == "performance")
     }
 
-    @Test func openRefusesANewTabAtTheTotalCapButStillRefocuses() {
+    @Test func openHasNoTotalTabCap() {
         let first = (0..<6).map { "a\($0)" }
-        let second = (0..<4).map { "b\($0)" } // 6 + 4 = 10 total (the cap)
+        let second = (0..<4).map { "b\($0)" }
         var ws = make([first, second], focused: 0)
-        #expect(ws.totalTabs == Workspace.maxTabs)
-        let blocked = ws.open("overflow")
-        #expect(blocked == false)
-        #expect(ws.totalTabs == Workspace.maxTabs) // nothing added
-        let refocus = ws.open("b0") // already open → allowed
-        #expect(refocus)
+        for id in (0..<20).map({ "extra\($0)" }) { ws.open(id) }
+        #expect(ws.totalTabs == 30)
+        ws.open("b0") // already open → refocuses its pane
         #expect(ws.focusedGroup == 1)
     }
 
@@ -139,7 +134,7 @@ import Testing
         #expect(ws.openTabs(inGroup: 1) == ["performance"])
     }
 
-    @Test func restoreTrimsToTheTotalCapAndTwoPanes() {
+    @Test func restoreKeepsAllTabsButAtMostTwoPanes() {
         let groups = [
             (0..<8).map { "a\($0)" },
             (0..<8).map { "b\($0)" },
@@ -147,9 +142,8 @@ import Testing
         ]
         let ws = make(groups)
         #expect(ws.groups.count == 2)
-        #expect(ws.totalTabs == Workspace.maxTabs) // 8 + 2, trimmed
         #expect(ws.openTabs(inGroup: 0).count == 8)
-        #expect(ws.openTabs(inGroup: 1).count == 2)
+        #expect(ws.openTabs(inGroup: 1).count == 8) // no total cap
     }
 
     @Test func restoreDropsInvalidIdsAndSeedsFallbackWhenNothingSurvives() {

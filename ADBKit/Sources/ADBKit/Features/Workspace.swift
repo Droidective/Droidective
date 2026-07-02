@@ -3,18 +3,15 @@ import Foundation
 /// The editor-group workspace: one or two panes (`TabState` groups) side by
 /// side, plus which one holds focus. Pure value type kept out of the SwiftUI
 /// layer (like `TabState`/`SidebarOrdering`) so the fiddly multi-group rules —
-/// collapsing an emptied pane, shifting indices, the total-tab cap, global id
-/// uniqueness, keeping a pane focused, and never leaving the workspace empty —
-/// are unit-tested without a UI or a device.
+/// collapsing an emptied pane, shifting indices, global id uniqueness, keeping
+/// a pane focused, and never leaving the workspace empty — are unit-tested
+/// without a UI or a device.
 ///
 /// A feature id is open in at most one group, so moving a tab between panes is a
 /// move, not a copy. `fallback` is the id seeded when the workspace would
 /// otherwise be empty (the app passes "home") — kept as data so this type stays
 /// free of any UI/registry knowledge.
 public struct Workspace: Sendable, Equatable {
-    /// The hard cap on simultaneously open tabs, summed across both panes.
-    public static let maxTabs = TabState.maxTabs
-
     /// The tab seeded when the last tab would close (never leave an empty pane).
     public let fallback: String
     /// The open panes, left to right — always 1 or 2.
@@ -31,8 +28,8 @@ public struct Workspace: Sendable, Equatable {
     }
 
     /// Rebuild from persisted panes, enforcing every invariant: at most two
-    /// panes, `maxTabs` tabs total, ids valid (`isValidID`) and globally unique,
-    /// a non-empty result (seed `fallback`), and an in-range `focusedGroup`.
+    /// panes, ids valid (`isValidID`) and globally unique, a non-empty result
+    /// (seed `fallback`), and an in-range `focusedGroup`.
     public init(
         restoring persisted: [TabGroupState],
         focusedGroup: Int?,
@@ -42,14 +39,10 @@ public struct Workspace: Sendable, Equatable {
         self.fallback = fallback
         var restored: [TabState] = []
         var seen = Set<String>()
-        var budget = Self.maxTabs
         for group in persisted.prefix(2) {
-            guard budget > 0 else { break }
             let valid = group.tabs.filter { isValidID($0) && seen.insert($0).inserted }
-            let kept = Array(valid.prefix(budget))
-            guard !kept.isEmpty else { continue }
-            budget -= kept.count
-            restored.append(TabState(openTabs: kept, activeTab: group.activeTab))
+            guard !valid.isEmpty else { continue }
+            restored.append(TabState(openTabs: valid, activeTab: group.activeTab))
         }
         groups = restored.isEmpty ? [TabState(openTabs: [fallback], activeTab: fallback)] : restored
         self.focusedGroup = min(max(focusedGroup ?? 0, 0), groups.count - 1)
@@ -82,18 +75,14 @@ public struct Workspace: Sendable, Equatable {
     // MARK: - Mutations
 
     /// Open `id`, or refocus it wherever it's already open. A not-yet-open id
-    /// lands in the focused pane. Returns false only when a *new* tab is blocked
-    /// by the total cap (the caller surfaces a hint); refocusing always succeeds.
-    @discardableResult
-    public mutating func open(_ id: String) -> Bool {
+    /// lands in the focused pane.
+    public mutating func open(_ id: String) {
         if let group = groupIndex(of: id) {
             focusedGroup = group
             groups[group].open(id)
-            return true
+        } else {
+            groups[focusedGroup].open(id)
         }
-        guard totalTabs < Self.maxTabs else { return false }
-        groups[focusedGroup].open(id)
-        return true
     }
 
     /// Close `id` (in whichever pane holds it). Collapses an emptied second pane;
@@ -111,15 +100,11 @@ public struct Workspace: Sendable, Equatable {
     }
 
     /// Move `id` into pane `dest` (append + activate). Collapses the source pane
-    /// if it empties. Undoes itself if `dest` is unexpectedly full so no tab is
-    /// stranded. No-op for the same pane or an invalid `dest`.
+    /// if it empties. No-op for the same pane or an invalid `dest`.
     public mutating func move(_ id: String, toGroup dest: Int) {
         guard let src = groupIndex(of: id), src != dest, groups.indices.contains(dest) else { return }
         groups[src].close(id)
-        guard groups[dest].open(id) else {
-            groups[src].open(id)
-            return
-        }
+        groups[dest].open(id)
         if groups[src].openTabs.isEmpty { groups.remove(at: src) }
         focusedGroup = groupIndex(of: id) ?? focusedGroup
     }

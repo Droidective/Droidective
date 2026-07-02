@@ -2,15 +2,19 @@ import AppKit
 import SwiftTerm
 import SwiftUI
 
-/// A real embedded shell (PTY-backed, via SwiftTerm), created once and shared
-/// app-wide so the session and scrollback survive switching features and
-/// minimizing the command bar. The login shell is started lazily the first
-/// time the Terminal tab is shown.
+/// One real embedded shell (PTY-backed, via SwiftTerm). The Terminal feature's
+/// manager owns one session per tab, all held on `AppState` so every shell and
+/// its scrollback survive switching features. The login shell is started
+/// lazily the first time the tab is shown.
 @MainActor
 final class TerminalSession {
     private var terminalView: LocalProcessTerminalView?
+    /// Latched by `kill()`. SwiftUI's teardown pass can call `view(serial:)`
+    /// once more on the dying representable — without the latch that silently
+    /// respawned an orphan shell for every closed tab.
+    private var killed = false
 
-    /// The shared terminal view, starting the login shell on first use. The
+    /// The session's terminal view, starting the login shell on first use. The
     /// selected device serial is exported as `ANDROID_SERIAL` so `adb` targets
     /// it without `-s`.
     func view(serial: String?) -> LocalProcessTerminalView {
@@ -18,6 +22,7 @@ final class TerminalSession {
         let view = LocalProcessTerminalView(frame: .zero)
         view.font = Self.terminalFont(size: 12)
         terminalView = view
+        guard !killed else { return view } // dead husk for the unmount pass
 
         var environment = ProcessInfo.processInfo.environment
         environment["TERM"] = "xterm-256color"
@@ -33,10 +38,18 @@ final class TerminalSession {
         return view
     }
 
-    /// Terminate the shell and drop the view so the next `view(serial:)` starts
-    /// a fresh session — used by the command bar's "kill terminal" button.
+    /// Terminate the shell and drop the view — used when a terminal tab closes.
+    /// SwiftTerm's `terminate()` closes the PTY and sends SIGTERM, which an
+    /// interactive zsh *ignores* — follow up with SIGHUP, which it honors.
     func kill() {
-        terminalView?.terminate()
+        killed = true
+        if let terminalView {
+            let pid = terminalView.process.shellPid
+            terminalView.terminate()
+            if pid != 0 {
+                Darwin.kill(pid, SIGHUP)
+            }
+        }
         terminalView = nil
     }
 
@@ -56,11 +69,11 @@ final class TerminalSession {
     }
 }
 
-/// SwiftUI host for the shared terminal. SwiftUI tears down and recreates the
-/// representable when the Terminal tab is hidden/reshown; returning the shared
-/// view directly let SwiftUI reset it, spawning a fresh-looking shell. Instead
-/// we hand SwiftUI a fresh container each time and re-parent the one live
-/// terminal into it, so the PTY session and scrollback truly persist.
+/// SwiftUI host for one terminal session. SwiftUI tears down and recreates the
+/// representable when a tab is hidden/reshown; returning the session's view
+/// directly let SwiftUI reset it, spawning a fresh-looking shell. Instead we
+/// hand SwiftUI a fresh container each time and re-parent the session's one
+/// live terminal into it, so the PTY session and scrollback truly persist.
 struct NativeTerminalView: NSViewRepresentable {
     let session: TerminalSession
     let serial: String?
