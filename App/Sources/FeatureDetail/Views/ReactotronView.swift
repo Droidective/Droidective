@@ -17,6 +17,11 @@ final class ReactotronSession {
     /// Cumulative wire bytes of `items`, maintained alongside it so the byte
     /// budget doesn't re-sum the buffer on every append.
     private var itemsBytes = 0
+    // Anonymous usage stats (numbers only, no payload contents) reported per
+    // session so the timeline caps can be sized against real workloads.
+    private var peakItemsBytes = 0
+    private var peakItemCount = 0
+    private var evictedItemCount = 0
     fileprivate var commands: [RegisteredCommand] = []
     fileprivate var connection: RtConnection = .idle
     fileprivate var connectedApp: String?
@@ -113,6 +118,7 @@ final class ReactotronSession {
     }
 
     private func reset() {
+        flushUsageStats()
         // The timeline/store graphs can be huge (gigabytes of nested JSON
         // payloads); hand them to a background task instead of freeing them
         // inline, which hangs the main thread for the whole release cascade.
@@ -405,10 +411,13 @@ final class ReactotronSession {
     private func append(_ item: RtItem) {
         items.append(item)
         itemsBytes += item.frameBytes
+        peakItemsBytes = max(peakItemsBytes, itemsBytes)
+        peakItemCount = max(peakItemCount, items.count)
         let drop = ReactotronTimeline.dropCount(
             sizes: items.lazy.map(\.frameBytes), count: items.count, totalBytes: itemsBytes
         )
         guard drop > 0 else { return }
+        evictedItemCount += drop
         let dropped = Array(items[..<drop])
         items.removeFirst(drop)
         itemsBytes -= dropped.reduce(0) { $0 + $1.frameBytes }
@@ -428,6 +437,24 @@ final class ReactotronSession {
         let dropped = Array(snapshots[..<(snapshots.count - Self.maxSnapshots)])
         snapshots.removeFirst(snapshots.count - Self.maxSnapshots)
         Self.discardInBackground(dropped)
+    }
+
+    /// Report how full the timeline got this session — peak bytes/items and how
+    /// many items the caps evicted — so `ReactotronTimeline`'s budgets can be
+    /// sized against real workloads. Numbers only; no payload contents.
+    private func flushUsageStats() {
+        if peakItemsBytes > 0 {
+            Telemetry.shared.track("reactotron_timeline_usage", [
+                "peak_bytes": peakItemsBytes,
+                "peak_items": peakItemCount,
+                "evicted_items": evictedItemCount,
+                "max_bytes": ReactotronTimeline.maxTotalBytes,
+                "max_items": ReactotronTimeline.maxItems,
+            ])
+        }
+        peakItemsBytes = 0
+        peakItemCount = 0
+        evictedItemCount = 0
     }
 
     /// Free a possibly-huge value graph (nested JSON dictionaries/arrays) off
