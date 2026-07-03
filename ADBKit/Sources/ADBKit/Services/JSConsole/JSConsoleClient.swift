@@ -39,6 +39,13 @@ public actor JSConsoleClient {
     private var pending: [Int: CheckedContinuation<JSONValue?, Error>] = [:]
     private var earlyResults: [Int: Result<JSONValue?, Error>] = [:]
     private var nextId = 1
+    /// Bumped by every teardown. The receive loop, heartbeat, and in-flight
+    /// sends belong to the generation they started under; a stale one returns
+    /// instead of touching a successor connection's state — without this, the
+    /// old receive loop's close error (its socket is cancelled mid-`receive`
+    /// during a reconnect) tore down the *new* connection and leaked its
+    /// still-open socket, so Metro piled up zombie debugger connections.
+    private var generation = 0
 
     public init() {}
 
@@ -60,24 +67,44 @@ public actor JSConsoleClient {
     /// event stream; it finishes when the connection closes or `disconnect()` is
     /// called. Re-entrant: a previous connection is torn down first. Throws if
     /// the connection can't be established (so the caller can retry), detected
-    /// via `Runtime.enable` — `Log.enable` is best-effort for older peers.
-    public func connect(to url: URL) async throws -> AsyncStream<Event> {
-        teardown(reason: "reconnecting")
+    /// via `Runtime.enable` — `Log.enable` is best-effort for older peers. The
+    /// handshake is bounded by `handshakeTimeout`: a proxy that accepts the
+    /// socket for a dead page never answers `Runtime.enable`, and an unbounded
+    /// wait would wedge the caller's reconnect loop.
+    public func connect(
+        to url: URL,
+        handshakeTimeout: Duration = .seconds(10)
+    ) async throws -> AsyncStream<Event> {
+        teardown(reason: "reconnecting", notify: true)
         let task = URLSession.shared.webSocketTask(with: Self.debuggerRequest(for: url))
         self.task = task
+        let generation = generation
         let (stream, continuation) = AsyncStream.makeStream(of: Event.self)
         self.continuation = continuation
         task.resume()
-        startReceiveLoop()
-        startHeartbeat()
+        startReceiveLoop(generation: generation)
+        startHeartbeat(generation: generation)
+        let watchdog = Task { [weak self] in
+            try? await Task.sleep(for: handshakeTimeout)
+            guard !Task.isCancelled else { return }
+            await self?.handshakeTimedOut(generation: generation)
+        }
+        defer { watchdog.cancel() }
         do {
             _ = try await send(method: "Runtime.enable", params: [:])
         } catch {
-            teardown(reason: "connect failed")
+            if generation == self.generation { teardown(reason: "connect failed", notify: false) }
             throw error
         }
         _ = try? await send(method: "Log.enable", params: [:])
         return stream
+    }
+
+    /// The handshake outlasted its timeout: tear the connection down, which
+    /// also fails the pending `Runtime.enable` and unblocks `connect`.
+    private func handshakeTimedOut(generation: Int) {
+        guard generation == self.generation else { return }
+        teardown(reason: "Timed out waiting for the JS runtime.", notify: false)
     }
 
     public func evaluate(_ expression: String) async throws -> EvalOutcome {
@@ -108,13 +135,14 @@ public actor JSConsoleClient {
     }
 
     public func disconnect() {
-        teardown(reason: "disconnected")
+        teardown(reason: "disconnected", notify: true)
     }
 
     // MARK: - Request / response
 
     private func send(method: String, params: [String: JSONValue]) async throws -> JSONValue? {
         guard let task else { throw ClientError.notConnected }
+        let generation = generation
         let id = nextId
         nextId += 1
         let envelope = CDP.request(id: id, method: method, params: params)
@@ -132,11 +160,12 @@ public actor JSConsoleClient {
         return try await withCheckedThrowingContinuation { continuation in
             if let early = earlyResults.removeValue(forKey: id) {
                 continuation.resume(with: early)
-            } else if self.task != nil {
+            } else if generation == self.generation, self.task != nil {
                 pending[id] = continuation
             } else {
-                // The socket closed during the send await (teardown/handleClosed
-                // already drained `pending`), so nothing would ever resume this.
+                // The connection this request went out on closed (or was
+                // replaced) during the send await — its `pending` map was
+                // drained, so nothing would ever resume this.
                 continuation.resume(throwing: ClientError.notConnected)
             }
         }
@@ -152,20 +181,28 @@ public actor JSConsoleClient {
 
     // MARK: - Receive loop
 
-    private func startReceiveLoop() {
+    private func startReceiveLoop(generation: Int) {
         receiveTask = Task { [weak self] in
-            await self?.receiveLoop()
+            await self?.receiveLoop(generation: generation)
         }
     }
 
-    private func receiveLoop() async {
+    /// Reads until the socket dies. Every touch of actor state is gated on the
+    /// generation: cancelling this loop's socket suspends-then-throws its
+    /// `receive()`, and by the time that error lands a reconnect may already
+    /// own `task`/`continuation` — a stale loop must return, not "close" the
+    /// successor.
+    private func receiveLoop(generation: Int) async {
         while !Task.isCancelled {
-            guard let task else { return }
+            guard generation == self.generation, let task else { return }
             do {
                 let message = try await task.receive()
+                guard generation == self.generation else { return }
                 handle(message)
             } catch {
-                handleClosed("\(error.localizedDescription)")
+                if generation == self.generation {
+                    handleClosed("\(error.localizedDescription)")
+                }
                 return
             }
         }
@@ -212,7 +249,9 @@ public actor JSConsoleClient {
 
     private func handleClosed(_ reason: String) {
         guard continuation != nil else { return }
+        generation += 1
         cancelTasks()
+        task?.cancel(with: .goingAway, reason: nil)
         task = nil
         failPending(ClientError.transport(reason))
         continuation?.yield(.closed(reason: reason))
@@ -225,17 +264,18 @@ public actor JSConsoleClient {
     /// The Metro inspector proxy pings on an interval and drops a peer that
     /// doesn't pong; `URLSessionWebSocketTask` doesn't reliably reply on its own,
     /// so send our own ping under that window to hold the connection open.
-    private func startHeartbeat() {
+    private func startHeartbeat(generation: Int) {
         heartbeatTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(15))
                 if Task.isCancelled { return }
-                await self?.ping()
+                await self?.ping(generation: generation)
             }
         }
     }
 
-    private func ping() {
+    private func ping(generation: Int) {
+        guard generation == self.generation else { return }
         task?.sendPing { _ in }
     }
 
@@ -248,11 +288,17 @@ public actor JSConsoleClient {
         heartbeatTask = nil
     }
 
-    private func teardown(reason: String) {
+    /// Close the current connection. `notify` yields a final `.closed` so a
+    /// still-attached consumer (e.g. when a stray disconnect races a fresh
+    /// connection) learns the stream is over instead of waiting forever on a
+    /// silently-finished feed.
+    private func teardown(reason: String, notify: Bool) {
+        generation += 1
         cancelTasks()
         task?.cancel(with: .goingAway, reason: nil)
         task = nil
         failPending(ClientError.notConnected)
+        if notify { continuation?.yield(.closed(reason: reason)) }
         continuation?.finish()
         continuation = nil
     }

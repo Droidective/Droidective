@@ -401,8 +401,11 @@ final class JSConsoleSession {
         guard (1 ... 65535).contains(newPort), newPort != port else { return }
         // Reset the discovery state synchronously so the running loop (which
         // re-reads `port`) can't apply a stale-port result; the socket close is
-        // async cleanup that the loop already guards against.
+        // async cleanup that the loop already guards against. Bumping the
+        // connect generation also stops a connect that's mid-await against the
+        // old port from committing its target after the switch.
         port = newPort
+        connectGeneration += 1
         consumeTask?.cancel()
         consumeTask = nil
         welcomeTask?.cancel()

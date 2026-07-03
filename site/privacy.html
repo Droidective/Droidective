@@ -68,16 +68,17 @@
       </div>
 
       <h2>The app</h2>
-      <p>Droidective collects two kinds of anonymous data, both <strong>on by default</strong> and switchable off any time in <code>Settings → Privacy</code> (a first-run notice explains this):</p>
+      <p>Droidective collects three kinds of anonymous data, all <strong>on by default</strong> and switchable off any time in <code>Settings → Privacy</code> (a first-run notice explains this):</p>
       <table>
         <tr><th>What</th><th>Tool</th><th>Why</th></tr>
         <tr><td>Crash &amp; error reports</td><td>Sentry</td><td>Find and fix crashes</td></tr>
         <tr><td>Feature-usage events</td><td>PostHog</td><td>See which tools are used so the app improves</td></tr>
+        <tr><td>Performance signals — sustained high CPU or memory in the app itself, with the features open at the time</td><td>Sentry + PostHog</td><td>Find and fix resource hogs</td></tr>
       </table>
       <p><strong>“Anonymous” means it:</strong></p>
       <ul>
         <li>never creates a profile or identifies you — PostHog person profiles are disabled;</li>
-        <li>never sends device serial numbers, package or app IDs, file paths, IP addresses, or the contents of any command — only <em>which</em> tool or feature was used;</li>
+        <li>never sends device serial numbers, package or app IDs, file paths, IP addresses, or the contents of any command — only <em>which</em> tool or feature was used, plus the app’s own CPU/memory numbers when it misbehaves;</li>
         <li>sends no personal information to Sentry (<code>sendDefaultPii</code> is off).</li>
       </ul>
 
