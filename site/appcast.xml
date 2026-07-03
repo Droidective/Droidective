@@ -6,9 +6,9 @@
     <description>Most recent Droidective updates.</description>
     <language>en</language>
     <item>
-      <title>Droidective 2.8.1</title>
-      <sparkle:version>248</sparkle:version>
-      <sparkle:shortVersionString>2.8.1</sparkle:shortVersionString>
+      <title>Droidective 2.8.2</title>
+      <sparkle:version>254</sparkle:version>
+      <sparkle:shortVersionString>2.8.2</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <description><![CDATA[
 <style>
@@ -24,78 +24,34 @@ pre { background: color-mix(in srgb, currentColor 8%, transparent); padding: .6e
 pre code { background: none; padding: 0; }
 a { color: #2f9e44; }
 </style>
-<p>A release that adds a built-in Terminal and shell-kind custom commands, a
-Security / Pentest role with reworked per-role sidebars, and a round of
-performance and stability fixes.</p>
-<h3>New features</h3>
+<p>A patch release that fixes the JS Console's reconnect behavior against Metro
+and adds anonymous app performance monitoring.</p>
+<h3>Fixes</h3>
 <ul>
 <li>
-<strong>Terminal</strong> — real multi-tab login shells (PTY-backed via SwiftTerm) inside
-the app. The device selected when a shell opens is exported as
-<code>ANDROID_SERIAL</code>, so plain adb commands target it without <code>-s</code>. Tabs are
-renameable (double-click, right-click, or ⇧⌘R), ⌘N opens a shell from
-anywhere, ⌘W peels one at a time, ⇧⌘[ / ⇧⌘] cycle, and typing <code>exit</code> closes
-the tab. Sessions and scrollback survive switching features, and closing the
-feature tab — or quitting — with live shells asks first.</li>
-<li>
-<strong>Shell custom commands</strong> — a custom command now runs either as adb
-(tokenized arguments, never a shell) or as a Terminal command line through
-<code>zsh -lc</code>, so plain command lines and script files behave like in Terminal.
-<code>{bundleId}</code> and <code>{serial}</code> substitute in both, a file picker inserts a
-script path, and shell runs are recorded on the command log.</li>
-<li>
-<strong>Security / Pentest role</strong> — a new role with a curated sidebar; the
-per-role feature lists were reworked and sidebar groups follow the role's
-order.</li>
+<strong>JS Console reconnect storm</strong> — a race in the CDP client killed each new
+connection moments after it opened and left the old socket running, so the
+console reconnected every couple of seconds, Metro logged a stream of
+connection-established messages, and leaked debugger connections piled up
+until a JS reload cleared them. Connections are now generation-guarded, every
+close path shuts its socket, and the handshake times out instead of hanging
+on a dead target — the console connects once and stays connected.</li>
+<li>Changing the Metro port can no longer commit a connection that was still in
+flight against the old port.</li>
 </ul>
 <h3>Improvements</h3>
 <ul>
 <li>
-<strong>Sidebar</strong> — ⌘1–⌘0 jump to the first ten rows (with hints and a Go menu),
-and pinning is discoverable: a hover pin on every row and a pinned marker.</li>
-<li>
-<strong>Device Info</strong> — identity header, live memory/storage/battery/app gauges,
-curated property groups, and a searchable getprop dump.</li>
-<li>
-<strong>Device bar</strong> — a single row with the bundle picker next to the device pill.</li>
-<li>The 10-tab workspace cap is gone, and the bottom Recent/Commands bar was
-removed — the how-it-works note toggles from Settings ▸ Appearance and the
-Command Log lives in Settings.</li>
-<li>
-<strong>Performance</strong> — the launch hang from decoding the dock icon on the main
-thread is fixed, the Reactotron timeline is capped by bytes (big payloads
-released off the main thread), JS console search filters incrementally, and
-the decompile cache is deleted off the quit path.</li>
-<li>Log views share a smart-tailing scroller that follows the bottom until you
-scroll up.</li>
-</ul>
-<h3>Fixes</h3>
-<ul>
-<li>
-<strong>Reactotron</strong> — a failed server start (e.g. the port is taken) shows an
-error state with Retry and can actually restart; previously the dead server
-handle stuck.</li>
-<li>
-<strong>React Native</strong> — Process Death backgrounds the app, kills it, and verifies
-with pidof (with a foreground-app fallback); the dev-server host runner
-reverse-tunnels localhost, sets <code>metro.host</code> where the device allows it, and
-rejects <code>http://</code> / IPv6 input instead of misreporting success.</li>
-<li>
-<strong>Tab strip</strong> — the ‹ › arrows derive the first visible tab from measured
-geometry, so the first click after a trackpad scroll works.</li>
-<li>
-<strong>Frida</strong> — architecture detection works on single-ABI devices.</li>
-<li>
-<strong>APK Studio</strong> — the decompile source viewer no longer renders blank when an
-editor push is dropped.</li>
-<li>Role changes stop every open tab's background work (also fixing a Reactotron
-server leak), and a closed shell can't be respawned by a SwiftUI teardown
-pass.</li>
+<strong>Performance self-monitoring</strong> — the app now watches its own CPU and memory
+use and, when something stays over the limit, reports it to the anonymous
+diagnostics along with which features were open — so resource hogs get found
+and fixed. Sends only feature names and resource numbers; opt-out any time in
+Settings → Privacy.</li>
 </ul>
 <p>Installed copies update in place via Sparkle.</p>
 ]]></description>
-      <pubDate>Fri, 03 Jul 2026 04:42:27 +0000</pubDate>
-      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v2.8.1/Droidective-v2.8.1.dmg" sparkle:edSignature="VHPYeKv8X5xo0lcM4SiCZuIVW/w81AJhft5c651JpzkrP+EwVev2Vc1dSCoAYjmIJ+QRKAZM5u0K8wDys1E3DQ==" length="45388274" type="application/octet-stream" />
+      <pubDate>Fri, 03 Jul 2026 10:58:48 +0000</pubDate>
+      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v2.8.2/Droidective-v2.8.2.dmg" sparkle:edSignature="BcAE66yva5o5L6AfBAV/K+PcTk07hOfv57+pbXhPTL7LA13xJB4z0/5e7L/eIiAywsiEoHsbfvdOv3dUCzi4Cg==" length="45982017" type="application/octet-stream" />
     </item>
   </channel>
 </rss>
