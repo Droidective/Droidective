@@ -10,6 +10,7 @@ struct DeepLinksSection: View {
     @State private var showEditor = false
     @State private var draftLabel = ""
     @State private var draftURL = ""
+    @State private var pendingDelete: DeepLink?
 
     var body: some View {
         HubSection("Deep links", subtitle: "Saved per app — launch a URL on the device in one click.") {
@@ -41,6 +42,19 @@ struct DeepLinksSection: View {
         }
         .task(id: state.selectedBundleId) { await loadLinks() }
         .sheet(isPresented: $showEditor) { editor }
+        .confirmationDialog(
+            "Delete “\(pendingDelete?.label ?? "")”?",
+            isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                if let target = pendingDelete { remove(target) }
+                pendingDelete = nil
+            }
+            Button("Cancel", role: .cancel) { pendingDelete = nil }
+        } message: {
+            Text("This can't be undone.")
+        }
     }
 
     private func linkRow(_ link: DeepLink) -> some View {
@@ -68,10 +82,11 @@ struct DeepLinksSection: View {
                 Image(systemName: "pencil")
             }
             .buttonStyle(.borderless)
-            Button { remove(link) } label: {
+            Button { pendingDelete = link } label: {
                 Image(systemName: "trash").foregroundStyle(.red)
             }
             .buttonStyle(.borderless)
+            .accessibilityLabel("Delete \(link.label)")
         }
         .padding(.vertical, 7)
     }

@@ -220,6 +220,7 @@ struct PrivacySettingsView: View {
     @Environment(AppState.self) private var state
     @AppStorage(ScreenCaptureService.captureFolderDefaultsKey) private var captureFolderPath = ""
     @State private var showCommandLog = false
+    @State private var confirmClearLog = false
 
     private var captureFolderDisplay: String {
         captureFolderPath.isEmpty
@@ -271,7 +272,7 @@ struct PrivacySettingsView: View {
                 LabeledContent("Command log") {
                     HStack {
                         Button("View…") { showCommandLog = true }
-                        Button("Clear") { Task { await state.env.commandLog.clear() } }
+                        Button("Clear") { confirmClearLog = true }
                     }
                 }
             }
@@ -279,6 +280,21 @@ struct PrivacySettingsView: View {
         .formStyle(.grouped)
         .sheet(isPresented: $showCommandLog) {
             CommandLogView()
+        }
+        .confirmationDialog(
+            "Clear the command log?",
+            isPresented: $confirmClearLog,
+            titleVisibility: .visible
+        ) {
+            Button("Clear", role: .destructive) {
+                Task {
+                    await state.env.commandLog.clear()
+                    state.showToast(Toast(message: "Command log cleared", ok: true))
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes all recorded commands.")
         }
     }
 }

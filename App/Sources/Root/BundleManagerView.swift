@@ -10,6 +10,7 @@ struct BundleManagerView: View {
     @State private var nickname = ""
     @State private var packageId = ""
     @State private var editingBundle: AppBundle?
+    @State private var pendingDelete: AppBundle?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -39,12 +40,13 @@ struct BundleManagerView: View {
                         }
                         .buttonStyle(IconButtonStyle())
                         Button {
-                            state.removeBundle(id: bundle.id)
+                            pendingDelete = bundle
                         } label: {
                             Image(systemName: "trash")
                                 .foregroundStyle(.red)
                         }
                         .buttonStyle(IconButtonStyle())
+                        .accessibilityLabel("Delete \(bundle.nickname)")
                     }
                 }
                 .frame(minHeight: 120, maxHeight: 200)
@@ -78,6 +80,19 @@ struct BundleManagerView: View {
         }
         .padding(16)
         .frame(width: 440)
+        .confirmationDialog(
+            "Delete “\(pendingDelete?.nickname ?? "")”?",
+            isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                if let target = pendingDelete { state.removeBundle(id: target.id) }
+                pendingDelete = nil
+            }
+            Button("Cancel", role: .cancel) { pendingDelete = nil }
+        } message: {
+            Text("This removes the saved bundle. This can't be undone.")
+        }
     }
 
     private func submit() {

@@ -13,6 +13,7 @@ struct CustomCommandsView: View {
     @State private var draftCommand = ""
     @State private var draftKind: CustomCommandKind = .adb
     @State private var draftNeedsBundle = false
+    @State private var pendingDelete: CustomCommand?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -77,12 +78,12 @@ struct CustomCommandsView: View {
                         }
                         .buttonStyle(.plain)
                         Button {
-                            commands.removeAll { $0.id == command.id }
-                            persist()
+                            pendingDelete = command
                         } label: {
                             Image(systemName: "trash").foregroundStyle(.red)
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel("Delete \(command.name)")
                     }
                     .padding(.vertical, 2)
                 }
@@ -96,6 +97,22 @@ struct CustomCommandsView: View {
         .task { commands = await state.env.stores.customCommands.load() }
         .sheet(isPresented: $showEditor) { editor }
         .sheet(isPresented: $showPresets) { presetLibrary }
+        .confirmationDialog(
+            "Delete “\(pendingDelete?.name ?? "")”?",
+            isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                if let target = pendingDelete {
+                    commands.removeAll { $0.id == target.id }
+                    persist()
+                }
+                pendingDelete = nil
+            }
+            Button("Cancel", role: .cancel) { pendingDelete = nil }
+        } message: {
+            Text("This can't be undone.")
+        }
     }
 
     private var editor: some View {
