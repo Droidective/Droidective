@@ -288,6 +288,14 @@ final class AppState {
     /// async layout load can't overwrite the just-seeded curation.
     private var roleChosenThisSession = false
 
+    /// False until `bootstrap` has loaded the persisted layout. Until then the
+    /// in-memory `layout` is still the default, so persisting it would clobber
+    /// the user's saved layout — `persistLayout` no-ops while this is false.
+    private(set) var didLoadLayout = false
+    /// Feature opens that arrived before the layout finished loading (e.g. an
+    /// APK double-clicked in Finder on cold launch). Replayed after restore.
+    private var pendingFeatureOpens: [String] = []
+
     init(env: AppEnvironment) {
         self.env = env
         let savedStep = UserDefaults.standard.object(forKey: "fontScaleStep") as? Int ?? Self.defaultScaleIndex
@@ -313,19 +321,27 @@ final class AppState {
         let loadedLayout = await env.stores.layout.load()
         // A brand-new user can pick a role — which seeds `layout` — while these
         // async store loads are still in flight; don't clobber that seed.
+        var layoutChanged = false
         if !roleChosenThisSession {
             layout = loadedLayout
-            var layoutChanged = layout.adoptNewDefaults()
+            layoutChanged = layout.adoptNewDefaults()
             layoutChanged = layout.adoptAllEnabled() || layoutChanged
             layoutChanged = layout.adoptNewRoleFeatures() || layoutChanged
-            if layoutChanged {
-                persistLayout()
-            }
             // Reopen the tabs from the last session (idle — recordings/streams
             // don't resume). Falls back to a single Home tab for a new user or a
             // layout written before tabs existed.
             restoreTabs(from: layout)
         }
+        didLoadLayout = true
+        // Replay feature opens that raced the load (e.g. openAPKs from Finder),
+        // then persist for the first time now that `layout` is authoritative.
+        for id in pendingFeatureOpens {
+            workspace.open(id)
+        }
+        if layoutChanged || !pendingFeatureOpens.isEmpty {
+            persistTabs()
+        }
+        pendingFeatureOpens = []
         usageStats = await env.stores.usage.load()
         bundles = await env.stores.bundles.load()
         await refreshToolStatus()
@@ -571,7 +587,13 @@ final class AppState {
     /// stay mounted), so there's no leave guard.
     func requestFeature(_ id: String) {
         workspace.open(id)
-        persistTabs()
+        if didLoadLayout {
+            persistTabs()
+        } else {
+            // The layout hasn't finished loading; record the open so bootstrap
+            // can replay and persist it without a default layout clobbering disk.
+            pendingFeatureOpens.append(id)
+        }
     }
 
     /// What put the "close all terminals?" prompt on screen: closing the
