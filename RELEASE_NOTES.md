@@ -1,3 +1,64 @@
+## Droidective v2.8.1
+
+A release that adds a built-in Terminal and shell-kind custom commands, a
+Security / Pentest role with reworked per-role sidebars, and a round of
+performance and stability fixes.
+
+### New features
+
+- **Terminal** — real multi-tab login shells (PTY-backed via SwiftTerm) inside
+  the app. The device selected when a shell opens is exported as
+  `ANDROID_SERIAL`, so plain adb commands target it without `-s`. Tabs are
+  renameable (double-click, right-click, or ⇧⌘R), ⌘N opens a shell from
+  anywhere, ⌘W peels one at a time, ⇧⌘[ / ⇧⌘] cycle, and typing `exit` closes
+  the tab. Sessions and scrollback survive switching features, and closing the
+  feature tab — or quitting — with live shells asks first.
+- **Shell custom commands** — a custom command now runs either as adb
+  (tokenized arguments, never a shell) or as a Terminal command line through
+  `zsh -lc`, so plain command lines and script files behave like in Terminal.
+  `{bundleId}` and `{serial}` substitute in both, a file picker inserts a
+  script path, and shell runs are recorded on the command log.
+- **Security / Pentest role** — a new role with a curated sidebar; the
+  per-role feature lists were reworked and sidebar groups follow the role's
+  order.
+
+### Improvements
+
+- **Sidebar** — ⌘1–⌘0 jump to the first ten rows (with hints and a Go menu),
+  and pinning is discoverable: a hover pin on every row and a pinned marker.
+- **Device Info** — identity header, live memory/storage/battery/app gauges,
+  curated property groups, and a searchable getprop dump.
+- **Device bar** — a single row with the bundle picker next to the device pill.
+- The 10-tab workspace cap is gone, and the bottom Recent/Commands bar was
+  removed — the how-it-works note toggles from Settings ▸ Appearance and the
+  Command Log lives in Settings.
+- **Performance** — the launch hang from decoding the dock icon on the main
+  thread is fixed, the Reactotron timeline is capped by bytes (big payloads
+  released off the main thread), JS console search filters incrementally, and
+  the decompile cache is deleted off the quit path.
+- Log views share a smart-tailing scroller that follows the bottom until you
+  scroll up.
+
+### Fixes
+
+- **Reactotron** — a failed server start (e.g. the port is taken) shows an
+  error state with Retry and can actually restart; previously the dead server
+  handle stuck.
+- **React Native** — Process Death backgrounds the app, kills it, and verifies
+  with pidof (with a foreground-app fallback); the dev-server host runner
+  reverse-tunnels localhost, sets `metro.host` where the device allows it, and
+  rejects `http://` / IPv6 input instead of misreporting success.
+- **Tab strip** — the ‹ › arrows derive the first visible tab from measured
+  geometry, so the first click after a trackpad scroll works.
+- **Frida** — architecture detection works on single-ABI devices.
+- **APK Studio** — the decompile source viewer no longer renders blank when an
+  editor push is dropped.
+- Role changes stop every open tab's background work (also fixing a Reactotron
+  server leak), and a closed shell can't be respawned by a SwiftUI teardown
+  pass.
+
+Installed copies update in place via Sparkle.
+
 ## Droidective v2.8.0
 
 A feature release that adds a tabbed workspace with split panes and a React
