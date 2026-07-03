@@ -76,13 +76,13 @@ struct LogTailView<Data: RandomAccessCollection, Row: View>: View
             }
             .coordinateSpace(name: "logtail")
             // Let a row scroll its own header into view (e.g. when an object is
-            // expanded). Scroll to the row's leading (newest-side) edge — `.top`
-            // in both layouts, since `.scrollPosition` already treats the newest
-            // side as the anchor and the per-row flip keeps the header there.
+            // expanded). In the flipped newest-at-bottom layout the per-row flip
+            // puts a row's header at its internal *bottom*, so `.bottom` lands it
+            // at the visible top; `.top` does that for the un-flipped layout.
+            // No animation — the caller may re-issue this as rows lay out, and
+            // snapping straight to the settled position avoids visible drift.
             .environment(\.logTailScrollToHeader) { id in
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    proxy.scrollTo(id, anchor: .top)
-                }
+                proxy.scrollTo(id, anchor: newestEdge == .bottom ? .bottom : .top)
             }
             .scrollPosition(id: $leadingID, anchor: .top)   // .top = first row = newest
             .scaleEffect(x: 1, y: flip, anchor: .center)    // identity for .top feeds

@@ -1142,14 +1142,8 @@ private struct JSValueView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Button {
                     expanded.toggle()
-                    if expanded, snapshot == nil, !loading { load() }
-                    if expanded, let id = scrollTargetID {
-                        // Let the expanded rows lay out, then bring the header to
-                        // the top so the object reads from its start, not its end.
-                        Task {
-                            try? await Task.sleep(for: .milliseconds(60))
-                            scrollToHeader(id)
-                        }
+                    if expanded {
+                        if snapshot == nil, !loading { load() } else { scrollHeaderToTop() }
                     }
                 } label: {
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
@@ -1222,6 +1216,22 @@ private struct JSValueView: View {
             snapshot = node
             failed = node == nil
             loading = false
+            if node != nil { scrollHeaderToTop() }
+        }
+    }
+
+    /// Bring the object's header to the top after expanding. The child rows
+    /// aren't lazy, so a big object takes a few frames to lay out; re-issue the
+    /// scroll over a short window so it lands on the settled position, not an
+    /// early estimate (which left the viewport at the object's end).
+    private func scrollHeaderToTop() {
+        guard let id = scrollTargetID else { return }
+        Task {
+            for delay in [30, 120, 260] {
+                try? await Task.sleep(for: .milliseconds(delay))
+                guard expanded else { return }
+                scrollToHeader(id)
+            }
         }
     }
 }
