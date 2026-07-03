@@ -110,9 +110,8 @@ struct ADTApp: App {
         // hot-key registration needs a running event loop, which App.init
         // predates.
         _appState = State(initialValue: AppState(env: AppEnvironment()))
-        // Count this launch so the first-run privacy disclosure can be deferred
-        // (gated in RootView). Telemetry is anonymous and on by default; start
-        // it as early as possible.
+        // Count this launch for the star-nudge threshold (gated in RootView).
+        // Telemetry is anonymous and on by default; start it as early as possible.
         let defaults = UserDefaults.standard
         defaults.set(defaults.integer(forKey: "launchCount") + 1, forKey: "launchCount")
         Telemetry.shared.start()
