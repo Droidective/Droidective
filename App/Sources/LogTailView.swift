@@ -75,6 +75,16 @@ struct LogTailView<Data: RandomAccessCollection, Row: View>: View
                     )
             }
             .coordinateSpace(name: "logtail")
+            // Let a row scroll its own header into view (e.g. when an object is
+            // expanded). The anchor matches the newest edge: in the flipped
+            // newest-at-bottom layout the row's header sits at its content-bottom,
+            // so `.bottom` brings it to the visible top — the inverse of `.top`
+            // for the un-flipped newest-at-top layout.
+            .environment(\.logTailScrollToHeader) { id in
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    proxy.scrollTo(id, anchor: newestEdge == .bottom ? .bottom : .top)
+                }
+            }
             .scrollPosition(id: $leadingID, anchor: .top)   // .top = first row = newest
             .scaleEffect(x: 1, y: flip, anchor: .center)    // identity for .top feeds
             .onAppear { leadingID = newestID }
@@ -153,4 +163,19 @@ struct LogTailView<Data: RandomAccessCollection, Row: View>: View
 private struct TailOffsetKey: PreferenceKey {
     static let defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
+/// A row can call this to scroll its own header into view (e.g. right after
+/// expanding a large object), so growth doesn't leave the viewport at the
+/// object's end. Injected by `LogTailView` with the correct anchor for its
+/// layout; a no-op outside one.
+private struct LogTailScrollKey: EnvironmentKey {
+    static let defaultValue: @MainActor (AnyHashable) -> Void = { _ in }
+}
+
+extension EnvironmentValues {
+    var logTailScrollToHeader: @MainActor (AnyHashable) -> Void {
+        get { self[LogTailScrollKey.self] }
+        set { self[LogTailScrollKey.self] = newValue }
+    }
 }

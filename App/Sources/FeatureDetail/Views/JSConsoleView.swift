@@ -1021,7 +1021,7 @@ private struct JSEntryRow: View {
         case let .input(text):
             line(text, base: JSConsoleTheme.muted)
         case let .result(object):
-            JSValueView(object: object, session: session)
+            JSValueView(object: object, session: session, scrollTargetID: entry.id)
         case let .evalError(details):
             errorContent(details)
         case let .log(level, args, stack):
@@ -1059,7 +1059,7 @@ private struct JSEntryRow: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 case let .object(arg):
-                    JSValueView(object: arg, session: session)
+                    JSValueView(object: arg, session: session, scrollTargetID: entry.id)
                 }
             }
             if level == .error, let stack { StackView(stack: stack) }
@@ -1121,6 +1121,11 @@ private struct JSEntryRow: View {
 private struct JSValueView: View {
     let object: RemoteObject
     let session: JSConsoleSession
+    /// The owning log row's id — set for a top-level object so expanding it
+    /// scrolls that row's header into view instead of leaving the viewport at
+    /// the object's end (the flipped-layout jump).
+    var scrollTargetID: AnyHashable?
+    @Environment(\.logTailScrollToHeader) private var scrollToHeader
     @State private var expanded = false
     @State private var snapshot: SnapNode?
     @State private var failed = false
@@ -1138,6 +1143,14 @@ private struct JSValueView: View {
                 Button {
                     expanded.toggle()
                     if expanded, snapshot == nil, !loading { load() }
+                    if expanded, let id = scrollTargetID {
+                        // Let the expanded rows lay out, then bring the header to
+                        // the top so the object reads from its start, not its end.
+                        Task {
+                            try? await Task.sleep(for: .milliseconds(60))
+                            scrollToHeader(id)
+                        }
+                    }
                 } label: {
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
                         Image(systemName: expanded ? "chevron.down" : "chevron.right")
@@ -1215,18 +1228,13 @@ private struct JSValueView: View {
 
 // MARK: - Snapshot tree (client-side, no getProperties)
 
-/// An expanded object/array: an optional "search in object" field over a
-/// height-bounded, internally-scrolling tree. Bounding the height keeps a big
-/// object from reflowing the whole feed on expand (which, in the flipped
-/// newest-at-bottom layout, left the viewport at the object's end).
+/// An expanded object/array: an optional "search in object" field over the
+/// tree, rendered inline (the feed grows to fit — no nested scroll). The scroll
+/// jump on expand is handled by the owning row scrolling its header into view.
 private struct ExpandedTree: View {
     let node: SnapNode
     let session: JSConsoleSession
     @State private var search = ""
-    @State private var height: CGFloat = 40
-
-    /// Max height before the object scrolls internally instead of growing the feed.
-    private static let maxHeight: CGFloat = 380
 
     /// Only worth an in-object search box once there are enough children.
     private var searchable: Bool {
@@ -1241,21 +1249,9 @@ private struct ExpandedTree: View {
                     .controlSize(.small)
                     .frame(maxWidth: 260)
             }
-            ScrollView(.vertical) {
-                SnapChildrenView(node: node, session: session, query: query)
-                    .background(GeometryReader { geo in
-                        Color.clear.preference(key: TreeHeightKey.self, value: geo.size.height)
-                    })
-            }
-            .frame(height: min(height, Self.maxHeight))
-            .onPreferenceChange(TreeHeightKey.self) { height = max(20, $0) }
+            SnapChildrenView(node: node, session: session, query: query)
         }
     }
-}
-
-private struct TreeHeightKey: PreferenceKey {
-    static let defaultValue: CGFloat = 40
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
 
 /// The ordered child rows of a container `SnapNode` — array items with index
