@@ -82,15 +82,6 @@ import Testing
         if case let .response(id, _, _) = decoded { #expect(id == 1) } else { Issue.record("expected id round-trip") }
     }
 
-    @Test func getPropertiesRequestRequestsOwnProperties() {
-        let params = CDP.getPropertiesParams(objectId: "{\"id\":1}")
-        #expect(params["objectId"]?.stringValue == "{\"id\":1}")
-        #expect(params["ownProperties"]?.boolValue == true)
-        // Must NOT request a preview: Hermes crashes the app's VM generating
-        // previews during getProperties, so expanding an object would kill the app.
-        #expect(params["generatePreview"] == nil)
-    }
-
     // MARK: - Incoming classification
 
     @Test func classifiesResponseAndEvent() {
@@ -185,24 +176,6 @@ import Testing
         #expect(call.args.first?.value?.stringValue == "watch out")
         #expect(call.timestamp == 1_700_000_000_000)
     }
-
-    // MARK: - getProperties
-
-    @Test func parsesOwnPropertiesAndSkipsValuelessAccessors() {
-        let json = #"""
-        {"result":[
-          {"name":"id","value":{"type":"number","value":1,"description":"1"},"isOwn":true,"enumerable":true},
-          {"name":"hidden","get":{"type":"function"},"isOwn":true,"enumerable":true}
-        ]}
-        """#
-        let result = try? JSONDecoder().decode(JSONValue.self, from: Data(json.utf8))
-        let properties = CDPProperty.parse(result)
-        #expect(properties.count == 1)
-        #expect(properties.first?.name == "id")
-        #expect(properties.first?.value?.value?.doubleValue == 1)
-    }
-
-    // MARK: - Stack frames
 
     // MARK: - inlineSummary across all data types (real Hermes shapes)
 

@@ -260,8 +260,10 @@ public actor PerformanceService {
             }
             if let row = memRows.first(where: { $0.name == packageId }) {
                 poll.appPssKb = row.pssKb
-            } else if !includeProcesses,
-                      let appMem = await shell(serial, ["dumpsys", "meminfo", shellQuote(packageId)]) {
+            } else if let appMem = await shell(serial, ["dumpsys", "meminfo", shellQuote(packageId)]) {
+                // No matching row in the full dump (not a process tick, or the
+                // app runs under a different process name) — fall back to the
+                // per-package meminfo so the app's PSS still populates.
                 poll.appPssKb = AppInspectionService.parseMemInfo(appMem).totalPssKb
             }
         }

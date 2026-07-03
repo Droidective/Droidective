@@ -112,11 +112,6 @@ public actor JSConsoleClient {
         return EvalOutcome.from(result: result)
     }
 
-    public func getProperties(objectId: String) async throws -> [CDPProperty] {
-        let result = try await send(method: "Runtime.getProperties", params: CDP.getPropertiesParams(objectId: objectId))
-        return CDPProperty.parse(result)
-    }
-
     /// A faithful deep-JSON rendering of an object, evaluated in the runtime via
     /// `callFunctionOn` — for "Copy as JSON". Returns nil on transport failure.
     public func deepStringify(objectId: String) async -> String? {

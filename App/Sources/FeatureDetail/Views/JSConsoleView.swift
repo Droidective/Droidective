@@ -1195,13 +1195,9 @@ private struct JSValueView: View {
             // An interactive tree rendered from a bounded snapshot fetched via
             // callFunctionOn (not getProperties, which crashes Hermes). All
             // further expansion is client-side over this snapshot — no more
-            // device round-trips.
-            //
-            // Height-bounded: a big object (up to 100 rendered rows) would
-            // otherwise reflow the whole feed on expand and — in the flipped
-            // newest-at-bottom layout — leave the viewport at the *end* of the
-            // object. Capping the height means the feed barely moves and the
-            // object's top shows first; it scrolls internally past the cap.
+            // device round-trips. The owning row scrolls its header to the top
+            // on expand (see scrollHeaderToTop) so the object reads from its
+            // start rather than the feed reflowing to its end.
             ExpandedTree(node: snapshot, session: session)
         } else if failed {
             Text("Couldn't read this value.").font(.caption).foregroundStyle(.tertiary)

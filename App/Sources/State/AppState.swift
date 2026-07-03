@@ -352,7 +352,9 @@ final class AppState {
         for id in pendingFeatureOpens {
             workspace.open(id)
         }
-        if layoutChanged || !pendingFeatureOpens.isEmpty {
+        // Persist if defaults were adopted, an open raced the load, or a role was
+        // seeded while loading (chooseRole's persistTabs no-op'd before load).
+        if layoutChanged || !pendingFeatureOpens.isEmpty || roleChosenThisSession {
             persistTabs()
         }
         pendingFeatureOpens = []

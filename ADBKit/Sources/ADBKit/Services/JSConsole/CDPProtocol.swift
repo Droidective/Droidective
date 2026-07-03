@@ -37,19 +37,6 @@ public enum CDP {
         ]
     }
 
-    public static func getPropertiesParams(objectId: String) -> [String: JSONValue] {
-        // No `generatePreview`: Hermes crashes the RN app's VM when asked to
-        // generate inline previews while enumerating an object's properties
-        // (its preview generator is not crash-safe the way Chrome's is). The
-        // property values still arrive as RemoteObjects with type/description,
-        // and a nested object stays expandable via its own getProperties — we
-        // just don't get the one-line inline preview of nested children.
-        [
-            "objectId": .string(objectId),
-            "ownProperties": .bool(true),
-        ]
-    }
-
     public static func releaseObjectGroupParams(_ group: String) -> [String: JSONValue] {
         ["objectGroup": .string(group)]
     }
@@ -109,12 +96,18 @@ public enum CDP {
     /// bounded, and `truncated` marks where a level was cut.
     public static let boundedSnapshotFunction = """
     function () {
-      const MAX_DEPTH = 6, MAX_ITEMS = 500, MAX_STRING = 10000;
+      const MAX_DEPTH = 6, MAX_ITEMS = 500, MAX_STRING = 10000, MAX_NODES = 20000;
       const seen = new WeakSet();
+      let budget = MAX_NODES;
       const prim = (type, text) => ({ type: type, text: text });
       const build = (value, depth) => {
+        // Total-node cap: per-level caps alone (depth × breadth) are
+        // multiplicatively unbounded, so a wide-and-deep graph could still
+        // produce a huge string. Stop emitting once the whole snapshot is big.
+        if (budget <= 0) return prim('string', '…(truncated)');
+        budget--;
         const t = typeof value;
-        if (value === null) return { type: 'null' };
+        if (value === null) return prim('null', 'null');
         if (t === 'string') return prim('string', value.length > MAX_STRING ? value.slice(0, MAX_STRING) + '…(+' + (value.length - MAX_STRING) + ' chars)' : value);
         if (t === 'number') return prim('number', Number.isFinite(value) ? String(value) : (value > 0 ? 'Infinity' : value < 0 ? '-Infinity' : 'NaN'));
         if (t === 'boolean') return prim('boolean', String(value));
@@ -246,27 +239,6 @@ public struct PropertyPreview: Sendable, Equatable {
         type = json["type"]?.stringValue ?? "string"
         value = json["value"]?.stringValue
         subtype = json["subtype"]?.stringValue
-    }
-}
-
-/// One own property from `Runtime.getProperties` — the rows shown when an object
-/// is expanded.
-public struct CDPProperty: Sendable, Equatable, Identifiable {
-    public let name: String
-    public let value: RemoteObject?
-
-    public var id: String { name }
-
-    /// Parse the `result` array of a `getProperties` reply, keeping enumerable
-    /// own data properties (skipping pure getters/setters with no value) so the
-    /// expanded view shows the same fields a developer expects.
-    public static func parse(_ result: JSONValue?) -> [CDPProperty] {
-        guard let array = result?["result"]?.arrayValue else { return [] }
-        return array.compactMap { entry in
-            guard let name = entry["name"]?.stringValue else { return nil }
-            guard let value = entry["value"] else { return nil }
-            return CDPProperty(name: name, value: RemoteObject(json: value))
-        }
     }
 }
 

@@ -436,6 +436,7 @@ final class ReactotronSession {
         guard flushTask == nil else { return }
         flushTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(16))
+            guard !Task.isCancelled else { return }
             self?.flushPending()
         }
     }

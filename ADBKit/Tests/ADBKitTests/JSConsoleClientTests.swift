@@ -26,11 +26,6 @@ import Testing
         #expect(object.type == "number")
         #expect(object.description == "4")
 
-        // Expand an object — the server returns one property `x`.
-        let properties = try await client.getProperties(objectId: "obj-1")
-        #expect(properties.first?.name == "x")
-        #expect(properties.first?.value?.value?.doubleValue == 1)
-
         // Deep-stringify (Copy as JSON) round-trips the runtime's JSON string.
         let json = await client.deepStringify(objectId: "obj-1")
         #expect(json == "{\n  \"x\": 1\n}")
@@ -239,14 +234,6 @@ private actor CDPTestServer {
         case "Runtime.evaluate":
             .object(["result": .object([
                 "type": .string("number"), "value": .number(4), "description": .string("4"),
-            ])])
-        case "Runtime.getProperties":
-            .object(["result": .array([
-                .object([
-                    "name": .string("x"),
-                    "value": .object(["type": .string("number"), "value": .number(1), "description": .string("1")]),
-                    "isOwn": .bool(true),
-                ]),
             ])])
         case "Runtime.callFunctionOn":
             .object(["result": .object([
