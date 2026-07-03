@@ -17,6 +17,12 @@ final class ReactotronSession {
     /// Cumulative wire bytes of `items`, maintained alongside it so the byte
     /// budget doesn't re-sum the buffer on every append.
     private var itemsBytes = 0
+    /// Timeline events received between flushes. Coalesced on a ~16ms timer so a
+    /// chatty client (tens of events/sec) triggers one `items` mutation — and
+    /// thus one SwiftUI invalidation — per frame, not one per event. Never
+    /// observed, so appending to it doesn't re-render.
+    @ObservationIgnored private var pendingItems: [RtItem] = []
+    @ObservationIgnored private var flushTask: Task<Void, Never>?
     // Anonymous usage stats (numbers only, no payload contents) reported per
     // session so the timeline caps can be sized against real workloads.
     private var peakItemsBytes = 0
@@ -119,6 +125,9 @@ final class ReactotronSession {
 
     private func reset() {
         flushUsageStats()
+        flushTask?.cancel()
+        flushTask = nil
+        pendingItems.removeAll()
         // The timeline/store graphs can be huge (gigabytes of nested JSON
         // payloads); hand them to a background task instead of freeing them
         // inline, which hangs the main thread for the whole release cascade.
@@ -270,6 +279,11 @@ final class ReactotronSession {
     }
 
     func clearTimeline() {
+        // Drop buffered-but-unflushed events too, or they'd reappear on the next
+        // flush right after the user cleared the timeline.
+        flushTask?.cancel()
+        flushTask = nil
+        pendingItems.removeAll()
         let cleared = items
         items = []
         itemsBytes = 0
@@ -314,7 +328,7 @@ final class ReactotronSession {
             clients.append(ClientInfo(id: connectionId, name: name, platform: platform))
             refreshConnectionState()
             if !subscriptionPaths.isEmpty { sendSubscriptions() }
-            append(RtItem(
+            enqueue(RtItem(
                 event: parsed, command: intro, connectionId: connectionId,
                 important: false, frameBytes: frameBytes
             ))
@@ -322,8 +336,10 @@ final class ReactotronSession {
             let parsed = ReactotronEvent(command: command)
             switch parsed {
             case .clear:
-                // Scope to the sending client so one app's clear doesn't wipe
-                // another connected app's timeline.
+                // Flush first so events still buffered for this client are
+                // included in the clear, then scope to the sending client so one
+                // app's clear doesn't wipe another connected app's timeline.
+                flushPending()
                 let previous = items
                 items = previous.filter { $0.connectionId != connectionId }
                 itemsBytes = items.reduce(0) { $0 + $1.frameBytes }
@@ -368,7 +384,7 @@ final class ReactotronSession {
             default:
                 break
             }
-            append(RtItem(
+            enqueue(RtItem(
                 event: parsed, command: command, connectionId: connectionId,
                 important: command.isImportant, frameBytes: frameBytes
             ))
@@ -413,13 +429,36 @@ final class ReactotronSession {
         }
     }
 
+    /// Buffer a timeline event and schedule a coalesced flush, so a burst of
+    /// events becomes one `items` mutation instead of one per event.
+    private func enqueue(_ item: RtItem) {
+        pendingItems.append(item)
+        guard flushTask == nil else { return }
+        flushTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(16))
+            self?.flushPending()
+        }
+    }
+
+    /// Drain the pending buffer into the timeline in a single append. Called by
+    /// the flush timer, and eagerly before any read that must see every event
+    /// (a client `clear`, teardown).
+    private func flushPending() {
+        flushTask?.cancel()
+        flushTask = nil
+        guard !pendingItems.isEmpty else { return }
+        let batch = pendingItems
+        pendingItems.removeAll(keepingCapacity: true)
+        appendBatch(batch)
+    }
+
     /// Ring-buffer append bounded by count *and* cumulative frame bytes
     /// (`ReactotronTimeline`), so a client streaming huge payloads can't grow
     /// the retained timeline into gigabytes. Trims oldest-first in batches and
     /// frees the dropped items off the main actor.
-    private func append(_ item: RtItem) {
-        items.append(item)
-        itemsBytes += item.frameBytes
+    private func appendBatch(_ batch: [RtItem]) {
+        items.append(contentsOf: batch)
+        for item in batch { itemsBytes += item.frameBytes }
         peakItemsBytes = max(peakItemsBytes, itemsBytes)
         peakItemCount = max(peakItemCount, items.count)
         let drop = ReactotronTimeline.dropCount(
@@ -987,10 +1026,22 @@ private struct RtItem: Identifiable, Sendable {
     /// timeline's byte budget.
     let frameBytes: Int
     let receivedAt = Date()
+    /// Badge + primary text, lowercased once at creation, so search matching is
+    /// an allocation-free `contains` instead of rebuilding `event.presentation`
+    /// and re-lowercasing on every filter pass.
+    let searchText: String
 
-    var searchText: String {
+    init(event: ReactotronEvent, command: ReactotronCommand, connectionId: Int, important: Bool, frameBytes: Int) {
+        self.event = event
+        self.command = command
+        self.connectionId = connectionId
+        self.important = important
+        self.frameBytes = frameBytes
         let presentation = event.presentation
-        return "\(presentation.badge) \(presentation.primary)"
+        // Bounded so a giant log message (a console.log of a huge string) can't
+        // store a multi-megabyte lowercased copy per row — search matches the
+        // header text, and the full payload lives in the expandable row.
+        searchText = "\(presentation.badge) \(presentation.primary)".prefix(2000).lowercased()
     }
 }
 
@@ -1055,15 +1106,19 @@ private struct TimelinePane: View {
     @State private var newestFirst = true
 
     var body: some View {
-        VStack(spacing: 0) {
-            paneToolbar
+        // Filter once per render — the count badge, export button, and timeline
+        // all read the same result instead of each recomputing the filter.
+        let visible = filteredItems
+        let ordered = newestFirst ? Array(visible.reversed()) : visible
+        return VStack(spacing: 0) {
+            paneToolbar(visible: visible)
             Divider()
-            timeline
+            timeline(ordered: ordered)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private var paneToolbar: some View {
+    private func paneToolbar(visible: [RtItem]) -> some View {
         HStack(spacing: 10) {
             Picker("Filter", selection: $filter) {
                 ForEach(RtFilter.allCases) { Text($0.label).tag($0) }
@@ -1077,19 +1132,19 @@ private struct TimelinePane: View {
             Spacer()
 
             if !search.isEmpty || filter != .all {
-                Text("\(visibleItems.count)")
+                Text("\(visible.count)")
                     .font(.caption)
                     .foregroundStyle(.textMuted)
             }
 
             Button {
-                onExport(visibleItems)
+                onExport(visible)
             } label: {
                 Image(systemName: "square.and.arrow.up")
             }
             .buttonStyle(IconButtonStyle())
             .help("Export this pane's filtered timeline to JSON")
-            .disabled(visibleItems.isEmpty)
+            .disabled(visible.isEmpty)
 
             Button {
                 newestFirst.toggle()
@@ -1105,22 +1160,21 @@ private struct TimelinePane: View {
         .padding(.vertical, 6)
     }
 
-    private var visibleItems: [RtItem] {
-        items.filter { item in
+    private var filteredItems: [RtItem] {
+        let query = search.trimmingCharacters(in: .whitespaces).lowercased()
+        return items.filter { item in
             if filter != .all, item.event.category != filter { return false }
-            if !search.isEmpty, !item.searchText.localizedCaseInsensitiveContains(search) { return false }
+            // item.searchText is lowercased at creation, so this is a plain,
+            // allocation-free substring check.
+            if !query.isEmpty, !item.searchText.contains(query) { return false }
             return true
         }
     }
 
-    private var orderedItems: [RtItem] {
-        newestFirst ? Array(visibleItems.reversed()) : visibleItems
-    }
-
-    private var timeline: some View {
+    private func timeline(ordered: [RtItem]) -> some View {
         // Newest events land at the top in newest-first, the bottom otherwise —
         // LogTailView follows whichever edge and pauses when the user scrolls off.
-        LogTailView(entries: orderedItems, newestEdge: newestFirst ? .top : .bottom) { item in
+        LogTailView(entries: ordered, newestEdge: newestFirst ? .top : .bottom) { item in
             RtRow(item: item)
             Divider()
         }
