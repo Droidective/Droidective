@@ -127,6 +127,18 @@ public actor JSConsoleClient {
         return result?["result"]?["value"]?.stringValue
     }
 
+    /// A bounded pretty-JSON snapshot of an object for expanding it in the UI.
+    /// Uses `callFunctionOn` (which returns a string) instead of `getProperties`
+    /// (whose native RemoteObject converter crashes Hermes on some object
+    /// graphs). Returns nil on transport failure.
+    public func snapshotJSON(objectId: String) async -> String? {
+        let result = try? await send(
+            method: "Runtime.callFunctionOn",
+            params: CDP.callFunctionOnParams(objectId: objectId, functionDeclaration: CDP.boundedSnapshotFunction)
+        )
+        return result?["result"]?["value"]?.stringValue
+    }
+
     /// Release the `console` object group — drops the device-side handles for
     /// everything evaluated/logged so far. Called when the console is cleared so
     /// remote objects don't accumulate. Best-effort.

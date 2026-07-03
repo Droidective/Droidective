@@ -319,8 +319,12 @@ final class JSConsoleSession {
         }
     }
 
-    func properties(of objectId: String) async -> [CDPProperty] {
-        (try? await cdp.getProperties(objectId: objectId)) ?? []
+    /// A bounded pretty-JSON snapshot for expanding an object. Uses
+    /// `callFunctionOn` (returns a string) rather than `getProperties`, whose
+    /// native converter crashes Hermes on some object graphs (e.g. a large
+    /// array). Returns a message string on failure so the row always resolves.
+    func expandedJSON(of objectId: String) async -> String {
+        await cdp.snapshotJSON(objectId: objectId) ?? "Couldn't read this value."
     }
 
     func clear() {
@@ -1116,7 +1120,7 @@ private struct JSValueView: View {
     let object: RemoteObject
     let session: JSConsoleSession
     @State private var expanded = false
-    @State private var children: [CDPProperty]?
+    @State private var expandedText: String?
     @State private var loading = false
 
     private var query: String { session.findText.trimmingCharacters(in: .whitespaces) }
@@ -1130,7 +1134,7 @@ private struct JSValueView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Button {
                     expanded.toggle()
-                    if expanded, children == nil, !loading { load() }
+                    if expanded, expandedText == nil, !loading { load() }
                 } label: {
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
                         Image(systemName: expanded ? "chevron.down" : "chevron.right")
@@ -1177,26 +1181,15 @@ private struct JSValueView: View {
     @ViewBuilder private var expandedChildren: some View {
         if loading {
             ProgressView().controlSize(.small)
-        } else if let children {
-            VStack(alignment: .leading, spacing: 3) {
-                if children.isEmpty {
-                    Text("(no enumerable properties)").font(.caption).foregroundStyle(.tertiary)
-                }
-                ForEach(Array(children.enumerated()), id: \.offset) { _, property in
-                    HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        highlightedText("\(property.name):", query: query, base: jsColor(.key))
-                            .font(.system(.callout, design: .monospaced))
-                            .fixedSize(horizontal: false, vertical: true)
-                        if let value = property.value {
-                            JSValueView(object: value, session: session)
-                        } else {
-                            Text("—").foregroundStyle(.tertiary)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+        } else if let expandedText {
+            // A bounded pretty-JSON snapshot fetched via callFunctionOn (not
+            // getProperties, which crashes Hermes). Rendered read-only; the
+            // collapsed preview above stays the interactive summary.
+            highlightedText(expandedText, query: query, base: jsColor(.plain))
+                .font(.system(.callout, design: .monospaced))
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -1204,8 +1197,8 @@ private struct JSValueView: View {
         guard let objectId = object.objectId else { return }
         loading = true
         Task {
-            let properties = await session.properties(of: objectId)
-            children = properties
+            let text = await session.expandedJSON(of: objectId)
+            expandedText = text
             loading = false
         }
     }

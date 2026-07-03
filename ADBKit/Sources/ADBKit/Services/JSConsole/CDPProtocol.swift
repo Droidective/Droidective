@@ -94,6 +94,57 @@ public enum CDP {
     }
     """
 
+    /// Runs in the device's JS context (via `callFunctionOn`, `this` = the object)
+    /// to produce a *bounded* pretty-JSON snapshot for expanding a logged value.
+    ///
+    /// This exists because `Runtime.getProperties` crashes Hermes's VM (a native
+    /// null-deref in its RemoteObject converter) when it recursively serializes
+    /// some values — expanding e.g. a 200-element array killed the app. Building
+    /// the rendering entirely in JS and returning a single *string* never goes
+    /// through that native converter (the return is a primitive), so it can't
+    /// trip the bug. The depth / breadth / string caps keep a huge or deeply
+    /// nested payload from producing a multi-megabyte reply.
+    public static let boundedSnapshotFunction = """
+    function () {
+      const MAX_DEPTH = 5, MAX_ITEMS = 100, MAX_STRING = 10000;
+      const seen = new WeakSet();
+      const ser = (value, depth) => {
+        const t = typeof value;
+        if (value === null) return null;
+        if (t === 'bigint') return value.toString() + 'n';
+        if (t === 'number') return Number.isFinite(value) ? value : (value > 0 ? 'Infinity' : value < 0 ? '-Infinity' : 'NaN');
+        if (t === 'boolean') return value;
+        if (t === 'string') return value.length > MAX_STRING ? value.slice(0, MAX_STRING) + '…(+' + (value.length - MAX_STRING) + ' chars)' : value;
+        if (t === 'undefined') return '[undefined]';
+        if (t === 'function') return '[Function ' + (value.name || 'anonymous') + ']';
+        if (t === 'symbol') return value.toString();
+        if (value instanceof Error) return { name: value.name, message: value.message, stack: value.stack };
+        if (value instanceof RegExp) return value.toString();
+        if (depth >= MAX_DEPTH) return Array.isArray(value) ? '[Array(' + value.length + ')]' : '[Object]';
+        if (seen.has(value)) return '[Circular]';
+        seen.add(value);
+        try {
+          if (value instanceof Map) return { dataType: 'Map', entries: ser(Array.from(value.entries()), depth) };
+          if (value instanceof Set) return { dataType: 'Set', values: ser(Array.from(value.values()), depth) };
+          if (Array.isArray(value)) {
+            const out = [];
+            const n = Math.min(value.length, MAX_ITEMS);
+            for (let i = 0; i < n; i++) { try { out.push(ser(value[i], depth + 1)); } catch (e) { out.push('[threw ' + e + ']'); } }
+            if (value.length > MAX_ITEMS) out.push('…(+' + (value.length - MAX_ITEMS) + ' more)');
+            return out;
+          }
+          const out = {};
+          const keys = Object.keys(value);
+          const n = Math.min(keys.length, MAX_ITEMS);
+          for (let i = 0; i < n; i++) { const k = keys[i]; try { out[k] = ser(value[k], depth + 1); } catch (e) { out[k] = '[threw ' + e + ']'; } }
+          if (keys.length > MAX_ITEMS) out['…'] = '(+' + (keys.length - MAX_ITEMS) + ' more)';
+          return out;
+        } finally { seen.delete(value); }
+      };
+      try { return JSON.stringify(ser(this, 0), null, 2); } catch (e) { return String(e); }
+    }
+    """
+
     // MARK: - Inbound messages
 
     /// A decoded inbound frame: either a reply to one of our requests (`id`) or
