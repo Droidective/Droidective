@@ -242,23 +242,28 @@ public actor PerformanceService {
             poll.uploadBytesPerSec = speed.up
         }
 
-        if let packageId, !packageId.isEmpty {
-            async let gfxString = shell(serial, ["dumpsys", "gfxinfo", shellQuote(packageId)])
-            async let appMemString = shell(serial, ["dumpsys", "meminfo", shellQuote(packageId)])
-            if let gfx = await gfxString {
-                poll.appFps = consumeGfx(serial: serial, packageId: packageId, output: gfx)
-            }
-            if let appMem = await appMemString {
-                poll.appPssKb = AppInspectionService.parseMemInfo(appMem).totalPssKb
-            }
-        }
-
+        // The full `dumpsys meminfo` dump (process ticks) already carries every
+        // process's PSS, so derive the watched app's PSS from it instead of
+        // firing a second, heavy per-package meminfo in the same cycle.
+        var memRows: [(pid: Int, name: String, pssKb: Int)] = []
         if includeProcesses {
             async let cpuString = shell(serial, ["dumpsys", "cpuinfo"])
             async let memProcString = shell(serial, ["dumpsys", "meminfo"])
             let cpuRows = (await cpuString).map(CpuInfoParser.parse) ?? []
-            let memRows = (await memProcString).map(MemProcParser.parse) ?? []
+            memRows = (await memProcString).map(MemProcParser.parse) ?? []
             poll.processes = Self.mergeProcesses(cpu: cpuRows, mem: memRows)
+        }
+
+        if let packageId, !packageId.isEmpty {
+            if let gfx = await shell(serial, ["dumpsys", "gfxinfo", shellQuote(packageId)]) {
+                poll.appFps = consumeGfx(serial: serial, packageId: packageId, output: gfx)
+            }
+            if let row = memRows.first(where: { $0.name == packageId }) {
+                poll.appPssKb = row.pssKb
+            } else if !includeProcesses,
+                      let appMem = await shell(serial, ["dumpsys", "meminfo", shellQuote(packageId)]) {
+                poll.appPssKb = AppInspectionService.parseMemInfo(appMem).totalPssKb
+            }
         }
         return poll
     }

@@ -759,6 +759,13 @@ final class AppState {
         FeatureRegistry.byID[id] != nil || ["home", "about", "catalog"].contains(id)
     }
 
+    /// Widen device polling while the app is backgrounded so an idle, hidden
+    /// window stops spawning `adb devices` every 2s; restore it on foreground.
+    func setForeground(_ active: Bool) {
+        let interval: Duration = active ? .seconds(2) : .seconds(10)
+        Task { [monitor = env.monitor] in await monitor.setPollInterval(interval) }
+    }
+
     /// Switch the active device, or hold it behind a confirmation when a guard
     /// is active.
     func requestDevice(_ serial: String) {

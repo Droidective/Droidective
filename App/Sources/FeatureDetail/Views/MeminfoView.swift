@@ -5,6 +5,7 @@ import SwiftUI
 /// Live memory usage for the selected bundle (2s polling) with a Total-PSS graph.
 struct MeminfoView: View {
     @Environment(AppState.self) private var state
+    @Environment(\.tabIsActive) private var tabIsActive
     @State private var info: MemInfo?
     @State private var history: [MemSample] = []
     @State private var started: Date?
@@ -45,7 +46,9 @@ struct MeminfoView: View {
                 ProgressView("Reading memory…").frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .task(id: "\(state.selectedBundleId ?? "")|\(state.targetSerials.first ?? "")") {
+        // Keyed on visibility too, so polling pauses while the tab is hidden
+        // (tabs stay mounted) and resumes when it comes back to the foreground.
+        .task(id: "\(state.selectedBundleId ?? "")|\(state.targetSerials.first ?? "")|\(tabIsActive)") {
             await poll()
         }
     }
@@ -195,6 +198,9 @@ struct MeminfoView: View {
     }
 
     private func poll() async {
+        // Paused while the tab is hidden — keep the last reading on screen and
+        // spawn no adb until the tab is shown again.
+        guard tabIsActive else { return }
         info = nil
         history = []
         started = nil

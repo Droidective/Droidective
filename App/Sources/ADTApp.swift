@@ -57,6 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 @main
 struct ADTApp: App {
     @State private var appState: AppState
+    @Environment(\.scenePhase) private var scenePhase
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @AppStorage("showMenuBarExtra") private var showMenuBarExtra = true
     @AppStorage("sidebarWidth") private var sidebarWidth = 300.0
@@ -131,6 +132,9 @@ struct ADTApp: App {
                 // `.brandAccent` re-resolves. AppState (and its device list) is
                 // owned above this view, so the rebuild preserves it.
                 .id(accentHex)
+                .onChange(of: scenePhase) { _, phase in
+                    appState.setForeground(phase == .active)
+                }
         }
         .windowStyle(.automatic)
         .commands {
