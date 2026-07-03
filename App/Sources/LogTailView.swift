@@ -37,6 +37,15 @@ struct LogTailView<Data: RandomAccessCollection, Row: View>: View
     /// only from real position changes, so an append — which moves the "newest" id
     /// before the binding catches up — can't flip it falsely.
     @State private var isTailing = true
+    /// Distance the content has been scrolled from the newest edge. `leadingID`
+    /// alone only changes once a whole (possibly tall) row scrolls past the edge,
+    /// so scrolling *within* the newest row wouldn't register as "scrolled away";
+    /// this catches that so tailing pauses on any real scroll.
+    @State private var atNewestEdge = true
+
+    /// How far (points) the content may sit from the newest edge and still count
+    /// as "parked at the edge", covering sub-pixel rounding and a tail auto-scroll.
+    private static var edgeTolerance: CGFloat { 24 }
 
     /// The newest entry: `.bottom` feeds arrive at the end of `entries`, `.top`
     /// feeds at the front. Either way it becomes the first row laid out below.
@@ -52,15 +61,35 @@ struct LogTailView<Data: RandomAccessCollection, Row: View>: View
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) { orderedRows }
                     .scrollTargetLayout()
+                    .background(
+                        GeometryReader { geo in
+                            // Content top relative to the scroll view; ~0 at the
+                            // newest edge, growing in magnitude as the user scrolls
+                            // away. Sign flips with the layout flip, so compare the
+                            // magnitude.
+                            Color.clear.preference(
+                                key: TailOffsetKey.self,
+                                value: geo.frame(in: .named("logtail")).minY
+                            )
+                        }
+                    )
             }
+            .coordinateSpace(name: "logtail")
             .scrollPosition(id: $leadingID, anchor: .top)   // .top = first row = newest
             .scaleEffect(x: 1, y: flip, anchor: .center)    // identity for .top feeds
             .onAppear { leadingID = newestID }
-            .onChange(of: leadingID) { _, id in isTailing = (id == newestID) }
+            .onChange(of: leadingID) { recomputeTailing() }
+            .onPreferenceChange(TailOffsetKey.self) { minY in
+                let atEdge = abs(minY) <= Self.edgeTolerance
+                if atEdge != atNewestEdge {
+                    atNewestEdge = atEdge
+                    recomputeTailing()
+                }
+            }
             .onChange(of: newestID) { _, newest in
                 if isTailing, let newest { leadingID = newest }   // cheap: first row, offset 0
             }
-            .onChange(of: newestEdge) { isTailing = true; leadingID = newestID }
+            .onChange(of: newestEdge) { atNewestEdge = true; isTailing = true; leadingID = newestID }
             .onChange(of: focusID) { _, id in
                 guard let id else { return }
                 // `scrollTo` doesn't write back into `leadingID`, so stop tailing
@@ -80,6 +109,13 @@ struct LogTailView<Data: RandomAccessCollection, Row: View>: View
         }
     }
 
+    /// Tail only when the newest row is the leading row *and* the content is
+    /// parked at the newest edge — so scrolling within a tall newest row still
+    /// pauses following.
+    private func recomputeTailing() {
+        isTailing = (leadingID == newestID) && atNewestEdge
+    }
+
     /// Rows laid out newest-first. `.bottom` feeds reverse the display order and
     /// un-flip each row (the scroll view flip above mirrors the whole stack).
     @ViewBuilder private var orderedRows: some View {
@@ -96,6 +132,7 @@ struct LogTailView<Data: RandomAccessCollection, Row: View>: View
 
     private var jumpButton: some View {
         Button {
+            atNewestEdge = true
             withAnimation(.easeOut(duration: 0.25)) { leadingID = newestID }
         } label: {
             Image(systemName: newestEdge == .bottom ? "arrow.down" : "arrow.up")
@@ -109,4 +146,11 @@ struct LogTailView<Data: RandomAccessCollection, Row: View>: View
         .help("Jump to the newest logs")
         .accessibilityLabel("Jump to newest")
     }
+}
+
+/// Content-top offset of a `LogTailView` scroll, in its "logtail" coordinate
+/// space — used to detect scroll-away within a tall newest row.
+private struct TailOffsetKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
