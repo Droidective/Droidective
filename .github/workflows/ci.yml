@@ -4,6 +4,9 @@ on:
     branches: [main]
     tags: ["v*"]
   pull_request:
+  # Manual runs, mainly to redo the Pages deploy with a fresh artifact when a
+  # GitHub-side "Deployment failed, try again later" outlasts job reruns.
+  workflow_dispatch:
 
 permissions:
   contents: read
