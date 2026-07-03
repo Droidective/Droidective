@@ -128,7 +128,7 @@ struct SandboxBrowserView: View {
         entries = nil
         debuggable = true
         guard let serial = state.targetSerials.first, let pkg else { return }
-        let result = await CommandLog.userInitiated(feature: "sandbox-browser") {
+        let result = await CommandLog.userInitiated {
             try? await state.env.engine.inspection.sandboxList(
                 serial: serial, packageId: pkg, dir: currentPath
             )
@@ -147,7 +147,7 @@ struct SandboxBrowserView: View {
         guard let dest = state.askSaveLocation(suggestedName: entry.name) else { return }
         let filePath = currentPath + "/" + entry.name
         Task {
-            await CommandLog.userInitiated(feature: "sandbox-browser") {
+            await CommandLog.userInitiated {
                 do {
                     let saved = try await state.withOperation("Pulling \(entry.name)…") {
                         try await state.env.engine.inspection.sandboxPull(

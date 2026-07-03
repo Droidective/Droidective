@@ -390,19 +390,26 @@ struct RootView: View {
     }
 }
 
-/// Confirms closing the Terminal feature tab while shells are still open —
-/// the close kills every one of them. Its own modifier (not part of RootView's
-/// body expression) to keep that body's type-check time in bounds.
+/// Confirms closing the Terminal feature tab — or quitting the app — while
+/// shells are still open; either kills every one of them. Its own modifier
+/// (not part of RootView's body expression) to keep that body's type-check
+/// time in bounds.
 private struct TerminalCloseConfirmation: ViewModifier {
     let state: AppState
 
     func body(content: Content) -> some View {
+        // Buttons resolve the prompt themselves; the binding's `set` only
+        // fires for an outside dismissal (Esc), which counts as Cancel — the
+        // resolve guard makes a post-button set(false) a no-op.
         content.alert("Close all terminals?", isPresented: Binding(
-            get: { state.confirmTerminalClose },
-            set: { state.confirmTerminalClose = $0 }
+            get: { state.terminalClosePrompt != nil },
+            set: { if !$0 { state.resolveTerminalPrompt(confirmed: false) } }
         )) {
-            Button("Close Terminals", role: .destructive) { state.closeAllTerminalsConfirmed() }
-            Button("Cancel", role: .cancel) {}
+            Button(
+                state.terminalClosePrompt == .quit ? "Quit" : "Close Terminals",
+                role: .destructive
+            ) { state.resolveTerminalPrompt(confirmed: true) }
+            Button("Cancel", role: .cancel) { state.resolveTerminalPrompt(confirmed: false) }
         } message: {
             Text(message)
         }

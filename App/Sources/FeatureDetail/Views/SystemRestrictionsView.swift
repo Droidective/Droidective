@@ -109,7 +109,7 @@ struct SystemRestrictionsView: View {
     /// the device normalizes differently would leave a stale optimistic value, so a
     /// new toggle that doesn't round-trip must reload on success here too.
     private func applyToggle(_ operation: @escaping @Sendable () async throws -> AdbResult) async {
-        await CommandLog.userInitiated(feature: "system-restrictions") {
+        await CommandLog.userInitiated {
             do {
                 let result = try await operation()
                 if !result.succeeded {
@@ -128,7 +128,7 @@ struct SystemRestrictionsView: View {
     private func applyAction(_ operation: @escaping @Sendable () async throws -> AdbResult) async {
         refreshBusy = true
         defer { refreshBusy = false }
-        await CommandLog.userInitiated(feature: "system-restrictions") {
+        await CommandLog.userInitiated {
             do {
                 let result = try await operation()
                 if !result.succeeded {
@@ -149,7 +149,7 @@ struct SystemRestrictionsView: View {
 
     private func load() async {
         guard !serial.isEmpty else { return }
-        let result = await CommandLog.userInitiated(feature: "system-restrictions") { () -> (RestrictionsState, Bool) in
+        let result = await CommandLog.userInitiated { () -> (RestrictionsState, Bool) in
             let restrictions = await engine.restrictions.current(serial: serial)
             let rooted = await engine.root.detect(serial: serial).hasRootShell
             return (restrictions, rooted)

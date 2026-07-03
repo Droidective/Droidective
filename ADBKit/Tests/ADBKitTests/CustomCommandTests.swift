@@ -72,7 +72,17 @@ import Testing
         #expect(result.message == "ran")
         let invocation = runner.invocations.last
         #expect(invocation?.executable == "/bin/zsh")
-        #expect(invocation?.arguments == ["-lc", "~/scripts/reset.sh S1"])
+        #expect(invocation?.arguments == ["-lc", "export ANDROID_SERIAL='S1'; ~/scripts/reset.sh S1"])
+    }
+
+    @Test func shellLineExportsTheSelectedSerialQuoted() throws {
+        let line = try CustomCommandService.shellLine(
+            template: "adb shell pidof {bundleId}", bundleId: "com.app", serial: "192.168.1.5:5555"
+        )
+        #expect(line == "export ANDROID_SERIAL='192.168.1.5:5555'; adb shell pidof com.app")
+
+        let bare = try CustomCommandService.shellLine(template: "echo hi", bundleId: nil, serial: "")
+        #expect(bare == "echo hi")
     }
 
     @Test func shellKindSubstitutesBundleAndReportsFailure() async {

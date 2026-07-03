@@ -365,11 +365,25 @@ public struct FeatureEngine: Sendable {
         guard !raw.isEmpty else {
             return FeatureResult(ok: false, message: "Enter a host:port (e.g. 192.168.1.10:8081).")
         }
+        guard !raw.contains("://") else {
+            return FeatureResult(
+                ok: false,
+                message: "Enter just host:port (e.g. 192.168.1.10:8081) — drop the http:// prefix."
+            )
+        }
         let (host, portText) = Self.splitHostPort(raw)
         guard let port = Int(portText), (1...65535).contains(port) else {
             return FeatureResult(
                 ok: false,
                 message: "\"\(portText)\" isn't a valid port — use host:port, e.g. 192.168.1.10:8081."
+            )
+        }
+        // splitHostPort takes the last colon as the port separator, so an IPv6
+        // literal would be silently mangled into host+port — reject it instead.
+        guard !host.contains(":") else {
+            return FeatureResult(
+                ok: false,
+                message: "IPv6 hosts aren't supported here — use an IPv4 address or hostname, e.g. 192.168.1.10:8081."
             )
         }
         if host.isEmpty || host == "localhost" || host == "127.0.0.1" {
@@ -383,16 +397,20 @@ public struct FeatureEngine: Sendable {
         _ = try await client.run(on: serial, ["shell", "setprop", "metro.host", shellQuote(host)])
         let readBack = try await client.run(on: serial, ["shell", "getprop", "metro.host"])
         if readBack.stdout.trimmingCharacters(in: .whitespacesAndNewlines) == host {
-            return FeatureResult(
-                ok: true,
-                message: "Set metro.host=\(host) — reload JS (or relaunch the app) to load from \(host):\(port)."
-            )
+            // RN pairs metro.host with the app's built-in Metro port, so the
+            // prop alone can't carry a custom port — say so instead of
+            // promising host:port.
+            let followUp = port == 8081
+                ? "reload JS (or relaunch the app) to load from \(host):\(port)."
+                : "RN pairs it with the app's built-in Metro port (usually 8081) — for port \(port), "
+                    + "set \(host):\(port) in the dev menu’s “Change Bundle Location” instead."
+            return FeatureResult(ok: true, message: "Set metro.host=\(host) — \(followUp)")
         }
         _ = try await client.run(on: serial, ["shell", "input", "keyevent", "82"])
         return FeatureResult(
             ok: false,
-            message: "This device blocks setting a dev host over adb — opened the dev menu instead: "
-                + "choose “Change Bundle Location” and enter \(host):\(port)."
+            message: "This device blocks setting a dev host over adb — sent the dev-menu shortcut instead. "
+                + "With your RN dev build in the foreground, choose “Change Bundle Location” and enter \(host):\(port)."
         )
     }
 

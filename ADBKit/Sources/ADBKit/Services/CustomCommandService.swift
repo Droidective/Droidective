@@ -119,28 +119,39 @@ public struct CustomCommandService: Sendable {
         }
     }
 
+    /// Build the line handed to `zsh -lc`: the selected device is exported as
+    /// ANDROID_SERIAL (quoted — the value comes from the device, not the user)
+    /// so bare `adb` calls inside the command target it, matching the Terminal
+    /// feature and the `-s` injection adb-kind commands get.
+    public static func shellLine(template: String, bundleId: String?, serial: String)
+        throws(TemplateError) -> String {
+        let line = try substitute(template: template, bundleId: bundleId, serial: serial)
+        guard !line.trimmingCharacters(in: .whitespaces).isEmpty else { throw .empty }
+        guard !serial.isEmpty else { return line }
+        return "export ANDROID_SERIAL=\(shellQuote(serial)); " + line
+    }
+
     /// Run a `.shell` command line through the user's login shell, so PATH,
     /// dotfile setup, and plain script-file paths (e.g. ~/scripts/reset.sh)
     /// behave exactly like Terminal. Recorded on the shared command log like
-    /// every adb run.
+    /// every adb run. The 10-minute ceiling is a hang stop, sized so real work
+    /// (a gradle build, a long pull) isn't cut off like it would be at adb's
+    /// usual 120s.
     private func runShell(command: CustomCommand, bundleId: String?, serial: String) async -> FeatureResult {
         let line: String
         do {
-            line = try CustomCommandService.substitute(
+            line = try CustomCommandService.shellLine(
                 template: command.command, bundleId: bundleId, serial: serial
             )
         } catch {
             return FeatureResult(ok: false, message: error.localizedDescription)
-        }
-        guard !line.trimmingCharacters(in: .whitespaces).isEmpty else {
-            return FeatureResult(ok: false, message: TemplateError.empty.localizedDescription)
         }
         let clock = ContinuousClock()
         let started = clock.now
         let output = await client.runner.run(
             executable: "/bin/zsh",
             arguments: ["-lc", line],
-            timeout: .seconds(120),
+            timeout: .seconds(600),
             maxOutputBytes: AdbClient.defaultMaxOutput
         )
         await client.log.record(

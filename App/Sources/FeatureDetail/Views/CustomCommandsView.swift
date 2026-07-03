@@ -156,8 +156,9 @@ struct CustomCommandsView: View {
         panel.allowsMultipleSelection = false
         panel.message = "Choose a script or executable to run"
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        let path = url.path
-        let quoted = path.contains(" ") ? "\"\(path)\"" : path
+        // shellQuote, not ad-hoc doubling: the line runs through `zsh -lc`, so
+        // $, backticks, and parens in a path would otherwise expand or break.
+        let quoted = shellQuote(url.path)
         draftCommand = draftCommand.trimmingCharacters(in: .whitespaces).isEmpty
             ? quoted
             : "\(quoted) \(draftCommand)"
@@ -197,7 +198,7 @@ struct CustomCommandsView: View {
         let serial = state.targetSerials.first ?? ""
         let bundleId = state.selectedBundle?.packageId
         Task {
-            await CommandLog.userInitiated(feature: "custom-commands") {
+            await CommandLog.userInitiated {
                 let result = await state.env.engine.customCommands.run(
                     command: command, bundleId: bundleId, serial: serial
                 )

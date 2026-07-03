@@ -317,7 +317,7 @@ struct LogcatView: View {
             if !recordedCommand {
                 recordedCommand = true
                 let command = "adb " + LogcatLineParser.buildArgs(serial: serial, filters: filters).joined(separator: " ")
-                await CommandLog.userInitiated(feature: "logcat") {
+                await CommandLog.userInitiated {
                     await state.env.commandLog.record(
                         command: command, exitCode: 0, duration: .zero, stdout: "", stderr: ""
                     )

@@ -399,9 +399,8 @@ final class AppState {
 
     func resetOverride(_ kind: OverrideKind) {
         guard let serial = selectedSerial else { return }
-        let featureID = FeatureRegistry.all.first { $0.overrideKind == kind }?.id
         Task {
-            await CommandLog.userInitiated(feature: featureID) {
+            await CommandLog.userInitiated {
                 do {
                     try await env.engine.overrides.reset(serial: serial, kind: kind)
                     showToast(Toast(message: "\(kind.label) reset", ok: true))
@@ -472,7 +471,7 @@ final class AppState {
     func disconnectWireless(target: String?) {
         let connection = env.engine.connection
         Task {
-            await CommandLog.userInitiated(feature: "wireless-adb") {
+            await CommandLog.userInitiated {
                 do {
                     let result = try await connection.disconnect(target: target)
                     showToast(Toast(message: result.message, ok: result.ok, important: true))
@@ -566,9 +565,14 @@ final class AppState {
         persistTabs()
     }
 
-    /// Set when the Terminal feature tab is closed with live shells — the close
-    /// is held until the user confirms losing them (RootView shows the alert).
-    var confirmTerminalClose = false
+    /// What put the "close all terminals?" prompt on screen: closing the
+    /// Terminal feature tab, or quitting the app — both kill every live shell,
+    /// so both are held until the user confirms losing them (RootView shows
+    /// the alert).
+    enum TerminalClosePrompt { case closeTab, quit }
+
+    /// Set while the terminal close/quit confirmation is on screen.
+    var terminalClosePrompt: TerminalClosePrompt?
 
     /// Close a tab (in whichever pane holds it). A tab whose view holds losable
     /// work routes through the leave confirmation first, since closing unmounts
@@ -579,7 +583,7 @@ final class AppState {
         // none remain, so that path stays prompt-free. Not an ExitGuard: those
         // also hold device switches, which shells don't care about.
         if id == "terminal", !terminals.tabs.isEmpty {
-            confirmTerminalClose = true
+            terminalClosePrompt = .closeTab
             return
         }
         if exitGuards[id] != nil {
@@ -589,11 +593,24 @@ final class AppState {
         }
     }
 
-    /// The user confirmed losing the running shells: close the Terminal
-    /// feature tab (which kills them all).
-    func closeAllTerminalsConfirmed() {
-        confirmTerminalClose = false
-        performClose("terminal")
+    /// Resolve the terminal confirmation. Confirming kills every shell and
+    /// finishes the held close or quit; cancelling a quit must reply to the
+    /// deferred termination (`applicationShouldTerminate` returned
+    /// `.terminateLater`), mirroring `cancelExit`.
+    func resolveTerminalPrompt(confirmed: Bool) {
+        guard let prompt = terminalClosePrompt else { return }
+        terminalClosePrompt = nil
+        switch prompt {
+        case .closeTab:
+            if confirmed { performClose("terminal") }
+        case .quit:
+            if confirmed {
+                terminals.killAll()
+                quitNow()
+            } else {
+                NSApp.reply(toApplicationShouldTerminate: false)
+            }
+        }
     }
 
     /// Close the focused pane's active tab (⌘W).
@@ -713,9 +730,17 @@ final class AppState {
     /// means losable work is in flight — the leave prompt is shown and the
     /// resolution drives termination (see `quitNow` / `cancelExit`).
     func requestQuit() -> Bool {
-        guard !exitGuards.isEmpty else { return true }
-        pendingExit = PendingExit(target: .quit)
-        return false
+        if !exitGuards.isEmpty {
+            pendingExit = PendingExit(target: .quit)
+            return false
+        }
+        // Live shells are losable work too: quitting kills them all, so it
+        // gets the same confirmation closing the Terminal tab does.
+        if !terminals.tabs.isEmpty {
+            terminalClosePrompt = .quit
+            return false
+        }
+        return true
     }
 
     /// "Discard" / "Discard changes": drop the at-risk work and run the deferred
@@ -820,7 +845,7 @@ final class AppState {
         }
 
         let engine = env.engine
-        await CommandLog.userInitiated(feature: feature.id) {
+        await CommandLog.userInitiated {
             if !feature.needsDevice {
                 let result = await engine.run(featureID: feature.id, serial: "", params: params)
                 self.lastResults[feature.id] = (result, Date())
@@ -894,7 +919,7 @@ final class AppState {
     func installAPKs(_ urls: [URL], onSerials serials: [String]) async -> String {
         guard !urls.isEmpty, !serials.isEmpty else { return "" }
         var report: [String] = []
-        await CommandLog.userInitiated(feature: "install-app") {
+        await CommandLog.userInitiated {
             for url in urls {
                 let name = url.lastPathComponent
                 var ok = 0
@@ -1072,7 +1097,7 @@ final class AppState {
             showToast(Toast(message: "Capturing in \(delaySeconds)s…", ok: true))
             try? await Task.sleep(for: .seconds(delaySeconds))
         }
-        await CommandLog.userInitiated(feature: "screenshot") {
+        await CommandLog.userInitiated {
             do {
                 let dir = try ScreenCaptureService.ensureCaptureDir()
                 let dest = dir.appendingPathComponent("screenshot_\(ScreenCaptureService.stamp()).png")
@@ -1101,7 +1126,7 @@ final class AppState {
             showToast(Toast(message: "Capturing in \(delaySeconds)s…", ok: true))
             try? await Task.sleep(for: .seconds(delaySeconds))
         }
-        let data: Data? = await CommandLog.userInitiated(feature: "screenshot") {
+        let data: Data? = await CommandLog.userInitiated {
             do {
                 return try await withOperation("Capturing screenshot…") {
                     try await env.engine.captureScreenshotData(serial: serial)
@@ -1145,7 +1170,7 @@ final class AppState {
         guard let serial = targetSerials.first else { return }
         showToast(Toast(message: "Downloading ADBKeyboard…", ok: true))
         Task {
-            await CommandLog.userInitiated(feature: "send-text") {
+            await CommandLog.userInitiated {
                 let result = await env.engine.adbKeyboard.install(serial: serial)
                 showToast(Toast(message: result.message, ok: result.ok))
             }

@@ -242,8 +242,13 @@ struct FormActionView: View {
             }
         }
         Task {
+            // Compare timestamps so a stale success (run() early-returns on
+            // no-device without touching lastResults) can't clear unsent text.
+            let previousResultAt = state.lastResults[feature.id]?.1
             await state.run(feature: feature, params: params)
-            if isSendText, clearAfterSend, state.lastResults[feature.id]?.0.ok == true {
+            if isSendText, clearAfterSend,
+               let (result, at) = state.lastResults[feature.id],
+               result.ok, at != previousResultAt {
                 textValues["text"] = ""
             }
         }

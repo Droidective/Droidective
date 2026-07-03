@@ -44,7 +44,7 @@ struct PrivateDnsSection: View {
     private func load() async {
         loaded = false
         guard !serial.isEmpty else { return }
-        let status = await CommandLog.userInitiated(feature: "private-dns") {
+        let status = await CommandLog.userInitiated {
             await state.env.engine.dns.current(serial: serial)
         }
         guard !Task.isCancelled else { return }
@@ -58,7 +58,7 @@ struct PrivateDnsSection: View {
         defer { busy = false }
         let dns = state.env.engine.dns
         let host = hostname.trimmingCharacters(in: .whitespaces)
-        await CommandLog.userInitiated(feature: "private-dns") {
+        await CommandLog.userInitiated {
             do {
                 let result: AdbResult
                 switch mode {

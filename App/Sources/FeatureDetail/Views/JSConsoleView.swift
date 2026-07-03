@@ -423,7 +423,7 @@ final class JSConsoleSession {
         guard !serials.isEmpty else { return }
         let metroPort = port
         let serials = serials
-        let reversed = await CommandLog.userInitiated(feature: "js-console") {
+        let reversed = await CommandLog.userInitiated {
             var reversed: Set<String> = []
             for serial in serials {
                 if let result = try? await adb.run(on: serial, ["reverse", "tcp:\(metroPort)", "tcp:\(metroPort)"]),

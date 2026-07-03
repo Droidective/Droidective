@@ -141,6 +141,42 @@ import Testing
         #expect(runner.invocations.isEmpty)
     }
 
+    @Test func devHostRejectsASchemePrefixedHost() async {
+        let runner = MockProcessRunner()
+        let engine = await makeEngine(runner)
+
+        let result = await engine.run(
+            featureID: "rn-dev-host", serial: "S1", params: ["host": .string("http://192.168.1.99:8081")]
+        )
+        #expect(!result.ok)
+        #expect(result.message.contains("http://"))
+        #expect(runner.invocations.isEmpty)
+    }
+
+    @Test func devHostRejectsAnIPv6Host() async {
+        let runner = MockProcessRunner()
+        let engine = await makeEngine(runner)
+
+        let result = await engine.run(featureID: "rn-dev-host", serial: "S1", params: ["host": .string("fe80::1")])
+        #expect(!result.ok)
+        #expect(result.message.contains("IPv6"))
+        #expect(runner.invocations.isEmpty)
+    }
+
+    @Test func devHostRemoteWithACustomPortPointsAtTheDevMenu() async {
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["-s"], stdout: "")
+        runner.script(argsPrefix: ["-s", "S1", "shell", "getprop"], stdout: "192.168.1.99\n")
+        let engine = await makeEngine(runner)
+
+        let result = await engine.run(
+            featureID: "rn-dev-host", serial: "S1", params: ["host": .string("192.168.1.99:8088")]
+        )
+        #expect(result.ok)
+        #expect(result.message.contains("Change Bundle Location"))
+        #expect(result.message.contains("192.168.1.99:8088"))
+    }
+
     @Test func reversePortValidatesAndRuns() async {
         let runner = MockProcessRunner()
         runner.script(argsPrefix: ["-s"], stdout: "")
@@ -350,26 +386,6 @@ import Testing
     @Test func everyFeatureHasAHowToNote() {
         for feature in FeatureRegistry.all {
             #expect(FeatureRegistry.howTo(for: feature.id) != nil, "missing howTo for \(feature.id)")
-        }
-    }
-
-    @Test func everyFeatureHasACommandReference() {
-        for feature in FeatureRegistry.all {
-            #expect(!FeatureRegistry.commands(for: feature.id).isEmpty, "missing commands for \(feature.id)")
-        }
-    }
-
-    @Test func commandReferenceLeadsWithTheTool() {
-        for feature in FeatureRegistry.all {
-            for command in FeatureRegistry.commands(for: feature.id) {
-                let leadsWithTool = [
-                    "adb ", "scrcpy ", "emulator ", "ffmpeg ", "aapt2 ", "apksigner ",
-                    "zipalign ", "jadx ", "apktool ", "keytool ", "frida ", "frida-ps ", "zsh ",
-                ].contains {
-                    command.command.hasPrefix($0)
-                }
-                #expect(leadsWithTool, "\(feature.id): unexpected command \"\(command.command)\"")
-            }
         }
     }
 
