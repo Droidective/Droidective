@@ -14,6 +14,10 @@ final class TerminalSession {
     /// respawned an orphan shell for every closed tab.
     private var killed = false
 
+    /// Fired when the shell ends on its own (`exit`, EOF, a crash) — not when
+    /// `kill()` tears it down — so the owning tab can close like the × does.
+    var onProcessExit: (() -> Void)?
+
     /// The session's terminal view, starting the login shell on first use. The
     /// selected device serial is exported as `ANDROID_SERIAL` so `adb` targets
     /// it without `-s`.
@@ -21,6 +25,7 @@ final class TerminalSession {
         if let terminalView { return terminalView }
         let view = LocalProcessTerminalView(frame: .zero)
         view.font = Self.terminalFont(size: 12)
+        view.processDelegate = self
         terminalView = view
         guard !killed else { return view } // dead husk for the unmount pass
 
@@ -66,6 +71,25 @@ final class TerminalSession {
             return font
         }
         return .monospacedSystemFont(ofSize: size, weight: .regular)
+    }
+}
+
+/// The delegate is adopted only to hear the shell end on its own — sizing and
+/// titles are handled inside SwiftTerm. `LocalProcess` posts these callbacks
+/// on the main queue (its default dispatch queue), so hopping back onto the
+/// main actor with `assumeIsolated` is safe.
+extension TerminalSession: LocalProcessTerminalViewDelegate {
+    nonisolated func sizeChanged(source: LocalProcessTerminalView, newCols: Int, newRows: Int) {}
+
+    nonisolated func setTerminalTitle(source: LocalProcessTerminalView, title: String) {}
+
+    nonisolated func hostCurrentDirectoryUpdate(source: SwiftTerm.TerminalView, directory: String?) {}
+
+    nonisolated func processTerminated(source: SwiftTerm.TerminalView, exitCode: Int32?) {
+        MainActor.assumeIsolated {
+            guard !killed else { return } // kill() already closed the tab
+            onProcessExit?()
+        }
     }
 }
 

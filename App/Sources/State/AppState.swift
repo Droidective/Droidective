@@ -293,6 +293,12 @@ final class AppState {
         jsConsoleSession = JSConsoleSession(adb: env.client)
         reactotronSession.app = self
         jsConsoleSession.app = self
+        // Typing `exit` (or a shell crash) closes that tab like the × does.
+        // The contains-check drops late callbacks racing a killAll teardown.
+        terminals.onShellExited = { [weak self] id in
+            guard let self, self.terminals.tabs.contains(where: { $0.id == id }) else { return }
+            self.closeTerminalShell(id)
+        }
         Task { await bootstrap() }
     }
 

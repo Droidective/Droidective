@@ -17,6 +17,10 @@ final class TerminalManager {
     var activeID: UUID?
     private var counter = 0
 
+    /// Set by `AppState`: a shell ended on its own (the user typed `exit`),
+    /// so its tab should close through the same path as the × / ⌘W.
+    var onShellExited: ((UUID) -> Void)?
+
     var activeTab: Tab? {
         tabs.first { $0.id == activeID }
     }
@@ -25,6 +29,7 @@ final class TerminalManager {
     func newTab() {
         counter += 1
         let tab = Tab(name: "Terminal \(counter)", session: TerminalSession())
+        tab.session.onProcessExit = { [weak self] in self?.onShellExited?(tab.id) }
         tabs.append(tab)
         activeID = tab.id
     }
