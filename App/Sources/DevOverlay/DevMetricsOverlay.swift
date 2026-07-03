@@ -4,7 +4,7 @@ import Observation
 import SwiftUI
 
 /// Debug-only HUD: samples Droidective's *own* memory, CPU, and network
-/// throughput once a second and drives the top-left overlay. Compiled only into
+/// throughput once a second and drives the top-right overlay. Compiled only into
 /// Debug builds. Memory and CPU come from `ProcessStats` (CPU% derived from the
 /// cumulative-time delta, the same math `ResourceWatchdog` uses); network from
 /// `NetworkTrafficMeter`, the app's own transfer tally.

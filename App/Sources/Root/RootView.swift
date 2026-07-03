@@ -86,7 +86,7 @@ struct RootView: View {
         // (the exitGuard alone is often unchanged), driving the leave dialog.
         let showExitDialog = state.pendingExit.map { !$0.saving } ?? false
         return zoomedContent
-            .overlay(alignment: .topLeading) { devMetricsOverlay }
+            .overlay(alignment: .topTrailing) { devMetricsOverlay }
             .environment(\.colorScheme, injectedColorScheme)
             .preferredColorScheme(preferredScheme)
             .background(WindowAccessor { window in
@@ -151,12 +151,12 @@ struct RootView: View {
             .modifier(TerminalCloseConfirmation(state: state))
     }
 
-    /// The debug-only self-metrics HUD (memory/CPU/network), pinned top-left over
+    /// The debug-only self-metrics HUD (memory/CPU/network), pinned top-right over
     /// the content. Empty in Release; visibility inside is driven by the
     /// Settings ▸ Appearance toggle.
     @ViewBuilder private var devMetricsOverlay: some View {
         #if DEBUG
-        DevMetricsOverlay().padding(.top, 10).padding(.leading, 10)
+        DevMetricsOverlay().padding(.top, 10).padding(.trailing, 10)
         #endif
     }
 

@@ -217,7 +217,7 @@ struct AppearanceSettingsView: View {
             #if DEBUG
             Section("Developer") {
                 Toggle("Show self-metrics overlay", isOn: $showDevMetrics)
-                Text("A floating panel (top-left) with Droidective's own memory, CPU, and network throughput. Debug builds only.")
+                Text("A floating panel (top-right) with Droidective's own memory, CPU, and network throughput. Debug builds only.")
                     .font(.footnote)
                     .foregroundStyle(.textMuted)
             }
