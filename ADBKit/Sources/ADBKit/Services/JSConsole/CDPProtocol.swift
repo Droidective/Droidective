@@ -109,7 +109,7 @@ public enum CDP {
     /// bounded, and `truncated` marks where a level was cut.
     public static let boundedSnapshotFunction = """
     function () {
-      const MAX_DEPTH = 6, MAX_ITEMS = 100, MAX_STRING = 10000;
+      const MAX_DEPTH = 6, MAX_ITEMS = 500, MAX_STRING = 10000;
       const seen = new WeakSet();
       const prim = (type, text) => ({ type: type, text: text });
       const build = (value, depth) => {
