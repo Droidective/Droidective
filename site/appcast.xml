@@ -6,9 +6,9 @@
     <description>Most recent Droidective updates.</description>
     <language>en</language>
     <item>
-      <title>Droidective 2.8.0</title>
-      <sparkle:version>220</sparkle:version>
-      <sparkle:shortVersionString>2.8.0</sparkle:shortVersionString>
+      <title>Droidective 2.8.1</title>
+      <sparkle:version>248</sparkle:version>
+      <sparkle:shortVersionString>2.8.1</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <description><![CDATA[
 <style>
@@ -24,57 +24,78 @@ pre { background: color-mix(in srgb, currentColor 8%, transparent); padding: .6e
 pre code { background: none; padding: 0; }
 a { color: #2f9e44; }
 </style>
-<p>A feature release that adds a tabbed workspace with split panes and a React
-Native JS Console, curates the "Run on all devices" toggle, and fixes a round of
-light-mode and layout issues.</p>
+<p>A release that adds a built-in Terminal and shell-kind custom commands, a
+Security / Pentest role with reworked per-role sidebars, and a round of
+performance and stability fixes.</p>
 <h3>New features</h3>
 <ul>
 <li>
-<strong>Tabbed workspace with split panes</strong> — open features in tabs (up to ten)
-instead of one detail pane at a time. Tabs stay mounted while hidden, so a
-screen recording or a live view keeps running in the background. Split the
-window into two panes and drag tabs between them, reorder tabs by dragging, and
-navigate with ⌘T, ⌘W, ⌃Tab, and ⌃1–9. The open tabs and the split layout are
-restored on the next launch.</li>
+<strong>Terminal</strong> — real multi-tab login shells (PTY-backed via SwiftTerm) inside
+the app. The device selected when a shell opens is exported as
+<code>ANDROID_SERIAL</code>, so plain adb commands target it without <code>-s</code>. Tabs are
+renameable (double-click, right-click, or ⇧⌘R), ⌘N opens a shell from
+anywhere, ⌘W peels one at a time, ⇧⌘[ / ⇧⌘] cycle, and typing <code>exit</code> closes
+the tab. Sessions and scrollback survive switching features, and closing the
+feature tab — or quitting — with live shells asks first.</li>
 <li>
-<strong>React Native JS Console</strong> — a console over the Hermes runtime via the Chrome
-DevTools Protocol: it connects to a Metro target, streams <code>console.*</code> output
-with syntax-highlighted objects, and evaluates expressions against the running
-app.</li>
+<strong>Shell custom commands</strong> — a custom command now runs either as adb
+(tokenized arguments, never a shell) or as a Terminal command line through
+<code>zsh -lc</code>, so plain command lines and script files behave like in Terminal.
+<code>{bundleId}</code> and <code>{serial}</code> substitute in both, a file picker inserts a
+script path, and shell runs are recorded on the command log.</li>
+<li>
+<strong>Security / Pentest role</strong> — a new role with a curated sidebar; the
+per-role feature lists were reworked and sidebar groups follow the role's
+order.</li>
 </ul>
 <h3>Improvements</h3>
 <ul>
 <li>
-<strong>Curated "Run on all devices"</strong> — the toggle now appears only for the features
-where running on every device makes sense (send text, React Native, Simulate,
-install app) and is hidden elsewhere.</li>
+<strong>Sidebar</strong> — ⌘1–⌘0 jump to the first ten rows (with hints and a Go menu),
+and pinning is discoverable: a hover pin on every row and a pinned marker.</li>
 <li>
-<strong>Live mirror follows the active device</strong> — switching the device while
-mirroring re-targets the mirror instead of staying on the previous one.</li>
+<strong>Device Info</strong> — identity header, live memory/storage/battery/app gauges,
+curated property groups, and a searchable getprop dump.</li>
 <li>
-<strong>Command palette opens centered</strong>, the <strong>sidebar search shows all matches</strong> and
-locks the group/reorder controls while a query is active, and the <strong>close button
-on toasts and the notification panel</strong> is a single restyled control.</li>
+<strong>Device bar</strong> — a single row with the bundle picker next to the device pill.</li>
+<li>The 10-tab workspace cap is gone, and the bottom Recent/Commands bar was
+removed — the how-it-works note toggles from Settings ▸ Appearance and the
+Command Log lives in Settings.</li>
+<li>
+<strong>Performance</strong> — the launch hang from decoding the dock icon on the main
+thread is fixed, the Reactotron timeline is capped by bytes (big payloads
+released off the main thread), JS console search filters incrementally, and
+the decompile cache is deleted off the quit path.</li>
+<li>Log views share a smart-tailing scroller that follows the bottom until you
+scroll up.</li>
 </ul>
 <h3>Fixes</h3>
 <ul>
 <li>
-<strong>Light-mode colors</strong> — named colors resolve per color scheme, and foreground
-text now picks black or white by the background's luminance, so labels no longer
-render white-on-white on light or bright-accent backgrounds (device pill,
-palette rows, copy buttons, toggle styles).</li>
+<strong>Reactotron</strong> — a failed server start (e.g. the port is taken) shows an
+error state with Retry and can actually restart; previously the dead server
+handle stuck.</li>
 <li>
-<strong>Simulate</strong> shows an empty state when no device is connected; <strong>Home</strong> feature
-cards keep their height with short text; <strong>System Restrictions</strong> cards are
-visible in light mode and no longer reload the whole list on each toggle.</li>
-<li>Fully tappable rows for <strong>Settings</strong> disclosures and <strong>Screen Record</strong> advanced
-options; <strong>form action pickers</strong> fill the available width; the <strong>notification
-panel</strong> slide no longer janks the layout.</li>
+<strong>React Native</strong> — Process Death backgrounds the app, kills it, and verifies
+with pidof (with a foreground-app fallback); the dev-server host runner
+reverse-tunnels localhost, sets <code>metro.host</code> where the device allows it, and
+rejects <code>http://</code> / IPv6 input instead of misreporting success.</li>
+<li>
+<strong>Tab strip</strong> — the ‹ › arrows derive the first visible tab from measured
+geometry, so the first click after a trackpad scroll works.</li>
+<li>
+<strong>Frida</strong> — architecture detection works on single-ABI devices.</li>
+<li>
+<strong>APK Studio</strong> — the decompile source viewer no longer renders blank when an
+editor push is dropped.</li>
+<li>Role changes stop every open tab's background work (also fixing a Reactotron
+server leak), and a closed shell can't be respawned by a SwiftUI teardown
+pass.</li>
 </ul>
 <p>Installed copies update in place via Sparkle.</p>
 ]]></description>
-      <pubDate>Wed, 01 Jul 2026 09:30:59 +0000</pubDate>
-      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v2.8.0/Droidective-v2.8.0.dmg" sparkle:edSignature="esX+O+1tDCS1RKM9O0l+1IjnU50qOrAcS/Py9VFwsmFMIgpyffp/JywxpxqDJYBBdGOVMxrfylptJwDeiJF2DQ==" length="46351864" type="application/octet-stream" />
+      <pubDate>Fri, 03 Jul 2026 04:42:27 +0000</pubDate>
+      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v2.8.1/Droidective-v2.8.1.dmg" sparkle:edSignature="VHPYeKv8X5xo0lcM4SiCZuIVW/w81AJhft5c651JpzkrP+EwVev2Vc1dSCoAYjmIJ+QRKAZM5u0K8wDys1E3DQ==" length="45388274" type="application/octet-stream" />
     </item>
   </channel>
 </rss>
