@@ -30,18 +30,18 @@ struct LogTailView<Data: RandomAccessCollection, Row: View>: View
     var focusID: Data.Element.ID? = nil
     @ViewBuilder var row: (Data.Element) -> Row
 
-    /// The row at the scroll's leading (offset-0) edge — the newest side. nil
-    /// before the first layout.
+    /// The row pinned at the scroll's leading (offset-0) edge. Drives
+    /// `.scrollPosition` for two things: keeping the viewport stable when rows are
+    /// inserted at the newest edge, and programmatically following the newest line
+    /// while tailing. It is *not* consulted to decide whether we're tailing — that
+    /// is the offset's job (below), because this binding lags and the follow
+    /// overwrites it, which used to race an append into snapping the view back.
     @State private var leadingID: Data.Element.ID?
-    /// True while the newest line sits at that edge (the user is tailing). Updated
-    /// only from real position changes, so an append — which moves the "newest" id
-    /// before the binding catches up — can't flip it falsely.
+    /// True while the content is parked at the newest edge (the user is tailing).
+    /// Derived solely from the measured scroll offset: content-top at the edge
+    /// (`minY ≈ 0`) *is* the newest row parked at the edge, in either flip mode, so
+    /// one signal decides it — no coupling with the laggy `leadingID` binding.
     @State private var isTailing = true
-    /// Distance the content has been scrolled from the newest edge. `leadingID`
-    /// alone only changes once a whole (possibly tall) row scrolls past the edge,
-    /// so scrolling *within* the newest row wouldn't register as "scrolled away";
-    /// this catches that so tailing pauses on any real scroll.
-    @State private var atNewestEdge = true
 
     /// How far (points) the content may sit from the newest edge and still count
     /// as "parked at the edge", covering sub-pixel rounding and a tail auto-scroll.
@@ -87,23 +87,24 @@ struct LogTailView<Data: RandomAccessCollection, Row: View>: View
             .scrollPosition(id: $leadingID, anchor: .top)   // .top = first row = newest
             .scaleEffect(x: 1, y: flip, anchor: .center)    // identity for .top feeds
             .onAppear { leadingID = newestID }
-            .onChange(of: leadingID) { recomputeTailing() }
             .onPreferenceChange(TailOffsetKey.self) { minY in
+                // The offset is the single source of truth for tailing: at the
+                // newest edge the content top sits at ~0; any real scroll away
+                // grows its magnitude past the tolerance and pauses following.
                 let atEdge = abs(minY) <= Self.edgeTolerance
-                if atEdge != atNewestEdge {
-                    atNewestEdge = atEdge
-                    recomputeTailing()
-                }
+                if atEdge != isTailing { isTailing = atEdge }
             }
             .onChange(of: newestID) { _, newest in
                 if isTailing, let newest { leadingID = newest }   // cheap: first row, offset 0
             }
-            .onChange(of: newestEdge) { atNewestEdge = true; isTailing = true; leadingID = newestID }
+            .onChange(of: newestEdge) { isTailing = true; leadingID = newestID }
             .onChange(of: focusID) { _, id in
                 guard let id else { return }
                 // `scrollTo` doesn't write back into `leadingID`, so stop tailing
                 // here unless the target *is* the newest row — otherwise the next
-                // append would fire the follower and snap us off the match.
+                // append would fire the follower and snap us off the match. The
+                // offset settles this once the scroll lands, but set it eagerly so
+                // an append in the interim can't yank us off the match.
                 isTailing = (id == newestID)
                 withAnimation(.easeInOut(duration: 0.15)) { proxy.scrollTo(id, anchor: .center) }
             }
@@ -116,13 +117,6 @@ struct LogTailView<Data: RandomAccessCollection, Row: View>: View
             }
             .animation(.snappy(duration: 0.2), value: isTailing)
         }
-    }
-
-    /// Tail only when the newest row is the leading row *and* the content is
-    /// parked at the newest edge — so scrolling within a tall newest row still
-    /// pauses following.
-    private func recomputeTailing() {
-        isTailing = (leadingID == newestID) && atNewestEdge
     }
 
     /// Rows laid out newest-first. `.bottom` feeds reverse the display order and
@@ -141,7 +135,7 @@ struct LogTailView<Data: RandomAccessCollection, Row: View>: View
 
     private var jumpButton: some View {
         Button {
-            atNewestEdge = true
+            isTailing = true
             withAnimation(.easeOut(duration: 0.25)) { leadingID = newestID }
         } label: {
             Image(systemName: newestEdge == .bottom ? "arrow.down" : "arrow.up")
