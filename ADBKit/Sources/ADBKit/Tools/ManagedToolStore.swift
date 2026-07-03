@@ -72,6 +72,7 @@ final class DownloadProgressDelegate: NSObject, URLSessionDownloadDelegate, @unc
         _ session: URLSession, downloadTask: URLSessionDownloadTask,
         didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64
     ) {
+        NetworkTrafficMeter.shared.recordReceived(Int(bytesWritten))
         guard let onProgress, totalBytesExpectedToWrite > 0 else { return }
         onProgress(Double(totalBytesWritten) / Double(totalBytesExpectedToWrite))
     }

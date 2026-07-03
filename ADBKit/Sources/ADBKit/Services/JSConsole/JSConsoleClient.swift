@@ -161,6 +161,7 @@ public actor JSConsoleClient {
         // receive loop stashes it in `earlyResults` and we pick it up below.
         do {
             try await task.send(.string(String(decoding: data, as: UTF8.self)))
+            NetworkTrafficMeter.shared.recordSent(data.count)
         } catch {
             throw ClientError.transport("\(error.localizedDescription)")
         }
@@ -222,6 +223,7 @@ public actor JSConsoleClient {
         case let .data(payload): data = payload
         @unknown default: return
         }
+        NetworkTrafficMeter.shared.recordReceived(data.count)
         guard let incoming = CDP.parseIncoming(data) else { return }
         switch incoming {
         case let .response(id, result, error):

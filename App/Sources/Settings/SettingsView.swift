@@ -164,6 +164,9 @@ struct AppearanceSettingsView: View {
     @AppStorage("theme") private var theme = "dark"
     @AppStorage(accentColorDefaultsKey) private var accentHex = ""
     @AppStorage("showFeatureNotes") private var showFeatureNotes = false
+    #if DEBUG
+    @AppStorage(DevMetrics.overlayEnabledKey) private var showDevMetrics = true
+    #endif
 
     /// The accent ColorPicker reads/writes the stored hex; an empty value shows
     /// (and resets to) the bundled default.
@@ -210,6 +213,15 @@ struct AppearanceSettingsView: View {
                     .font(.footnote)
                     .foregroundStyle(.textMuted)
             }
+
+            #if DEBUG
+            Section("Developer") {
+                Toggle("Show self-metrics overlay", isOn: $showDevMetrics)
+                Text("A floating panel (top-left) with Droidective's own memory, CPU, and network throughput. Debug builds only.")
+                    .font(.footnote)
+                    .foregroundStyle(.textMuted)
+            }
+            #endif
         }
         .formStyle(.grouped)
     }

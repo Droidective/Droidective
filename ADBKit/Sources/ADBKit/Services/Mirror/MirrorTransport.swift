@@ -311,6 +311,7 @@ public actor MirrorTransport {
     public func controlSender() -> (@Sendable (Data) -> Void)? {
         guard let box = controlBox else { return nil }
         return { data in
+            NetworkTrafficMeter.shared.recordSent(data.count)
             box.connection.send(content: data, completion: .contentProcessed { _ in })
         }
     }
@@ -331,7 +332,10 @@ public actor MirrorTransport {
     ) {
         box.connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) {
             data, _, isComplete, error in
-            if let data, !data.isEmpty { continuation.yield(data) }
+            if let data, !data.isEmpty {
+                NetworkTrafficMeter.shared.recordReceived(data.count)
+                continuation.yield(data)
+            }
             if error != nil || isComplete {
                 continuation.finish()
                 return
@@ -356,7 +360,10 @@ public actor MirrorTransport {
     ) {
         box.connection.receive(minimumIncompleteLength: 1, maximumLength: 256 * 1024) {
             data, _, isComplete, error in
-            if let data, !data.isEmpty { continuation.yield(data) }
+            if let data, !data.isEmpty {
+                NetworkTrafficMeter.shared.recordReceived(data.count)
+                continuation.yield(data)
+            }
             if let error {
                 continuation.finish(throwing: error)
                 return
