@@ -1,3 +1,30 @@
+## Droidective v2.8.2
+
+A patch release that fixes the JS Console's reconnect behavior against Metro
+and adds anonymous app performance monitoring.
+
+### Fixes
+
+- **JS Console reconnect storm** — a race in the CDP client killed each new
+  connection moments after it opened and left the old socket running, so the
+  console reconnected every couple of seconds, Metro logged a stream of
+  connection-established messages, and leaked debugger connections piled up
+  until a JS reload cleared them. Connections are now generation-guarded, every
+  close path shuts its socket, and the handshake times out instead of hanging
+  on a dead target — the console connects once and stays connected.
+- Changing the Metro port can no longer commit a connection that was still in
+  flight against the old port.
+
+### Improvements
+
+- **Performance self-monitoring** — the app now watches its own CPU and memory
+  use and, when something stays over the limit, reports it to the anonymous
+  diagnostics along with which features were open — so resource hogs get found
+  and fixed. Sends only feature names and resource numbers; opt-out any time in
+  Settings → Privacy.
+
+Installed copies update in place via Sparkle.
+
 ## Droidective v2.8.1
 
 A release that adds a built-in Terminal and shell-kind custom commands, a
