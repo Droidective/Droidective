@@ -1189,7 +1189,13 @@ private struct JSValueView: View {
             // callFunctionOn (not getProperties, which crashes Hermes). All
             // further expansion is client-side over this snapshot — no more
             // device round-trips.
-            SnapChildrenView(node: snapshot, session: session)
+            //
+            // Height-bounded: a big object (up to 100 rendered rows) would
+            // otherwise reflow the whole feed on expand and — in the flipped
+            // newest-at-bottom layout — leave the viewport at the *end* of the
+            // object. Capping the height means the feed barely moves and the
+            // object's top shows first; it scrolls internally past the cap.
+            ExpandedTree(node: snapshot, session: session)
         } else if failed {
             Text("Couldn't read this value.").font(.caption).foregroundStyle(.tertiary)
         }
@@ -1209,33 +1215,82 @@ private struct JSValueView: View {
 
 // MARK: - Snapshot tree (client-side, no getProperties)
 
+/// An expanded object/array: an optional "search in object" field over a
+/// height-bounded, internally-scrolling tree. Bounding the height keeps a big
+/// object from reflowing the whole feed on expand (which, in the flipped
+/// newest-at-bottom layout, left the viewport at the object's end).
+private struct ExpandedTree: View {
+    let node: SnapNode
+    let session: JSConsoleSession
+    @State private var search = ""
+    @State private var height: CGFloat = 40
+
+    /// Max height before the object scrolls internally instead of growing the feed.
+    private static let maxHeight: CGFloat = 380
+
+    /// Only worth an in-object search box once there are enough children.
+    private var searchable: Bool {
+        (node.entries?.count ?? node.items?.count ?? 0) >= 8
+    }
+
+    var body: some View {
+        let query = search.trimmingCharacters(in: .whitespaces).lowercased()
+        VStack(alignment: .leading, spacing: 4) {
+            if searchable {
+                SearchField(prompt: "Search in object…", text: $search)
+                    .controlSize(.small)
+                    .frame(maxWidth: 260)
+            }
+            ScrollView(.vertical) {
+                SnapChildrenView(node: node, session: session, query: query)
+                    .background(GeometryReader { geo in
+                        Color.clear.preference(key: TreeHeightKey.self, value: geo.size.height)
+                    })
+            }
+            .frame(height: min(height, Self.maxHeight))
+            .onPreferenceChange(TreeHeightKey.self) { height = max(20, $0) }
+        }
+    }
+}
+
+private struct TreeHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 40
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
 /// The ordered child rows of a container `SnapNode` — array items with index
-/// labels, or object entries with key labels.
+/// labels, or object entries with key labels. `query` (lowercased) prunes to
+/// matching branches for the in-object search.
 private struct SnapChildrenView: View {
     let node: SnapNode
     let session: JSConsoleSession
+    var query: String = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             if node.type == "array", let items = node.items {
-                if items.isEmpty { emptyRow }
-                ForEach(Array(items.enumerated()), id: \.offset) { index, child in
-                    SnapValueView(label: String(index), node: child, session: session)
+                let shown = items.enumerated().filter { query.isEmpty || $0.element.matches(query) }
+                if shown.isEmpty { emptyRow }
+                ForEach(shown, id: \.offset) { index, child in
+                    SnapValueView(label: String(index), node: child, session: session, query: query)
                 }
-                if let hidden = node.hiddenCount, hidden > 0 { moreRow("…(+\(hidden) more)") }
+                if query.isEmpty, let hidden = node.hiddenCount, hidden > 0 { moreRow("…(+\(hidden) more)") }
             } else if let entries = node.entries {
-                if entries.isEmpty { emptyRow }
-                ForEach(Array(entries.enumerated()), id: \.offset) { _, entry in
-                    SnapValueView(label: entry.name, node: entry.node, session: session)
+                let shown = entries.enumerated().filter { query.isEmpty || $0.element.node.matches(query, key: $0.element.name) }
+                if shown.isEmpty { emptyRow }
+                ForEach(shown, id: \.offset) { _, entry in
+                    SnapValueView(label: entry.name, node: entry.node, session: session, query: query)
                 }
-                if node.truncated == true { moreRow("…(more)") }
+                if query.isEmpty, node.truncated == true { moreRow("…(more)") }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var emptyRow: some View {
-        Text(node.type == "array" ? "(empty array)" : "(no enumerable properties)")
+        Text(query.isEmpty
+            ? (node.type == "array" ? "(empty array)" : "(no enumerable properties)")
+            : "No matches")
             .font(.caption).foregroundStyle(.tertiary)
     }
 
@@ -1246,13 +1301,20 @@ private struct SnapChildrenView: View {
 
 /// One row in the snapshot tree: a primitive `key: value`, or a collapsible
 /// container header whose children (another `SnapChildrenView`) indent below.
+/// A non-empty `query` auto-expands containers so matches are revealed, and
+/// highlights the matched text.
 private struct SnapValueView: View {
     let label: String?
     let node: SnapNode
     let session: JSConsoleSession
+    var query: String = ""
     @State private var expanded = false
 
-    private var query: String { session.findText.trimmingCharacters(in: .whitespaces) }
+    /// Text highlighted in rows: the in-object search when active, else the ⌘F find.
+    private var highlight: String {
+        query.isEmpty ? session.findText.trimmingCharacters(in: .whitespaces) : query
+    }
+    private var isOpen: Bool { expanded || !query.isEmpty }
 
     var body: some View {
         if node.isContainer {
@@ -1261,26 +1323,27 @@ private struct SnapValueView: View {
                     expanded.toggle()
                 } label: {
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                        Image(systemName: isOpen ? "chevron.down" : "chevron.right")
                             .font(.system(size: 10, weight: .bold))
                             .foregroundStyle(.secondary)
                             .frame(width: 14)
                         labelText
-                        highlightedText(summary, query: query, base: jsColor(.className))
+                        highlightedText(summary, query: highlight, base: jsColor(.className))
                             .font(.system(.callout, design: .monospaced))
                     }
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                if expanded {
-                    SnapChildrenView(node: node, session: session).padding(.leading, 18)
+                .disabled(!query.isEmpty)   // search drives expansion; manual toggle resumes when cleared
+                if isOpen {
+                    SnapChildrenView(node: node, session: session, query: query).padding(.leading, 18)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 labelText
-                highlightedText(primitiveText, query: query, base: jsColor(kind))
+                highlightedText(primitiveText, query: highlight, base: jsColor(kind))
                     .font(.system(.callout, design: .monospaced))
                     .textSelection(.enabled)
             }
@@ -1290,7 +1353,7 @@ private struct SnapValueView: View {
 
     @ViewBuilder private var labelText: some View {
         if let label {
-            highlightedText("\(label):", query: query, base: jsColor(.key))
+            highlightedText("\(label):", query: highlight, base: jsColor(.key))
                 .font(.system(.callout, design: .monospaced))
                 .fixedSize(horizontal: false, vertical: true)
         }

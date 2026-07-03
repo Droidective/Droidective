@@ -41,4 +41,17 @@ public struct SnapNode: Sendable, Decodable, Equatable {
         guard let data = json.data(using: .utf8) else { return nil }
         return try? JSONDecoder().decode(SnapNode.self, from: data)
     }
+
+    /// Whether this node — or any descendant — matches `query` (already
+    /// lowercased) in a key or a primitive value, so a search within an object
+    /// can keep matching branches and prune the rest. `key` is this node's own
+    /// key (nil for array items and the root). An empty query matches everything.
+    public func matches(_ query: String, key: String? = nil) -> Bool {
+        if query.isEmpty { return true }
+        if let key, key.lowercased().contains(query) { return true }
+        if let text, text.lowercased().contains(query) { return true }
+        if let entries { return entries.contains { $0.node.matches(query, key: $0.name) } }
+        if let items { return items.contains { $0.matches(query) } }
+        return false
+    }
 }
