@@ -133,6 +133,7 @@ struct RootView: View {
                 if !showing && shouldPromptConsent { presentConsent = true }
             }
             .onChange(of: colorScheme) { _, _ in updateDockIcon() }
+            .onChange(of: state.activeTabID) { _, id in Telemetry.shared.featureBecameActive(id) }
             .confirmationDialog(
                 state.pendingGuard?.title ?? "",
                 isPresented: Binding(
@@ -180,6 +181,7 @@ struct RootView: View {
             )
         }
         HotkeyManager.install(state: state)
+        Telemetry.shared.featureBecameActive(state.activeTabID)
         installCloseTabMonitor()
         switch LaunchPrompt.next(
             hasChosenRole: hasChosenRole, hasSeenTour: hasSeenTour,

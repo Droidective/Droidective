@@ -602,6 +602,7 @@ final class AppState {
     /// open feature lands in the focused group. Switching is always safe (tabs
     /// stay mounted), so there's no leave guard.
     func requestFeature(_ id: String) {
+        Telemetry.shared.trackFeatureUsed(id, kind: FeatureRegistry.byID[id]?.kind.rawValue ?? "view")
         workspace.open(id)
         if didLoadLayout {
             persistTabs()
@@ -868,7 +869,7 @@ final class AppState {
     func run(feature: FeatureDef, params: [String: FeatureValue]) async {
         isRunningFeature = true
         defer { isRunningFeature = false }
-        Telemetry.shared.track("feature_used", ["feature": feature.id])
+        Telemetry.shared.trackFeatureUsed(feature.id, kind: feature.kind.rawValue)
         noteFeatureUse(feature.id)
 
         // A screenshot from a quick path (sidebar ⏎, global hotkey, menu bar)
