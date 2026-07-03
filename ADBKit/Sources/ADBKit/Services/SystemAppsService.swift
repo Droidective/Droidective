@@ -57,16 +57,16 @@ public struct SystemAppsService: Sendable {
 
     public func setDisabled(serial: String, packageId: String, _ disabled: Bool) async throws(AdbError) -> AdbResult {
         if disabled {
-            return try await client.run(on: serial, ["shell", "pm", "disable-user", "--user", "0", packageId])
+            return try await client.run(on: serial, ["shell", "pm", "disable-user", "--user", "0", shellQuote(packageId)])
         }
-        return try await client.run(on: serial, ["shell", "pm", "enable", packageId])
+        return try await client.run(on: serial, ["shell", "pm", "enable", shellQuote(packageId)])
     }
 
     public func setRemoved(serial: String, packageId: String, _ removed: Bool) async throws(AdbError) -> AdbResult {
         if removed {
-            return try await client.run(on: serial, ["shell", "pm", "uninstall", "--user", "0", packageId])
+            return try await client.run(on: serial, ["shell", "pm", "uninstall", "--user", "0", shellQuote(packageId)])
         }
-        return try await client.run(on: serial, ["shell", "cmd", "package", "install-existing", packageId])
+        return try await client.run(on: serial, ["shell", "cmd", "package", "install-existing", shellQuote(packageId)])
     }
 
     // MARK: - Parsing

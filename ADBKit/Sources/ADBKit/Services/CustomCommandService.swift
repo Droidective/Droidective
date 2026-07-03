@@ -74,13 +74,23 @@ public struct CustomCommandService: Sendable {
             .replacingOccurrences(of: "{serial}", with: serial)
     }
 
-    /// Substitute placeholders and tokenize. The leading "adb" (if typed) is
-    /// dropped — the client supplies the binary.
+    /// Tokenize, then substitute placeholders *into each token*. The leading
+    /// "adb" (if typed) is dropped — the client supplies the binary.
+    ///
+    /// Substituting after tokenizing keeps a placeholder value that contains
+    /// spaces or shell metacharacters (a free-text bundle id, a crafted serial)
+    /// as a single argv token, instead of letting it split into extra adb
+    /// arguments the way pre-tokenization substitution did.
     public static func buildArgs(
         template: String, bundleId: String?, serial: String
     ) throws(TemplateError) -> [String] {
-        let substituted = try substitute(template: template, bundleId: bundleId, serial: serial)
-        var tokens = try tokenize(substituted)
+        if template.contains("{bundleId}") && (bundleId ?? "").isEmpty {
+            throw .missingBundle
+        }
+        var tokens = try tokenize(template).map {
+            $0.replacingOccurrences(of: "{bundleId}", with: bundleId ?? "")
+                .replacingOccurrences(of: "{serial}", with: serial)
+        }
         if tokens.first == "adb" {
             tokens.removeFirst()
         }

@@ -41,7 +41,7 @@ public struct BugReportService: Sendable {
         try Data(info.utf8).write(to: tmp.appendingPathComponent("device-info.txt"))
 
         if let packageId, !packageId.isEmpty {
-            let dump = try await client.run(on: serial, ["shell", "dumpsys", "package", packageId])
+            let dump = try await client.run(on: serial, ["shell", "dumpsys", "package", shellQuote(packageId)])
             let name = dump.stdout.firstMatch(of: /versionName=(\S+)/).map { String($0.1) } ?? "?"
             let code = dump.stdout.firstMatch(of: /versionCode=(\d+)/).map { String($0.1) } ?? "?"
             try Data("versionName=\(name)\nversionCode=\(code)".utf8)

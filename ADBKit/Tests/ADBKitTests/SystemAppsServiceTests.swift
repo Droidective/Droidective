@@ -1,6 +1,30 @@
 import Testing
 @testable import ADBKit
 
+@Suite struct SystemAppsArgTests {
+    @Test func disableQuotesPackage() async throws {
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["-s"], stdout: "")
+        let service = SystemAppsService(client: await makeTestClient(runner: runner))
+
+        _ = try await service.setDisabled(serial: "S1", packageId: "com.app;x", true)
+        #expect(runner.invocations.last?.arguments == [
+            "-s", "S1", "shell", "pm", "disable-user", "--user", "0", "'com.app;x'",
+        ])
+    }
+
+    @Test func uninstallForUserQuotesPackage() async throws {
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["-s"], stdout: "")
+        let service = SystemAppsService(client: await makeTestClient(runner: runner))
+
+        _ = try await service.setRemoved(serial: "S1", packageId: "com.app;x", true)
+        #expect(runner.invocations.last?.arguments == [
+            "-s", "S1", "shell", "pm", "uninstall", "--user", "0", "'com.app;x'",
+        ])
+    }
+}
+
 @Suite struct SystemAppsServiceTests {
     @Test func parsePackageListStripsPrefixAndUid() {
         let set = SystemAppsService.parsePackageList("""

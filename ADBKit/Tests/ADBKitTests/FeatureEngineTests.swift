@@ -34,6 +34,21 @@ import Testing
         #expect(runner.invocations.last?.arguments == ["-s", "S1", "shell", "input", "keyevent", "46", "46"])
     }
 
+    @Test func monkeyQuotesThePackage() async {
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["-s"], stdout: "Events injected: 10")
+        let engine = await makeEngine(runner)
+
+        let result = await engine.run(
+            featureID: "monkey", serial: "S1",
+            params: ["packageId": .string("com.demo;rm"), "count": .number(10)]
+        )
+        #expect(result.ok)
+        #expect(runner.invocations.last?.arguments == [
+            "-s", "S1", "shell", "monkey", "-p", "'com.demo;rm'", "-v", "10",
+        ])
+    }
+
     @Test func processDeathKillsTheChosenBundleAndVerifiesDeath() async {
         let runner = MockProcessRunner()
         runner.script(argsPrefix: ["-s"], stdout: "")

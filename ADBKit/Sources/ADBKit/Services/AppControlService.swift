@@ -26,7 +26,7 @@ public struct AppControlService: Sendable {
         switch action {
         case .open:
             let result = try await client.run(on: serial, [
-                "shell", "monkey", "-p", packageId, "-c", "android.intent.category.LAUNCHER", "1",
+                "shell", "monkey", "-p", shellQuote(packageId), "-c", "android.intent.category.LAUNCHER", "1",
             ])
             let combined = result.stdout + result.stderr
             let launched = result.succeeded && combined.range(of: "No activities found", options: .caseInsensitive) == nil
@@ -35,7 +35,7 @@ public struct AppControlService: Sendable {
                 : FeatureResult(ok: false, message: "Couldn't launch — no launcher activity found.")
 
         case .stop:
-            let result = try await client.run(on: serial, ["shell", "am", "force-stop", packageId])
+            let result = try await client.run(on: serial, ["shell", "am", "force-stop", shellQuote(packageId)])
             return fromResult(result, success: "Force-stopped", fallback: "Failed to force-stop")
 
         case .minimize:
@@ -43,14 +43,18 @@ public struct AppControlService: Sendable {
             return fromResult(result, success: "Sent to background", fallback: "Failed to minimize")
 
         case .clearCache:
-            let result = try await client.run(on: serial, ["shell", "pm", "clear", "--cache-only", packageId])
-            return result.succeeded
+            let result = try await client.run(on: serial, ["shell", "pm", "clear", "--cache-only", shellQuote(packageId)])
+            // `pm clear` prints "Success"/"Failed" and exits 0 either way, so the
+            // stdout text — not the exit code — is authoritative.
+            return Self.pmClearSucceeded(result)
                 ? FeatureResult(ok: true, message: "Cleared cache")
                 : FeatureResult(ok: false, message: "Clearing cache needs Android 14+ (or use Clear Data).")
 
         case .clearData:
-            let result = try await client.run(on: serial, ["shell", "pm", "clear", packageId])
-            return fromResult(result, success: "Cleared app data", fallback: "Failed to clear data")
+            let result = try await client.run(on: serial, ["shell", "pm", "clear", shellQuote(packageId)])
+            return Self.pmClearSucceeded(result)
+                ? FeatureResult(ok: true, message: "Cleared app data")
+                : FeatureResult(ok: false, message: friendlyAdbError(result, fallback: "Failed to clear data"))
 
         case .uninstall:
             let result = try await client.run(on: serial, ["uninstall", packageId])
@@ -86,6 +90,15 @@ public struct AppControlService: Sendable {
         return failed
             ? FeatureResult(ok: false, message: friendlyAdbError(result, fallback: "Couldn't launch the deep link"))
             : FeatureResult(ok: true, message: "Launched \(url)")
+    }
+
+    /// `pm clear` reports the outcome in stdout ("Success" / "Failed") while
+    /// exiting 0 in both cases, so success means the word "Success" is present
+    /// and "Failed" is not.
+    static func pmClearSucceeded(_ result: AdbResult) -> Bool {
+        let combined = result.stdout + result.stderr
+        if combined.range(of: "Failed", options: .caseInsensitive) != nil { return false }
+        return combined.range(of: "Success", options: .caseInsensitive) != nil
     }
 
     private func fromResult(_ result: AdbResult, success: String, fallback: String) -> FeatureResult {

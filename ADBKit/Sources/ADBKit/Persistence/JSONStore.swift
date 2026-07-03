@@ -51,7 +51,9 @@ public actor JSONStore<T: Codable & Sendable> {
     }
 
     public func save(_ value: T) throws {
-        cached = value
+        // Cache only after the write succeeds — a throwing write must not leave
+        // the in-memory cache holding a value that never reached disk, or a
+        // later load() would return unpersisted data.
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(value)
@@ -62,6 +64,7 @@ public actor JSONStore<T: Codable & Sendable> {
             .appendingPathComponent(".\(fileURL.lastPathComponent).tmp-\(UUID().uuidString)")
         try data.write(to: tempURL)
         _ = try FileManager.default.replaceItemAt(fileURL, withItemAt: tempURL)
+        cached = value
     }
 
     @discardableResult

@@ -99,7 +99,7 @@ public actor LogcatStreamer {
 
     /// Resolve a package's running PID, or nil if it isn't running.
     public func resolvePid(serial: String, packageId: String) async throws(AdbError) -> Int? {
-        let result = try await client.run(on: serial, ["shell", "pidof", "-s", packageId])
+        let result = try await client.run(on: serial, ["shell", "pidof", "-s", shellQuote(packageId)])
         let first = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
             .split(separator: " ").first
         return first.flatMap { Int($0) }

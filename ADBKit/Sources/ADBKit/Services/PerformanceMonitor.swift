@@ -243,8 +243,8 @@ public actor PerformanceService {
         }
 
         if let packageId, !packageId.isEmpty {
-            async let gfxString = shell(serial, ["dumpsys", "gfxinfo", packageId])
-            async let appMemString = shell(serial, ["dumpsys", "meminfo", packageId])
+            async let gfxString = shell(serial, ["dumpsys", "gfxinfo", shellQuote(packageId)])
+            async let appMemString = shell(serial, ["dumpsys", "meminfo", shellQuote(packageId)])
             if let gfx = await gfxString {
                 poll.appFps = consumeGfx(serial: serial, packageId: packageId, output: gfx)
             }
