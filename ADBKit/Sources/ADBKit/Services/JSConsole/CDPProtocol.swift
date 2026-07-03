@@ -38,10 +38,15 @@ public enum CDP {
     }
 
     public static func getPropertiesParams(objectId: String) -> [String: JSONValue] {
+        // No `generatePreview`: Hermes crashes the RN app's VM when asked to
+        // generate inline previews while enumerating an object's properties
+        // (its preview generator is not crash-safe the way Chrome's is). The
+        // property values still arrive as RemoteObjects with type/description,
+        // and a nested object stays expandable via its own getProperties — we
+        // just don't get the one-line inline preview of nested children.
         [
             "objectId": .string(objectId),
             "ownProperties": .bool(true),
-            "generatePreview": .bool(true),
         ]
     }
 

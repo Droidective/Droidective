@@ -37,6 +37,9 @@ import Testing
         let params = CDP.getPropertiesParams(objectId: "{\"id\":1}")
         #expect(params["objectId"]?.stringValue == "{\"id\":1}")
         #expect(params["ownProperties"]?.boolValue == true)
+        // Must NOT request a preview: Hermes crashes the app's VM generating
+        // previews during getProperties, so expanding an object would kill the app.
+        #expect(params["generatePreview"] == nil)
     }
 
     // MARK: - Incoming classification
