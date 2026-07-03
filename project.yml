@@ -9,19 +9,19 @@ packages:
     path: ADBKit
   KeyboardShortcuts:
     url: https://github.com/sindresorhus/KeyboardShortcuts
-    from: 1.10.0
+    exactVersion: 1.10.0
   SwiftTerm:
     url: https://github.com/migueldeicaza/SwiftTerm
-    from: 1.13.0
+    exactVersion: 1.13.0
   Sparkle:
     url: https://github.com/sparkle-project/Sparkle
-    from: 2.9.3
+    exactVersion: 2.9.3
   Sentry:
     url: https://github.com/getsentry/sentry-cocoa
-    from: 9.18.0
+    exactVersion: 9.18.0
   PostHog:
     url: https://github.com/PostHog/posthog-ios
-    from: 3.61.0
+    exactVersion: 3.61.0
 targets:
   App:
     type: application

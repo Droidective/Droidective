@@ -112,17 +112,24 @@ public actor JSConsoleClient {
         return EvalOutcome.from(result: result)
     }
 
-    public func getProperties(objectId: String) async throws -> [CDPProperty] {
-        let result = try await send(method: "Runtime.getProperties", params: CDP.getPropertiesParams(objectId: objectId))
-        return CDPProperty.parse(result)
-    }
-
     /// A faithful deep-JSON rendering of an object, evaluated in the runtime via
     /// `callFunctionOn` — for "Copy as JSON". Returns nil on transport failure.
     public func deepStringify(objectId: String) async -> String? {
         let result = try? await send(
             method: "Runtime.callFunctionOn",
             params: CDP.callFunctionOnParams(objectId: objectId, functionDeclaration: CDP.deepStringifyFunction)
+        )
+        return result?["result"]?["value"]?.stringValue
+    }
+
+    /// A bounded pretty-JSON snapshot of an object for expanding it in the UI.
+    /// Uses `callFunctionOn` (which returns a string) instead of `getProperties`
+    /// (whose native RemoteObject converter crashes Hermes on some object
+    /// graphs). Returns nil on transport failure.
+    public func snapshotJSON(objectId: String) async -> String? {
+        let result = try? await send(
+            method: "Runtime.callFunctionOn",
+            params: CDP.callFunctionOnParams(objectId: objectId, functionDeclaration: CDP.boundedSnapshotFunction)
         )
         return result?["result"]?["value"]?.stringValue
     }
@@ -154,6 +161,7 @@ public actor JSConsoleClient {
         // receive loop stashes it in `earlyResults` and we pick it up below.
         do {
             try await task.send(.string(String(decoding: data, as: UTF8.self)))
+            NetworkTrafficMeter.shared.recordSent(data.count)
         } catch {
             throw ClientError.transport("\(error.localizedDescription)")
         }
@@ -215,6 +223,7 @@ public actor JSConsoleClient {
         case let .data(payload): data = payload
         @unknown default: return
         }
+        NetworkTrafficMeter.shared.recordReceived(data.count)
         guard let incoming = CDP.parseIncoming(data) else { return }
         switch incoming {
         case let .response(id, result, error):

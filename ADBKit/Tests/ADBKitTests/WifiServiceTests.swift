@@ -1,6 +1,21 @@
 import Testing
 @testable import ADBKit
 
+@Suite struct WifiConnectArgTests {
+    @Test func connectQuotesSsidAndPassword() async throws {
+        // SSIDs routinely contain spaces/quotes; both the SSID and the password
+        // must reach the device shell as single quoted arguments.
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["-s"], stdout: "")
+        let service = WifiService(client: await makeTestClient(runner: runner))
+
+        _ = try await service.connect(serial: "S1", ssid: "Cafe ' x", security: "wpa2", password: "p w")
+        #expect(runner.invocations.last?.arguments == [
+            "-s", "S1", "shell", "cmd", "wifi", "connect-network", "'Cafe '\\'' x'", "wpa2", "'p w'",
+        ])
+    }
+}
+
 @Suite struct WifiServiceTests {
     @Test func parsesConnectedStatusFromCmdWifi() {
         let status = WifiService.parseStatus(

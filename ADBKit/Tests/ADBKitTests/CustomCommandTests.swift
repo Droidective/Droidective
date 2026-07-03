@@ -36,6 +36,15 @@ import Testing
         #expect(args == ["shell", "am", "force-stop", "com.app"])
     }
 
+    @Test func placeholderValueStaysOneTokenEvenWithSpaces() throws {
+        // Substitution happens after tokenization, so a value containing spaces
+        // or metacharacters can't split into extra adb arguments.
+        let args = try CustomCommandService.buildArgs(
+            template: "shell am force-stop {bundleId}", bundleId: "com.app extra;arg", serial: "S1"
+        )
+        #expect(args == ["shell", "am", "force-stop", "com.app extra;arg"])
+    }
+
     @Test func dropsLeadingAdbToken() throws {
         let args = try CustomCommandService.buildArgs(template: "adb devices", bundleId: nil, serial: "")
         #expect(args == ["devices"])

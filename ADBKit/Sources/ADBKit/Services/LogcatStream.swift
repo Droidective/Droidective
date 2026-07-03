@@ -46,8 +46,13 @@ public struct LogcatFilters: Sendable, Equatable {
 
 /// Pure threadtime line parsing, testable without a device.
 public enum LogcatLineParser {
+    /// Hoisted so the regex is compiled once, not rebuilt per line — logcat
+    /// streams hundreds of lines a second. `nonisolated(unsafe)` because `Regex`
+    /// isn't `Sendable`, but matching against it is a read-only operation with
+    /// no shared mutable state, so concurrent `parse` calls are safe.
+    nonisolated(unsafe) static let threadtime = /^(\d\d-\d\d \d\d:\d\d:\d\d\.\d\d\d)\s+(\d+)\s+(\d+)\s+([VDIWEFS])\s+(.*?):\s?(.*)$/
+
     public static func parse(_ raw: String) -> LogLine {
-        let threadtime = /^(\d\d-\d\d \d\d:\d\d:\d\d\.\d\d\d)\s+(\d+)\s+(\d+)\s+([VDIWEFS])\s+(.*?):\s?(.*)$/
         guard let match = raw.wholeMatch(of: threadtime) else {
             return LogLine(raw: raw, time: "", pid: "", level: "", tag: "", message: raw)
         }
@@ -99,7 +104,7 @@ public actor LogcatStreamer {
 
     /// Resolve a package's running PID, or nil if it isn't running.
     public func resolvePid(serial: String, packageId: String) async throws(AdbError) -> Int? {
-        let result = try await client.run(on: serial, ["shell", "pidof", "-s", packageId])
+        let result = try await client.run(on: serial, ["shell", "pidof", "-s", shellQuote(packageId)])
         let first = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
             .split(separator: " ").first
         return first.flatMap { Int($0) }

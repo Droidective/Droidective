@@ -86,17 +86,21 @@ struct RootView: View {
         // (the exitGuard alone is often unchanged), driving the leave dialog.
         let showExitDialog = state.pendingExit.map { !$0.saving } ?? false
         return zoomedContent
+            .overlay(alignment: .topTrailing) { devMetricsOverlay }
             .environment(\.colorScheme, injectedColorScheme)
             .preferredColorScheme(preferredScheme)
             .background(WindowAccessor { window in
                 // Tag the main window so the ⌘W monitor can tell it apart from
                 // Settings / the palette panel.
                 window.identifier = NSUserInterfaceItemIdentifier(RootView.mainWindowID)
-                // Fill the screen's usable area on launch — a regular maximized
-                // window, not a native full-screen Space.
-                if let screen = window.screen ?? NSScreen.main {
+                // Restore the user's saved window frame; only fill the screen's
+                // usable area on the very first launch (nothing to restore), so
+                // a resized window survives relaunch instead of being maximized.
+                let autosaveName = NSWindow.FrameAutosaveName(RootView.mainWindowID)
+                if !window.setFrameUsingName(autosaveName), let screen = window.screen ?? NSScreen.main {
                     window.setFrame(screen.visibleFrame, display: true)
                 }
+                window.setFrameAutosaveName(autosaveName)
             })
             .overlay {
                 // Full-window takeover (macOS has no fullScreenCover), shown
@@ -145,6 +149,15 @@ struct RootView: View {
                 Text(info.message)
             }
             .modifier(TerminalCloseConfirmation(state: state))
+    }
+
+    /// The debug-only self-metrics HUD (memory/CPU/network), pinned top-right over
+    /// the content. Empty in Release; visibility inside is driven by the
+    /// Settings ▸ Appearance toggle.
+    @ViewBuilder private var devMetricsOverlay: some View {
+        #if DEBUG
+        DevMetricsOverlay().padding(.top, 10).padding(.trailing, 10)
+        #endif
     }
 
     /// Runs once when the root view appears: wires AppState callbacks, applies
@@ -316,8 +329,11 @@ struct RootView: View {
             }
             VStack(spacing: 0) {
                 // Device bar on top (shared across panes); each pane's own tab
-                // strip sits below it, inside the pane — VS Code-style.
-                if state.activeTabID != "catalog" {
+                // strip sits below it, inside the pane — VS Code-style. Shown
+                // whenever any visible pane needs a device, so focusing the
+                // catalog in one pane of a split doesn't pull the bar (and the
+                // progress strip) out from under a live feature in the other.
+                if state.workspace.groups.contains(where: { $0.activeTab != "catalog" }) {
                     DeviceBarView()
                     if let operation = state.runningOperation {
                         OperationProgressStrip(operation: operation)

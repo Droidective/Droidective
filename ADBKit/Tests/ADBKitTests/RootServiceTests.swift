@@ -1,6 +1,21 @@
 import Testing
 @testable import ADBKit
 
+@Suite struct RootSuRunArgTests {
+    @Test func suRunQuotesTheWholeCommand() async throws {
+        // The free-text root command must reach `su -c` as a single quoted
+        // argument, not split on spaces by the device shell.
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["-s"], stdout: "")
+        let service = RootService(client: await makeTestClient(runner: runner))
+
+        _ = try await service.suRun(serial: "S1", "rm -rf /data/x; echo hi")
+        #expect(runner.invocations.last?.arguments == [
+            "-s", "S1", "shell", "su", "-c", "'rm -rf /data/x; echo hi'",
+        ])
+    }
+}
+
 @Suite struct RootServiceTests {
     private static let cleanProps = [
         "ro.build.tags": "release-keys",

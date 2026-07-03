@@ -294,6 +294,9 @@ extension AppState {
     }
 
     func persistLayout() {
+        // Until bootstrap has loaded the persisted layout, `layout` is still the
+        // default — writing it would overwrite the user's saved data.
+        guard didLoadLayout else { return }
         let snapshot = layout
         Task {
             try? await env.stores.layout.save(snapshot)

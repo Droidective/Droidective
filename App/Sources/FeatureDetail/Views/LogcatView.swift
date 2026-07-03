@@ -30,12 +30,15 @@ struct LogcatView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        // Filter once per render — the status count and the list share it,
+        // instead of each re-scanning the full buffer while searching.
+        let visible = visibleLines
+        return VStack(spacing: 0) {
             toolbar
             Divider()
-            statusBar
+            statusBar(visible: visible)
             Divider()
-            logList
+            logList(visible: visible)
         }
         .task(id: taskKey) { await streamLoop() }
         // Open pre-filtered to the bundle chosen in the device bar (changeable
@@ -114,7 +117,7 @@ struct LogcatView: View {
     }
 
     /// One line of truth about what the stream is actually doing.
-    private var statusBar: some View {
+    private func statusBar(visible: [LogLine]) -> some View {
         HStack(spacing: 6) {
             Circle()
                 .fill(statusColor)
@@ -140,7 +143,7 @@ struct LogcatView: View {
             }
             Spacer()
             if !search.isEmpty {
-                Text("\(visibleLines.count) of \(lines.count) lines match")
+                Text("\(visible.count) of \(lines.count) lines match")
                     .font(.caption)
                     .foregroundStyle(.textMuted)
             } else {
@@ -190,10 +193,10 @@ struct LogcatView: View {
         }
     }
 
-    private var logList: some View {
+    private func logList(visible: [LogLine]) -> some View {
         // Newest lines append at the bottom; LogTailView follows them while the
         // user is at the bottom and pauses the moment they scroll up.
-        LogTailView(entries: visibleLines, newestEdge: .bottom) { line in
+        LogTailView(entries: visible, newestEdge: .bottom) { line in
             Text(attributedDisplay(line))
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(color(for: line.level))

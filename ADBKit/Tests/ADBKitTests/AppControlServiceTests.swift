@@ -14,8 +14,53 @@ import Testing
         let result = try await service.control(serial: "S1", packageId: "com.app", action: .open)
         #expect(result.ok)
         #expect(runner.invocations.last?.arguments == [
-            "-s", "S1", "shell", "monkey", "-p", "com.app", "-c", "android.intent.category.LAUNCHER", "1",
+            "-s", "S1", "shell", "monkey", "-p", "'com.app'", "-c", "android.intent.category.LAUNCHER", "1",
         ])
+    }
+
+    @Test func forceStopQuotesPackageForTheDeviceShell() async throws {
+        // A package id is free text in the bundle store; a metacharacter must be
+        // quoted so `am force-stop` can't be turned into a second command.
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["-s"], stdout: "")
+        let service = await makeService(runner)
+
+        _ = try await service.control(serial: "S1", packageId: "com.app; reboot", action: .stop)
+        #expect(runner.invocations.last?.arguments == [
+            "-s", "S1", "shell", "am", "force-stop", "'com.app; reboot'",
+        ])
+    }
+
+    @Test func clearDataQuotesPackageAndReadsSuccessText() async throws {
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["-s"], stdout: "Success")
+        let service = await makeService(runner)
+
+        let result = try await service.control(serial: "S1", packageId: "a'b", action: .clearData)
+        #expect(result.ok)
+        #expect(runner.invocations.last?.arguments == [
+            "-s", "S1", "shell", "pm", "clear", "'a'\\''b'",
+        ])
+    }
+
+    @Test func clearDataReportsFailureWhenPmClearFailsWithExitZero() async throws {
+        // `pm clear` prints "Failed" while exiting 0 — the text is authoritative.
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["-s"], stdout: "Failed")
+        let service = await makeService(runner)
+
+        let result = try await service.control(serial: "S1", packageId: "com.app", action: .clearData)
+        #expect(!result.ok)
+    }
+
+    @Test func clearCacheReportsFailureWhenNoSuccessText() async throws {
+        // Older devices print nothing (no --cache-only support) and exit 0.
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["-s"], stdout: "")
+        let service = await makeService(runner)
+
+        let result = try await service.control(serial: "S1", packageId: "com.app", action: .clearCache)
+        #expect(!result.ok)
     }
 
     @Test func openDetectsMissingLauncherActivity() async throws {

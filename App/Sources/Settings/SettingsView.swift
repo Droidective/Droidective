@@ -164,6 +164,9 @@ struct AppearanceSettingsView: View {
     @AppStorage("theme") private var theme = "dark"
     @AppStorage(accentColorDefaultsKey) private var accentHex = ""
     @AppStorage("showFeatureNotes") private var showFeatureNotes = false
+    #if DEBUG
+    @AppStorage(DevMetrics.overlayEnabledKey) private var showDevMetrics = true
+    #endif
 
     /// The accent ColorPicker reads/writes the stored hex; an empty value shows
     /// (and resets to) the bundled default.
@@ -210,6 +213,15 @@ struct AppearanceSettingsView: View {
                     .font(.footnote)
                     .foregroundStyle(.textMuted)
             }
+
+            #if DEBUG
+            Section("Developer") {
+                Toggle("Show self-metrics overlay", isOn: $showDevMetrics)
+                Text("A floating panel (top-right) with Droidective's own memory, CPU, and network throughput. Debug builds only.")
+                    .font(.footnote)
+                    .foregroundStyle(.textMuted)
+            }
+            #endif
         }
         .formStyle(.grouped)
     }
@@ -220,6 +232,7 @@ struct PrivacySettingsView: View {
     @Environment(AppState.self) private var state
     @AppStorage(ScreenCaptureService.captureFolderDefaultsKey) private var captureFolderPath = ""
     @State private var showCommandLog = false
+    @State private var confirmClearLog = false
 
     private var captureFolderDisplay: String {
         captureFolderPath.isEmpty
@@ -271,7 +284,7 @@ struct PrivacySettingsView: View {
                 LabeledContent("Command log") {
                     HStack {
                         Button("View…") { showCommandLog = true }
-                        Button("Clear") { Task { await state.env.commandLog.clear() } }
+                        Button("Clear") { confirmClearLog = true }
                     }
                 }
             }
@@ -279,6 +292,21 @@ struct PrivacySettingsView: View {
         .formStyle(.grouped)
         .sheet(isPresented: $showCommandLog) {
             CommandLogView()
+        }
+        .confirmationDialog(
+            "Clear the command log?",
+            isPresented: $confirmClearLog,
+            titleVisibility: .visible
+        ) {
+            Button("Clear", role: .destructive) {
+                Task {
+                    await state.env.commandLog.clear()
+                    state.showToast(Toast(message: "Command log cleared", ok: true))
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes all recorded commands.")
         }
     }
 }

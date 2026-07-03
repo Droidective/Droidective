@@ -243,6 +243,10 @@ private struct TabChip: View {
         .contentShape(Rectangle())
         .onTapGesture { onSelect() }
         .onHover { hovering = $0 }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(isActive ? [.isButton, .isSelected] : .isButton)
+        .accessibilityHint("Opens this tab")
     }
 
     @ViewBuilder private var leading: some View {
@@ -270,7 +274,9 @@ private struct TabChip: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help("Close tab (⌘W)")
+            // ⌘W closes the *active* tab, so only hint it on the active chip.
+            .help(isActive ? "Close tab (⌘W)" : "Close tab")
+            .accessibilityLabel("Close \(title)")
         } else {
             Color.clear.frame(width: 16, height: 16)
         }

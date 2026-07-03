@@ -176,6 +176,7 @@ public actor ReactotronServer {
                 switch metadata.opcode {
                 case .text:
                     if let content {
+                        NetworkTrafficMeter.shared.recordReceived(content.count)
                         Task { await server.handleFrame(connectionId: id, data: content) }
                     }
                 case .close:

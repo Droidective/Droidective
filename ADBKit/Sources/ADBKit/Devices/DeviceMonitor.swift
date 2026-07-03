@@ -10,6 +10,7 @@ public actor DeviceMonitor {
     private var continuations: [UUID: AsyncStream<[Device]>.Continuation] = [:]
     private var pollTask: Task<Void, Never>?
     private var lastPublished: [Device]?
+    private var pollInterval: Duration = .seconds(2)
 
     public init(client: AdbClient) {
         self.client = client
@@ -50,12 +51,20 @@ public actor DeviceMonitor {
         return stream
     }
 
+    /// Adjust the polling cadence at runtime — the app widens it while
+    /// backgrounded so an idle, hidden window stops spawning `adb devices`
+    /// every 2s. Takes effect on the next loop iteration.
+    public func setPollInterval(_ interval: Duration) {
+        pollInterval = interval
+    }
+
     private func startPollingIfNeeded(interval: Duration) {
+        pollInterval = interval
         guard pollTask == nil else { return }
         pollTask = Task {
             while !Task.isCancelled {
                 await self.pollOnce()
-                try? await Task.sleep(for: interval)
+                try? await Task.sleep(for: self.pollInterval)
             }
         }
     }

@@ -99,7 +99,7 @@ struct PerformanceView: View {
         }
         .onDisappear {
             sampler?.cancel()
-            state.recordingActive = false
+            state.setRecording(false, owner: "performance")
             state.clearExitGuard(exitGuardID)
         }
     }
@@ -521,7 +521,7 @@ struct PerformanceView: View {
             samples = []
             startDate = Date()
             phase = .recording
-            state.recordingActive = true
+            state.setRecording(true, owner: "performance")
             launchSampler()
         case .recording:
             phase = .paused
@@ -529,7 +529,7 @@ struct PerformanceView: View {
             sampler = nil
         case .paused:
             phase = .recording
-            state.recordingActive = true
+            state.setRecording(true, owner: "performance")
             launchSampler()
         }
     }
@@ -547,7 +547,7 @@ struct PerformanceView: View {
         phase = .idle
         sampler?.cancel()
         sampler = nil
-        state.recordingActive = false
+        state.setRecording(false, owner: "performance")
     }
 
     private func launchSampler() {

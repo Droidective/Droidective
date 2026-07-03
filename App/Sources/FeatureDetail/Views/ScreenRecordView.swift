@@ -57,7 +57,7 @@ struct ScreenRecordView: View {
         }
         .onDisappear {
             limitTask?.cancel()
-            state.recordingActive = false
+            state.setRecording(false, owner: "screen-record")
             state.clearExitGuard(exitGuardID)
             if isRecording, let recorder { Task { await recorder.abort() } }
             if let url = recordedURL { try? FileManager.default.removeItem(at: url) }
@@ -249,7 +249,7 @@ struct ScreenRecordView: View {
             // performance/network recorders do. A recording targets one device;
             // switching it mid-capture would strand this recorder (the view stays
             // mounted on a device switch, so .onDisappear never fires to abort it).
-            state.recordingActive = true
+            state.setRecording(true, owner: "screen-record")
             state.setExitGuard(.init(
                 id: exitGuardID, featureID: tabFeatureID, style: .recording,
                 title: "Recording in progress",
@@ -310,7 +310,7 @@ struct ScreenRecordView: View {
         isStopping = false
         startedAt = nil
         self.recorder = nil
-        state.recordingActive = false
+        state.setRecording(false, owner: "screen-record")
         state.clearExitGuard(exitGuardID)
     }
 
@@ -322,7 +322,7 @@ struct ScreenRecordView: View {
         // Cleared here, not only in .onDisappear: a Stop & Save that resolves a
         // device switch keeps this view mounted, so onDisappear wouldn't fire to
         // unlock the device/bundle pickers.
-        state.recordingActive = false
+        state.setRecording(false, owner: "screen-record")
         guard let recorder else { state.finishExitSave(); return }
         self.recorder = nil
         isRecording = false

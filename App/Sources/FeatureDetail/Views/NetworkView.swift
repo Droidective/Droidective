@@ -336,12 +336,12 @@ struct NetworkView: View {
         baselineTx = nil
         sessionRx = 0
         sessionTx = 0
-        state.recordingActive = true
+        state.setRecording(true, owner: "network-speed")
     }
 
     private func stopRecording() {
         isRecording = false
-        state.recordingActive = false
+        state.setRecording(false, owner: "network-speed")
     }
 
     private func launchSampler() {
