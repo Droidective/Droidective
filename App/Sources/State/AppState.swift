@@ -284,6 +284,9 @@ final class AppState {
     var lastResults: [String: (result: FeatureResult, at: Date)] = [:]
     /// Per-serial enrichment for the device picker (version, battery).
     var deviceDetails: [String: DeviceDetails] = [:]
+    /// Serials already reported to analytics this session, so `device_connected`
+    /// fires once per device (the serial is used only locally, never sent).
+    private var reportedDeviceSerials: Set<String> = []
 
     /// Bring the app forward, reopening the main window if it was closed.
     func activateMainWindow() {
@@ -406,9 +409,23 @@ final class AppState {
         }
         for device in ready where deviceDetails[device.serial] == nil {
             Task {
-                deviceDetails[device.serial] = await DeviceDetails.fetch(client: env.client, serial: device.serial)
+                let details = await DeviceDetails.fetch(client: env.client, serial: device.serial)
+                deviceDetails[device.serial] = details
+                reportDeviceConnected(device, details: details)
             }
         }
+    }
+
+    /// Emit an anonymous `device_connected` once per device this session (no
+    /// serial leaves the machine — it's only the local dedup key).
+    private func reportDeviceConnected(_ device: Device, details: DeviceDetails) {
+        guard reportedDeviceSerials.insert(device.serial).inserted else { return }
+        Telemetry.shared.trackDeviceConnected(
+            isEmulator: device.serial.hasPrefix("emulator-"),
+            androidVersion: details.androidVersion,
+            model: device.model,
+            isWireless: device.isWireless
+        )
     }
 
     /// Picker label with enrichment: "Pixel 7 (005F) · Android 14 · 82%".
@@ -1063,6 +1080,9 @@ final class AppState {
     /// enabled set + sidebar order to that role, or keep everything on for
     /// `nil` ("show me everything"). Persists and lands on the launchpad.
     func chooseRole(_ role: UserRole?) {
+        let isChange = layout.selectedRole != nil
+        Telemetry.shared.trackRoleChosen(role?.rawValue ?? "all", isChange: isChange)
+        Telemetry.shared.applyRole(role?.rawValue)
         if let role {
             layout.seedRole(role)
         } else {

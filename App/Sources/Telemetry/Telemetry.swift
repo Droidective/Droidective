@@ -104,6 +104,60 @@ final class Telemetry {
         }
     }
 
+    // MARK: - Who & session
+
+    /// Version/OS/arch describing this install — registered as super-properties
+    /// so every event can be sliced by app version, macOS, and CPU.
+    private static var baseProperties: [String: Any] {
+        let info = Bundle.main.infoDictionary
+        let os = ProcessInfo.processInfo.operatingSystemVersion
+        #if arch(arm64)
+        let arch = "arm64"
+        #else
+        let arch = "x86_64"
+        #endif
+        return [
+            "app_version": info?["CFBundleShortVersionString"] as? String ?? "unknown",
+            "app_build": info?["CFBundleVersion"] as? String ?? "unknown",
+            "macos_version": "\(os.majorVersion).\(os.minorVersion).\(os.patchVersion)",
+            "mac_arch": arch,
+        ]
+    }
+
+    /// Attach the user's role to every subsequent event, so all analytics can be
+    /// segmented by who's using the app. `nil` (chose "everything") reads as
+    /// "unset". Idempotent — call at launch and whenever the role changes.
+    func applyRole(_ role: String?) {
+        guard analyticsEnabled, postHogReady else { return }
+        PostHogSDK.shared.register(["role": role ?? "unset"])
+    }
+
+    /// One session-start event per launch, carrying the running launch count so
+    /// activation and retention are measurable.
+    func trackAppLaunched(launchCount: Int) {
+        track("app_launched", ["launch_count": launchCount])
+    }
+
+    /// The user picked or switched roles (or chose "everything"). `isChange`
+    /// separates a first pick from a later switch.
+    func trackRoleChosen(_ role: String, isChange: Bool) {
+        track("role_selected", ["role": role, "is_change": isChange])
+    }
+
+    /// A device became visible and its details resolved. Anonymous environment
+    /// signal — no serial — so the target Android landscape (versions, emulator
+    /// vs. physical, wireless) is knowable for roadmap decisions.
+    func trackDeviceConnected(isEmulator: Bool, androidVersion: String?, model: String?, isWireless: Bool) {
+        track("device_connected", [
+            "is_emulator": isEmulator,
+            "android_version": androidVersion ?? "unknown",
+            "device_model": model ?? "unknown",
+            "is_wireless": isWireless,
+        ])
+    }
+
+    // MARK: - Performance
+
     /// A closed window of per-feature resource use (from `FeaturePerfAggregator`)
     /// — a baseline distribution, not just the threshold spikes below.
     func reportFeaturePerf(_ record: FeaturePerfRecord) {
@@ -255,6 +309,7 @@ final class Telemetry {
         }
         PostHogSDK.shared.optIn()
         PostHogSDK.shared.identify(Self.deviceID)
+        PostHogSDK.shared.register(Self.baseProperties)
     }
 
     private func stopAnalytics() {

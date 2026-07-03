@@ -153,6 +153,8 @@ struct RootView: View {
             )
         }
         HotkeyManager.install(state: state)
+        Telemetry.shared.applyRole(state.selectedRole?.rawValue)
+        Telemetry.shared.trackAppLaunched(launchCount: launchCount)
         Telemetry.shared.featureBecameActive(state.activeTabID)
         installCloseTabMonitor()
         switch LaunchPrompt.next(
