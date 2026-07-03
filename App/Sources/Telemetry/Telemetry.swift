@@ -1,3 +1,4 @@
+import ADBKit
 import Foundation
 import PostHog
 import Sentry
@@ -50,6 +51,75 @@ final class Telemetry {
     func track(_ event: String, _ properties: [String: Any] = [:]) {
         guard analyticsEnabled, postHogReady else { return }
         PostHogSDK.shared.capture(event, properties: properties)
+    }
+
+    // MARK: - Performance incidents
+
+    /// Report sustained app resource overuse (or its recovery) from the
+    /// performance monitor. An incident becomes a PostHog `app_perf_incident`
+    /// event and a Sentry warning fingerprinted per metric + active feature,
+    /// so each resource hog groups into its own issue; recovery sends the
+    /// peak/duration follow-up and leaves a Sentry breadcrumb. Each sink
+    /// respects its own consent toggle. Only feature ids and resource numbers
+    /// are sent — nothing device- or user-identifying.
+    func reportResourceEvent(_ event: ResourceEvent, context: PerformanceMonitor.FeatureContext) {
+        let feature = context.activeFeature ?? "none"
+        switch event {
+        case .began(let metric, let value, let limit):
+            track("app_perf_incident", [
+                "metric": metric.rawValue,
+                "value": chartValue(metric, value),
+                "limit": chartValue(metric, limit),
+                "feature": feature,
+                "open_features": context.openFeatures,
+            ])
+            guard crashReportingEnabled, sentryRunning else { return }
+            let sentryEvent = Sentry.Event(level: .warning)
+            sentryEvent.message = SentryMessage(
+                formatted: "High \(label(metric)): \(readable(metric, value)) while \(feature) is active")
+            sentryEvent.fingerprint = ["app-perf", metric.rawValue, feature]
+            sentryEvent.tags = ["perf_metric": metric.rawValue, "perf_feature": feature]
+            sentryEvent.extra = [
+                "value": readable(metric, value),
+                "limit": readable(metric, limit),
+                "open_features": context.openFeatures.joined(separator: ", "),
+            ]
+            SentrySDK.capture(event: sentryEvent)
+        case .ended(let metric, let peak, let seconds):
+            track("app_perf_recovered", [
+                "metric": metric.rawValue,
+                "peak": chartValue(metric, peak),
+                "duration_seconds": Int(seconds.rounded()),
+                "feature": feature,
+            ])
+            guard crashReportingEnabled, sentryRunning else { return }
+            let crumb = Breadcrumb(level: .info, category: "app.perf")
+            crumb.message =
+                "\(label(metric)) recovered — peak \(readable(metric, peak)) over \(Int(seconds.rounded()))s"
+            SentrySDK.addBreadcrumb(crumb)
+        }
+    }
+
+    /// Chartable number for PostHog: CPU in percent, memory in MB.
+    private func chartValue(_ metric: ResourceMetric, _ value: Double) -> Int {
+        switch metric {
+        case .cpu: Int(value.rounded())
+        case .memory: Int((value / 1_048_576).rounded())
+        }
+    }
+
+    private func readable(_ metric: ResourceMetric, _ value: Double) -> String {
+        switch metric {
+        case .cpu: "\(Int(value.rounded()))%"
+        case .memory: ByteCountFormatter.string(fromByteCount: Int64(value), countStyle: .memory)
+        }
+    }
+
+    private func label(_ metric: ResourceMetric) -> String {
+        switch metric {
+        case .cpu: "CPU"
+        case .memory: "memory"
+        }
     }
 
     // MARK: - Sentry (crashes + performance)

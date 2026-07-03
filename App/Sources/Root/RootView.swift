@@ -158,6 +158,14 @@ struct RootView: View {
         migrateDefaultsIfNeeded()
         applyStoredTheme()
         updateDockIcon()
+        // Watch the app's own CPU/RAM and report sustained spikes to telemetry
+        // with the features open at the time (consent-gated in Telemetry).
+        PerformanceMonitor.shared.start { [state] in
+            PerformanceMonitor.FeatureContext(
+                activeFeature: state.activeTabID,
+                openFeatures: state.openFeatureIDs
+            )
+        }
         HotkeyManager.install(state: state)
         installCloseTabMonitor()
         switch LaunchPrompt.next(

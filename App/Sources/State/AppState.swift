@@ -97,6 +97,9 @@ final class AppState {
     var isSplit: Bool { workspace.isSplit }
     /// The open tabs of pane `index` (empty if that pane doesn't exist).
     func openTabIDs(inGroup index: Int) -> [String] { workspace.openTabs(inGroup: index) }
+    /// Every open tab across both panes — the performance monitor sends these
+    /// with a resource incident so spikes are attributable to a feature.
+    var openFeatureIDs: [String] { workspace.groups.flatMap(\.openTabs) }
     /// The active tab of pane `index`.
     func activeTab(inGroup index: Int) -> String? { workspace.activeTab(inGroup: index) }
     var layout = LayoutState()
