@@ -130,34 +130,59 @@ struct TerminalView: View {
         )
     }
 
+    /// The chips' natural width and the strip's full width, so the + button
+    /// can trail the last tab while everything fits and pin to the right edge
+    /// once the tabs overflow. The chips are measured without the button, so
+    /// the threshold can't feed back into itself.
+    @State private var chipsWidth: CGFloat = 0
+    @State private var stripWidth: CGFloat = .infinity
+
+    private var plusIsPinned: Bool {
+        // chips + inline button (28) + row spacing (4) + content padding (16)
+        chipsWidth + 48 > stripWidth
+    }
+
     private var tabStrip: some View {
         HStack(spacing: 4) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 4) {
-                    ForEach(terminals.tabs) { tab in
-                        chip(tab)
+                    HStack(spacing: 4) {
+                        ForEach(terminals.tabs) { tab in
+                            chip(tab)
+                        }
+                    }
+                    .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { chipsWidth = $0 }
+
+                    if !plusIsPinned {
+                        newTabButton
                     }
                 }
                 .padding(.horizontal, 8)
             }
 
-            Spacer(minLength: 4)
-
-            Button {
-                terminals.newTab()
-            } label: {
-                Image(systemName: "plus")
-                    .font(.callout.weight(.medium))
-                    .foregroundStyle(.textMuted)
-                    .frame(width: 28, height: 28)
-                    .contentShape(Rectangle())
+            if plusIsPinned {
+                Spacer(minLength: 4)
+                newTabButton
+                    .padding(.trailing, 6)
             }
-            .buttonStyle(.plain)
-            .help("New terminal")
-            .padding(.trailing, 6)
         }
         .frame(height: 36)
         .background(.bgSurface)
+        .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { stripWidth = $0 }
+    }
+
+    private var newTabButton: some View {
+        Button {
+            terminals.newTab()
+        } label: {
+            Image(systemName: "plus")
+                .font(.callout.weight(.medium))
+                .foregroundStyle(.textMuted)
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("New terminal")
     }
 
     private func chip(_ tab: TerminalManager.Tab) -> some View {
