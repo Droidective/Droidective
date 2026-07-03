@@ -104,8 +104,8 @@ spawn adb/scrcpy/emulator/brew).
   ScreenRecorder (records through a headless `MirrorSession` on the bundled
   scrcpy server — no desktop scrcpy), Crash, BugReport, Connection (wireless),
   CustomCommand (adb kind → tokenized argv, never a shell; Terminal kind →
-  `zsh -lc` with the selected device exported as ANDROID_SERIAL),
-  ToolDetection, AdbKeyboardInstaller, Emulator, AppIcon,
+  `zsh -lc`, deliberately not device-scoped — `{serial}` targets the
+  selection), ToolDetection, AdbKeyboardInstaller, Emulator, AppIcon,
   Performance (per-core CPU/RAM/FPS/per-process), NetworkSpeed (`/proc/net/dev`
   throughput), VideoEditService (ffmpeg export). The **`JSConsole/`** trio backs
   the `js-console` feature — a Hermes Chrome-DevTools-Protocol JS console for RN:
@@ -320,7 +320,7 @@ and sign — with keystore creation) plus Frida setup, a custom accent color,
 launching emulators from the device bar, per-feature connect-a-device empty
 states, a live-preview hotkey recorder, and a Settings split into
 Appearance/Privacy; managed tools download from GitHub releases into
-Application Support and are sized/removable in Settings); 514 tests green;
+Application Support and are sized/removable in Settings); 513 tests green;
 builds clean with zero warnings (enforced as errors in CI). Verified live against a
 physical device and an Android emulator. Release builds are Developer ID-signed +
 notarized and bundle scrcpy/ffmpeg (see `RELEASING.md`). Open gaps: the Apps
