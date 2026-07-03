@@ -319,12 +319,14 @@ final class JSConsoleSession {
         }
     }
 
-    /// A bounded pretty-JSON snapshot for expanding an object. Uses
+    /// A bounded, ordered snapshot tree for expanding an object. Uses
     /// `callFunctionOn` (returns a string) rather than `getProperties`, whose
     /// native converter crashes Hermes on some object graphs (e.g. a large
-    /// array). Returns a message string on failure so the row always resolves.
-    func expandedJSON(of objectId: String) async -> String {
-        await cdp.snapshotJSON(objectId: objectId) ?? "Couldn't read this value."
+    /// array). The tree is rendered client-side, so expansion never touches the
+    /// device again.
+    func snapshot(of objectId: String) async -> SnapNode? {
+        guard let json = await cdp.snapshotJSON(objectId: objectId) else { return nil }
+        return SnapNode.parse(json)
     }
 
     func clear() {
@@ -1120,7 +1122,8 @@ private struct JSValueView: View {
     let object: RemoteObject
     let session: JSConsoleSession
     @State private var expanded = false
-    @State private var expandedText: String?
+    @State private var snapshot: SnapNode?
+    @State private var failed = false
     @State private var loading = false
 
     private var query: String { session.findText.trimmingCharacters(in: .whitespaces) }
@@ -1134,7 +1137,7 @@ private struct JSValueView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Button {
                     expanded.toggle()
-                    if expanded, expandedText == nil, !loading { load() }
+                    if expanded, snapshot == nil, !loading { load() }
                 } label: {
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
                         Image(systemName: expanded ? "chevron.down" : "chevron.right")
@@ -1181,15 +1184,14 @@ private struct JSValueView: View {
     @ViewBuilder private var expandedChildren: some View {
         if loading {
             ProgressView().controlSize(.small)
-        } else if let expandedText {
-            // A bounded pretty-JSON snapshot fetched via callFunctionOn (not
-            // getProperties, which crashes Hermes). Rendered read-only; the
-            // collapsed preview above stays the interactive summary.
-            highlightedText(expandedText, query: query, base: jsColor(.plain))
-                .font(.system(.callout, design: .monospaced))
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
+        } else if let snapshot {
+            // An interactive tree rendered from a bounded snapshot fetched via
+            // callFunctionOn (not getProperties, which crashes Hermes). All
+            // further expansion is client-side over this snapshot — no more
+            // device round-trips.
+            SnapChildrenView(node: snapshot, session: session)
+        } else if failed {
+            Text("Couldn't read this value.").font(.caption).foregroundStyle(.tertiary)
         }
     }
 
@@ -1197,9 +1199,128 @@ private struct JSValueView: View {
         guard let objectId = object.objectId else { return }
         loading = true
         Task {
-            let text = await session.expandedJSON(of: objectId)
-            expandedText = text
+            let node = await session.snapshot(of: objectId)
+            snapshot = node
+            failed = node == nil
             loading = false
+        }
+    }
+}
+
+// MARK: - Snapshot tree (client-side, no getProperties)
+
+/// The ordered child rows of a container `SnapNode` — array items with index
+/// labels, or object entries with key labels.
+private struct SnapChildrenView: View {
+    let node: SnapNode
+    let session: JSConsoleSession
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            if node.type == "array", let items = node.items {
+                if items.isEmpty { emptyRow }
+                ForEach(Array(items.enumerated()), id: \.offset) { index, child in
+                    SnapValueView(label: String(index), node: child, session: session)
+                }
+                if let hidden = node.hiddenCount, hidden > 0 { moreRow("…(+\(hidden) more)") }
+            } else if let entries = node.entries {
+                if entries.isEmpty { emptyRow }
+                ForEach(Array(entries.enumerated()), id: \.offset) { _, entry in
+                    SnapValueView(label: entry.name, node: entry.node, session: session)
+                }
+                if node.truncated == true { moreRow("…(more)") }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var emptyRow: some View {
+        Text(node.type == "array" ? "(empty array)" : "(no enumerable properties)")
+            .font(.caption).foregroundStyle(.tertiary)
+    }
+
+    private func moreRow(_ text: String) -> some View {
+        Text(text).font(.caption).foregroundStyle(.tertiary)
+    }
+}
+
+/// One row in the snapshot tree: a primitive `key: value`, or a collapsible
+/// container header whose children (another `SnapChildrenView`) indent below.
+private struct SnapValueView: View {
+    let label: String?
+    let node: SnapNode
+    let session: JSConsoleSession
+    @State private var expanded = false
+
+    private var query: String { session.findText.trimmingCharacters(in: .whitespaces) }
+
+    var body: some View {
+        if node.isContainer {
+            VStack(alignment: .leading, spacing: 2) {
+                Button {
+                    expanded.toggle()
+                } label: {
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 14)
+                        labelText
+                        highlightedText(summary, query: query, base: jsColor(.className))
+                            .font(.system(.callout, design: .monospaced))
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                if expanded {
+                    SnapChildrenView(node: node, session: session).padding(.leading, 18)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                labelText
+                highlightedText(primitiveText, query: query, base: jsColor(kind))
+                    .font(.system(.callout, design: .monospaced))
+                    .textSelection(.enabled)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder private var labelText: some View {
+        if let label {
+            highlightedText("\(label):", query: query, base: jsColor(.key))
+                .font(.system(.callout, design: .monospaced))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// Collapsed one-liner for a container, e.g. `Array(200)`, `{3}`, `Map {2}`.
+    private var summary: String {
+        if node.type == "array" {
+            return "Array(\(node.length ?? node.items?.count ?? 0))"
+        }
+        let count = node.entries?.count ?? 0
+        let ctor = node.ctor ?? "Object"
+        return ctor == "Object" ? "{\(count)}" : "\(ctor) {\(count)}"
+    }
+
+    private var primitiveText: String {
+        let text = node.text ?? "—"
+        return node.type == "string" ? "\"\(text)\"" : text
+    }
+
+    private var kind: JSTokenKind {
+        switch node.type {
+        case "string": return .string
+        case "number", "bigint": return .number
+        case "boolean": return .boolean
+        case "null": return .null
+        case "undefined": return .undefined
+        case "function": return .function
+        case "symbol": return .symbol
+        default: return .plain
         }
     }
 }

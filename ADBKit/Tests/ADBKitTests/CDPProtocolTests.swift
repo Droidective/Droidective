@@ -2,6 +2,39 @@ import Foundation
 import Testing
 @testable import ADBKit
 
+@Suite struct SnapNodeTests {
+    @Test func parsesOrderedObjectArrayAndPrimitives() {
+        // Shape emitted by boundedSnapshotFunction: object entries stay ordered.
+        let json = """
+        {"type":"object","ctor":"Object","truncated":false,"entries":[
+          {"name":"userId","node":{"type":"number","text":"1"}},
+          {"name":"title","node":{"type":"string","text":"hi"}},
+          {"name":"tags","node":{"type":"array","length":2,"truncated":false,"items":[
+            {"type":"string","text":"a"},{"type":"string","text":"b"}]}}
+        ]}
+        """
+        let node = SnapNode.parse(json)
+        #expect(node?.type == "object")
+        #expect(node?.entries?.map(\.name) == ["userId", "title", "tags"])   // order preserved
+        #expect(node?.entries?[2].node.type == "array")
+        #expect(node?.entries?[2].node.items?.count == 2)
+        #expect(node?.entries?[2].node.isContainer == true)
+    }
+
+    @Test func reportsHiddenCountForTruncatedArray() {
+        let json = """
+        {"type":"array","length":200,"truncated":true,"items":[{"type":"number","text":"0"}]}
+        """
+        let node = SnapNode.parse(json)
+        #expect(node?.length == 200)
+        #expect(node?.hiddenCount == 199)
+    }
+
+    @Test func malformedJSONReturnsNil() {
+        #expect(SnapNode.parse("not json") == nil)
+    }
+}
+
 /// Pure tests for the CDP framing: request shapes and decoding of the replies
 /// and events a console relies on.
 @Suite struct CDPProtocolTests {
