@@ -123,9 +123,23 @@ final class AppState {
     /// Drives the first-launch role picker (a full-window takeover) and the
     /// "Change role" flow. Picking a role seeds a curated feature set.
     var presentRolePicker = false
-    /// True while a performance/network recording is in flight — locks the
-    /// device and bundle pickers so the captured series stays consistent.
-    var recordingActive = false
+    /// Owners of an in-flight performance/network/screen recording, keyed by
+    /// feature id. The device and bundle pickers lock while any recording runs,
+    /// so a second recorder in another tab can't have the device switched out
+    /// from under it when the first one stops.
+    private(set) var recordingOwners: Set<String> = []
+
+    /// True while any recording is in flight — locks the device/bundle pickers.
+    var recordingActive: Bool { !recordingOwners.isEmpty }
+
+    /// Mark a recording started/stopped for `owner` (its feature id).
+    func setRecording(_ active: Bool, owner: String) {
+        if active {
+            recordingOwners.insert(owner)
+        } else {
+            recordingOwners.remove(owner)
+        }
+    }
 
     /// Views holding losable work (an active recording, unsaved editor edits)
     /// register a guard here, keyed by the owning tab's feature id, so closing

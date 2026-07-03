@@ -92,11 +92,14 @@ struct RootView: View {
                 // Tag the main window so the ⌘W monitor can tell it apart from
                 // Settings / the palette panel.
                 window.identifier = NSUserInterfaceItemIdentifier(RootView.mainWindowID)
-                // Fill the screen's usable area on launch — a regular maximized
-                // window, not a native full-screen Space.
-                if let screen = window.screen ?? NSScreen.main {
+                // Restore the user's saved window frame; only fill the screen's
+                // usable area on the very first launch (nothing to restore), so
+                // a resized window survives relaunch instead of being maximized.
+                let autosaveName = NSWindow.FrameAutosaveName(RootView.mainWindowID)
+                if !window.setFrameUsingName(autosaveName), let screen = window.screen ?? NSScreen.main {
                     window.setFrame(screen.visibleFrame, display: true)
                 }
+                window.setFrameAutosaveName(autosaveName)
             })
             .overlay {
                 // Full-window takeover (macOS has no fullScreenCover), shown
@@ -316,8 +319,11 @@ struct RootView: View {
             }
             VStack(spacing: 0) {
                 // Device bar on top (shared across panes); each pane's own tab
-                // strip sits below it, inside the pane — VS Code-style.
-                if state.activeTabID != "catalog" {
+                // strip sits below it, inside the pane — VS Code-style. Shown
+                // whenever any visible pane needs a device, so focusing the
+                // catalog in one pane of a split doesn't pull the bar (and the
+                // progress strip) out from under a live feature in the other.
+                if state.workspace.groups.contains(where: { $0.activeTab != "catalog" }) {
                     DeviceBarView()
                     if let operation = state.runningOperation {
                         OperationProgressStrip(operation: operation)
