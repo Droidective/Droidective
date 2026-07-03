@@ -11,11 +11,9 @@ struct RootView: View {
     @AppStorage("tabSplitFraction") private var splitFraction = 0.5
     @AppStorage("hasSeenTour") private var hasSeenTour = false
     @AppStorage("hasChosenRole") private var hasChosenRole = false
-    @AppStorage("telemetryConsentAsked") private var consentAsked = false
     @AppStorage("launchCount") private var launchCount = 0
     @AppStorage("starPromptShown") private var starPromptShown = false
     @AppStorage("theme") private var theme = "dark"
-    @State private var presentConsent = false
     @State private var presentStar = false
     /// True only while the *first-run* role picker is up, so its dismissal
     /// chains into the welcome tour. Changing role later (pill / Settings)
@@ -23,18 +21,7 @@ struct RootView: View {
     @State private var pickerIsFirstRun = false
     @Environment(\.colorScheme) private var colorScheme
 
-    /// Temporary toggle: flip to `true` to surface the privacy disclosure on the
-    /// first launch (after the welcome flow) instead of deferring it. Left
-    /// `false` for now to keep current behavior. Telemetry stays anonymous and
-    /// on by default either way (opt-out in Settings → Privacy). Remove this
-    /// (and the deferral below) when switching to ask-on-first-launch for good.
-    private let askConsentOnFirstLaunch = false
-
-    /// Launches to allow before the first-run privacy disclosure appears, when
-    /// `askConsentOnFirstLaunch` is false.
-    private let consentPromptAfterLaunches = 5
-
-    /// Launches before the one-time GitHub-star nudge (shown after consent).
+    /// Launches before the one-time GitHub-star nudge.
     private let starPromptAfterLaunches = 10
 
     /// Theme color-sync needs two modifiers because they reach different layers,
@@ -67,12 +54,6 @@ struct RootView: View {
         case "auto": return colorScheme
         default: return .dark
         }
-    }
-
-    private var shouldPromptConsent: Bool {
-        LaunchPrompt.consentDue(
-            consentAsked: consentAsked, launchCount: launchCount,
-            askOnFirstLaunch: askConsentOnFirstLaunch, afterLaunches: consentPromptAfterLaunches)
     }
 
     private var shouldPromptStar: Bool {
@@ -115,23 +96,14 @@ struct RootView: View {
                 TourView()
             }
             .background {
-                // Separate host view: two .sheet modifiers on one view can drop
-                // one, and the deferred privacy consent must still reliably show.
-                Color.clear.sheet(isPresented: $presentConsent) {
-                    TelemetryConsentView()
-                }
-            }
-            .background {
-                // Its own host view for the same reason as the consent sheet.
+                // Its own host view so the star sheet reliably presents (two
+                // .sheet modifiers on one view can drop one).
                 Color.clear.sheet(isPresented: $presentStar) {
                     StarPromptView(onStar: { state.openRepository() })
                 }
             }
             .onAppear { performLaunchSetup() }
             .onChange(of: state.presentRolePicker) { _, showing in rolePickerVisibilityChanged(showing) }
-            .onChange(of: state.presentTour) { _, showing in
-                if !showing && shouldPromptConsent { presentConsent = true }
-            }
             .onChange(of: colorScheme) { _, _ in updateDockIcon() }
             .onChange(of: state.activeTabID) { _, id in Telemetry.shared.featureBecameActive(id) }
             .confirmationDialog(
@@ -185,9 +157,8 @@ struct RootView: View {
         installCloseTabMonitor()
         switch LaunchPrompt.next(
             hasChosenRole: hasChosenRole, hasSeenTour: hasSeenTour,
-            consentAsked: consentAsked, starPromptShown: starPromptShown,
-            launchCount: launchCount, askConsentOnFirstLaunch: askConsentOnFirstLaunch,
-            consentAfterLaunches: consentPromptAfterLaunches, starAfterLaunches: starPromptAfterLaunches
+            starPromptShown: starPromptShown,
+            launchCount: launchCount, starAfterLaunches: starPromptAfterLaunches
         ) {
         case .rolePicker:
             // Brand-new user: pick a role first, then run the tour.
@@ -195,8 +166,6 @@ struct RootView: View {
             state.presentRolePicker = true
         case .tour:
             state.presentTour = true
-        case .consent:
-            presentConsent = true
         case .star:
             presentStar = true
         case nil:
