@@ -65,15 +65,17 @@ the in-app catalog.
   follow-to-bottom, export), crash catcher with Slack/Jira formatting, one-click
   bug-report zip, and a **performance monitor** (per-core CPU, RAM, FPS, network,
   and per-process usage charted live, recorded, and exported to JSON/CSV).
-- **Tool UX** — custom adb macros with `{bundleId}`/`{serial}` placeholders,
-  feature catalog with pinned items, per-feature + global hotkeys, menu-bar quick
-  actions.
+- **Tool UX** — a multi-tab **Terminal** (real PTY login shells with the
+  selected device exported as `ANDROID_SERIAL`), custom command macros with
+  `{bundleId}`/`{serial}` placeholders (adb argument vectors or plain shell
+  lines/scripts run through `zsh`), feature catalog with pinned items,
+  per-feature + global hotkeys, menu-bar quick actions.
 
-Every feature has a how-it-works description and a command bar beneath it with
-**Recent** runs (the exact adb commands + output), the **Commands** it uses (copyable),
-and an embedded **Terminal**. A **Home** screen and first-launch tour explain the
-basics; the sidebar adds drag-to-reorder, `⌘1`–`⌘9` quick-select, and `⌘=`/`⌘-`
-font zoom. Files pulled from the device always ask where to save (default
+Every feature has an inline how-it-works description (toggleable from
+Settings ▸ Appearance), and Settings keeps a **Command Log** of the exact adb
+commands your actions ran, with output. A **Home** screen and first-launch tour
+explain the basics; the sidebar adds drag-to-reorder, `⌘1`–`⌘0` quick-select,
+and `⌘=`/`⌘-` font zoom. Files pulled from the device always ask where to save (default
 `~/Downloads/Droidective`).
 
 ## Requirements
@@ -124,7 +126,7 @@ through Sparkle (and `brew upgrade` defers to that).
 ADBKit/   Swift package — all logic, zero UI dependencies (swift test)
   Exec/         adb process execution, tool location, scoped command log
   Devices/      discovery (2s polling), getprop, hardware/usage overview
-  Features/     declarative 54-feature registry + runners + how-to notes
+  Features/     declarative 55-feature registry + runners + how-to notes
   Services/     logcat streaming, overrides, file/apps explorers, capture,
                 screen record, crash, bug report, wireless, emulators,
                 performance + network monitors, APK inspect/sign/decompile,
@@ -133,8 +135,8 @@ ADBKit/   Swift package — all logic, zero UI dependencies (swift test)
                 frida) from GitHub releases + the APK toolchain resolver
   Persistence/  JSON stores in ~/Library/Application Support/Droidective
 App/      SwiftUI macOS app — command palette, device bar, feature views,
-          Home + tour, per-feature command bar with an embedded terminal,
-          settings, menu-bar extra, ⌘K search window
+          Home + tour, multi-tab terminal, settings, menu-bar extra,
+          ⌘K search window
 ```
 
 The split is strict: `ADBKit` imports no UI frameworks (feature icons are SF
