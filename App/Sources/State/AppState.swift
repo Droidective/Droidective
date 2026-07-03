@@ -113,10 +113,8 @@ final class AppState {
     var unreadNotifications = 0
     var isRunningFeature = false
 
-    // Layout toggles: ⌘B (sidebar) and ⌘J (minimize/maximize the command bar).
+    // Layout toggle: ⌘B (sidebar).
     var sidebarVisible = true
-    var commandBarExpanded = false
-    var commandBarTab: CommandBarTab = .recent
     /// Drives the first-launch / replayable welcome tour sheet.
     var presentTour = false
     /// Drives the first-launch role picker (a full-window takeover) and the
@@ -135,10 +133,6 @@ final class AppState {
     /// A navigation deferred until the user resolves the relevant `exitGuards`
     /// entry (close a guarded tab, switch device, or quit with work in flight).
     private(set) var pendingExit: PendingExit?
-    /// The command bar's Terminal tab — a real PTY-backed shell, shared
-    /// app-wide so it persists across features.
-    let terminalSession = TerminalSession()
-
     /// The Reactotron server + timeline, owned here (not by the view) so leaving
     /// the feature can keep the connection alive and return to an intact session.
     let reactotronSession: ReactotronSession
@@ -146,6 +140,10 @@ final class AppState {
     /// The JS Console (Hermes CDP) session — owned here so its log buffer and
     /// connection survive leaving the feature, like the Reactotron session.
     let jsConsoleSession: JSConsoleSession
+
+    /// The Terminal feature's shells — owned here so every tab's PTY session
+    /// and scrollback survive leaving the feature.
+    let terminals = TerminalManager()
 
     func toggleSidebar() {
         withAnimation(.easeInOut(duration: 0.18)) { sidebarVisible.toggle() }
@@ -295,6 +293,12 @@ final class AppState {
         jsConsoleSession = JSConsoleSession(adb: env.client)
         reactotronSession.app = self
         jsConsoleSession.app = self
+        // Typing `exit` (or a shell crash) closes that tab like the × does.
+        // The contains-check drops late callbacks racing a killAll teardown.
+        terminals.onShellExited = { [weak self] id in
+            guard let self, self.terminals.tabs.contains(where: { $0.id == id }) else { return }
+            self.closeTerminalShell(id)
+        }
         Task { await bootstrap() }
     }
 
@@ -401,9 +405,8 @@ final class AppState {
 
     func resetOverride(_ kind: OverrideKind) {
         guard let serial = selectedSerial else { return }
-        let featureID = FeatureRegistry.all.first { $0.overrideKind == kind }?.id
         Task {
-            await CommandLog.userInitiated(feature: featureID) {
+            await CommandLog.userInitiated {
                 do {
                     try await env.engine.overrides.reset(serial: serial, kind: kind)
                     showToast(Toast(message: "\(kind.label) reset", ok: true))
@@ -474,7 +477,7 @@ final class AppState {
     func disconnectWireless(target: String?) {
         let connection = env.engine.connection
         Task {
-            await CommandLog.userInitiated(feature: "wireless-adb") {
+            await CommandLog.userInitiated {
                 do {
                     let result = try await connection.disconnect(target: target)
                     showToast(Toast(message: result.message, ok: result.ok, important: true))
@@ -562,22 +565,33 @@ final class AppState {
     /// Open `id`, or refocus it wherever it's already open. Every feature open
     /// (sidebar, palette, menu, hotkeys, Finder) routes through here; a not-yet-
     /// open feature lands in the focused group. Switching is always safe (tabs
-    /// stay mounted), so there's no leave guard — only the `TabState.maxTabs`
-    /// total cap, which surfaces a toast when a new tab can't open.
+    /// stay mounted), so there's no leave guard.
     func requestFeature(_ id: String) {
-        guard workspace.open(id) else {
-            showToast(Toast(
-                message: "You can have up to \(Workspace.maxTabs) tabs open — close one first.",
-                ok: false))
-            return
-        }
+        workspace.open(id)
         persistTabs()
     }
+
+    /// What put the "close all terminals?" prompt on screen: closing the
+    /// Terminal feature tab, or quitting the app — both kill every live shell,
+    /// so both are held until the user confirms losing them (RootView shows
+    /// the alert).
+    enum TerminalClosePrompt { case closeTab, quit }
+
+    /// Set while the terminal close/quit confirmation is on screen.
+    var terminalClosePrompt: TerminalClosePrompt?
 
     /// Close a tab (in whichever pane holds it). A tab whose view holds losable
     /// work routes through the leave confirmation first, since closing unmounts
     /// the view (which would destroy that work). Closing any other is immediate.
     func closeTab(_ id: String) {
+        // Closing the Terminal feature kills every shell — confirm first while
+        // any are open. Peeling shells one at a time (⌘W) only lands here once
+        // none remain, so that path stays prompt-free. Not an ExitGuard: those
+        // also hold device switches, which shells don't care about.
+        if id == "terminal", !terminals.tabs.isEmpty {
+            terminalClosePrompt = .closeTab
+            return
+        }
         if exitGuards[id] != nil {
             pendingExit = PendingExit(target: .closeTab(id))
         } else {
@@ -585,9 +599,45 @@ final class AppState {
         }
     }
 
+    /// Resolve the terminal confirmation. Confirming kills every shell and
+    /// finishes the held close or quit; cancelling a quit must reply to the
+    /// deferred termination (`applicationShouldTerminate` returned
+    /// `.terminateLater`), mirroring `cancelExit`.
+    func resolveTerminalPrompt(confirmed: Bool) {
+        guard let prompt = terminalClosePrompt else { return }
+        terminalClosePrompt = nil
+        switch prompt {
+        case .closeTab:
+            if confirmed { performClose("terminal") }
+        case .quit:
+            if confirmed {
+                terminals.killAll()
+                quitNow()
+            } else {
+                NSApp.reply(toApplicationShouldTerminate: false)
+            }
+        }
+    }
+
     /// Close the focused pane's active tab (⌘W).
     func closeActiveTab() {
+        // ⌘W inside the Terminal feature peels one shell tab at a time (focus
+        // slides to its neighbor); the feature tab itself closes only once no
+        // shells remain.
+        if workspace.activeTab == "terminal", let shellID = terminals.activeID {
+            closeTerminalShell(shellID)
+            return
+        }
         if let id = workspace.activeTab { closeTab(id) }
+    }
+
+    /// Close one terminal shell tab (killing its process). Closing the last
+    /// shell closes the Terminal feature tab with it — an empty terminal pane
+    /// is a dead end. Every shell-closing path (⌘W, the chip ×, the menu bar)
+    /// routes through here.
+    func closeTerminalShell(_ id: UUID) {
+        terminals.close(id)
+        if terminals.tabs.isEmpty { closeTab("terminal") }
     }
 
     /// Give a pane keyboard focus — its `+` focuses it so a new tab lands there.
@@ -641,6 +691,9 @@ final class AppState {
         if id == "js-console" {
             Task { await jsConsoleSession.removeReverseTunnels() }
         }
+        if id == "terminal" {
+            terminals.killAll()
+        }
     }
 
     private func persistTabs() {
@@ -683,9 +736,17 @@ final class AppState {
     /// means losable work is in flight — the leave prompt is shown and the
     /// resolution drives termination (see `quitNow` / `cancelExit`).
     func requestQuit() -> Bool {
-        guard !exitGuards.isEmpty else { return true }
-        pendingExit = PendingExit(target: .quit)
-        return false
+        if !exitGuards.isEmpty {
+            pendingExit = PendingExit(target: .quit)
+            return false
+        }
+        // Live shells are losable work too: quitting kills them all, so it
+        // gets the same confirmation closing the Terminal tab does.
+        if !terminals.tabs.isEmpty {
+            terminalClosePrompt = .quit
+            return false
+        }
+        return true
     }
 
     /// "Discard" / "Discard changes": drop the at-risk work and run the deferred
@@ -790,7 +851,7 @@ final class AppState {
         }
 
         let engine = env.engine
-        await CommandLog.userInitiated(feature: feature.id) {
+        await CommandLog.userInitiated {
             if !feature.needsDevice {
                 let result = await engine.run(featureID: feature.id, serial: "", params: params)
                 self.lastResults[feature.id] = (result, Date())
@@ -864,7 +925,7 @@ final class AppState {
     func installAPKs(_ urls: [URL], onSerials serials: [String]) async -> String {
         guard !urls.isEmpty, !serials.isEmpty else { return "" }
         var report: [String] = []
-        await CommandLog.userInitiated(feature: "install-app") {
+        await CommandLog.userInitiated {
             for url in urls {
                 let name = url.lastPathComponent
                 var ok = 0
@@ -959,7 +1020,14 @@ final class AppState {
             layout.seedEverything()
         }
         roleChosenThisSession = true
-        // Start the freshly-chosen role on a single Home tab, no split.
+        // Start the freshly-chosen role on a single Home tab, no split. The
+        // reset drops every open tab without routing through performClose, so
+        // stop each one's background work explicitly — otherwise kept-alive
+        // sessions (terminal shells, the Reactotron server) leak with no UI
+        // left to reach them.
+        for id in workspace.groups.flatMap(\.openTabs) {
+            stopBackgroundWork(for: id)
+        }
         workspace.reset()
         persistTabs()
         presentRolePicker = false
@@ -1035,7 +1103,7 @@ final class AppState {
             showToast(Toast(message: "Capturing in \(delaySeconds)s…", ok: true))
             try? await Task.sleep(for: .seconds(delaySeconds))
         }
-        await CommandLog.userInitiated(feature: "screenshot") {
+        await CommandLog.userInitiated {
             do {
                 let dir = try ScreenCaptureService.ensureCaptureDir()
                 let dest = dir.appendingPathComponent("screenshot_\(ScreenCaptureService.stamp()).png")
@@ -1064,7 +1132,7 @@ final class AppState {
             showToast(Toast(message: "Capturing in \(delaySeconds)s…", ok: true))
             try? await Task.sleep(for: .seconds(delaySeconds))
         }
-        let data: Data? = await CommandLog.userInitiated(feature: "screenshot") {
+        let data: Data? = await CommandLog.userInitiated {
             do {
                 return try await withOperation("Capturing screenshot…") {
                     try await env.engine.captureScreenshotData(serial: serial)
@@ -1108,7 +1176,7 @@ final class AppState {
         guard let serial = targetSerials.first else { return }
         showToast(Toast(message: "Downloading ADBKeyboard…", ok: true))
         Task {
-            await CommandLog.userInitiated(feature: "send-text") {
+            await CommandLog.userInitiated {
                 let result = await env.engine.adbKeyboard.install(serial: serial)
                 showToast(Toast(message: result.message, ok: result.ok))
             }

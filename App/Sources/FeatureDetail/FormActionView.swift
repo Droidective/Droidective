@@ -12,6 +12,11 @@ struct FormActionView: View {
     @State private var sliderValues: [String: Double] = [:]
     @State private var presets = Presets()
     @FocusState private var focusedField: String?
+    /// Send Text: wipe the field after a successful send, for firing a sequence
+    /// of inputs without hand-clearing between them. Persisted choice.
+    @AppStorage("sendTextClearAfterSend") private var clearAfterSend = false
+
+    private var isSendText: Bool { feature.id == "send-text" }
 
     var body: some View {
         Group {
@@ -46,6 +51,12 @@ struct FormActionView: View {
                     .foregroundStyle(.tertiary)
             }
             .padding(.top, 4)
+
+            if isSendText {
+                Toggle("Clear the text after sending", isOn: $clearAfterSend)
+                    .toggleStyle(.checkbox)
+                    .font(.callout)
+            }
 
             LastResultCard(featureID: feature.id)
         }
@@ -149,6 +160,21 @@ struct FormActionView: View {
             TextField("", text: binding(for: field), prompt: field.placeholder.map(Text.init))
                 .brandField()
                 .focused($focusedField, equals: field.name)
+                .overlay(alignment: .trailing) {
+                    if isSendText, field.name == "text", !(textValues[field.name] ?? "").isEmpty {
+                        Button {
+                            textValues[field.name] = ""
+                            focusedField = field.name
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.textMuted)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.trailing, 6)
+                        .help("Clear the text")
+                    }
+                }
         case .preset:
             presetField(for: field)
         case .select:
@@ -215,7 +241,17 @@ struct FormActionView: View {
                 }
             }
         }
-        Task { await state.run(feature: feature, params: params) }
+        Task {
+            // Compare timestamps so a stale success (run() early-returns on
+            // no-device without touching lastResults) can't clear unsent text.
+            let previousResultAt = state.lastResults[feature.id]?.1
+            await state.run(feature: feature, params: params)
+            if isSendText, clearAfterSend,
+               let (result, at) = state.lastResults[feature.id],
+               result.ok, at != previousResultAt {
+                textValues["text"] = ""
+            }
+        }
     }
 
     private func defaultSlider(_ field: FieldDef) -> Double {

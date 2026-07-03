@@ -15,9 +15,18 @@ struct ReactNativeView: View {
         HubColumn {
             HubSection("Quick actions", subtitle: "Drive the in-app dev menu and Metro over adb.") {
                 LazyVGrid(columns: actionColumns, spacing: 10) {
-                    actionButton("reload-js", "Reload JS", "arrow.clockwise", prominent: true)
-                    actionButton("open-dev-menu", "Dev Menu", "filemenu.and.selection")
-                    actionButton("process-death", "Process Death", "xmark.octagon")
+                    actionButton(
+                        "reload-js", "Reload JS", "arrow.clockwise", prominent: true,
+                        help: "Sends R·R (keycode 46) — needs an RN dev build with the app in front"
+                    )
+                    actionButton(
+                        "open-dev-menu", "Dev Menu", "filemenu.and.selection",
+                        help: "Sends keycode 82 — needs an RN dev build with the app in front"
+                    )
+                    actionButton(
+                        "process-death", "Process Death", "xmark.octagon",
+                        help: "Backgrounds then kills the selected bundle — or the app in front when none is chosen"
+                    )
                     metroButton
                 }
                 if state.targetSerials.isEmpty {
@@ -27,7 +36,11 @@ struct ReactNativeView: View {
                 }
             }
 
-            HubSection("Dev server host", subtitle: "Point the app at your Metro bundler and reverse-tunnel its port.") {
+            HubSection(
+                "Dev server host",
+                subtitle: "localhost tunnels the Metro port to this Mac; a remote host is set on the device "
+                    + "where Android allows it, otherwise the dev menu opens with directions."
+            ) {
                 HStack(spacing: 10) {
                     TextField("", text: $devHost, prompt: Text("192.168.1.10:8081"))
                         .brandField()
@@ -55,18 +68,22 @@ struct ReactNativeView: View {
     }
 
     @ViewBuilder
-    private func actionButton(_ id: String, _ title: String, _ icon: String, prominent: Bool = false) -> some View {
+    private func actionButton(
+        _ id: String, _ title: String, _ icon: String, prominent: Bool = false, help: String = ""
+    ) -> some View {
         let label = Label(title, systemImage: icon).frame(maxWidth: .infinity)
         if prominent {
             Button { run(id) } label: { label }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .disabled(state.targetSerials.isEmpty || state.isRunningFeature)
+                .help(help)
         } else {
             Button { run(id) } label: { label }
                 .buttonStyle(.bordered)
                 .controlSize(.large)
                 .disabled(state.targetSerials.isEmpty || state.isRunningFeature)
+                .help(help)
         }
     }
 

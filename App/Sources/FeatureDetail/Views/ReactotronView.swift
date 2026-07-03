@@ -2,7 +2,7 @@ import ADBKit
 import SwiftUI
 
 /// The live Reactotron session — server, adb-reverse tunnels, and the whole
-/// timeline/state buffer. Owned by `AppState` (like `terminalSession`) so it
+/// timeline/state buffer. Owned by `AppState` (like `jsConsoleSession`) so it
 /// survives leaving the feature: the user can keep events streaming in the
 /// background and return to an intact timeline. The view is a thin renderer over
 /// this; nothing here imports UI beyond `Color` used by the helper value types.
@@ -378,6 +378,15 @@ final class ReactotronSession {
             if clients.isEmpty { commands.removeAll() }
             refreshConnectionState()
         case let .failed(reason, portInUse):
+            // The server tears itself down on failure, so drop our handle to it —
+            // otherwise `isRunning` stays true and re-entering the view (or the
+            // Retry button) would skip the restart and the error could never clear.
+            consumeTask?.cancel()
+            consumeTask = nil
+            service = nil
+            clients.removeAll()
+            selectedClient = nil
+            commands.removeAll()
             connection = portInUse ? .portInUse : .failed(reason)
         }
     }
@@ -473,6 +482,7 @@ final class ReactotronSession {
 /// follow-to-bottom. A second tab drives the client's custom commands.
 struct ReactotronView: View {
     @Environment(AppState.self) private var state
+    @Environment(\.tabIsActive) private var tabIsActive
 
     // View-local UI only — drafts and the active tab/split. Everything that must
     // survive leaving the feature lives on `session`.
@@ -481,6 +491,7 @@ struct ReactotronView: View {
     @State private var newPath = ""
     @State private var dispatchText = ""
     @State private var replCode = ""
+    @State private var showDisconnectAlert = false
 
     private var session: ReactotronSession { state.reactotronSession }
 
@@ -492,6 +503,10 @@ struct ReactotronView: View {
         VStack(spacing: 0) {
             topTabs
             Divider()
+            if session.connection.isError {
+                serverErrorBanner
+                Divider()
+            }
             content
         }
         // The session is owned by AppState, so it persists across feature
@@ -500,6 +515,17 @@ struct ReactotronView: View {
         .task { await session.start(serials: readySerials) }
         .onChange(of: readySerials) { _, serials in
             Task { await session.applyReverse(serials: serials) }
+        }
+        // A device dropping off is announced with an alert instead of the old
+        // full-pane overlay, which painted over the still-visible timeline.
+        .onChange(of: state.targetSerials.isEmpty) { wasEmpty, isEmpty in
+            if isEmpty, !wasEmpty, tabIsActive { showDisconnectAlert = true }
+        }
+        .alert("Device disconnected", isPresented: $showDisconnectAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Reactotron keeps listening on :9090 and the timeline stays as it is. "
+                + "Reconnect a device or start an emulator to keep receiving events.")
         }
     }
 
@@ -573,6 +599,29 @@ struct ReactotronView: View {
         .padding(.vertical, 6)
     }
 
+    /// The server failing (port taken, socket error) used to be a red dot with a
+    /// hover tooltip — invisible unless you knew to hover. Spell the reason out
+    /// and offer the restart inline; it shows on every tab, even mid-timeline.
+    private var serverErrorBanner: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 12))
+                .foregroundStyle(.red)
+            Text(session.connection.text(app: nil))
+                .font(.caption)
+                .lineLimit(2)
+                .textSelection(.enabled)
+            Spacer(minLength: 8)
+            Button("Retry") {
+                Task { await session.start(serials: readySerials) }
+            }
+            .controlSize(.small)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(Color.red.opacity(0.08))
+    }
+
     // MARK: - Toolbar (timeline)
 
     /// Pane-independent controls: split toggle plus the global export/clear. Each
@@ -626,7 +675,8 @@ struct ReactotronView: View {
             targetEmpty: state.targetSerials.isEmpty,
             connection: session.connection,
             showOnboarding: showOnboarding,
-            onExport: { session.export($0) }
+            onExport: { session.export($0) },
+            onRetry: { Task { await session.start(serials: readySerials) } }
         )
     }
 
@@ -897,6 +947,14 @@ private enum RtConnection: Equatable {
     case portInUse
     case failed(String)
 
+    /// Server-dead states — the ones worth a visible banner, not just a dot.
+    var isError: Bool {
+        switch self {
+        case .portInUse, .failed: true
+        case .idle, .listening, .connected: false
+        }
+    }
+
     var color: Color {
         switch self {
         case .idle: .textMuted
@@ -911,7 +969,7 @@ private enum RtConnection: Equatable {
         case .idle: "Starting the server on :9090…"
         case .listening: "Listening on :9090 — waiting for your app to connect"
         case .connected: "Connected" + (app.map { " — \($0)" } ?? "")
-        case .portInUse: "Port 9090 is in use — close the Reactotron desktop app, then reopen this screen"
+        case .portInUse: "Port 9090 is in use — close the app that owns it (usually the Reactotron desktop app), then retry"
         case let .failed(reason): "Server error: \(reason)"
         }
     }
@@ -990,6 +1048,7 @@ private struct TimelinePane: View {
     let connection: RtConnection
     let showOnboarding: Bool
     let onExport: ([RtItem]) -> Void
+    let onRetry: () -> Void
 
     @State private var search = ""
     @State private var filter: RtFilter = .all
@@ -1069,15 +1128,22 @@ private struct TimelinePane: View {
         .overlay { emptyOverlay }
     }
 
+    /// Empty-state overlays appear only over an *empty* timeline — a device
+    /// dropping off mid-session must not paint over live events (the view
+    /// raises an alert for that instead).
     @ViewBuilder
     private var emptyOverlay: some View {
-        if targetEmpty {
+        if items.isEmpty, connection.isError, showOnboarding {
+            // A dead server trumps the other empty states — nothing can connect
+            // until it's restarted, so lead with the error and the fix.
+            ReactotronOnboarding(connection: connection, onRetry: onRetry)
+        } else if items.isEmpty, targetEmpty {
             ContentUnavailableView(
                 "No device connected", systemImage: "iphone.slash",
                 description: Text("Connect a device or start an emulator to receive Reactotron events.")
             )
         } else if items.isEmpty, showOnboarding {
-            ReactotronOnboarding(connection: connection)
+            ReactotronOnboarding(connection: connection, onRetry: onRetry)
         }
     }
 }
@@ -1125,9 +1191,9 @@ private struct RtRow: View {
     private func header(_ presentation: RtPresentation) -> some View {
         HStack(spacing: 8) {
             Image(systemName: expanded ? "chevron.down" : "chevron.right")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(.tertiary)
-                .frame(width: 12)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(.secondary)
+                .frame(width: 16)
                 .opacity(canExpand ? 1 : 0)
             Text(Self.timeFormatter.string(from: item.receivedAt))
                 .font(.system(size: 11, design: .monospaced))
@@ -1517,11 +1583,11 @@ private struct JSONTreeView: View {
             }
             if node.isContainer, search.isEmpty {
                 Image(systemName: expanded.contains(node.path) ? "chevron.down" : "chevron.right")
-                    .font(.system(size: 8))
-                    .foregroundStyle(.tertiary)
-                    .frame(width: 10)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 14)
             } else {
-                Color.clear.frame(width: 10, height: 1)
+                Color.clear.frame(width: 14, height: 1)
             }
             if !node.key.isEmpty {
                 Text(node.key)
@@ -1538,6 +1604,8 @@ private struct JSONTreeView: View {
                 .textSelection(.enabled)
             Spacer(minLength: 0)
         }
+        // Rows were 13pt slivers — give container rows a real click target.
+        .padding(.vertical, 2)
         .contentShape(Rectangle())
         .onTapGesture {
             if node.isContainer, search.isEmpty { toggle(node.path) }
@@ -1671,6 +1739,7 @@ private struct CommandCard: View {
 
 private struct ReactotronOnboarding: View {
     let connection: RtConnection
+    let onRetry: () -> Void
 
     private static let snippet = """
     // App entry (e.g. index.js)
@@ -1681,7 +1750,38 @@ private struct ReactotronOnboarding: View {
       .connect()
     """
 
+    @ViewBuilder
     var body: some View {
+        if connection.isError {
+            errorBody
+        } else {
+            waitingBody
+        }
+    }
+
+    /// The server couldn't start (or died) — the "add the client" walkthrough
+    /// would mislead here, so state the actual error and offer the restart.
+    private var errorBody: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 40))
+                .foregroundStyle(.red)
+            Text(connection == .portInUse ? "Port 9090 is taken" : "Reactotron server error")
+                .font(.title3.weight(.semibold))
+            Text(connection.text(app: nil))
+                .font(.callout)
+                .foregroundStyle(.textMuted)
+                .multilineTextAlignment(.center)
+                .textSelection(.enabled)
+                .frame(maxWidth: 460)
+            Button("Retry", action: onRetry)
+                .buttonStyle(.borderedProminent)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding()
+    }
+
+    private var waitingBody: some View {
         VStack(spacing: 14) {
             Image(systemName: "antenna.radiowaves.left.and.right")
                 .font(.system(size: 40))

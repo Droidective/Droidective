@@ -61,6 +61,7 @@ public enum UserRole: String, Sendable, Codable, CaseIterable, Identifiable {
     case reactNativeDeveloper = "rn-dev"
     case qaTester = "qa"
     case supportTriage = "support"
+    case securityTester = "security"
 
     public var id: String { rawValue }
 
@@ -70,6 +71,7 @@ public enum UserRole: String, Sendable, Codable, CaseIterable, Identifiable {
         case .reactNativeDeveloper: return "React Native Developer"
         case .qaTester: return "QA / Tester"
         case .supportTriage: return "Support / Triage"
+        case .securityTester: return "Security / Pentest"
         }
     }
 
@@ -80,6 +82,7 @@ public enum UserRole: String, Sendable, Codable, CaseIterable, Identifiable {
         case .reactNativeDeveloper: return "Metro reload, dev menu, logs, and performance."
         case .qaTester: return "Capture, recording, crash hunting, and state simulation."
         case .supportTriage: return "Device diagnostics, connection, and quick checks."
+        case .securityTester: return "APK analysis, Frida, traffic proxy, and app-data inspection."
         }
     }
 
@@ -90,6 +93,7 @@ public enum UserRole: String, Sendable, Codable, CaseIterable, Identifiable {
         case .reactNativeDeveloper: return "atom"
         case .qaTester: return "checkmark.seal"
         case .supportTriage: return "lifepreserver"
+        case .securityTester: return "lock.shield"
         }
     }
 }

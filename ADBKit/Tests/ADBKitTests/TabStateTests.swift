@@ -5,31 +5,25 @@ import Testing
 @Suite struct TabStateTests {
     @Test func opensAndActivatesNewTabs() {
         var tabs = TabState()
-        let a = tabs.open("a")
-        let b = tabs.open("b")
-        #expect(a)
-        #expect(b)
+        tabs.open("a")
+        tabs.open("b")
         #expect(tabs.openTabs == ["a", "b"])
         #expect(tabs.activeTab == "b")
     }
 
     @Test func openingAnOpenTabRefocusesWithoutDuplicating() {
         var tabs = TabState(openTabs: ["a", "b", "c"], activeTab: "c")
-        let reopened = tabs.open("a")
-        #expect(reopened)
+        tabs.open("a")
         #expect(tabs.openTabs == ["a", "b", "c"]) // no duplicate
         #expect(tabs.activeTab == "a")
     }
 
-    @Test func openRefusesANewTabAtTheCapButStillRefocusesOpenOnes() {
-        let ids = (0..<TabState.maxTabs).map { "f\($0)" }
-        var tabs = TabState(openTabs: ids, activeTab: ids.last)
-        let overflow = tabs.open("overflow")            // new tab blocked at cap
-        #expect(overflow == false)
+    @Test func openHasNoTabCap() {
+        var tabs = TabState()
+        let ids = (0..<40).map { "f\($0)" }
+        for id in ids { tabs.open(id) }
         #expect(tabs.openTabs == ids)
-        let refocus = tabs.open("f0")                    // already-open still focuses
-        #expect(refocus)
-        #expect(tabs.activeTab == "f0")
+        #expect(tabs.activeTab == "f39")
     }
 
     @Test func closingActiveTabFocusesTheRightNeighbor() {

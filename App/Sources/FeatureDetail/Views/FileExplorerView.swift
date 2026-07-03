@@ -286,7 +286,7 @@ struct FileExplorerView: View {
         let explorer = state.env.engine.fileExplorer
         let asRoot = rootMode
         Task {
-            await CommandLog.userInitiated(feature: "file-explorer") {
+            await CommandLog.userInitiated {
                 for url in urls {
                     let result = await state.withOperation("Pushing \(url.lastPathComponent)…") {
                         (try? await explorer.push(serial: serial, localPath: url.path, toDir: destination, asRoot: asRoot))
@@ -413,7 +413,7 @@ struct FileExplorerView: View {
         .task(id: entry.id) {
             infoDetails = nil
             guard let serial = state.targetSerials.first else { return }
-            infoDetails = await CommandLog.userInitiated(feature: "file-explorer") {
+            infoDetails = await CommandLog.userInitiated {
                 try? await state.env.engine.fileExplorer.info(serial: serial, path: path(for: entry), asRoot: rootMode)
             }
         }
@@ -433,7 +433,7 @@ struct FileExplorerView: View {
     private func load() async {
         entries = nil
         guard let serial = state.targetSerials.first else { return }
-        let result = await CommandLog.userInitiated(feature: "file-explorer") {
+        let result = await CommandLog.userInitiated {
             try? await state.env.engine.fileExplorer.list(serial: serial, dir: currentPath, asRoot: rootMode)
         }
         guard !Task.isCancelled else { return }
@@ -448,7 +448,7 @@ struct FileExplorerView: View {
         let explorer = state.env.engine.fileExplorer
         let asRoot = rootMode
         Task {
-            await CommandLog.userInitiated(feature: "file-explorer") {
+            await CommandLog.userInitiated {
                 let result = await state.withOperation("Creating \(name)…") {
                     (try? await explorer.makeDirectory(serial: serial, path: target, asRoot: asRoot))
                         ?? FeatureResult(ok: false, message: "adb not found")
@@ -466,7 +466,7 @@ struct FileExplorerView: View {
         let explorer = state.env.engine.fileExplorer
         let asRoot = rootMode
         Task {
-            await CommandLog.userInitiated(feature: "file-explorer") {
+            await CommandLog.userInitiated {
                 await state.withOperation("Deleting \(label)…") {
                     for path in paths {
                         let result = (try? await explorer.delete(serial: serial, path: path, asRoot: asRoot))
@@ -494,7 +494,7 @@ struct FileExplorerView: View {
         let explorer = state.env.engine.fileExplorer
         let asRoot = rootMode
         Task {
-            await CommandLog.userInitiated(feature: "file-explorer") {
+            await CommandLog.userInitiated {
                 await state.withOperation("\(clipboard.isCut ? "Moving" : "Copying") \(label)…") {
                     for source in clipboard.paths {
                         let result = clipboard.isCut
@@ -531,7 +531,7 @@ struct FileExplorerView: View {
         let explorer = state.env.engine.fileExplorer
         let asRoot = rootMode
         Task {
-            await CommandLog.userInitiated(feature: "file-explorer") {
+            await CommandLog.userInitiated {
                 var lastDest: URL?
                 for item in destinations {
                     do {

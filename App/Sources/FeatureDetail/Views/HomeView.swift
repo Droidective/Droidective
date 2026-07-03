@@ -205,8 +205,6 @@ struct HomeView: View {
                  detail: "Open the palette and jump straight to any feature instantly."),
         Shortcut(key: "⌘B", icon: "sidebar.left", title: "Toggle sidebar",
                  detail: "Hide the feature list for more room, and bring it back anytime."),
-        Shortcut(key: "⌘J", icon: "chevron.up.square", title: "Command bar",
-                 detail: "Expand or minimize the Recent / Commands / Terminal bar beneath every feature."),
         Shortcut(key: "⌘,", icon: "gearshape", title: "Settings",
                  detail: "Theme, startup, hotkeys, and the setup Doctor that checks your toolchain."),
     ]

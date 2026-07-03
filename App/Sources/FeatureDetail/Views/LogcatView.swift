@@ -16,6 +16,9 @@ struct LogcatView: View {
     @State private var search = ""
     @State private var waitingForPackage: String?
     @State private var streamingPid: Int?
+    /// One-shot: the App filter is seeded from the device bar's chosen bundle
+    /// the first time the view appears, then left to the user.
+    @State private var seededPackageFilter = false
 
     private static let levels: [(value: String, label: String)] = [
         ("All", "All levels"), ("V", "Verbose"), ("D", "Debug"),
@@ -35,6 +38,16 @@ struct LogcatView: View {
             logList
         }
         .task(id: taskKey) { await streamLoop() }
+        // Open pre-filtered to the bundle chosen in the device bar (changeable
+        // from the App picker), and follow when that choice changes later.
+        .onAppear {
+            guard !seededPackageFilter else { return }
+            seededPackageFilter = true
+            if let bundle = state.selectedBundle { packageFilter = bundle.packageId }
+        }
+        .onChange(of: state.selectedBundleId) { _, _ in
+            packageFilter = state.selectedBundle?.packageId
+        }
     }
 
     // MARK: - Toolbar
@@ -304,7 +317,7 @@ struct LogcatView: View {
             if !recordedCommand {
                 recordedCommand = true
                 let command = "adb " + LogcatLineParser.buildArgs(serial: serial, filters: filters).joined(separator: " ")
-                await CommandLog.userInitiated(feature: "logcat") {
+                await CommandLog.userInitiated {
                     await state.env.commandLog.record(
                         command: command, exitCode: 0, duration: .zero, stdout: "", stderr: ""
                     )

@@ -74,7 +74,7 @@ struct WirelessAdbSection: View {
     private func runConnection(_ operation: @escaping @Sendable () async throws -> FeatureResult) {
         busy = true
         Task {
-            await CommandLog.userInitiated(feature: "wireless-adb") {
+            await CommandLog.userInitiated {
                 do {
                     let result = try await operation()
                     state.showToast(Toast(message: result.message, ok: result.ok, copyText: result.copyText, important: true))

@@ -99,7 +99,7 @@ struct RootStatusView: View {
     private func load() async {
         status = nil
         guard let serial = state.targetSerials.first else { return }
-        let result = await CommandLog.userInitiated(feature: "root-status") {
+        let result = await CommandLog.userInitiated {
             await state.env.engine.root.detect(serial: serial)
         }
         guard !Task.isCancelled else { return }

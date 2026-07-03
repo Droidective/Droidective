@@ -105,6 +105,7 @@ public struct FeatureEngine: Sendable {
     /// Feature ids with a working runner. The UI shows a "coming soon"
     /// placeholder for registry entries not yet listed here.
     public static let implementedIDs: Set<String> = [
+        "terminal",
         "send-text", "get-ip", "reverse-port",
         "open-dev-menu", "reload-js", "screenshot",
         "scrcpy", "deep-link", "app-management", "logcat",
@@ -157,11 +158,19 @@ public struct FeatureEngine: Sendable {
 
         case "open-dev-menu":
             let result = try await client.run(on: serial, ["shell", "input", "keyevent", "82"])
-            return fromResult(result, success: "Opened the dev menu", fallback: "Failed to open the dev menu")
+            return fromResult(
+                result,
+                success: "Sent the dev-menu key — the menu opens in RN dev builds with the app in front",
+                fallback: "Failed to send the dev-menu key"
+            )
 
         case "reload-js":
             let result = try await client.run(on: serial, ["shell", "input", "keyevent", "46", "46"])
-            return fromResult(result, success: "Reloaded JS", fallback: "Failed to reload JS")
+            return fromResult(
+                result,
+                success: "Sent reload (R·R) — RN dev builds with the app in front reload from Metro",
+                fallback: "Failed to send the reload keys"
+            )
 
         case "screenshot":
             let file = try await screenCapture.captureScreenshot(serial: serial)
@@ -226,26 +235,10 @@ public struct FeatureEngine: Sendable {
             return FeatureResult(ok: true, message: "Bug report saved", revealPath: zipPath.path)
 
         case "process-death":
-            guard let package = params["packageId"]?.stringValue, !package.isEmpty else {
-                return FeatureResult(ok: false, message: "Pick a saved bundle first.")
-            }
-            _ = try await client.run(on: serial, ["shell", "input", "keyevent", "3"]) // HOME → background
-            let killResult = try await client.run(on: serial, ["shell", "am", "kill", package])
-            return killResult.succeeded
-                ? FeatureResult(ok: true, message: "Killed \(package) in the background — reopen to test state restoration.")
-                : FeatureResult(ok: false, message: friendlyAdbError(killResult, fallback: "Failed to kill the app"))
+            return try await simulateProcessDeath(serial: serial, params: params)
 
         case "rn-dev-host":
-            let host = (params["host"]?.stringValue ?? "").trimmingCharacters(in: .whitespaces)
-            guard !host.isEmpty else {
-                return FeatureResult(ok: false, message: "Enter a host:port (e.g. 192.168.1.10:8081).")
-            }
-            let port = host.contains(":") ? String(host.split(separator: ":").last ?? "8081") : "8081"
-            _ = try await client.run(on: serial, ["reverse", "tcp:\(port)", "tcp:\(port)"])
-            return FeatureResult(
-                ok: true,
-                message: "Reverse-tunneled :\(port). For a remote Metro IP, also set it in the RN dev menu → Settings → Debug server host."
-            )
+            return try await setDevServerHost(serial: serial, params: params)
 
         case "current-activity":
             guard let activity = try await inspection.getCurrentActivity(serial: serial) else {
@@ -329,6 +322,105 @@ public struct FeatureEngine: Sendable {
             return FeatureResult(ok: false, message: "Couldn't determine the device IP (is Wi-Fi on?).")
         }
         return FeatureResult(ok: true, message: "Device IP: \(ip)", copyText: ip)
+    }
+
+    /// Background-then-kill for state-restoration testing. Uses the chosen
+    /// bundle, or whatever app is in front when none is chosen (read before
+    /// HOME backgrounds it). `am kill` exits 0 even when the system declines
+    /// to kill (e.g. a foreground service holds the process), so the process
+    /// is re-checked to report what actually happened.
+    private func simulateProcessDeath(serial: String, params: [String: FeatureValue]) async throws -> FeatureResult {
+        var package = params["packageId"]?.stringValue ?? ""
+        if package.isEmpty {
+            package = (try await inspection.getForegroundPackage(serial: serial)) ?? ""
+        }
+        guard !package.isEmpty else {
+            return FeatureResult(
+                ok: false,
+                message: "Couldn't read the app in front — open the app on the device, or pick a saved bundle."
+            )
+        }
+        _ = try await client.run(on: serial, ["shell", "input", "keyevent", "3"]) // HOME → background
+        let kill = try await client.run(on: serial, ["shell", "am", "kill", shellQuote(package)])
+        guard kill.succeeded else {
+            return FeatureResult(ok: false, message: friendlyAdbError(kill, fallback: "Failed to kill the app"))
+        }
+        try? await Task.sleep(for: .milliseconds(600))
+        let alive = try await client.run(on: serial, ["shell", "pidof", shellQuote(package)])
+        return alive.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? FeatureResult(ok: true, message: "Killed \(package) in the background — reopen it to test state restoration.")
+            : FeatureResult(
+                ok: false,
+                message: "\(package) is still running — the system kept it alive (a foreground service?). Use Apps → Force Stop for a hard kill."
+            )
+    }
+
+    /// Point the app at a Metro dev server, best mechanism first: a localhost
+    /// host (or bare port) reverse-tunnels the port; a remote host sets the
+    /// `metro.host` system property where SELinux allows it (emulators, rooted
+    /// devices); otherwise the dev menu is opened so the host can be set by
+    /// hand — production Android offers no adb path to write it.
+    private func setDevServerHost(serial: String, params: [String: FeatureValue]) async throws -> FeatureResult {
+        let raw = (params["host"]?.stringValue ?? "").trimmingCharacters(in: .whitespaces)
+        guard !raw.isEmpty else {
+            return FeatureResult(ok: false, message: "Enter a host:port (e.g. 192.168.1.10:8081).")
+        }
+        guard !raw.contains("://") else {
+            return FeatureResult(
+                ok: false,
+                message: "Enter just host:port (e.g. 192.168.1.10:8081) — drop the http:// prefix."
+            )
+        }
+        let (host, portText) = Self.splitHostPort(raw)
+        guard let port = Int(portText), (1...65535).contains(port) else {
+            return FeatureResult(
+                ok: false,
+                message: "\"\(portText)\" isn't a valid port — use host:port, e.g. 192.168.1.10:8081."
+            )
+        }
+        // splitHostPort takes the last colon as the port separator, so an IPv6
+        // literal would be silently mangled into host+port — reject it instead.
+        guard !host.contains(":") else {
+            return FeatureResult(
+                ok: false,
+                message: "IPv6 hosts aren't supported here — use an IPv4 address or hostname, e.g. 192.168.1.10:8081."
+            )
+        }
+        if host.isEmpty || host == "localhost" || host == "127.0.0.1" {
+            let result = try await client.run(on: serial, ["reverse", "tcp:\(port)", "tcp:\(port)"])
+            return fromResult(
+                result,
+                success: "Reverse-tunneled tcp:\(port) — the app's default localhost:\(port) now reaches Metro on this Mac.",
+                fallback: "Failed to reverse tcp:\(port)"
+            )
+        }
+        _ = try await client.run(on: serial, ["shell", "setprop", "metro.host", shellQuote(host)])
+        let readBack = try await client.run(on: serial, ["shell", "getprop", "metro.host"])
+        if readBack.stdout.trimmingCharacters(in: .whitespacesAndNewlines) == host {
+            // RN pairs metro.host with the app's built-in Metro port, so the
+            // prop alone can't carry a custom port — say so instead of
+            // promising host:port.
+            let followUp = port == 8081
+                ? "reload JS (or relaunch the app) to load from \(host):\(port)."
+                : "RN pairs it with the app's built-in Metro port (usually 8081) — for port \(port), "
+                    + "set \(host):\(port) in the dev menu’s “Change Bundle Location” instead."
+            return FeatureResult(ok: true, message: "Set metro.host=\(host) — \(followUp)")
+        }
+        _ = try await client.run(on: serial, ["shell", "input", "keyevent", "82"])
+        return FeatureResult(
+            ok: false,
+            message: "This device blocks setting a dev host over adb — sent the dev-menu shortcut instead. "
+                + "With your RN dev build in the foreground, choose “Change Bundle Location” and enter \(host):\(port)."
+        )
+    }
+
+    /// "host:port" → (host, port); a bare port means localhost; a bare host
+    /// gets Metro's default 8081.
+    static func splitHostPort(_ raw: String) -> (host: String, port: String) {
+        if let colon = raw.lastIndex(of: ":") {
+            return (String(raw[..<colon]), String(raw[raw.index(after: colon)...]))
+        }
+        return raw.allSatisfy(\.isNumber) ? ("", raw) : (raw, "8081")
     }
 
     private func reversePort(serial: String, params: [String: FeatureValue]) async throws(AdbError) -> FeatureResult {

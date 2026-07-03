@@ -1,10 +1,10 @@
 import ADBKit
 import SwiftUI
 
-/// Persistent device context above the detail pane. A two-row grid keeps the
-/// device and bundle rows' icons, controls, and trailing actions aligned. The
-/// device and app are shown as prominent pills (status dot + bold name) so the
-/// active target is unmistakable.
+/// Persistent device context above the detail pane, on a single row: the device
+/// pill with the bundle picker right beside it, then the flexible middle and the
+/// trailing actions. The device and app are shown as prominent pills (status
+/// dot + bold name) so the active target is unmistakable.
 struct DeviceBarView: View {
     @Environment(AppState.self) private var state
     @Environment(\.colorScheme) private var colorScheme
@@ -24,83 +24,68 @@ struct DeviceBarView: View {
             .buttonStyle(IconButtonStyle())
             .help("Show or hide the sidebar (⌘B)")
 
-            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
-            GridRow {
+            // Device and bundle are matching icon + pill pairs: identical inner
+            // spacing, and both pills draw their own background (no hidden
+            // control insets), so every gap on the bar reads uniform.
+            HStack(spacing: 10) {
                 Image(systemName: "iphone")
                     .foregroundStyle(deviceStatusColor)
-                    .gridColumnAlignment(.center)
                     .help(deviceStatusHelp)
-
-                HStack(spacing: 8) {
-                    deviceControl
-                    if let device = selectedDevice, device.isWireless {
-                        disconnectControl(device)
-                    }
+                deviceControl
+                if let device = selectedDevice, device.isWireless {
+                    disconnectControl(device)
                 }
-
-                // Flexible middle column pushes trailing controls right.
-                HStack(spacing: 8) {
-                    OverridesPillView()
-                    if state.adbMissing {
-                        Label("adb not found", systemImage: "exclamationmark.triangle.fill")
-                            .font(.footnote)
-                            .foregroundStyle(.orange)
-                        Button(state.installingTool == .adb ? "Installing…" : "Install") {
-                            state.installTool(.adb)
-                        }
-                        .controlSize(.mini)
-                        .disabled(state.installingTool != nil)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                HStack(spacing: 10) {
-                    if state.readyDeviceCount > 1, state.activeFeatureSupportsRunAll {
-                        Toggle(isOn: $state.runOnAll) {
-                            Label("Run on all", systemImage: "square.stack.3d.up.fill")
-                        }
-                        .toggleStyle(.switch)
-                        .controlSize(.mini)
-                        .disabled(state.recordingActive)
-                        .onChange(of: state.runOnAll) { state.persistSelection() }
-                        .help("Run this feature on every connected device")
-                    }
-
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.6)) { refreshSpin += 360 }
-                        state.refreshDevices()
-                    } label: {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                            .rotationEffect(.degrees(refreshSpin))
-                    }
-                    .buttonStyle(IconButtonStyle())
-                    .help("Refresh devices")
-
-                    NotificationBell()
-                }
-                .gridColumnAlignment(.trailing)
             }
 
-            // The bundle row only appears when the selected feature actually
-            // works with an app bundle.
-            if bundleRowVisible {
-                GridRow {
+            // Only when the selected feature actually works with an app bundle.
+            if bundlePickerVisible {
+                HStack(spacing: 10) {
                     Image(systemName: "shippingbox")
                         .foregroundStyle(bundleIconColor)
-                        .gridColumnAlignment(.center)
-
                     bundleControl
-
-                    Color.clear.frame(height: 1)
-
-                    Color.clear
-                        .frame(width: 1, height: 1)
-                        .gridColumnAlignment(.trailing)
                 }
             }
-        }
-            .frame(maxWidth: .infinity)
-            .fixedSize(horizontal: false, vertical: true)
+
+            // Flexible middle pushes trailing controls right.
+            HStack(spacing: 8) {
+                OverridesPillView()
+                if state.adbMissing {
+                    Label("adb not found", systemImage: "exclamationmark.triangle.fill")
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                    Button(state.installingTool == .adb ? "Installing…" : "Install") {
+                        state.installTool(.adb)
+                    }
+                    .controlSize(.mini)
+                    .disabled(state.installingTool != nil)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            HStack(spacing: 10) {
+                if state.readyDeviceCount > 1, state.activeFeatureSupportsRunAll {
+                    Toggle(isOn: $state.runOnAll) {
+                        Label("Run on all", systemImage: "square.stack.3d.up.fill")
+                    }
+                    .toggleStyle(.switch)
+                    .controlSize(.mini)
+                    .disabled(state.recordingActive)
+                    .onChange(of: state.runOnAll) { state.persistSelection() }
+                    .help("Run this feature on every connected device")
+                }
+
+                Button {
+                    withAnimation(.easeInOut(duration: 0.6)) { refreshSpin += 360 }
+                    state.refreshDevices()
+                } label: {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .rotationEffect(.degrees(refreshSpin))
+                }
+                .buttonStyle(IconButtonStyle())
+                .help("Refresh devices")
+
+                NotificationBell()
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
@@ -244,7 +229,7 @@ struct DeviceBarView: View {
     /// True when the selected feature works with an app bundle. Custom
     /// commands (commands may require one) and logcat (its app filter is
     /// driven by saved bundles) are included.
-    private var bundleRowVisible: Bool {
+    private var bundlePickerVisible: Bool {
         guard let id = state.activeTabID,
               let feature = FeatureRegistry.byID[id] else { return false }
         return feature.needsBundle
@@ -293,8 +278,17 @@ struct DeviceBarView: View {
         } label: {
             bundlePill
         }
+        // Borderless with a hand-drawn pill, exactly like the device control —
+        // the default pop-up button carries its own leading inset, which made
+        // the icon→pill gap read wider than the device pair's.
+        .menuStyle(.borderlessButton)
         .fixedSize()
         .controlSize(.large)
+        .foregroundStyle(pillTextColor)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .background(pillTextColor.opacity(0.06), in: RoundedRectangle(cornerRadius: 7))
+        .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(pillTextColor.opacity(0.18)))
         .disabled(state.recordingActive)
         .help(state.recordingActive ? "Stop the recording to change the app bundle" : "Choose the target app")
     }

@@ -97,7 +97,7 @@ struct FridaConsoleView: View {
             let version = await state.env.engine.managedTools.installedVersion(.fridaServer) ?? ""
             state.showToast(Toast(message: "Downloaded frida-server \(version)", ok: true, copyText: local, revealPath: local))
             status = "Pushing and starting frida-server…"
-            try await CommandLog.userInitiated(feature: "frida-console") {
+            try await CommandLog.userInitiated {
                 _ = try await state.env.engine.frida.installServer(localPath: local, serial: serial)
                 _ = try await state.env.engine.frida.startServer(serial: serial)
             }
@@ -112,7 +112,7 @@ struct FridaConsoleView: View {
         busy = true
         defer { busy = false }
         do {
-            try await CommandLog.userInitiated(feature: "frida-console") {
+            try await CommandLog.userInitiated {
                 _ = try await state.env.engine.frida.stopServer(serial: serial)
             }
             serverRunning = try await state.env.engine.frida.isServerRunning(serial: serial)

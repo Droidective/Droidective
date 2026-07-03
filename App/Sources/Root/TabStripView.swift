@@ -13,8 +13,12 @@ struct TabStripView: View {
     @State private var chipWidths: [String: CGFloat] = [:]
     @State private var contentWidth: CGFloat = 0
     @State private var viewportWidth: CGFloat = 0
-    /// Index the ‹ › arrows last scrolled to — stepped on each press.
-    @State private var scrollAnchor = 0
+    /// The content's live horizontal scroll offset (0 = fully left). The ‹ ›
+    /// arrows derive the first visible tab from this, so they step from where
+    /// the strip *actually* is — a stored index went stale the moment the user
+    /// trackpad-scrolled or the active tab auto-centered, making the first
+    /// arrow click a no-op.
+    @State private var scrollOffset: CGFloat = 0
     /// Where the insertion guideline shows during a reorder drag (nil = none).
     @State private var dropSlot: TabDropSlot?
 
@@ -41,13 +45,14 @@ struct TabStripView: View {
                     .padding(.horizontal, 8)
                     .frame(maxHeight: .infinity)
                     .background(widthReader { contentWidth = $0 })
+                    .background(scrollOffsetReader)
                 }
+                .coordinateSpace(name: "tabStrip")
                 .frame(maxWidth: .infinity)
                 .background(widthReader { viewportWidth = $0 })
                 .onChange(of: activeID) { _, id in
                     // Bring this pane's active tab into view when it changes off-screen.
                     guard let id else { return }
-                    if let index = tabIDs.firstIndex(of: id) { scrollAnchor = index }
                     withAnimation(.easeInOut(duration: 0.15)) { proxy.scrollTo(id, anchor: .center) }
                 }
 
@@ -60,6 +65,36 @@ struct TabStripView: View {
         .frame(height: 36)
         .background(.bgSurface)
         .overlay(alignment: .bottom) { Divider() }
+        // A drop that lands outside this strip's chips (the pane content, dead
+        // strip space, the other pane) never reaches the chips' drop delegates,
+        // so their `setSlot(nil)` cleanup can't run and the insertion guideline
+        // stayed painted. The drag's single source of truth is `draggingTabID` —
+        // clear the slot whenever it resets, wherever the drop landed.
+        .onChange(of: state.draggingTabID) { _, id in
+            if id == nil { dropSlot = nil }
+        }
+    }
+
+    /// Reports the content's minX in the strip's coordinate space — 0 when fully
+    /// left, negative as the strip scrolls right.
+    private var scrollOffsetReader: some View {
+        GeometryReader { geo in
+            Color.clear.onChange(of: geo.frame(in: .named("tabStrip")).minX, initial: true) { _, minX in
+                scrollOffset = -minX
+            }
+        }
+    }
+
+    /// The index of the first chip whose trailing edge is inside the viewport,
+    /// computed from the measured chip widths and the live scroll offset.
+    private var firstVisibleIndex: Int {
+        var x: CGFloat = 8 // leading padding
+        for (index, id) in tabIDs.enumerated() {
+            let width = chipWidths[id] ?? 0
+            if x + width > scrollOffset + 1 { return index }
+            x += width + 4 // chip spacing
+        }
+        return max(tabIDs.count - 1, 0)
     }
 
     /// Nudge the horizontal scroll by a few tabs (single click) — reveals hidden
@@ -68,8 +103,8 @@ struct TabStripView: View {
         Button {
             let ids = tabIDs
             guard !ids.isEmpty else { return }
-            scrollAnchor = min(max(scrollAnchor + direction * 3, 0), ids.count - 1)
-            withAnimation(.easeInOut(duration: 0.2)) { proxy.scrollTo(ids[scrollAnchor], anchor: .leading) }
+            let target = min(max(firstVisibleIndex + direction * 3, 0), ids.count - 1)
+            withAnimation(.easeInOut(duration: 0.2)) { proxy.scrollTo(ids[target], anchor: .leading) }
         } label: {
             Image(systemName: icon)
                 .font(.caption.weight(.semibold))

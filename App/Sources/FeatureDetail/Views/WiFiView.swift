@@ -167,7 +167,7 @@ struct WiFiView: View {
         loaded = false
         guard !serial.isEmpty else { return }
         let engine = state.env.engine
-        let result = await CommandLog.userInitiated(feature: "wifi") { () -> (WifiStatus, [WifiNetwork], Bool) in
+        let result = await CommandLog.userInitiated { () -> (WifiStatus, [WifiNetwork], Bool) in
             let status = await engine.wifi.status(serial: serial)
             var networks = await engine.wifi.savedNetworks(serial: serial)
             var rooted = false
@@ -198,7 +198,7 @@ struct WiFiView: View {
     private func setWifi(_ on: Bool) async {
         busy = true
         defer { busy = false }
-        await CommandLog.userInitiated(feature: "wifi") {
+        await CommandLog.userInitiated {
             let result = try? await state.env.engine.wifi.setEnabled(serial: serial, on)
             if result?.succeeded ?? false {
                 state.showToast(Toast(message: "Wi-Fi \(on ? "on" : "off")", ok: true))
@@ -213,7 +213,7 @@ struct WiFiView: View {
         busy = true
         defer { busy = false }
         let ssid = newSSID
-        await CommandLog.userInitiated(feature: "wifi") {
+        await CommandLog.userInitiated {
             let result = try? await state.env.engine.wifi.connect(
                 serial: serial, ssid: ssid, security: newSecurity, password: newPassword
             )

@@ -24,10 +24,9 @@ struct FeatureDetailView: View {
         }
     }
 
-    /// Every feature shows its "how it works" description beneath its content,
-    /// then a command bar with the adb commands + executed output — both
-    /// pinned below the feature's own (often centered) content so they never
-    /// shift or clip it.
+    /// Every feature shows its "how it works" description beneath its content —
+    /// pinned below the feature's own (often centered) content so it never
+    /// shifts or clips it. Toggled from Settings ▸ Appearance.
     private func featureBody(for feature: FeatureDef) -> some View {
         VStack(spacing: 0) {
             detail(for: feature)
@@ -35,16 +34,7 @@ struct FeatureDetailView: View {
             if showFeatureNotes, let note = FeatureRegistry.howTo(for: feature.id) {
                 FeatureDescription(note: note)
             }
-            if !hidesCommandBar(feature.id) {
-                FeatureCommandBar(feature: feature)
-            }
         }
-    }
-
-    /// Full-pane editor/recorder features manage their own actions and need the
-    /// whole pane, so the command bar is hidden for them.
-    private func hidesCommandBar(_ id: String) -> Bool {
-        id == "video-editor" || id == "screen-record"
     }
 
     @ViewBuilder
@@ -107,6 +97,8 @@ struct FeatureDetailView: View {
                 WirelessAdbView()
             case "custom-commands":
                 CustomCommandsView()
+            case "terminal":
+                TerminalView()
             case "file-explorer":
                 FileExplorerView()
             case "apps":
@@ -157,7 +149,7 @@ struct FeatureDetailView: View {
 }
 
 /// The feature's "how it works" note, rendered as a description strip beneath
-/// the feature's content (above the command bar) — replaces the old ⓘ popover.
+/// the feature's content — replaces the old ⓘ popover.
 struct FeatureDescription: View {
     @AppStorage("showFeatureNotes") private var showFeatureNotes = false
     let note: String
@@ -178,7 +170,7 @@ struct FeatureDescription: View {
                     .foregroundStyle(.tertiary)
             }
             .buttonStyle(.plain)
-            .help("Hide this note (toggle back with ⓘ in the bar below)")
+            .help("Hide this note (toggle back in Settings ▸ Appearance)")
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)

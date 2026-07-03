@@ -6,11 +6,8 @@ import Foundation
 ///
 /// Tabs are *strictly distinct features*: a feature's id identifies its tab, so
 /// opening a feature that's already open just refocuses it — there are never two
-/// tabs for the same feature. At most `maxTabs` are open at once.
+/// tabs for the same feature.
 public struct TabState: Sendable, Equatable {
-    /// The hard cap on simultaneously open tabs.
-    public static let maxTabs = 10
-
     /// Open tabs (feature ids) in strip order, left to right.
     public private(set) var openTabs: [String]
     /// The foreground tab — always one of `openTabs`, or nil only when none are
@@ -24,19 +21,12 @@ public struct TabState: Sendable, Equatable {
         self.activeTab = activeTab.flatMap { openTabs.contains($0) ? $0 : nil } ?? openTabs.first
     }
 
-    /// Open `id`, or refocus it if already open. Returns false only when a *new*
-    /// tab can't be opened because the cap is reached — the caller surfaces a
-    /// hint. Refocusing an already-open tab always succeeds.
-    @discardableResult
-    public mutating func open(_ id: String) -> Bool {
-        if openTabs.contains(id) {
-            activeTab = id
-            return true
+    /// Open `id`, or refocus it if already open.
+    public mutating func open(_ id: String) {
+        if !openTabs.contains(id) {
+            openTabs.append(id)
         }
-        guard openTabs.count < Self.maxTabs else { return false }
-        openTabs.append(id)
         activeTab = id
-        return true
     }
 
     /// Close `id`. If it was the active tab, focus the neighbor that slid into

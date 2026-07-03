@@ -30,12 +30,10 @@ automated guard, so the failure mode is a non-working feature you only catch by
 opening it — verify those by hand.
 
 1. **Define it** — add a `FeatureDef` to `FeatureRegistry.all` (unique `id`,
-   title, keywords, category, `kind`). **[test: `hasAll53Features` — bump the
+   title, keywords, category, `kind`). **[test: `hasAll55Features` — bump the
    count; `byID` traps on a duplicate id]**
 2. **How-it-works note** — add to `FeatureNotes`. **[test: `everyFeatureHasAHowToNote`]**
-3. **Command reference** — add to `FeatureCommands` (each entry leads with the
-   tool name). **[test: `everyFeatureHasACommandReference`, `commandReferenceLeadsWithTheTool`]**
-4. **If it's an action** (`.instantAction`/`.formAction`/`.toggleAction`):
+3. **If it's an action** (`.instantAction`/`.formAction`/`.toggleAction`):
    - add the runner `case` to `FeatureEngine.dispatch`,
    - add the `id` to `FeatureEngine.implementedIDs`,
    - add an arg-vector test in `FeatureEngineTests` asserting the exact adb
@@ -43,20 +41,20 @@ opening it — verify those by hand.
      `everyImplementedActionResolvesToARunner` catches a missing dispatch case;
      `implementedIDsAreAllRealFeatures` catches a typo'd id; your arg-vector test
      catches wrong/omitted-quote arguments]**
-5. **If it's a view** (`.view`/`.system`):
+4. **If it's a view** (`.view`/`.system`):
    - build the SwiftUI view in `App/Sources/FeatureDetail/Views/`,
    - add the `id` → view `case` in `FeatureDetailView.detailByKind`,
    - add the `id` to `implementedIDs`,
    - if it runs adb directly, wrap each user action in
-     `CommandLog.userInitiated(feature: <id>)`. **[test: `implementedIDsAreAllRealFeatures`
+     `CommandLog.userInitiated`. **[test: `implementedIDsAreAllRealFeatures`
      for the id] · [silent: a missing `detailByKind` case renders "Coming Soon";
-     missing `userInitiated` leaves the Recent tab empty]**
-6. **If it joins a hub** — add it to `FeatureRegistry.absorbedByHub` and fold its
+     missing `userInitiated` keeps its commands out of Settings ▸ Command Log]**
+5. **If it joins a hub** — add it to `FeatureRegistry.absorbedByHub` and fold its
    keywords into the hub's `keywords`. **[test: `hubsStaySearchableByTheirMembersPrimaryKeyword`]**
-7. **Logic lives in ADBKit.** adb/Process/parsing go in an ADBKit service with a
+6. **Logic lives in ADBKit.** adb/Process/parsing go in an ADBKit service with a
    pure, static, tested parser — never `Process`/`adb` in a SwiftUI view.
    **[silent — but a review red flag]**
-8. **Verify** — `cd ADBKit && swift test` green, then `make build` with zero
+7. **Verify** — `cd ADBKit && swift test` green, then `make build` with zero
    warnings (warnings are errors).
 
 ## Build / test / run
@@ -81,14 +79,13 @@ spawn adb/scrcpy/emulator/brew).
   ffmpeg/emulator via SDK paths → Homebrew → `zsh -lc` fallback, cached.
   `AdbClient` (structured `AdbResult`, never throws on non-zero exit, only on
   `.adbNotFound`). `CommandLog` (actor; records only inside
-  `CommandLog.$isUserInitiated.withValue(true)` — background polling stays out —
-  and tags each entry with `$currentFeatureID`, set via
-  `CommandLog.userInitiated(feature:)`, so the command bar's Recent tab can
-  filter by feature).
+  `CommandLog.$isUserInitiated.withValue(true)` — wrap view actions in
+  `CommandLog.userInitiated {}`, keep background polling out — feeding the
+  Settings ▸ Command Log sheet).
 - `Devices/`: `DeviceMonitor` (actor, 2s poll, `AsyncStream<[Device]>`),
   `DeviceListParser`, `DeviceProps` (getprop), `DeviceOverview` (RAM/storage/
   battery/CPU/app counts), `DeviceDetails` (picker enrichment).
-- `Features/`: `FeatureRegistry` (54 `FeatureDef`s, declarative; `absorbedByHub`
+- `Features/`: `FeatureRegistry` (55 `FeatureDef`s, declarative; `absorbedByHub`
   maps a hub screen to the features it gathers, flattened to
   `absorbedFeatureIDs`; `catalogFeatureIDs` is the registry minus those),
   `FeatureModel`,
@@ -106,7 +103,9 @@ spawn adb/scrcpy/emulator/brew).
   info/meminfo/sandbox), AppsExplorer, FileExplorer, Overrides, ScreenCapture,
   ScreenRecorder (records through a headless `MirrorSession` on the bundled
   scrcpy server — no desktop scrcpy), Crash, BugReport, Connection (wireless),
-  CustomCommand, ToolDetection, AdbKeyboardInstaller, Emulator, AppIcon,
+  CustomCommand (adb kind → tokenized argv, never a shell; Terminal kind →
+  `zsh -lc`, deliberately not device-scoped — `{serial}` targets the
+  selection), ToolDetection, AdbKeyboardInstaller, Emulator, AppIcon,
   Performance (per-core CPU/RAM/FPS/per-process), NetworkSpeed (`/proc/net/dev`
   throughput), VideoEditService (ffmpeg export). The **`JSConsole/`** trio backs
   the `js-console` feature — a Hermes Chrome-DevTools-Protocol JS console for RN:
@@ -144,12 +143,13 @@ spawn adb/scrcpy/emulator/brew).
   Recompile · Sign tabs (the views take an optional injected APK so they embed in
   the studio and still work standalone via hotkey).
 
-## The 54 features
+## The 55 features
 
 Most `.view` features are full-screen bespoke panels (file-explorer, apps,
 emulators, device-info, logcat, crash-catcher, sandbox-browser, performance,
-network-speed, wifi, root-status, screen-record, scrcpy, reactotron, js-console
-+ the custom-commands/catalog system panels). Several are **hub** screens — `react-native`, `simulate`,
+network-speed, wifi, root-status, screen-record, scrcpy, reactotron, js-console,
+terminal — multi-tab PTY login shells via SwiftTerm, with the device selected at
+open exported as ANDROID_SERIAL — + the custom-commands/catalog system panels). Several are **hub** screens — `react-native`, `simulate`,
 and `connection` gather related instant-/form-/toggle-actions into one scrollable
 grouped `Form`; `apk-studio` is a tabbed workspace over one loaded APK (Inspect/
 Decompile/Recompile/Sign). (The Apps explorer similarly covers per-app
@@ -166,7 +166,7 @@ Apps hub. They stay hotkey-able (every feature registers a shortcut; the Hotkeys
 tab lists bound members under "Hidden features"). This is a pure display filter —
 no persisted migration — so it also covers a hub that grows later. The rest are generic instant-/form-/toggle-actions
 driven by the registry. The catalog and Home's "All N features" count use
-`catalogFeatureIDs` (33). **Every feature is enabled by default**
+`catalogFeatureIDs` (34). **Every feature is enabled by default**
 (`defaultEnabledIDs == catalogFeatureIDs`); the catalog (Manage features) is for
 turning OFF the ones you don't want, not opting in — there's no Restore button.
 `LayoutState.adoptAllEnabled()` is a one-time migration that turns everything on
@@ -204,12 +204,12 @@ feature for existing users via `knownIds`.
   otherwise the whole VStack centers and the toolbar floats mid-window.
 - **`HSplitView` ignores SwiftUI safe-area insets** (it's NSSplitView-backed) —
   content renders under the device bar. Use a plain HStack split.
-- **Command bar Recent tab filters CommandLog by featureID.** A view-feature
-  that runs adb directly (logcat, device-info, file-explorer…) must wrap its
-  user-initiated calls in `CommandLog.userInitiated(feature: <id>)` or its Recent
-  tab stays empty. Keep background polling OUT (don't wrap it). Every feature's
-  how-it-works note now renders inline beneath its content (the old ⓘ popover is
-  gone), and `FeatureRegistry.commands(for:)` powers the Commands tab.
+- **The Command Log records only wrapped calls.** A view-feature that runs adb
+  directly (logcat, device-info, file-explorer…) must wrap its user-initiated
+  calls in `CommandLog.userInitiated {}` or they never reach the Settings ▸
+  Command Log sheet. Keep background polling OUT (don't wrap it). Every
+  feature's how-it-works note renders inline beneath its content (toggleable
+  from Settings ▸ Appearance); the old bottom command bar is gone.
 - **⌘=/⌘- font zoom is a `scaleEffect` on RootView, not dynamic type.** macOS
   ignores SwiftUI `dynamicTypeSize` for rendering, so the content is laid out at
   `size/scale` and scaled up. It's bypassed entirely at 1.0× because the
@@ -310,13 +310,18 @@ compile or test time* — lean on it instead of manual vigilance.
 ## Status
 
 Feature-complete across all planned milestones plus several UX rounds (latest:
-**v2.7.0** — a full APK toolchain (APK Studio: inspect, decompile via jadx/
-apktool, recompile, and sign — with keystore creation) plus Frida setup, a custom
-accent color, launching emulators from the device bar, per-feature
-connect-a-device empty states, a live-preview hotkey recorder, and a Settings
-split into Appearance/Privacy; managed tools download from GitHub releases into
-Application Support and are sized/removable in Settings); 406 tests green; builds
-clean with zero warnings (enforced as errors in CI). Verified live against a
+a native multi-tab **Terminal** feature (PTY login shells via SwiftTerm,
+ANDROID_SERIAL-scoped, ⌘N/⌘W/⇧⌘[ ⇧⌘] shell management with close/quit
+confirmations), shell-kind custom commands through `zsh -lc`, and the removal
+of the bottom command bar — the how-it-works note toggles from Settings ▸
+Appearance and the Command Log lives in Settings. Before that, **v2.7.0** — a
+full APK toolchain (APK Studio: inspect, decompile via jadx/apktool, recompile,
+and sign — with keystore creation) plus Frida setup, a custom accent color,
+launching emulators from the device bar, per-feature connect-a-device empty
+states, a live-preview hotkey recorder, and a Settings split into
+Appearance/Privacy; managed tools download from GitHub releases into
+Application Support and are sized/removable in Settings); 513 tests green;
+builds clean with zero warnings (enforced as errors in CI). Verified live against a
 physical device and an Android emulator. Release builds are Developer ID-signed +
 notarized and bundle scrcpy/ffmpeg (see `RELEASING.md`). Open gaps: the Apps
 list/detail divider isn't drag-resizable.

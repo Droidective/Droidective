@@ -178,7 +178,7 @@ struct AppsExplorerView: View {
             selectedPackage = nil
         }
         guard let serial = state.targetSerials.first else { return }
-        let (listing, lifecycle) = await CommandLog.userInitiated(feature: "apps") {
+        let (listing, lifecycle) = await CommandLog.userInitiated {
             async let listing = try? state.env.engine.appsExplorer.listAll(serial: serial)
             async let lifecycle = state.env.engine.systemApps.states(serial: serial)
             return await (listing, lifecycle)
@@ -396,7 +396,7 @@ private struct AppDetailPane: View {
     private func uninstall() {
         managing = true
         Task {
-            await CommandLog.userInitiated(feature: "apps") {
+            await CommandLog.userInitiated {
                 do {
                     _ = try await state.env.engine.systemApps.setRemoved(serial: serial, packageId: packageId, true)
                     let entry = await state.env.engine.systemApps.states(serial: serial)[packageId]
@@ -421,7 +421,7 @@ private struct AppDetailPane: View {
     private func manage(_ operation: @escaping (SystemAppsService) async throws -> AdbResult) {
         managing = true
         Task {
-            await CommandLog.userInitiated(feature: "apps") {
+            await CommandLog.userInitiated {
                 do {
                     let result = try await operation(state.env.engine.systemApps)
                     let ok = result.succeeded && !result.stdout.localizedCaseInsensitiveContains("failure")
@@ -442,7 +442,7 @@ private struct AppDetailPane: View {
     private func runControl(_ action: AppControlService.AppAction) {
         managing = true
         Task {
-            await CommandLog.userInitiated(feature: "apps") {
+            await CommandLog.userInitiated {
                 let result = (try? await state.env.engine.appControl.control(
                     serial: serial, packageId: packageId, action: action
                 )) ?? FeatureResult(ok: false, message: "adb not found")
@@ -456,7 +456,7 @@ private struct AppDetailPane: View {
         info = nil
         permissions = nil
         guard let serial = state.targetSerials.first else { return }
-        let (fetchedInfo, fetchedPermissions) = await CommandLog.userInitiated(feature: "apps") {
+        let (fetchedInfo, fetchedPermissions) = await CommandLog.userInitiated {
             async let infoResult = try? state.env.engine.inspection.getAppInfo(serial: serial, packageId: packageId)
             async let permissionsResult = try? state.env.engine.inspection.listPermissions(serial: serial, packageId: packageId)
             return await (infoResult, permissionsResult)
@@ -471,7 +471,7 @@ private struct AppDetailPane: View {
         guard let dest = state.askSaveLocation(suggestedName: "\(packageId).apk") else { return }
         pullingApk = true
         Task {
-            await CommandLog.userInitiated(feature: "apps") {
+            await CommandLog.userInitiated {
                 do {
                     let saved = try await state.withFileProgress(
                         "Pulling \(packageId)…", destination: dest, expectedBytes: info?.apkSizeBytes
@@ -491,7 +491,7 @@ private struct AppDetailPane: View {
         guard let serial = state.targetSerials.first else { return }
         mutating = true
         Task {
-            await CommandLog.userInitiated(feature: "apps") {
+            await CommandLog.userInitiated {
                 let result = (try? await state.env.engine.inspection.setPermission(
                     serial: serial, packageId: packageId, permission: permission.name, grant: granted
                 )) ?? FeatureResult(ok: false, message: "adb not found")
