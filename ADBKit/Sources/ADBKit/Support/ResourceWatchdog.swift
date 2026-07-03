@@ -16,6 +16,15 @@ public struct ResourceSample: Sendable, Equatable {
         self.cpuTimeSeconds = cpuTimeSeconds
         self.footprintBytes = footprintBytes
     }
+
+    /// CPU percentage (100 = one fully busy core) consumed since an earlier
+    /// sample, from the cumulative-time delta. `nil` for a non-advancing clock
+    /// (the first reading, or two samples at the same instant).
+    public func cpuPercent(since previous: ResourceSample) -> Double? {
+        guard uptime > previous.uptime else { return nil }
+        let used = max(0, cpuTimeSeconds - previous.cpuTimeSeconds)
+        return used / (uptime - previous.uptime) * 100
+    }
 }
 
 public enum ResourceMetric: String, Sendable {
@@ -98,9 +107,8 @@ public struct ResourceWatchdog: Sendable {
     /// CPU% from the cumulative-time delta; nil for the first sample or a
     /// non-advancing clock.
     private func cpuPercent(for sample: ResourceSample) -> Double? {
-        guard let previous, sample.uptime > previous.uptime else { return nil }
-        let used = max(0, sample.cpuTimeSeconds - previous.cpuTimeSeconds)
-        return used / (sample.uptime - previous.uptime) * 100
+        guard let previous else { return nil }
+        return sample.cpuPercent(since: previous)
     }
 
     private static func step(

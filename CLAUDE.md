@@ -67,7 +67,7 @@ opening it — verify those by hand.
 ## Build / test / run
 
 ```
-make test          # ADBKit unit tests (cd ADBKit && swift test) — 544 tests, keep green
+make test          # ADBKit unit tests (cd ADBKit && swift test) — 549 tests, keep green
 make build         # xcodegen generate + xcodebuild Debug
 make run           # build + open the .app
 ```
@@ -327,7 +327,7 @@ and sign — with keystore creation) plus Frida setup, a custom accent color,
 launching emulators from the device bar, per-feature connect-a-device empty
 states, a live-preview hotkey recorder, and a Settings split into
 Appearance/Privacy; managed tools download from GitHub releases into
-Application Support and are sized/removable in Settings); 544 tests green;
+Application Support and are sized/removable in Settings); 549 tests green;
 builds clean with zero warnings (enforced as errors in CI). Verified live against a
 physical device and an Android emulator. Release builds are Developer ID-signed +
 notarized and bundle scrcpy/ffmpeg (see `RELEASING.md`). Open gaps: the Apps
