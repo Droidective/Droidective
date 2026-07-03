@@ -833,11 +833,15 @@ struct ReactotronView: View {
                 Text(path)
                     .font(.system(size: 12, weight: .semibold, design: .monospaced))
                     .foregroundStyle(.rtKey)
-                Text(session.subscriptionValues[path]?.jsonString ?? "waiting for a change…")
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(session.subscriptionValues[path] == nil ? Color.secondary : Color.textMuted)
-                    .textSelection(.enabled)
-                    .lineLimit(3)
+                if let value = session.subscriptionValues[path] {
+                    // A collapsible, colored tree instead of a raw JSON string —
+                    // the same reader the State browser uses.
+                    JSONTreeView(root: value, showSearch: false)
+                } else {
+                    Text("waiting for a change…")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
             }
             Spacer(minLength: 8)
             Button { session.removeSubscription(path) } label: {
@@ -892,36 +896,19 @@ struct ReactotronView: View {
                 EmptyHint(icon: "camera", message: "Take a snapshot to capture the store as it is right now.")
             } else {
                 VStack(spacing: 6) {
-                    ForEach(session.snapshots) { snapshot in snapshotRow(snapshot) }
+                    ForEach(session.snapshots) { snapshot in
+                        SnapshotRow(
+                            time: Self.timeFormatter.string(from: snapshot.takenAt),
+                            state: snapshot.state,
+                            onRestore: { session.restore(snapshot) },
+                            onDelete: { session.deleteSnapshot(snapshot) }
+                        )
+                    }
                 }
             }
         }
     }
 
-    private func snapshotRow(_ snapshot: Snapshot) -> some View {
-        HStack(alignment: .center, spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(Self.timeFormatter.string(from: snapshot.takenAt))
-                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(.rtNumber)
-                Text(snapshot.state.jsonString)
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(.textMuted)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-            Spacer(minLength: 8)
-            Button("Restore") { session.restore(snapshot) }
-                .controlSize(.small)
-            Button { session.deleteSnapshot(snapshot) } label: {
-                Image(systemName: "trash")
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.tertiary)
-            .help("Delete this snapshot")
-        }
-        .cardInset()
-    }
 
     // MARK: - REPL
 
@@ -1567,24 +1554,70 @@ private func rtRemoteURL(_ uri: String) -> URL? {
 /// Renders a `JSONValue` as a collapsible tree. Everything starts collapsed and
 /// only expanded/visible nodes are flattened into the `LazyVStack`, so even a
 /// very large object is cheap to display until the user drills in.
+/// A saved store snapshot: a compact header (time, Restore, Delete) that reveals
+/// the full state as a collapsible, searchable tree when expanded — instead of a
+/// one-line raw-JSON preview.
+private struct SnapshotRow: View {
+    let time: String
+    let state: JSONValue
+    let onRestore: () -> Void
+    let onDelete: () -> Void
+    @State private var expanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .center, spacing: 10) {
+                Button { expanded.toggle() } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.secondary)
+                        Text(time)
+                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(.rtNumber)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(expanded ? "Hide the snapshot" : "Show the snapshot")
+                Spacer(minLength: 8)
+                Button("Restore", action: onRestore).controlSize(.small)
+                Button(action: onDelete) { Image(systemName: "trash") }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.tertiary)
+                    .help("Delete this snapshot")
+            }
+            if expanded {
+                JSONTreeView(root: state)
+            }
+        }
+        .cardInset()
+    }
+}
+
 private struct JSONTreeView: View {
     let root: JSONValue
+    /// Show the built-in key/value search field (hidden when embedded in a list
+    /// where a search box per row would be clutter).
+    var showSearch: Bool = true
     @State private var expanded: Set<String> = []
     @State private var search = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 4) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 9))
-                    .foregroundStyle(.tertiary)
-                TextField("Search keys & values…", text: $search)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 11, design: .monospaced))
-                if !search.isEmpty {
-                    Button { search = "" } label: { Image(systemName: "xmark.circle.fill") }
-                        .buttonStyle(.plain)
+            if showSearch {
+                HStack(spacing: 4) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 9))
                         .foregroundStyle(.tertiary)
+                    TextField("Search keys & values…", text: $search)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 11, design: .monospaced))
+                    if !search.isEmpty {
+                        Button { search = "" } label: { Image(systemName: "xmark.circle.fill") }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.tertiary)
+                    }
                 }
             }
             LazyVStack(alignment: .leading, spacing: 1) {
