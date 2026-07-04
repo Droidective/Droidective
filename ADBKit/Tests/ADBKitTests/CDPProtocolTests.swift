@@ -2,6 +2,55 @@ import Foundation
 import Testing
 @testable import ADBKit
 
+@Suite struct SnapNodeTests {
+    @Test func parsesOrderedObjectArrayAndPrimitives() {
+        // Shape emitted by boundedSnapshotFunction: object entries stay ordered.
+        let json = """
+        {"type":"object","ctor":"Object","truncated":false,"entries":[
+          {"name":"userId","node":{"type":"number","text":"1"}},
+          {"name":"title","node":{"type":"string","text":"hi"}},
+          {"name":"tags","node":{"type":"array","length":2,"truncated":false,"items":[
+            {"type":"string","text":"a"},{"type":"string","text":"b"}]}}
+        ]}
+        """
+        let node = SnapNode.parse(json)
+        #expect(node?.type == "object")
+        #expect(node?.entries?.map(\.name) == ["userId", "title", "tags"])   // order preserved
+        #expect(node?.entries?[2].node.type == "array")
+        #expect(node?.entries?[2].node.items?.count == 2)
+        #expect(node?.entries?[2].node.isContainer == true)
+    }
+
+    @Test func reportsHiddenCountForTruncatedArray() {
+        let json = """
+        {"type":"array","length":200,"truncated":true,"items":[{"type":"number","text":"0"}]}
+        """
+        let node = SnapNode.parse(json)
+        #expect(node?.length == 200)
+        #expect(node?.hiddenCount == 199)
+    }
+
+    @Test func malformedJSONReturnsNil() {
+        #expect(SnapNode.parse("not json") == nil)
+    }
+
+    @Test func matchesFindsKeysAndValuesInDescendants() {
+        let json = """
+        {"type":"object","entries":[
+          {"name":"userId","node":{"type":"number","text":"7"}},
+          {"name":"profile","node":{"type":"object","entries":[
+            {"name":"city","node":{"type":"string","text":"Berlin"}}]}}
+        ]}
+        """
+        let node = SnapNode.parse(json)!
+        #expect(node.matches("berlin"))          // nested value
+        #expect(node.matches("city"))            // nested key
+        #expect(node.matches("userid"))          // top-level key, case-insensitive
+        #expect(!node.matches("london"))         // absent
+        #expect(node.matches(""))                // empty query matches everything
+    }
+}
+
 /// Pure tests for the CDP framing: request shapes and decoding of the replies
 /// and events a console relies on.
 @Suite struct CDPProtocolTests {
@@ -31,12 +80,6 @@ import Testing
         let decoded = data.flatMap { CDP.parseIncoming($0) }
         // It decodes back as a (request-shaped) response with our id.
         if case let .response(id, _, _) = decoded { #expect(id == 1) } else { Issue.record("expected id round-trip") }
-    }
-
-    @Test func getPropertiesRequestRequestsOwnProperties() {
-        let params = CDP.getPropertiesParams(objectId: "{\"id\":1}")
-        #expect(params["objectId"]?.stringValue == "{\"id\":1}")
-        #expect(params["ownProperties"]?.boolValue == true)
     }
 
     // MARK: - Incoming classification
@@ -133,24 +176,6 @@ import Testing
         #expect(call.args.first?.value?.stringValue == "watch out")
         #expect(call.timestamp == 1_700_000_000_000)
     }
-
-    // MARK: - getProperties
-
-    @Test func parsesOwnPropertiesAndSkipsValuelessAccessors() {
-        let json = #"""
-        {"result":[
-          {"name":"id","value":{"type":"number","value":1,"description":"1"},"isOwn":true,"enumerable":true},
-          {"name":"hidden","get":{"type":"function"},"isOwn":true,"enumerable":true}
-        ]}
-        """#
-        let result = try? JSONDecoder().decode(JSONValue.self, from: Data(json.utf8))
-        let properties = CDPProperty.parse(result)
-        #expect(properties.count == 1)
-        #expect(properties.first?.name == "id")
-        #expect(properties.first?.value?.value?.doubleValue == 1)
-    }
-
-    // MARK: - Stack frames
 
     // MARK: - inlineSummary across all data types (real Hermes shapes)
 

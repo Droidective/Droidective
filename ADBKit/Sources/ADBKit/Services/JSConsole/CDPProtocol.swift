@@ -37,14 +37,6 @@ public enum CDP {
         ]
     }
 
-    public static func getPropertiesParams(objectId: String) -> [String: JSONValue] {
-        [
-            "objectId": .string(objectId),
-            "ownProperties": .bool(true),
-            "generatePreview": .bool(true),
-        ]
-    }
-
     public static func releaseObjectGroupParams(_ group: String) -> [String: JSONValue] {
         ["objectGroup": .string(group)]
     }
@@ -86,6 +78,72 @@ public enum CDP {
         return value;
       };
       try { return JSON.stringify(this, replacer, 2); } catch (e) { return String(this); }
+    }
+    """
+
+    /// Runs in the device's JS context (via `callFunctionOn`, `this` = the object)
+    /// to produce a *bounded, ordered, type-tagged* tree for expanding a logged
+    /// value, serialized to a single JSON string (`SnapNode`).
+    ///
+    /// This exists because `Runtime.getProperties` crashes Hermes's VM (a native
+    /// null-deref in its RemoteObject converter) when it recursively serializes
+    /// some values — expanding e.g. a 200-element array killed the app. Building
+    /// the tree entirely in JS and returning a single *string* never goes through
+    /// that native converter (the return is a primitive), so it can't trip the
+    /// bug. Object entries are emitted as an ordered array so insertion order is
+    /// preserved (a plain JSON object would be reordered by the decoder). The
+    /// depth / breadth / string caps keep a huge or deeply nested payload
+    /// bounded, and `truncated` marks where a level was cut.
+    public static let boundedSnapshotFunction = """
+    function () {
+      const MAX_DEPTH = 6, MAX_ITEMS = 500, MAX_STRING = 10000, MAX_NODES = 20000;
+      const seen = new WeakSet();
+      let budget = MAX_NODES;
+      const prim = (type, text) => ({ type: type, text: text });
+      const build = (value, depth) => {
+        // Total-node cap: per-level caps alone (depth × breadth) are
+        // multiplicatively unbounded, so a wide-and-deep graph could still
+        // produce a huge string. Stop emitting once the whole snapshot is big.
+        if (budget <= 0) return prim('string', '…(truncated)');
+        budget--;
+        const t = typeof value;
+        if (value === null) return prim('null', 'null');
+        if (t === 'string') return prim('string', value.length > MAX_STRING ? value.slice(0, MAX_STRING) + '…(+' + (value.length - MAX_STRING) + ' chars)' : value);
+        if (t === 'number') return prim('number', Number.isFinite(value) ? String(value) : (value > 0 ? 'Infinity' : value < 0 ? '-Infinity' : 'NaN'));
+        if (t === 'boolean') return prim('boolean', String(value));
+        if (t === 'undefined') return prim('undefined', 'undefined');
+        if (t === 'bigint') return prim('bigint', value.toString() + 'n');
+        if (t === 'symbol') return prim('symbol', value.toString());
+        if (t === 'function') return prim('function', '\\u0192 ' + (value.name || 'anonymous') + '()');
+        if (value instanceof Error) return prim('string', value.stack || (value.name + ': ' + value.message));
+        if (value instanceof RegExp) return prim('string', value.toString());
+        if (depth >= MAX_DEPTH) return prim('string', Array.isArray(value) ? 'Array(' + value.length + ')' : 'Object');
+        if (seen.has(value)) return prim('string', '[Circular]');
+        seen.add(value);
+        try {
+          let src = value, ctor = 'Object';
+          if (value instanceof Map) src = { dataType: 'Map', entries: Array.from(value.entries()) };
+          else if (value instanceof Set) src = { dataType: 'Set', values: Array.from(value.values()) };
+          if (Array.isArray(src)) {
+            const items = [];
+            const n = Math.min(src.length, MAX_ITEMS);
+            for (let i = 0; i < n; i++) { try { items.push(build(src[i], depth + 1)); } catch (e) { items.push(prim('string', '[threw]')); } }
+            return { type: 'array', length: src.length, truncated: src.length > MAX_ITEMS, items: items };
+          }
+          try { ctor = (src.constructor && src.constructor.name) || 'Object'; } catch (e) {}
+          const keys = Object.keys(src);
+          const n = Math.min(keys.length, MAX_ITEMS);
+          const entries = [];
+          for (let i = 0; i < n; i++) {
+            const k = keys[i];
+            let child;
+            try { child = build(src[k], depth + 1); } catch (e) { child = prim('string', '[threw]'); }
+            entries.push({ name: k, node: child });
+          }
+          return { type: 'object', ctor: ctor, truncated: keys.length > MAX_ITEMS, entries: entries };
+        } finally { seen.delete(value); }
+      };
+      try { return JSON.stringify(build(this, 0)); } catch (e) { return JSON.stringify(prim('string', String(e))); }
     }
     """
 
@@ -181,27 +239,6 @@ public struct PropertyPreview: Sendable, Equatable {
         type = json["type"]?.stringValue ?? "string"
         value = json["value"]?.stringValue
         subtype = json["subtype"]?.stringValue
-    }
-}
-
-/// One own property from `Runtime.getProperties` — the rows shown when an object
-/// is expanded.
-public struct CDPProperty: Sendable, Equatable, Identifiable {
-    public let name: String
-    public let value: RemoteObject?
-
-    public var id: String { name }
-
-    /// Parse the `result` array of a `getProperties` reply, keeping enumerable
-    /// own data properties (skipping pure getters/setters with no value) so the
-    /// expanded view shows the same fields a developer expects.
-    public static func parse(_ result: JSONValue?) -> [CDPProperty] {
-        guard let array = result?["result"]?.arrayValue else { return [] }
-        return array.compactMap { entry in
-            guard let name = entry["name"]?.stringValue else { return nil }
-            guard let value = entry["value"] else { return nil }
-            return CDPProperty(name: name, value: RemoteObject(json: value))
-        }
     }
 }
 

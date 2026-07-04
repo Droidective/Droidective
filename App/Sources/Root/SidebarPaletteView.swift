@@ -712,6 +712,9 @@ struct FeatureRowView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
             .onTapGesture { if !reordering { activate() } }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+            .accessibilityHint("Opens \(feature.title)")
 
             pinControl
             trailingControl

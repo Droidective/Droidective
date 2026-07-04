@@ -63,6 +63,10 @@ struct PaletteWindowView: View {
                     ForEach(Array(visibleMatches.enumerated()), id: \.element.id) { index, feature in
                         paletteRow(feature, index: index, isHighlighted: index == highlighted)
                             .onTapGesture { open(at: index) }
+                            .accessibilityElement(children: .combine)
+                            .accessibilityAddTraits(index == highlighted ? [.isButton, .isSelected] : .isButton)
+                            .accessibilityLabel(feature.title)
+                            .accessibilityHint("Opens \(feature.title)")
                     }
                 }
                 .padding(6)

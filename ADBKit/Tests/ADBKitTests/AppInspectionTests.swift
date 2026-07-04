@@ -1,6 +1,32 @@
 import Testing
 @testable import ADBKit
 
+@Suite struct AppInspectionArgTests {
+    @Test func setPermissionQuotesPackageAndPermission() async throws {
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["-s"], stdout: "")
+        let service = AppInspectionService(client: await makeTestClient(runner: runner))
+
+        _ = try await service.setPermission(
+            serial: "S1", packageId: "com.app;x", permission: "android.permission.CAMERA", grant: true
+        )
+        #expect(runner.invocations.last?.arguments == [
+            "-s", "S1", "shell", "pm", "grant", "'com.app;x'", "'android.permission.CAMERA'",
+        ])
+    }
+
+    @Test func sandboxListQuotesPackageAndDir() async throws {
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["-s"], stdout: "")
+        let service = AppInspectionService(client: await makeTestClient(runner: runner))
+
+        _ = try await service.sandboxList(serial: "S1", packageId: "com.app", dir: "/data/x y")
+        #expect(runner.invocations.last?.arguments == [
+            "-s", "S1", "shell", "run-as", "'com.app'", "ls", "-la", "'/data/x y'",
+        ])
+    }
+}
+
 @Suite struct PermissionParsingTests {
     @Test func parsesRuntimePermissionBlock() {
         let dump = """

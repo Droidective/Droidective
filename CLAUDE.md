@@ -6,7 +6,14 @@ pane per feature. Swift 6 + SwiftUI, macOS 14+.
 
 ## Architecture (the load-bearing rule)
 
-Two layers, strictly separated so a future cross-platform port only re-does UI:
+Two layers, strictly separated so a second **Apple** UI (iPad/visionOS) could
+reuse ADBKit almost as-is. Note the honest scope: a Linux/Windows port re-does
+the UI **plus** the macOS-bound seams inside ADBKit — the Mirror media stack
+(CoreMedia/VideoToolbox/AVFoundation), the Network.framework socket servers,
+`ToolLocator`'s Homebrew/SDK paths + `zsh -lc`, and `.lzma`/`tar` extraction;
+an iOS companion can't run `Process` at all, so it would need a remote-host
+protocol, not just a UI swap. Keep the existing seams (`ProcessRunning`,
+injected directories) and don't pre-abstract the rest until a port is scheduled.
 
 - **`ADBKit/`** — a SwiftPM package holding *all* logic. Zero UI imports
   (feature icons are SF Symbol *name strings*). Actors for stateful services,
@@ -61,7 +68,7 @@ opening it — verify those by hand.
 ## Build / test / run
 
 ```
-make test          # ADBKit unit tests (cd ADBKit && swift test) — 350 tests, keep green
+make test          # ADBKit unit tests (cd ADBKit && swift test) — 549 tests, keep green
 make build         # xcodegen generate + xcodebuild Debug
 make run           # build + open the .app
 ```
@@ -337,7 +344,7 @@ and sign — with keystore creation) plus Frida setup, a custom accent color,
 launching emulators from the device bar, per-feature connect-a-device empty
 states, a live-preview hotkey recorder, and a Settings split into
 Appearance/Privacy; managed tools download from GitHub releases into
-Application Support and are sized/removable in Settings); 513 tests green;
+Application Support and are sized/removable in Settings); 549 tests green;
 builds clean with zero warnings (enforced as errors in CI). Verified live against a
 physical device and an Android emulator. Release builds are Developer ID-signed +
 notarized and bundle scrcpy/ffmpeg (see `RELEASING.md`). Open gaps: the Apps

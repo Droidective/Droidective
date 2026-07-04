@@ -242,23 +242,30 @@ public actor PerformanceService {
             poll.uploadBytesPerSec = speed.up
         }
 
-        if let packageId, !packageId.isEmpty {
-            async let gfxString = shell(serial, ["dumpsys", "gfxinfo", packageId])
-            async let appMemString = shell(serial, ["dumpsys", "meminfo", packageId])
-            if let gfx = await gfxString {
-                poll.appFps = consumeGfx(serial: serial, packageId: packageId, output: gfx)
-            }
-            if let appMem = await appMemString {
-                poll.appPssKb = AppInspectionService.parseMemInfo(appMem).totalPssKb
-            }
-        }
-
+        // The full `dumpsys meminfo` dump (process ticks) already carries every
+        // process's PSS, so derive the watched app's PSS from it instead of
+        // firing a second, heavy per-package meminfo in the same cycle.
+        var memRows: [(pid: Int, name: String, pssKb: Int)] = []
         if includeProcesses {
             async let cpuString = shell(serial, ["dumpsys", "cpuinfo"])
             async let memProcString = shell(serial, ["dumpsys", "meminfo"])
             let cpuRows = (await cpuString).map(CpuInfoParser.parse) ?? []
-            let memRows = (await memProcString).map(MemProcParser.parse) ?? []
+            memRows = (await memProcString).map(MemProcParser.parse) ?? []
             poll.processes = Self.mergeProcesses(cpu: cpuRows, mem: memRows)
+        }
+
+        if let packageId, !packageId.isEmpty {
+            if let gfx = await shell(serial, ["dumpsys", "gfxinfo", shellQuote(packageId)]) {
+                poll.appFps = consumeGfx(serial: serial, packageId: packageId, output: gfx)
+            }
+            if let row = memRows.first(where: { $0.name == packageId }) {
+                poll.appPssKb = row.pssKb
+            } else if let appMem = await shell(serial, ["dumpsys", "meminfo", shellQuote(packageId)]) {
+                // No matching row in the full dump (not a process tick, or the
+                // app runs under a different process name) — fall back to the
+                // per-package meminfo so the app's PSS still populates.
+                poll.appPssKb = AppInspectionService.parseMemInfo(appMem).totalPssKb
+            }
         }
         return poll
     }

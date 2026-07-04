@@ -7,6 +7,7 @@ struct CommandLogView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var entries: [CommandLogEntry] = []
+    @State private var confirmClear = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -20,18 +21,32 @@ struct CommandLogView: View {
                     Image(systemName: "arrow.clockwise")
                 }
                 .buttonStyle(IconButtonStyle())
+                .accessibilityLabel("Refresh")
                 Button(role: .destructive) {
-                    Task {
-                        await state.env.commandLog.clear()
-                        await refresh()
-                    }
+                    confirmClear = true
                 } label: {
                     Image(systemName: "trash")
                 }
                 .buttonStyle(IconButtonStyle())
+                .accessibilityLabel("Clear command log")
                 Button("Close") { dismiss() }
             }
             .padding(12)
+            .confirmationDialog(
+                "Clear the command log?",
+                isPresented: $confirmClear,
+                titleVisibility: .visible
+            ) {
+                Button("Clear", role: .destructive) {
+                    Task {
+                        await state.env.commandLog.clear()
+                        await refresh()
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This removes all recorded commands.")
+            }
 
             Divider()
 

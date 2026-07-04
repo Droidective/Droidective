@@ -30,13 +30,22 @@ struct LogTailView<Data: RandomAccessCollection, Row: View>: View
     var focusID: Data.Element.ID? = nil
     @ViewBuilder var row: (Data.Element) -> Row
 
-    /// The row at the scroll's leading (offset-0) edge — the newest side. nil
-    /// before the first layout.
+    /// The row pinned at the scroll's leading (offset-0) edge. Drives
+    /// `.scrollPosition` for two things: keeping the viewport stable when rows are
+    /// inserted at the newest edge, and programmatically following the newest line
+    /// while tailing. It is *not* consulted to decide whether we're tailing — that
+    /// is the offset's job (below), because this binding lags and the follow
+    /// overwrites it, which used to race an append into snapping the view back.
     @State private var leadingID: Data.Element.ID?
-    /// True while the newest line sits at that edge (the user is tailing). Updated
-    /// only from real position changes, so an append — which moves the "newest" id
-    /// before the binding catches up — can't flip it falsely.
+    /// True while the content is parked at the newest edge (the user is tailing).
+    /// Derived solely from the measured scroll offset: content-top at the edge
+    /// (`minY ≈ 0`) *is* the newest row parked at the edge, in either flip mode, so
+    /// one signal decides it — no coupling with the laggy `leadingID` binding.
     @State private var isTailing = true
+
+    /// How far (points) the content may sit from the newest edge and still count
+    /// as "parked at the edge", covering sub-pixel rounding and a tail auto-scroll.
+    private static var edgeTolerance: CGFloat { 24 }
 
     /// The newest entry: `.bottom` feeds arrive at the end of `entries`, `.top`
     /// feeds at the front. Either way it becomes the first row laid out below.
@@ -52,11 +61,39 @@ struct LogTailView<Data: RandomAccessCollection, Row: View>: View
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) { orderedRows }
                     .scrollTargetLayout()
+                    .background(
+                        GeometryReader { geo in
+                            // Content top relative to the scroll view; ~0 at the
+                            // newest edge, growing in magnitude as the user scrolls
+                            // away. Sign flips with the layout flip, so compare the
+                            // magnitude.
+                            Color.clear.preference(
+                                key: TailOffsetKey.self,
+                                value: geo.frame(in: .named("logtail")).minY
+                            )
+                        }
+                    )
+            }
+            .coordinateSpace(name: "logtail")
+            // Let a row scroll its own header into view (e.g. when an object is
+            // expanded). In the flipped newest-at-bottom layout the per-row flip
+            // puts a row's header at its internal *bottom*, so `.bottom` lands it
+            // at the visible top; `.top` does that for the un-flipped layout.
+            // No animation — the caller may re-issue this as rows lay out, and
+            // snapping straight to the settled position avoids visible drift.
+            .environment(\.logTailScrollToHeader) { id in
+                proxy.scrollTo(id, anchor: newestEdge == .bottom ? .bottom : .top)
             }
             .scrollPosition(id: $leadingID, anchor: .top)   // .top = first row = newest
             .scaleEffect(x: 1, y: flip, anchor: .center)    // identity for .top feeds
             .onAppear { leadingID = newestID }
-            .onChange(of: leadingID) { _, id in isTailing = (id == newestID) }
+            .onPreferenceChange(TailOffsetKey.self) { minY in
+                // The offset is the single source of truth for tailing: at the
+                // newest edge the content top sits at ~0; any real scroll away
+                // grows its magnitude past the tolerance and pauses following.
+                let atEdge = abs(minY) <= Self.edgeTolerance
+                if atEdge != isTailing { isTailing = atEdge }
+            }
             .onChange(of: newestID) { _, newest in
                 if isTailing, let newest { leadingID = newest }   // cheap: first row, offset 0
             }
@@ -65,7 +102,9 @@ struct LogTailView<Data: RandomAccessCollection, Row: View>: View
                 guard let id else { return }
                 // `scrollTo` doesn't write back into `leadingID`, so stop tailing
                 // here unless the target *is* the newest row — otherwise the next
-                // append would fire the follower and snap us off the match.
+                // append would fire the follower and snap us off the match. The
+                // offset settles this once the scroll lands, but set it eagerly so
+                // an append in the interim can't yank us off the match.
                 isTailing = (id == newestID)
                 withAnimation(.easeInOut(duration: 0.15)) { proxy.scrollTo(id, anchor: .center) }
             }
@@ -96,6 +135,7 @@ struct LogTailView<Data: RandomAccessCollection, Row: View>: View
 
     private var jumpButton: some View {
         Button {
+            isTailing = true
             withAnimation(.easeOut(duration: 0.25)) { leadingID = newestID }
         } label: {
             Image(systemName: newestEdge == .bottom ? "arrow.down" : "arrow.up")
@@ -108,5 +148,27 @@ struct LogTailView<Data: RandomAccessCollection, Row: View>: View
         .buttonStyle(.plain)
         .help("Jump to the newest logs")
         .accessibilityLabel("Jump to newest")
+    }
+}
+
+/// Content-top offset of a `LogTailView` scroll, in its "logtail" coordinate
+/// space — used to detect scroll-away within a tall newest row.
+private struct TailOffsetKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
+/// A row can call this to scroll its own header into view (e.g. right after
+/// expanding a large object), so growth doesn't leave the viewport at the
+/// object's end. Injected by `LogTailView` with the correct anchor for its
+/// layout; a no-op outside one.
+private struct LogTailScrollKey: EnvironmentKey {
+    static let defaultValue: @MainActor (AnyHashable) -> Void = { _ in }
+}
+
+extension EnvironmentValues {
+    var logTailScrollToHeader: @MainActor (AnyHashable) -> Void {
+        get { self[LogTailScrollKey.self] }
+        set { self[LogTailScrollKey.self] = newValue }
     }
 }

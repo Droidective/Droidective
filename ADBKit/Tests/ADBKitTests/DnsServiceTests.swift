@@ -1,6 +1,22 @@
 import Testing
 @testable import ADBKit
 
+@Suite struct DnsSetHostnameArgTests {
+    @Test func setHostnameQuotesTheHostname() async throws {
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["-s"], stdout: "")
+        let service = DnsService(client: await makeTestClient(runner: runner))
+
+        _ = try await service.setHostname(serial: "S1", "dns.example.com; reboot")
+        #expect(runner.invocations.contains {
+            $0.arguments == [
+                "-s", "S1", "shell", "settings", "put", "global",
+                "private_dns_specifier", "'dns.example.com; reboot'",
+            ]
+        })
+    }
+}
+
 @Suite struct DnsServiceTests {
     @Test func parsesOff() {
         let status = DnsService.parse(mode: "off", specifier: "null")

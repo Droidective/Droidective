@@ -11,11 +11,9 @@ struct RootView: View {
     @AppStorage("tabSplitFraction") private var splitFraction = 0.5
     @AppStorage("hasSeenTour") private var hasSeenTour = false
     @AppStorage("hasChosenRole") private var hasChosenRole = false
-    @AppStorage("telemetryConsentAsked") private var consentAsked = false
     @AppStorage("launchCount") private var launchCount = 0
     @AppStorage("starPromptShown") private var starPromptShown = false
     @AppStorage("theme") private var theme = "dark"
-    @State private var presentConsent = false
     @State private var presentStar = false
     /// True only while the *first-run* role picker is up, so its dismissal
     /// chains into the welcome tour. Changing role later (pill / Settings)
@@ -23,18 +21,7 @@ struct RootView: View {
     @State private var pickerIsFirstRun = false
     @Environment(\.colorScheme) private var colorScheme
 
-    /// Temporary toggle: flip to `true` to surface the privacy disclosure on the
-    /// first launch (after the welcome flow) instead of deferring it. Left
-    /// `false` for now to keep current behavior. Telemetry stays anonymous and
-    /// on by default either way (opt-out in Settings → Privacy). Remove this
-    /// (and the deferral below) when switching to ask-on-first-launch for good.
-    private let askConsentOnFirstLaunch = false
-
-    /// Launches to allow before the first-run privacy disclosure appears, when
-    /// `askConsentOnFirstLaunch` is false.
-    private let consentPromptAfterLaunches = 5
-
-    /// Launches before the one-time GitHub-star nudge (shown after consent).
+    /// Launches before the one-time GitHub-star nudge.
     private let starPromptAfterLaunches = 10
 
     /// Theme color-sync needs two modifiers because they reach different layers,
@@ -69,12 +56,6 @@ struct RootView: View {
         }
     }
 
-    private var shouldPromptConsent: Bool {
-        LaunchPrompt.consentDue(
-            consentAsked: consentAsked, launchCount: launchCount,
-            askOnFirstLaunch: askConsentOnFirstLaunch, afterLaunches: consentPromptAfterLaunches)
-    }
-
     private var shouldPromptStar: Bool {
         LaunchPrompt.starDue(
             starPromptShown: starPromptShown, launchCount: launchCount, afterLaunches: starPromptAfterLaunches)
@@ -86,17 +67,21 @@ struct RootView: View {
         // (the exitGuard alone is often unchanged), driving the leave dialog.
         let showExitDialog = state.pendingExit.map { !$0.saving } ?? false
         return zoomedContent
+            .overlay(alignment: .topTrailing) { devMetricsOverlay }
             .environment(\.colorScheme, injectedColorScheme)
             .preferredColorScheme(preferredScheme)
             .background(WindowAccessor { window in
                 // Tag the main window so the ⌘W monitor can tell it apart from
                 // Settings / the palette panel.
                 window.identifier = NSUserInterfaceItemIdentifier(RootView.mainWindowID)
-                // Fill the screen's usable area on launch — a regular maximized
-                // window, not a native full-screen Space.
-                if let screen = window.screen ?? NSScreen.main {
+                // Restore the user's saved window frame; only fill the screen's
+                // usable area on the very first launch (nothing to restore), so
+                // a resized window survives relaunch instead of being maximized.
+                let autosaveName = NSWindow.FrameAutosaveName(RootView.mainWindowID)
+                if !window.setFrameUsingName(autosaveName), let screen = window.screen ?? NSScreen.main {
                     window.setFrame(screen.visibleFrame, display: true)
                 }
+                window.setFrameAutosaveName(autosaveName)
             })
             .overlay {
                 // Full-window takeover (macOS has no fullScreenCover), shown
@@ -111,24 +96,16 @@ struct RootView: View {
                 TourView()
             }
             .background {
-                // Separate host view: two .sheet modifiers on one view can drop
-                // one, and the deferred privacy consent must still reliably show.
-                Color.clear.sheet(isPresented: $presentConsent) {
-                    TelemetryConsentView()
-                }
-            }
-            .background {
-                // Its own host view for the same reason as the consent sheet.
+                // Its own host view so the star sheet reliably presents (two
+                // .sheet modifiers on one view can drop one).
                 Color.clear.sheet(isPresented: $presentStar) {
                     StarPromptView(onStar: { state.openRepository() })
                 }
             }
             .onAppear { performLaunchSetup() }
             .onChange(of: state.presentRolePicker) { _, showing in rolePickerVisibilityChanged(showing) }
-            .onChange(of: state.presentTour) { _, showing in
-                if !showing && shouldPromptConsent { presentConsent = true }
-            }
             .onChange(of: colorScheme) { _, _ in updateDockIcon() }
+            .onChange(of: state.activeTabID) { _, id in Telemetry.shared.featureBecameActive(id) }
             .confirmationDialog(
                 state.pendingGuard?.title ?? "",
                 isPresented: Binding(
@@ -145,6 +122,15 @@ struct RootView: View {
                 Text(info.message)
             }
             .modifier(TerminalCloseConfirmation(state: state))
+    }
+
+    /// The debug-only self-metrics HUD (memory/CPU/network), pinned top-right over
+    /// the content. Empty in Release; visibility inside is driven by the
+    /// Settings ▸ Appearance toggle.
+    @ViewBuilder private var devMetricsOverlay: some View {
+        #if DEBUG
+        DevMetricsOverlay().padding(.top, 10).padding(.trailing, 10)
+        #endif
     }
 
     /// Runs once when the root view appears: wires AppState callbacks, applies
@@ -167,12 +153,14 @@ struct RootView: View {
             )
         }
         HotkeyManager.install(state: state)
+        Telemetry.shared.applyRole(state.selectedRole?.rawValue)
+        Telemetry.shared.trackAppLaunched(launchCount: launchCount)
+        Telemetry.shared.featureBecameActive(state.activeTabID)
         installCloseTabMonitor()
         switch LaunchPrompt.next(
             hasChosenRole: hasChosenRole, hasSeenTour: hasSeenTour,
-            consentAsked: consentAsked, starPromptShown: starPromptShown,
-            launchCount: launchCount, askConsentOnFirstLaunch: askConsentOnFirstLaunch,
-            consentAfterLaunches: consentPromptAfterLaunches, starAfterLaunches: starPromptAfterLaunches
+            starPromptShown: starPromptShown,
+            launchCount: launchCount, starAfterLaunches: starPromptAfterLaunches
         ) {
         case .rolePicker:
             // Brand-new user: pick a role first, then run the tour.
@@ -180,8 +168,6 @@ struct RootView: View {
             state.presentRolePicker = true
         case .tour:
             state.presentTour = true
-        case .consent:
-            presentConsent = true
         case .star:
             presentStar = true
         case nil:
@@ -316,8 +302,11 @@ struct RootView: View {
             }
             VStack(spacing: 0) {
                 // Device bar on top (shared across panes); each pane's own tab
-                // strip sits below it, inside the pane — VS Code-style.
-                if state.activeTabID != "catalog" {
+                // strip sits below it, inside the pane — VS Code-style. Shown
+                // whenever any visible pane needs a device, so focusing the
+                // catalog in one pane of a split doesn't pull the bar (and the
+                // progress strip) out from under a live feature in the other.
+                if state.workspace.groups.contains(where: { $0.activeTab != "catalog" }) {
                     DeviceBarView()
                     if let operation = state.runningOperation {
                         OperationProgressStrip(operation: operation)

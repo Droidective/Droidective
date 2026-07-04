@@ -23,6 +23,7 @@ struct DeviceBarView: View {
             }
             .buttonStyle(IconButtonStyle())
             .help("Show or hide the sidebar (⌘B)")
+            .accessibilityLabel("Toggle sidebar")
 
             // Device and bundle are matching icon + pill pairs: identical inner
             // spacing, and both pills draw their own background (no hidden
@@ -83,6 +84,7 @@ struct DeviceBarView: View {
                 }
                 .buttonStyle(IconButtonStyle())
                 .help("Refresh devices")
+                .accessibilityLabel("Refresh devices")
 
                 NotificationBell()
             }

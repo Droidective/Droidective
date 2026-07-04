@@ -25,6 +25,8 @@ struct DecompileBrowserView: View {
     @State private var fileText: String?
     @State private var fileLanguage = ""
     @State private var targetLine = 0
+    /// Bumped on every file open so a slow read can't overwrite a newer one.
+    @State private var fileLoadID = 0
     @State private var findToken = 0
 
     @State private var filter = ""
@@ -359,7 +361,11 @@ struct DecompileBrowserView: View {
             let dir = try await state.env.engine.decompile.decompile(
                 apkPath: apkURL.path, mode: mode, into: AppPaths.decompiledCacheDir)
             guard !Task.isCancelled else { return }
-            root = DecompileService.tree(at: dir)
+            // A decompiled APK is tens of thousands of files; walk it off the
+            // main actor so the browser doesn't beachball as it appears.
+            let tree = await Task.detached { DecompileService.tree(at: dir) }.value
+            guard !Task.isCancelled else { return }
+            root = tree
             status = nil
         } catch {
             status = error.localizedDescription
@@ -407,15 +413,27 @@ struct DecompileBrowserView: View {
         }
         let ext = (path as NSString).pathExtension.lowercased()
         fileLanguage = ext == "java" ? "java" : (ext == "xml" ? "xml" : "")
-        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)) else {
-            fileText = "Couldn't read this file."
+        // Stat the size first — clicking a large binary (a lib/*.so,
+        // resources.arsc) must not block the main actor on a full read only to
+        // then reject it.
+        if let size = (try? FileManager.default.attributesOfItem(atPath: path))?[.size] as? Int,
+           size > 2_000_000 {
+            fileText = "File too large to preview (\(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)))."
             return
         }
-        if data.count > 2_000_000 {
-            fileText = "File too large to preview (\(ByteCountFormatter.string(fromByteCount: Int64(data.count), countStyle: .file)))."
-        } else {
-            fileText = String(data: data, encoding: .utf8)
-                ?? "Binary file — \(ByteCountFormatter.string(fromByteCount: Int64(data.count), countStyle: .file))."
+        fileLoadID += 1
+        let token = fileLoadID
+        fileText = nil
+        Task {
+            let text = await Task.detached { () -> String in
+                guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)) else {
+                    return "Couldn't read this file."
+                }
+                return String(data: data, encoding: .utf8)
+                    ?? "Binary file — \(ByteCountFormatter.string(fromByteCount: Int64(data.count), countStyle: .file))."
+            }.value
+            guard token == fileLoadID else { return }
+            fileText = text
         }
     }
 

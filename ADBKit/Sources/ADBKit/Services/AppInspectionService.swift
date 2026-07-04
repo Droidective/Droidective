@@ -79,7 +79,7 @@ public struct AppInspectionService: Sendable {
     }
 
     public func listPermissions(serial: String, packageId: String) async throws(AdbError) -> [PermissionEntry] {
-        let dump = try await client.run(on: serial, ["shell", "dumpsys", "package", packageId])
+        let dump = try await client.run(on: serial, ["shell", "dumpsys", "package", shellQuote(packageId)])
         return Self.parsePermissions(dump.stdout)
     }
 
@@ -87,7 +87,7 @@ public struct AppInspectionService: Sendable {
         serial: String, packageId: String, permission: String, grant: Bool
     ) async throws(AdbError) -> FeatureResult {
         let result = try await client.run(on: serial, [
-            "shell", "pm", grant ? "grant" : "revoke", packageId, permission,
+            "shell", "pm", grant ? "grant" : "revoke", shellQuote(packageId), shellQuote(permission),
         ])
         let short = permission.split(separator: ".").last.map(String.init) ?? permission
         if result.succeeded {
@@ -122,20 +122,20 @@ public struct AppInspectionService: Sendable {
     }
 
     public func getAppInfo(serial: String, packageId: String) async throws(AdbError) -> AppInfo {
-        let dump = try await client.run(on: serial, ["shell", "dumpsys", "package", packageId])
+        let dump = try await client.run(on: serial, ["shell", "dumpsys", "package", shellQuote(packageId)])
         var info = Self.parseAppInfo(dump.stdout, packageId: packageId)
         guard info.installed else { return info }
 
         if let apkPath = try await firstApkPath(serial: serial, packageId: packageId) {
             info.apkPath = apkPath
-            let stat = try await client.run(on: serial, ["shell", "stat", "-c", "%s", apkPath])
+            let stat = try await client.run(on: serial, ["shell", "stat", "-c", "%s", shellQuote(apkPath)])
             info.apkSizeBytes = Int(stat.stdout.trimmingCharacters(in: .whitespacesAndNewlines))
         }
         return info
     }
 
     func firstApkPath(serial: String, packageId: String) async throws(AdbError) -> String? {
-        let output = try await client.run(on: serial, ["shell", "pm", "path", packageId])
+        let output = try await client.run(on: serial, ["shell", "pm", "path", shellQuote(packageId)])
         return output.stdout.split(whereSeparator: \.isNewline)
             .map { $0.replacingOccurrences(of: "package:", with: "").trimmingCharacters(in: .whitespacesAndNewlines) }
             .first { !$0.isEmpty }
@@ -219,7 +219,7 @@ public struct AppInspectionService: Sendable {
     }
 
     public func getMemInfo(serial: String, packageId: String) async throws(AdbError) -> MemInfo {
-        let output = try await client.run(on: serial, ["shell", "dumpsys", "meminfo", packageId])
+        let output = try await client.run(on: serial, ["shell", "dumpsys", "meminfo", shellQuote(packageId)])
         return Self.parseMemInfo(output.stdout)
     }
 
@@ -257,7 +257,7 @@ public struct AppInspectionService: Sendable {
     public func sandboxList(
         serial: String, packageId: String, dir: String
     ) async throws(AdbError) -> (entries: [FsEntry], debuggable: Bool) {
-        let result = try await client.run(on: serial, ["shell", "run-as", packageId, "ls", "-la", shellQuote(dir)])
+        let result = try await client.run(on: serial, ["shell", "run-as", shellQuote(packageId), "ls", "-la", shellQuote(dir)])
         if Self.isNotDebuggable(result.stderr) {
             return ([], false)
         }

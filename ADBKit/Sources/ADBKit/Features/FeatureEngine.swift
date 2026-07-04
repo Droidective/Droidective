@@ -361,7 +361,7 @@ public struct FeatureEngine: Sendable {
             let count = max(1, Int((params["count"]?.numberValue ?? 500).rounded()))
             let result = try await client.run(
                 on: serial,
-                ["shell", "monkey", "-p", package, "-v", String(count)],
+                ["shell", "monkey", "-p", shellQuote(package), "-v", String(count)],
                 timeout: .seconds(120)
             )
             return result.succeeded
