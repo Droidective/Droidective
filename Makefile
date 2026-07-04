@@ -1,4 +1,4 @@
-.PHONY: generate build test run dmg clean
+.PHONY: generate build test run dmg clean site-dev site-build
 
 # Optional telemetry keys for local builds. Create .env.telemetry (gitignored)
 # with SENTRY_DSN=... and POSTHOG_KEY=... to enable crash/analytics locally.
@@ -38,3 +38,11 @@ dmg: generate
 
 clean:
 	rm -rf DerivedData ADBKit/.build *.xcodeproj
+
+# Marketing site (website/ — React + Vite; site/ is the static passthrough
+# copied into the build via Vite's publicDir)
+site-dev:
+	cd website && npm install && npm run dev
+
+site-build:
+	cd website && npm install && npm run build

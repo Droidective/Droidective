@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <title>Droidective — All-in-One Android &amp; React Native Debugging Tool for macOS</title>
+  <meta name="description" content="Droidective is a free, open-source macOS app: a Raycast-style command palette for Android & React Native debugging over adb. Mirror screens, tail logcat, browse device files, monitor performance, and debug React Native with built-in Reactotron — 56 tools in all, no terminal required." />
+  <meta name="keywords" content="adb tool, android debugging tool, all in one android dev tool, react native debugger, scrcpy gui mac, android developer tool macos, logcat viewer mac, adb gui, mobile dev tool, android emulator manager, react native debugging" />
+  <meta name="author" content="Rohindh R" />
+  <meta name="robots" content="index, follow" />
+  <meta name="theme-color" content="#0d0f0e" />
+  <link rel="canonical" href="https://droidective.com/" />
+
+  <link rel="icon" type="image/png" href="/assets/icon.png" media="(prefers-color-scheme: dark)" />
+  <link rel="icon" type="image/png" href="/assets/icon-light.png" media="(prefers-color-scheme: light)" />
+  <link rel="apple-touch-icon" href="/assets/icon.png" />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Droidective" />
+  <meta property="og:title" content="Droidective — All-in-One Android & React Native Debugging Tool for macOS" />
+  <meta property="og:description" content="A Raycast-style command palette for Android & React Native debugging over adb. Mirror screens, tail logcat, browse files, monitor performance — 56 tools, one keystroke away." />
+  <meta property="og:url" content="https://droidective.com/" />
+  <meta property="og:image" content="https://droidective.com/assets/screenshot-home.png" />
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Droidective — All-in-One Android & React Native Debugging Tool for macOS" />
+  <meta name="twitter:description" content="A Raycast-style command palette for Android & React Native debugging over adb. 56 tools, one keystroke away. Free & open source." />
+  <meta name="twitter:image" content="https://droidective.com/assets/screenshot-home.png" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;1,400&display=swap" rel="stylesheet" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Droidective",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS 14.0 or later",
+    "description": "A free, open-source macOS command palette for Android & React Native debugging over adb: screen mirroring, logcat, file explorer, performance monitoring, app management — 56 tools in all.",
+    "url": "https://droidective.com/",
+    "downloadUrl": "https://github.com/Droidective/Droidective/releases/latest",
+    "softwareVersion": "2.8.2",
+    "screenshot": "https://droidective.com/assets/screenshot-home.png",
+    "license": "https://github.com/Droidective/Droidective/blob/main/LICENSE",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "author": { "@type": "Person", "name": "Rohindh R", "url": "https://github.com/Rohindh-R" }
+  }
+  </script>
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      { "@type": "Question", "name": "Is it really free?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Droidective is MIT-licensed and fully open source — no account, no paywall, no pro tier. Star it, fork it, ship it." } },
+      { "@type": "Question", "name": "Is it signed and safe to open?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Release builds are signed with an Apple Developer ID and notarized by Apple, so they open with a normal double-click — no Gatekeeper workaround needed. Everything is open source, and you can build from source if you prefer." } },
+      { "@type": "Question", "name": "Do I need a rooted device?", "acceptedAnswer": { "@type": "Answer", "text": "No. Everything works on a normal device. A few extras — full-filesystem browsing, saved Wi-Fi passwords, SELinux mode and read-write remount — unlock automatically when root is available." } },
+      { "@type": "Question", "name": "What do I need installed?", "acceptedAnswer": { "@type": "Answer", "text": "Just Android adb. Droidective finds it via ANDROID_HOME, the default SDK path, or Homebrew, and offers a one-click install if it is missing. scrcpy and ffmpeg ship inside the app, so mirroring, recording, and video export work out of the box — only the Android emulator is optional, for AVD management." } },
+      { "@type": "Question", "name": "Does it send my data anywhere?", "acceptedAnswer": { "@type": "Answer", "text": "Anonymous crash reports and usage analytics are on by default (opt-out) — both disclosed on first launch and controlled in Settings → Privacy. Device serials, file paths, and command contents are never sent." } },
+      { "@type": "Question", "name": "Does it work with React Native?", "acceptedAnswer": { "@type": "Answer", "text": "Yes — there is a dedicated React Native hub: open the dev menu, reload the JS bundle, reverse the Metro port, save deep links per app, and set the dev-server host." } },
+      { "@type": "Question", "name": "Apple Silicon or Intel?", "acceptedAnswer": { "@type": "Answer", "text": "Both. Droidective runs on any Mac with macOS 14 Sonoma or later." } }
+    ]
+  }
+  </script>
+
+  <script src="/analytics.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+</html>
