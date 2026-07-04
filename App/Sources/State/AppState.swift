@@ -323,14 +323,31 @@ final class AppState {
     /// fires once per device (the serial is used only locally, never sent).
     private var reportedDeviceSerials: Set<String> = []
 
-    /// Bring the app forward, reopening the main window if it was closed.
+    /// Bring the app forward, reopening the main window if it was closed. When
+    /// resident in the background (no Dock icon — see `AppDelegate`), rejoin
+    /// the Dock first; that policy flip needs a runloop turn before activation
+    /// reliably fronts the window, so that path hops once.
     func activateMainWindow() {
+        if NSApp.activationPolicy() == .regular {
+            bringMainWindowFront()
+        } else {
+            NSApp.setActivationPolicy(.regular)
+            Task { self.bringMainWindowFront() }
+        }
+    }
+
+    private func bringMainWindowFront() {
         NSApp.activate(ignoringOtherApps: true)
-        if let window = NSApp.windows.first(where: { $0.canBecomeMain }) {
+        // Identifier first — `canBecomeMain` alone can pick a floating panel
+        // (KeyablePanel overrides it to true) while one is up.
+        let window = NSApp.windows.first { $0.identifier?.rawValue == RootView.mainWindowID }
+            ?? NSApp.windows.first { $0.canBecomeMain && !($0 is NSPanel) }
+        if let window {
             window.makeKeyAndOrderFront(nil)
         } else {
             openMainWindow?()
         }
+        setForeground(true)
     }
 
     var adbMissing: Bool { adbStatus?.installed == false }
@@ -754,7 +771,7 @@ final class AppState {
                 terminals.killAll()
                 quitNow()
             } else {
-                NSApp.reply(toApplicationShouldTerminate: false)
+                cancelDeferredQuit()
             }
         }
     }
@@ -868,10 +885,26 @@ final class AppState {
     }
 
     /// Widen device polling while the app is backgrounded so an idle, hidden
-    /// window stops spawning `adb devices` every 2s; restore it on foreground.
+    /// window stops spawning `adb devices` / `simctl list` every few seconds;
+    /// restore it on foreground.
     func setForeground(_ active: Bool) {
         let interval: Duration = active ? .seconds(2) : .seconds(10)
         Task { [monitor = env.monitor] in await monitor.setPollInterval(interval) }
+        let simInterval: Duration = active ? .seconds(3) : .seconds(15)
+        Task { [monitor = env.simulatorMonitor] in await monitor.setPollInterval(simInterval) }
+    }
+
+    /// The main window closed with background mode on (Settings ▸ General).
+    /// Stop the kept-alive sessions — terminal shells, the Reactotron server,
+    /// JS-console reverse tunnels — so no feature process outlives the UI
+    /// (view-owned work like recordings and log streams already dies with its
+    /// view), and widen device polling. The tabs stay in the workspace, so
+    /// reopening the window restores them idle.
+    func enterBackground() {
+        for id in openFeatureIDs {
+            stopBackgroundWork(for: id)
+        }
+        setForeground(false)
     }
 
     /// Switch the active device, or hold it behind a confirmation when a guard
@@ -920,7 +953,15 @@ final class AppState {
     func cancelExit() {
         let wasQuit = pendingExit?.target == .quit
         pendingExit = nil
-        if wasQuit { NSApp.reply(toApplicationShouldTerminate: false) }
+        if wasQuit { cancelDeferredQuit() }
+    }
+
+    /// Abandon a quit `applicationShouldTerminate` deferred: clear the
+    /// delegate's in-quit flag first, so a later window close still routes
+    /// through background mode instead of being mistaken for quit teardown.
+    private func cancelDeferredQuit() {
+        (NSApp.delegate as? AppDelegate)?.isQuitting = false
+        NSApp.reply(toApplicationShouldTerminate: false)
     }
 
     /// "Stop & save": ask the active view to save (it observes `pendingExit`),

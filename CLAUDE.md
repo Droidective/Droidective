@@ -268,6 +268,19 @@ platforms annotation without a runner.
   (⌘Z / ⇧⌘Z) is snapshot-based (full image+annotations) and reaches the editor
   via `CommandGroup(replacing: .undoRedo)` + a `focusedSceneValue` — nil'd while
   typing a text label so ⌘Z falls through to the text field.
+- **Background mode & the Quick Actions panel.** With Settings ▸ General ▸
+  "Keep running in the background" on (the default), closing the main window
+  stops the kept-alive sessions (`AppState.enterBackground` — terminal shells,
+  Reactotron, JS-console tunnels; view-owned work dies with its view), widens
+  both device polls, and drops the Dock icon (`.accessory` — see
+  `AppDelegate.windowWillClose`, guarded by `isQuitting` so quit teardown isn't
+  mistaken for a window close). The app stays resident for the menu bar, the
+  per-feature hotkeys, and `QuickActionsPanel` — a **non-activating**
+  `FloatingPanelController` panel (global hotkey in Settings ▸ Hotkeys) that
+  runs instant/toggle actions and saved custom commands in place, ranked by the
+  shared, tested `PaletteSearch`; view features reopen the app
+  (`activateMainWindow` flips the policy back to `.regular`, then fronts the
+  window on the next runloop turn).
 - UI automation for verification: prefer AX element refs over coordinate
   clicks; the user works on the Mac alongside you (see memory).
 

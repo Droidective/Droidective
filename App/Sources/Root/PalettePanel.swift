@@ -3,7 +3,7 @@ import SwiftUI
 
 /// A borderless panel that can still take key focus. Borderless `NSWindow`s
 /// return `false` from `canBecomeKey`/`canBecomeMain` by default, which would
-/// stop the palette's search field from receiving input; overriding them keeps
+/// stop a palette's search field from receiving input; overriding them keeps
 /// the panel chromeless yet focusable. A panel we own (vs. a SwiftUI `Window`
 /// scene) can do this without colliding with SwiftUI's window constraints.
 final class KeyablePanel: NSPanel {
@@ -11,35 +11,53 @@ final class KeyablePanel: NSPanel {
     override var canBecomeMain: Bool { true }
 }
 
-/// Owns the ⌘K command palette as a borderless `NSPanel`. Borderless removes the
-/// 32pt title-bar region a hidden-title-bar `Window` scene always reserves, so
-/// the content sizes the panel exactly — flush at top and bottom. The panel
-/// hosts `PaletteWindowView`, resizes to its content, keeps its top edge anchored
-/// as results grow/shrink, and closes when it loses key (click-away) or on Esc.
+/// Owns one floating, borderless panel hosting SwiftUI content — the shared
+/// chassis of the ⌘K palette and the Quick Actions panel. Borderless removes
+/// the 32pt title-bar region a hidden-title-bar `Window` scene always
+/// reserves, so the content sizes the panel exactly — flush at top and
+/// bottom. The panel resizes to its content, keeps its top edge anchored as
+/// results grow/shrink, and closes when it loses key (click-away) or on Esc.
 @MainActor
-final class PaletteController {
-    static let shared = PaletteController()
+final class FloatingPanelController {
+    /// The in-app ⌘K search palette.
+    static let palette = FloatingPanelController(identifier: "palette", activatesApp: true)
 
+    /// The global-hotkey Quick Actions panel. Non-activating: it takes key
+    /// input without activating Droidective, so whatever app was frontmost
+    /// keeps focus underneath — summonable while the app is resident in the
+    /// background with no window and no Dock icon.
+    static let quickActions = FloatingPanelController(identifier: "quick-actions", activatesApp: false)
+
+    private let identifier: String
+    private let activatesApp: Bool
     private var panel: KeyablePanel?
     private var anchorMaxY: CGFloat = 0
     private var resignObserver: NSObjectProtocol?
     private var resizeObserver: NSObjectProtocol?
 
-    func show(appState: AppState) {
+    private init(identifier: String, activatesApp: Bool) {
+        self.identifier = identifier
+        self.activatesApp = activatesApp
+    }
+
+    var isVisible: Bool { panel != nil }
+
+    /// Present the panel with `content`, which receives the close action to
+    /// wire into its Esc/dismiss handling. Re-showing an open panel just
+    /// re-fronts it.
+    func show<Content: View>(@ViewBuilder content: (_ close: @escaping () -> Void) -> Content) {
         if let panel {
             panel.makeKeyAndOrderFront(nil)
             return
         }
 
-        let root = PaletteWindowView(onClose: { [weak self] in self?.close() })
-            .environment(appState)
-            .tint(.brandAccent)
+        let root = content { [weak self] in self?.close() }
         let hosting = NSHostingController(rootView: root)
         hosting.sizingOptions = [.preferredContentSize]
 
         let panel = KeyablePanel(contentViewController: hosting)
-        panel.styleMask = [.borderless]
-        panel.identifier = NSUserInterfaceItemIdentifier("palette")
+        panel.styleMask = activatesApp ? [.borderless] : [.borderless, .nonactivatingPanel]
+        panel.identifier = NSUserInterfaceItemIdentifier(identifier)
         panel.isFloatingPanel = true
         panel.level = .floating
         panel.isOpaque = false

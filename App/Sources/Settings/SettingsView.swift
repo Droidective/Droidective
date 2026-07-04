@@ -49,6 +49,7 @@ func applyStoredTheme() {
 struct GeneralSettingsView: View {
     @Environment(AppState.self) private var state
     @AppStorage("showMenuBarExtra") private var showMenuBar = true
+    @AppStorage(keepRunningInBackgroundKey) private var keepRunningInBackground = true
     @State private var openAtLoginOn = false
     @State private var showMenuItems = false
 
@@ -112,6 +113,13 @@ struct GeneralSettingsView: View {
 
             Section("Startup") {
                 Toggle("Open at login", isOn: openAtLogin)
+            }
+
+            Section("Background") {
+                Toggle("Keep running in the background", isOn: $keepRunningInBackground)
+                Text("Closing the window hides Droidective from the Dock and stops running feature work — including terminal shells. The menu bar icon, global hotkeys, and the Quick Actions panel stay available; quit fully with ⌘Q.")
+                    .font(.footnote)
+                    .foregroundStyle(.textMuted)
             }
 
             #if !APPSTORE
@@ -509,6 +517,9 @@ struct HotkeysSettingsView: View {
             Section("Global") {
                 LabeledContent("Show Droidective") {
                     HotkeyRecorderField(name: .globalLaunch)
+                }
+                LabeledContent("Quick Actions panel") {
+                    HotkeyRecorderField(name: .quickActions)
                 }
             }
             // Mirrors the sidebar: enabled features in their sidebar order.

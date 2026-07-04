@@ -139,7 +139,13 @@ struct RootView: View {
     /// out of `body` so the view-builder expression stays cheap to type-check.
     private func performLaunchSetup() {
         state.openMainWindow = { openWindow(id: "main") }
-        state.openPalette = { PaletteController.shared.show(appState: state) }
+        state.openPalette = {
+            FloatingPanelController.palette.show { close in
+                PaletteWindowView(onClose: close)
+                    .environment(state)
+                    .tint(.brandAccent)
+            }
+        }
         (NSApp.delegate as? AppDelegate)?.appState = state
         InstallInbox.shared.onReceive = { urls in state.openAPKs(urls) }
         migrateDefaultsIfNeeded()
@@ -177,8 +183,9 @@ struct RootView: View {
     }
 
     /// Identifier stamped on the main window so `installCloseTabMonitor` can
-    /// scope ⌘W to it and leave Settings / the palette panel alone.
-    fileprivate static let mainWindowID = "droidective-main"
+    /// scope ⌘W to it, `AppDelegate`'s close observer can recognize it, and
+    /// `activateMainWindow` can re-front it — leaving Settings / panels alone.
+    static let mainWindowID = "droidective-main"
     private static var closeTabMonitorInstalled = false
 
     /// ⌘W closes the active tab, not the window. A local key-down monitor
