@@ -6,9 +6,9 @@
     <description>Most recent Droidective updates.</description>
     <language>en</language>
     <item>
-      <title>Droidective 2.8.2</title>
-      <sparkle:version>254</sparkle:version>
-      <sparkle:shortVersionString>2.8.2</sparkle:shortVersionString>
+      <title>Droidective 2.8.3</title>
+      <sparkle:version>273</sparkle:version>
+      <sparkle:shortVersionString>2.8.3</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <description><![CDATA[
 <style>
@@ -24,34 +24,47 @@ pre { background: color-mix(in srgb, currentColor 8%, transparent); padding: .6e
 pre code { background: none; padding: 0; }
 a { color: #2f9e44; }
 </style>
-<p>A patch release that fixes the JS Console's reconnect behavior against Metro
-and adds anonymous app performance monitoring.</p>
-<h3>Fixes</h3>
+<p>Adds iOS Simulator support, per-feature product analytics, and a redesigned
+role picker, and ships a rebuilt marketing site.</p>
+<h3>New features</h3>
 <ul>
 <li>
-<strong>JS Console reconnect storm</strong> — a race in the CDP client killed each new
-connection moments after it opened and left the old socket running, so the
-console reconnected every couple of seconds, Metro logged a stream of
-connection-established messages, and leaked debugger connections piled up
-until a JS reload cleared them. Connections are now generation-guarded, every
-close path shuts its socket, and the handshake times out instead of hanging
-on a dead target — the console connects once and stays connected.</li>
-<li>Changing the Metro port can no longer commit a connection that was still in
-flight against the old port.</li>
+<strong>iOS Simulators in the device bar</strong> — booted iOS Simulators now sit alongside
+Android devices, and features adapt to the selected platform. Screenshot, dark
+mode, demo mode, fake battery, and deep links run against a simulator through
+<code>xcrun simctl</code>; push notifications are a new Simulator-only tool. The
+Emulators &amp; Simulators screen lists and boots or shuts down simulators, and a
+new iOS Developer role leads with them. A feature that only applies to Android
+shows a platform-mismatch state with a one-click switch to a connected device.
+The registry grows from 55 to 56 tools.</li>
 </ul>
 <h3>Improvements</h3>
 <ul>
 <li>
-<strong>Performance self-monitoring</strong> — the app now watches its own CPU and memory
-use and, when something stays over the limit, reports it to the anonymous
-diagnostics along with which features were open — so resource hogs get found
-and fixed. Sends only feature names and resource numbers; opt-out any time in
-Settings → Privacy.</li>
+<strong>Role picker redesign</strong> — each role card carries a tool-count pill and
+feature-preview chips, with hover, press, and keyboard-focus states, a
+staggered entrance, and Reduce Motion respected.</li>
+<li>
+<strong>Product analytics</strong> — anonymous usage is now attributed per feature (which
+tool was open when an event, hang, or crash occurred), with install-level
+retention and the target-device landscape. It stays on by default with opt-out
+in Settings → Privacy; no serials, paths, package ids, SSIDs, or command text
+are ever sent, and the first-run consent prompt has been removed.</li>
+<li>
+<strong>Reactotron &amp; logs</strong> — Reactotron subscriptions and snapshots render as
+readable trees, expanded console objects are bounded and searchable in place,
+and log auto-follow is steadier while scrolling.</li>
+</ul>
+<h3>Fixes</h3>
+<ul>
+<li>Security hardening from an audit pass — device-shell values are consistently
+shell-quoted — plus a JS Console crash fix and React Native console UX
+follow-ups.</li>
 </ul>
 <p>Installed copies update in place via Sparkle.</p>
 ]]></description>
-      <pubDate>Fri, 03 Jul 2026 10:58:48 +0000</pubDate>
-      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v2.8.2/Droidective-v2.8.2.dmg" sparkle:edSignature="BcAE66yva5o5L6AfBAV/K+PcTk07hOfv57+pbXhPTL7LA13xJB4z0/5e7L/eIiAywsiEoHsbfvdOv3dUCzi4Cg==" length="45982017" type="application/octet-stream" />
+      <pubDate>Sat, 04 Jul 2026 12:32:24 +0000</pubDate>
+      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v2.8.3/Droidective-v2.8.3.dmg" sparkle:edSignature="uUcxzvVW6RPSsvB2IbcH+GRtc99XXbyjhT2dOdfR3/3RlhnY3DssZvV4NcNA5b06pKTtl/Gjm+XXyQOs1wnjBA==" length="45424457" type="application/octet-stream" />
     </item>
   </channel>
 </rss>
