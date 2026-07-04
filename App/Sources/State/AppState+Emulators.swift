@@ -23,11 +23,11 @@ extension AppState {
         }
     }
 
-    /// Refresh `availableSimulators` — bootable (shut down, runtime present)
-    /// iOS Simulators. Empty without Xcode.
+    /// Refresh `availableSimulators` — the short recently-used list for the
+    /// device-bar menu (Xcode installs ~30 sims; the Emulators screen lists
+    /// them all). Empty without Xcode.
     func refreshSimulators() async {
-        availableSimulators = await env.simulatorMonitor.list()
-            .filter { !$0.isBooted && $0.isAvailable }
+        availableSimulators = SimulatorListParser.quickPicks(await env.simulatorMonitor.list())
     }
 
     /// Boot a simulator; it joins the device bar once simctl reports it Booted.

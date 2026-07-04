@@ -614,6 +614,15 @@ public enum FeatureRegistry {
             "emulators", "connection",
             "terminal", "custom-commands",
         ],
+        // Simulator-first loop: boot sims → simulate state (push, battery,
+        // appearance via the Simulate hub) → capture/polish. Deep links live
+        // in the React Native hub (its absorbing hub), reachable via search.
+        // The always-on tools tail matches the other roles.
+        .iosDeveloper: [
+            "emulators", "simulate", "demo-mode",
+            "screenshot", "video-editor",
+            "terminal", "custom-commands",
+        ],
         // Capture first (the QA staple), then repro/report, state simulation,
         // perf/fuzz, app install, and device context.
         .qaTester: [

@@ -19,7 +19,8 @@ import Testing
             "udid" : "BBBB-2222",
             "name" : "iPad Air 11-inch (M2)",
             "state" : "Shutdown",
-            "isAvailable" : true
+            "isAvailable" : true,
+            "lastBootedAt" : "2026-06-30T09:15:00Z"
           }
         ],
         "com.apple.CoreSimulator.SimRuntime.iOS-17-5" : [
@@ -90,6 +91,48 @@ import Testing
     @Test func unavailableBootedSimIsExcluded() {
         let sims = [Simulator(udid: "X", name: "Ghost", state: "Booted", runtime: "iOS 17.0", isAvailable: false)]
         #expect(SimulatorListParser.devices(from: sims).isEmpty)
+    }
+
+    @Test func parsesLastBootedAt() {
+        let sims = SimulatorListParser.parse(sampleJSON)
+        let ipad = sims.first { $0.udid == "BBBB-2222" }
+        #expect(ipad?.lastBootedAt != nil)
+        #expect(sims.first { $0.udid == "AAAA-1111" }?.lastBootedAt == nil)
+    }
+
+    private func sim(
+        _ udid: String, state: String = "Shutdown", available: Bool = true, booted: Date? = nil
+    ) -> Simulator {
+        Simulator(
+            udid: udid, name: udid, state: state, runtime: "iOS 18.3",
+            isAvailable: available, lastBootedAt: booted
+        )
+    }
+
+    @Test func quickPicksPreferRecentlyUsedAndSkipBootedOrBroken() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let sims = [
+            sim("never-used"),
+            sim("old", booted: now.addingTimeInterval(-86_400)),
+            sim("recent", booted: now),
+            sim("already-booted", state: "Booted", booted: now),
+            sim("broken", available: false, booted: now),
+        ]
+        #expect(SimulatorListParser.quickPicks(sims).map(\.udid) == ["recent", "old"])
+    }
+
+    @Test func quickPicksFallBackToDefaultOrderOnAFreshInstall() {
+        // No sim ever booted: show the head of the default list rather than
+        // an empty menu section.
+        let sims = (1...8).map { sim("sim-\($0)") }
+        #expect(SimulatorListParser.quickPicks(sims).map(\.udid) == ["sim-1", "sim-2", "sim-3", "sim-4", "sim-5"])
+    }
+
+    @Test func quickPicksHonorTheLimit() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let sims = (1...8).map { sim("sim-\($0)", booted: now.addingTimeInterval(Double($0))) }
+        let picks = SimulatorListParser.quickPicks(sims, limit: 3)
+        #expect(picks.map(\.udid) == ["sim-8", "sim-7", "sim-6"])
     }
 }
 

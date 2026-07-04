@@ -59,6 +59,7 @@ public enum FeatureCategory: String, Sendable, Codable, CaseIterable {
 public enum UserRole: String, Sendable, Codable, CaseIterable, Identifiable {
     case androidDeveloper = "android-dev"
     case reactNativeDeveloper = "rn-dev"
+    case iosDeveloper = "ios-dev"
     case qaTester = "qa"
     case supportTriage = "support"
     case securityTester = "security"
@@ -69,6 +70,7 @@ public enum UserRole: String, Sendable, Codable, CaseIterable, Identifiable {
         switch self {
         case .androidDeveloper: return "Android Developer"
         case .reactNativeDeveloper: return "React Native Developer"
+        case .iosDeveloper: return "iOS Developer"
         case .qaTester: return "QA / Tester"
         case .supportTriage: return "Support / Triage"
         case .securityTester: return "Security / Pentest"
@@ -80,6 +82,7 @@ public enum UserRole: String, Sendable, Codable, CaseIterable, Identifiable {
         switch self {
         case .androidDeveloper: return "Logs, app internals, files, and device connection."
         case .reactNativeDeveloper: return "Metro reload, dev menu, logs, and performance."
+        case .iosDeveloper: return "Simulators, push testing, capture, and deep links."
         case .qaTester: return "Capture, recording, crash hunting, and state simulation."
         case .supportTriage: return "Device diagnostics, connection, and quick checks."
         case .securityTester: return "APK analysis, Frida, traffic proxy, and app-data inspection."
@@ -91,6 +94,7 @@ public enum UserRole: String, Sendable, Codable, CaseIterable, Identifiable {
         switch self {
         case .androidDeveloper: return "hammer"
         case .reactNativeDeveloper: return "atom"
+        case .iosDeveloper: return "apple.logo"
         case .qaTester: return "checkmark.seal"
         case .supportTriage: return "lifepreserver"
         case .securityTester: return "lock.shield"

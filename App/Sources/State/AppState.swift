@@ -338,8 +338,10 @@ final class AppState {
         }
         usageStats = await env.stores.usage.load()
         bundles = await env.stores.bundles.load()
-        await refreshToolStatus()
 
+        // Subscribe both device streams before the tool probe: adb detection
+        // can spend seconds in the login shell, and the bar shouldn't sit
+        // empty that long (the simulator poll doesn't need adb at all).
         deviceStreamTask = Task { [weak self, monitor = env.monitor] in
             // This Task inherits AppState's @MainActor isolation, so the loop
             // body already runs on the main actor — no extra hop needed.
@@ -356,6 +358,7 @@ final class AppState {
                 self.devicesChanged(self.androidDevices + self.simulatorDevices)
             }
         }
+        await refreshToolStatus()
     }
 
     func refreshToolStatus() async {

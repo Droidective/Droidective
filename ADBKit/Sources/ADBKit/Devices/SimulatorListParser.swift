@@ -11,13 +11,20 @@ public struct Simulator: Sendable, Equatable, Identifiable {
     /// False when the runtime was removed (e.g. by an Xcode update) — the
     /// simulator exists but can't boot.
     public let isAvailable: Bool
+    /// When simctl last booted this simulator; nil for one never booted.
+    /// The recency signal behind the device bar's short "most used" list.
+    public let lastBootedAt: Date?
 
-    public init(udid: String, name: String, state: String, runtime: String, isAvailable: Bool) {
+    public init(
+        udid: String, name: String, state: String, runtime: String,
+        isAvailable: Bool, lastBootedAt: Date? = nil
+    ) {
         self.udid = udid
         self.name = name
         self.state = state
         self.runtime = runtime
         self.isAvailable = isAvailable
+        self.lastBootedAt = lastBootedAt
     }
 
     public var id: String { udid }
@@ -36,6 +43,12 @@ public enum SimulatorListParser {
         let name: String
         let state: String
         let isAvailable: Bool?
+        let lastBootedAt: String?
+    }
+
+    /// simctl emits plain ISO8601 ("2026-07-04T05:12:30Z").
+    private static func bootDate(_ raw: String?) -> Date? {
+        raw.flatMap { ISO8601DateFormatter().date(from: $0) }
     }
 
     /// All simulators, sorted by runtime (newest first) then name for a stable
@@ -54,7 +67,8 @@ public enum SimulatorListParser {
                     name: entry.name,
                     state: entry.state,
                     runtime: runtime,
-                    isAvailable: entry.isAvailable ?? true
+                    isAvailable: entry.isAvailable ?? true,
+                    lastBootedAt: bootDate(entry.lastBootedAt)
                 ))
             }
         }
@@ -76,6 +90,20 @@ public enum SimulatorListParser {
             return key
         }
         return "\(parts[0]) \(parts.dropFirst().joined(separator: "."))"
+    }
+
+    /// The short bootable list for the device-bar menu: available, shut-down
+    /// simulators the user has actually booted before, most recent first —
+    /// Xcode installs ~30 sims and the menu shouldn't list them all (the
+    /// Emulators screen does). A user who never booted one gets the first
+    /// `limit` in default order so the section isn't empty on day one.
+    public static func quickPicks(_ simulators: [Simulator], limit: Int = 5) -> [Simulator] {
+        let bootable = simulators.filter { !$0.isBooted && $0.isAvailable }
+        let used = bootable
+            .filter { $0.lastBootedAt != nil }
+            .sorted { ($0.lastBootedAt ?? .distantPast) > ($1.lastBootedAt ?? .distantPast) }
+        let picks = used.isEmpty ? bootable : used
+        return Array(picks.prefix(limit))
     }
 
     /// Booted, available simulators as device-bar `Device`s. State normalizes
