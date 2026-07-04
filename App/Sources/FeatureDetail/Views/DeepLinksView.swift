@@ -143,8 +143,15 @@ struct DeepLinksSection: View {
         Task {
             await CommandLog.userInitiated {
                 for serial in targets {
-                    let result = (try? await state.env.engine.appControl.launchDeepLink(serial: serial, url: link.url))
-                        ?? FeatureResult(ok: false, message: "adb not found")
+                    let result: FeatureResult
+                    switch state.platform(for: serial) {
+                    case .android:
+                        result = (try? await state.env.engine.appControl.launchDeepLink(serial: serial, url: link.url))
+                            ?? FeatureResult(ok: false, message: "adb not found")
+                    case .iosSimulator:
+                        result = (try? await state.env.engine.simulators.openURL(udid: serial, url: link.url))
+                            ?? FeatureResult(ok: false, message: "Xcode not found")
+                    }
                     state.showToast(Toast(message: result.message, ok: result.ok))
                 }
             }

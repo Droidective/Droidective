@@ -4,6 +4,9 @@ import SwiftUI
 /// Simulate / Device State hub — fake battery, appearance, motion, layout,
 /// locale, network, and proxy overrides on one screen. Each section runs the
 /// matching feature; the individual features stay searchable + hotkey-able.
+/// The sections adapt to the selected device's platform: an iOS Simulator
+/// keeps battery/appearance and gains push notifications; the adb-only
+/// sections (layout, locale, network, proxy) show for Android.
 struct SimulateView: View {
     @Environment(AppState.self) private var state
 
@@ -16,6 +19,14 @@ struct SimulateView: View {
     @State private var data = true
     @State private var airplane = false
     @State private var proxy = ""
+    @State private var pushBundleId = ""
+    @State private var pushTitle = "Test Notification"
+    @State private var pushBody = "Hello from Droidective"
+    @State private var pushBadge = ""
+
+    private var isSimulator: Bool {
+        state.selectedDevice?.platform == .iosSimulator
+    }
 
     var body: some View {
         if state.targetSerials.isEmpty {
@@ -30,90 +41,129 @@ struct SimulateView: View {
                     Button("Reset all overrides", role: .destructive) { state.resetAllOverrides() }
                         .buttonStyle(.bordered)
                 }
-
-                HubSection("Battery") {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Level: \(Int(batteryLevel))%").foregroundStyle(.textMain)
-                        Slider(value: $batteryLevel, in: 0...100, step: 1)
-                    }
-                    SwitchRow("Simulate unplugged", isOn: $batteryUnplugged)
-                    Button("Apply") {
-                        run("fake-battery", ["level": .number(batteryLevel), "unplugged": .bool(batteryUnplugged)])
-                    }
-                    .buttonStyle(.borderedProminent)
+                sharedSections
+                if isSimulator {
+                    pushNotificationSection
+                } else {
+                    androidOnlySections
                 }
+            }
+        }
+    }
 
-                HubSection("Appearance & motion") {
-                    if let darkMode = FeatureRegistry.byID["dark-mode"] {
-                        HStack {
-                            Text("Dark mode")
-                            Spacer(minLength: 12)
-                            OverrideToggleControl(feature: darkMode) { _ in EmptyView() }
-                                .labelsHidden()
-                        }
-                    }
-                    if let animations = FeatureRegistry.byID["animation-scale"] {
-                        HStack {
-                            Text("Disable animations (0×)")
-                            Spacer(minLength: 12)
-                            OverrideToggleControl(feature: animations) { _ in EmptyView() }
-                                .labelsHidden()
-                        }
-                    }
-                }
+    /// Battery + appearance work on both platforms (adb and simctl runners).
+    @ViewBuilder
+    private var sharedSections: some View {
+        HubSection("Battery") {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Level: \(Int(batteryLevel))%").foregroundStyle(.textMain)
+                Slider(value: $batteryLevel, in: 0...100, step: 1)
+            }
+            SwitchRow("Simulate unplugged", isOn: $batteryUnplugged)
+            Button("Apply") {
+                run("fake-battery", ["level": .number(batteryLevel), "unplugged": .bool(batteryUnplugged)])
+            }
+            .buttonStyle(.borderedProminent)
+        }
 
-                HubSection("Layout") {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Font scale: \(fontScale, specifier: "%.2f")").foregroundStyle(.textMain)
-                        Slider(value: $fontScale, in: 0.85...1.3, step: 0.05)
-                    }
-                    HubField("Display density", prompt: "dpi — blank to keep", text: $density)
-                    Button("Apply") {
-                        var params: [String: FeatureValue] = ["fontScale": .number(fontScale)]
-                        let raw = density.trimmingCharacters(in: .whitespaces)
-                        if !raw.isEmpty, let value = Double(raw) { params["density"] = .number(value) }
-                        run("layout-overrides", params)
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-
-                HubSection("Locale") {
-                    HStack {
-                        Text("Language")
-                        Spacer(minLength: 12)
-                        Picker("", selection: $locale) {
-                            ForEach(localeOptions, id: \.value) { option in
-                                Text(option.label).tag(option.value)
-                            }
-                        }
+        HubSection("Appearance & motion") {
+            if let darkMode = FeatureRegistry.byID["dark-mode"] {
+                HStack {
+                    Text("Dark mode")
+                    Spacer(minLength: 12)
+                    OverrideToggleControl(feature: darkMode) { _ in EmptyView() }
                         .labelsHidden()
-                        .pickerStyle(.menu)
-                        .frame(minWidth: 140)
-                    }
-                    Button("Apply") { run("locale", ["locale": .string(locale)]) }
-                        .buttonStyle(.borderedProminent)
                 }
+            }
+            if !isSimulator, let animations = FeatureRegistry.byID["animation-scale"] {
+                HStack {
+                    Text("Disable animations (0×)")
+                    Spacer(minLength: 12)
+                    OverrideToggleControl(feature: animations) { _ in EmptyView() }
+                        .labelsHidden()
+                }
+            }
+        }
+    }
 
-                HubSection("Network") {
-                    SwitchRow("Wi-Fi", isOn: $wifi)
-                    SwitchRow("Mobile data", isOn: $data)
-                    SwitchRow("Airplane mode", isOn: $airplane)
-                    Button("Apply") {
-                        run("network-toggles", ["wifi": .bool(wifi), "data": .bool(data), "airplane": .bool(airplane)])
+    private var pushNotificationSection: some View {
+        HubSection(
+            "Push notification",
+            subtitle: "Delivers a test APNS payload to an app on this simulator."
+        ) {
+            HubField("Bundle ID", prompt: "com.example.app", text: $pushBundleId)
+            HubField("Title", prompt: "Test Notification", text: $pushTitle)
+            HubField("Body", prompt: "Hello from Droidective", text: $pushBody)
+            HubField("Badge count (blank = none)", prompt: "1", text: $pushBadge)
+            Button("Send") {
+                var params: [String: FeatureValue] = [
+                    "bundleId": .string(pushBundleId.trimmingCharacters(in: .whitespaces)),
+                    "title": .string(pushTitle),
+                    "body": .string(pushBody),
+                ]
+                if let badge = Double(pushBadge.trimmingCharacters(in: .whitespaces)) {
+                    params["badge"] = .number(badge)
+                }
+                run("push-notification", params)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(pushBundleId.trimmingCharacters(in: .whitespaces).isEmpty)
+        }
+    }
+
+    /// adb-backed sections with no simctl equivalent.
+    @ViewBuilder
+    private var androidOnlySections: some View {
+        HubSection("Layout") {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Font scale: \(fontScale, specifier: "%.2f")").foregroundStyle(.textMain)
+                Slider(value: $fontScale, in: 0.85...1.3, step: 0.05)
+            }
+            HubField("Display density", prompt: "dpi — blank to keep", text: $density)
+            Button("Apply") {
+                var params: [String: FeatureValue] = ["fontScale": .number(fontScale)]
+                let raw = density.trimmingCharacters(in: .whitespaces)
+                if !raw.isEmpty, let value = Double(raw) { params["density"] = .number(value) }
+                run("layout-overrides", params)
+            }
+            .buttonStyle(.borderedProminent)
+        }
+
+        HubSection("Locale") {
+            HStack {
+                Text("Language")
+                Spacer(minLength: 12)
+                Picker("", selection: $locale) {
+                    ForEach(localeOptions, id: \.value) { option in
+                        Text(option.label).tag(option.value)
                     }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(minWidth: 140)
+            }
+            Button("Apply") { run("locale", ["locale": .string(locale)]) }
+                .buttonStyle(.borderedProminent)
+        }
+
+        HubSection("Network") {
+            SwitchRow("Wi-Fi", isOn: $wifi)
+            SwitchRow("Mobile data", isOn: $data)
+            SwitchRow("Airplane mode", isOn: $airplane)
+            Button("Apply") {
+                run("network-toggles", ["wifi": .bool(wifi), "data": .bool(data), "airplane": .bool(airplane)])
+            }
+            .buttonStyle(.borderedProminent)
+        }
+
+        HubSection("HTTP proxy", subtitle: "Route traffic through Charles, Proxyman, or mitmproxy.") {
+            HubField("Proxy", prompt: "10.0.0.5:8888", text: $proxy)
+            HStack(spacing: 10) {
+                Button("Set") { run("http-proxy", ["proxy": .string(proxy.trimmingCharacters(in: .whitespaces))]) }
                     .buttonStyle(.borderedProminent)
-                }
-
-                HubSection("HTTP proxy", subtitle: "Route traffic through Charles, Proxyman, or mitmproxy.") {
-                    HubField("Proxy", prompt: "10.0.0.5:8888", text: $proxy)
-                    HStack(spacing: 10) {
-                        Button("Set") { run("http-proxy", ["proxy": .string(proxy.trimmingCharacters(in: .whitespaces))]) }
-                            .buttonStyle(.borderedProminent)
-                            .disabled(proxy.trimmingCharacters(in: .whitespaces).isEmpty)
-                        Button("Clear") { run("http-proxy", ["proxy": .string("")]) }
-                            .buttonStyle(.bordered)
-                    }
-                }
+                    .disabled(proxy.trimmingCharacters(in: .whitespaces).isEmpty)
+                Button("Clear") { run("http-proxy", ["proxy": .string("")]) }
+                    .buttonStyle(.bordered)
             }
         }
     }

@@ -7,6 +7,7 @@ struct AppEnvironment: Sendable {
     let commandLog: CommandLog
     let client: AdbClient
     let monitor: DeviceMonitor
+    let simulatorMonitor: SimulatorMonitor
     let engine: FeatureEngine
     let stores: AppStores
 
@@ -19,5 +20,6 @@ struct AppEnvironment: Sendable {
         engine = FeatureEngine(
             client: client, locator: locator, monitor: monitor, overridesStore: stores.overrides,
             toolsDirectory: AppPaths.supportDir.appendingPathComponent("tools", isDirectory: true))
+        simulatorMonitor = SimulatorMonitor(client: engine.simctl)
     }
 }

@@ -59,11 +59,20 @@ final class AppState {
     /// cache is wiped alongside it — see `AppDelegate.applicationWillTerminate`).
     let apkStudio = ApkStudioSession()
 
+    /// Everything connected, both platforms: adb devices first, then booted
+    /// iOS Simulators. Rebuilt whenever either monitor publishes.
     var devices: [Device] = []
+    /// The two platform streams, merged into `devices` — kept separately so
+    /// one monitor's update never drops the other's list.
+    private var androidDevices: [Device] = []
+    private var simulatorDevices: [Device] = []
     /// Android Studio AVDs, for launching an emulator straight from the device
     /// bar. Refreshed when the connected set changes (see `refreshAvds`); ones
     /// with a `runningSerial` are already in `devices`.
     var availableAvds: [Avd] = []
+    /// Xcode iOS Simulators not currently booted, for the device-bar "Start a
+    /// simulator" section — the AVD list's simctl twin.
+    var availableSimulators: [Simulator] = []
     /// Switch via `requestDevice(_:)`, not direct assignment — that routes the
     /// change through the leave guard so an active recording isn't lost.
     private(set) var selectedSerial: String?
@@ -284,6 +293,7 @@ final class AppState {
     var adbMissing: Bool { adbStatus?.installed == false }
 
     private var deviceStreamTask: Task<Void, Never>?
+    private var simulatorStreamTask: Task<Void, Never>?
     /// Set the moment the user picks a role this session, so `bootstrap`'s
     /// async layout load can't overwrite the just-seeded curation.
     private var roleChosenThisSession = false
@@ -335,7 +345,15 @@ final class AppState {
             // body already runs on the main actor — no extra hop needed.
             for await devices in await monitor.updates() {
                 guard let self else { break }
-                self.devicesChanged(devices)
+                self.androidDevices = devices
+                self.devicesChanged(self.androidDevices + self.simulatorDevices)
+            }
+        }
+        simulatorStreamTask = Task { [weak self, monitor = env.simulatorMonitor] in
+            for await simulators in await monitor.updates() {
+                guard let self else { break }
+                self.simulatorDevices = simulators
+                self.devicesChanged(self.androidDevices + self.simulatorDevices)
             }
         }
     }
@@ -372,14 +390,18 @@ final class AppState {
         if selectedSerial != before || (selectedSerial != nil && activeOverrides.isEmpty) {
             Task { await refreshOverrides() }
         }
-        for device in ready where deviceDetails[device.serial] == nil {
+        // Picker enrichment reads getprop over adb — Android only; a
+        // simulator's runtime label already rides in `Device.product`.
+        for device in ready
+        where device.platform == .android && deviceDetails[device.serial] == nil {
             Task {
                 deviceDetails[device.serial] = await DeviceDetails.fetch(client: env.client, serial: device.serial)
             }
         }
     }
 
-    /// Picker label with enrichment: "Pixel 7 (005F) · Android 14 · 82%".
+    /// Picker label with enrichment: "Pixel 7 (005F) · Android 14 · 82%",
+    /// or "iPhone 16 Pro · iOS 18.2 · Simulator" for a booted simulator.
     func deviceTitle(_ device: Device) -> String {
         guard device.isReady else {
             return device.state == "unauthorized"
@@ -387,9 +409,15 @@ final class AppState {
                 : "\(device.label) — \(device.state)"
         }
         var parts = [device.label]
-        if let details = deviceDetails[device.serial] {
-            if let version = details.androidVersion { parts.append("Android \(version)") }
-            if let battery = details.batteryLevel { parts.append("\(battery)%") }
+        switch device.platform {
+        case .android:
+            if let details = deviceDetails[device.serial] {
+                if let version = details.androidVersion { parts.append("Android \(version)") }
+                if let battery = details.batteryLevel { parts.append("\(battery)%") }
+            }
+        case .iosSimulator:
+            if let runtime = device.product { parts.append(runtime) }
+            parts.append("Simulator")
         }
         return parts.joined(separator: " · ")
     }
@@ -399,19 +427,29 @@ final class AppState {
     var activeOverrides: [ActiveOverride] = []
 
     func refreshOverrides() async {
-        guard let serial = selectedSerial, selectedDevice?.isReady == true else {
+        guard let device = selectedDevice, device.isReady else {
             activeOverrides = []
             return
         }
-        activeOverrides = (try? await env.engine.overrides.active(serial: serial)) ?? []
+        switch device.platform {
+        case .android:
+            activeOverrides = (try? await env.engine.overrides.active(serial: device.serial)) ?? []
+        case .iosSimulator:
+            activeOverrides = await env.engine.simulators.activeOverrides(udid: device.serial)
+        }
     }
 
     func resetOverride(_ kind: OverrideKind) {
-        guard let serial = selectedSerial else { return }
+        guard let device = selectedDevice else { return }
         Task {
             await CommandLog.userInitiated {
                 do {
-                    try await env.engine.overrides.reset(serial: serial, kind: kind)
+                    switch device.platform {
+                    case .android:
+                        try await env.engine.overrides.reset(serial: device.serial, kind: kind)
+                    case .iosSimulator:
+                        try await env.engine.simulators.reset(udid: device.serial, kind: kind)
+                    }
                     showToast(Toast(message: "\(kind.label) reset", ok: true))
                 } catch {
                     showToast(Toast(message: error.localizedDescription, ok: false))
@@ -422,11 +460,16 @@ final class AppState {
     }
 
     func resetAllOverrides() {
-        guard let serial = selectedSerial else { return }
+        guard let device = selectedDevice else { return }
         Task {
             await CommandLog.userInitiated {
                 do {
-                    try await env.engine.overrides.resetAll(serial: serial)
+                    switch device.platform {
+                    case .android:
+                        try await env.engine.overrides.resetAll(serial: device.serial)
+                    case .iosSimulator:
+                        try await env.engine.simulators.resetAll(udid: device.serial)
+                    }
                     showToast(Toast(message: "All overrides reset", ok: true))
                 } catch {
                     showToast(Toast(message: error.localizedDescription, ok: false))
@@ -434,6 +477,13 @@ final class AppState {
             }
             await refreshOverrides()
         }
+    }
+
+    /// Toolchain for a serial in the current device set — Android when unknown
+    /// (a device that just disconnected mid-run was adb-backed in every
+    /// existing flow).
+    func platform(for serial: String) -> DevicePlatform {
+        devices.first { $0.serial == serial }?.platform ?? .android
     }
 
     var selectedDevice: Device? {
@@ -868,7 +918,10 @@ final class AppState {
                 return
             }
             for serial in targets {
-                let result = await engine.run(featureID: feature.id, serial: serial, params: params)
+                let result = await engine.run(
+                    featureID: feature.id, serial: serial,
+                    platform: self.platform(for: serial), params: params
+                )
                 self.lastResults[feature.id] = (result, Date())
                 if targets.count > 1 {
                     let label = self.devices.first { $0.serial == serial }?.label ?? serial
@@ -1111,7 +1164,9 @@ final class AppState {
                 let dir = try ScreenCaptureService.ensureCaptureDir()
                 let dest = dir.appendingPathComponent("screenshot_\(ScreenCaptureService.stamp()).png")
                 let file = try await withOperation("Capturing screenshot…") {
-                    try await env.engine.captureScreenshot(serial: serial, to: dest)
+                    try await env.engine.captureScreenshot(
+                        serial: serial, platform: platform(for: serial), to: dest
+                    )
                 }
                 let result = FeatureResult(ok: true, message: "Screenshot saved", revealPath: file.path)
                 lastResults["screenshot"] = (result, Date())
@@ -1138,7 +1193,7 @@ final class AppState {
         let data: Data? = await CommandLog.userInitiated {
             do {
                 return try await withOperation("Capturing screenshot…") {
-                    try await env.engine.captureScreenshotData(serial: serial)
+                    try await env.engine.captureScreenshotData(serial: serial, platform: platform(for: serial))
                 }
             } catch {
                 showToast(Toast(message: error.localizedDescription, ok: false))

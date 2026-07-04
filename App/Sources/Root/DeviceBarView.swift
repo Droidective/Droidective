@@ -28,7 +28,7 @@ struct DeviceBarView: View {
             // spacing, and both pills draw their own background (no hidden
             // control insets), so every gap on the bar reads uniform.
             HStack(spacing: 10) {
-                Image(systemName: "iphone")
+                Image(systemName: deviceStatusIcon)
                     .foregroundStyle(deviceStatusColor)
                     .help(deviceStatusHelp)
                 deviceControl
@@ -137,11 +137,22 @@ struct DeviceBarView: View {
                     }
                 }
             }
+            if !state.availableSimulators.isEmpty {
+                Section("Start an iOS Simulator") {
+                    ForEach(state.availableSimulators) { simulator in
+                        Button {
+                            state.bootSimulator(simulator)
+                        } label: {
+                            Label("\(simulator.name) · \(simulator.runtime)", systemImage: "play.circle")
+                        }
+                    }
+                }
+            }
             Divider()
             Button {
                 state.requestFeature("emulators")
             } label: {
-                Label("Manage emulators…", systemImage: "square.stack.3d.up")
+                Label("Manage emulators & simulators…", systemImage: "square.stack.3d.up")
             }
             Button {
                 state.refreshDevices()
@@ -167,7 +178,10 @@ struct DeviceBarView: View {
         .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(pillTextColor.opacity(0.18)))
         .disabled(state.effectiveRunOnAll || state.recordingActive)
         .help(state.recordingActive ? "Stop the recording to change the device" : "Switch the active device")
-        .task(id: state.devices.map(\.serial).joined()) { await state.refreshAvds() }
+        .task(id: state.devices.map(\.serial).joined()) {
+            await state.refreshAvds()
+            await state.refreshSimulators()
+        }
     }
 
     /// Title/chevron color for the device pill, pre-resolved to a concrete value
@@ -189,6 +203,12 @@ struct DeviceBarView: View {
         if device.isReady { return .green }
         if device.state == "unauthorized" { return .orange }
         return .red
+    }
+
+    /// A booted iOS Simulator gets the Apple mark so the platform in charge
+    /// of the bar is unmistakable at a glance.
+    private var deviceStatusIcon: String {
+        selectedDevice?.platform == .iosSimulator ? "apple.logo" : "iphone"
     }
 
     private var bundleIconColor: Color {

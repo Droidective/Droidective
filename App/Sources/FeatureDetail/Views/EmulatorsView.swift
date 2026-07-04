@@ -2,36 +2,31 @@ import ADBKit
 import AppKit
 import SwiftUI
 
-/// Android Studio AVDs: launch (normal / cold boot / wipe data), see which
-/// are running, and stop them.
+/// Android Studio AVDs and Xcode iOS Simulators: launch (normal / cold boot /
+/// wipe data for AVDs; boot for simulators), see which are running, and stop
+/// them. Booted ones join the device bar through normal polling.
 struct EmulatorsView: View {
     @Environment(AppState.self) private var state
     @State private var avds: [Avd]?
+    @State private var simulators: [Simulator]?
     @State private var emulatorMissing = false
+    @State private var simctlMissing = false
     @State private var reloadToken = 0
     @State private var wipeTarget: Avd?
 
     var body: some View {
         Group {
-            if emulatorMissing {
-                ContentUnavailableView(
-                    "Emulator not found",
-                    systemImage: "play.display",
-                    description: Text("Install the Android Emulator from Android Studio → SDK Manager → SDK Tools.")
-                )
-            } else if let avds {
-                if avds.isEmpty {
-                    ContentUnavailableView(
-                        "No AVDs",
-                        systemImage: "play.display",
-                        description: Text("Create a virtual device in Android Studio → Device Manager, then refresh.")
-                    )
-                } else {
-                    list(avds)
-                }
-            } else {
-                ProgressView("Reading AVDs…")
+            if avds == nil && simulators == nil {
+                ProgressView("Reading virtual devices…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if (avds ?? []).isEmpty, (simulators ?? []).isEmpty {
+                ContentUnavailableView(
+                    "No virtual devices",
+                    systemImage: "play.display",
+                    description: Text(emptyStateAdvice)
+                )
+            } else {
+                list
             }
         }
         // Re-resolves running state as devices come and go.
@@ -40,10 +35,25 @@ struct EmulatorsView: View {
         }
     }
 
-    private func list(_ avds: [Avd]) -> some View {
+    private var emptyStateAdvice: String {
+        var advice: [String] = []
+        advice.append(
+            emulatorMissing
+                ? "Install the Android Emulator from Android Studio → SDK Manager → SDK Tools."
+                : "Create a virtual device in Android Studio → Device Manager, then refresh."
+        )
+        advice.append(
+            simctlMissing
+                ? "Install Xcode for iOS Simulators."
+                : "Add iOS Simulators from Xcode → Window → Devices and Simulators."
+        )
+        return advice.joined(separator: "\n")
+    }
+
+    private var list: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("\(avds.count) virtual devices")
+                Text("\((avds ?? []).count + (simulators ?? []).count) virtual devices")
                     .font(.footnote)
                     .foregroundStyle(.textMuted)
                 Spacer()
@@ -57,49 +67,17 @@ struct EmulatorsView: View {
             .padding(8)
             Divider()
 
-            List(avds) { avd in
-                HStack {
-                    Image(systemName: avd.runningSerial != nil ? "play.display" : "display")
-                        .foregroundStyle(avd.runningSerial != nil ? .brandAccent : .textMuted)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(avd.displayName)
-                        if let serial = avd.runningSerial {
-                            Text("Running — \(serial)")
-                                .font(.footnote)
-                                .foregroundStyle(.brandAccent)
-                        }
-                    }
-                    Spacer()
-
-                    if let serial = avd.runningSerial {
-                        Button("Stop") {
-                            stop(serial: serial, name: avd.displayName)
-                        }
-                        .controlSize(.small)
-                    } else {
-                        Button("Launch") {
-                            launch(avd, options: EmulatorService.LaunchOptions())
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.small)
-                        Menu {
-                            Button("Cold Boot (skip snapshot)") {
-                                launch(avd, options: EmulatorService.LaunchOptions(coldBoot: true))
-                            }
-                            Button("Wipe Data & Launch…", role: .destructive) {
-                                wipeTarget = avd
-                            }
-                        } label: {
-                            Image(systemName: "ellipsis.circle")
-                        }
-                        .menuStyle(.borderlessButton)
-                        .fixedSize()
+            List {
+                if let avds, !avds.isEmpty {
+                    Section("Android emulators") {
+                        ForEach(avds) { avdRow($0) }
                     }
                 }
-                .padding(.vertical, 3)
-                .contentShape(Rectangle())
-                .onTapGesture { if let serial = avd.runningSerial { focus(serial: serial) } }
-                .help(avd.runningSerial != nil ? "Click to bring the emulator window to the front" : "")
+                if let simulators, !simulators.isEmpty {
+                    Section("iOS Simulators") {
+                        ForEach(simulators) { simulatorRow($0) }
+                    }
+                }
             }
         }
         .confirmationDialog(
@@ -116,17 +94,112 @@ struct EmulatorsView: View {
         }
     }
 
+    private func avdRow(_ avd: Avd) -> some View {
+        HStack {
+            Image(systemName: avd.runningSerial != nil ? "play.display" : "display")
+                .foregroundStyle(avd.runningSerial != nil ? .brandAccent : .textMuted)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(avd.displayName)
+                if let serial = avd.runningSerial {
+                    Text("Running — \(serial)")
+                        .font(.footnote)
+                        .foregroundStyle(.brandAccent)
+                }
+            }
+            Spacer()
+
+            if let serial = avd.runningSerial {
+                Button("Stop") {
+                    stop(serial: serial, name: avd.displayName)
+                }
+                .controlSize(.small)
+            } else {
+                Button("Launch") {
+                    launch(avd, options: EmulatorService.LaunchOptions())
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                Menu {
+                    Button("Cold Boot (skip snapshot)") {
+                        launch(avd, options: EmulatorService.LaunchOptions(coldBoot: true))
+                    }
+                    Button("Wipe Data & Launch…", role: .destructive) {
+                        wipeTarget = avd
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+            }
+        }
+        .padding(.vertical, 3)
+        .contentShape(Rectangle())
+        .onTapGesture { if let serial = avd.runningSerial { focus(serial: serial) } }
+        .help(avd.runningSerial != nil ? "Click to bring the emulator window to the front" : "")
+    }
+
+    private func simulatorRow(_ simulator: Simulator) -> some View {
+        HStack {
+            Image(systemName: simulator.isBooted ? "play.display" : "display")
+                .foregroundStyle(simulator.isBooted ? .brandAccent : .textMuted)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(simulator.name)
+                Text(simulator.isBooted ? "Booted — \(simulator.runtime)" : simulator.runtime)
+                    .font(.footnote)
+                    .foregroundStyle(simulator.isBooted ? .brandAccent : .textMuted)
+            }
+            Spacer()
+
+            if !simulator.isAvailable {
+                Text("Runtime missing")
+                    .font(.footnote)
+                    .foregroundStyle(.textMuted)
+            } else if simulator.isBooted {
+                Button("Shut Down") {
+                    state.shutdownSimulator(simulator)
+                    scheduleReload()
+                }
+                .controlSize(.small)
+            } else {
+                Button("Boot") {
+                    state.bootSimulator(simulator)
+                    scheduleReload()
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            }
+        }
+        .padding(.vertical, 3)
+    }
+
+    /// Boot/shutdown state flips a moment after simctl returns — refresh once
+    /// it settles (the device-bar poll covers stragglers).
+    private func scheduleReload() {
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            reloadToken += 1
+        }
+    }
+
     private func load() async {
-        guard await state.env.engine.emulators.emulatorInstalled() else {
-            emulatorMissing = true
-            return
+        emulatorMissing = !(await state.env.engine.emulators.emulatorInstalled())
+        let loadedAvds: [Avd]
+        if emulatorMissing {
+            loadedAvds = []
+        } else {
+            loadedAvds = await CommandLog.userInitiated {
+                await state.env.engine.emulators.listAvds(devices: state.devices)
+            }
         }
-        emulatorMissing = false
-        let result = await CommandLog.userInitiated {
-            await state.env.engine.emulators.listAvds(devices: state.devices)
-        }
+        simctlMissing = !state.env.engine.simctl.available
+        let loadedSimulators = simctlMissing
+            ? []
+            : await CommandLog.userInitiated { await state.env.engine.simulators.listAll() }
+                .filter(\.isAvailable)
         guard !Task.isCancelled else { return }
-        avds = result
+        avds = loadedAvds
+        simulators = loadedSimulators
     }
 
     private func launch(_ avd: Avd, options: EmulatorService.LaunchOptions) {
