@@ -10,34 +10,46 @@ import SwiftUI
 /// the window; macOS has no `fullScreenCover`.
 struct RolePickerView: View {
     @Environment(AppState.self) private var state
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("hasChosenRole") private var hasChosenRole = false
+    @State private var appeared = false
 
-    private let columns = [GridItem(.adaptive(minimum: 240), spacing: 16)]
+    private let columns = [GridItem(.adaptive(minimum: 236), spacing: 14)]
 
     var body: some View {
-        VStack(spacing: 28) {
+        VStack(spacing: 26) {
             header
-            LazyVGrid(columns: columns, spacing: 16) {
-                ForEach(UserRole.allCases) { role in
+            LazyVGrid(columns: columns, spacing: 14) {
+                ForEach(Array(UserRole.allCases.enumerated()), id: \.element) { index, role in
                     RoleCard(role: role) { choose(role) }
+                        .opacity(appeared ? 1 : 0)
+                        .offset(y: appeared ? 0 : 14)
+                        .animation(
+                            reduceMotion ? nil : .spring(duration: 0.35).delay(Double(index) * 0.04),
+                            value: appeared
+                        )
                 }
             }
-            .frame(maxWidth: 560)
-            Button("Show me everything") { choose(nil) }
-                .buttonStyle(.plain)
-                .foregroundStyle(.textMuted)
+            .frame(maxWidth: 790)
+            skipButton
         }
         .padding(40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.bgRoot)
+        .onAppear { appeared = true }
     }
 
     private var header: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 8) {
             Image(systemName: "square.grid.2x2.fill")
-                .font(.system(size: 42))
+                .font(.system(size: 38))
                 .foregroundStyle(.brandAccent)
                 .symbolRenderingMode(.hierarchical)
+                .padding(.bottom, 2)
+            Text("Welcome to Droidective".uppercased())
+                .font(.caption.weight(.semibold))
+                .kerning(1.2)
+                .foregroundStyle(.brandAccent)
             Text("What do you do?")
                 .font(.largeTitle.bold())
                 .foregroundStyle(.textMain)
@@ -51,26 +63,69 @@ struct RolePickerView: View {
         }
     }
 
+    /// Deliberately quiet next to the cards (one primary action per screen),
+    /// but with a real hit area and the concrete outcome in the label.
+    private var skipButton: some View {
+        Button {
+            choose(nil)
+        } label: {
+            Label(
+                "Show me everything — all \(FeatureRegistry.catalogFeatureIDs.count) tools",
+                systemImage: "square.grid.3x3"
+            )
+            .font(.callout)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(HoverUnderlineButtonStyle())
+    }
+
     private func choose(_ role: UserRole?) {
         hasChosenRole = true
         state.chooseRole(role)
     }
 }
 
-/// One selectable role tile — icon, name, and a one-line description, with the
-/// brand-green hover border used elsewhere in the app.
+/// One selectable role tile: icon + tool count up top, name, one-line blurb,
+/// and a preview row of the first tools the role actually seeds — the card
+/// answers "what do I get?", not just "what am I?". Hover lifts, press
+/// scales, and keyboard focus draws the same accent ring, so every input
+/// method sees a distinct state.
 private struct RoleCard: View {
     let role: UserRole
     let action: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hovering = false
+    @FocusState private var focused: Bool
+
+    private var curated: [String] { FeatureRegistry.featuresByRole[role] ?? [] }
+
+    private var previewFeatures: [FeatureDef] {
+        curated.prefix(2).compactMap { FeatureRegistry.byID[$0] }
+    }
 
     var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 10) {
-                Image(systemName: role.icon)
-                    .font(.system(size: 26))
-                    .foregroundStyle(.brandAccent)
-                    .symbolRenderingMode(.hierarchical)
+            VStack(alignment: .leading, spacing: 9) {
+                HStack(alignment: .top) {
+                    Image(systemName: role.icon)
+                        .font(.system(size: 19, weight: .medium))
+                        .foregroundStyle(.brandAccent)
+                        .symbolRenderingMode(.hierarchical)
+                        .frame(width: 38, height: 38)
+                        .background(
+                            Color.brandAccent.opacity(0.12),
+                            in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        )
+                    Spacer(minLength: 8)
+                    Text("\(curated.count) tools")
+                        .font(.caption)
+                        .foregroundStyle(.textMuted)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(.bgRoot, in: Capsule())
+                }
                 Text(role.label)
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(.textMain)
@@ -79,20 +134,80 @@ private struct RoleCard: View {
                     .foregroundStyle(.textMuted)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 2)
+                previewRow
             }
-            .frame(maxWidth: .infinity, minHeight: 150, alignment: .topLeading)
-            .padding(18)
+            .frame(maxWidth: .infinity, minHeight: 168, alignment: .topLeading)
+            .padding(16)
             .background(.bgSurface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .strokeBorder(
-                        hovering ? Color.brandAccent : Color.borderSubtle,
-                        lineWidth: hovering ? 2 : 1
+                        hovering || focused ? Color.brandAccent : Color.borderSubtle,
+                        lineWidth: hovering || focused ? 2 : 1
                     )
             }
+            .shadow(
+                color: .black.opacity(hovering ? 0.16 : 0.05),
+                radius: hovering ? 9 : 3,
+                y: hovering ? 4 : 1
+            )
+            .scaleEffect(hovering && !reduceMotion ? 1.015 : 1)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableCardButtonStyle())
+        .focused($focused)
         .onHover { hovering = $0 }
-        .animation(.easeInOut(duration: 0.15), value: hovering)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: hovering)
+        .accessibilityHint("Sets up the sidebar with \(curated.count) tools for this role")
+    }
+
+    /// The first curated tools as small chips, ending in "+N" — the concrete
+    /// preview of what picking this card does.
+    private var previewRow: some View {
+        HStack(spacing: 6) {
+            ForEach(previewFeatures) { feature in
+                Label(feature.title, systemImage: feature.icon)
+                    .font(.caption)
+                    .lineLimit(1)
+                    .foregroundStyle(.textMuted)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(.bgRoot, in: Capsule())
+                    .overlay(Capsule().strokeBorder(Color.borderSubtle, lineWidth: 1))
+            }
+            if curated.count > previewFeatures.count {
+                Text("+\(curated.count - previewFeatures.count)")
+                    .font(.caption)
+                    .foregroundStyle(.textMuted)
+            }
+        }
+    }
+}
+
+/// Press feedback for the role cards: a quick, interruptible scale-down —
+/// enough to read as a press without shifting the grid.
+private struct PressableCardButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+}
+
+/// Quiet secondary action: muted at rest, brightens on hover — subordinate to
+/// the cards without becoming an untargetable text sliver.
+private struct HoverUnderlineButtonStyle: ButtonStyle {
+    @State private var hovering = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(hovering ? Color.textMain : Color.textMuted)
+            .background(
+                hovering ? Color.textMain.opacity(0.06) : .clear,
+                in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+            )
+            .opacity(configuration.isPressed ? 0.75 : 1)
+            .onHover { hovering = $0 }
+            .animation(.easeOut(duration: 0.15), value: hovering)
     }
 }
