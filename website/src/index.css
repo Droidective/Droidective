@@ -1,0 +1,88 @@
+@import "tailwindcss";
+
+@theme {
+  /* Graphite ramp — the "case" the app lives in */
+  --color-ink-900: #0a0c0b;
+  --color-ink-850: #0d0f0e;
+  --color-ink-800: #121514;
+  --color-ink-700: #16191a;
+  --color-ink-650: #1b1f1e;
+  --color-ink-600: #232827;
+
+  /* The electricity — one chromatic accent, everywhere it counts */
+  --color-green: #9be021;
+  --color-green-bright: #b6f24a;
+  --color-green-dim: #7cb81e;
+
+  /* Ink */
+  --color-text: #e7eae5;
+  --color-muted: #99a39a;
+  --color-faint: #69716a;
+
+  /* A single warm wink to the detective hat — used almost never */
+  --color-amber: #f5b544;
+
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI",
+    system-ui, sans-serif;
+
+  /* shadcn semantic tokens, mapped onto the brand */
+  --color-background: #0d0f0e;
+  --color-foreground: #e7eae5;
+  --color-card: #121514;
+  --color-card-foreground: #e7eae5;
+  --color-popover: #16191a;
+  --color-popover-foreground: #e7eae5;
+  --color-primary: #9be021;
+  --color-primary-foreground: #0a0c0b;
+  --color-secondary: #1b1f1e;
+  --color-secondary-foreground: #e7eae5;
+  --color-muted-foreground: #99a39a;
+  --color-accent: #1b1f1e;
+  --color-accent-foreground: #e7eae5;
+  --color-destructive: #ef4444;
+  --color-border: rgba(231, 234, 229, 0.08);
+  --color-border-2: rgba(231, 234, 229, 0.14);
+  --color-input: rgba(231, 234, 229, 0.14);
+  --color-ring: #9be021;
+
+  --radius-lg: 16px;
+  --radius-md: 12px;
+  --radius-sm: 8px;
+
+  --shadow-glow: 0 0 0 1px rgba(155, 224, 33, 0.4),
+    0 10px 30px -8px rgba(155, 224, 33, 0.3);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-ink-850 text-text font-sans antialiased;
+  line-height: 1.6;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-green);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+::selection {
+  background: rgba(155, 224, 33, 0.25);
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}

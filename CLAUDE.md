@@ -80,6 +80,20 @@ lands at `DerivedData/Build/Products/Debug/Droidective.app`.
 `brew install xcodegen` if missing. App is ad-hoc signed, sandbox OFF (it must
 spawn adb/scrcpy/emulator/brew).
 
+## Marketing site
+
+`website/` is a React 19 + Vite 6 + Tailwind v4 app (shadcn/ui + react-bits
+components) that renders the landing page; `site/` holds the static
+passthrough — CNAME, `appcast.xml` (the release pipeline commits to it; don't
+move it), sitemap, `analytics.js`, the SEO subpages, and all screenshots.
+Vite's `publicDir` points at `site/`, so `npm run build` in `website/` emits
+the complete deployable Pages site into `website/dist`; CI's `pages` job builds
+it and injects the PostHog key into `analytics.js`. `make site-dev` /
+`make site-build` wrap it. Landing-page copy lives in
+`website/src/lib/content.ts`; sections are `website/src/components/site/*`.
+Node 22 in CI; scroll reveals and the hero palette demo must keep their
+`prefers-reduced-motion` fallbacks.
+
 ## Key types (ADBKit)
 
 - `Exec/`: `ProcessRunning` protocol → `SystemProcessRunner` (real) +
