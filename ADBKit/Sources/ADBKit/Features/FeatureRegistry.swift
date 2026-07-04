@@ -67,10 +67,11 @@ public enum FeatureRegistry {
             category: .connection, icon: "wifi", kind: .view, needsDevice: false
         ),
         FeatureDef(
-            id: "emulators", title: "Emulators",
-            subtitle: "List, launch, and stop Android emulators",
-            keywords: ["emulator", "avd", "virtual", "simulator", "launch", "boot"],
-            category: .connection, icon: "play.display", kind: .view, needsDevice: false
+            id: "emulators", title: "Emulators & Simulators",
+            subtitle: "Launch and stop Android emulators & iOS Simulators",
+            keywords: ["emulator", "avd", "virtual", "simulator", "launch", "boot", "ios", "xcode", "iphone"],
+            category: .connection, icon: "play.display", kind: .view, needsDevice: false,
+            platforms: [.android, .iosSimulator]
         ),
         FeatureDef(
             id: "network-speed", title: "Network Speed",
@@ -126,7 +127,8 @@ public enum FeatureRegistry {
             id: "deep-link", title: "Deep Links",
             subtitle: "Launch and save deep links per app",
             keywords: ["deep link", "url", "intent", "scheme", "universal"],
-            category: .reactNative, icon: "link", kind: .view, needsBundle: true
+            category: .reactNative, icon: "link", kind: .view, needsBundle: true,
+            platforms: [.android, .iosSimulator]
         ),
         FeatureDef(
             id: "process-death", title: "Simulate Process Death",
@@ -176,7 +178,8 @@ public enum FeatureRegistry {
             id: "screenshot", title: "Screenshot",
             subtitle: "Capture the screen and save it to your Mac",
             keywords: ["screenshot", "capture", "screencap", "png", "image"],
-            category: .screen, icon: "camera", kind: .instantAction
+            category: .screen, icon: "camera", kind: .instantAction,
+            platforms: [.android, .iosSimulator]
         ),
         FeatureDef(
             id: "screen-record", title: "Screen Record",
@@ -194,8 +197,9 @@ public enum FeatureRegistry {
         FeatureDef(
             id: "demo-mode", title: "Demo Mode",
             subtitle: "Clean status bar for store screenshots",
-            keywords: ["demo", "status bar", "clean", "screenshot", "store"],
+            keywords: ["demo", "status bar", "clean", "screenshot", "store", "9:41"],
             category: .screen, icon: "wand.and.stars", kind: .toggleAction,
+            platforms: [.android, .iosSimulator],
             isStateOverride: true, overrideKind: .demo,
             toggleOnLabel: "Demo mode on", toggleOffLabel: "Demo mode off"
         ),
@@ -237,16 +241,17 @@ public enum FeatureRegistry {
                 "scale", "speed", "locale", "language", "i18n", "rtl", "font",
                 "font scale", "density", "dpi", "layout", "text size", "network",
                 "wifi", "data", "airplane", "offline", "proxy", "charles", "proxyman",
-                "mitmproxy", "http",
+                "mitmproxy", "http", "push", "notification", "apns",
             ],
             category: .deviceState, icon: "slider.horizontal.3", kind: .view, needsDevice: false,
-            supportsRunAll: true
+            supportsRunAll: true, platforms: [.android, .iosSimulator]
         ),
         FeatureDef(
             id: "fake-battery", title: "Fake Battery",
             subtitle: "Set a fake battery level and unplugged state",
             keywords: ["battery", "fake", "level", "unplugged", "charge"],
             category: .deviceState, icon: "battery.25percent", kind: .formAction,
+            platforms: [.android, .iosSimulator],
             isStateOverride: true, overrideKind: .battery,
             fields: [
                 FieldDef(
@@ -261,8 +266,35 @@ public enum FeatureRegistry {
             subtitle: "Toggle system dark mode",
             keywords: ["dark", "light", "theme", "night", "ui mode"],
             category: .deviceState, icon: "moon", kind: .toggleAction,
+            platforms: [.android, .iosSimulator],
             isStateOverride: true, overrideKind: .darkMode,
             toggleOnLabel: "Dark", toggleOffLabel: "Light"
+        ),
+        FeatureDef(
+            id: "push-notification", title: "Push Notification",
+            subtitle: "Deliver a test APNS push to a simulator app",
+            keywords: ["push", "notification", "apns", "alert", "banner", "badge", "ios", "simulator"],
+            category: .deviceState, icon: "bell.badge", kind: .formAction,
+            platforms: [.iosSimulator],
+            fields: [
+                FieldDef(
+                    name: "bundleId", label: "Bundle ID", control: .text,
+                    placeholder: "com.example.app",
+                    description: "The app that receives the notification."
+                ),
+                FieldDef(
+                    name: "title", label: "Title", control: .text,
+                    defaultValue: .string("Test Notification")
+                ),
+                FieldDef(
+                    name: "body", label: "Body", control: .text,
+                    defaultValue: .string("Hello from Droidective")
+                ),
+                FieldDef(
+                    name: "badge", label: "Badge count (blank = none)", control: .number,
+                    placeholder: "1", optional: true
+                ),
+            ]
         ),
         FeatureDef(
             id: "layout-overrides", title: "Font & Density",
@@ -520,7 +552,7 @@ public enum FeatureRegistry {
         "react-native": ["open-dev-menu", "reload-js", "deep-link", "process-death", "rn-dev-host"],
         "simulate": [
             "fake-battery", "dark-mode", "layout-overrides", "animation-scale",
-            "locale", "network-toggles", "http-proxy",
+            "locale", "network-toggles", "http-proxy", "push-notification",
         ],
         "connection": ["reverse-port", "private-dns", "wireless-adb"],
         // The Apps explorer already shows per-app permissions, info, and

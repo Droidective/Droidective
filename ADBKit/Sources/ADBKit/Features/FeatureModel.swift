@@ -220,6 +220,11 @@ public struct FeatureDef: Sendable, Identifiable {
     /// dispatch through the fan-out `run` path; Send Text and Install App fan
     /// out too). Single-device / interactive-session features leave it false.
     public let supportsRunAll: Bool
+    /// Device platforms this feature works against. Almost everything is
+    /// adb-backed, so the default is Android-only; cross-platform features
+    /// (screenshot, dark mode, …) opt in to `.iosSimulator` and dispatch to
+    /// simctl runners. The UI gates on this when a device is selected.
+    public let platforms: Set<DevicePlatform>
     public let isStateOverride: Bool
     public let overrideKind: OverrideKind?
     public let isDestructive: Bool
@@ -242,6 +247,7 @@ public struct FeatureDef: Sendable, Identifiable {
         needsScrcpy: Bool = false,
         needsFfmpeg: Bool = false,
         supportsRunAll: Bool = false,
+        platforms: Set<DevicePlatform> = [.android],
         isStateOverride: Bool = false,
         overrideKind: OverrideKind? = nil,
         isDestructive: Bool = false,
@@ -262,6 +268,7 @@ public struct FeatureDef: Sendable, Identifiable {
         self.needsScrcpy = needsScrcpy
         self.needsFfmpeg = needsFfmpeg
         self.supportsRunAll = supportsRunAll
+        self.platforms = platforms
         self.isStateOverride = isStateOverride
         self.overrideKind = overrideKind
         self.isDestructive = isDestructive

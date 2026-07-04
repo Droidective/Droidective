@@ -32,6 +32,10 @@ public struct FeatureResult: Sendable, Equatable {
 /// Keyed by the same feature ids the registry uses — ids are the contract.
 public struct FeatureEngine: Sendable {
     public let client: AdbClient
+    /// simctl twin of `client` — shares the process runner and command log,
+    /// so tests script both toolchains through one MockProcessRunner and the
+    /// Command Log shows adb and simctl calls side by side.
+    public let simctl: SimctlClient
     public let locator: ToolLocator
     public let managedTools: ManagedToolStore
     public let toolchain: ApkToolchain
@@ -61,6 +65,7 @@ public struct FeatureEngine: Sendable {
     public let systemApps: SystemAppsService
     public let dns: DnsService
     public let restrictions: RestrictionsService
+    public let simulators: SimulatorService
     let textInput: TextInputService
     let screenCapture: ScreenCaptureService
 
@@ -69,6 +74,8 @@ public struct FeatureEngine: Sendable {
         overridesStore: JSONStore<OverridesMap>, toolsDirectory: URL
     ) {
         self.client = client
+        self.simctl = SimctlClient(runner: client.runner, log: client.log)
+        self.simulators = SimulatorService(client: simctl)
         self.locator = locator
         self.monitor = monitor
         self.managedTools = ManagedToolStore(rootDirectory: toolsDirectory)
@@ -114,7 +121,7 @@ public struct FeatureEngine: Sendable {
         "permissions", "app-info", "current-activity", "foreground-package",
         "meminfo", "sandbox-browser", "monkey", "device-info",
         "screen-record", "crash-catcher", "bug-report", "wireless-adb",
-        "rn-dev-host", "process-death", "custom-commands",
+        "rn-dev-host", "process-death", "custom-commands", "push-notification",
         "file-explorer", "apps", "apk-studio", "apk-inspector", "apk-sign", "apk-decompile", "frida-console",
         "emulators", "performance", "network-speed",
         "root-status", "wifi", "private-dns", "system-restrictions",
@@ -122,21 +129,110 @@ public struct FeatureEngine: Sendable {
     ]
 
     /// Screenshot with an explicit destination (UI asks the user first).
-    public func captureScreenshot(serial: String, to destination: URL) async throws -> URL {
-        try await screenCapture.captureScreenshot(serial: serial, to: destination)
+    public func captureScreenshot(
+        serial: String, platform: DevicePlatform = .android, to destination: URL
+    ) async throws -> URL {
+        switch platform {
+        case .android: return try await screenCapture.captureScreenshot(serial: serial, to: destination)
+        case .iosSimulator: return try await simulators.screenshot(udid: serial, to: destination)
+        }
     }
 
     /// Screenshot returned as raw PNG bytes — for the editor, which saves on demand.
-    public func captureScreenshotData(serial: String) async throws -> Data {
-        try await screenCapture.captureScreenshotData(serial: serial)
+    public func captureScreenshotData(serial: String, platform: DevicePlatform = .android) async throws -> Data {
+        switch platform {
+        case .android: return try await screenCapture.captureScreenshotData(serial: serial)
+        case .iosSimulator: return try await simulators.screenshotData(udid: serial)
+        }
     }
 
     /// Run a feature against one serial (or globally for global-scope ids).
-    public func run(featureID: String, serial: String, params: [String: FeatureValue]) async -> FeatureResult {
+    /// `platform` routes cross-platform ids to the matching toolchain —
+    /// adb runners for Android, simctl runners for iOS Simulators.
+    public func run(
+        featureID: String,
+        serial: String,
+        platform: DevicePlatform = .android,
+        params: [String: FeatureValue]
+    ) async -> FeatureResult {
         do {
-            return try await dispatch(featureID: featureID, serial: serial, params: params)
+            switch platform {
+            case .android:
+                return try await dispatch(featureID: featureID, serial: serial, params: params)
+            case .iosSimulator:
+                return try await dispatchIOS(featureID: featureID, udid: serial, params: params)
+            }
         } catch {
             return FeatureResult(ok: false, message: error.localizedDescription)
+        }
+    }
+
+    /// simctl runners for the feature ids that support iOS Simulators. The
+    /// registry's `platforms` is the source of truth for what belongs here —
+    /// a consistency test walks every iOS-capable action id through this path.
+    private func dispatchIOS(
+        featureID: String,
+        udid: String,
+        params: [String: FeatureValue]
+    ) async throws -> FeatureResult {
+        switch featureID {
+        case "screenshot":
+            let file = try await simulators.screenshot(udid: udid)
+            return FeatureResult(ok: true, message: "Screenshot saved", revealPath: file.path)
+
+        case "dark-mode":
+            let on = params["on"]?.boolValue == true
+            let result = try await simulators.setAppearance(udid: udid, dark: on)
+            return fromResult(
+                result,
+                success: on ? "Switched to dark mode" : "Switched to light mode",
+                fallback: "Failed to change the appearance"
+            )
+
+        case "demo-mode":
+            let on = params["on"]?.boolValue == true
+            let result = on
+                ? try await simulators.statusBarOverride(udid: udid, arguments: SimulatorService.demoStatusBarArguments)
+                : try await simulators.statusBarClear(udid: udid)
+            return fromResult(
+                result,
+                success: on ? "Demo mode on (clean status bar)" : "Demo mode off",
+                fallback: "Failed to change the status bar"
+            )
+
+        case "fake-battery":
+            guard let raw = params["level"]?.numberValue, (0...100).contains(Int(raw.rounded())) else {
+                return FeatureResult(ok: false, message: "Battery level must be 0–100.")
+            }
+            let level = Int(raw.rounded())
+            let unplugged = params["unplugged"]?.boolValue ?? true
+            let result = try await simulators.statusBarOverride(udid: udid, arguments: [
+                "--batteryState", unplugged ? "discharging" : "charging",
+                "--batteryLevel", String(level),
+            ])
+            return fromResult(
+                result,
+                success: "Battery shown as \(level)% \(unplugged ? "unplugged" : "charging") — reset via the Demo Mode pill",
+                fallback: "Failed to override the battery"
+            )
+
+        case "push-notification":
+            let bundleId = (params["bundleId"]?.stringValue ?? "").trimmingCharacters(in: .whitespaces)
+            guard !bundleId.isEmpty else {
+                return FeatureResult(ok: false, message: "Enter the app's bundle ID, e.g. com.example.app.")
+            }
+            let title = params["title"]?.stringValue ?? "Test Notification"
+            let body = params["body"]?.stringValue ?? ""
+            let badge = params["badge"]?.numberValue.map { Int($0.rounded()) }
+            let payload = SimulatorService.apnsPayload(title: title, body: body, badge: badge)
+            return try await simulators.push(udid: udid, bundleId: bundleId, payload: payload)
+
+        default:
+            let title = FeatureRegistry.byID[featureID]?.title ?? featureID
+            return FeatureResult(
+                ok: false,
+                message: "\(title) isn't available for iOS Simulators — select an Android device."
+            )
         }
     }
 
@@ -146,6 +242,12 @@ public struct FeatureEngine: Sendable {
         params: [String: FeatureValue]
     ) async throws -> FeatureResult {
         switch featureID {
+        case "push-notification":
+            return FeatureResult(
+                ok: false,
+                message: "Push simulation works on iOS Simulators — select a booted simulator."
+            )
+
         case "send-text":
             let text = params["text"]?.stringValue ?? ""
             return try await textInput.send(serial: serial, text: text)
