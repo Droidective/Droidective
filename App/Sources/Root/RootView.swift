@@ -72,9 +72,11 @@ struct RootView: View {
             .environment(\.colorScheme, injectedColorScheme)
             .preferredColorScheme(preferredScheme)
             .background(WindowAccessor { window in
-                // Tag the main window so the ⌘W monitor can tell it apart from
-                // Settings / the palette panel.
-                window.identifier = NSUserInterfaceItemIdentifier(RootView.mainWindowID)
+                // Track the main window by reference — the ⌘W monitor and
+                // `activateMainWindow` need to tell it apart from Settings /
+                // panels, and identifiers don't survive a close (SwiftUI
+                // re-stamps `main-AppWindow-1` over any tag).
+                state.mainWindow = window
                 // Restore the user's saved window frame; only fill the screen's
                 // usable area on the very first launch (nothing to restore), so
                 // a resized window survives relaunch instead of being maximized.
@@ -146,7 +148,6 @@ struct RootView: View {
                     .tint(.brandAccent)
             }
         }
-        (NSApp.delegate as? AppDelegate)?.appState = state
         InstallInbox.shared.onReceive = { urls in state.openAPKs(urls) }
         migrateDefaultsIfNeeded()
         applyStoredTheme()
@@ -182,10 +183,10 @@ struct RootView: View {
         }
     }
 
-    /// Identifier stamped on the main window so `installCloseTabMonitor` can
-    /// scope ⌘W to it, `AppDelegate`'s close observer can recognize it, and
-    /// `activateMainWindow` can re-front it — leaving Settings / panels alone.
-    static let mainWindowID = "droidective-main"
+    /// The main window's frame-autosave name. (Recognizing the window itself
+    /// goes through `AppState.mainWindow` by reference — window identifiers
+    /// don't survive a close, SwiftUI re-stamps its own.)
+    fileprivate static let mainWindowID = "droidective-main"
     private static var closeTabMonitorInstalled = false
 
     /// ⌘W closes the active tab, not the window. A local key-down monitor
@@ -199,7 +200,7 @@ struct RootView: View {
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             guard event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
                   event.charactersIgnoringModifiers == "w",
-                  NSApp.keyWindow?.identifier?.rawValue == RootView.mainWindowID
+                  let keyWindow = NSApp.keyWindow, keyWindow === state.mainWindow
             else { return event }
             state.closeActiveTab()
             return nil

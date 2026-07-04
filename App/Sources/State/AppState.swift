@@ -234,6 +234,14 @@ final class AppState {
     var pendingInstallAPKs: [URL] = []
     /// Set by RootView so hotkeys/menu bar can reopen a closed main window.
     var openMainWindow: (() -> Void)?
+    /// The real app delegate (the adaptor instance, wired in `ADTApp.body`) —
+    /// `NSApp.delegate` is SwiftUI's wrapper on macOS, so casting it fails.
+    weak var appDelegate: AppDelegate?
+    /// The main window, resolved by RootView's `WindowAccessor`. Held by
+    /// *reference* because identifiers can't be trusted across a close:
+    /// SwiftUI re-stamps its own (`main-AppWindow-1`) over our tag, which
+    /// broke the ⌘W tab-close monitor after a close → reopen cycle.
+    weak var mainWindow: NSWindow?
     /// Set by RootView; opens the floating ⌘K search palette.
     var openPalette: (() -> Void)?
     /// Bumped by the ⌘K menu command; the sidebar focuses search on change.
@@ -338,9 +346,10 @@ final class AppState {
 
     private func bringMainWindowFront() {
         NSApp.activate(ignoringOtherApps: true)
-        // Identifier first — `canBecomeMain` alone can pick a floating panel
-        // (KeyablePanel overrides it to true) while one is up.
-        let window = NSApp.windows.first { $0.identifier?.rawValue == RootView.mainWindowID }
+        // The tracked reference first (identifiers are unreliable across a
+        // close); the structural fallback excludes panels, whose KeyablePanel
+        // overrides `canBecomeMain` to true.
+        let window = mainWindow
             ?? NSApp.windows.first { $0.canBecomeMain && !($0 is NSPanel) }
         if let window {
             window.makeKeyAndOrderFront(nil)
@@ -960,7 +969,7 @@ final class AppState {
     /// delegate's in-quit flag first, so a later window close still routes
     /// through background mode instead of being mistaken for quit teardown.
     private func cancelDeferredQuit() {
-        (NSApp.delegate as? AppDelegate)?.isQuitting = false
+        appDelegate?.isQuitting = false
         NSApp.reply(toApplicationShouldTerminate: false)
     }
 

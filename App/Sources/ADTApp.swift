@@ -8,8 +8,8 @@ let keepRunningInBackgroundKey = "keepRunningInBackground"
 /// Routes APKs opened from Finder (double-click / "Open With") into the install
 /// inbox, which surfaces the device picker once the UI is ready.
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    /// Set by RootView once the UI is up, so quit can tear down a kept-alive
-    /// Reactotron session (server socket + adb reverse tunnels).
+    /// Wired in `ADTApp.body` (the adaptor instance is the real delegate), so
+    /// quit and window-close can tear down kept-alive sessions.
     weak var appState: AppState?
 
     /// True from the moment termination is requested until it's cancelled, so
@@ -46,18 +46,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// the Quick Actions panel; quit still exits fully.
     @MainActor @objc private func windowWillClose(_ notification: Notification) {
         guard !isQuitting, let appState,
-              let closing = notification.object as? NSWindow,
               UserDefaults.standard.object(forKey: keepRunningInBackgroundKey) as? Bool ?? true
         else { return }
-        if closing.identifier?.rawValue == RootView.mainWindowID {
-            appState.enterBackground()
-        }
-        // Vacate the Dock only when no primary window remains. Settings counts:
-        // an accessory app's visible windows would lose the menu bar.
+        // Structural identification, not identifiers: SwiftUI re-stamps the
+        // main window's identifier (`main-AppWindow-1`) by close time, so the
+        // `droidective-main` tag can't be trusted here. Background mode starts
+        // when the last *primary* window closes — panels don't count, and
+        // Settings does (an accessory app's visible windows lose the menu bar).
+        guard let closing = notification.object as? NSWindow,
+              closing.canBecomeMain, !(closing is NSPanel)
+        else { return }
         let remaining = NSApp.windows.contains {
             $0 !== closing && $0.isVisible && $0.canBecomeMain && !($0 is NSPanel)
         }
-        if !remaining, NSApp.activationPolicy() == .regular {
+        guard !remaining else { return }
+        appState.enterBackground()
+        if NSApp.activationPolicy() == .regular {
             NSApp.setActivationPolicy(.accessory)
         }
     }
@@ -188,6 +192,13 @@ struct ADTApp: App {
                 // `.brandAccent` re-resolves. AppState (and its device list) is
                 // owned above this view, so the rebuild preserves it.
                 .id(accentHex)
+                .onAppear {
+                    // Wire the delegate ↔ state references through the adaptor
+                    // instance: on macOS `NSApp.delegate` is SwiftUI's own
+                    // wrapper, so casting it to `AppDelegate` fails silently.
+                    appDelegate.appState = appState
+                    appState.appDelegate = appDelegate
+                }
                 .onChange(of: scenePhase) { _, phase in
                     appState.setForeground(phase == .active)
                 }
