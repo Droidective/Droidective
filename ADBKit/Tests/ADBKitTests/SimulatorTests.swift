@@ -134,6 +134,21 @@ import Testing
         let picks = SimulatorListParser.quickPicks(sims, limit: 3)
         #expect(picks.map(\.udid) == ["sim-8", "sim-7", "sim-6"])
     }
+
+    @Test func prioritizedPutsBootedThenRecentThenRestStably() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let sims = [
+            sim("idle-a"),
+            sim("used-old", booted: now.addingTimeInterval(-9_999)),
+            sim("running", state: "Booted", booted: now.addingTimeInterval(-99_999)),
+            sim("used-new", booted: now),
+            sim("idle-b"),
+        ]
+        // Booted wins even with the oldest boot date; never-used keep their
+        // incoming order at the tail.
+        #expect(SimulatorListParser.prioritized(sims).map(\.udid)
+            == ["running", "used-new", "used-old", "idle-a", "idle-b"])
+    }
 }
 
 // MARK: - Client

@@ -106,6 +106,22 @@ public enum SimulatorListParser {
         return Array(picks.prefix(limit))
     }
 
+    /// Display order for a truncatable simulator list: booted first, then the
+    /// most recently used, then the rest in their given order — so a list cut
+    /// to its head never hides a running simulator or a daily driver. Stable:
+    /// ties keep their incoming (runtime/name) position.
+    public static func prioritized(_ simulators: [Simulator]) -> [Simulator] {
+        simulators.enumerated()
+            .sorted { lhs, rhs in
+                if lhs.element.isBooted != rhs.element.isBooted { return lhs.element.isBooted }
+                let lhsBoot = lhs.element.lastBootedAt ?? .distantPast
+                let rhsBoot = rhs.element.lastBootedAt ?? .distantPast
+                if lhsBoot != rhsBoot { return lhsBoot > rhsBoot }
+                return lhs.offset < rhs.offset
+            }
+            .map(\.element)
+    }
+
     /// Booted, available simulators as device-bar `Device`s. State normalizes
     /// to "device" so `isReady` works uniformly across platforms.
     public static func devices(from simulators: [Simulator]) -> [Device] {

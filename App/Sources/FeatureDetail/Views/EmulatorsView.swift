@@ -13,6 +13,17 @@ struct EmulatorsView: View {
     @State private var simctlMissing = false
     @State private var reloadToken = 0
     @State private var wipeTarget: Avd?
+    @State private var showAllSimulators = false
+
+    /// iOS-first presentation for the iOS Developer role: simulators section
+    /// on top and never truncated. Every other role leads with the Android
+    /// emulators and keeps the (long) simulator list cut to its head behind
+    /// "Show all".
+    private var simulatorsLead: Bool {
+        state.selectedRole == .iosDeveloper
+    }
+
+    private static let collapsedSimulatorCount = 5
 
     var body: some View {
         Group {
@@ -68,15 +79,12 @@ struct EmulatorsView: View {
             Divider()
 
             List {
-                if let avds, !avds.isEmpty {
-                    Section("Android emulators") {
-                        ForEach(avds) { avdRow($0) }
-                    }
-                }
-                if let simulators, !simulators.isEmpty {
-                    Section("iOS Simulators") {
-                        ForEach(simulators) { simulatorRow($0) }
-                    }
+                if simulatorsLead {
+                    simulatorsSection
+                    emulatorsSection
+                } else {
+                    emulatorsSection
+                    simulatorsSection
                 }
             }
         }
@@ -91,6 +99,43 @@ struct EmulatorsView: View {
                 wipeTarget = nil
             }
             Button("Cancel", role: .cancel) { wipeTarget = nil }
+        }
+    }
+
+    @ViewBuilder
+    private var emulatorsSection: some View {
+        if let avds, !avds.isEmpty {
+            Section("Android emulators") {
+                ForEach(avds) { avdRow($0) }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var simulatorsSection: some View {
+        if let simulators, !simulators.isEmpty {
+            let ordered = SimulatorListParser.prioritized(simulators)
+            let expanded = simulatorsLead || showAllSimulators
+            let visible = expanded ? ordered : Array(ordered.prefix(Self.collapsedSimulatorCount))
+            Section("iOS Simulators") {
+                ForEach(visible) { simulatorRow($0) }
+                if ordered.count > Self.collapsedSimulatorCount, !simulatorsLead {
+                    Button {
+                        showAllSimulators.toggle()
+                    } label: {
+                        Label(
+                            showAllSimulators
+                                ? "Show fewer"
+                                : "Show all \(ordered.count) simulators",
+                            systemImage: showAllSimulators ? "chevron.up" : "chevron.down"
+                        )
+                        .font(.footnote)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.brandAccent)
+                    .padding(.vertical, 3)
+                }
+            }
         }
     }
 
