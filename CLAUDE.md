@@ -30,8 +30,9 @@ automated guard, so the failure mode is a non-working feature you only catch by
 opening it — verify those by hand.
 
 1. **Define it** — add a `FeatureDef` to `FeatureRegistry.all` (unique `id`,
-   title, keywords, category, `kind`). **[test: `hasAll55Features` — bump the
-   count; `byID` traps on a duplicate id]**
+   title, keywords, category, `kind`; set `platforms` if it works on iOS
+   Simulators — the default is Android-only). **[test: `hasAll56Features` —
+   bump the count; `byID` traps on a duplicate id]**
 2. **How-it-works note** — add to `FeatureNotes`. **[test: `everyFeatureHasAHowToNote`]**
 3. **If it's an action** (`.instantAction`/`.formAction`/`.toggleAction`):
    - add the runner `case` to `FeatureEngine.dispatch`,
@@ -78,14 +79,18 @@ spawn adb/scrcpy/emulator/brew).
   `MockProcessRunner` (tests). `ToolLocator` (actor) resolves adb/scrcpy/brew/
   ffmpeg/emulator via SDK paths → Homebrew → `zsh -lc` fallback, cached.
   `AdbClient` (structured `AdbResult`, never throws on non-zero exit, only on
-  `.adbNotFound`). `CommandLog` (actor; records only inside
+  `.adbNotFound`). `SimctlClient` (AdbClient's `xcrun simctl` twin for iOS
+  Simulators — same `AdbResult` shape, throws only on missing Xcode).
+  `CommandLog` (actor; records only inside
   `CommandLog.$isUserInitiated.withValue(true)` — wrap view actions in
   `CommandLog.userInitiated {}`, keep background polling out — feeding the
   Settings ▸ Command Log sheet).
 - `Devices/`: `DeviceMonitor` (actor, 2s poll, `AsyncStream<[Device]>`),
-  `DeviceListParser`, `DeviceProps` (getprop), `DeviceOverview` (RAM/storage/
+  `DeviceListParser`, `SimulatorMonitor`/`SimulatorListParser` (the simctl
+  twins — booted iOS Simulators surface as `Device`s with
+  `platform: .iosSimulator`, merged into the bar in `AppState`), `DeviceProps` (getprop), `DeviceOverview` (RAM/storage/
   battery/CPU/app counts), `DeviceDetails` (picker enrichment).
-- `Features/`: `FeatureRegistry` (55 `FeatureDef`s, declarative; `absorbedByHub`
+- `Features/`: `FeatureRegistry` (56 `FeatureDef`s, declarative; `absorbedByHub`
   maps a hub screen to the features it gathers, flattened to
   `absorbedFeatureIDs`; `catalogFeatureIDs` is the registry minus those),
   `FeatureModel`,
@@ -105,7 +110,10 @@ spawn adb/scrcpy/emulator/brew).
   scrcpy server — no desktop scrcpy), Crash, BugReport, Connection (wireless),
   CustomCommand (adb kind → tokenized argv, never a shell; Terminal kind →
   `zsh -lc`, deliberately not device-scoped — `{serial}` targets the
-  selection), ToolDetection, AdbKeyboardInstaller, Emulator, AppIcon,
+  selection), ToolDetection, AdbKeyboardInstaller, Emulator, Simulator (simctl:
+  boot/shutdown, openurl, appearance, status_bar, screenshot, APNS push —
+  backs the cross-platform runners and the Emulators screen's simulator
+  section), AppIcon,
   Performance (per-core CPU/RAM/FPS/per-process), NetworkSpeed (`/proc/net/dev`
   throughput), VideoEditService (ffmpeg export). The **`JSConsole/`** trio backs
   the `js-console` feature — a Hermes Chrome-DevTools-Protocol JS console for RN:
@@ -143,7 +151,7 @@ spawn adb/scrcpy/emulator/brew).
   Recompile · Sign tabs (the views take an optional injected APK so they embed in
   the studio and still work standalone via hotkey).
 
-## The 55 features
+## The 56 features
 
 Most `.view` features are full-screen bespoke panels (file-explorer, apps,
 emulators, device-info, logcat, crash-catcher, sandbox-browser, performance,
@@ -171,7 +179,16 @@ driven by the registry. The catalog and Home's "All N features" count use
 turning OFF the ones you don't want, not opting in — there's no Restore button.
 `LayoutState.adoptAllEnabled()` is a one-time migration that turns everything on
 for existing layouts; `adoptNewDefaults()` still auto-enables a newly-shipped
-feature for existing users via `knownIds`.
+feature for existing users via `knownIds`. **Platforms:** `FeatureDef.platforms`
+says which toolchain a feature works against (default Android-only). Booted iOS
+Simulators sit in the same device bar; cross-platform ids (screenshot,
+dark-mode, demo-mode, fake-battery, deep-link) dispatch to simctl runners via
+`FeatureEngine.dispatchIOS`, `push-notification` is iOS-only (absorbed by the
+Simulate hub, which adapts its sections per platform), and everything else
+shows a "works with Android devices" state with a switch-device button when a
+simulator is selected. New cross-platform features add a `dispatchIOS` case +
+an arg-vector test; `everyIOSCapableActionResolvesToASimctlRunner` catches a
+platforms annotation without a runner.
 
 ## Conventions / gotchas learned the hard way
 
