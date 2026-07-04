@@ -39,7 +39,10 @@ struct FeatureDetailView: View {
 
     @ViewBuilder
     private func detail(for feature: FeatureDef) -> some View {
-        if feature.id == "screenshot" {
+        if let device = state.selectedDevice, device.isReady,
+           feature.needsDevice, !feature.platforms.contains(device.platform) {
+            PlatformUnsupportedView(feature: feature, device: device)
+        } else if feature.id == "screenshot" {
             ScreenshotView()
         } else {
             detailByKind(for: feature)
@@ -188,5 +191,44 @@ struct ComingSoonView: View {
             systemImage: feature.icon,
             description: Text("\(feature.subtitle ?? "")\n\nThis feature arrives in a later milestone.")
         )
+    }
+}
+
+/// Shown when the selected device's platform can't run the feature (an
+/// adb-only feature with a simulator selected, or push simulation with an
+/// Android device). Offers a one-click switch when a matching ready device
+/// is already connected.
+struct PlatformUnsupportedView: View {
+    @Environment(AppState.self) private var state
+    let feature: FeatureDef
+    let device: Device
+
+    var body: some View {
+        ContentUnavailableView {
+            Label(feature.title, systemImage: feature.icon)
+        } description: {
+            Text(explanation)
+        } actions: {
+            if let match = switchTarget {
+                Button("Switch to \(match.label)") {
+                    state.requestDevice(match.serial)
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        }
+    }
+
+    private var explanation: String {
+        switch device.platform {
+        case .iosSimulator:
+            return "\(feature.title) works with Android devices — \(device.label) is an iOS Simulator."
+        case .android:
+            return "\(feature.title) works with iOS Simulators — \(device.label) is an Android device."
+        }
+    }
+
+    /// First ready device the feature *can* run against, if any.
+    private var switchTarget: Device? {
+        state.devices.first { $0.isReady && feature.platforms.contains($0.platform) }
     }
 }

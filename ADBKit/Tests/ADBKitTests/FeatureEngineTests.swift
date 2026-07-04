@@ -333,9 +333,27 @@ import Testing
 }
 
 @Suite struct FeatureRegistryTests {
-    @Test func hasAll55Features() {
-        #expect(FeatureRegistry.all.count == 55)
-        #expect(FeatureRegistry.byID.count == 55)
+    @Test func hasAll56Features() {
+        #expect(FeatureRegistry.all.count == 56)
+        #expect(FeatureRegistry.byID.count == 56)
+    }
+
+    @Test func everyFeatureSupportsAtLeastOnePlatform() {
+        for feature in FeatureRegistry.all {
+            #expect(!feature.platforms.isEmpty, "\(feature.id) supports no platform at all")
+        }
+    }
+
+    @Test func iosOnlyFeaturesAreHubMembers() {
+        // An iOS-only feature standing alone in the (Android-first) catalog
+        // would read as broken to Android users; they join a hub that adapts
+        // to the selected platform instead.
+        for feature in FeatureRegistry.all where !feature.platforms.contains(.android) {
+            #expect(
+                FeatureRegistry.absorbedFeatureIDs.contains(feature.id),
+                "\(feature.id) is iOS-only but not folded into a hub"
+            )
+        }
     }
 
     @Test func runAllIsTheCuratedFanOutSet() {

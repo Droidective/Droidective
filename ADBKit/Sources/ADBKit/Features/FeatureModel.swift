@@ -59,6 +59,7 @@ public enum FeatureCategory: String, Sendable, Codable, CaseIterable {
 public enum UserRole: String, Sendable, Codable, CaseIterable, Identifiable {
     case androidDeveloper = "android-dev"
     case reactNativeDeveloper = "rn-dev"
+    case iosDeveloper = "ios-dev"
     case qaTester = "qa"
     case supportTriage = "support"
     case securityTester = "security"
@@ -69,6 +70,7 @@ public enum UserRole: String, Sendable, Codable, CaseIterable, Identifiable {
         switch self {
         case .androidDeveloper: return "Android Developer"
         case .reactNativeDeveloper: return "React Native Developer"
+        case .iosDeveloper: return "iOS Developer"
         case .qaTester: return "QA / Tester"
         case .supportTriage: return "Support / Triage"
         case .securityTester: return "Security / Pentest"
@@ -80,6 +82,7 @@ public enum UserRole: String, Sendable, Codable, CaseIterable, Identifiable {
         switch self {
         case .androidDeveloper: return "Logs, app internals, files, and device connection."
         case .reactNativeDeveloper: return "Metro reload, dev menu, logs, and performance."
+        case .iosDeveloper: return "Simulators, push testing, capture, and deep links."
         case .qaTester: return "Capture, recording, crash hunting, and state simulation."
         case .supportTriage: return "Device diagnostics, connection, and quick checks."
         case .securityTester: return "APK analysis, Frida, traffic proxy, and app-data inspection."
@@ -91,6 +94,7 @@ public enum UserRole: String, Sendable, Codable, CaseIterable, Identifiable {
         switch self {
         case .androidDeveloper: return "hammer"
         case .reactNativeDeveloper: return "atom"
+        case .iosDeveloper: return "apple.logo"
         case .qaTester: return "checkmark.seal"
         case .supportTriage: return "lifepreserver"
         case .securityTester: return "lock.shield"
@@ -220,6 +224,11 @@ public struct FeatureDef: Sendable, Identifiable {
     /// dispatch through the fan-out `run` path; Send Text and Install App fan
     /// out too). Single-device / interactive-session features leave it false.
     public let supportsRunAll: Bool
+    /// Device platforms this feature works against. Almost everything is
+    /// adb-backed, so the default is Android-only; cross-platform features
+    /// (screenshot, dark mode, …) opt in to `.iosSimulator` and dispatch to
+    /// simctl runners. The UI gates on this when a device is selected.
+    public let platforms: Set<DevicePlatform>
     public let isStateOverride: Bool
     public let overrideKind: OverrideKind?
     public let isDestructive: Bool
@@ -242,6 +251,7 @@ public struct FeatureDef: Sendable, Identifiable {
         needsScrcpy: Bool = false,
         needsFfmpeg: Bool = false,
         supportsRunAll: Bool = false,
+        platforms: Set<DevicePlatform> = [.android],
         isStateOverride: Bool = false,
         overrideKind: OverrideKind? = nil,
         isDestructive: Bool = false,
@@ -262,6 +272,7 @@ public struct FeatureDef: Sendable, Identifiable {
         self.needsScrcpy = needsScrcpy
         self.needsFfmpeg = needsFfmpeg
         self.supportsRunAll = supportsRunAll
+        self.platforms = platforms
         self.isStateOverride = isStateOverride
         self.overrideKind = overrideKind
         self.isDestructive = isDestructive
