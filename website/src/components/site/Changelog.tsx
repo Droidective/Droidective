@@ -8,7 +8,7 @@ export function Changelog() {
   return (
     <section id="changelog" className="mx-auto max-w-[1120px] px-6 py-26 max-[620px]:py-18">
       <SectionHead center eyebrow="changelog" title="Shipped, and still moving.">
-        Fifteen releases since the first public build — automatic in-app updates since v2.1.0, and Apple-notarized
+        Sixteen releases since the first public build — automatic in-app updates since v2.1.0, and Apple-notarized
         builds since v2.4.0.
       </SectionHead>
       <Reveal className="relative mx-auto max-w-190 pl-7.5 before:absolute before:top-2 before:bottom-2 before:left-1.25 before:w-px before:bg-border-2">

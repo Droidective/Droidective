@@ -1,3 +1,41 @@
+## Droidective v2.8.3
+
+Adds iOS Simulator support, per-feature product analytics, and a redesigned
+role picker, and ships a rebuilt marketing site.
+
+### New features
+
+- **iOS Simulators in the device bar** — booted iOS Simulators now sit alongside
+  Android devices, and features adapt to the selected platform. Screenshot, dark
+  mode, demo mode, fake battery, and deep links run against a simulator through
+  `xcrun simctl`; push notifications are a new Simulator-only tool. The
+  Emulators & Simulators screen lists and boots or shuts down simulators, and a
+  new iOS Developer role leads with them. A feature that only applies to Android
+  shows a platform-mismatch state with a one-click switch to a connected device.
+  The registry grows from 55 to 56 tools.
+
+### Improvements
+
+- **Role picker redesign** — each role card carries a tool-count pill and
+  feature-preview chips, with hover, press, and keyboard-focus states, a
+  staggered entrance, and Reduce Motion respected.
+- **Product analytics** — anonymous usage is now attributed per feature (which
+  tool was open when an event, hang, or crash occurred), with install-level
+  retention and the target-device landscape. It stays on by default with opt-out
+  in Settings → Privacy; no serials, paths, package ids, SSIDs, or command text
+  are ever sent, and the first-run consent prompt has been removed.
+- **Reactotron & logs** — Reactotron subscriptions and snapshots render as
+  readable trees, expanded console objects are bounded and searchable in place,
+  and log auto-follow is steadier while scrolling.
+
+### Fixes
+
+- Security hardening from an audit pass — device-shell values are consistently
+  shell-quoted — plus a JS Console crash fix and React Native console UX
+  follow-ups.
+
+Installed copies update in place via Sparkle.
+
 ## Droidective v2.8.2
 
 A patch release that fixes the JS Console's reconnect behavior against Metro
