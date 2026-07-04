@@ -20,31 +20,15 @@ struct PaletteWindowView: View {
 
     private static let digitKeys: [KeyEquivalent] = ["1", "2", "3", "4", "5", "6", "7", "8"]
 
-    private var searching: Bool { !query.isEmpty }
-
-    /// Results in display order. When not searching, pinned features lead; once
-    /// the user types, the pinned section drops and results rank by relevance.
+    /// Results in display order — the shared, tested ranking (`PaletteSearch`):
+    /// pinned features lead when not searching; once the user types, results
+    /// rank by relevance with disabled features last.
     private var matches: [FeatureDef] {
-        let enabled = state.layout.effectiveEnabledIDs
-        if searching {
-            let ranked = FeatureRegistry.all.enumerated()
-                .filter { $0.element.matches(query) && !$0.element.isAbsorbedByHub }
-                .sorted { lhs, rhs in
-                    let rl = lhs.element.relevance(for: query)
-                    let rr = rhs.element.relevance(for: query)
-                    return rl != rr ? rl > rr : lhs.offset < rhs.offset
-                }
-                .map(\.element)
-            return ranked.filter { enabled.contains($0.id) } + ranked.filter { !enabled.contains($0.id) }
-        }
-        let pinned = state.layout.favorites
-            .compactMap { FeatureRegistry.byID[$0] }
-            .filter { !$0.isAbsorbedByHub }
-        let pinnedIDs = Set(pinned.map(\.id))
-        let rest = FeatureRegistry.all.filter { !$0.isAbsorbedByHub && !pinnedIDs.contains($0.id) }
-        return pinned
-            + rest.filter { enabled.contains($0.id) }
-            + rest.filter { !enabled.contains($0.id) }
+        PaletteSearch.features(
+            query: query,
+            enabled: state.layout.effectiveEnabledIDs,
+            favorites: state.layout.favorites
+        )
     }
 
     private var visibleMatches: [FeatureDef] { Array(matches.prefix(8)) }
