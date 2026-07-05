@@ -276,11 +276,24 @@ platforms annotation without a runner.
   `AppDelegate.windowWillClose`, guarded by `isQuitting` so quit teardown isn't
   mistaken for a window close). The app stays resident for the menu bar, the
   per-feature hotkeys, and `QuickActionsPanel` — a **non-activating**
-  `FloatingPanelController` panel (global hotkey in Settings ▸ Hotkeys) that
-  runs instant/toggle actions and saved custom commands in place, ranked by the
-  shared, tested `PaletteSearch`; view features reopen the app
-  (`activateMainWindow` flips the policy back to `.regular`, then fronts the
-  window on the next runloop turn).
+  `FloatingPanelController` panel (global hotkey in Settings ▸ Hotkeys) that is
+  a small push-navigation mini app. The root is a *grid* of everything
+  runnable in place — saved custom commands, every implemented
+  instant/toggle/form action (hub members included —
+  `PaletteSearch.quickActions`, tested), Manage Apps / Emulators / Install
+  APK / Switch Device — with an "Open in Droidective" list below for the
+  full-app view screens. Form actions render their registry `FieldDef`s
+  in-panel (`QuickActionFormView`); app verbs come from
+  `AppControlService.AppAction` (destructive ones need a second ⏎). With >1
+  device connected, the first device-scoped action pushes a pick-device
+  interstitial ("All devices" fans out via `AppState.run(feature:params:on:)`
+  when `supportsRunAll`); the choice sticks for the session. Esc (or the
+  header's ‹ button) pops a screen and closes at the root, and a closed panel
+  resumes its screen + device choice when reopened within Settings ▸ Quick
+  Actions' window (`QuickPanelMemory`, default 5 min). Reopening the app goes
+  through `activateMainWindow` (flips the policy back to `.regular`, then
+  fronts the window on the next runloop turn; the main window is tracked by
+  reference in `AppState.mainWindow` — identifiers don't survive a close).
 - UI automation for verification: prefer AX element refs over coordinate
   clicks; the user works on the Mac alongside you (see memory).
 

@@ -50,6 +50,7 @@ struct GeneralSettingsView: View {
     @Environment(AppState.self) private var state
     @AppStorage("showMenuBarExtra") private var showMenuBar = true
     @AppStorage(keepRunningInBackgroundKey) private var keepRunningInBackground = true
+    @AppStorage(quickPanelResumeMinutesKey) private var quickPanelResumeMinutes = 5
     @State private var openAtLoginOn = false
     @State private var showMenuItems = false
 
@@ -118,6 +119,19 @@ struct GeneralSettingsView: View {
             Section("Background") {
                 Toggle("Keep running in the background", isOn: $keepRunningInBackground)
                 Text("Closing the window hides Droidective from the Dock and stops running feature work — including terminal shells. The menu bar icon, global hotkeys, and the Quick Actions panel stay available; quit fully with ⌘Q.")
+                    .font(.footnote)
+                    .foregroundStyle(.textMuted)
+            }
+
+            Section("Quick Actions") {
+                Picker("Resume where I left off", selection: $quickPanelResumeMinutes) {
+                    Text("Off").tag(0)
+                    Text("For 1 minute").tag(1)
+                    Text("For 5 minutes").tag(5)
+                    Text("For 15 minutes").tag(15)
+                    Text("For 1 hour").tag(60)
+                }
+                Text("Reopening the panel within this window returns to the screen and device you had — after that it starts fresh.")
                     .font(.footnote)
                     .foregroundStyle(.textMuted)
             }

@@ -35,6 +35,15 @@ final class FloatingPanelController {
     private var resignObserver: NSObjectProtocol?
     private var resizeObserver: NSObjectProtocol?
 
+    /// While true, losing key focus doesn't close the panel — set around an
+    /// open/save dialog the panel itself presents (e.g. Install APK's file
+    /// picker), which necessarily takes key.
+    var holdsThroughResign = false
+
+    /// Fired whenever the panel actually closes (Esc, click-away, auto-close),
+    /// for session bookkeeping like the Quick Actions resume timestamp.
+    var onClosed: (() -> Void)?
+
     private init(identifier: String, activatesApp: Bool) {
         self.identifier = identifier
         self.activatesApp = activatesApp
@@ -75,27 +84,39 @@ final class FloatingPanelController {
         panel.setContentSize(hosting.view.fittingSize)
 
         positionInitially(panel)
+        self.panel = panel
         panel.makeKeyAndOrderFront(nil)
 
         resignObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.didResignKeyNotification, object: panel, queue: .main
-        ) { [weak self] _ in MainActor.assumeIsolated { self?.close() } }
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, !self.holdsThroughResign else { return }
+                self.close()
+            }
+        }
         resizeObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.didResizeNotification, object: panel, queue: .main
         ) { [weak self] _ in MainActor.assumeIsolated { self?.keepCentered() } }
-
-        self.panel = panel
     }
 
     func close() {
+        guard let panel else { return }
         if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
         if let resizeObserver { NotificationCenter.default.removeObserver(resizeObserver) }
         resignObserver = nil
         resizeObserver = nil
-        panel?.orderOut(nil)
-        panel?.close()
-        panel = nil
+        panel.orderOut(nil)
+        panel.close()
+        self.panel = nil
+        onClosed?()
     }
+
+    /// Re-front and re-key the open panel (after a modal dialog took key).
+    func makeKey() {
+        panel?.makeKeyAndOrderFront(nil)
+    }
+
 
     /// Center on screen, and remember the top edge so later resizes grow
     /// downward from there instead of drifting up off the bottom-left origin.

@@ -1021,7 +1021,15 @@ final class AppState {
         persistUsage()
     }
 
-    func run(feature: FeatureDef, params: [String: FeatureValue]) async {
+    /// Run a feature. `explicitTargets` overrides the device-bar selection —
+    /// the Quick Actions panel passes its own pick (or run-on-all fan-out)
+    /// since `targetSerials`' run-all gating keys off the active tab, which is
+    /// meaningless with no window.
+    func run(
+        feature: FeatureDef,
+        params: [String: FeatureValue],
+        on explicitTargets: [String]? = nil
+    ) async {
         isRunningFeature = true
         defer { isRunningFeature = false }
         Telemetry.shared.trackFeatureUsed(feature.id, kind: feature.kind.rawValue)
@@ -1063,7 +1071,7 @@ final class AppState {
                 return
             }
 
-            let targets = self.targetSerials
+            let targets = explicitTargets ?? self.targetSerials
             guard !targets.isEmpty else {
                 self.showToast(Toast(message: "No device connected.", ok: false))
                 return

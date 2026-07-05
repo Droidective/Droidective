@@ -49,6 +49,38 @@ import Testing
         }
     }
 
+    @Test func quickActionsSpanActionsAndHubMembersButNeverViews() {
+        let ids = Set(
+            PaletteSearch.quickActions(query: "", implemented: FeatureEngine.implementedIDs)
+                .map(\.id)
+        )
+        // Form actions — including hub-absorbed members — are quick actions.
+        #expect(ids.contains("send-text"))
+        #expect(ids.contains("reverse-port"))
+        #expect(ids.contains("screenshot"))
+        // View/system screens (and the hubs themselves) need the full app.
+        #expect(!ids.contains("logcat"))
+        #expect(!ids.contains("reactotron"))
+        #expect(!ids.contains("js-console"))
+        #expect(!ids.contains("terminal"))
+        #expect(!ids.contains("react-native"))
+        #expect(!ids.contains("simulate"))
+        for id in ids {
+            let kind = FeatureRegistry.byID[id]?.kind
+            #expect(kind == .instantAction || kind == .toggleAction || kind == .formAction)
+        }
+    }
+
+    @Test func quickActionsRankByRelevanceAndDropUnimplemented() {
+        let implemented = FeatureEngine.implementedIDs
+        let sendText = PaletteSearch.quickActions(query: "Send Text", implemented: implemented)
+        #expect(sendText.first?.id == "send-text")
+
+        let without = implemented.subtracting(["send-text"])
+        let result = PaletteSearch.quickActions(query: "Send Text", implemented: without)
+        #expect(!result.contains { $0.id == "send-text" })
+    }
+
     @Test func commandsMatchNameOrTemplateCaseInsensitively() {
         let commands = [
             CustomCommand(name: "Wipe app data", command: "shell pm clear {bundleId}", needsBundle: true, createdAt: 1),

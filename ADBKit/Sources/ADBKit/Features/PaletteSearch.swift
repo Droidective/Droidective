@@ -34,6 +34,28 @@ public enum PaletteSearch {
             + rest.filter { !enabled.contains($0.id) }
     }
 
+    /// The Quick Actions panel's universe: every *implemented* instant,
+    /// toggle, or form action — hub members included (they are the quick
+    /// actions; a hub is just their in-app grouping). View and system screens
+    /// need the full app and never appear. Empty query keeps registry order;
+    /// otherwise matches rank by relevance, registry order breaking ties.
+    public static func quickActions(query: String, implemented: Set<String>) -> [FeatureDef] {
+        let actionable = FeatureRegistry.all.enumerated().filter {
+            let kind = $0.element.kind
+            return (kind == .instantAction || kind == .toggleAction || kind == .formAction)
+                && implemented.contains($0.element.id)
+        }
+        guard !query.isEmpty else { return actionable.map(\.element) }
+        return actionable
+            .filter { $0.element.matches(query) }
+            .sorted { lhs, rhs in
+                let rl = lhs.element.relevance(for: query)
+                let rr = rhs.element.relevance(for: query)
+                return rl != rr ? rl > rr : lhs.offset < rhs.offset
+            }
+            .map(\.element)
+    }
+
     /// Custom commands matching a query against name or command template,
     /// case-insensitively; an empty query keeps the user's saved order.
     public static func commands(_ commands: [CustomCommand], query: String) -> [CustomCommand] {

@@ -5,6 +5,10 @@ import SwiftUI
 /// Read with `object(forKey:)` nil-coalesced to true, so it defaults to on.
 let keepRunningInBackgroundKey = "keepRunningInBackground"
 
+/// UserDefaults key for how long (minutes) a closed Quick Actions panel keeps
+/// its session for resume; 0 disables resume. Defaults to 5.
+let quickPanelResumeMinutesKey = "quickPanelResumeMinutes"
+
 /// Routes APKs opened from Finder (double-click / "Open With") into the install
 /// inbox, which surfaces the device picker once the UI is ready.
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -17,9 +21,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// "the user closed the window" and start background mode mid-quit.
     @MainActor var isQuitting = false
 
+    /// When the last APK arrived from Finder. Opening a document activates
+    /// the app and can ride in with a reopen event — the Quick Actions panel
+    /// handles APKs, so a reopen right after one must not resurrect the
+    /// main window over it.
+    @MainActor private var lastAPKOpenAt: Date?
+
     func application(_ application: NSApplication, open urls: [URL]) {
         let apks = urls.filter { $0.pathExtension.lowercased() == "apk" }
         guard !apks.isEmpty else { return }
+        MainActor.assumeIsolated { lastAPKOpenAt = Date() }
         InstallInbox.shared.receive(apks)
     }
 
@@ -67,11 +78,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Relaunching from Finder/Spotlight while resident in the background (no
-    /// Dock icon, window closed) lands here — reopen the main window.
+    /// Dock icon, window closed) lands here — reopen the main window. Not for
+    /// a reopen riding in with an APK open, which stays panel-only.
     func applicationShouldHandleReopen(
         _ sender: NSApplication, hasVisibleWindows flag: Bool
     ) -> Bool {
         MainActor.assumeIsolated {
+            if let at = lastAPKOpenAt, Date().timeIntervalSince(at) < 2 { return false }
             guard !flag, let appState else { return true }
             appState.activateMainWindow()
             return false

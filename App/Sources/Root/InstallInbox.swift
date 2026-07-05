@@ -10,6 +10,11 @@ final class InstallInbox {
     private var pending: [URL] = []
     var onReceive: (([URL]) -> Void)? { didSet { drain() } }
 
+    /// True while APKs wait for the UI. On a cold launch this means the app
+    /// was launched *to open an APK* (the open event precedes window
+    /// creation) — RootView uses it to keep that launch panel-only.
+    var hasPending: Bool { !pending.isEmpty }
+
     func receive(_ urls: [URL]) {
         pending.append(contentsOf: urls)
         drain()
