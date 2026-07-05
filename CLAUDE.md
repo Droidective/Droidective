@@ -278,18 +278,19 @@ platforms annotation without a runner.
   per-feature hotkeys, and `QuickActionsPanel` — a **non-activating**
   `FloatingPanelController` panel (global hotkey in Settings ▸ Hotkeys) that is
   a small push-navigation mini app. The root is a *grid* of everything
-  runnable in place — saved custom commands, every implemented
-  instant/toggle/form action (hub members included —
-  `PaletteSearch.quickActions`, tested), Manage Apps / Emulators / Install
-  APK / Switch Device — with an "Open in Droidective" list below for the
-  full-app view screens. Form actions render their registry `FieldDef`s
-  in-panel (`QuickActionFormView`); app verbs come from
+  runnable in place — saved custom commands, every *enabled* implemented
+  instant/toggle/form action (mirrors the app's role/catalog curation; hub
+  members ride their hub's enabledness, pinned features lead — ⌘P toggles,
+  shared with the app's favorites; `PaletteSearch.quickActions`, tested),
+  Manage Apps / Emulators / Install APK — with an "Open in Droidective" list
+  below for the enabled full-app view screens. Form actions render their
+  registry `FieldDef`s in-panel (`QuickActionFormView`); app verbs come from
   `AppControlService.AppAction` (destructive ones need a second ⏎). With >1
   device connected, every device-scoped action pushes a pick-device
-  interstitial ("All devices" fans out via `AppState.run(feature:params:on:)`
-  when `supportsRunAll`); the latest pick scopes Manage Apps, its verbs, and
-  the footer. Targets always ride explicitly through `run(on:)` — never the
-  device-bar selection, whose run-on-all state belongs to the hidden window.
+  interstitial; ⌘⏎ there runs on all devices (any device feature — the panel
+  fans out explicit targets itself, not gated on `supportsRunAll`). Targets
+  always ride explicitly through `run(on:)` — never the device-bar
+  selection, whose run-on-all state belongs to the hidden window.
   ←→/↑↓ navigate the root grid even while a query is typed. Esc (or the
   header's ‹ button) pops a screen and closes at the root, and a closed panel
   resumes its screen + device choice when reopened within Settings ▸ Quick
