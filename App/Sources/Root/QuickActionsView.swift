@@ -423,7 +423,9 @@ struct QuickActionsView: View {
                             .padding(.vertical, 24)
                     }
                 }
-                .padding(10)
+                .padding(.horizontal, 10)
+                .padding(.top, 16)
+                .padding(.bottom, 10)
             }
             .frame(height: 400)
             .onChange(of: highlighted) {
