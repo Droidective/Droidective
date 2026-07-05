@@ -539,7 +539,25 @@ struct QuickActionsView: View {
                     : .runFeature(feature)
             )
         }
-        return rows
+        guard query.isEmpty else { return rows }
+        // Pinned tiles lead the whole grid — native screens included, in the
+        // favorites' own order — ahead of commands and the registry order.
+        let favorites = state.layout.favorites
+        var pinned: [QuickRow] = []
+        var rest: [QuickRow] = []
+        for row in rows {
+            if let id = pinnableFeatureID(of: row), favorites.contains(id) {
+                pinned.append(row)
+            } else {
+                rest.append(row)
+            }
+        }
+        pinned.sort { lhs, rhs in
+            let li = pinnableFeatureID(of: lhs).flatMap(favorites.firstIndex) ?? .max
+            let ri = pinnableFeatureID(of: rhs).flatMap(favorites.firstIndex) ?? .max
+            return li < ri
+        }
+        return pinned + rest
     }
 
     /// Full-app screens below the grid — everything that can't run in a
@@ -567,10 +585,13 @@ struct QuickActionsView: View {
         }
     }
 
-    /// The panel's own sub-screens and actions, searchable alongside the rest.
+    /// The panel's own sub-screens and actions, searchable alongside the
+    /// rest. Each fronts a registry feature and follows its enabledness, so
+    /// the panel mirrors the app's role/catalog curation here too.
     private var nativeRows: [QuickRow] {
+        let enabled = state.layout.effectiveEnabledIDs
         var rows: [QuickRow] = []
-        if matchesNative(title: "Manage Apps", keywords: [
+        if enabled.contains("apps"), matchesNative(title: "Manage Apps", keywords: [
             "apps", "app", "packages", "manage", "open", "force stop",
             "clear data", "clear cache", "uninstall",
         ]) {
@@ -581,7 +602,7 @@ struct QuickActionsView: View {
                 pushes: true, action: .push(.apps)
             ))
         }
-        if matchesNative(title: "Emulators", keywords: [
+        if enabled.contains("emulators"), matchesNative(title: "Emulators", keywords: [
             "emulator", "simulator", "avd", "boot", "launch", "virtual",
         ]) {
             rows.append(QuickRow(
@@ -591,7 +612,8 @@ struct QuickActionsView: View {
                 pushes: true, action: .push(.emulators)
             ))
         }
-        if matchesNative(title: "Install APK", keywords: ["install", "apk", "sideload", "package"]) {
+        if enabled.contains("install-app"),
+           matchesNative(title: "Install APK", keywords: ["install", "apk", "sideload", "package"]) {
             rows.append(QuickRow(
                 id: "native:install", icon: "arrow.down.app",
                 title: "Install APK",
@@ -1066,12 +1088,18 @@ struct QuickActionsView: View {
         panelTargetSerial.flatMap { serial in state.devices.first { $0.serial == serial } }
     }
 
-    /// The feature id ⌘P pins/unpins for this row, nil for rows that aren't
-    /// registry features (commands, apps, devices, the panel's own screens).
+    /// The feature id ⌘P pins/unpins for this row. The panel's native screens
+    /// map to the registry features they replace (Manage Apps → `apps`,
+    /// Emulators → `emulators`, Install APK → `install-app`), so pinning them
+    /// shares the app's favorites like everything else. Only rows with no
+    /// registry counterpart (commands, apps, devices, verbs) aren't pinnable.
     private func pinnableFeatureID(of row: QuickRow?) -> String? {
         switch row?.action {
         case .runFeature(let feature): return feature.id
         case .push(.form(let id)): return id
+        case .push(.apps): return "apps"
+        case .push(.emulators): return "emulators"
+        case .installAPK: return "install-app"
         case .openInApp(let feature): return feature.id
         default: return nil
         }
