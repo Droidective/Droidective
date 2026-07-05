@@ -80,10 +80,8 @@ enum QuickScreen: Equatable {
     case appActions(packageId: String, display: String)
     /// AVDs + iOS Simulators to boot (running ones select their device).
     case emulators
-    /// Pick which connected device the actions target.
-    case devices
     /// Interstitial before a device-scoped action when several devices are
-    /// connected; `allowAll` offers run-on-all for features that support it.
+    /// connected; `allowAll` offers the ⌘⏎ run-on-all path.
     case pickDevice(allowAll: Bool)
     /// Options for APKs opened from Finder: install in place, or hand them to
     /// APK Studio / the Install App screen in the main window.
@@ -330,7 +328,6 @@ struct QuickActionsView: View {
         case .apps: return "Search installed apps…"
         case .appActions(_, let display): return display
         case .emulators: return "Boot an emulator or simulator…"
-        case .devices: return "Switch device…"
         case .pickDevice: return "Pick a device for this action…"
         case .apk(let urls):
             return urls.count == 1 ? urls[0].lastPathComponent : "\(urls.count) APKs"
@@ -451,7 +448,7 @@ struct QuickActionsView: View {
         case .apps: return "No matching apps"
         case .emulators where emulatorsLoading: return "Looking for emulators and simulators…"
         case .emulators: return "No emulators or simulators found"
-        case .devices, .pickDevice: return "No ready devices"
+        case .pickDevice: return "No ready devices"
         default: return query.isEmpty ? "Nothing to run yet" : "No matching actions"
         }
     }
@@ -504,8 +501,7 @@ struct QuickActionsView: View {
         case .apps: return appRows
         case .appActions(let packageId, _): return appActionRows(packageId)
         case .emulators: return Array(emulatorRows.prefix(8))
-        case .devices: return deviceRows
-        case .pickDevice(let allowAll): return pickDeviceRows(allowAll: allowAll)
+        case .pickDevice: return pickDeviceRows
         case .apk(let urls): return apkRows(urls)
         case .form: return []
         }
@@ -527,31 +523,41 @@ struct QuickActionsView: View {
             )
         }
         rows += nativeRows
-        rows += PaletteSearch.quickActions(query: query, implemented: FeatureEngine.implementedIDs)
-            .map { feature in
-                QuickRow(
-                    id: "feature:\(feature.id)", icon: feature.icon,
-                    title: feature.title, subtitle: feature.subtitle,
-                    pushes: feature.kind == .formAction,
-                    action: feature.kind == .formAction
-                        ? .push(.form(feature.id))
-                        : .runFeature(feature)
-                )
-            }
+        rows += PaletteSearch.quickActions(
+            query: query,
+            implemented: FeatureEngine.implementedIDs,
+            enabled: state.layout.effectiveEnabledIDs,
+            favorites: state.layout.favorites
+        )
+        .map { feature in
+            QuickRow(
+                id: "feature:\(feature.id)", icon: feature.icon,
+                title: feature.title, subtitle: feature.subtitle,
+                pushes: feature.kind == .formAction,
+                action: feature.kind == .formAction
+                    ? .push(.form(feature.id))
+                    : .runFeature(feature)
+            )
+        }
         return rows
     }
 
     /// Full-app screens below the grid — everything that can't run in a
     /// panel opens the main window instead. The panel's native screens
-    /// replace their in-app counterparts here.
+    /// replace their in-app counterparts here, and it mirrors the app: only
+    /// enabled features (per the user's role/catalog curation) appear.
     private var rootAppItems: [QuickRow] {
         let covered: Set<String> = ["apps", "emulators", "install-app"]
+        let enabled = state.layout.effectiveEnabledIDs
         return PaletteSearch.features(
             query: query,
-            enabled: state.layout.effectiveEnabledIDs,
+            enabled: enabled,
             favorites: state.layout.favorites
         )
-        .filter { ($0.kind == .view || $0.kind == .system) && !covered.contains($0.id) }
+        .filter {
+            ($0.kind == .view || $0.kind == .system)
+                && !covered.contains($0.id) && enabled.contains($0.id)
+        }
         .map { feature in
             QuickRow(
                 id: "open:\(feature.id)", icon: feature.icon,
@@ -591,15 +597,6 @@ struct QuickActionsView: View {
                 title: "Install APK",
                 subtitle: "Pick .apk files and install them",
                 action: .installAPK
-            ))
-        }
-        if readyDevices.count > 1,
-           matchesNative(title: "Switch Device", keywords: ["device", "switch", "select", "target"]) {
-            rows.append(QuickRow(
-                id: "screen:devices", icon: "arrow.triangle.2.circlepath",
-                title: "Switch Device",
-                subtitle: panelTargetDevice.map { "Now targeting \($0.label)" },
-                pushes: true, action: .push(.devices)
             ))
         }
         return rows
@@ -720,29 +717,10 @@ struct QuickActionsView: View {
 
     private var readyDevices: [Device] { state.devices.filter(\.isReady) }
 
-    private var deviceRows: [QuickRow] {
-        matchingReadyDevices.map {
-            deviceRow($0, idPrefix: "device", action: .selectDevice(serial: $0.serial, label: $0.label))
-        }
-    }
-
     private var matchingReadyDevices: [Device] {
         readyDevices.filter {
             query.isEmpty || state.deviceTitle($0).localizedCaseInsensitiveContains(query)
         }
-    }
-
-    /// One device row — shared by Switch Device and the pick interstitial so
-    /// the two lists can't drift apart visually.
-    private func deviceRow(_ device: Device, idPrefix: String, action: QuickRow.Action) -> QuickRow {
-        QuickRow(
-            id: "\(idPrefix):\(device.serial)",
-            icon: device.platform == .iosSimulator ? "iphone" : "iphone.gen3",
-            title: device.label,
-            subtitle: state.deviceTitle(device),
-            badge: device.serial == panelTargetSerial ? "selected" : nil,
-            action: action
-        )
     }
 
     /// What you can do with Finder-opened APKs: install right here, or hand
@@ -787,21 +765,19 @@ struct QuickActionsView: View {
         return rows.filter { $0.title.localizedCaseInsensitiveContains(query) }
     }
 
-    /// The interstitial's rows: optionally "All devices", then each device.
-    private func pickDeviceRows(allowAll: Bool) -> [QuickRow] {
-        var rows: [QuickRow] = []
-        if allowAll, matchesNative(title: "All devices", keywords: ["all", "every"]) {
-            rows.append(QuickRow(
-                id: "pick:all", icon: "square.stack.3d.down.right",
-                title: "All devices",
-                subtitle: "Run on every connected device",
-                action: .chooseAllDevices
-            ))
+    /// The interstitial's rows — one per ready device, no persistent-selection
+    /// badge (each action picks afresh). Run-on-all lives in the footer (⌘⏎),
+    /// not the list.
+    private var pickDeviceRows: [QuickRow] {
+        matchingReadyDevices.map { device in
+            QuickRow(
+                id: "pick:\(device.serial)",
+                icon: device.platform == .iosSimulator ? "iphone" : "iphone.gen3",
+                title: device.label,
+                subtitle: state.deviceTitle(device),
+                action: .chooseDevice(serial: device.serial, label: device.label)
+            )
         }
-        rows += matchingReadyDevices.map {
-            deviceRow($0, idPrefix: "pick", action: .chooseDevice(serial: $0.serial, label: $0.label))
-        }
-        return rows
     }
 
     // MARK: - Row rendering
@@ -828,9 +804,21 @@ struct QuickActionsView: View {
             isHighlighted ? AnyShapeStyle(.brandAccent) : AnyShapeStyle(.quaternary.opacity(0.5)),
             in: RoundedRectangle(cornerRadius: 10)
         )
+        .overlay(alignment: .topTrailing) {
+            if isPinned(row) {
+                Image(systemName: "pin.fill")
+                    .font(.system(size: 8))
+                    .foregroundStyle(isHighlighted ? AnyShapeStyle(accentText.opacity(0.8)) : AnyShapeStyle(.brandAccent))
+                    .padding(4)
+            }
+        }
         .foregroundStyle(isHighlighted ? accentText : .primary)
         .contentShape(RoundedRectangle(cornerRadius: 10))
         .help(row.subtitle ?? row.title)
+    }
+
+    private func isPinned(_ row: QuickRow) -> Bool {
+        pinnableFeatureID(of: row).map { state.layout.favorites.contains($0) } ?? false
     }
 
     private func rowView(
@@ -862,6 +850,11 @@ struct QuickActionsView: View {
                 }
             }
             Spacer()
+            if isPinned(row) {
+                Image(systemName: "pin.fill")
+                    .font(.caption2)
+                    .foregroundStyle(isHighlighted ? AnyShapeStyle(accentText.opacity(0.8)) : AnyShapeStyle(.brandAccent))
+            }
             if isArmed {
                 Text("⏎ to confirm")
                     .font(.caption2.weight(.semibold))
@@ -901,7 +894,9 @@ struct QuickActionsView: View {
         return AnyShapeStyle(.brandAccent)
     }
 
-    /// Hidden buttons backing ⌘1–8 jumps to the first eight items.
+    /// Hidden buttons backing ⌘1–8 jumps, ⌘P pin/unpin, and — only while the
+    /// interstitial offers it, so it can't collide with the form's ⌘⏎ Run —
+    /// ⌘⏎ run-on-all.
     private var shortcutButtons: some View {
         ZStack {
             ForEach(Array(Self.digitKeys.enumerated()), id: \.offset) { index, key in
@@ -910,6 +905,16 @@ struct QuickActionsView: View {
                     if rows.indices.contains(index) { activate(rows[index]) }
                 }
                 .keyboardShortcut(key, modifiers: .command)
+            }
+            Button("") {
+                if let id = pinnableFeatureID(of: highlightedRow) {
+                    state.toggleFavorite(id)
+                }
+            }
+            .keyboardShortcut("p", modifiers: .command)
+            if case .pickDevice(allowAll: true) = screen {
+                Button("") { perform(.chooseAllDevices) }
+                    .keyboardShortcut(.return, modifiers: .command)
             }
         }
         .frame(width: 0, height: 0)
@@ -995,28 +1000,59 @@ struct QuickActionsView: View {
                     .buttonStyle(.link)
                     .font(.caption)
                 }
-            } else if let approved = effectiveApprovedSerials, approved.count > 1, !singleDeviceScreen {
-                Label("All devices (\(approved.count))", systemImage: "square.stack.3d.down.right")
+            } else if let context = footerContext {
+                Label(context.text, systemImage: context.icon)
                     .font(.caption)
                     .foregroundStyle(.textMuted)
-            } else {
-                // The device the next action actually targets — the panel's
-                // pick, not just the device-bar selection.
-                let device = panelTargetDevice
-                Label(
-                    device.map(state.deviceTitle) ?? "No device connected",
-                    systemImage: device?.platform == .iosSimulator ? "iphone" : "iphone.gen3"
-                )
-                .font(.caption)
-                .foregroundStyle(.textMuted)
-                .lineLimit(1)
+                    .lineLimit(1)
             }
             Spacer()
+            if case .pickDevice(allowAll: true) = screen {
+                Button {
+                    perform(.chooseAllDevices)
+                } label: {
+                    footerHint("⌘⏎", "All devices")
+                }
+                .buttonStyle(.plain)
+                .help("Run on every connected device")
+            }
+            if let id = pinnableFeatureID(of: highlightedRow) {
+                footerHint("⌘P", state.layout.favorites.contains(id) ? "Unpin" : "Pin")
+            }
             footerHint("⏎", isFormScreen ? "Run" : "Select")
             footerHint("esc", stack.isEmpty ? "Close" : "Back")
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
+    }
+
+    /// The footer's left-side context, shown only where a device scope is in
+    /// play: which device Manage Apps is listing, and what a form's ⏎ will
+    /// target. The root shows nothing — every action picks its device.
+    private var footerContext: (text: String, icon: String)? {
+        switch screen {
+        case .apps, .appActions:
+            guard let device = panelTargetDevice else {
+                return ("No device connected", "iphone.gen3")
+            }
+            return (
+                state.deviceTitle(device),
+                device.platform == .iosSimulator ? "iphone" : "iphone.gen3"
+            )
+        case .form:
+            if let approved = effectiveApprovedSerials, approved.count > 1 {
+                return ("All devices (\(approved.count))", "square.stack.3d.down.right")
+            }
+            guard let device = panelTargetDevice else {
+                return ("No device connected", "iphone.gen3")
+            }
+            return (
+                state.deviceTitle(device),
+                device.platform == .iosSimulator ? "iphone" : "iphone.gen3"
+            )
+        default:
+            return nil
+        }
     }
 
     private func footerHint(_ key: String, _ label: String) -> some View {
@@ -1030,12 +1066,14 @@ struct QuickActionsView: View {
         panelTargetSerial.flatMap { serial in state.devices.first { $0.serial == serial } }
     }
 
-    /// Screens whose actions are single-device by nature (the app list came
-    /// from one device) — the footer names that device, never "All devices".
-    private var singleDeviceScreen: Bool {
-        switch screen {
-        case .apps, .appActions: return true
-        default: return false
+    /// The feature id ⌘P pins/unpins for this row, nil for rows that aren't
+    /// registry features (commands, apps, devices, the panel's own screens).
+    private func pinnableFeatureID(of row: QuickRow?) -> String? {
+        switch row?.action {
+        case .runFeature(let feature): return feature.id
+        case .push(.form(let id)): return id
+        case .openInApp(let feature): return feature.id
+        default: return nil
         }
     }
 
@@ -1141,10 +1179,12 @@ struct QuickActionsView: View {
     /// falling back to `targetSerials` would let the *hidden main window's*
     /// run-on-all state fan a panel action out past an explicit single pick,
     /// and a device switch deferred behind an exit guard would silently run
-    /// on the old selection.
+    /// on the old selection. An "All devices" pick (⌘⏎ at the interstitial)
+    /// fans out any device feature — the panel loops explicit targets, so it
+    /// isn't limited to the registry's `supportsRunAll` set.
     private func explicitTargets(for feature: FeatureDef) -> [String]? {
         guard feature.needsDevice else { return nil }
-        if let approved = effectiveApprovedSerials, feature.supportsRunAll, approved.count > 1 {
+        if let approved = effectiveApprovedSerials, approved.count > 1 {
             return approved
         }
         return panelTargetSerial.map { [$0] } ?? []
@@ -1159,14 +1199,16 @@ struct QuickActionsView: View {
         guard readyDevices.count > 1 else { return (false, false) }
         switch action {
         case .runFeature(let feature):
-            return (feature.needsDevice, feature.supportsRunAll)
+            return (feature.needsDevice, feature.needsDevice)
         case .push(.form(let id)):
             guard let feature = FeatureRegistry.byID[id] else { return (false, false) }
-            return (feature.needsDevice, feature.supportsRunAll)
+            return (feature.needsDevice, feature.needsDevice)
         case .push(.apps):
+            // The apps list is inherently one device's.
             return (true, false)
         case .runCommand(let command):
-            return (command.kind == .adb || command.command.contains("{serial}"), false)
+            let scoped = command.kind == .adb || command.command.contains("{serial}")
+            return (scoped, scoped)
         case .installAPK, .installFiles:
             return (true, true)
         default:

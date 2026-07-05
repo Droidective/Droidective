@@ -38,17 +38,34 @@ public enum PaletteSearch {
     }
 
     /// The Quick Actions panel's universe: every *implemented* instant,
-    /// toggle, or form action — hub members included (they are the quick
-    /// actions; a hub is just their in-app grouping). View and system screens
-    /// need the full app and never appear. Empty query keeps registry order;
-    /// otherwise matches rank by relevance, registry order breaking ties.
-    public static func quickActions(query: String, implemented: Set<String>) -> [FeatureDef] {
-        let actionable = FeatureRegistry.all.enumerated().filter {
-            let kind = $0.element.kind
-            return (kind == .instantAction || kind == .toggleAction || kind == .formAction)
-                && implemented.contains($0.element.id)
+    /// toggle, or form action that's enabled — hub members included (they are
+    /// the quick actions; a member's enabledness rides on its hub, since the
+    /// catalog manages members only through the hub). View and system screens
+    /// need the full app and never appear. Empty query leads with pinned
+    /// features then registry order; otherwise matches rank by relevance,
+    /// registry order breaking ties.
+    public static func quickActions(
+        query: String, implemented: Set<String>, enabled: Set<String>, favorites: [String]
+    ) -> [FeatureDef] {
+        var hubByMember: [String: String] = [:]
+        for (hub, members) in FeatureRegistry.absorbedByHub {
+            for member in members { hubByMember[member] = hub }
         }
-        guard !query.isEmpty else { return actionable.map(\.element) }
+        let actionable = FeatureRegistry.all.enumerated().filter { entry in
+            let feature = entry.element
+            let isAction = feature.kind == .instantAction
+                || feature.kind == .toggleAction
+                || feature.kind == .formAction
+            guard isAction, implemented.contains(feature.id) else { return false }
+            if let hub = hubByMember[feature.id] { return enabled.contains(hub) }
+            return enabled.contains(feature.id)
+        }
+        guard !query.isEmpty else {
+            let all = actionable.map(\.element)
+            let pinned = favorites.compactMap { id in all.first { $0.id == id } }
+            let pinnedIDs = Set(pinned.map(\.id))
+            return pinned + all.filter { !pinnedIDs.contains($0.id) }
+        }
         var scored: [Scored] = []
         for entry in actionable {
             let score = entry.element.relevance(for: query)

@@ -49,10 +49,14 @@ import Testing
         }
     }
 
+    private var allCatalogEnabled: Set<String> { Set(FeatureRegistry.catalogFeatureIDs) }
+
     @Test func quickActionsSpanActionsAndHubMembersButNeverViews() {
         let ids = Set(
-            PaletteSearch.quickActions(query: "", implemented: FeatureEngine.implementedIDs)
-                .map(\.id)
+            PaletteSearch.quickActions(
+                query: "", implemented: FeatureEngine.implementedIDs,
+                enabled: allCatalogEnabled, favorites: []
+            ).map(\.id)
         )
         // Form actions — including hub-absorbed members — are quick actions.
         #expect(ids.contains("send-text"))
@@ -73,12 +77,42 @@ import Testing
 
     @Test func quickActionsRankByRelevanceAndDropUnimplemented() {
         let implemented = FeatureEngine.implementedIDs
-        let sendText = PaletteSearch.quickActions(query: "Send Text", implemented: implemented)
+        let sendText = PaletteSearch.quickActions(
+            query: "Send Text", implemented: implemented,
+            enabled: allCatalogEnabled, favorites: []
+        )
         #expect(sendText.first?.id == "send-text")
 
         let without = implemented.subtracting(["send-text"])
-        let result = PaletteSearch.quickActions(query: "Send Text", implemented: without)
+        let result = PaletteSearch.quickActions(
+            query: "Send Text", implemented: without,
+            enabled: allCatalogEnabled, favorites: []
+        )
         #expect(!result.contains { $0.id == "send-text" })
+    }
+
+    @Test func quickActionsFollowTheEnabledSetWithMembersRidingTheirHub() {
+        // Disabling the Connection hub hides its absorbed reverse-port member.
+        let withoutHub = PaletteSearch.quickActions(
+            query: "", implemented: FeatureEngine.implementedIDs,
+            enabled: allCatalogEnabled.subtracting(["connection"]), favorites: []
+        )
+        #expect(!withoutHub.contains { $0.id == "reverse-port" })
+
+        // Disabling a standalone action hides it directly.
+        let withoutSendText = PaletteSearch.quickActions(
+            query: "", implemented: FeatureEngine.implementedIDs,
+            enabled: allCatalogEnabled.subtracting(["send-text"]), favorites: []
+        )
+        #expect(!withoutSendText.contains { $0.id == "send-text" })
+    }
+
+    @Test func quickActionsLeadWithPinnedFeaturesWhenNotSearching() {
+        let result = PaletteSearch.quickActions(
+            query: "", implemented: FeatureEngine.implementedIDs,
+            enabled: allCatalogEnabled, favorites: ["screenshot"]
+        )
+        #expect(result.first?.id == "screenshot")
     }
 
     @Test func commandsMatchNameOrTemplateCaseInsensitively() {
