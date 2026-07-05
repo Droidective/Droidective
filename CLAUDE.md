@@ -276,7 +276,9 @@ platforms annotation without a runner.
   `AppDelegate.windowWillClose`, guarded by `isQuitting` so quit teardown isn't
   mistaken for a window close). The app stays resident for the menu bar, the
   per-feature hotkeys, and `QuickActionsPanel` — a **non-activating**
-  `FloatingPanelController` panel (global hotkey in Settings ▸ Hotkeys) that is
+  `FloatingPanelController` panel (global hotkey in Settings ▸ Hotkeys; the
+  welcome tour's "Get Started" ends on a record-a-hotkey ask recommending
+  ⇧⌘Space, shown only while none is set) that is
   a small push-navigation mini app. The root is a *grid* of everything
   runnable in place — saved custom commands, every *enabled* implemented
   instant/toggle/form action (mirrors the app's role/catalog curation; hub
