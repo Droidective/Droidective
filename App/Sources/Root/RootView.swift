@@ -77,15 +77,6 @@ struct RootView: View {
                 // panels, and identifiers don't survive a close (SwiftUI
                 // re-stamps `main-AppWindow-1` over any tag).
                 state.mainWindow = window
-                // Launched by double-clicking an APK (the open event precedes
-                // window creation, so it's already inboxed): the Quick Actions
-                // panel handles it — close the auto-created window so the
-                // launch is panel-only, like when the app is already resident.
-                // Tracking + autosave still ran, so a later reopen is normal.
-                if InstallInbox.shared.hasPending,
-                   UserDefaults.standard.object(forKey: keepRunningInBackgroundKey) as? Bool ?? true {
-                    DispatchQueue.main.async { window.close() }
-                }
                 // Restore the user's saved window frame; only fill the screen's
                 // usable area on the very first launch (nothing to restore), so
                 // a resized window survives relaunch instead of being maximized.
