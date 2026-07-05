@@ -20,15 +20,14 @@ final class KeyablePanel: NSPanel {
 @MainActor
 final class FloatingPanelController {
     /// The in-app ⌘K search palette.
-    static let palette = FloatingPanelController(identifier: "palette", activatesApp: true)
+    static let palette = FloatingPanelController(activatesApp: true)
 
     /// The global-hotkey Quick Actions panel. Non-activating: it takes key
     /// input without activating Droidective, so whatever app was frontmost
     /// keeps focus underneath — summonable while the app is resident in the
     /// background with no window and no Dock icon.
-    static let quickActions = FloatingPanelController(identifier: "quick-actions", activatesApp: false)
+    static let quickActions = FloatingPanelController(activatesApp: false)
 
-    private let identifier: String
     private let activatesApp: Bool
     private var panel: KeyablePanel?
     private var anchorMaxY: CGFloat = 0
@@ -44,8 +43,7 @@ final class FloatingPanelController {
     /// for session bookkeeping like the Quick Actions resume timestamp.
     var onClosed: (() -> Void)?
 
-    private init(identifier: String, activatesApp: Bool) {
-        self.identifier = identifier
+    private init(activatesApp: Bool) {
         self.activatesApp = activatesApp
     }
 
@@ -66,7 +64,6 @@ final class FloatingPanelController {
 
         let panel = KeyablePanel(contentViewController: hosting)
         panel.styleMask = activatesApp ? [.borderless] : [.borderless, .nonactivatingPanel]
-        panel.identifier = NSUserInterfaceItemIdentifier(identifier)
         panel.isFloatingPanel = true
         panel.level = .floating
         panel.isOpaque = false

@@ -131,7 +131,7 @@ struct GeneralSettingsView: View {
                     Text("For 15 minutes").tag(15)
                     Text("For 1 hour").tag(60)
                 }
-                Text("Reopening the panel within this window returns to the screen and device you had — after that it starts fresh.")
+                Text("Reopening the panel within this window returns to the screen and device you had — after that it starts fresh. Open the panel with its global hotkey (record one in the Hotkeys tab) or from the menu bar icon.")
                     .font(.footnote)
                     .foregroundStyle(.textMuted)
             }

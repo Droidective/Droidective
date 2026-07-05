@@ -13,14 +13,17 @@ public enum PaletteSearch {
         query: String, enabled: Set<String>, favorites: [String]
     ) -> [FeatureDef] {
         if !query.isEmpty {
-            let ranked = FeatureRegistry.all.enumerated()
-                .filter { $0.element.matches(query) && !$0.element.isAbsorbedByHub }
-                .sorted { lhs, rhs in
-                    let rl = lhs.element.relevance(for: query)
-                    let rr = rhs.element.relevance(for: query)
-                    return rl != rr ? rl > rr : lhs.offset < rhs.offset
+            // Score once per feature — relevance scans title/keywords, so
+            // recomputing it inside the sort comparator is O(n log n) scans.
+            var scored: [Scored] = []
+            for (offset, feature) in FeatureRegistry.all.enumerated() {
+                let score = feature.relevance(for: query)
+                if score > 0, !feature.isAbsorbedByHub {
+                    scored.append(Scored(feature: feature, offset: offset, score: score))
                 }
-                .map(\.element)
+            }
+            scored.sort { $0.score != $1.score ? $0.score > $1.score : $0.offset < $1.offset }
+            let ranked = scored.map(\.feature)
             return ranked.filter { enabled.contains($0.id) }
                 + ranked.filter { !enabled.contains($0.id) }
         }
@@ -46,14 +49,23 @@ public enum PaletteSearch {
                 && implemented.contains($0.element.id)
         }
         guard !query.isEmpty else { return actionable.map(\.element) }
-        return actionable
-            .filter { $0.element.matches(query) }
-            .sorted { lhs, rhs in
-                let rl = lhs.element.relevance(for: query)
-                let rr = rhs.element.relevance(for: query)
-                return rl != rr ? rl > rr : lhs.offset < rhs.offset
+        var scored: [Scored] = []
+        for entry in actionable {
+            let score = entry.element.relevance(for: query)
+            if score > 0 {
+                scored.append(Scored(feature: entry.element, offset: entry.offset, score: score))
             }
-            .map(\.element)
+        }
+        scored.sort { $0.score != $1.score ? $0.score > $1.score : $0.offset < $1.offset }
+        return scored.map(\.feature)
+    }
+
+    /// A feature with its registry position and query relevance, computed
+    /// once before sorting.
+    private struct Scored {
+        let feature: FeatureDef
+        let offset: Int
+        let score: Int
     }
 
     /// Custom commands matching a query against name or command template,

@@ -80,7 +80,7 @@ struct RootView: View {
                 // Restore the user's saved window frame; only fill the screen's
                 // usable area on the very first launch (nothing to restore), so
                 // a resized window survives relaunch instead of being maximized.
-                let autosaveName = NSWindow.FrameAutosaveName(RootView.mainWindowID)
+                let autosaveName = NSWindow.FrameAutosaveName(RootView.mainWindowFrameAutosaveName)
                 if !window.setFrameUsingName(autosaveName), let screen = window.screen ?? NSScreen.main {
                     window.setFrame(screen.visibleFrame, display: true)
                 }
@@ -188,10 +188,11 @@ struct RootView: View {
         }
     }
 
-    /// The main window's frame-autosave name. (Recognizing the window itself
-    /// goes through `AppState.mainWindow` by reference — window identifiers
-    /// don't survive a close, SwiftUI re-stamps its own.)
-    fileprivate static let mainWindowID = "droidective-main"
+    /// The main window's frame-autosave name — the value must stay
+    /// "droidective-main" so existing users' saved frames survive.
+    /// (Recognizing the window itself goes through `AppState.mainWindow` by
+    /// reference; identifiers don't survive a close.)
+    fileprivate static let mainWindowFrameAutosaveName = "droidective-main"
     private static var closeTabMonitorInstalled = false
 
     /// ⌘W closes the active tab, not the window. A local key-down monitor

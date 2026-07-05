@@ -48,7 +48,9 @@ struct QuickActionFormView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear { seedDefaults() }
         .task {
-            presets = await state.env.stores.presets.load()
+            let loaded = await state.env.stores.presets.load()
+            guard !Task.isCancelled else { return }
+            presets = loaded
             // Land the cursor in the first typed-input field once the screen
             // has mounted, mirroring the palette's focus timing.
             guard let first = firstFocusableField else { return }
@@ -168,7 +170,8 @@ struct QuickActionFormView: View {
 
     private func submit() {
         guard !running else { return }
-        if feature.needsDevice, state.targetSerials.isEmpty {
+        // The panel resolves targets explicitly; [] means no device is ready.
+        if feature.needsDevice, targetsProvider(feature)?.isEmpty == true {
             onFinish(QuickRunOutcome(message: "No device connected.", ok: false))
             return
         }

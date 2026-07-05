@@ -7,10 +7,9 @@ import UniformTypeIdentifiers
 /// mini app summoned by a global hotkey (or the menu bar). The root shows a
 /// grid of everything runnable in place (instant/toggle actions, in-panel
 /// forms, saved custom commands, Manage Apps / Emulators / Install APK) with
-/// an "Open in Droidective" list below for the full-app screens. Esc, ⌫ on an
-/// empty query, or `<` pops a screen; at the root Esc closes. A session
-/// resumes where it left off when reopened within the Settings ▸ Quick
-/// Actions window (default 5 minutes).
+/// an "Open in Droidective" list below for the full-app screens. Esc pops a
+/// screen; at the root it closes. A session resumes where it left off when
+/// reopened within the Settings ▸ Quick Actions window (default 5 minutes).
 @MainActor
 enum QuickActionsPanel {
     static func toggle(state: AppState) {
@@ -19,10 +18,7 @@ enum QuickActionsPanel {
             controller.close()
             return
         }
-        let memory = QuickPanelMemory.shared
-        let minutes = UserDefaults.standard.object(forKey: quickPanelResumeMinutesKey) as? Int ?? 5
-        let expired = memory.closedAt.map { Date().timeIntervalSince($0) > Double(minutes) * 60 } ?? true
-        if minutes <= 0 || expired { memory.reset() }
+        resetSessionIfExpired()
         present(state: state)
     }
 
@@ -31,13 +27,32 @@ enum QuickActionsPanel {
     /// the file into APK Studio / the Install App screen.
     static func showAPKOptions(_ urls: [URL], state: AppState) {
         guard !urls.isEmpty else { return }
+        // Same expiry rule as toggle — a stale session's device pick (worst
+        // case a stale "All devices") must not govern this install.
+        resetSessionIfExpired()
         let memory = QuickPanelMemory.shared
         memory.stack = [.apk(urls)]
         memory.closedAt = nil
         let controller = FloatingPanelController.quickActions
         // Rebuild if already up — the view seeds its screen stack at init.
         if controller.isVisible { controller.close() }
+        // The app activation that delivered the APK can shuffle key windows
+        // for a beat; don't let that churn dismiss the panel it opens.
+        controller.holdsThroughResign = true
         present(state: state)
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(1500))
+            controller.holdsThroughResign = false
+        }
+    }
+
+    /// Clear the resumable session once it's older than the Settings ▸ Quick
+    /// Actions window (0 = never resume).
+    private static func resetSessionIfExpired() {
+        let memory = QuickPanelMemory.shared
+        let minutes = UserDefaults.standard.object(forKey: quickPanelResumeMinutesKey) as? Int ?? 5
+        let expired = memory.closedAt.map { Date().timeIntervalSince($0) > Double(minutes) * 60 } ?? true
+        if minutes <= 0 || expired { memory.reset() }
     }
 
     private static func present(state: AppState) {
@@ -83,14 +98,21 @@ final class QuickPanelMemory {
     static let shared = QuickPanelMemory()
 
     var stack: [QuickScreen] = []
-    var hasPickedDevice = false
-    var runAllDevices = false
+    /// The serial explicitly picked at the device interstitial (or Switch
+    /// Device). Stored as the serial — not a flag — so a device that
+    /// disconnected while the panel was closed re-raises the interstitial
+    /// instead of silently running on whatever the selection drifted to.
+    var pickedSerial: String?
+    /// The exact serials approved by an "All devices" pick. Fan-outs use this
+    /// ∩ currently-ready, so a device plugged in *after* the approval is
+    /// never targeted by it.
+    var approvedAllSerials: [String]?
     var closedAt: Date?
 
     func reset() {
         stack = []
-        hasPickedDevice = false
-        runAllDevices = false
+        pickedSerial = nil
+        approvedAllSerials = nil
         closedAt = nil
     }
 }
@@ -137,10 +159,12 @@ struct QuickActionsView: View {
     @State private var armedRowID: String?
     /// The action held while the device interstitial is up.
     @State private var pendingAction: QuickRow.Action?
-    /// This session's device choice: once made, actions stop asking.
-    @State private var hasPickedDevice: Bool
-    /// "All devices" was chosen — features that support run-on-all fan out.
-    @State private var runAllDevices: Bool
+    /// This session's explicit device pick; nil until the interstitial ran.
+    @State private var pickedSerial: String?
+    /// The serials approved by an "All devices" pick, nil otherwise.
+    @State private var approvedAllSerials: [String]?
+    /// True while the Emulators screen's AVD/simulator refresh is in flight.
+    @State private var emulatorsLoading = false
     /// Outcome of the last action run from the panel, shown in the footer.
     @State private var lastRun: QuickRunOutcome?
     @FocusState private var searchFocused: Bool
@@ -149,8 +173,8 @@ struct QuickActionsView: View {
         self.onClose = onClose
         let memory = QuickPanelMemory.shared
         _stack = State(initialValue: memory.stack)
-        _hasPickedDevice = State(initialValue: memory.hasPickedDevice)
-        _runAllDevices = State(initialValue: memory.runAllDevices)
+        _pickedSerial = State(initialValue: memory.pickedSerial)
+        _approvedAllSerials = State(initialValue: memory.approvedAllSerials)
     }
 
     private static let digitKeys: [KeyEquivalent] = ["1", "2", "3", "4", "5", "6", "7", "8"]
@@ -174,7 +198,11 @@ struct QuickActionsView: View {
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .background { shortcutButtons }
         .onExitCommand { escape() }
-        .task { commands = await state.env.stores.customCommands.load() }
+        .task {
+            let loaded = await state.env.stores.customCommands.load()
+            guard !Task.isCancelled else { return }
+            commands = loaded
+        }
         .task(id: taskKey) { await loadScreenData() }
         .onAppear {
             // Focus must land after the panel becomes key — setting it
@@ -232,8 +260,8 @@ struct QuickActionsView: View {
             if case .pickDevice = $0 { return false }
             return true
         }
-        memory.hasPickedDevice = hasPickedDevice
-        memory.runAllDevices = runAllDevices
+        memory.pickedSerial = pickedSerial
+        memory.approvedAllSerials = approvedAllSerials
     }
 
     private func refocusSearch() {
@@ -417,9 +445,10 @@ struct QuickActionsView: View {
 
     private var emptyMessage: String {
         switch screen {
-        case .apps where state.targetSerials.isEmpty: return "Connect a device to manage its apps"
+        case .apps where panelTargetSerial == nil: return "Connect a device to manage its apps"
         case .apps where installedApps == nil: return "Loading apps…"
         case .apps: return "No matching apps"
+        case .emulators where emulatorsLoading: return "Looking for emulators and simulators…"
         case .emulators: return "No emulators or simulators found"
         case .devices, .pickDevice: return "No ready devices"
         default: return query.isEmpty ? "Nothing to run yet" : "No matching actions"
@@ -471,7 +500,7 @@ struct QuickActionsView: View {
     private var flatItems: [QuickRow] {
         switch screen {
         case .root: return rootGridItems + rootAppItems
-        case .apps: return Array(appRows.prefix(8))
+        case .apps: return appRows
         case .appActions(let packageId, _): return appActionRows(packageId)
         case .emulators: return Array(emulatorRows.prefix(8))
         case .devices: return deviceRows
@@ -563,12 +592,12 @@ struct QuickActionsView: View {
                 action: .installAPK
             ))
         }
-        if state.devices.filter(\.isReady).count > 1,
+        if readyDevices.count > 1,
            matchesNative(title: "Switch Device", keywords: ["device", "switch", "select", "target"]) {
             rows.append(QuickRow(
                 id: "screen:devices", icon: "arrow.triangle.2.circlepath",
                 title: "Switch Device",
-                subtitle: state.selectedDevice.map { "Now targeting \($0.label)" },
+                subtitle: panelTargetDevice.map { "Now targeting \($0.label)" },
                 pushes: true, action: .push(.devices)
             ))
         }
@@ -583,61 +612,72 @@ struct QuickActionsView: View {
     }
 
     /// Installed apps, saved bundles pinned first — mirroring how the device
-    /// bar treats bundles as the apps you actually work on.
+    /// bar treats bundles as the apps you actually work on. O(1) nickname
+    /// lookups and an early cap: with hundreds of packages this recomputes
+    /// per keystroke, so no per-package bundle scans and no rows built past
+    /// what the list shows.
     private var appRows: [QuickRow] {
         guard let installedApps else { return [] }
-        let bundleIDs = state.bundles.map(\.packageId)
-        let pinned = bundleIDs.filter(installedApps.contains)
-        let rest = installedApps.filter { !pinned.contains($0) }
-        return (pinned + rest)
-            .filter { packageId in
-                guard !query.isEmpty else { return true }
-                let nickname = state.bundles.first { $0.packageId == packageId }?.nickname
-                return packageId.localizedCaseInsensitiveContains(query)
-                    || Self.appDisplayName(packageId).localizedCaseInsensitiveContains(query)
-                    || (nickname?.localizedCaseInsensitiveContains(query) ?? false)
-            }
-            .map { packageId in
-                let nickname = state.bundles.first { $0.packageId == packageId }?.nickname
-                return QuickRow(
-                    id: "app:\(packageId)", icon: "app.badge",
-                    title: nickname ?? Self.appDisplayName(packageId),
-                    subtitle: packageId,
-                    badge: nickname != nil ? "saved" : nil,
-                    pushes: true,
-                    action: .push(.appActions(
-                        packageId: packageId,
-                        display: nickname ?? Self.appDisplayName(packageId)
-                    ))
-                )
-            }
+        let nicknames = Dictionary(
+            state.bundles.map { ($0.packageId, $0.nickname) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        let pinned = installedApps.filter { nicknames[$0] != nil }
+        let rest = installedApps.filter { nicknames[$0] == nil }
+        let matching = (pinned + rest).filter { packageId in
+            guard !query.isEmpty else { return true }
+            return packageId.localizedCaseInsensitiveContains(query)
+                || AppListing.displayName(for: packageId).localizedCaseInsensitiveContains(query)
+                || (nicknames[packageId]?.localizedCaseInsensitiveContains(query) ?? false)
+        }
+        return matching.prefix(8).map { packageId in
+            let display = nicknames[packageId] ?? AppListing.displayName(for: packageId)
+            return QuickRow(
+                id: "app:\(packageId)", icon: "app.badge",
+                title: display,
+                subtitle: packageId,
+                badge: nicknames[packageId] != nil ? "saved" : nil,
+                pushes: true,
+                action: .push(.appActions(packageId: packageId, display: display))
+            )
+        }
     }
 
-    /// "com.foo.weather" → "Weather", like `AppListing.displayName`.
-    private static func appDisplayName(_ packageId: String) -> String {
-        packageId.split(separator: ".").last
-            .map { $0.prefix(1).uppercased() + $0.dropFirst() } ?? packageId
-    }
-
+    /// One row per `AppAction` case — the exhaustive switches make a new verb
+    /// in ADBKit a compile error here instead of a silently missing row.
     private func appActionRows(_ packageId: String) -> [QuickRow] {
-        let verbs: [(AppControlService.AppAction, String, String)] = [
-            (.open, "Open", "play.circle"),
-            (.stop, "Force Stop", "stop.circle"),
-            (.minimize, "Minimize", "chevron.down.circle"),
-            (.clearCache, "Clear Cache", "eraser"),
-            (.clearData, "Clear Data", "eraser.fill"),
-            (.uninstall, "Uninstall", "trash"),
-        ]
-        return verbs
-            .filter { query.isEmpty || $0.1.localizedCaseInsensitiveContains(query) }
-            .map { verb, title, icon in
+        AppControlService.AppAction.allCases
+            .filter { query.isEmpty || Self.verbTitle($0).localizedCaseInsensitiveContains(query) }
+            .map { verb in
                 QuickRow(
-                    id: "verb:\(verb.rawValue):\(packageId)", icon: icon,
-                    title: title, subtitle: packageId,
+                    id: "verb:\(verb.rawValue):\(packageId)", icon: Self.verbIcon(verb),
+                    title: Self.verbTitle(verb), subtitle: packageId,
                     destructive: verb.isDestructive,
                     action: .appVerb(verb, packageId: packageId)
                 )
             }
+    }
+
+    private static func verbTitle(_ verb: AppControlService.AppAction) -> String {
+        switch verb {
+        case .open: return "Open"
+        case .stop: return "Force Stop"
+        case .minimize: return "Minimize"
+        case .clearCache: return "Clear Cache"
+        case .clearData: return "Clear Data"
+        case .uninstall: return "Uninstall"
+        }
+    }
+
+    private static func verbIcon(_ verb: AppControlService.AppAction) -> String {
+        switch verb {
+        case .open: return "play.circle"
+        case .stop: return "stop.circle"
+        case .minimize: return "chevron.down.circle"
+        case .clearCache: return "eraser"
+        case .clearData: return "eraser.fill"
+        case .uninstall: return "trash"
+        }
     }
 
     /// AVDs then iOS Simulators. Idle ones boot; running/booted ones switch
@@ -680,18 +720,28 @@ struct QuickActionsView: View {
     private var readyDevices: [Device] { state.devices.filter(\.isReady) }
 
     private var deviceRows: [QuickRow] {
-        readyDevices
-            .filter { query.isEmpty || state.deviceTitle($0).localizedCaseInsensitiveContains(query) }
-            .map { device in
-                QuickRow(
-                    id: "device:\(device.serial)",
-                    icon: device.platform == .iosSimulator ? "iphone" : "iphone.gen3",
-                    title: device.label,
-                    subtitle: state.deviceTitle(device),
-                    badge: device.serial == state.selectedSerial ? "selected" : nil,
-                    action: .selectDevice(serial: device.serial, label: device.label)
-                )
-            }
+        matchingReadyDevices.map {
+            deviceRow($0, idPrefix: "device", action: .selectDevice(serial: $0.serial, label: $0.label))
+        }
+    }
+
+    private var matchingReadyDevices: [Device] {
+        readyDevices.filter {
+            query.isEmpty || state.deviceTitle($0).localizedCaseInsensitiveContains(query)
+        }
+    }
+
+    /// One device row — shared by Switch Device and the pick interstitial so
+    /// the two lists can't drift apart visually.
+    private func deviceRow(_ device: Device, idPrefix: String, action: QuickRow.Action) -> QuickRow {
+        QuickRow(
+            id: "\(idPrefix):\(device.serial)",
+            icon: device.platform == .iosSimulator ? "iphone" : "iphone.gen3",
+            title: device.label,
+            subtitle: state.deviceTitle(device),
+            badge: device.serial == panelTargetSerial ? "selected" : nil,
+            action: action
+        )
     }
 
     /// What you can do with Finder-opened APKs: install right here, or hand
@@ -710,12 +760,19 @@ struct QuickActionsView: View {
             ("apk-decompile", .decompile),
             ("apk-sign", .sign),
         ]
+        // Loading this APK replaces whatever APK Studio already has open —
+        // if a different session is loaded, ask for the confirming second ⏎
+        // like the destructive app verbs do.
+        let clobbersStudio = state.apkStudio.apk.map { $0 != first } ?? false
         rows += studioTabs.compactMap { featureID, tab in
             guard let feature = FeatureRegistry.byID[featureID] else { return nil }
             return QuickRow(
                 id: "apk:\(featureID)", icon: feature.icon,
                 title: feature.title,
-                subtitle: "\(first.lastPathComponent) in APK Studio",
+                subtitle: clobbersStudio
+                    ? "Replaces the APK loaded in APK Studio"
+                    : "\(first.lastPathComponent) in APK Studio",
+                destructive: clobbersStudio,
                 action: .openStudio(tab: tab, url: first)
             )
         }
@@ -740,18 +797,9 @@ struct QuickActionsView: View {
                 action: .chooseAllDevices
             ))
         }
-        rows += readyDevices
-            .filter { query.isEmpty || state.deviceTitle($0).localizedCaseInsensitiveContains(query) }
-            .map { device in
-                QuickRow(
-                    id: "pick:\(device.serial)",
-                    icon: device.platform == .iosSimulator ? "iphone" : "iphone.gen3",
-                    title: device.label,
-                    subtitle: state.deviceTitle(device),
-                    badge: device.serial == state.selectedSerial ? "selected" : nil,
-                    action: .chooseDevice(serial: device.serial, label: device.label)
-                )
-            }
+        rows += matchingReadyDevices.map {
+            deviceRow($0, idPrefix: "pick", action: .chooseDevice(serial: $0.serial, label: $0.label))
+        }
         return rows
     }
 
@@ -787,7 +835,14 @@ struct QuickActionsView: View {
     private func rowView(
         _ row: QuickRow, index: Int, isHighlighted: Bool, showsDigitHint: Bool
     ) -> some View {
-        HStack(spacing: 10) {
+        let isArmed = armedRowID == row.id
+        // Destructive rows keep their danger color when highlighted (a red
+        // fill instead of the accent), and an armed row says so on the row
+        // itself — the footer warning alone was easy to miss.
+        let highlightFill: AnyShapeStyle = row.destructive
+            ? AnyShapeStyle(Color.red)
+            : AnyShapeStyle(.brandAccent)
+        return HStack(spacing: 10) {
             if runningRowID == row.id {
                 ProgressView().controlSize(.small).frame(width: 22)
             } else {
@@ -806,7 +861,11 @@ struct QuickActionsView: View {
                 }
             }
             Spacer()
-            if let badge = row.badge {
+            if isArmed {
+                Text("⏎ to confirm")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(isHighlighted ? AnyShapeStyle(accentText) : AnyShapeStyle(.orange))
+            } else if let badge = row.badge {
                 Text(badge)
                     .font(.caption2)
                     .foregroundStyle(isHighlighted ? accentText.opacity(0.75) : .secondary)
@@ -828,7 +887,7 @@ struct QuickActionsView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .background(
-            isHighlighted ? AnyShapeStyle(.brandAccent) : AnyShapeStyle(.clear),
+            isHighlighted ? highlightFill : AnyShapeStyle(.clear),
             in: RoundedRectangle(cornerRadius: 8)
         )
         .foregroundStyle(isHighlighted ? accentText : .primary)
@@ -872,16 +931,25 @@ struct QuickActionsView: View {
         switch screen {
         case .apps:
             installedApps = nil
-            guard let serial = state.targetSerials.first else {
+            guard let serial = panelTargetSerial else {
                 installedApps = []
                 return
             }
-            let packages = (try? await state.env.engine.appControl.listInstalledPackages(serial: serial)) ?? []
+            // User-initiated navigation, so it belongs in the Command Log
+            // like the panel's other adb calls.
+            let packages = await CommandLog.userInitiated {
+                (try? await state.env.engine.appControl.listInstalledPackages(serial: serial)) ?? []
+            }
             guard !Task.isCancelled else { return }
             installedApps = packages.sorted()
         case .emulators:
-            await state.refreshAvds()
-            await state.refreshSimulators()
+            emulatorsLoading = true
+            // Independent probes (emulator -list-avds vs simctl list) — run
+            // them together instead of paying the sum of both spawns.
+            async let avds: Void = state.refreshAvds()
+            async let simulators: Void = state.refreshSimulators()
+            _ = await (avds, simulators)
+            emulatorsLoading = false
         default:
             break
         }
@@ -926,15 +994,17 @@ struct QuickActionsView: View {
                     .buttonStyle(.link)
                     .font(.caption)
                 }
-            } else if runAllDevices, readyDevices.count > 1 {
-                Label("All devices (\(readyDevices.count))", systemImage: "square.stack.3d.down.right")
+            } else if let approved = effectiveApprovedSerials, approved.count > 1, !singleDeviceScreen {
+                Label("All devices (\(approved.count))", systemImage: "square.stack.3d.down.right")
                     .font(.caption)
                     .foregroundStyle(.textMuted)
             } else {
+                // The device the next action actually targets — the panel's
+                // pick, not just the device-bar selection.
+                let device = panelTargetDevice
                 Label(
-                    state.selectedDevice.map(state.deviceTitle) ?? "No device connected",
-                    systemImage: state.selectedDevice?.platform == .iosSimulator
-                        ? "iphone" : "iphone.gen3"
+                    device.map(state.deviceTitle) ?? "No device connected",
+                    systemImage: device?.platform == .iosSimulator ? "iphone" : "iphone.gen3"
                 )
                 .font(.caption)
                 .foregroundStyle(.textMuted)
@@ -952,6 +1022,19 @@ struct QuickActionsView: View {
         HStack(spacing: 5) {
             KeyHint(key)
             Text(label).font(.caption2).foregroundStyle(.textMuted)
+        }
+    }
+
+    private var panelTargetDevice: Device? {
+        panelTargetSerial.flatMap { serial in state.devices.first { $0.serial == serial } }
+    }
+
+    /// Screens whose actions are single-device by nature (the app list came
+    /// from one device) — the footer names that device, never "All devices".
+    private var singleDeviceScreen: Bool {
+        switch screen {
+        case .apps, .appActions: return true
+        default: return false
         }
     }
 
@@ -1023,10 +1106,56 @@ struct QuickActionsView: View {
         perform(row.action)
     }
 
+    // MARK: - Device targeting
+
+    /// The session's pick, discarded if that device is no longer ready — a
+    /// stale pick re-raises the interstitial instead of silently retargeting.
+    private var effectivePickedSerial: String? {
+        pickedSerial.flatMap { picked in
+            readyDevices.contains { $0.serial == picked } ? picked : nil
+        }
+    }
+
+    /// The serials an "All devices" approval still covers: approved ∩ ready.
+    /// Devices attached after the approval are never included.
+    private var effectiveApprovedSerials: [String]? {
+        guard let approvedAllSerials else { return nil }
+        let ready = Set(readyDevices.map(\.serial))
+        let live = approvedAllSerials.filter(ready.contains)
+        return live.isEmpty ? nil : live
+    }
+
+    /// The single device a panel action targets: the session pick, else the
+    /// device-bar selection, else the first ready device.
+    private var panelTargetSerial: String? {
+        if let picked = effectivePickedSerial { return picked }
+        if let selected = state.selectedSerial,
+           readyDevices.contains(where: { $0.serial == selected }) {
+            return selected
+        }
+        return readyDevices.first?.serial
+    }
+
+    /// Explicit targets for `AppState.run(feature:params:on:)`. Always
+    /// explicit for device features (empty = no device, which `run` reports):
+    /// falling back to `targetSerials` would let the *hidden main window's*
+    /// run-on-all state fan a panel action out past an explicit single pick,
+    /// and a device switch deferred behind an exit guard would silently run
+    /// on the old selection.
+    private func explicitTargets(for feature: FeatureDef) -> [String]? {
+        guard feature.needsDevice else { return nil }
+        if let approved = effectiveApprovedSerials, feature.supportsRunAll, approved.count > 1 {
+            return approved
+        }
+        return panelTargetSerial.map { [$0] } ?? []
+    }
+
     /// Whether this action needs the device interstitial, and whether that
     /// interstitial offers "All devices" (only where fan-out is supported).
     private func deviceChoice(for action: QuickRow.Action) -> (needed: Bool, allowAll: Bool) {
-        guard readyDevices.count > 1, !hasPickedDevice else { return (false, false) }
+        guard readyDevices.count > 1,
+              effectivePickedSerial == nil, effectiveApprovedSerials == nil
+        else { return (false, false) }
         switch action {
         case .runFeature(let feature):
             return (feature.needsDevice, feature.supportsRunAll)
@@ -1081,20 +1210,23 @@ struct QuickActionsView: View {
             state.bootSimulator(simulator)
             finish(QuickRunOutcome(message: "Booting \(simulator.name)…", ok: true))
         case .selectDevice(let serial, let label):
+            // The panel target is carried explicitly (`pickedSerial`) — the
+            // device-bar switch is a courtesy and may defer behind an exit
+            // guard, so nothing here depends on it landing.
+            pickedSerial = serial
+            approvedAllSerials = nil
             state.requestDevice(serial)
-            hasPickedDevice = true
-            runAllDevices = false
             syncMemory()
             if !stack.isEmpty { pop() }
             finish(QuickRunOutcome(message: "Now targeting \(label)", ok: true))
         case .chooseDevice(let serial, _):
+            pickedSerial = serial
+            approvedAllSerials = nil
             state.requestDevice(serial)
-            hasPickedDevice = true
-            runAllDevices = false
             resumePendingAfterPick()
         case .chooseAllDevices:
-            hasPickedDevice = true
-            runAllDevices = true
+            approvedAllSerials = readyDevices.map(\.serial)
+            pickedSerial = nil
             resumePendingAfterPick()
         }
     }
@@ -1108,23 +1240,10 @@ struct QuickActionsView: View {
         if let held { perform(held) }
     }
 
-    /// Fan-out targets for a feature when "All devices" is in effect (and the
-    /// feature supports run-on-all); nil defers to the device-bar selection.
-    private func explicitTargets(for feature: FeatureDef) -> [String]? {
-        guard runAllDevices, feature.supportsRunAll else { return nil }
-        var serials = readyDevices.map(\.serial)
-        guard serials.count > 1 else { return nil }
-        // Selected device first, mirroring `targetSerials`' ordering rule.
-        if let selected = state.selectedSerial, let index = serials.firstIndex(of: selected) {
-            serials.swapAt(0, index)
-        }
-        return serials
-    }
-
     private func run(_ feature: FeatureDef) {
         // `state.run` reports these preconditions only via toast (it doesn't
         // write `lastResults`), so check them here where the panel can say so.
-        if feature.needsDevice, state.targetSerials.isEmpty {
+        if feature.needsDevice, panelTargetSerial == nil {
             lastRun = QuickRunOutcome(message: "No device connected.", ok: false)
             return
         }
@@ -1149,8 +1268,16 @@ struct QuickActionsView: View {
             lastRun = QuickRunOutcome(message: "Pick a saved bundle first.", ok: false)
             return
         }
-        let serial = state.targetSerials.first ?? ""
-        if command.kind == .adb, serial.isEmpty {
+        // Device-scoped commands honor an "All devices" approval (the footer
+        // advertises it); shell commands without {serial} run once.
+        let deviceScoped = command.kind == .adb || command.command.contains("{serial}")
+        let targets: [String]
+        if deviceScoped, let approved = effectiveApprovedSerials, approved.count > 1 {
+            targets = approved
+        } else {
+            targets = panelTargetSerial.map { [$0] } ?? []
+        }
+        if command.kind == .adb, targets.isEmpty {
             lastRun = QuickRunOutcome(message: "No device connected.", ok: false)
             return
         }
@@ -1158,20 +1285,38 @@ struct QuickActionsView: View {
         lastRun = nil
         let bundleId = state.selectedBundle?.packageId
         Task {
-            let result = await CommandLog.userInitiated {
-                await state.env.engine.customCommands.run(
-                    command: command, bundleId: bundleId, serial: serial
-                )
+            var okCount = 0
+            var lastResult = FeatureResult(ok: false, message: "\(command.name) didn't run")
+            for serial in targets.isEmpty ? [""] : targets {
+                let result = await CommandLog.userInitiated {
+                    await state.env.engine.customCommands.run(
+                        command: command, bundleId: bundleId, serial: serial
+                    )
+                }
+                if result.ok { okCount += 1 }
+                lastResult = result
+                // Mirror the Custom Commands screen: results land in the
+                // notifications history too, not just this transient footer.
+                let label = state.devices.first { $0.serial == serial }?.label
+                state.showToast(Toast(
+                    message: targets.count > 1 ? "\(label ?? serial): \(result.message)" : result.message,
+                    ok: result.ok
+                ))
             }
-            // Mirror the Custom Commands screen: failures land in the
-            // notifications history too, not just this transient footer.
-            state.showToast(Toast(message: result.message, ok: result.ok))
-            finish(QuickRunOutcome(result: result))
+            if targets.count > 1 {
+                finish(QuickRunOutcome(
+                    message: "\(command.name) — ok on \(okCount) of \(targets.count) devices",
+                    ok: okCount == targets.count
+                ))
+            } else {
+                finish(QuickRunOutcome(result: lastResult))
+            }
         }
     }
 
     private func run(_ verb: AppControlService.AppAction, packageId: String) {
-        guard let serial = state.targetSerials.first else {
+        // Single device by design — the app list itself came from one device.
+        guard let serial = panelTargetSerial else {
             lastRun = QuickRunOutcome(message: "No device connected.", ok: false)
             return
         }
@@ -1212,12 +1357,15 @@ struct QuickActionsView: View {
         install(picker.urls)
     }
 
-    /// Install APKs on the panel's target device(s) — one device, or all of
-    /// them after an "All devices" pick.
+    /// Install APKs on the panel's target device(s) — one device, or the
+    /// serials an "All devices" pick approved.
     private func install(_ urls: [URL]) {
-        let serials = runAllDevices
-            ? readyDevices.map(\.serial)
-            : Array(state.targetSerials.prefix(1))
+        let serials: [String]
+        if let approved = effectiveApprovedSerials, approved.count > 1 {
+            serials = approved
+        } else {
+            serials = panelTargetSerial.map { [$0] } ?? []
+        }
         guard !serials.isEmpty else {
             lastRun = QuickRunOutcome(message: "No device connected.", ok: false)
             return
@@ -1225,10 +1373,10 @@ struct QuickActionsView: View {
         runningRowID = "native:install"
         lastRun = nil
         Task {
-            let report = await state.installAPKs(urls, onSerials: serials)
+            let outcome = await state.installAPKs(urls, onSerials: serials)
             finish(QuickRunOutcome(
-                message: report.components(separatedBy: "\n").first ?? "Install finished",
-                ok: true
+                message: outcome.report.components(separatedBy: "\n").first ?? "Install finished",
+                ok: outcome.ok
             ))
         }
     }

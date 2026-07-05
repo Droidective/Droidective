@@ -7,7 +7,11 @@ public struct AppListing: Sendable, Equatable, Identifiable {
 
     public var id: String { packageId }
     /// Display name derived from the package id ("weather" → "Weather").
-    public var displayName: String {
+    public var displayName: String { Self.displayName(for: packageId) }
+
+    /// The package-id → display-name rule, callable without a full listing —
+    /// the Quick Actions panel derives names from bare `pm list` package ids.
+    public static func displayName(for packageId: String) -> String {
         packageId.split(separator: ".").last.map { $0.prefix(1).uppercased() + $0.dropFirst() } ?? packageId
     }
 

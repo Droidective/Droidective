@@ -1134,12 +1134,14 @@ final class AppState {
 
     /// Install one or more APKs on the given device serials, one toast per APK
     /// (failures keep the full adb output in the toast's copyText). Returns a
-    /// short multi-line summary for inline display. Shared by the Install App
-    /// screen's drop zone, the file picker, and APKs opened from Finder.
+    /// short multi-line summary for inline display plus whether every install
+    /// landed. Shared by the Install App screen's drop zone, the file picker,
+    /// and APKs opened from Finder.
     @discardableResult
-    func installAPKs(_ urls: [URL], onSerials serials: [String]) async -> String {
-        guard !urls.isEmpty, !serials.isEmpty else { return "" }
+    func installAPKs(_ urls: [URL], onSerials serials: [String]) async -> (report: String, ok: Bool) {
+        guard !urls.isEmpty, !serials.isEmpty else { return ("", false) }
         var report: [String] = []
+        var allOK = true
         await CommandLog.userInitiated {
             for url in urls {
                 let name = url.lastPathComponent
@@ -1150,13 +1152,14 @@ final class AppState {
                         ?? FeatureResult(ok: false, message: "adb not found")
                     if result.ok { ok += 1 } else { failures.append((serial, result)) }
                 }
+                if !failures.isEmpty { allOK = false }
                 showToast(Self.installToast(name: name, ok: ok, total: serials.count, failures: failures))
                 report.append(ok == serials.count
                     ? "Installed \(name)"
                     : "Installed \(name) on \(ok) of \(serials.count) devices")
             }
         }
-        return report.joined(separator: "\n")
+        return (report.joined(separator: "\n"), allOK)
     }
 
     /// A short install headline for the toast; on failure the full adb output is

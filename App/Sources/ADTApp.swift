@@ -60,8 +60,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let closing = notification.object as? NSWindow,
               closing.canBecomeMain, !(closing is NSPanel)
         else { return }
+        // Minimized windows count — a main window in the Dock is still the
+        // user's workspace, not a cue to kill sessions and go accessory.
         let remaining = NSApp.windows.contains {
-            $0 !== closing && $0.isVisible && $0.canBecomeMain && !($0 is NSPanel)
+            $0 !== closing && ($0.isVisible || $0.isMiniaturized)
+                && $0.canBecomeMain && !($0 is NSPanel)
         }
         guard !remaining else { return }
         appState.enterBackground()
@@ -71,12 +74,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Relaunching from Finder/Spotlight while resident in the background (no
-    /// Dock icon, window closed) lands here — reopen the main window.
+    /// Dock icon, window closed) lands here — reopen the main window. Checked
+    /// structurally, not via `hasVisibleWindows`: an open Quick Actions panel
+    /// counts as a visible window and would otherwise make the relaunch a
+    /// no-op with no main window and no Dock icon.
     func applicationShouldHandleReopen(
         _ sender: NSApplication, hasVisibleWindows flag: Bool
     ) -> Bool {
         MainActor.assumeIsolated {
-            guard !flag, let appState else { return true }
+            let hasPrimary = NSApp.windows.contains {
+                ($0.isVisible || $0.isMiniaturized) && $0.canBecomeMain && !($0 is NSPanel)
+            }
+            guard !hasPrimary, let appState else { return true }
             appState.activateMainWindow()
             return false
         }

@@ -177,7 +177,7 @@ struct InstallAppView: View {
         installing = true
         Task {
             let summary = await state.installAPKs(urls, onSerials: serials)
-            lastResult = summary.isEmpty ? nil : summary
+            lastResult = summary.report.isEmpty ? nil : summary.report
             installing = false
             staged = []
         }
