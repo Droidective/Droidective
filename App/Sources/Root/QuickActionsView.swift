@@ -98,10 +98,11 @@ final class QuickPanelMemory {
     static let shared = QuickPanelMemory()
 
     var stack: [QuickScreen] = []
-    /// The serial explicitly picked at the device interstitial (or Switch
-    /// Device). Stored as the serial — not a flag — so a device that
-    /// disconnected while the panel was closed re-raises the interstitial
-    /// instead of silently running on whatever the selection drifted to.
+    /// The serial from the most recent device interstitial (or Switch
+    /// Device) — the target for device-scoped screens (Manage Apps) and the
+    /// footer. Stored as the serial, not a flag, so a device that
+    /// disconnected while the panel was closed falls back visibly instead of
+    /// silently retargeting. Actions themselves re-ask before every run.
     var pickedSerial: String?
     /// The exact serials approved by an "All devices" pick. Fan-outs use this
     /// ∩ currently-ready, so a device plugged in *after* the approval is
@@ -1075,10 +1076,10 @@ struct QuickActionsView: View {
         highlighted = index
     }
 
-    /// ←/→ step through the root grid — only while the query is empty, so
-    /// they keep moving the text caret while typing.
+    /// ←/→ step through the root grid, searching or not — arrow keys own
+    /// grid navigation (Raycast-style); the query caret cedes to them.
     private func moveHorizontal(_ direction: Int) -> KeyPress.Result {
-        guard isRoot, query.isEmpty else { return .ignored }
+        guard isRoot else { return .ignored }
         let total = rootGridItems.count + rootAppItems.count
         guard total > 0 else { return .ignored }
         armedRowID = nil
@@ -1108,8 +1109,7 @@ struct QuickActionsView: View {
 
     // MARK: - Device targeting
 
-    /// The session's pick, discarded if that device is no longer ready — a
-    /// stale pick re-raises the interstitial instead of silently retargeting.
+    /// The latest pick, discarded if that device is no longer ready.
     private var effectivePickedSerial: String? {
         pickedSerial.flatMap { picked in
             readyDevices.contains { $0.serial == picked } ? picked : nil
@@ -1152,10 +1152,11 @@ struct QuickActionsView: View {
 
     /// Whether this action needs the device interstitial, and whether that
     /// interstitial offers "All devices" (only where fan-out is supported).
+    /// With several devices connected, every device-scoped action asks —
+    /// each pick scopes just the action it precedes (verbs inside Manage
+    /// Apps inherit the pick that opened the list).
     private func deviceChoice(for action: QuickRow.Action) -> (needed: Bool, allowAll: Bool) {
-        guard readyDevices.count > 1,
-              effectivePickedSerial == nil, effectiveApprovedSerials == nil
-        else { return (false, false) }
+        guard readyDevices.count > 1 else { return (false, false) }
         switch action {
         case .runFeature(let feature):
             return (feature.needsDevice, feature.supportsRunAll)

@@ -285,9 +285,12 @@ platforms annotation without a runner.
   full-app view screens. Form actions render their registry `FieldDef`s
   in-panel (`QuickActionFormView`); app verbs come from
   `AppControlService.AppAction` (destructive ones need a second ⏎). With >1
-  device connected, the first device-scoped action pushes a pick-device
+  device connected, every device-scoped action pushes a pick-device
   interstitial ("All devices" fans out via `AppState.run(feature:params:on:)`
-  when `supportsRunAll`); the choice sticks for the session. Esc (or the
+  when `supportsRunAll`); the latest pick scopes Manage Apps, its verbs, and
+  the footer. Targets always ride explicitly through `run(on:)` — never the
+  device-bar selection, whose run-on-all state belongs to the hidden window.
+  ←→/↑↓ navigate the root grid even while a query is typed. Esc (or the
   header's ‹ button) pops a screen and closes at the root, and a closed panel
   resumes its screen + device choice when reopened within Settings ▸ Quick
   Actions' window (`QuickPanelMemory`, default 5 min). Reopening the app goes
