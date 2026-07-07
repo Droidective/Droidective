@@ -164,6 +164,7 @@ struct AppearanceSettingsView: View {
     @AppStorage("theme") private var theme = "dark"
     @AppStorage(accentColorDefaultsKey) private var accentHex = ""
     @AppStorage("showFeatureNotes") private var showFeatureNotes = false
+    @AppStorage("sidebarAutoHide") private var sidebarAutoHide = false
     #if DEBUG
     @AppStorage(DevMetrics.overlayEnabledKey) private var showDevMetrics = true
     #endif
@@ -203,6 +204,13 @@ struct AppearanceSettingsView: View {
                     }
                 }
                 Text("Recolors buttons, toggles, selection, and active icons across the app.")
+                    .font(.footnote)
+                    .foregroundStyle(.textMuted)
+            }
+
+            Section("Sidebar") {
+                Toggle("Automatically hide and show the sidebar", isOn: $sidebarAutoHide)
+                Text("The sidebar slides over the content when you push the mouse against the window's left edge — ⌘B also shows it.")
                     .font(.footnote)
                     .foregroundStyle(.textMuted)
             }

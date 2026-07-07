@@ -171,8 +171,30 @@ final class AppState {
     /// and scrollback survive leaving the feature.
     let terminals = TerminalManager()
 
+    /// With auto-hide on (Settings ▸ Appearance), the sidebar rides over the
+    /// content instead of sitting in the layout; this is that overlay's
+    /// visibility, driven by the left-edge hover zone and ⌘B.
+    var sidebarOverlayShown = false
+
     func toggleSidebar() {
-        withAnimation(.easeInOut(duration: 0.18)) { sidebarVisible.toggle() }
+        if UserDefaults.standard.bool(forKey: "sidebarAutoHide") {
+            withAnimation(.easeInOut(duration: 0.18)) { sidebarOverlayShown.toggle() }
+        } else {
+            withAnimation(.easeInOut(duration: 0.18)) { sidebarVisible.toggle() }
+        }
+    }
+
+    /// The device bar's sidebar button: switches between the fixed sidebar
+    /// and Dock-style auto-hide. Returning to fixed always shows the sidebar —
+    /// a mode flip that leaves everything hidden would read as a dead button.
+    func toggleSidebarMode() {
+        let defaults = UserDefaults.standard
+        let autoHide = !defaults.bool(forKey: "sidebarAutoHide")
+        withAnimation(.easeInOut(duration: 0.18)) {
+            defaults.set(autoHide, forKey: "sidebarAutoHide")
+            sidebarOverlayShown = false
+            if !autoHide { sidebarVisible = true }
+        }
     }
 
     // MARK: - Font scaling (⌘= / ⌘- / ⌘0)
