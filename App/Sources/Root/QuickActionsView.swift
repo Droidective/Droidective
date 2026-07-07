@@ -741,6 +741,10 @@ struct QuickActionsView: View {
 
     private var readyDevices: [Device] { state.devices.filter(\.isReady) }
 
+    /// Ready-device serials in bar order — the input `PanelTargeting` resolves
+    /// the panel's target(s) from.
+    private var readySerials: [String] { readyDevices.map(\.serial) }
+
     private var matchingReadyDevices: [Device] {
         readyDevices.filter {
             query.isEmpty || state.deviceTitle($0).localizedCaseInsensitiveContains(query)
@@ -1180,47 +1184,31 @@ struct QuickActionsView: View {
 
     // MARK: - Device targeting
 
-    /// The latest pick, discarded if that device is no longer ready.
-    private var effectivePickedSerial: String? {
-        pickedSerial.flatMap { picked in
-            readyDevices.contains { $0.serial == picked } ? picked : nil
-        }
-    }
-
-    /// The serials an "All devices" approval still covers: approved ∩ ready.
-    /// Devices attached after the approval are never included.
+    /// The serials an "All devices" approval still covers (approved ∩ ready) —
+    /// the footer's "All devices (N)" count reads this. See `PanelTargeting`.
     private var effectiveApprovedSerials: [String]? {
-        guard let approvedAllSerials else { return nil }
-        let ready = Set(readyDevices.map(\.serial))
-        let live = approvedAllSerials.filter(ready.contains)
-        return live.isEmpty ? nil : live
+        PanelTargeting.approvedTargets(approved: approvedAllSerials, ready: readySerials)
     }
 
     /// The single device a panel action targets: the session pick, else the
-    /// device-bar selection, else the first ready device.
+    /// device-bar selection, else the first ready device. See `PanelTargeting`.
     private var panelTargetSerial: String? {
-        if let picked = effectivePickedSerial { return picked }
-        if let selected = state.selectedSerial,
-           readyDevices.contains(where: { $0.serial == selected }) {
-            return selected
-        }
-        return readyDevices.first?.serial
+        PanelTargeting.singleTarget(
+            picked: pickedSerial, selected: state.selectedSerial, ready: readySerials
+        )
     }
 
-    /// Explicit targets for `AppState.run(feature:params:on:)`. Always
-    /// explicit for device features (empty = no device, which `run` reports):
-    /// falling back to `targetSerials` would let the *hidden main window's*
-    /// run-on-all state fan a panel action out past an explicit single pick,
-    /// and a device switch deferred behind an exit guard would silently run
-    /// on the old selection. An "All devices" pick (⌘⏎ at the interstitial)
-    /// fans out any device feature — the panel loops explicit targets, so it
-    /// isn't limited to the registry's `supportsRunAll` set.
+    /// Explicit targets for `AppState.run(feature:params:on:)` — always the
+    /// panel's own single pick or "All devices" fan-out, never the device
+    /// bar's `targetSerials` (whose run-on-all state belongs to the hidden main
+    /// window, and whose selection can lag a guard-deferred switch). An "All
+    /// devices" pick fans out any device feature, not just `supportsRunAll`
+    /// ones, since the panel loops explicit targets. See `PanelTargeting`.
     private func explicitTargets(for feature: FeatureDef) -> [String]? {
-        guard feature.needsDevice else { return nil }
-        if let approved = effectiveApprovedSerials, approved.count > 1 {
-            return approved
-        }
-        return panelTargetSerial.map { [$0] } ?? []
+        PanelTargeting.runTargets(
+            needsDevice: feature.needsDevice, picked: pickedSerial,
+            selected: state.selectedSerial, approved: approvedAllSerials, ready: readySerials
+        )
     }
 
     /// Whether this action needs the device interstitial, and whether that
@@ -1347,12 +1335,12 @@ struct QuickActionsView: View {
         // Device-scoped commands honor an "All devices" approval (the footer
         // advertises it); shell commands without {serial} run once.
         let deviceScoped = command.kind == .adb || command.command.contains("{serial}")
-        let targets: [String]
-        if deviceScoped, let approved = effectiveApprovedSerials, approved.count > 1 {
-            targets = approved
-        } else {
-            targets = panelTargetSerial.map { [$0] } ?? []
-        }
+        let targets: [String] = deviceScoped
+            ? PanelTargeting.fanOut(
+                picked: pickedSerial, selected: state.selectedSerial,
+                approved: approvedAllSerials, ready: readySerials
+            )
+            : (panelTargetSerial.map { [$0] } ?? [])
         if command.kind == .adb, targets.isEmpty {
             lastRun = QuickRunOutcome(message: "No device connected.", ok: false)
             return
@@ -1436,12 +1424,10 @@ struct QuickActionsView: View {
     /// Install APKs on the panel's target device(s) — one device, or the
     /// serials an "All devices" pick approved.
     private func install(_ urls: [URL]) {
-        let serials: [String]
-        if let approved = effectiveApprovedSerials, approved.count > 1 {
-            serials = approved
-        } else {
-            serials = panelTargetSerial.map { [$0] } ?? []
-        }
+        let serials = PanelTargeting.fanOut(
+            picked: pickedSerial, selected: state.selectedSerial,
+            approved: approvedAllSerials, ready: readySerials
+        )
         guard !serials.isEmpty else {
             lastRun = QuickRunOutcome(message: "No device connected.", ok: false)
             return
