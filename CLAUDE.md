@@ -380,17 +380,22 @@ compile or test time* — lean on it instead of manual vigilance.
 ## Status
 
 Feature-complete across all planned milestones plus several UX rounds (latest:
-a native multi-tab **Terminal** feature (PTY login shells via SwiftTerm,
-ANDROID_SERIAL-scoped, ⌘N/⌘W/⇧⌘[ ⇧⌘] shell management with close/quit
-confirmations), shell-kind custom commands through `zsh -lc`, and the removal
-of the bottom command bar — the how-it-works note toggles from Settings ▸
-Appearance and the Command Log lives in Settings. Before that, **v2.7.0** — a
-full APK toolchain (APK Studio: inspect, decompile via jadx/apktool, recompile,
-and sign — with keystore creation) plus Frida setup, a custom accent color,
-launching emulators from the device bar, per-feature connect-a-device empty
-states, a live-preview hotkey recorder, and a Settings split into
-Appearance/Privacy; managed tools download from GitHub releases into
-Application Support and are sized/removable in Settings); 549 tests green;
+**v2.9.0** — **background mode** (closing the main window keeps Droidective
+resident in the menu bar, drops the Dock icon, and stops kept-alive sessions;
+⌘Q still quits) with a global **Quick Actions panel** (a non-activating
+Raycast-style mini app on a global hotkey: instant/toggle/form actions, custom
+commands, Manage Apps, Emulators, and Install APK, with per-action device
+targeting, run-on-all, and Finder APK routing — see `QuickActionsView` and the
+tested `PanelTargeting`), plus a **terminal tab rail** with a find bar (⌘F,
+⌘G / ⇧⌘G) and a Dock-style **auto-hiding sidebar**; before that a native
+multi-tab **Terminal** feature (PTY login shells via SwiftTerm,
+ANDROID_SERIAL-scoped) and shell-kind custom commands through `zsh -lc`. Before
+that, **v2.7.0** — a full APK toolchain (APK Studio: inspect, decompile via
+jadx/apktool, recompile, and sign — with keystore creation) plus Frida setup, a
+custom accent color, launching emulators from the device bar, per-feature
+connect-a-device empty states, a live-preview hotkey recorder, and a Settings
+split into Appearance/Privacy; managed tools download from GitHub releases into
+Application Support and are sized/removable in Settings); 654 tests green;
 builds clean with zero warnings (enforced as errors in CI). Verified live against a
 physical device and an Android emulator. Release builds are Developer ID-signed +
 notarized and bundle scrcpy/ffmpeg (see `RELEASING.md`). Open gaps: the Apps
