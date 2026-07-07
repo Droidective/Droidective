@@ -6,9 +6,9 @@
     <description>Most recent Droidective updates.</description>
     <language>en</language>
     <item>
-      <title>Droidective 2.8.3</title>
-      <sparkle:version>273</sparkle:version>
-      <sparkle:shortVersionString>2.8.3</sparkle:shortVersionString>
+      <title>Droidective 2.9.0</title>
+      <sparkle:version>300</sparkle:version>
+      <sparkle:shortVersionString>2.9.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <description><![CDATA[
 <style>
@@ -63,8 +63,8 @@ follow-ups.</li>
 </ul>
 <p>Installed copies update in place via Sparkle.</p>
 ]]></description>
-      <pubDate>Sat, 04 Jul 2026 12:32:24 +0000</pubDate>
-      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v2.8.3/Droidective-v2.8.3.dmg" sparkle:edSignature="uUcxzvVW6RPSsvB2IbcH+GRtc99XXbyjhT2dOdfR3/3RlhnY3DssZvV4NcNA5b06pKTtl/Gjm+XXyQOs1wnjBA==" length="45424457" type="application/octet-stream" />
+      <pubDate>Tue, 07 Jul 2026 20:18:56 +0000</pubDate>
+      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v2.9.0/Droidective-v2.9.0.dmg" sparkle:edSignature="O+5OEsxdybfGzGBRkw8kOdA7JZBLRh4XtPfYdaerdf8D9YKLW6p+PTDvbOaOSol9PysAbIOilZivylE75E5DAg==" length="45961119" type="application/octet-stream" />
     </item>
   </channel>
 </rss>
