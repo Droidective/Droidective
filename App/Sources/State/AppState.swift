@@ -754,6 +754,13 @@ final class AppState {
         if terminals.tabs.isEmpty { closeTab("terminal") }
     }
 
+    /// Close a whole rail group, killing each shell in it. Like single
+    /// closes, the Terminal feature tab goes with the last shell.
+    func closeTerminalGroup(_ id: UUID) {
+        terminals.closeGroup(id)
+        if terminals.tabs.isEmpty { closeTab("terminal") }
+    }
+
     /// Give a pane keyboard focus — its `+` focuses it so a new tab lands there.
     func focusGroup(_ index: Int) { workspace.focus(index); persistTabs() }
 
