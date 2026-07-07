@@ -166,10 +166,13 @@ struct TerminalView: View {
     @State private var renamingGroup: TerminalTabs.Group?
     @State private var renameDraft = ""
     @AppStorage("terminalRailCollapsed") private var railCollapsed = false
-    /// The tab/group being dragged in the rail; rows live-reorder as the drag
-    /// passes over them, so the drop itself only has to clear this.
+    /// The tab/group being dragged in the rail. Rows hold still while an accent
+    /// insertion guideline (`dropSlot`) shows where the drop will land; the move
+    /// itself happens on drop.
     @State private var draggedTabID: UUID?
     @State private var draggedGroupID: UUID?
+    /// Where the insertion guideline is drawn during a rail drag.
+    @State private var dropSlot: RailDropSlot?
 
     private var terminals: TerminalManager { state.terminals }
 
@@ -189,6 +192,7 @@ struct TerminalView: View {
             clear: {
                 draggedTabID = nil
                 draggedGroupID = nil
+                dropSlot = nil
             }
         ))
         // A first visit opens a shell right away — an empty terminal screen
@@ -298,9 +302,13 @@ struct TerminalView: View {
                         .frame(minHeight: 56)
                         .frame(maxHeight: .infinity)
                         .contentShape(Rectangle())
+                        .overlay(alignment: .top) {
+                            guideline(dropSlot == .railEnd).padding(.horizontal, 8)
+                        }
                         .onDrop(of: [.plainText], delegate: RailTailDropDelegate(
                             terminals: terminals,
-                            draggedTabID: $draggedTabID, draggedGroupID: $draggedGroupID
+                            draggedTabID: $draggedTabID, draggedGroupID: $draggedGroupID,
+                            dropSlot: $dropSlot
                         ))
                 }
                 .frame(maxHeight: .infinity, alignment: .top)
@@ -363,13 +371,18 @@ struct TerminalView: View {
             Button("Close Group") { state.closeTerminalGroup(group.id) }
         }
         .opacity(draggedGroupID == group.id ? 0.4 : 1)
+        // Above the header → a group reorders here; below it → a tab joins the
+        // group.
+        .overlay(alignment: .top) { guideline(dropSlot == .beforeGroup(group.id)).offset(y: -1) }
+        .overlay(alignment: .bottom) { guideline(dropSlot == .intoGroup(group.id)).offset(y: 1) }
         .onDrag {
             draggedGroupID = group.id
             return NSItemProvider(object: "group:\(group.id.uuidString)" as NSString)
         }
         .onDrop(of: [.plainText], delegate: GroupHeaderDropDelegate(
             group: group.id, terminals: terminals,
-            draggedTabID: $draggedTabID, draggedGroupID: $draggedGroupID
+            draggedTabID: $draggedTabID, draggedGroupID: $draggedGroupID,
+            dropSlot: $dropSlot
         ))
     }
 
@@ -418,14 +431,39 @@ struct TerminalView: View {
             Button("Close Terminal") { state.closeTerminalShell(tab.id) }
         }
         .opacity(draggedTabID == tab.id ? 0.4 : 1)
+        // A tab drops before this row; a group dragged over a loose row
+        // interleaves before it. Both draw the guideline above the row.
+        .overlay(alignment: .top) {
+            guideline(dropSlot == .beforeTab(tab.id) || (!indented && dropSlot == .beforeGroup(tab.id)))
+                .offset(y: -1)
+        }
         .onDrag {
             draggedTabID = tab.id
             return NSItemProvider(object: "tab:\(tab.id.uuidString)" as NSString)
         }
         .onDrop(of: [.plainText], delegate: TabRowDropDelegate(
-            row: tab.id, terminals: terminals,
-            draggedTabID: $draggedTabID, draggedGroupID: $draggedGroupID
+            row: tab.id, isLoose: !indented, terminals: terminals,
+            draggedTabID: $draggedTabID, draggedGroupID: $draggedGroupID,
+            dropSlot: $dropSlot
         ))
+    }
+
+    /// The accent insertion indicator shown at a drop slot — a thin capped line,
+    /// matching the sidebar's guideline.
+    @ViewBuilder
+    private func guideline(_ show: Bool) -> some View {
+        if show {
+            HStack(spacing: 0) {
+                guidelineCap
+                Rectangle().fill(Color.brandAccent).frame(height: 2)
+                guidelineCap
+            }
+            .frame(height: 6)
+        }
+    }
+
+    private var guidelineCap: some View {
+        RoundedRectangle(cornerRadius: 1).fill(Color.brandAccent).frame(width: 3, height: 6)
     }
 
     private func beginRename(_ tab: TerminalManager.Tab) {
@@ -462,83 +500,132 @@ struct TerminalView: View {
 
 // MARK: - Rail drag & drop
 
-/// Rows reorder live as the drag passes over them (`dropEntered`), so these
-/// delegates never decode the item provider — the dragged id travels in the
-/// view's `draggedTabID`/`draggedGroupID` state instead.
+/// Where the insertion guideline is drawn during a rail drag. The delegates
+/// set it as the drag moves and the matching row draws the accent line; the
+/// move is applied only on drop.
+private enum RailDropSlot: Equatable {
+    case beforeTab(UUID)     // guideline above a tab row
+    case intoGroup(UUID)     // guideline below a group header — a tab joins the group
+    case beforeGroup(UUID)   // guideline above a group header (or a loose tab) — a group reorders here
+    case railEnd             // guideline at the rail's bottom — loose end / group to end
+}
+
+/// One tab row's drop target. A dragged tab drops before this row (loose or
+/// grouped, matching the row's context); a dragged group interleaves before a
+/// *loose* row. Rows hold still — only `dropSlot` changes — until the drop.
 private struct TabRowDropDelegate: DropDelegate {
     let row: UUID
+    let isLoose: Bool
     let terminals: TerminalManager
     @Binding var draggedTabID: UUID?
     @Binding var draggedGroupID: UUID?
+    @Binding var dropSlot: RailDropSlot?
 
-    func dropEntered(info: DropInfo) {
-        if let dragged = draggedTabID, dragged != row {
-            // Before a loose row → stays loose; before a grouped row → joins
-            // that group. The model reads the target's context.
-            terminals.moveTab(dragged, before: row)
-        } else if let dragged = draggedGroupID {
-            // Dragging a group over a loose tab interleaves it there (a no-op
-            // over a grouped row, whose id isn't a top-level entry).
-            terminals.moveGroup(dragged, before: row)
-        }
+    private var slot: RailDropSlot? {
+        if let dragged = draggedTabID, dragged != row { return .beforeTab(row) }
+        // A group targets a loose row (its id is a top-level entry); a grouped
+        // row isn't, so a group drag there would be a no-op — offer no slot.
+        if draggedGroupID != nil, isLoose { return .beforeGroup(row) }
+        return nil
     }
 
-    func dropUpdated(info: DropInfo) -> DropProposal? { DropProposal(operation: .move) }
+    func validateDrop(info: DropInfo) -> Bool { slot != nil }
+    func dropEntered(info: DropInfo) { dropSlot = slot }
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        dropSlot = slot
+        return slot == nil ? nil : DropProposal(operation: .move)
+    }
+    func dropExited(info: DropInfo) { if dropSlot == slot { dropSlot = nil } }
 
     func performDrop(info: DropInfo) -> Bool {
-        draggedTabID = nil
-        draggedGroupID = nil
-        return true
+        defer { clearRailDrag(&draggedTabID, &draggedGroupID, &dropSlot) }
+        if let dragged = draggedTabID, dragged != row {
+            terminals.moveTab(dragged, before: row)
+            return true
+        }
+        if let dragged = draggedGroupID, isLoose {
+            terminals.moveGroup(dragged, before: row)
+            return true
+        }
+        return false
     }
 }
 
-/// A tab dragged onto a group header appends to that group (works for
-/// collapsed groups too); a group dragged onto another header reorders the
-/// groups.
+/// A group header's drop target: a dragged tab joins the group (guideline
+/// below the header); a dragged group reorders before it (guideline above).
 private struct GroupHeaderDropDelegate: DropDelegate {
     let group: UUID
     let terminals: TerminalManager
     @Binding var draggedTabID: UUID?
     @Binding var draggedGroupID: UUID?
+    @Binding var dropSlot: RailDropSlot?
 
-    func dropEntered(info: DropInfo) {
-        if let dragged = draggedTabID {
-            terminals.moveTab(dragged, toEndOfGroup: group)
-        } else if let dragged = draggedGroupID, dragged != group {
-            terminals.moveGroup(dragged, before: group)
-        }
+    private var slot: RailDropSlot? {
+        if draggedTabID != nil { return .intoGroup(group) }
+        if let dragged = draggedGroupID, dragged != group { return .beforeGroup(group) }
+        return nil
     }
 
-    func dropUpdated(info: DropInfo) -> DropProposal? { DropProposal(operation: .move) }
+    func validateDrop(info: DropInfo) -> Bool { slot != nil }
+    func dropEntered(info: DropInfo) { dropSlot = slot }
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        dropSlot = slot
+        return slot == nil ? nil : DropProposal(operation: .move)
+    }
+    func dropExited(info: DropInfo) { if dropSlot == slot { dropSlot = nil } }
 
     func performDrop(info: DropInfo) -> Bool {
-        draggedTabID = nil
-        draggedGroupID = nil
-        return true
+        defer { clearRailDrag(&draggedTabID, &draggedGroupID, &dropSlot) }
+        if let dragged = draggedTabID {
+            terminals.moveTab(dragged, toEndOfGroup: group)
+            return true
+        }
+        if let dragged = draggedGroupID, dragged != group {
+            terminals.moveGroup(dragged, before: group)
+            return true
+        }
+        return false
     }
 }
 
-/// The rail's empty tail: dropping a tab there sends it to the very end as a
-/// loose tab (also how a tab leaves its group); a group goes last. Also the
-/// safety net that clears the drag state when a drop lands on no row at all.
+/// The rail's empty tail: a tab drops to the very end as loose (also how a tab
+/// leaves its group); a group goes last. Also the safety net that clears the
+/// drag state when a drop lands on no row at all.
 private struct RailTailDropDelegate: DropDelegate {
     let terminals: TerminalManager
     @Binding var draggedTabID: UUID?
     @Binding var draggedGroupID: UUID?
+    @Binding var dropSlot: RailDropSlot?
 
-    func dropEntered(info: DropInfo) {
-        if let dragged = draggedTabID {
-            terminals.moveTabToLooseEnd(dragged)
-        } else if let dragged = draggedGroupID {
-            terminals.moveGroupToEnd(dragged)
-        }
+    private var isDragging: Bool { draggedTabID != nil || draggedGroupID != nil }
+
+    func validateDrop(info: DropInfo) -> Bool { isDragging }
+    func dropEntered(info: DropInfo) { if isDragging { dropSlot = .railEnd } }
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        if isDragging { dropSlot = .railEnd }
+        return isDragging ? DropProposal(operation: .move) : nil
     }
-
-    func dropUpdated(info: DropInfo) -> DropProposal? { DropProposal(operation: .move) }
+    func dropExited(info: DropInfo) { if dropSlot == .railEnd { dropSlot = nil } }
 
     func performDrop(info: DropInfo) -> Bool {
-        draggedTabID = nil
-        draggedGroupID = nil
-        return true
+        defer { clearRailDrag(&draggedTabID, &draggedGroupID, &dropSlot) }
+        if let dragged = draggedTabID {
+            terminals.moveTabToLooseEnd(dragged)
+            return true
+        }
+        if let dragged = draggedGroupID {
+            terminals.moveGroupToEnd(dragged)
+            return true
+        }
+        return false
     }
+}
+
+/// Reset every rail drag binding once a drop resolves.
+private func clearRailDrag(
+    _ tab: inout UUID?, _ group: inout UUID?, _ slot: inout RailDropSlot?
+) {
+    tab = nil
+    group = nil
+    slot = nil
 }
