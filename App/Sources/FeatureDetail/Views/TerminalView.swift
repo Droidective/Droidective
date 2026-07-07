@@ -236,7 +236,11 @@ struct TerminalView: View {
         // shells keep rendering into their scrollback instead of pausing.
         ZStack {
             ForEach(terminals.tabs) { tab in
-                NativeTerminalView(session: tab.session, serial: state.targetSerials.first)
+                NativeTerminalView(
+                    session: tab.session,
+                    serial: state.targetSerials.first,
+                    isActive: tab.id == terminals.activeID
+                )
                     .opacity(tab.id == terminals.activeID ? 1 : 0)
                     .allowsHitTesting(tab.id == terminals.activeID)
             }

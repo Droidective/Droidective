@@ -242,6 +242,30 @@ struct ADTApp: App {
                     appState.requestFeature("catalog")
                 }
                 .keyboardShortcut(".", modifiers: .command)
+
+                Divider()
+
+                // SwiftTerm ships a find bar but SwiftUI's stock Edit menu has
+                // no Find items to reach it — wire them for the focused shell.
+                // Disabled outside the Terminal so ⌘F falls through to views
+                // with their own find (e.g. the JS console's filter).
+                Button("Find in Terminal…") {
+                    appState.terminals.activeTab?.session.showFindBar()
+                }
+                .keyboardShortcut("f", modifiers: .command)
+                .disabled(!terminalCommandsEnabled)
+
+                Button("Find Next") {
+                    appState.terminals.activeTab?.session.findNext()
+                }
+                .keyboardShortcut("g", modifiers: .command)
+                .disabled(!terminalCommandsEnabled)
+
+                Button("Find Previous") {
+                    appState.terminals.activeTab?.session.findPrevious()
+                }
+                .keyboardShortcut("g", modifiers: [.command, .shift])
+                .disabled(!terminalCommandsEnabled)
             }
 
             CommandGroup(after: .sidebar) {
