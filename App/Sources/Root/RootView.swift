@@ -6,6 +6,7 @@ struct RootView: View {
     @Environment(AppState.self) private var state
     @Environment(\.openWindow) private var openWindow
     @AppStorage("sidebarWidth") private var sidebarWidth = 300.0
+    @AppStorage(sidebarAutoHideDefaultsKey) private var sidebarAutoHide = false
     /// Left-pane fraction (0…1) of the editor split; the layout clamps it so
     /// neither pane collapses.
     @AppStorage("tabSplitFraction") private var splitFraction = 0.5
@@ -294,7 +295,7 @@ struct RootView: View {
     /// full-height VS Code-style sidebar with a single continuous divider.
     private var split: some View {
         HStack(spacing: 0) {
-            if state.sidebarVisible {
+            if state.sidebarVisible && !sidebarAutoHide {
                 SidebarPaletteView()
                     .frame(width: min(max(sidebarWidth, 300), 460))
                     .transition(.move(edge: .leading).combined(with: .opacity))
@@ -341,6 +342,43 @@ struct RootView: View {
             isDragging: state.draggingTabID != nil,
             clear: { state.draggingTabID = nil }
         ))
+        // Dock-style auto-hide: the sidebar leaves the layout and rides over
+        // the content, revealed by pushing the mouse against the left edge
+        // (or ⌘B) and hidden again once the pointer moves past it. One
+        // continuous-hover tracker on the whole split decides both — a thin
+        // transparent hot-strip never received hover events reliably.
+        .onContinuousHover { phase in
+            guard sidebarAutoHide, case .active(let point) = phase else { return }
+            if point.x <= 8, !state.sidebarOverlayShown {
+                withAnimation(.easeOut(duration: 0.18)) { state.sidebarOverlayShown = true }
+            } else if state.sidebarOverlayShown, point.x > overlaySidebarWidth + 8 {
+                withAnimation(.easeIn(duration: 0.18)) { state.sidebarOverlayShown = false }
+            }
+        }
+        .overlay(alignment: .leading) {
+            if sidebarAutoHide && state.sidebarOverlayShown {
+                SidebarPaletteView()
+                    .frame(width: overlaySidebarWidth)
+                    .background(.bgSurface)
+                    .overlay(alignment: .trailing) { Divider() }
+                    .shadow(color: .black.opacity(0.35), radius: 14, x: 6)
+                    .transition(.move(edge: .leading))
+            }
+        }
+        // The Settings ▸ Appearance toggle flips the mode without going
+        // through toggleSidebarMode — apply the same safeguard here: never
+        // leave BOTH the fixed sidebar and the overlay hidden (turning
+        // auto-hide off after ⌘B would silently vanish the sidebar).
+        .onChange(of: sidebarAutoHide) { _, autoHide in
+            state.sidebarOverlayShown = false
+            if !autoHide, !state.sidebarVisible {
+                withAnimation(.easeInOut(duration: 0.18)) { state.sidebarVisible = true }
+            }
+        }
+    }
+
+    private var overlaySidebarWidth: CGFloat {
+        min(max(sidebarWidth, 300), 460)
     }
 
     /// The editor area: one pane, or two side by side split by a draggable seam.

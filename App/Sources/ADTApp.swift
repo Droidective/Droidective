@@ -61,6 +61,7 @@ struct ADTApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @AppStorage("showMenuBarExtra") private var showMenuBarExtra = true
     @AppStorage("sidebarWidth") private var sidebarWidth = 300.0
+    @AppStorage(sidebarAutoHideDefaultsKey) private var sidebarAutoHide = false
     /// The user-chosen accent. Read here so changing it re-renders the scene and
     /// re-keys RootView (`.id`), forcing every `.brandAccent` to re-resolve.
     @AppStorage(accentColorDefaultsKey) private var accentHex = ""
@@ -82,7 +83,8 @@ struct ADTApp: App {
         // the window is small.
         let detailMinWidth: CGFloat = appState.isSplit ? 648 : 360
         let notifications: CGFloat = appState.showNotifications ? 321 : 0
-        let sidebar: CGFloat = appState.sidebarVisible
+        // An auto-hidden sidebar overlays the content, so it costs no width.
+        let sidebar: CGFloat = appState.sidebarVisible && !sidebarAutoHide
             ? CGFloat(min(max(sidebarWidth, 300), 460))
             : 0
         // The content is laid out at window ÷ fontScale then scaled up, so the
@@ -242,6 +244,30 @@ struct ADTApp: App {
                     appState.requestFeature("catalog")
                 }
                 .keyboardShortcut(".", modifiers: .command)
+
+                Divider()
+
+                // SwiftTerm ships a find bar but SwiftUI's stock Edit menu has
+                // no Find items to reach it — wire them for the focused shell.
+                // Disabled outside the Terminal so ⌘F falls through to views
+                // with their own find (e.g. the JS console's filter).
+                Button("Find in Terminal…") {
+                    appState.terminals.activeTab?.session.showFindBar()
+                }
+                .keyboardShortcut("f", modifiers: .command)
+                .disabled(!terminalCommandsEnabled)
+
+                Button("Find Next") {
+                    appState.terminals.activeTab?.session.findNext()
+                }
+                .keyboardShortcut("g", modifiers: .command)
+                .disabled(!terminalCommandsEnabled)
+
+                Button("Find Previous") {
+                    appState.terminals.activeTab?.session.findPrevious()
+                }
+                .keyboardShortcut("g", modifiers: [.command, .shift])
+                .disabled(!terminalCommandsEnabled)
             }
 
             CommandGroup(after: .sidebar) {

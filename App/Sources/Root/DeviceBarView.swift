@@ -8,6 +8,7 @@ import SwiftUI
 struct DeviceBarView: View {
     @Environment(AppState.self) private var state
     @Environment(\.colorScheme) private var colorScheme
+    @AppStorage(sidebarAutoHideDefaultsKey) private var sidebarAutoHide = false
     @State private var showBundleManager = false
     @State private var showInstalledApps = false
     @State private var refreshSpin = 0.0
@@ -16,14 +17,16 @@ struct DeviceBarView: View {
         @Bindable var state = state
         HStack(spacing: 10) {
             Button {
-                state.toggleSidebar()
+                state.toggleSidebarMode()
             } label: {
-                Image(systemName: "sidebar.left")
+                Image(systemName: sidebarAutoHide ? "sidebar.leading" : "sidebar.left")
                     .contentShape(Rectangle())
             }
             .buttonStyle(IconButtonStyle())
-            .help("Show or hide the sidebar (⌘B)")
-            .accessibilityLabel("Toggle sidebar")
+            .help(sidebarAutoHide
+                ? "Pin the sidebar (auto-hide is on — hover the left edge to peek)"
+                : "Auto-hide the sidebar (⌘B shows it on demand)")
+            .accessibilityLabel("Toggle sidebar auto-hide")
 
             // Device and bundle are matching icon + pill pairs: identical inner
             // spacing, and both pills draw their own background (no hidden

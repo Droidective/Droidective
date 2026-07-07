@@ -4,6 +4,10 @@ import Foundation
 import Observation
 import SwiftUI
 
+/// UserDefaults key for the sidebar's Dock-style auto-hide mode — spelled
+/// once, read via `@AppStorage` in the views and directly here.
+let sidebarAutoHideDefaultsKey = "sidebarAutoHide"
+
 struct Toast: Identifiable, Equatable {
     enum Level: Equatable {
         case success, info, warning, error
@@ -171,8 +175,30 @@ final class AppState {
     /// and scrollback survive leaving the feature.
     let terminals = TerminalManager()
 
+    /// With auto-hide on (Settings ▸ Appearance), the sidebar rides over the
+    /// content instead of sitting in the layout; this is that overlay's
+    /// visibility, driven by the left-edge hover zone and ⌘B.
+    var sidebarOverlayShown = false
+
     func toggleSidebar() {
-        withAnimation(.easeInOut(duration: 0.18)) { sidebarVisible.toggle() }
+        if UserDefaults.standard.bool(forKey: sidebarAutoHideDefaultsKey) {
+            withAnimation(.easeInOut(duration: 0.18)) { sidebarOverlayShown.toggle() }
+        } else {
+            withAnimation(.easeInOut(duration: 0.18)) { sidebarVisible.toggle() }
+        }
+    }
+
+    /// The device bar's sidebar button: switches between the fixed sidebar
+    /// and Dock-style auto-hide. Returning to fixed always shows the sidebar —
+    /// a mode flip that leaves everything hidden would read as a dead button.
+    func toggleSidebarMode() {
+        let defaults = UserDefaults.standard
+        let autoHide = !defaults.bool(forKey: sidebarAutoHideDefaultsKey)
+        withAnimation(.easeInOut(duration: 0.18)) {
+            defaults.set(autoHide, forKey: sidebarAutoHideDefaultsKey)
+            sidebarOverlayShown = false
+            if !autoHide { sidebarVisible = true }
+        }
     }
 
     // MARK: - Font scaling (⌘= / ⌘- / ⌘0)
@@ -751,6 +777,13 @@ final class AppState {
     /// routes through here.
     func closeTerminalShell(_ id: UUID) {
         terminals.close(id)
+        if terminals.tabs.isEmpty { closeTab("terminal") }
+    }
+
+    /// Close a whole rail group, killing each shell in it. Like single
+    /// closes, the Terminal feature tab goes with the last shell.
+    func closeTerminalGroup(_ id: UUID) {
+        terminals.closeGroup(id)
         if terminals.tabs.isEmpty { closeTab("terminal") }
     }
 
