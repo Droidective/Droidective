@@ -1,3 +1,48 @@
+## Droidective v2.9.0
+
+Adds a background mode with a global Quick Actions panel, a terminal tab rail
+with a find bar, and a Dock-style auto-hiding sidebar.
+
+### New features
+
+- **Background mode & the Quick Actions panel** — with "Keep running in the
+  background" on (Settings ▸ General, the default), closing the main window
+  hides Droidective from the Dock and stops its kept-alive sessions (terminal
+  shells, Reactotron, the JS-console tunnels) while the menu bar icon, global
+  hotkeys, and a new Quick Actions panel stay available; ⌘Q still quits fully,
+  and relaunching from Finder reopens the window. The **Quick Actions panel** is
+  a non-activating floating mini app on a global hotkey (record one in
+  Settings ▸ Hotkeys): a grid of everything runnable in place — saved custom
+  commands, every enabled instant, toggle, and form action, plus Manage Apps,
+  Emulators, and Install APK — with an "Open in Droidective" list for the
+  full-app screens. Form actions run in the panel, destructive app verbs take a
+  confirming second press, and with several devices connected each action asks
+  which to target (⌘⏎ runs on all). Double-clicking an APK in Finder opens it
+  here to install in place or hand to APK Studio. The panel mirrors the app's
+  role and catalog curation and resumes where you left off when reopened within
+  a configurable window.
+- **Terminal tab rail & find bar** — terminal shells group into a collapsible
+  rail with drag reordering, and a find bar (⌘F, then ⌘G / ⇧⌘G) searches the
+  focused shell. Drag-selection autoscrolls, with a right-click context menu.
+- **Auto-hiding sidebar** — a Dock-style mode (Settings ▸ Appearance) where the
+  sidebar slides over the content when you push the pointer to the window's
+  left edge, freeing horizontal space; ⌘B still shows and hides it.
+
+### Improvements
+
+- **Screen Recorder live preview** — the recorder shows a live preview of the
+  device while it captures.
+- **Selectable logcat** — logcat is backed by a text view, so lines can be
+  selected across line breaks and copied.
+
+### Fixes
+
+- Screen Recorder pause and resume controls no longer wedge mid-recording.
+- CPU-overuse diagnostics are waived while screen mirroring — which is expected
+  to be CPU-heavy — so it no longer files false performance incidents.
+
+Installed copies update in place via Sparkle.
+
 ## Droidective v2.8.3
 
 Adds iOS Simulator support, per-feature product analytics, and a redesigned
