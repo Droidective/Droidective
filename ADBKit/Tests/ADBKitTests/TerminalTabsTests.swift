@@ -4,53 +4,110 @@ import Testing
 
 @Suite("TerminalTabs")
 struct TerminalTabsTests {
-    // MARK: - Adding
+    // MARK: - Loose tabs by default
 
-    @Test func addingATabWithNoGroupsCreatesTheDefaultGroup() {
+    @Test func tabsAreLooseByDefault() {
         var tabs = TerminalTabs()
-        let tab = UUID()
-        tabs.add(tab: tab)
-        #expect(tabs.groups.count == 1)
-        #expect(tabs.groups[0].name == TerminalTabs.defaultGroupName)
-        #expect(tabs.allTabIDs == [tab])
+        let a = UUID(), b = UUID()
+        tabs.add(tab: a)
+        tabs.add(tab: b)
+        #expect(tabs.groups.isEmpty)
+        #expect(tabs.allTabIDs == [a, b])
+        #expect(tabs.groupID(ofTab: a) == nil)
     }
 
-    @Test func addingWithoutAGroupAppendsToTheLastGroup() {
+    @Test func addingToAGroupLandsThere() {
         var tabs = TerminalTabs()
-        tabs.addGroup(named: "Build")
-        let device = tabs.addGroup(named: "Device")
-        let tab = UUID()
-        tabs.add(tab: tab)
-        #expect(tabs.group(device)?.tabIDs == [tab])
+        let a = UUID()
+        tabs.add(tab: a)
+        let group = tabs.newGroup(named: "Build", containing: a)!
+        let b = UUID()
+        tabs.add(tab: b, toGroup: group)
+        #expect(tabs.group(group)?.tabIDs == [a, b])
+        #expect(tabs.groupID(ofTab: b) == group)
     }
 
-    @Test func addingToASpecificGroupLandsThere() {
+    // MARK: - Creating groups
+
+    @Test func newGroupWrapsALooseTabInPlace() {
         var tabs = TerminalTabs()
-        let build = tabs.addGroup(named: "Build")
-        tabs.addGroup(named: "Device")
-        let tab = UUID()
-        tabs.add(tab: tab, toGroup: build)
-        #expect(tabs.group(build)?.tabIDs == [tab])
-        #expect(tabs.groupID(ofTab: tab) == build)
+        let a = UUID(), b = UUID(), c = UUID()
+        for tab in [a, b, c] { tabs.add(tab: tab) }
+        let group = tabs.newGroup(named: "Mid", containing: b)!
+        // b's slot is now a group; a and c stay loose around it.
+        #expect(tabs.allTabIDs == [a, b, c])
+        #expect(tabs.groupID(ofTab: b) == group)
+        #expect(tabs.groupID(ofTab: a) == nil)
+        #expect(tabs.groupID(ofTab: c) == nil)
     }
 
-    @Test func addGroupFallsBackToDefaultNameWhenBlank() {
+    @Test func newGroupNameFallsBackWhenBlank() {
         var tabs = TerminalTabs()
-        let id = tabs.addGroup(named: "   ")
-        #expect(tabs.group(id)?.name == TerminalTabs.defaultGroupName)
+        let a = UUID()
+        tabs.add(tab: a)
+        let group = tabs.newGroup(named: "   ", containing: a)!
+        #expect(tabs.group(group)?.name == TerminalTabs.defaultGroupName)
+    }
+
+    @Test func newGroupOnAnUnknownTabIsNil() {
+        var tabs = TerminalTabs()
+        #expect(tabs.newGroup(named: "X", containing: UUID()) == nil)
+    }
+
+    @Test func newGroupFromAGroupedTabMovesItOut() {
+        var tabs = TerminalTabs()
+        let a = UUID(), b = UUID()
+        tabs.add(tab: a)
+        tabs.add(tab: b)
+        let first = tabs.newGroup(named: "First", containing: a)!
+        tabs.move(tab: b, toEndOfGroup: first)
+        // Now re-group b into its own group; First keeps a and survives.
+        let second = tabs.newGroup(named: "Second", containing: b)!
+        #expect(tabs.group(first)?.tabIDs == [a])
+        #expect(tabs.group(second)?.tabIDs == [b])
+    }
+
+    // MARK: - Auto-deleting empty groups
+
+    @Test func removingTheLastTabDeletesItsGroup() {
+        var tabs = TerminalTabs()
+        let a = UUID()
+        tabs.add(tab: a)
+        tabs.newGroup(named: "Solo", containing: a)
+        let removed = tabs.remove(tab: a)
+        #expect(removed)
+        #expect(tabs.groups.isEmpty)
+        #expect(tabs.tabCount == 0)
+    }
+
+    @Test func removingANonLastTabKeepsTheGroup() {
+        var tabs = TerminalTabs()
+        let a = UUID(), b = UUID()
+        tabs.add(tab: a)
+        let group = tabs.newGroup(named: "Pair", containing: a)!
+        tabs.move(tab: b, toEndOfGroup: group)   // b is loose after add? add first
+        tabs.add(tab: b)
+        tabs.move(tab: b, toEndOfGroup: group)
+        let removed = tabs.remove(tab: a)
+        #expect(removed)
+        #expect(tabs.group(group)?.tabIDs == [b])
+    }
+
+    @Test func draggingTheLastTabOutDeletesTheGroup() {
+        var tabs = TerminalTabs()
+        let a = UUID(), b = UUID()
+        tabs.add(tab: a)
+        tabs.add(tab: b)
+        let group = tabs.newGroup(named: "G", containing: b)!
+        // Drag b out to become loose — its group empties and vanishes.
+        tabs.moveToLooseEnd(tab: b)
+        #expect(tabs.group(group) == nil)
+        #expect(tabs.groups.isEmpty)
+        #expect(tabs.allTabIDs == [a, b])
+        #expect(tabs.groupID(ofTab: b) == nil)
     }
 
     // MARK: - Removing
-
-    @Test func removingATabLeavesItsEmptyGroupInPlace() {
-        var tabs = TerminalTabs()
-        let tab = UUID()
-        tabs.add(tab: tab)
-        let removed = tabs.remove(tab: tab)
-        #expect(removed)
-        #expect(tabs.groups.count == 1)
-        #expect(tabs.tabCount == 0)
-    }
 
     @Test func removingAnUnknownTabReportsFalse() {
         var tabs = TerminalTabs()
@@ -60,11 +117,11 @@ struct TerminalTabsTests {
         #expect(tabs.tabCount == 1)
     }
 
-    @Test func removingAGroupReturnsItsTabsInOrder() {
+    @Test func removeGroupReturnsItsTabsInOrder() {
         var tabs = TerminalTabs()
-        let group = tabs.addGroup(named: "Build")
         let a = UUID(), b = UUID()
-        tabs.add(tab: a, toGroup: group)
+        tabs.add(tab: a)
+        let group = tabs.newGroup(named: "G", containing: a)!
         tabs.add(tab: b, toGroup: group)
         let evicted = tabs.removeGroup(group)
         #expect(evicted == [a, b])
@@ -75,7 +132,9 @@ struct TerminalTabsTests {
 
     @Test func renameTrimsAndIgnoresEmpty() {
         var tabs = TerminalTabs()
-        let group = tabs.addGroup(named: "Build")
+        let a = UUID()
+        tabs.add(tab: a)
+        let group = tabs.newGroup(named: "Build", containing: a)!
         tabs.renameGroup(group, to: "  Deploy  ")
         #expect(tabs.group(group)?.name == "Deploy")
         tabs.renameGroup(group, to: "   ")
@@ -84,43 +143,57 @@ struct TerminalTabsTests {
 
     @Test func collapseIsPerGroup() {
         var tabs = TerminalTabs()
-        let a = tabs.addGroup(named: "A")
-        let b = tabs.addGroup(named: "B")
-        tabs.setCollapsed(a, true)
-        #expect(tabs.group(a)?.isCollapsed == true)
-        #expect(tabs.group(b)?.isCollapsed == false)
+        let a = UUID(), b = UUID()
+        tabs.add(tab: a)
+        tabs.add(tab: b)
+        let first = tabs.newGroup(named: "A", containing: a)!
+        let second = tabs.newGroup(named: "B", containing: b)!
+        tabs.setCollapsed(first, true)
+        #expect(tabs.group(first)?.isCollapsed == true)
+        #expect(tabs.group(second)?.isCollapsed == false)
     }
 
     // MARK: - Moving tabs
 
-    @Test func moveBeforeReordersWithinAGroup() {
+    @Test func moveBeforeReordersLooseTabs() {
         var tabs = TerminalTabs()
-        let group = tabs.addGroup(named: "G")
         let a = UUID(), b = UUID(), c = UUID()
-        for tab in [a, b, c] { tabs.add(tab: tab, toGroup: group) }
+        for tab in [a, b, c] { tabs.add(tab: tab) }
         tabs.move(tab: c, before: a)
-        #expect(tabs.group(group)?.tabIDs == [c, a, b])
+        #expect(tabs.allTabIDs == [c, a, b])
+        #expect(tabs.groups.isEmpty)
     }
 
-    @Test func moveBeforeCrossesGroups() {
+    @Test func moveBeforeAGroupedTabJoinsThatGroup() {
         var tabs = TerminalTabs()
-        let build = tabs.addGroup(named: "Build")
-        let device = tabs.addGroup(named: "Device")
         let a = UUID(), b = UUID()
-        tabs.add(tab: a, toGroup: build)
-        tabs.add(tab: b, toGroup: device)
+        tabs.add(tab: a)
+        tabs.add(tab: b)
+        let group = tabs.newGroup(named: "G", containing: b)!
         tabs.move(tab: a, before: b)
-        #expect(tabs.group(build)?.tabIDs == [])
-        #expect(tabs.group(device)?.tabIDs == [a, b])
-        #expect(tabs.groupID(ofTab: a) == device)
+        #expect(tabs.group(group)?.tabIDs == [a, b])
+        #expect(tabs.groupID(ofTab: a) == group)
+    }
+
+    @Test func moveBeforeALooseTabLeavesTheGroup() {
+        var tabs = TerminalTabs()
+        let a = UUID(), b = UUID(), c = UUID()
+        tabs.add(tab: a)   // loose
+        tabs.add(tab: b)
+        tabs.add(tab: c)
+        let group = tabs.newGroup(named: "G", containing: b)!
+        tabs.move(tab: c, toEndOfGroup: group)   // group holds b, c
+        tabs.move(tab: c, before: a)             // pull c out, before loose a
+        #expect(tabs.groupID(ofTab: c) == nil)
+        #expect(tabs.group(group)?.tabIDs == [b])
+        #expect(tabs.allTabIDs == [c, a, b])
     }
 
     @Test func moveBeforeItselfOrUnknownIsANoOp() {
         var tabs = TerminalTabs()
-        let group = tabs.addGroup(named: "G")
         let a = UUID(), b = UUID()
-        tabs.add(tab: a, toGroup: group)
-        tabs.add(tab: b, toGroup: group)
+        tabs.add(tab: a)
+        tabs.add(tab: b)
         let before = tabs
         tabs.move(tab: a, before: a)
         tabs.move(tab: UUID(), before: a)
@@ -128,88 +201,101 @@ struct TerminalTabsTests {
         #expect(tabs == before)
     }
 
-    @Test func moveDownWithinAGroupAccountsForTheRemovalShift() {
+    @Test func moveToEndOfGroupCrossesFromLoose() {
         var tabs = TerminalTabs()
-        let group = tabs.addGroup(named: "G")
-        let a = UUID(), b = UUID(), c = UUID()
-        for tab in [a, b, c] { tabs.add(tab: tab, toGroup: group) }
-        tabs.move(tab: a, before: c)
-        #expect(tabs.group(group)?.tabIDs == [b, a, c])
+        let a = UUID(), b = UUID()
+        tabs.add(tab: a)
+        tabs.add(tab: b)
+        let group = tabs.newGroup(named: "G", containing: a)!
+        tabs.move(tab: b, toEndOfGroup: group)
+        #expect(tabs.group(group)?.tabIDs == [a, b])
+    }
+
+    @Test func moveToEndOfGroupOfTheSoleTabIsANoOp() {
+        var tabs = TerminalTabs()
+        let a = UUID()
+        tabs.add(tab: a)
+        let group = tabs.newGroup(named: "G", containing: a)!
+        let before = tabs
+        tabs.move(tab: a, toEndOfGroup: group)
+        #expect(tabs == before)
     }
 
     @Test func moveToEndOfGroupWithUnknownIDsIsANoOp() {
         var tabs = TerminalTabs()
-        let group = tabs.addGroup(named: "G")
-        tabs.add(tab: UUID(), toGroup: group)
-        let before = tabs
-        tabs.move(tab: before.allTabIDs[0], toEndOfGroup: UUID())
-        tabs.move(tab: UUID(), toEndOfGroup: group)
-        #expect(tabs == before)
-    }
-
-    @Test func moveToEndOfGroupAppends() {
-        var tabs = TerminalTabs()
-        let build = tabs.addGroup(named: "Build")
-        let device = tabs.addGroup(named: "Device")
         let a = UUID(), b = UUID()
-        tabs.add(tab: a, toGroup: build)
-        tabs.add(tab: b, toGroup: device)
-        tabs.move(tab: a, toEndOfGroup: device)
-        #expect(tabs.group(device)?.tabIDs == [b, a])
-        tabs.move(tab: b, toEndOfGroup: device)
-        #expect(tabs.group(device)?.tabIDs == [a, b])
+        tabs.add(tab: a)
+        tabs.add(tab: b)
+        let group = tabs.newGroup(named: "G", containing: a)!
+        let before = tabs
+        tabs.move(tab: b, toEndOfGroup: UUID())       // unknown group
+        tabs.move(tab: UUID(), toEndOfGroup: group)   // unknown tab
+        #expect(tabs == before)
     }
 
     // MARK: - Moving groups
 
     @Test func moveGroupBeforeAndToEnd() {
         var tabs = TerminalTabs()
-        let a = tabs.addGroup(named: "A")
-        let b = tabs.addGroup(named: "B")
-        let c = tabs.addGroup(named: "C")
-        tabs.moveGroup(c, before: a)
-        #expect(tabs.groups.map(\.id) == [c, a, b])
-        tabs.moveGroupToEnd(c)
-        #expect(tabs.groups.map(\.id) == [a, b, c])
+        let a = UUID(), b = UUID(), c = UUID()
+        tabs.add(tab: a)
+        tabs.add(tab: b)
+        tabs.add(tab: c)
+        let first = tabs.newGroup(named: "A", containing: a)!
+        let second = tabs.newGroup(named: "B", containing: b)!
+        let third = tabs.newGroup(named: "C", containing: c)!
+        tabs.moveGroup(third, before: first)
+        #expect(tabs.groups.map(\.id) == [third, first, second])
+        tabs.moveGroupToEnd(third)
+        #expect(tabs.groups.map(\.id) == [first, second, third])
+    }
+
+    @Test func moveGroupBeforeALooseTabInterleaves() {
+        var tabs = TerminalTabs()
+        let a = UUID(), b = UUID()
+        tabs.add(tab: a)   // loose, first
+        tabs.add(tab: b)
+        let group = tabs.newGroup(named: "G", containing: b)!   // group, second
+        tabs.moveGroup(group, before: a)
+        #expect(tabs.allTabIDs == [b, a])
     }
 
     @Test func moveGroupForwardAccountsForTheRemovalShift() {
         var tabs = TerminalTabs()
-        let a = tabs.addGroup(named: "A")
-        let b = tabs.addGroup(named: "B")
-        let c = tabs.addGroup(named: "C")
-        tabs.moveGroup(a, before: c)
-        #expect(tabs.groups.map(\.id) == [b, a, c])
+        let a = UUID(), b = UUID(), c = UUID()
+        tabs.add(tab: a)
+        tabs.add(tab: b)
+        tabs.add(tab: c)
+        let first = tabs.newGroup(named: "A", containing: a)!
+        let second = tabs.newGroup(named: "B", containing: b)!
+        let third = tabs.newGroup(named: "C", containing: c)!
+        // Forward move: the target is re-found after the group is removed.
+        tabs.moveGroup(first, before: third)
+        #expect(tabs.groups.map(\.id) == [second, first, third])
     }
 
     @Test func moveGroupBeforeUnknownTargetKeepsItsPlace() {
         var tabs = TerminalTabs()
-        let a = tabs.addGroup(named: "A")
-        let b = tabs.addGroup(named: "B")
-        tabs.moveGroup(a, before: UUID())
-        #expect(tabs.groups.map(\.id) == [a, b])
+        let a = UUID(), b = UUID()
+        tabs.add(tab: a)
+        tabs.add(tab: b)
+        let first = tabs.newGroup(named: "A", containing: a)!
+        let second = tabs.newGroup(named: "B", containing: b)!
+        tabs.moveGroup(first, before: UUID())
+        #expect(tabs.groups.map(\.id) == [first, second])
     }
 
     // MARK: - Focus math
 
-    @Test func neighborIsTheTabSlidingIntoTheSlot() {
+    @Test func neighborCrossesLooseAndGroupedTabs() {
         var tabs = TerminalTabs()
-        let group = tabs.addGroup(named: "G")
         let a = UUID(), b = UUID(), c = UUID()
-        for tab in [a, b, c] { tabs.add(tab: tab, toGroup: group) }
+        tabs.add(tab: a)
+        tabs.add(tab: b)
+        tabs.add(tab: c)
+        tabs.newGroup(named: "G", containing: b)
         #expect(tabs.neighbor(of: b) == c)
-        #expect(tabs.neighbor(of: c) == b)   // last: falls back to previous
-    }
-
-    @Test func neighborCrossesGroupBoundaries() {
-        var tabs = TerminalTabs()
-        let build = tabs.addGroup(named: "Build")
-        let device = tabs.addGroup(named: "Device")
-        let a = UUID(), b = UUID()
-        tabs.add(tab: a, toGroup: build)
-        tabs.add(tab: b, toGroup: device)
-        #expect(tabs.neighbor(of: a) == b)
-        #expect(tabs.neighbor(of: b) == a)
+        #expect(tabs.neighbor(of: c) == b)
     }
 
     @Test func neighborOfTheOnlyTabIsNil() {
@@ -221,15 +307,15 @@ struct TerminalTabsTests {
 
     @Test func cycleWrapsAcrossGroupsInBothDirections() {
         var tabs = TerminalTabs()
-        let build = tabs.addGroup(named: "Build")
-        let device = tabs.addGroup(named: "Device")
         let a = UUID(), b = UUID(), c = UUID()
-        tabs.add(tab: a, toGroup: build)
-        tabs.add(tab: b, toGroup: build)
-        tabs.add(tab: c, toGroup: device)
-        #expect(tabs.tab(offset: 1, from: c) == a)    // wraps forward
-        #expect(tabs.tab(offset: -1, from: a) == c)   // wraps backward
-        #expect(tabs.tab(offset: 1, from: b) == c)    // crosses the boundary
+        tabs.add(tab: a)
+        tabs.add(tab: b)
+        tabs.add(tab: c)
+        let group = tabs.newGroup(named: "G", containing: a)!
+        tabs.move(tab: b, toEndOfGroup: group)   // group: a, b ; loose: c
+        #expect(tabs.tab(offset: 1, from: c) == a)
+        #expect(tabs.tab(offset: -1, from: a) == c)
+        #expect(tabs.tab(offset: 1, from: b) == c)
     }
 
     @Test func cycleFromAnUnknownTabFallsToTheFirst() {

@@ -42,8 +42,8 @@ final class TerminalManager {
         group.tabIDs.compactMap { tabsByID[$0] }
     }
 
-    /// Open a fresh shell tab and focus it. It lands in `group` when given,
-    /// else next to the active tab, else in the last group.
+    /// Open a fresh shell tab and focus it. It joins `group` when given, else
+    /// the active tab's group, else lands loose — a fresh rail has no groups.
     func newTab(inGroup group: UUID? = nil) {
         counter += 1
         let tab = Tab(name: "Terminal \(counter)", session: TerminalSession())
@@ -97,11 +97,12 @@ final class TerminalManager {
 
     // MARK: - Groups
 
-    /// Add an empty group at the end, named "Group N" until the user renames.
+    /// Wrap a tab in a new group, named "Group N" until the user renames it.
+    /// Returns the group id so the view can open its rename dialog.
     @discardableResult
-    func addGroup() -> UUID {
+    func newGroup(containing tab: UUID) -> UUID? {
         groupCounter += 1
-        return layout.addGroup(named: "Group \(groupCounter)")
+        return layout.newGroup(named: "Group \(groupCounter)", containing: tab)
     }
 
     func renameGroup(_ id: UUID, to name: String) {
@@ -114,12 +115,12 @@ final class TerminalManager {
     }
 
     /// Kill every shell in the group and remove it. Focus falls off the last
-    /// closed tab's neighbor like a single close does.
+    /// closed tab's neighbor like a single close does. (Each `close` empties
+    /// the group a tab at a time; the model drops it once the last one goes.)
     func closeGroup(_ id: UUID) {
         for tabID in layout.group(id)?.tabIDs ?? [] {
             close(tabID)
         }
-        layout.removeGroup(id)
     }
 
     func moveTab(_ id: UUID, before target: UUID) {
@@ -128,6 +129,11 @@ final class TerminalManager {
 
     func moveTab(_ id: UUID, toEndOfGroup group: UUID) {
         layout.move(tab: id, toEndOfGroup: group)
+    }
+
+    /// Drag a tab out to the end of the rail as a loose tab.
+    func moveTabToLooseEnd(_ id: UUID) {
+        layout.moveToLooseEnd(tab: id)
     }
 
     func moveGroup(_ id: UUID, before target: UUID) {
@@ -150,10 +156,10 @@ final class TerminalManager {
 
 /// A real multi-tab terminal: each tab is its own PTY-backed login shell
 /// (SwiftTerm), with the selected device exported as ANDROID_SERIAL. Sessions
-/// are listed in a collapsible left rail, grouped into user-named groups —
-/// tabs drag-reorder within and across groups, groups drag-reorder among
-/// themselves — and every session keeps running (scrollback intact) while you
-/// work in other features.
+/// are listed in a collapsible left rail — loose (ungrouped) by default; a
+/// right-click wraps a tab in a new group, tabs and groups drag-reorder and
+/// interleave, and a group deletes itself once its last tab leaves. Every
+/// session keeps running (scrollback intact) while you work in other features.
 struct TerminalView: View {
     @Environment(AppState.self) private var state
     @State private var renaming: TerminalManager.Tab?
@@ -265,31 +271,39 @@ struct TerminalView: View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(spacing: 0) {
-                    LazyVStack(spacing: 1) {
-                        ForEach(terminals.layout.groups) { group in
-                            groupHeader(group)
-                            if !group.isCollapsed {
-                                ForEach(terminals.tabs(in: group)) { tab in
-                                    tabRow(tab)
+                    LazyVStack(spacing: 2) {
+                        // Loose tabs and groups interleave in one ordered list;
+                        // a tab dragged out of a group lands where it's dropped.
+                        ForEach(terminals.layout.entries) { entry in
+                            switch entry {
+                            case .tab(let id):
+                                if let tab = terminals.tab(id) { tabRow(tab, indented: false) }
+                            case .group(let group):
+                                groupHeader(group)
+                                if !group.isCollapsed {
+                                    ForEach(terminals.tabs(in: group)) { tab in
+                                        tabRow(tab, indented: true)
+                                    }
                                 }
                             }
                         }
                     }
-                    .padding(6)
+                    .padding(8)
 
                     // The empty tail below the rows: dropping a drag here
-                    // lands it at the very end. A bounded zone, not the whole
-                    // scroll view — a whole-view target also caught the drag
-                    // crossing the gaps between rows and teleported the tab
-                    // to the end mid-drag.
+                    // lands it at the very end (loose). A bounded zone, not the
+                    // whole scroll view — a whole-view target also caught the
+                    // drag crossing the gaps between rows and teleported it.
                     Color.clear
-                        .frame(height: 48)
+                        .frame(minHeight: 56)
+                        .frame(maxHeight: .infinity)
                         .contentShape(Rectangle())
                         .onDrop(of: [.plainText], delegate: RailTailDropDelegate(
                             terminals: terminals,
                             draggedTabID: $draggedTabID, draggedGroupID: $draggedGroupID
                         ))
                 }
+                .frame(maxHeight: .infinity, alignment: .top)
             }
 
             Divider()
@@ -298,19 +312,15 @@ struct TerminalView: View {
                 railButton("plus", help: "New terminal") {
                     terminals.newTab()
                 }
-                railButton("folder.badge.plus", help: "New group") {
-                    let id = terminals.addGroup()
-                    if let group = terminals.layout.group(id) { beginRenameGroup(group) }
-                }
                 Spacer()
                 railButton("sidebar.left", help: "Hide the terminal list") {
                     railCollapsed = true
                 }
             }
-            .padding(.horizontal, 6)
-            .padding(.vertical, 5)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
         }
-        .frame(width: 190)
+        .frame(width: 210)
         .background(.bgSurface)
     }
 
@@ -319,7 +329,7 @@ struct TerminalView: View {
             Image(systemName: symbol)
                 .font(.callout.weight(.medium))
                 .foregroundStyle(.textMuted)
-                .frame(width: 24, height: 24)
+                .frame(width: 26, height: 26)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -327,22 +337,22 @@ struct TerminalView: View {
     }
 
     private func groupHeader(_ group: TerminalTabs.Group) -> some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 6) {
             Image(systemName: "chevron.right")
-                .font(.system(size: 8, weight: .bold))
+                .font(.system(size: 9, weight: .bold))
                 .rotationEffect(.degrees(group.isCollapsed ? 0 : 90))
                 .foregroundStyle(.textMuted)
             Text(group.name)
-                .font(.caption.weight(.semibold))
+                .font(.callout.weight(.semibold))
                 .lineLimit(1)
                 .foregroundStyle(.textMuted)
             Text("\(group.tabIDs.count)")
-                .font(.caption2)
+                .font(.caption)
                 .foregroundStyle(.tertiary)
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 6)
-        .frame(height: 24)
+        .padding(.horizontal, 8)
+        .frame(height: 30)
         .contentShape(Rectangle())
         .onTapGesture(count: 2) { beginRenameGroup(group) }
         .onTapGesture { terminals.toggleCollapsed(group.id) }
@@ -363,11 +373,11 @@ struct TerminalView: View {
         ))
     }
 
-    private func tabRow(_ tab: TerminalManager.Tab) -> some View {
+    private func tabRow(_ tab: TerminalManager.Tab, indented: Bool) -> some View {
         let isActive = tab.id == terminals.activeID
-        return HStack(spacing: 6) {
+        return HStack(spacing: 8) {
             Image(systemName: "terminal")
-                .font(.caption)
+                .font(.body)
                 .foregroundStyle(isActive ? AnyShapeStyle(.brandAccent) : AnyShapeStyle(.textMuted))
             Text(tab.name)
                 .font(.callout)
@@ -378,19 +388,19 @@ struct TerminalView: View {
                 state.closeTerminalShell(tab.id)
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 9, weight: .bold))
+                    .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(.textMuted)
-                    .frame(width: 16, height: 16)
+                    .frame(width: 20, height: 20)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .help("Close this terminal (kills its shell)")
         }
-        .padding(.leading, 18)
-        .padding(.trailing, 5)
-        .frame(height: 26)
+        .padding(.leading, indented ? 22 : 10)
+        .padding(.trailing, 6)
+        .frame(height: 34)
         .background(
-            RoundedRectangle(cornerRadius: 6)
+            RoundedRectangle(cornerRadius: 7)
                 .fill(isActive ? AnyShapeStyle(.brandAccent.opacity(0.14)) : AnyShapeStyle(.clear))
         )
         .contentShape(Rectangle())
@@ -398,7 +408,12 @@ struct TerminalView: View {
         .onTapGesture { terminals.activeID = tab.id }
         .contextMenu {
             Button("Rename…") { beginRename(tab) }
-            moveToGroupMenu(for: tab)
+            Button("New Group…") {
+                if let id = terminals.newGroup(containing: tab.id),
+                   let group = terminals.layout.group(id) {
+                    beginRenameGroup(group)
+                }
+            }
             Divider()
             Button("Close Terminal") { state.closeTerminalShell(tab.id) }
         }
@@ -411,17 +426,6 @@ struct TerminalView: View {
             row: tab.id, terminals: terminals,
             draggedTabID: $draggedTabID, draggedGroupID: $draggedGroupID
         ))
-    }
-
-    @ViewBuilder
-    private func moveToGroupMenu(for tab: TerminalManager.Tab) -> some View {
-        let currentGroup = terminals.layout.groupID(ofTab: tab.id)
-        Menu("Move to Group") {
-            ForEach(terminals.layout.groups) { group in
-                Button(group.name) { terminals.moveTab(tab.id, toEndOfGroup: group.id) }
-                    .disabled(group.id == currentGroup)
-            }
-        }
     }
 
     private func beginRename(_ tab: TerminalManager.Tab) {
@@ -468,8 +472,15 @@ private struct TabRowDropDelegate: DropDelegate {
     @Binding var draggedGroupID: UUID?
 
     func dropEntered(info: DropInfo) {
-        guard let dragged = draggedTabID, dragged != row else { return }
-        terminals.moveTab(dragged, before: row)
+        if let dragged = draggedTabID, dragged != row {
+            // Before a loose row → stays loose; before a grouped row → joins
+            // that group. The model reads the target's context.
+            terminals.moveTab(dragged, before: row)
+        } else if let dragged = draggedGroupID {
+            // Dragging a group over a loose tab interleaves it there (a no-op
+            // over a grouped row, whose id isn't a top-level entry).
+            terminals.moveGroup(dragged, before: row)
+        }
     }
 
     func dropUpdated(info: DropInfo) -> DropProposal? { DropProposal(operation: .move) }
@@ -507,17 +518,17 @@ private struct GroupHeaderDropDelegate: DropDelegate {
     }
 }
 
-/// The rail's empty tail: dropping a tab there sends it to the very end; a
-/// group goes last. Also the safety net that clears the drag state when the
-/// drop lands on no row at all.
+/// The rail's empty tail: dropping a tab there sends it to the very end as a
+/// loose tab (also how a tab leaves its group); a group goes last. Also the
+/// safety net that clears the drag state when a drop lands on no row at all.
 private struct RailTailDropDelegate: DropDelegate {
     let terminals: TerminalManager
     @Binding var draggedTabID: UUID?
     @Binding var draggedGroupID: UUID?
 
     func dropEntered(info: DropInfo) {
-        if let dragged = draggedTabID, let last = terminals.layout.groups.last {
-            terminals.moveTab(dragged, toEndOfGroup: last.id)
+        if let dragged = draggedTabID {
+            terminals.moveTabToLooseEnd(dragged)
         } else if let dragged = draggedGroupID {
             terminals.moveGroupToEnd(dragged)
         }
