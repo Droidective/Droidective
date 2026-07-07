@@ -8,7 +8,7 @@ import SwiftUI
 struct DeviceBarView: View {
     @Environment(AppState.self) private var state
     @Environment(\.colorScheme) private var colorScheme
-    @AppStorage("sidebarAutoHide") private var sidebarAutoHide = false
+    @AppStorage(sidebarAutoHideDefaultsKey) private var sidebarAutoHide = false
     @State private var showBundleManager = false
     @State private var showInstalledApps = false
     @State private var refreshSpin = 0.0

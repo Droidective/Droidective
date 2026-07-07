@@ -61,7 +61,7 @@ struct ADTApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @AppStorage("showMenuBarExtra") private var showMenuBarExtra = true
     @AppStorage("sidebarWidth") private var sidebarWidth = 300.0
-    @AppStorage("sidebarAutoHide") private var sidebarAutoHide = false
+    @AppStorage(sidebarAutoHideDefaultsKey) private var sidebarAutoHide = false
     /// The user-chosen accent. Read here so changing it re-renders the scene and
     /// re-keys RootView (`.id`), forcing every `.brandAccent` to re-resolve.
     @AppStorage(accentColorDefaultsKey) private var accentHex = ""

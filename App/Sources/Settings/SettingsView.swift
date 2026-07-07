@@ -164,7 +164,7 @@ struct AppearanceSettingsView: View {
     @AppStorage("theme") private var theme = "dark"
     @AppStorage(accentColorDefaultsKey) private var accentHex = ""
     @AppStorage("showFeatureNotes") private var showFeatureNotes = false
-    @AppStorage("sidebarAutoHide") private var sidebarAutoHide = false
+    @AppStorage(sidebarAutoHideDefaultsKey) private var sidebarAutoHide = false
     #if DEBUG
     @AppStorage(DevMetrics.overlayEnabledKey) private var showDevMetrics = true
     #endif

@@ -4,6 +4,10 @@ import Foundation
 import Observation
 import SwiftUI
 
+/// UserDefaults key for the sidebar's Dock-style auto-hide mode — spelled
+/// once, read via `@AppStorage` in the views and directly here.
+let sidebarAutoHideDefaultsKey = "sidebarAutoHide"
+
 struct Toast: Identifiable, Equatable {
     enum Level: Equatable {
         case success, info, warning, error
@@ -177,7 +181,7 @@ final class AppState {
     var sidebarOverlayShown = false
 
     func toggleSidebar() {
-        if UserDefaults.standard.bool(forKey: "sidebarAutoHide") {
+        if UserDefaults.standard.bool(forKey: sidebarAutoHideDefaultsKey) {
             withAnimation(.easeInOut(duration: 0.18)) { sidebarOverlayShown.toggle() }
         } else {
             withAnimation(.easeInOut(duration: 0.18)) { sidebarVisible.toggle() }
@@ -189,9 +193,9 @@ final class AppState {
     /// a mode flip that leaves everything hidden would read as a dead button.
     func toggleSidebarMode() {
         let defaults = UserDefaults.standard
-        let autoHide = !defaults.bool(forKey: "sidebarAutoHide")
+        let autoHide = !defaults.bool(forKey: sidebarAutoHideDefaultsKey)
         withAnimation(.easeInOut(duration: 0.18)) {
-            defaults.set(autoHide, forKey: "sidebarAutoHide")
+            defaults.set(autoHide, forKey: sidebarAutoHideDefaultsKey)
             sidebarOverlayShown = false
             if !autoHide { sidebarVisible = true }
         }

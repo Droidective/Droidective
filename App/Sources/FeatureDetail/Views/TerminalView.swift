@@ -252,23 +252,33 @@ struct TerminalView: View {
     private var expandedRail: some View {
         VStack(spacing: 0) {
             ScrollView {
-                LazyVStack(spacing: 1) {
-                    ForEach(terminals.layout.groups) { group in
-                        groupHeader(group)
-                        if !group.isCollapsed {
-                            ForEach(terminals.tabs(in: group)) { tab in
-                                tabRow(tab)
+                VStack(spacing: 0) {
+                    LazyVStack(spacing: 1) {
+                        ForEach(terminals.layout.groups) { group in
+                            groupHeader(group)
+                            if !group.isCollapsed {
+                                ForEach(terminals.tabs(in: group)) { tab in
+                                    tabRow(tab)
+                                }
                             }
                         }
                     }
+                    .padding(6)
+
+                    // The empty tail below the rows: dropping a drag here
+                    // lands it at the very end. A bounded zone, not the whole
+                    // scroll view — a whole-view target also caught the drag
+                    // crossing the gaps between rows and teleported the tab
+                    // to the end mid-drag.
+                    Color.clear
+                        .frame(height: 48)
+                        .contentShape(Rectangle())
+                        .onDrop(of: [.plainText], delegate: RailTailDropDelegate(
+                            terminals: terminals,
+                            draggedTabID: $draggedTabID, draggedGroupID: $draggedGroupID
+                        ))
                 }
-                .padding(6)
             }
-            // A drag released over the empty tail of the rail lands the tab at
-            // the very end (the last group), instead of dying with no target.
-            .onDrop(of: [.plainText], delegate: RailTailDropDelegate(
-                terminals: terminals, draggedTabID: $draggedTabID, draggedGroupID: $draggedGroupID
-            ))
 
             Divider()
 

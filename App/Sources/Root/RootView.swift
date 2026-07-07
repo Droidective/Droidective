@@ -6,7 +6,7 @@ struct RootView: View {
     @Environment(AppState.self) private var state
     @Environment(\.openWindow) private var openWindow
     @AppStorage("sidebarWidth") private var sidebarWidth = 300.0
-    @AppStorage("sidebarAutoHide") private var sidebarAutoHide = false
+    @AppStorage(sidebarAutoHideDefaultsKey) private var sidebarAutoHide = false
     /// Left-pane fraction (0…1) of the editor split; the layout clamps it so
     /// neither pane collapses.
     @AppStorage("tabSplitFraction") private var splitFraction = 0.5
