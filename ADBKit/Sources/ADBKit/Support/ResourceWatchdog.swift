@@ -92,10 +92,18 @@ public struct ResourceWatchdog: Sendable {
     }
 
     /// Feed the next sample; returns the threshold events it triggered.
-    public mutating func ingest(_ sample: ResourceSample) -> [ResourceEvent] {
+    ///
+    /// `cpuLimitOverride` replaces the configured CPU limit for this sample only.
+    /// The App layer raises it (to `.infinity`) while a feature that legitimately
+    /// pegs the CPU is on screen — live screen mirroring and recording decode
+    /// H.264 in-process, so ~two busy cores is expected there, not an incident.
+    /// Memory is always judged against the configured limit.
+    public mutating func ingest(
+        _ sample: ResourceSample, cpuLimitOverride: Double? = nil
+    ) -> [ResourceEvent] {
         var events: [ResourceEvent] = []
         if let percent = cpuPercent(for: sample) {
-            Self.step(.cpu, state: &cpu, value: percent, limit: limits.cpuPercent,
+            Self.step(.cpu, state: &cpu, value: percent, limit: cpuLimitOverride ?? limits.cpuPercent,
                       limits: limits, at: sample.uptime, into: &events)
         }
         Self.step(.memory, state: &memory, value: Double(sample.footprintBytes),

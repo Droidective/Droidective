@@ -18,6 +18,20 @@ final class PerformanceMonitor {
         let openFeatures: [String]
     }
 
+    /// Features that legitimately peg the CPU while on screen: live screen
+    /// mirroring and recording both decode H.264 in-process, so ~two busy cores
+    /// is expected, not an incident. CPU overuse is not reported while one of
+    /// these is on screen; the per-feature baseline (`feature_perf`) still
+    /// records it, and memory is watched regardless.
+    private static let cpuIntensiveFeatures: Set<String> = ["scrcpy", "screen-record"]
+
+    /// Whether a CPU-intensive feature is on screen (focused or open in either
+    /// pane), so CPU-overuse incidents should be waived for this sample.
+    private static func cpuExpectedHigh(_ context: FeatureContext) -> Bool {
+        if let active = context.activeFeature, cpuIntensiveFeatures.contains(active) { return true }
+        return context.openFeatures.contains { cpuIntensiveFeatures.contains($0) }
+    }
+
     private var poller: Task<Void, Never>?
     private var watchdog = ResourceWatchdog()
     private var perFeature = FeaturePerfAggregator()
@@ -34,7 +48,8 @@ final class PerformanceMonitor {
                 guard let self else { return }
                 guard let sample = ProcessStats.sample() else { continue }
                 let context = context()
-                for event in self.watchdog.ingest(sample) {
+                let cpuLimitOverride = Self.cpuExpectedHigh(context) ? Double.infinity : nil
+                for event in self.watchdog.ingest(sample, cpuLimitOverride: cpuLimitOverride) {
                     Telemetry.shared.reportResourceEvent(event, context: context)
                 }
                 if let record = self.perFeature.ingest(sample, feature: context.activeFeature ?? "none") {

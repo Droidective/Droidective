@@ -105,6 +105,35 @@ import Testing
         let events = dog.ingest(ResourceSample(uptime: 5, cpuTimeSeconds: 15, footprintBytes: UInt64(1_500 * mb)))
         #expect(events == [.began(metric: .cpu, value: 300, limit: 200)])
     }
+
+    // MARK: - CPU limit override (expected-heavy features)
+
+    @Test func cpuOverrideSuppressesTheIncidentUnderExpectedLoad() {
+        var dog = ResourceWatchdog(limits: .init(cpuPercent: 200, sustainedSamples: 1))
+        _ = dog.ingest(cpuSample(at: 0, cpuTime: 0))
+        // 300% CPU, but a mirroring feature is on screen this tick, so it's expected.
+        #expect(dog.ingest(cpuSample(at: 5, cpuTime: 15), cpuLimitOverride: .infinity).isEmpty)
+    }
+
+    @Test func cpuOverrideRetiresAnInFlightEpisode() {
+        var dog = ResourceWatchdog(limits: .init(cpuPercent: 200, sustainedSamples: 1, resetFraction: 0.8))
+        _ = dog.ingest(cpuSample(at: 0, cpuTime: 0))
+        #expect(dog.ingest(cpuSample(at: 5, cpuTime: 15)).count == 1)   // began at 300%
+        // Mirroring starts mid-episode: the override ends it instead of stranding it.
+        #expect(dog.ingest(cpuSample(at: 10, cpuTime: 25), cpuLimitOverride: .infinity)
+            == [.ended(metric: .cpu, peak: 300, seconds: 5)])
+    }
+
+    @Test func cpuOverrideStillWatchesMemory() {
+        var dog = ResourceWatchdog(limits: .init(
+            cpuPercent: 200, memoryBytes: 1_000 * mb, sustainedSamples: 1))
+        _ = dog.ingest(ResourceSample(uptime: 0, cpuTimeSeconds: 0, footprintBytes: UInt64(100 * mb)))
+        // CPU is waived (mirroring), but a memory-overuse incident still fires.
+        let events = dog.ingest(
+            ResourceSample(uptime: 5, cpuTimeSeconds: 15, footprintBytes: UInt64(1_500 * mb)),
+            cpuLimitOverride: .infinity)
+        #expect(events == [.began(metric: .memory, value: 1_500 * mb, limit: 1_000 * mb)])
+    }
 }
 
 @Suite struct ProcessStatsTests {
