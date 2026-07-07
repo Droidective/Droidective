@@ -19,6 +19,10 @@ struct LogcatView: View {
     /// One-shot: the App filter is seeded from the device bar's chosen bundle
     /// the first time the view appears, then left to the user.
     @State private var seededPackageFilter = false
+    /// Mirrors the log pane's follow state; drives the jump button.
+    @State private var isTailing = true
+    /// Incremented by the jump button to ask the pane to scroll to newest.
+    @State private var jumpToken = 0
 
     private static let levels: [(value: String, label: String)] = [
         ("All", "All levels"), ("V", "Verbose"), ("D", "Debug"),
@@ -194,39 +198,43 @@ struct LogcatView: View {
     }
 
     private func logList(visible: [LogLine]) -> some View {
-        // Newest lines append at the bottom; LogTailView follows them while the
-        // user is at the bottom and pauses the moment they scroll up.
-        LogTailView(entries: visible, newestEdge: .bottom) { line in
-            Text(attributedDisplay(line))
-                .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(color(for: line.level))
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 8)
-                .contextMenu {
-                    if !line.tag.isEmpty {
-                        Button("Filter by tag \"\(line.tag)\"") { tagFilter = line.tag }
-                    }
-                    Button("Copy line") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(line.raw, forType: .string)
-                    }
-                }
+        // An NSTextView-backed pane: real cross-line selection with drag
+        // autoscroll (the SwiftUI list trapped selection inside each row).
+        // It follows new lines while parked at the bottom and pauses the
+        // moment the user scrolls up.
+        ZStack(alignment: .bottomTrailing) {
+            SelectableLogView(
+                lines: visible,
+                search: search,
+                isTailing: $isTailing,
+                jumpToken: jumpToken,
+                onFilterTag: { tagFilter = $0 }
+            )
+            if !isTailing {
+                jumpButton
+                    .padding(16)
+                    .transition(.scale(scale: 0.85).combined(with: .opacity))
+            }
         }
+        .animation(.snappy(duration: 0.2), value: isTailing)
         .background(.background)
         .overlay { emptyOverlay }
     }
 
-    /// Search matches get a highlight instead of vanishing into the filter.
-    private func attributedDisplay(_ line: LogLine) -> AttributedString {
-        var attributed = AttributedString(display(line))
-        guard !search.isEmpty else { return attributed }
-        var searchStart = attributed.startIndex
-        while let range = attributed[searchStart...].range(of: search, options: .caseInsensitive) {
-            attributed[range].backgroundColor = .yellow.opacity(0.35)
-            searchStart = range.upperBound
+    private var jumpButton: some View {
+        Button {
+            jumpToken += 1
+        } label: {
+            Image(systemName: "arrow.down")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 36, height: 36)
+                .background(.tint, in: Circle())
+                .shadow(radius: 4, y: 2)
         }
-        return attributed
+        .buttonStyle(.plain)
+        .help("Jump to the newest logs")
+        .accessibilityLabel("Jump to newest")
     }
 
     private func export() {
@@ -259,21 +267,6 @@ struct LogcatView: View {
                 "No log output", systemImage: "scroll",
                 description: Text("Logs will appear here as the device emits them.")
             )
-        }
-    }
-
-    private func display(_ line: LogLine) -> String {
-        line.level.isEmpty
-            ? line.raw
-            : "\(line.time)  \(line.pid)  \(line.level)/\(line.tag): \(line.message)"
-    }
-
-    private func color(for level: String) -> Color {
-        switch level {
-        case "E", "F": return .red
-        case "W": return .orange
-        case "I": return .primary
-        default: return .textMuted
         }
     }
 
