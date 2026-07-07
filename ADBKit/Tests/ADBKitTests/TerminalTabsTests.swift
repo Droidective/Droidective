@@ -137,6 +137,16 @@ struct TerminalTabsTests {
         #expect(tabs.group(group)?.tabIDs == [b, a, c])
     }
 
+    @Test func moveToEndOfGroupWithUnknownIDsIsANoOp() {
+        var tabs = TerminalTabs()
+        let group = tabs.addGroup(named: "G")
+        tabs.add(tab: UUID(), toGroup: group)
+        let before = tabs
+        tabs.move(tab: before.allTabIDs[0], toEndOfGroup: UUID())
+        tabs.move(tab: UUID(), toEndOfGroup: group)
+        #expect(tabs == before)
+    }
+
     @Test func moveToEndOfGroupAppends() {
         var tabs = TerminalTabs()
         let build = tabs.addGroup(named: "Build")
@@ -161,6 +171,15 @@ struct TerminalTabsTests {
         #expect(tabs.groups.map(\.id) == [c, a, b])
         tabs.moveGroupToEnd(c)
         #expect(tabs.groups.map(\.id) == [a, b, c])
+    }
+
+    @Test func moveGroupForwardAccountsForTheRemovalShift() {
+        var tabs = TerminalTabs()
+        let a = tabs.addGroup(named: "A")
+        let b = tabs.addGroup(named: "B")
+        let c = tabs.addGroup(named: "C")
+        tabs.moveGroup(a, before: c)
+        #expect(tabs.groups.map(\.id) == [b, a, c])
     }
 
     @Test func moveGroupBeforeUnknownTargetKeepsItsPlace() {

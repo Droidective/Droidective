@@ -173,6 +173,18 @@ struct TerminalView: View {
             Divider()
             content
         }
+        // A rail drag released outside the rail (over the shells, most often)
+        // never reaches a rail drop delegate, which would leave the dragged
+        // row stuck dimmed. Catch those here and clear the drag state — only
+        // a target while a rail drag is in flight, so it never swallows text
+        // drops headed for the terminal.
+        .onDrop(of: [.plainText], delegate: TabDragCancelCatch(
+            isDragging: draggedTabID != nil || draggedGroupID != nil,
+            clear: {
+                draggedTabID = nil
+                draggedGroupID = nil
+            }
+        ))
         // A first visit opens a shell right away — an empty terminal screen
         // with a lone + button would just be a speed bump.
         .task {

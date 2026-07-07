@@ -365,6 +365,16 @@ struct RootView: View {
                     .transition(.move(edge: .leading))
             }
         }
+        // The Settings ▸ Appearance toggle flips the mode without going
+        // through toggleSidebarMode — apply the same safeguard here: never
+        // leave BOTH the fixed sidebar and the overlay hidden (turning
+        // auto-hide off after ⌘B would silently vanish the sidebar).
+        .onChange(of: sidebarAutoHide) { _, autoHide in
+            state.sidebarOverlayShown = false
+            if !autoHide, !state.sidebarVisible {
+                withAnimation(.easeInOut(duration: 0.18)) { state.sidebarVisible = true }
+            }
+        }
     }
 
     private var overlaySidebarWidth: CGFloat {

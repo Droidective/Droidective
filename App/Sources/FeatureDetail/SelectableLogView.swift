@@ -24,6 +24,10 @@ struct SelectableLogView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSScrollView {
         let textView = LogTextView()
+        // Head-trims measure the deleted height through the TextKit 1 layout
+        // manager; touch it before any content lands so the view starts in
+        // TextKit 1 instead of downgrading mid-stream.
+        _ = textView.layoutManager
         textView.isEditable = false
         textView.isSelectable = true
         textView.drawsBackground = false
@@ -143,34 +147,50 @@ struct SelectableLogView: NSViewRepresentable {
                 rebuild(lines, in: storage)
                 return
             }
-            // Fast path: nothing changed.
-            if lines.count == renderedLines.count,
-               lines.first?.id == renderedLines.first?.id,
-               lines.last?.id == renderedLines.last?.id {
+            switch LogStreamDiff.plan(rendered: renderedLines.map(\.id), incoming: lines.map(\.id)) {
+            case .unchanged:
                 return
-            }
-            guard let first = lines.first else {
+            case .rebuild:
                 rebuild(lines, in: storage)
-                return
+            case .edit(let dropHead, let appendFrom):
+                if dropHead > 0 {
+                    trimHead(dropHead, in: storage, keepScrollPlace: !wasTailing)
+                }
+                if lines.count > appendFrom {
+                    append(Array(lines[appendFrom...]), to: storage)
+                }
             }
-            guard let overlapStart = renderedLines.firstIndex(where: { $0.id == first.id }) else {
-                rebuild(lines, in: storage)
-                return
+        }
+
+        /// Deletes the first `count` rendered lines. While the user is parked
+        /// in scrollback, the deleted height is subtracted from the scroll
+        /// offset so the lines being read hold still — without this every
+        /// ring trim yanked the scrollback up by the trimmed amount.
+        private func trimHead(_ count: Int, in storage: NSTextStorage, keepScrollPlace: Bool) {
+            let headLength = lineLengths.prefix(count).reduce(0, +)
+            let trimmedHeight = keepScrollPlace ? height(ofFirstCharacters: headLength) : 0
+            storage.deleteCharacters(in: NSRange(location: 0, length: headLength))
+            renderedLines.removeFirst(count)
+            lineLengths.removeFirst(count)
+            if trimmedHeight > 0, let scrollView {
+                let clip = scrollView.contentView
+                var origin = clip.bounds.origin
+                origin.y = max(0, origin.y - trimmedHeight)
+                clip.scroll(to: origin)
+                scrollView.reflectScrolledClipView(clip)
             }
-            let overlap = renderedLines.count - overlapStart
-            guard lines.count >= overlap, lines[overlap - 1].id == renderedLines.last?.id else {
-                rebuild(lines, in: storage)
-                return
-            }
-            if overlapStart > 0 {
-                let headLength = lineLengths.prefix(overlapStart).reduce(0, +)
-                storage.deleteCharacters(in: NSRange(location: 0, length: headLength))
-                renderedLines.removeFirst(overlapStart)
-                lineLengths.removeFirst(overlapStart)
-            }
-            if lines.count > overlap {
-                append(Array(lines[overlap...]), to: storage)
-            }
+        }
+
+        /// The rendered height of the leading `length` characters — what a
+        /// head-trim is about to delete. Everything above the viewport is
+        /// already laid out, so this is a lookup, not a fresh layout pass.
+        private func height(ofFirstCharacters length: Int) -> CGFloat {
+            guard length > 0, let textView, let layoutManager = textView.layoutManager,
+                  let container = textView.textContainer else { return 0 }
+            let glyphs = layoutManager.glyphRange(
+                forCharacterRange: NSRange(location: 0, length: length), actualCharacterRange: nil
+            )
+            return layoutManager.boundingRect(forGlyphRange: glyphs, in: container).height
         }
 
         private func rebuild(_ lines: [LogLine], in storage: NSTextStorage) {
