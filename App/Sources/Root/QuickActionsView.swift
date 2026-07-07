@@ -948,10 +948,13 @@ struct QuickActionsView: View {
     // MARK: - Screen data
 
     /// Re-keys per screen + device, so entering Apps loads the package list
-    /// and Emulators refreshes AVDs/simulators.
+    /// and Emulators refreshes AVDs/simulators. The Apps key must use
+    /// `panelTargetSerial` — the exact device `loadScreenData` loads — so a
+    /// target change (a picked device disconnecting, a deferred switch landing)
+    /// re-fires the load instead of leaving a stale list from the old device.
     private var taskKey: String {
         switch screen {
-        case .apps: return "apps:\(state.targetSerials.first ?? "")"
+        case .apps: return "apps:\(panelTargetSerial ?? "")"
         case .emulators: return "emulators"
         default: return "static"
         }
