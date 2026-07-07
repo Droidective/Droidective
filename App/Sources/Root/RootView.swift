@@ -72,13 +72,15 @@ struct RootView: View {
             .environment(\.colorScheme, injectedColorScheme)
             .preferredColorScheme(preferredScheme)
             .background(WindowAccessor { window in
-                // Tag the main window so the ⌘W monitor can tell it apart from
-                // Settings / the palette panel.
-                window.identifier = NSUserInterfaceItemIdentifier(RootView.mainWindowID)
+                // Track the main window by reference — the ⌘W monitor and
+                // `activateMainWindow` need to tell it apart from Settings /
+                // panels, and identifiers don't survive a close (SwiftUI
+                // re-stamps `main-AppWindow-1` over any tag).
+                state.mainWindow = window
                 // Restore the user's saved window frame; only fill the screen's
                 // usable area on the very first launch (nothing to restore), so
                 // a resized window survives relaunch instead of being maximized.
-                let autosaveName = NSWindow.FrameAutosaveName(RootView.mainWindowID)
+                let autosaveName = NSWindow.FrameAutosaveName(RootView.mainWindowFrameAutosaveName)
                 if !window.setFrameUsingName(autosaveName), let screen = window.screen ?? NSScreen.main {
                     window.setFrame(screen.visibleFrame, display: true)
                 }
@@ -139,9 +141,19 @@ struct RootView: View {
     /// out of `body` so the view-builder expression stays cheap to type-check.
     private func performLaunchSetup() {
         state.openMainWindow = { openWindow(id: "main") }
-        state.openPalette = { PaletteController.shared.show(appState: state) }
-        (NSApp.delegate as? AppDelegate)?.appState = state
-        InstallInbox.shared.onReceive = { urls in state.openAPKs(urls) }
+        state.openPalette = {
+            FloatingPanelController.palette.show { close in
+                PaletteWindowView(onClose: close)
+                    .environment(state)
+                    .tint(.brandAccent)
+            }
+        }
+        // A double-clicked APK opens the Quick Actions panel on its options
+        // screen (install in place / APK Studio / the Install App screen)
+        // instead of taking over the main window.
+        InstallInbox.shared.onReceive = { urls in
+            QuickActionsPanel.showAPKOptions(urls, state: state)
+        }
         migrateDefaultsIfNeeded()
         applyStoredTheme()
         updateDockIcon()
@@ -176,9 +188,11 @@ struct RootView: View {
         }
     }
 
-    /// Identifier stamped on the main window so `installCloseTabMonitor` can
-    /// scope ⌘W to it and leave Settings / the palette panel alone.
-    fileprivate static let mainWindowID = "droidective-main"
+    /// The main window's frame-autosave name — the value must stay
+    /// "droidective-main" so existing users' saved frames survive.
+    /// (Recognizing the window itself goes through `AppState.mainWindow` by
+    /// reference; identifiers don't survive a close.)
+    fileprivate static let mainWindowFrameAutosaveName = "droidective-main"
     private static var closeTabMonitorInstalled = false
 
     /// ⌘W closes the active tab, not the window. A local key-down monitor
@@ -192,7 +206,7 @@ struct RootView: View {
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             guard event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
                   event.charactersIgnoringModifiers == "w",
-                  NSApp.keyWindow?.identifier?.rawValue == RootView.mainWindowID
+                  let keyWindow = NSApp.keyWindow, keyWindow === state.mainWindow
             else { return event }
             state.closeActiveTab()
             return nil

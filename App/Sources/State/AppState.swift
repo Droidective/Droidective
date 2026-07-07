@@ -234,6 +234,14 @@ final class AppState {
     var pendingInstallAPKs: [URL] = []
     /// Set by RootView so hotkeys/menu bar can reopen a closed main window.
     var openMainWindow: (() -> Void)?
+    /// The real app delegate (the adaptor instance, wired in `ADTApp.body`) —
+    /// `NSApp.delegate` is SwiftUI's wrapper on macOS, so casting it fails.
+    weak var appDelegate: AppDelegate?
+    /// The main window, resolved by RootView's `WindowAccessor`. Held by
+    /// *reference* because identifiers can't be trusted across a close:
+    /// SwiftUI re-stamps its own (`main-AppWindow-1`) over our tag, which
+    /// broke the ⌘W tab-close monitor after a close → reopen cycle.
+    weak var mainWindow: NSWindow?
     /// Set by RootView; opens the floating ⌘K search palette.
     var openPalette: (() -> Void)?
     /// Bumped by the ⌘K menu command; the sidebar focuses search on change.
@@ -323,14 +331,32 @@ final class AppState {
     /// fires once per device (the serial is used only locally, never sent).
     private var reportedDeviceSerials: Set<String> = []
 
-    /// Bring the app forward, reopening the main window if it was closed.
+    /// Bring the app forward, reopening the main window if it was closed. When
+    /// resident in the background (no Dock icon — see `AppDelegate`), rejoin
+    /// the Dock first; that policy flip needs a runloop turn before activation
+    /// reliably fronts the window, so that path hops once.
     func activateMainWindow() {
+        if NSApp.activationPolicy() == .regular {
+            bringMainWindowFront()
+        } else {
+            NSApp.setActivationPolicy(.regular)
+            Task { self.bringMainWindowFront() }
+        }
+    }
+
+    private func bringMainWindowFront() {
         NSApp.activate(ignoringOtherApps: true)
-        if let window = NSApp.windows.first(where: { $0.canBecomeMain }) {
+        // The tracked reference first (identifiers are unreliable across a
+        // close); the structural fallback excludes panels, whose KeyablePanel
+        // overrides `canBecomeMain` to true.
+        let window = mainWindow
+            ?? NSApp.windows.first { $0.canBecomeMain && !($0 is NSPanel) }
+        if let window {
             window.makeKeyAndOrderFront(nil)
         } else {
             openMainWindow?()
         }
+        setForeground(true)
     }
 
     var adbMissing: Bool { adbStatus?.installed == false }
@@ -754,7 +780,7 @@ final class AppState {
                 terminals.killAll()
                 quitNow()
             } else {
-                NSApp.reply(toApplicationShouldTerminate: false)
+                cancelDeferredQuit()
             }
         }
     }
@@ -868,10 +894,26 @@ final class AppState {
     }
 
     /// Widen device polling while the app is backgrounded so an idle, hidden
-    /// window stops spawning `adb devices` every 2s; restore it on foreground.
+    /// window stops spawning `adb devices` / `simctl list` every few seconds;
+    /// restore it on foreground.
     func setForeground(_ active: Bool) {
         let interval: Duration = active ? .seconds(2) : .seconds(10)
         Task { [monitor = env.monitor] in await monitor.setPollInterval(interval) }
+        let simInterval: Duration = active ? .seconds(3) : .seconds(15)
+        Task { [monitor = env.simulatorMonitor] in await monitor.setPollInterval(simInterval) }
+    }
+
+    /// The main window closed with background mode on (Settings ▸ General).
+    /// Stop the kept-alive sessions — terminal shells, the Reactotron server,
+    /// JS-console reverse tunnels — so no feature process outlives the UI
+    /// (view-owned work like recordings and log streams already dies with its
+    /// view), and widen device polling. The tabs stay in the workspace, so
+    /// reopening the window restores them idle.
+    func enterBackground() {
+        for id in openFeatureIDs {
+            stopBackgroundWork(for: id)
+        }
+        setForeground(false)
     }
 
     /// Switch the active device, or hold it behind a confirmation when a guard
@@ -920,7 +962,15 @@ final class AppState {
     func cancelExit() {
         let wasQuit = pendingExit?.target == .quit
         pendingExit = nil
-        if wasQuit { NSApp.reply(toApplicationShouldTerminate: false) }
+        if wasQuit { cancelDeferredQuit() }
+    }
+
+    /// Abandon a quit `applicationShouldTerminate` deferred: clear the
+    /// delegate's in-quit flag first, so a later window close still routes
+    /// through background mode instead of being mistaken for quit teardown.
+    private func cancelDeferredQuit() {
+        appDelegate?.isQuitting = false
+        NSApp.reply(toApplicationShouldTerminate: false)
     }
 
     /// "Stop & save": ask the active view to save (it observes `pendingExit`),
@@ -971,7 +1021,15 @@ final class AppState {
         persistUsage()
     }
 
-    func run(feature: FeatureDef, params: [String: FeatureValue]) async {
+    /// Run a feature. `explicitTargets` overrides the device-bar selection —
+    /// the Quick Actions panel passes its own pick (or run-on-all fan-out)
+    /// since `targetSerials`' run-all gating keys off the active tab, which is
+    /// meaningless with no window.
+    func run(
+        feature: FeatureDef,
+        params: [String: FeatureValue],
+        on explicitTargets: [String]? = nil
+    ) async {
         isRunningFeature = true
         defer { isRunningFeature = false }
         Telemetry.shared.trackFeatureUsed(feature.id, kind: feature.kind.rawValue)
@@ -1013,7 +1071,7 @@ final class AppState {
                 return
             }
 
-            let targets = self.targetSerials
+            let targets = explicitTargets ?? self.targetSerials
             guard !targets.isEmpty else {
                 self.showToast(Toast(message: "No device connected.", ok: false))
                 return
@@ -1076,12 +1134,14 @@ final class AppState {
 
     /// Install one or more APKs on the given device serials, one toast per APK
     /// (failures keep the full adb output in the toast's copyText). Returns a
-    /// short multi-line summary for inline display. Shared by the Install App
-    /// screen's drop zone, the file picker, and APKs opened from Finder.
+    /// short multi-line summary for inline display plus whether every install
+    /// landed. Shared by the Install App screen's drop zone, the file picker,
+    /// and APKs opened from Finder.
     @discardableResult
-    func installAPKs(_ urls: [URL], onSerials serials: [String]) async -> String {
-        guard !urls.isEmpty, !serials.isEmpty else { return "" }
+    func installAPKs(_ urls: [URL], onSerials serials: [String]) async -> (report: String, ok: Bool) {
+        guard !urls.isEmpty, !serials.isEmpty else { return ("", false) }
         var report: [String] = []
+        var allOK = true
         await CommandLog.userInitiated {
             for url in urls {
                 let name = url.lastPathComponent
@@ -1092,13 +1152,14 @@ final class AppState {
                         ?? FeatureResult(ok: false, message: "adb not found")
                     if result.ok { ok += 1 } else { failures.append((serial, result)) }
                 }
+                if !failures.isEmpty { allOK = false }
                 showToast(Self.installToast(name: name, ok: ok, total: serials.count, failures: failures))
                 report.append(ok == serials.count
                     ? "Installed \(name)"
                     : "Installed \(name) on \(ok) of \(serials.count) devices")
             }
         }
-        return report.joined(separator: "\n")
+        return (report.joined(separator: "\n"), allOK)
     }
 
     /// A short install headline for the toast; on failure the full adb output is

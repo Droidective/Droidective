@@ -5,6 +5,7 @@ import SwiftUI
 
 extension KeyboardShortcuts.Name {
     @MainActor static let globalLaunch = Self("globalLaunch")
+    @MainActor static let quickActions = Self("quickActions")
 }
 
 /// Bridges KeyboardShortcuts (Carbon RegisterEventHotKey — no Accessibility
@@ -30,6 +31,10 @@ enum HotkeyManager {
         installed = true
         KeyboardShortcuts.onKeyUp(for: .globalLaunch) { [weak state] in
             state?.activateMainWindow()
+        }
+        KeyboardShortcuts.onKeyUp(for: .quickActions) { [weak state] in
+            guard let state else { return }
+            QuickActionsPanel.toggle(state: state)
         }
         for feature in FeatureRegistry.all {
             KeyboardShortcuts.onKeyUp(for: featureName(feature.id)) { [weak state] in

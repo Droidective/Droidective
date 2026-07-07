@@ -1,12 +1,25 @@
 import ADBKit
 import SwiftUI
 
+/// UserDefaults key for Settings ▸ General ▸ "Keep running in the background".
+/// Read with `object(forKey:)` nil-coalesced to true, so it defaults to on.
+let keepRunningInBackgroundKey = "keepRunningInBackground"
+
+/// UserDefaults key for how long (minutes) a closed Quick Actions panel keeps
+/// its session for resume; 0 disables resume. Defaults to 5.
+let quickPanelResumeMinutesKey = "quickPanelResumeMinutes"
+
 /// Routes APKs opened from Finder (double-click / "Open With") into the install
 /// inbox, which surfaces the device picker once the UI is ready.
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    /// Set by RootView once the UI is up, so quit can tear down a kept-alive
-    /// Reactotron session (server socket + adb reverse tunnels).
+    /// Wired in `ADTApp.body` (the adaptor instance is the real delegate), so
+    /// quit and window-close can tear down kept-alive sessions.
     weak var appState: AppState?
+
+    /// True from the moment termination is requested until it's cancelled, so
+    /// the window-close observer doesn't mistake quit's window teardown for
+    /// "the user closed the window" and start background mode mid-quit.
+    @MainActor var isQuitting = false
 
     func application(_ application: NSApplication, open urls: [URL]) {
         let apks = urls.filter { $0.pathExtension.lowercased() == "apk" }
@@ -21,6 +34,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task.detached(priority: .utility) {
             CacheTrash.sweep(around: AppPaths.decompiledCacheDir)
         }
+        // Selector-based (not the block API): `Notification` isn't Sendable,
+        // so a @Sendable block can't hand it to the main actor. The selector
+        // route delivers it straight into a @MainActor method — safe because
+        // willClose is always posted on the main thread.
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(windowWillClose(_:)),
+            name: NSWindow.willCloseNotification, object: nil
+        )
+    }
+
+    /// Background mode: closing the main window (not quitting) stops running
+    /// feature work and — once no primary window is left — removes the Dock
+    /// icon. The app stays resident for the menu bar icon, global hotkeys, and
+    /// the Quick Actions panel; quit still exits fully.
+    @MainActor @objc private func windowWillClose(_ notification: Notification) {
+        guard !isQuitting, let appState,
+              UserDefaults.standard.object(forKey: keepRunningInBackgroundKey) as? Bool ?? true
+        else { return }
+        // Structural identification, not identifiers: SwiftUI re-stamps the
+        // main window's identifier (`main-AppWindow-1`) by close time, so the
+        // `droidective-main` tag can't be trusted here. Background mode starts
+        // when the last *primary* window closes — panels don't count, and
+        // Settings does (an accessory app's visible windows lose the menu bar).
+        guard let closing = notification.object as? NSWindow,
+              closing.canBecomeMain, !(closing is NSPanel)
+        else { return }
+        // Minimized windows count — a main window in the Dock is still the
+        // user's workspace, not a cue to kill sessions and go accessory.
+        let remaining = NSApp.windows.contains {
+            $0 !== closing && ($0.isVisible || $0.isMiniaturized)
+                && $0.canBecomeMain && !($0 is NSPanel)
+        }
+        guard !remaining else { return }
+        appState.enterBackground()
+        if NSApp.activationPolicy() == .regular {
+            NSApp.setActivationPolicy(.accessory)
+        }
+    }
+
+    /// Relaunching from Finder/Spotlight while resident in the background (no
+    /// Dock icon, window closed) lands here — reopen the main window. Checked
+    /// structurally, not via `hasVisibleWindows`: an open Quick Actions panel
+    /// counts as a visible window and would otherwise make the relaunch a
+    /// no-op with no main window and no Dock icon.
+    func applicationShouldHandleReopen(
+        _ sender: NSApplication, hasVisibleWindows flag: Bool
+    ) -> Bool {
+        MainActor.assumeIsolated {
+            let hasPrimary = NSApp.windows.contains {
+                ($0.isVisible || $0.isMiniaturized) && $0.canBecomeMain && !($0 is NSPanel)
+            }
+            guard !hasPrimary, let appState else { return true }
+            appState.activateMainWindow()
+            return false
+        }
     }
 
     /// Block quit when losable work is in flight (an active recording / unsaved
@@ -30,6 +98,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let appState else { return .terminateNow }
         return MainActor.assumeIsolated {
+            // From here on, window closes belong to quit teardown, not
+            // background mode. Cleared again if the quit gets cancelled
+            // (`AppState.cancelDeferredQuit`).
+            isQuitting = true
             // The leave prompt's resolution (quit / cancel) drives termination.
             if !appState.requestQuit() { return .terminateLater }
             guard appState.reactotronSession.isRunning else { return .terminateNow }
@@ -133,6 +205,13 @@ struct ADTApp: App {
                 // `.brandAccent` re-resolves. AppState (and its device list) is
                 // owned above this view, so the rebuild preserves it.
                 .id(accentHex)
+                .onAppear {
+                    // Wire the delegate ↔ state references through the adaptor
+                    // instance: on macOS `NSApp.delegate` is SwiftUI's own
+                    // wrapper, so casting it to `AppDelegate` fails silently.
+                    appDelegate.appState = appState
+                    appState.appDelegate = appDelegate
+                }
                 .onChange(of: scenePhase) { _, phase in
                     appState.setForeground(phase == .active)
                 }
@@ -321,6 +400,9 @@ struct MenuBarView: View {
         Divider()
 
         // Always-on quick actions — no window needed.
+        Button("Quick Actions…") {
+            QuickActionsPanel.toggle(state: state)
+        }
         Button("Screenshot") {
             runByID("screenshot")
         }

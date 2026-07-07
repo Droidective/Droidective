@@ -13,6 +13,7 @@ public actor SimulatorMonitor {
     private var continuations: [UUID: AsyncStream<[Device]>.Continuation] = [:]
     private var pollTask: Task<Void, Never>?
     private var lastPublished: [Device]?
+    private var pollInterval: Duration = .seconds(3)
 
     public init(client: SimctlClient) {
         self.client = client
@@ -55,12 +56,20 @@ public actor SimulatorMonitor {
         return stream
     }
 
+    /// Adjust the polling cadence at runtime — DeviceMonitor's counterpart, so
+    /// the app can widen it while backgrounded instead of spawning `simctl
+    /// list` every 3s forever. Takes effect on the next loop iteration.
+    public func setPollInterval(_ interval: Duration) {
+        pollInterval = interval
+    }
+
     private func startPollingIfNeeded(interval: Duration) {
+        pollInterval = interval
         guard pollTask == nil else { return }
         pollTask = Task {
             while !Task.isCancelled {
                 await self.pollOnce()
-                try? await Task.sleep(for: interval)
+                try? await Task.sleep(for: self.pollInterval)
             }
         }
     }

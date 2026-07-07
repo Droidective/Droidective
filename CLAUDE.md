@@ -268,6 +268,38 @@ platforms annotation without a runner.
   (⌘Z / ⇧⌘Z) is snapshot-based (full image+annotations) and reaches the editor
   via `CommandGroup(replacing: .undoRedo)` + a `focusedSceneValue` — nil'd while
   typing a text label so ⌘Z falls through to the text field.
+- **Background mode & the Quick Actions panel.** With Settings ▸ General ▸
+  "Keep running in the background" on (the default), closing the main window
+  stops the kept-alive sessions (`AppState.enterBackground` — terminal shells,
+  Reactotron, JS-console tunnels; view-owned work dies with its view), widens
+  both device polls, and drops the Dock icon (`.accessory` — see
+  `AppDelegate.windowWillClose`, guarded by `isQuitting` so quit teardown isn't
+  mistaken for a window close). The app stays resident for the menu bar, the
+  per-feature hotkeys, and `QuickActionsPanel` — a **non-activating**
+  `FloatingPanelController` panel (global hotkey in Settings ▸ Hotkeys; the
+  welcome tour's "Get Started" ends on a record-a-hotkey ask recommending
+  ⇧⌘Space, shown only while none is set) that is
+  a small push-navigation mini app. The root is a *grid* of everything
+  runnable in place — saved custom commands, every *enabled* implemented
+  instant/toggle/form action (mirrors the app's role/catalog curation; hub
+  members ride their hub's enabledness, pinned features lead — ⌘P toggles,
+  shared with the app's favorites; `PaletteSearch.quickActions`, tested),
+  Manage Apps / Emulators / Install APK — with an "Open in Droidective" list
+  below for the enabled full-app view screens. Form actions render their
+  registry `FieldDef`s in-panel (`QuickActionFormView`); app verbs come from
+  `AppControlService.AppAction` (destructive ones need a second ⏎). With >1
+  device connected, every device-scoped action pushes a pick-device
+  interstitial; ⌘⏎ there runs on all devices (any device feature — the panel
+  fans out explicit targets itself, not gated on `supportsRunAll`). Targets
+  always ride explicitly through `run(on:)` — never the device-bar
+  selection, whose run-on-all state belongs to the hidden window.
+  ←→/↑↓ navigate the root grid even while a query is typed. Esc (or the
+  header's ‹ button) pops a screen and closes at the root, and a closed panel
+  resumes its screen + device choice when reopened within Settings ▸ Quick
+  Actions' window (`QuickPanelMemory`, default 5 min). Reopening the app goes
+  through `activateMainWindow` (flips the policy back to `.regular`, then
+  fronts the window on the next runloop turn; the main window is tracked by
+  reference in `AppState.mainWindow` — identifiers don't survive a close).
 - UI automation for verification: prefer AX element refs over coordinate
   clicks; the user works on the Mac alongside you (see memory).
 
