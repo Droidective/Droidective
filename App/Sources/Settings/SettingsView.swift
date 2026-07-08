@@ -104,7 +104,7 @@ struct GeneralSettingsView: View {
                     }
                 }
                 Text("Curates which features start visible — switching re-curates your set. Nothing is deleted; add any feature back from Home or the catalog.")
-                    .font(.footnote)
+                    .font(.app(.footnote))
                     .foregroundStyle(.textMuted)
                 Button("Open the role picker…") {
                     state.activateMainWindow()
@@ -119,7 +119,7 @@ struct GeneralSettingsView: View {
             Section("Background") {
                 Toggle("Keep running in the background", isOn: $keepRunningInBackground)
                 Text("Closing the window hides Droidective from the Dock and stops running feature work — including terminal shells. The menu bar icon, global hotkeys, and the Quick Actions panel stay available; quit fully with ⌘Q.")
-                    .font(.footnote)
+                    .font(.app(.footnote))
                     .foregroundStyle(.textMuted)
             }
 
@@ -132,7 +132,7 @@ struct GeneralSettingsView: View {
                     Text("For 1 hour").tag(60)
                 }
                 Text("Reopening the panel within this window returns to the screen and device you had — after that it starts fresh. Open the panel with its global hotkey (record one in the Hotkeys tab) or from the menu bar icon.")
-                    .font(.footnote)
+                    .font(.app(.footnote))
                     .foregroundStyle(.textMuted)
             }
 
@@ -143,7 +143,7 @@ struct GeneralSettingsView: View {
                     set: { SparkleUpdater.shared.automaticallyChecksForUpdates = $0 }
                 ))
                 Text("Updates are delivered via Sparkle from GitHub Releases.")
-                    .font(.footnote)
+                    .font(.app(.footnote))
                     .foregroundStyle(.textMuted)
             }
             #endif
@@ -153,7 +153,7 @@ struct GeneralSettingsView: View {
                 if showMenuBar {
                     DisclosureGroup(isExpanded: $showMenuItems) {
                         Text("When none are selected, your pinned features (or enabled instant actions) are shown. Screenshot and Mirror Screen always appear.")
-                            .font(.footnote)
+                            .font(.app(.footnote))
                             .foregroundStyle(.textMuted)
                             .padding(.vertical, 6)
                         ForEach(state.enabledFeatures) { feature in
@@ -181,15 +181,26 @@ struct GeneralSettingsView: View {
     }
 }
 
-/// Theme, accent color, and the inline how-it-works notes.
+/// Theme, accent color, fonts, and the inline how-it-works notes.
 struct AppearanceSettingsView: View {
     @AppStorage("theme") private var theme = "dark"
     @AppStorage(accentColorDefaultsKey) private var accentHex = ""
     @AppStorage("showFeatureNotes") private var showFeatureNotes = false
     @AppStorage(sidebarAutoHideDefaultsKey) private var sidebarAutoHide = false
+    @AppStorage(appFontFamilyDefaultsKey) private var fontFamily = ""
+    @AppStorage(appFontSizeScaleDefaultsKey) private var fontSizeScale = 1.0
+    @State private var hexDraft = ""
+    @State private var hexInvalid = false
     #if DEBUG
     @AppStorage(DevMetrics.overlayEnabledKey) private var showDevMetrics = true
     #endif
+
+    /// One-click accent presets; the leading nil swatch is the bundled default.
+    private static let presetAccents: [(name: String, hex: String)] = [
+        ("Mint", "#00C7BE"), ("Teal", "#64D2FF"), ("Blue", "#0A84FF"),
+        ("Indigo", "#5E5CE6"), ("Purple", "#BF5AF2"), ("Pink", "#FF375F"),
+        ("Red", "#FF453A"), ("Orange", "#FF9F0A"), ("Yellow", "#FFD60A"),
+    ]
 
     /// The accent ColorPicker reads/writes the stored hex; an empty value shows
     /// (and resets to) the bundled default.
@@ -211,36 +222,80 @@ struct AppearanceSettingsView: View {
                 .onChange(of: theme) { applyStoredTheme() }
                 if theme == "light" {
                     Text("Light mode is in beta — a few screens are still being tuned for it.")
-                        .font(.footnote)
+                        .font(.app(.footnote))
                         .foregroundStyle(.textMuted)
                 }
             }
 
             Section("Accent") {
-                LabeledContent("Accent color") {
-                    HStack(spacing: 8) {
-                        ColorPicker("", selection: accentBinding, supportsOpacity: false).labelsHidden()
-                        if !accentHex.isEmpty {
-                            Button("Reset") { accentHex = "" }
+                LabeledContent("Presets") {
+                    HStack(spacing: 7) {
+                        accentSwatch(name: "Droidective green (default)", hex: nil)
+                        ForEach(Self.presetAccents, id: \.hex) { preset in
+                            accentSwatch(name: preset.name, hex: preset.hex)
                         }
                     }
                 }
-                Text("Recolors buttons, toggles, selection, and active icons across the app.")
-                    .font(.footnote)
+                LabeledContent("Custom") {
+                    HStack(spacing: 8) {
+                        ColorPicker("", selection: accentBinding, supportsOpacity: false).labelsHidden()
+                        TextField("#34C759", text: $hexDraft)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 90)
+                            .onSubmit { commitHex() }
+                        if !accentHex.isEmpty {
+                            Button("Reset") { setAccent("") }
+                        }
+                    }
+                }
+                if hexInvalid {
+                    Text("Enter a hex color like #34C759 (or the short #3C5).")
+                        .font(.app(.footnote))
+                        .foregroundStyle(.orange)
+                }
+                Text("Recolors buttons, toggles, selection, and active icons across the app. Pick a preset, use the color well, or type a hex code and press ⏎.")
+                    .font(.app(.footnote))
+                    .foregroundStyle(.textMuted)
+            }
+
+            Section("Font") {
+                Picker("Font", selection: $fontFamily) {
+                    Text("System (San Francisco)").tag("")
+                    if !FontCatalog.standardFamilies.isEmpty {
+                        Divider()
+                        ForEach(FontCatalog.standardFamilies, id: \.self) { family in
+                            Text(family).font(.custom(family, size: 13)).tag(family)
+                        }
+                    }
+                    if !FontCatalog.otherFamilies.isEmpty {
+                        Divider()
+                        ForEach(FontCatalog.otherFamilies, id: \.self) { family in
+                            Text(family).tag(family)
+                        }
+                    }
+                }
+                Picker("Text size", selection: $fontSizeScale) {
+                    Text("Small").tag(0.9)
+                    Text("Default").tag(1.0)
+                    Text("Large").tag(1.1)
+                    Text("Extra large").tag(1.25)
+                }
+                Text("Applies across the app — code and log views keep their monospaced font, and the terminal keeps its own. ⌘= / ⌘- additionally zoom the whole window.")
+                    .font(.app(.footnote))
                     .foregroundStyle(.textMuted)
             }
 
             Section("Sidebar") {
                 Toggle("Automatically hide and show the sidebar", isOn: $sidebarAutoHide)
                 Text("The sidebar slides over the content when you push the mouse against the window's left edge — ⌘B also shows it.")
-                    .font(.footnote)
+                    .font(.app(.footnote))
                     .foregroundStyle(.textMuted)
             }
 
             Section("Feature notes") {
                 Toggle("Show how-it-works notes", isOn: $showFeatureNotes)
                 Text("The info text beneath each feature, above the command bar.")
-                    .font(.footnote)
+                    .font(.app(.footnote))
                     .foregroundStyle(.textMuted)
             }
 
@@ -248,12 +303,59 @@ struct AppearanceSettingsView: View {
             Section("Developer") {
                 Toggle("Show self-metrics overlay", isOn: $showDevMetrics)
                 Text("A floating panel (top-right) with Droidective's own memory, CPU, and network throughput. Debug builds only.")
-                    .font(.footnote)
+                    .font(.app(.footnote))
                     .foregroundStyle(.textMuted)
             }
             #endif
         }
         .formStyle(.grouped)
+        .onAppear { hexDraft = accentHex }
+        // Reflect swatch/color-well changes into the hex field so it always
+        // shows the effective value.
+        .onChange(of: accentHex) { hexDraft = accentHex }
+    }
+
+    /// A one-click accent circle; nil hex is the bundled default. The selected
+    /// swatch carries a checkmark.
+    private func accentSwatch(name: String, hex: String?) -> some View {
+        let color = hex.flatMap { Color(hex: $0) } ?? Color("BrandAccent")
+        let isSelected = accentHex == (hex ?? "")
+        return Button { setAccent(hex ?? "") } label: {
+            Circle()
+                .fill(color)
+                .frame(width: 18, height: 18)
+                .overlay {
+                    if isSelected {
+                        Image(systemName: "checkmark")
+                            .font(.app(size: 9, weight: .bold))
+                            .foregroundStyle(color.contrastingForeground)
+                    }
+                }
+                .overlay(Circle().strokeBorder(.primary.opacity(0.15), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .help(name)
+    }
+
+    private func setAccent(_ hex: String) {
+        accentHex = hex
+        hexDraft = hex
+        hexInvalid = false
+    }
+
+    /// Validate and store the typed hex (empty resets to the default),
+    /// normalized to "#RRGGBB" so swatch selection matches it.
+    private func commitHex() {
+        let trimmed = hexDraft.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else {
+            setAccent("")
+            return
+        }
+        guard let color = Color(hex: trimmed), let normalized = color.hexString else {
+            hexInvalid = true
+            return
+        }
+        setAccent(normalized)
     }
 }
 
@@ -282,7 +384,7 @@ struct PrivacySettingsView: View {
                     set: { Telemetry.shared.setAnalytics($0) }
                 ))
                 Text("Crash reports help fix bugs; analytics shows which tools get used. Both are anonymous — no device data, file paths, or command contents are ever sent.")
-                    .font(.footnote)
+                    .font(.app(.footnote))
                     .foregroundStyle(.textMuted)
             }
 
@@ -290,7 +392,7 @@ struct PrivacySettingsView: View {
                 LabeledContent("Captures & pulls") {
                     VStack(alignment: .trailing, spacing: 6) {
                         Text(captureFolderDisplay)
-                            .font(.callout)
+                            .font(.app(.callout))
                             .foregroundStyle(.textMuted)
                             .lineLimit(1)
                             .truncationMode(.middle)
@@ -434,7 +536,7 @@ struct DoctorSettingsView: View {
             DisclosureGroup(isExpanded: $isExpanded) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(check.purpose)
-                        .font(.callout)
+                        .font(.app(.callout))
                         .foregroundStyle(.textMuted)
                     if let status {
                         if let version = status.version {
@@ -451,7 +553,7 @@ struct DoctorSettingsView: View {
                                 .disabled(installingTool != nil)
                             } else {
                                 Text(status.installHint)
-                                    .font(.callout)
+                                    .font(.app(.callout))
                                     .foregroundStyle(.textMuted)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
@@ -467,7 +569,7 @@ struct DoctorSettingsView: View {
                         Spacer()
                         if let status, !status.installed {
                             Text("not installed")
-                                .font(.caption)
+                                .font(.app(.caption))
                                 .foregroundStyle(.textMuted)
                         }
                     }
@@ -498,7 +600,7 @@ struct DoctorSettingsView: View {
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .font(.callout)
+            .font(.app(.callout))
         }
     }
 

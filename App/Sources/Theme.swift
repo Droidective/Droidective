@@ -43,10 +43,12 @@ extension ShapeStyle where Self == Color {
 let accentColorDefaultsKey = "accentColorHex"
 
 extension Color {
-    /// Parse "#RRGGBB" / "RRGGBB" as sRGB. nil on malformed input.
+    /// Parse "#RRGGBB" / "RRGGBB" (or the "#RGB" shorthand) as sRGB. nil on
+    /// malformed input.
     init?(hex: String) {
         var s = hex.trimmingCharacters(in: .whitespaces)
         if s.hasPrefix("#") { s.removeFirst() }
+        if s.count == 3 { s = s.map { "\($0)\($0)" }.joined() }
         guard s.count == 6, let value = UInt32(s, radix: 16) else { return nil }
         self.init(
             .sRGB,
