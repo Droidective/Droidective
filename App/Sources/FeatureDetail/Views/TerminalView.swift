@@ -22,6 +22,30 @@ final class TerminalManager {
     private var counter = 0
     private var groupCounter = 0
 
+    /// The rail's drag-in-flight state — which row/group is dragged and where
+    /// the insertion guideline sits. On the manager, not view `@State`, so the
+    /// root drag janitor can clear it when a drag ends without a drop. The
+    /// whole-view drop catch that used to do that job claimed the drag region
+    /// for the entire feature area and killed the pane's tab drops (SwiftUI
+    /// routes a drop to the deepest region under the cursor by *geometry*,
+    /// regardless of whether its declared types match the drag).
+    fileprivate var railDraggedTabID: UUID?
+    fileprivate var railDraggedGroupID: UUID?
+    fileprivate var railDropSlot: RailDropSlot?
+
+    /// True while a rail row/group drag is in flight (the janitor's guard).
+    var railDragActive: Bool {
+        railDraggedTabID != nil || railDraggedGroupID != nil || railDropSlot != nil
+    }
+
+    /// Reset the rail drag state — a drop resolved, or the janitor caught a
+    /// drag that ended with no drop (released over the shells or outside).
+    func clearRailDrag() {
+        railDraggedTabID = nil
+        railDraggedGroupID = nil
+        railDropSlot = nil
+    }
+
     /// Set by `AppState`: a shell ended on its own (the user typed `exit`),
     /// so its tab should close through the same path as the × / ⌘W.
     var onShellExited: ((UUID) -> Void)?
@@ -166,14 +190,6 @@ struct TerminalView: View {
     @State private var renamingGroup: TerminalTabs.Group?
     @State private var renameDraft = ""
     @AppStorage("terminalRailCollapsed") private var railCollapsed = false
-    /// The tab/group being dragged in the rail. Rows hold still while an accent
-    /// insertion guideline (`dropSlot`) shows where the drop will land; the move
-    /// itself happens on drop.
-    @State private var draggedTabID: UUID?
-    @State private var draggedGroupID: UUID?
-    /// Where the insertion guideline is drawn during a rail drag.
-    @State private var dropSlot: RailDropSlot?
-
     private var terminals: TerminalManager { state.terminals }
 
     var body: some View {
@@ -182,19 +198,12 @@ struct TerminalView: View {
             Divider()
             content
         }
-        // A rail drag released outside the rail (over the shells, most often)
-        // never reaches a rail drop delegate, which would leave the dragged
-        // row stuck dimmed. Catch those here and clear the drag state — only
-        // a target while a rail drag is in flight, so it never swallows text
-        // drops headed for the terminal.
-        .onDrop(of: [.plainText], delegate: TabDragCancelCatch(
-            isDragging: draggedTabID != nil || draggedGroupID != nil,
-            clear: {
-                draggedTabID = nil
-                draggedGroupID = nil
-                dropSlot = nil
-            }
-        ))
+        // No whole-view drop catch here: SwiftUI routes a drop to the deepest
+        // drop region under the cursor by geometry, regardless of type match,
+        // so a feature-wide target — even one listening for a type a tab drag
+        // doesn't carry — killed the pane's drop-to-split while a terminal tab
+        // was mounted. Rail drags that end without a drop are cleared by the
+        // root drag janitor (`RootView.installDragJanitor`) instead.
         // A first visit opens a shell right away — an empty terminal screen
         // with a lone + button would just be a speed bump.
         .task {
@@ -303,12 +312,10 @@ struct TerminalView: View {
                         .frame(maxHeight: .infinity)
                         .contentShape(Rectangle())
                         .overlay(alignment: .top) {
-                            guideline(dropSlot == .railEnd).padding(.horizontal, 8)
+                            guideline(terminals.railDropSlot == .railEnd).padding(.horizontal, 8)
                         }
-                        .onDrop(of: [.plainText], delegate: RailTailDropDelegate(
-                            terminals: terminals,
-                            draggedTabID: $draggedTabID, draggedGroupID: $draggedGroupID,
-                            dropSlot: $dropSlot
+                        .onDrop(of: [.terminalRailItem], delegate: RailTailDropDelegate(
+                            terminals: terminals
                         ))
                 }
                 .frame(maxHeight: .infinity, alignment: .top)
@@ -370,19 +377,21 @@ struct TerminalView: View {
             Divider()
             Button("Close Group") { state.closeTerminalGroup(group.id) }
         }
-        .opacity(draggedGroupID == group.id ? 0.4 : 1)
+        .opacity(terminals.railDraggedGroupID == group.id ? 0.4 : 1)
         // Above the header → a group reorders here; below it → a tab joins the
         // group.
-        .overlay(alignment: .top) { guideline(dropSlot == .beforeGroup(group.id)).offset(y: -1) }
-        .overlay(alignment: .bottom) { guideline(dropSlot == .intoGroup(group.id)).offset(y: 1) }
-        .onDrag {
-            draggedGroupID = group.id
-            return NSItemProvider(object: "group:\(group.id.uuidString)" as NSString)
+        .overlay(alignment: .top) {
+            guideline(terminals.railDropSlot == .beforeGroup(group.id)).offset(y: -1)
         }
-        .onDrop(of: [.plainText], delegate: GroupHeaderDropDelegate(
-            group: group.id, terminals: terminals,
-            draggedTabID: $draggedTabID, draggedGroupID: $draggedGroupID,
-            dropSlot: $dropSlot
+        .overlay(alignment: .bottom) {
+            guideline(terminals.railDropSlot == .intoGroup(group.id)).offset(y: 1)
+        }
+        .onDrag {
+            terminals.railDraggedGroupID = group.id
+            return privateDragItem(.terminalRailItem, "group:\(group.id.uuidString)")
+        }
+        .onDrop(of: [.terminalRailItem], delegate: GroupHeaderDropDelegate(
+            group: group.id, terminals: terminals
         ))
     }
 
@@ -430,21 +439,22 @@ struct TerminalView: View {
             Divider()
             Button("Close Terminal") { state.closeTerminalShell(tab.id) }
         }
-        .opacity(draggedTabID == tab.id ? 0.4 : 1)
+        .opacity(terminals.railDraggedTabID == tab.id ? 0.4 : 1)
         // A tab drops before this row; a group dragged over a loose row
         // interleaves before it. Both draw the guideline above the row.
         .overlay(alignment: .top) {
-            guideline(dropSlot == .beforeTab(tab.id) || (!indented && dropSlot == .beforeGroup(tab.id)))
-                .offset(y: -1)
+            guideline(
+                terminals.railDropSlot == .beforeTab(tab.id)
+                    || (!indented && terminals.railDropSlot == .beforeGroup(tab.id))
+            )
+            .offset(y: -1)
         }
         .onDrag {
-            draggedTabID = tab.id
-            return NSItemProvider(object: "tab:\(tab.id.uuidString)" as NSString)
+            terminals.railDraggedTabID = tab.id
+            return privateDragItem(.terminalRailItem, "tab:\(tab.id.uuidString)")
         }
-        .onDrop(of: [.plainText], delegate: TabRowDropDelegate(
-            row: tab.id, isLoose: !indented, terminals: terminals,
-            draggedTabID: $draggedTabID, draggedGroupID: $draggedGroupID,
-            dropSlot: $dropSlot
+        .onDrop(of: [.terminalRailItem], delegate: TabRowDropDelegate(
+            row: tab.id, isLoose: !indented, terminals: terminals
         ))
     }
 
@@ -512,38 +522,38 @@ private enum RailDropSlot: Equatable {
 
 /// One tab row's drop target. A dragged tab drops before this row (loose or
 /// grouped, matching the row's context); a dragged group interleaves before a
-/// *loose* row. Rows hold still — only `dropSlot` changes — until the drop.
+/// *loose* row. Rows hold still — only the manager's `railDropSlot` changes —
+/// until the drop.
 private struct TabRowDropDelegate: DropDelegate {
     let row: UUID
     let isLoose: Bool
     let terminals: TerminalManager
-    @Binding var draggedTabID: UUID?
-    @Binding var draggedGroupID: UUID?
-    @Binding var dropSlot: RailDropSlot?
 
     private var slot: RailDropSlot? {
-        if let dragged = draggedTabID, dragged != row { return .beforeTab(row) }
+        if let dragged = terminals.railDraggedTabID, dragged != row { return .beforeTab(row) }
         // A group targets a loose row (its id is a top-level entry); a grouped
         // row isn't, so a group drag there would be a no-op — offer no slot.
-        if draggedGroupID != nil, isLoose { return .beforeGroup(row) }
+        if terminals.railDraggedGroupID != nil, isLoose { return .beforeGroup(row) }
         return nil
     }
 
     func validateDrop(info: DropInfo) -> Bool { slot != nil }
-    func dropEntered(info: DropInfo) { dropSlot = slot }
+    func dropEntered(info: DropInfo) { terminals.railDropSlot = slot }
     func dropUpdated(info: DropInfo) -> DropProposal? {
-        dropSlot = slot
+        terminals.railDropSlot = slot
         return slot == nil ? nil : DropProposal(operation: .move)
     }
-    func dropExited(info: DropInfo) { if dropSlot == slot { dropSlot = nil } }
+    func dropExited(info: DropInfo) {
+        if terminals.railDropSlot == slot { terminals.railDropSlot = nil }
+    }
 
     func performDrop(info: DropInfo) -> Bool {
-        defer { clearRailDrag(&draggedTabID, &draggedGroupID, &dropSlot) }
-        if let dragged = draggedTabID, dragged != row {
+        defer { terminals.clearRailDrag() }
+        if let dragged = terminals.railDraggedTabID, dragged != row {
             terminals.moveTab(dragged, before: row)
             return true
         }
-        if let dragged = draggedGroupID, isLoose {
+        if let dragged = terminals.railDraggedGroupID, isLoose {
             terminals.moveGroup(dragged, before: row)
             return true
         }
@@ -556,31 +566,32 @@ private struct TabRowDropDelegate: DropDelegate {
 private struct GroupHeaderDropDelegate: DropDelegate {
     let group: UUID
     let terminals: TerminalManager
-    @Binding var draggedTabID: UUID?
-    @Binding var draggedGroupID: UUID?
-    @Binding var dropSlot: RailDropSlot?
 
     private var slot: RailDropSlot? {
-        if draggedTabID != nil { return .intoGroup(group) }
-        if let dragged = draggedGroupID, dragged != group { return .beforeGroup(group) }
+        if terminals.railDraggedTabID != nil { return .intoGroup(group) }
+        if let dragged = terminals.railDraggedGroupID, dragged != group {
+            return .beforeGroup(group)
+        }
         return nil
     }
 
     func validateDrop(info: DropInfo) -> Bool { slot != nil }
-    func dropEntered(info: DropInfo) { dropSlot = slot }
+    func dropEntered(info: DropInfo) { terminals.railDropSlot = slot }
     func dropUpdated(info: DropInfo) -> DropProposal? {
-        dropSlot = slot
+        terminals.railDropSlot = slot
         return slot == nil ? nil : DropProposal(operation: .move)
     }
-    func dropExited(info: DropInfo) { if dropSlot == slot { dropSlot = nil } }
+    func dropExited(info: DropInfo) {
+        if terminals.railDropSlot == slot { terminals.railDropSlot = nil }
+    }
 
     func performDrop(info: DropInfo) -> Bool {
-        defer { clearRailDrag(&draggedTabID, &draggedGroupID, &dropSlot) }
-        if let dragged = draggedTabID {
+        defer { terminals.clearRailDrag() }
+        if let dragged = terminals.railDraggedTabID {
             terminals.moveTab(dragged, toEndOfGroup: group)
             return true
         }
-        if let dragged = draggedGroupID, dragged != group {
+        if let dragged = terminals.railDraggedGroupID, dragged != group {
             terminals.moveGroup(dragged, before: group)
             return true
         }
@@ -593,39 +604,31 @@ private struct GroupHeaderDropDelegate: DropDelegate {
 /// drag state when a drop lands on no row at all.
 private struct RailTailDropDelegate: DropDelegate {
     let terminals: TerminalManager
-    @Binding var draggedTabID: UUID?
-    @Binding var draggedGroupID: UUID?
-    @Binding var dropSlot: RailDropSlot?
 
-    private var isDragging: Bool { draggedTabID != nil || draggedGroupID != nil }
+    private var isDragging: Bool {
+        terminals.railDraggedTabID != nil || terminals.railDraggedGroupID != nil
+    }
 
     func validateDrop(info: DropInfo) -> Bool { isDragging }
-    func dropEntered(info: DropInfo) { if isDragging { dropSlot = .railEnd } }
+    func dropEntered(info: DropInfo) { if isDragging { terminals.railDropSlot = .railEnd } }
     func dropUpdated(info: DropInfo) -> DropProposal? {
-        if isDragging { dropSlot = .railEnd }
+        if isDragging { terminals.railDropSlot = .railEnd }
         return isDragging ? DropProposal(operation: .move) : nil
     }
-    func dropExited(info: DropInfo) { if dropSlot == .railEnd { dropSlot = nil } }
+    func dropExited(info: DropInfo) {
+        if terminals.railDropSlot == .railEnd { terminals.railDropSlot = nil }
+    }
 
     func performDrop(info: DropInfo) -> Bool {
-        defer { clearRailDrag(&draggedTabID, &draggedGroupID, &dropSlot) }
-        if let dragged = draggedTabID {
+        defer { terminals.clearRailDrag() }
+        if let dragged = terminals.railDraggedTabID {
             terminals.moveTabToLooseEnd(dragged)
             return true
         }
-        if let dragged = draggedGroupID {
+        if let dragged = terminals.railDraggedGroupID {
             terminals.moveGroupToEnd(dragged)
             return true
         }
         return false
     }
-}
-
-/// Reset every rail drag binding once a drop resolves.
-private func clearRailDrag(
-    _ tab: inout UUID?, _ group: inout UUID?, _ slot: inout RailDropSlot?
-) {
-    tab = nil
-    group = nil
-    slot = nil
 }

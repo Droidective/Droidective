@@ -74,6 +74,19 @@ targets:
             UTTypeTagSpecification:
               public.filename-extension:
                 - apk
+        # The app's private drag types (DragTypes.swift). macOS only writes a
+        # custom UTI to the drag pasteboard when the app declares it, so an
+        # undeclared type makes every .onDrag with it die silently — no drop
+        # target ever matches.
+        UTExportedTypeDeclarations:
+          - UTTypeIdentifier: com.rohindh.droidective.workspace-tab
+            UTTypeDescription: Droidective workspace tab
+            UTTypeConformsTo:
+              - public.data
+          - UTTypeIdentifier: com.rohindh.droidective.terminal-rail-item
+            UTTypeDescription: Droidective terminal rail item
+            UTTypeConformsTo:
+              - public.data
         CFBundleDocumentTypes:
           - CFBundleTypeName: Android Package
             CFBundleTypeRole: Viewer

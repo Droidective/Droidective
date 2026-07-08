@@ -1,6 +1,7 @@
 import ADBKit
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct RootView: View {
     @Environment(AppState.self) private var state
@@ -170,6 +171,7 @@ struct RootView: View {
         Telemetry.shared.trackAppLaunched(launchCount: launchCount)
         Telemetry.shared.featureBecameActive(state.activeTabID)
         installCloseTabMonitor()
+        installDragJanitor()
         switch LaunchPrompt.next(
             hasChosenRole: hasChosenRole, hasSeenTour: hasSeenTour,
             starPromptShown: starPromptShown,
@@ -210,6 +212,27 @@ struct RootView: View {
             else { return event }
             state.closeActiveTab()
             return nil
+        }
+    }
+
+    private static var dragJanitorInstalled = false
+
+    /// A drag has no "ended without a drop" callback: releasing a dragged tab
+    /// (or a terminal rail row) outside any drop target fires no delegate, so
+    /// the drag state — and the insertion guideline keyed off it — stayed
+    /// stuck. Normal mouse events don't flow while a drag session runs, so the
+    /// first one arriving with drag state still set means exactly that ending;
+    /// clear it there. Installed once. This is also what lets the Terminal
+    /// drop its whole-view cleanup catch, which blocked the pane's tab drops
+    /// (drops route to the deepest region by geometry, not type).
+    private func installDragJanitor() {
+        guard !RootView.dragJanitorInstalled else { return }
+        RootView.dragJanitorInstalled = true
+        let state = self.state
+        NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDown]) { event in
+            if state.draggingTabID != nil { state.draggingTabID = nil }
+            if state.terminals.railDragActive { state.terminals.clearRailDrag() }
+            return event
         }
     }
 
@@ -352,7 +375,7 @@ struct RootView: View {
         // split-create overlay stuck blocking the pane. Catch those here and
         // clear it. Only a target while a tab drag is in flight; returns false so
         // it never swallows a real drop (inner targets are hit first).
-        .onDrop(of: [.text], delegate: TabDragCancelCatch(
+        .onDrop(of: [.workspaceTab], delegate: TabDragCancelCatch(
             isDragging: state.draggingTabID != nil,
             clear: { state.draggingTabID = nil }
         ))
@@ -536,7 +559,7 @@ private struct EditorPane: View {
             TabStripView(group: index)
             TabHostView(group: index)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .onDrop(of: [.text], delegate: TabPaneDrop(
+                .onDrop(of: [.workspaceTab], delegate: TabPaneDrop(
                     draggingID: state.draggingTabID,
                     onDrop: { id in
                         if state.isSplit {
@@ -549,7 +572,11 @@ private struct EditorPane: View {
                     onTargetedChange: { contentTargeted = $0 }
                 ))
                 .overlay(alignment: .trailing) {
-                    if !state.isSplit, contentTargeted { splitPreview }
+                    // Only promise a split the model will honor: `split()`
+                    // requires >1 tab (something must stay behind), so a
+                    // single-tab drag shows no preview instead of a dead one.
+                    if !state.isSplit, contentTargeted,
+                       state.openTabIDs(inGroup: index).count > 1 { splitPreview }
                 }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

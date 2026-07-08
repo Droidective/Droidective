@@ -1,5 +1,6 @@
 import ADBKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// One editor pane's tab strip. Tabs scroll sideways when they overflow (‹ ›
 /// arrows appear); the active one is highlighted and kept in view. A recording
@@ -65,6 +66,17 @@ struct TabStripView: View {
         .frame(height: 36)
         .background(.bgSurface)
         .overlay(alignment: .bottom) { Divider() }
+        // The strip's dead space (past the last chip, around the + button) is
+        // a drop target too: dropping there appends the tab to this pane —
+        // the natural way to drag a tab across a split. Chip drops sit deeper,
+        // so precise before/after placement still wins over this catch-all.
+        .onDrop(of: [.workspaceTab], delegate: TabPaneDrop(
+            draggingID: state.draggingTabID,
+            onDrop: { id in
+                state.dropTab(id, intoGroup: group, before: nil)
+                state.draggingTabID = nil
+            }
+        ))
         // A drop that lands outside this strip's chips (the pane content, dead
         // strip space, the other pane) never reaches the chips' drop delegates,
         // so their `setSlot(nil)` cleanup can't run and the insertion guideline
@@ -131,9 +143,12 @@ struct TabStripView: View {
         .overlay(alignment: .trailing) { guideline(visible: dropSlot == TabDropSlot(targetID: id, after: true)) }
         .onDrag {
             state.draggingTabID = id
-            return NSItemProvider(object: id as NSString)
+            // A private type, not an NSString: a plain-text drag is captured at
+            // the AppKit level by any mounted text view (SwiftTerm, logcat)
+            // before SwiftUI's drop targets see it — see `DragTypes.swift`.
+            return privateDragItem(.workspaceTab, id)
         }
-        .onDrop(of: [.text], delegate: TabReorderDrop(
+        .onDrop(of: [.workspaceTab], delegate: TabReorderDrop(
             targetID: id,
             width: chipWidths[id] ?? 0,
             order: tabIDs,
