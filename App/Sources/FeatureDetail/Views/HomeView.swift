@@ -2,14 +2,16 @@ import ADBKit
 import AppKit
 import SwiftUI
 
-/// The landing screen, now a role-aware launchpad: a grid of the user's curated
-/// tools (sorted by what they use most), an expandable "More features" section
-/// to add the rest, the keyboard shortcuts that drive the app, and the
-/// no-device onboarding when nothing is connected.
+/// The landing screen, now a role-aware launchpad: an inline feature search, a
+/// strip of the features used most, a grid of the user's curated tools (sorted
+/// by what they use most), an expandable "More features" section to add the
+/// rest, the keyboard shortcuts that drive the app, and the no-device
+/// onboarding when nothing is connected.
 struct HomeView: View {
     @Environment(AppState.self) private var state
     @Environment(\.colorScheme) private var colorScheme
     @State private var showMore = false
+    @State private var query = ""
 
     private static let welcomeTitle = "Welcome to Droidective"
 
@@ -17,19 +19,117 @@ struct HomeView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 30) {
                 header
-                if state.devices.isEmpty {
-                    connectCard
+                searchBar
+                if !query.isEmpty {
+                    searchResultsSection
+                } else {
+                    if state.devices.isEmpty {
+                        connectCard
+                    }
+                    frequentSection
+                    launchpadSection
+                    moreFeaturesSection
+                    shortcutsSection
+                    tourFooter
                 }
-                launchpadSection
-                moreFeaturesSection
-                shortcutsSection
-                tourFooter
             }
             .frame(maxWidth: 760, alignment: .leading)
             .frame(maxWidth: .infinity)
             .padding(32)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Search
+
+    /// The shared, tested palette ranking — the same order ⌘K shows — capped
+    /// to a grid's worth of results.
+    private var searchMatches: [FeatureDef] {
+        Array(
+            PaletteSearch.features(
+                query: query,
+                enabled: state.layout.effectiveEnabledIDs,
+                favorites: state.layout.favorites
+            ).prefix(12)
+        )
+    }
+
+    private var searchBar: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.textMuted)
+            TextField("Search features…", text: $query)
+                .textFieldStyle(.plain)
+                .onSubmit { openTopMatch() }
+            if query.isEmpty {
+                KeyHint("⌘K")
+            } else {
+                Button { query = "" } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.textMuted)
+                }
+                .buttonStyle(.plain)
+                .help("Clear search")
+            }
+        }
+        .font(.app(.title3))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Color.bgSurface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(Color.borderSubtle, lineWidth: 1)
+        )
+        .onExitCommand { query = "" }
+    }
+
+    @ViewBuilder private var searchResultsSection: some View {
+        let matches = searchMatches
+        if matches.isEmpty {
+            Text("No matching features")
+                .font(.app(.callout))
+                .foregroundStyle(.textMuted)
+        } else {
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 210), spacing: 12)],
+                alignment: .leading,
+                spacing: 12
+            ) {
+                ForEach(matches) { feature in
+                    FeatureCard(feature: feature) { open(feature) }
+                }
+            }
+        }
+    }
+
+    private func openTopMatch() {
+        guard let first = searchMatches.first else { return }
+        open(first)
+    }
+
+    private func open(_ feature: FeatureDef) {
+        query = ""
+        state.openFeature(feature)
+    }
+
+    // MARK: - Frequently used
+
+    @ViewBuilder private var frequentSection: some View {
+        let frequent = state.frequentFeatures
+        if !frequent.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                sectionTitle("Frequently used")
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 160), spacing: 10)],
+                    alignment: .leading,
+                    spacing: 10
+                ) {
+                    ForEach(frequent) { feature in
+                        FrequentPill(feature: feature) { state.openFeature(feature) }
+                    }
+                }
+            }
+        }
     }
 
     // MARK: - Header
@@ -46,7 +146,7 @@ struct HomeView: View {
                 HStack(alignment: .center, spacing: 16) {
                     logo
                     Text(Self.welcomeTitle)
-                        .font(.largeTitle.bold())
+                        .font(.app(.largeTitle).bold())
                         .fixedSize()
                     Spacer(minLength: 12)
                     roleBadge
@@ -55,7 +155,7 @@ struct HomeView: View {
                     HStack(alignment: .center, spacing: 12) {
                         logo
                         Text(Self.welcomeTitle)
-                            .font(.largeTitle.bold())
+                            .font(.app(.largeTitle).bold())
                             .lineLimit(2)
                             .minimumScaleFactor(0.6)
                     }
@@ -63,7 +163,7 @@ struct HomeView: View {
                 }
             }
             Text("An Android & React Native debugging command palette, driven over adb.")
-                .font(.title3)
+                .font(.app(.title3))
                 .foregroundStyle(.textMuted)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -83,10 +183,10 @@ struct HomeView: View {
                 Image(systemName: state.selectedRole?.icon ?? "square.grid.2x2")
                 Text(state.selectedRole?.label ?? "All features")
                 Image(systemName: "chevron.down")
-                    .font(.caption2)
+                    .font(.app(.caption2))
                     .foregroundStyle(.textMuted)
             }
-            .font(.callout)
+            .font(.app(.callout))
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
             .background(Color.bgSurface, in: Capsule())
@@ -103,7 +203,7 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: 12) {
             sectionTitle("Your tools")
             Text("Your most-used features, front and center. Add more below or from the sidebar.")
-                .font(.callout)
+                .font(.app(.callout))
                 .foregroundStyle(.textMuted)
             LazyVGrid(
                 columns: [GridItem(.adaptive(minimum: 210), spacing: 12)],
@@ -145,14 +245,14 @@ struct HomeView: View {
                 .padding(.top, 10)
                 Button("Manage all features…") { state.requestFeature("catalog") }
                     .buttonStyle(.link)
-                    .font(.callout)
+                    .font(.app(.callout))
                     .padding(.top, 8)
             } label: {
                 HStack(spacing: 8) {
                     Text("More features")
-                        .font(.title2.bold())
+                        .font(.app(.title2).bold())
                     Text("\(addable.count)")
-                        .font(.callout.monospacedDigit())
+                        .font(.app(.callout).monospacedDigit())
                         .foregroundStyle(.textMuted)
                 }
                 .contentShape(Rectangle())
@@ -172,7 +272,7 @@ struct HomeView: View {
                     Text(feature.title).foregroundStyle(.textMain)
                     if let subtitle = feature.subtitle {
                         Text(subtitle)
-                            .font(.footnote)
+                            .font(.app(.footnote))
                             .foregroundStyle(.textMuted)
                             .lineLimit(1)
                     }
@@ -226,16 +326,16 @@ struct HomeView: View {
     private func shortcutCard(_ shortcut: Shortcut) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: shortcut.icon)
-                .font(.title2)
+                .font(.app(.title2))
                 .foregroundStyle(.brandAccent)
                 .frame(width: 26)
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
-                    Text(shortcut.title).font(.headline)
+                    Text(shortcut.title).font(.app(.headline))
                     KeyHint(shortcut.key)
                 }
                 Text(shortcut.detail)
-                    .font(.callout)
+                    .font(.app(.callout))
                     .foregroundStyle(.textMuted)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -252,7 +352,7 @@ struct HomeView: View {
     private var connectCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             Label("No device connected", systemImage: "iphone.gen3.badge.exclamationmark")
-                .font(.headline)
+                .font(.app(.headline))
             step(1, "On the device, open **Settings → About phone** and tap **Build number** 7 times to enable Developer options.")
             step(2, "In **Developer options**, turn on **USB debugging**.")
             step(3, "Plug in via USB and tap **Allow** on the debugging prompt — or connect over Wi-Fi.")
@@ -267,7 +367,7 @@ struct HomeView: View {
             .padding(.top, 2)
             if state.adbMissing {
                 Label("adb isn't installed yet — use the Install button in the device bar first.", systemImage: "exclamationmark.triangle")
-                    .font(.footnote)
+                    .font(.app(.footnote))
                     .foregroundStyle(.orange)
             }
         }
@@ -279,11 +379,11 @@ struct HomeView: View {
     private func step(_ number: Int, _ text: String) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Text("\(number)")
-                .font(.callout.weight(.bold))
+                .font(.app(.callout).weight(.bold))
                 .frame(width: 22, height: 22)
                 .background(.brandAccent.opacity(0.15), in: Circle())
             Text(.init(text))
-                .font(.callout)
+                .font(.app(.callout))
                 .foregroundStyle(.textMuted)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -306,7 +406,42 @@ struct HomeView: View {
 
     private func sectionTitle(_ text: String) -> some View {
         Text(text)
-            .font(.title2.bold())
+            .font(.app(.title2).bold())
+    }
+}
+
+/// One compact pill on the "Frequently used" strip — icon and title only, with
+/// the brand hover border. Opens or runs the feature.
+private struct FrequentPill: View {
+    let feature: FeatureDef
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: feature.icon)
+                    .foregroundStyle(.brandAccent)
+                Text(feature.title)
+                    .foregroundStyle(.textMain)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .font(.app(.callout))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color.bgSurface, in: Capsule())
+            .overlay(
+                Capsule().strokeBorder(
+                    hovering ? Color.brandAccent : Color.borderSubtle,
+                    lineWidth: hovering ? 2 : 1
+                )
+            )
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .animation(.easeInOut(duration: 0.15), value: hovering)
+        .help(feature.subtitle ?? feature.title)
     }
 }
 
@@ -321,16 +456,16 @@ private struct FeatureCard: View {
         Button(action: action) {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: feature.icon)
-                    .font(.title2)
+                    .font(.app(.title2))
                     .foregroundStyle(.brandAccent)
                     .frame(width: 26)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(feature.title)
-                        .font(.headline)
+                        .font(.app(.headline))
                         .foregroundStyle(.textMain)
                     if let subtitle = feature.subtitle {
                         Text(subtitle)
-                            .font(.callout)
+                            .font(.app(.callout))
                             .foregroundStyle(.textMuted)
                             .lineLimit(2)
                             .fixedSize(horizontal: false, vertical: true)
