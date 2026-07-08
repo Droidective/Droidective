@@ -9,8 +9,9 @@ import Sentry
 /// Anonymous by design: no device serials, package ids, file paths, IPs, or
 /// command contents are ever sent — only which feature was used and the app's
 /// own resource numbers. The only stable identifier is a random per-install
-/// UUID (`deviceID`, no PII), which lets PostHog count distinct installs,
-/// retention, and funnels. Both sinks are on by default and opt-out in
+/// UUID (`deviceID`, no PII), set on both sinks so distinct-install counts
+/// agree and a Sentry crash/hang cross-references the same install's PostHog
+/// usage. Both sinks are on by default and opt-out in
 /// Settings → Privacy; the first-run consent disclosure is deferred for the
 /// first few launches (gated in RootView).
 @MainActor
@@ -98,9 +99,26 @@ final class Telemetry {
 
         if crashReportingEnabled, sentryRunning {
             SentrySDK.configureScope { $0.setTag(value: feature, key: "active_feature") }
+            let crumb = Breadcrumb(level: .info, category: "navigation")
+            crumb.message = "feature → \(feature)"
+            SentrySDK.addBreadcrumb(crumb)
         }
         if analyticsEnabled, postHogReady {
             PostHogSDK.shared.register(["active_feature": feature])
+        }
+    }
+
+    /// The set of open (kept-alive) feature tabs changed. Tags every crash and
+    /// hang with what else is running: a hidden tab's stream can be the real
+    /// workload while `active_feature` names whatever is on screen, so the tag
+    /// pair is what attributes an incident correctly.
+    func openFeaturesChanged(_ ids: [String]) {
+        let joined = ids.isEmpty ? "none" : ids.sorted().joined(separator: ",")
+        if crashReportingEnabled, sentryRunning {
+            SentrySDK.configureScope { $0.setTag(value: joined, key: "open_features") }
+        }
+        if analyticsEnabled, postHogReady {
+            PostHogSDK.shared.register(["open_features": joined])
         }
     }
 
@@ -154,6 +172,12 @@ final class Telemetry {
             "device_model": model ?? "unknown",
             "is_wireless": isWireless,
         ])
+        if crashReportingEnabled, sentryRunning {
+            let crumb = Breadcrumb(level: .info, category: "device")
+            let kind = isEmulator ? "emulator" : (isWireless ? "wireless" : "usb")
+            crumb.message = "connected: \(model ?? "unknown") · Android \(androidVersion ?? "?") · \(kind)"
+            SentrySDK.addBreadcrumb(crumb)
+        }
     }
 
     // MARK: - Performance
@@ -272,6 +296,11 @@ final class Telemetry {
             options.debug = true  // verbose Sentry logs in dev builds only
             #endif
         }
+        // The same anonymous per-install UUID PostHog identifies with, so
+        // distinct-install counts match across sinks and a Sentry incident can
+        // be joined to that install's PostHog usage. Not PII — random, local.
+        let user = User(userId: Self.deviceID)
+        SentrySDK.setUser(user)
         sentryRunning = true
     }
 

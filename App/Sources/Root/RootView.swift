@@ -110,6 +110,7 @@ struct RootView: View {
             .onChange(of: state.presentRolePicker) { _, showing in rolePickerVisibilityChanged(showing) }
             .onChange(of: colorScheme) { _, _ in updateDockIcon() }
             .onChange(of: state.activeTabID) { _, id in Telemetry.shared.featureBecameActive(id) }
+            .onChange(of: state.openFeatureIDs) { _, ids in Telemetry.shared.openFeaturesChanged(ids) }
             .confirmationDialog(
                 state.pendingGuard?.title ?? "",
                 isPresented: Binding(
@@ -173,6 +174,7 @@ struct RootView: View {
         Telemetry.shared.applyRole(state.selectedRole?.rawValue)
         Telemetry.shared.trackAppLaunched(launchCount: launchCount)
         Telemetry.shared.featureBecameActive(state.activeTabID)
+        Telemetry.shared.openFeaturesChanged(state.openFeatureIDs)
         installCloseTabMonitor()
         installDragJanitor()
         installFocusRelease()
