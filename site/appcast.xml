@@ -6,9 +6,9 @@
     <description>Most recent Droidective updates.</description>
     <language>en</language>
     <item>
-      <title>Droidective 2.9.0</title>
-      <sparkle:version>302</sparkle:version>
-      <sparkle:shortVersionString>2.9.0</sparkle:shortVersionString>
+      <title>Droidective 2.9.1</title>
+      <sparkle:version>317</sparkle:version>
+      <sparkle:shortVersionString>2.9.1</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <description><![CDATA[
 <style>
@@ -24,8 +24,50 @@ pre { background: color-mix(in srgb, currentColor 8%, transparent); padding: .6e
 pre code { background: none; padding: 0; }
 a { color: #2f9e44; }
 </style>
-<p>Adds a background mode with a global Quick Actions panel, a terminal tab rail
-with a find bar, and a Dock-style auto-hiding sidebar.</p>
+<p>Adds Home feature search and a Frequently-used strip, font and accent-color
+customization, and a round of fixes.</p>
+<h3>New features</h3>
+<ul>
+<li>
+<strong>Home feature search &amp; Frequently-used strip</strong> — an inline search under the
+Home header finds any tool (⏎ opens the top match, Esc clears), and a
+Frequently-used strip surfaces the features you open most, ordered by use
+count.</li>
+<li>
+<strong>Font customization</strong> — Settings ▸ Appearance gains a font-family picker over
+the installed macOS families and a text-size scale; every UI font follows the
+choice (the terminal and screenshot-annotation canvas keep their own).</li>
+<li>
+<strong>Accent-color customization</strong> — pick from preset swatches, the color well, or
+a hex field (<code>#RRGGBB</code> / <code>#RGB</code>), and the accent now reaches the surfaces that
+used to ignore it (device/bundle pills, list selection in Apps and the
+decompile tree, success toasts).</li>
+</ul>
+<h3>Improvements</h3>
+<ul>
+<li>The command palette shortcut moves to <strong>⌘T</strong> everywhere.</li>
+<li>The <strong>⌘T palette</strong> now runs instant actions in place (e.g. Copy Device IP
+copies and shows a toast) instead of opening a detail tab.</li>
+<li>
+<strong>Reactotron</strong> gains <strong>Copy as JSON</strong> on the state tree, subscriptions, and
+snapshots.</li>
+</ul>
+<h3>Fixes</h3>
+<ul>
+<li>
+<strong>Set Dev Server Host</strong> now works on physical devices: it writes React
+Native's <code>debug_http_host</code> preference via <code>run-as</code> and relaunches the app,
+falling back to <code>setprop metro.host</code> and the dev menu.</li>
+<li>
+<strong>Text fields release focus when you click away</strong> — clicking outside a field
+no longer leaves it holding the keyboard.</li>
+<li>
+<strong>⌘,</strong> no longer opens Settings hidden behind the Quick Actions panel.</li>
+<li>
+<strong>Drop-to-split works again in the Terminal</strong> — a leftover whole-view drop
+target had blocked dropping a tab into a pane.</li>
+</ul>
+<p>Installed copies update in place via Sparkle.</p>
 <h3>New features</h3>
 <ul>
 <li>
@@ -71,8 +113,8 @@ to be CPU-heavy — so it no longer files false performance incidents.</li>
 </ul>
 <p>Installed copies update in place via Sparkle.</p>
 ]]></description>
-      <pubDate>Wed, 08 Jul 2026 02:16:04 +0000</pubDate>
-      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v2.9.0/Droidective-v2.9.0.dmg" sparkle:edSignature="ln/ImNk+SLj+5RVa+/ZelUTZOX0h/IH6G5InKBHExqZDNd6aUaeEr2K08oSOQd9G417jeyXguqBQnG1Qn6HPCg==" length="45961312" type="application/octet-stream" />
+      <pubDate>Wed, 08 Jul 2026 13:40:26 +0000</pubDate>
+      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v2.9.1/Droidective-v2.9.1.dmg" sparkle:edSignature="U9zIGvCgB7x0duwAZn6WRkjSweDYNlgGmho9JuEcugS84yqP5MeCC5wDNFe2I54gFuM88Dclvvrikbq7IFoRBA==" length="46823282" type="application/octet-stream" />
     </item>
   </channel>
 </rss>
