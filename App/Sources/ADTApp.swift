@@ -311,6 +311,14 @@ struct ADTApp: App {
                 #endif
             }
 
+            // The stock ⌘, opens Settings without bringing the app forward, so
+            // it lands hidden behind the floating, non-activating Quick Actions
+            // panel. Replace it with one that dismisses the panel and activates
+            // the app first.
+            CommandGroup(replacing: .appSettings) {
+                OpenSettingsButton()
+            }
+
             CommandGroup(replacing: .help) {
                 Button("Report an Issue…") { appState.reportBug() }
                 Button("Request a Feature…") { appState.requestFeature() }
@@ -392,6 +400,22 @@ struct ADTApp: App {
             MenuBarView()
                 .environment(appState)
         }
+    }
+}
+
+/// Settings… menu item (⌘,). Opens the SwiftUI Settings scene, but first
+/// closes the Quick Actions panel and activates the app so the Settings window
+/// comes to the front instead of behind the panel's floating level.
+private struct OpenSettingsButton: View {
+    @Environment(\.openSettings) private var openSettings
+
+    var body: some View {
+        Button("Settings…") {
+            FloatingPanelController.quickActions.close()
+            NSApp.activate(ignoringOtherApps: true)
+            openSettings()
+        }
+        .keyboardShortcut(",", modifiers: .command)
     }
 }
 

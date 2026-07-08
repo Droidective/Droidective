@@ -175,6 +175,7 @@ struct RootView: View {
         Telemetry.shared.featureBecameActive(state.activeTabID)
         installCloseTabMonitor()
         installDragJanitor()
+        installFocusRelease()
         switch LaunchPrompt.next(
             hasChosenRole: hasChosenRole, hasSeenTour: hasSeenTour,
             starPromptShown: starPromptShown,
@@ -235,6 +236,35 @@ struct RootView: View {
         NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDown]) { event in
             if state.draggingTabID != nil { state.draggingTabID = nil }
             if state.terminals.railDragActive { state.terminals.clearRailDrag() }
+            return event
+        }
+    }
+
+    private static var focusReleaseInstalled = false
+
+    /// Clicking outside the active text field should end its editing. macOS
+    /// keeps an `NSTextField`'s field editor first responder until something
+    /// else takes focus, so clicking empty chrome otherwise leaves the field
+    /// editing and swallowing keystrokes. On each left-click, if a field editor
+    /// is active and the click landed neither in it nor on the control it edits,
+    /// resign to the window — committing the field without closing panels
+    /// (`makeFirstResponder(nil)` keeps the window key). One monitor covers
+    /// every `TextField`/`SecureField`/search field in every window. Installed
+    /// once. Multi-line `TextEditor`s aren't field editors, so they're left
+    /// alone (their own click handling manages focus).
+    private func installFocusRelease() {
+        guard !RootView.focusReleaseInstalled else { return }
+        RootView.focusReleaseInstalled = true
+        NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown]) { event in
+            guard let window = event.window,
+                  let editor = window.firstResponder as? NSTextView, editor.isFieldEditor
+            else { return event }
+            let editedControl = editor.delegate as? NSView
+            let clickedInField = window.contentView?.hitTest(event.locationInWindow).map { hit in
+                hit === editor || hit.isDescendant(of: editor)
+                    || (editedControl.map { hit.isDescendant(of: $0) } ?? false)
+            } ?? false
+            if !clickedInField { window.makeFirstResponder(nil) }
             return event
         }
     }
