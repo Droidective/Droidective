@@ -186,7 +186,6 @@ struct AppearanceSettingsView: View {
     @AppStorage("theme") private var theme = "dark"
     @AppStorage(accentColorDefaultsKey) private var accentHex = ""
     @AppStorage("showFeatureNotes") private var showFeatureNotes = false
-    @AppStorage(sidebarAutoHideDefaultsKey) private var sidebarAutoHide = false
     @AppStorage(appFontFamilyDefaultsKey) private var fontFamily = ""
     @AppStorage(appFontSizeScaleDefaultsKey) private var fontSizeScale = 1.0
     @State private var hexDraft = ""
@@ -282,13 +281,6 @@ struct AppearanceSettingsView: View {
                     Text("Extra large").tag(1.25)
                 }
                 Text("Applies across the app — code and log views keep their monospaced font, and the terminal keeps its own. ⌘= / ⌘- additionally zoom the whole window.")
-                    .font(.app(.footnote))
-                    .foregroundStyle(.textMuted)
-            }
-
-            Section("Sidebar") {
-                Toggle("Automatically hide and show the sidebar", isOn: $sidebarAutoHide)
-                Text("The sidebar slides over the content when you push the mouse against the window's left edge — ⌘B also shows it.")
                     .font(.app(.footnote))
                     .foregroundStyle(.textMuted)
             }
