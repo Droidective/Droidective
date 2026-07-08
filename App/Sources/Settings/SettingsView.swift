@@ -239,9 +239,10 @@ struct AppearanceSettingsView: View {
                 LabeledContent("Custom") {
                     HStack(spacing: 8) {
                         ColorPicker("", selection: accentBinding, supportsOpacity: false).labelsHidden()
-                        TextField("#34C759", text: $hexDraft)
+                        TextField("Hex code", text: $hexDraft, prompt: Text("#34C759"))
                             .textFieldStyle(.roundedBorder)
-                            .frame(width: 90)
+                            .labelsHidden()
+                            .frame(width: 110)
                             .onSubmit { commitHex() }
                         if !accentHex.isEmpty {
                             Button("Reset") { setAccent("") }
