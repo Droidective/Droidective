@@ -8,7 +8,10 @@ struct ScreenMirrorView: View {
     @Environment(AppState.self) private var state
     @Environment(\.tabFeatureID) private var tabFeatureID
     @Environment(\.tabIsActive) private var tabIsActive
+    @Environment(\.openWindow) private var openWindow
     @State private var model: MirrorViewModel?
+    /// The in-flight (re)connect, so a newer one can cancel and supersede it.
+    @State private var connectTask: Task<Void, Never>?
     /// Identifies this view's leave guard so a stale clear can't wipe another's.
     @State private var exitGuardID = UUID()
 
@@ -27,7 +30,10 @@ struct ScreenMirrorView: View {
                 } else if let image = model.editingScreenshot {
                     ScreenshotEditorView(image: image) { model.editingScreenshot = nil }
                 } else {
-                    MirrorStage(model: model)
+                    MirrorStage(
+                        model: model,
+                        onReconnect: reconnectCurrent,
+                        onPopOut: popOutAction)
                 }
             } else {
                 ContentUnavailableView(
@@ -43,21 +49,22 @@ struct ScreenMirrorView: View {
             // Connect if the mirror is the tab on screen when it's first
             // mounted; a hidden tab connects lazily once it becomes active
             // (below). A hidden mirror is heavy video encode for nothing.
-            if tabIsActive, model == nil { await reconnect(to: state.targetSerials.first) }
+            if tabIsActive, model == nil { scheduleReconnect(to: state.targetSerials.first) }
         }
         .onChange(of: state.targetSerials.first) { _, serial in
             // Follow the selected device: switching it re-targets the live
             // mirror — but never mid-recording, which stays on its device
             // (leaving to switch is gated by the recording exit guard).
             guard tabIsActive, model?.isRecording != true else { return }
-            Task { await reconnect(to: serial) }
+            scheduleReconnect(to: serial)
         }
         .onChange(of: tabIsActive) { _, active in
             if active {
-                if model == nil { Task { await reconnect(to: state.targetSerials.first) } }
+                if model == nil { scheduleReconnect(to: state.targetSerials.first) }
             } else if model?.isRecording != true {
                 // Pause the live mirror while hidden — unless it's recording,
                 // which must keep capturing.
+                connectTask?.cancel()
                 let leaving = model
                 model = nil
                 Task { await leaving?.stop() }
@@ -85,6 +92,7 @@ struct ScreenMirrorView: View {
         }
         .onDisappear {
             state.clearExitGuard(exitGuardID)
+            connectTask?.cancel()
             let leaving = model
             model = nil
             Task { await leaving?.stop() }
@@ -96,6 +104,7 @@ struct ScreenMirrorView: View {
     private func saveRecordingForLeave() async {
         guard let model else { state.finishExitSave(); return }
         if let temp = await model.finishRecordingForLeave() {
+            state.confirmCaptureFolderOnce()
             do {
                 let dir = try ScreenCaptureService.ensureCaptureDir()
                 let dest = dir.appendingPathComponent("recording_\(ScreenCaptureService.stamp()).mp4")
@@ -108,12 +117,45 @@ struct ScreenMirrorView: View {
         state.finishExitSave()
     }
 
+    /// Reconnect the selected device in place — the stopped/failed cards' button.
+    private func reconnectCurrent() {
+        scheduleReconnect(to: state.targetSerials.first)
+    }
+
+    /// Pop-out is offered only in the tab host — the window host has nowhere
+    /// further to pop.
+    private var popOutAction: (() -> Void)? {
+        guard tabFeatureID != MirrorWindow.featureID else { return nil }
+        return { popOut() }
+    }
+
+    /// Move the mirror to its own window: open (or focus) the mirror window —
+    /// which connects its own session to the selected device — and close this
+    /// tab so the same device isn't encoded twice.
+    private func popOut() {
+        openWindow(id: MirrorWindow.windowID)
+        state.closeTab(tabFeatureID)
+    }
+
+    /// Serialize (re)connects: cancel the in-flight one and chain the new one
+    /// behind its teardown, so rapid device switches can't interleave two
+    /// connects or leave an orphaned session streaming in the background.
+    private func scheduleReconnect(to serial: String?) {
+        let previous = connectTask
+        previous?.cancel()
+        connectTask = Task {
+            await previous?.value
+            guard !Task.isCancelled else { return }
+            await reconnect(to: serial)
+        }
+    }
+
     private func reconnect(to serial: String?) async {
         if let existing = model {
-            await existing.stop()
             model = nil
+            await existing.stop()
         }
-        guard let serial else { return }
+        guard let serial, !Task.isCancelled else { return }
         let viewModel = MirrorViewModel(
             adb: state.env.engine.client,
             locator: state.env.engine.locator,
@@ -133,6 +175,10 @@ struct ScreenMirrorView: View {
 
 private struct MirrorStage: View {
     @Bindable var model: MirrorViewModel
+    /// Reconnect the current device in place (the stopped/failed cards' button).
+    let onReconnect: () -> Void
+    /// Move the mirror to its own window; nil when already hosted in one.
+    let onPopOut: (() -> Void)?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -152,9 +198,9 @@ private struct MirrorStage: View {
                 case .connecting:
                     ProgressView("Connecting…").controlSize(.large).tint(.white)
                 case let .failed(message):
-                    statusCard(icon: "exclamationmark.triangle", text: message)
+                    statusCard(icon: "exclamationmark.triangle", text: message, retry: true)
                 case .stopped:
-                    statusCard(icon: "stop.circle", text: "Mirror stopped.")
+                    statusCard(icon: "stop.circle", text: "Mirror stopped.", retry: true)
                 case .streaming:
                     EmptyView()
                 }
@@ -200,6 +246,13 @@ private struct MirrorStage: View {
             navButton("speaker.wave.1.fill", help: "Volume down") { model.tapKey(25) }
             navButton("speaker.wave.3.fill", help: "Volume up") { model.tapKey(24) }
             navButton("speaker.slash.fill", help: "Mute / unmute") { model.tapKey(164) }
+
+            // Pop out to a window — hidden while recording, which must stay
+            // with this session (the window would connect a fresh one).
+            if let onPopOut, !model.isRecording {
+                Divider().frame(height: 22)
+                navButton("macwindow.on.rectangle", help: "Open in a separate window") { onPopOut() }
+            }
         }
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity)
@@ -221,10 +274,15 @@ private struct MirrorStage: View {
         .help(help)
     }
 
-    private func statusCard(icon: String, text: String) -> some View {
+    private func statusCard(icon: String, text: String, retry: Bool = false) -> some View {
         VStack(spacing: 10) {
             Image(systemName: icon).font(.app(size: 34))
             Text(text).multilineTextAlignment(.center)
+            if retry {
+                Button("Reconnect") { onReconnect() }
+                    .buttonStyle(.borderedProminent)
+                    .padding(.top, 4)
+            }
         }
         .foregroundStyle(.white)
         .padding(24)

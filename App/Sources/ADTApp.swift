@@ -389,6 +389,16 @@ struct ADTApp: App {
             }
         }
 
+        // The pop-out screen mirror (the mirror control bar's window button,
+        // also listed in the Window menu). Sized like a phone by default.
+        Window("Screen Mirror", id: MirrorWindow.windowID) {
+            MirrorWindowView()
+                .environment(appState)
+                .tint(.brandAccent)
+                .id(appearanceKey)
+        }
+        .defaultSize(width: 420, height: 850)
+
         Settings {
             SettingsView()
                 .environment(appState)
