@@ -261,8 +261,8 @@ struct ADTApp: App {
             }
 
             CommandMenu("Tab") {
-                // ⌘T / ⌘K both open the search palette; the chosen feature opens
-                // in a tab (a new one, or refocuses it if already open).
+                // ⌘T opens the search palette; the chosen feature opens in a
+                // tab (a new one, or refocuses it if already open).
                 Button("New Tab") {
                     appState.activateMainWindow()
                     appState.openPalette?()
@@ -323,7 +323,6 @@ struct ADTApp: App {
                 Button("Find Feature") {
                     appState.openPalette?()
                 }
-                .keyboardShortcut("k", modifiers: .command)
 
                 Button("Manage Features") {
                     appState.activateMainWindow()

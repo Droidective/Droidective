@@ -2,7 +2,7 @@ import ADBKit
 import AppKit
 import SwiftUI
 
-/// Spotlight-style floating search palette (⌘K): type, arrow through matches,
+/// Spotlight-style floating search palette (⌘T): type, arrow through matches,
 /// ⏎ opens the feature in the main window. ⌘P pins / ⌘E enables-disables the
 /// highlighted feature. Pinned features lead the list when not searching. Esc
 /// closes.
@@ -211,7 +211,7 @@ struct PaletteWindowView: View {
     }
 }
 
-/// A small keycap-style hint badge (e.g. ⌘K, ⌘1). `prominent` styles it for a
+/// A small keycap-style hint badge (e.g. ⌘T, ⌘1). `prominent` styles it for a
 /// highlighted/accent background.
 struct KeyHint: View {
     let text: String

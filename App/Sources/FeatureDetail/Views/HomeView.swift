@@ -42,7 +42,7 @@ struct HomeView: View {
 
     // MARK: - Search
 
-    /// The shared, tested palette ranking — the same order ⌘K shows — capped
+    /// The shared, tested palette ranking — the same order ⌘T shows — capped
     /// to a grid's worth of results.
     private var searchMatches: [FeatureDef] {
         Array(
@@ -62,7 +62,7 @@ struct HomeView: View {
                 .textFieldStyle(.plain)
                 .onSubmit { openTopMatch() }
             if query.isEmpty {
-                KeyHint("⌘K")
+                KeyHint("⌘T")
             } else {
                 Button { query = "" } label: {
                     Image(systemName: "xmark.circle.fill")
@@ -301,7 +301,7 @@ struct HomeView: View {
     }
 
     private static let shortcuts: [Shortcut] = [
-        Shortcut(key: "⌘K", icon: "magnifyingglass", title: "Search features",
+        Shortcut(key: "⌘T", icon: "magnifyingglass", title: "Search features",
                  detail: "Open the palette and jump straight to any feature instantly."),
         Shortcut(key: "⌘B", icon: "sidebar.left", title: "Toggle sidebar",
                  detail: "Hide the feature list for more room, and bring it back anytime."),

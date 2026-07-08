@@ -10,7 +10,7 @@ export function TrustStrip() {
       label: "built-in tools",
       green: true,
     },
-    { value: <>⌘K</>, label: "command palette", green: false },
+    { value: <>⌘T</>, label: "command palette", green: false },
     { value: <>MIT</>, label: "open source", green: false },
     { value: <>$0</>, label: "free, forever", green: false },
   ]

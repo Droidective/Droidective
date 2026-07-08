@@ -242,10 +242,8 @@ final class AppState {
     /// SwiftUI re-stamps its own (`main-AppWindow-1`) over our tag, which
     /// broke the ⌘W tab-close monitor after a close → reopen cycle.
     weak var mainWindow: NSWindow?
-    /// Set by RootView; opens the floating ⌘K search palette.
+    /// Set by RootView; opens the floating ⌘T search palette.
     var openPalette: (() -> Void)?
-    /// Bumped by the ⌘K menu command; the sidebar focuses search on change.
-    var focusSearchToken = 0
     struct OperationStatus: Equatable {
         var label: String
         /// 0…1 when the total is known, nil = indeterminate.
@@ -1045,7 +1043,7 @@ final class AppState {
 
         var params = params
         // A state-override fired without an explicit target flips its current
-        // state — so a sidebar tap, hotkey, or ⌘K toggles it in place with no
+        // state — so a sidebar tap, hotkey, or ⌘T toggles it in place with no
         // detail screen (the sidebar switch reflects the result).
         if feature.isStateOverride, params["on"] == nil, let kind = feature.overrideKind {
             params["on"] = .bool(!activeOverrides.contains { $0.kind == kind })

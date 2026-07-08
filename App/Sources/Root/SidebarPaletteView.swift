@@ -101,7 +101,7 @@ private struct SidebarDrop: DropDelegate {
 }
 
 /// Raycast-style command palette: pinned search field on top of the
-/// categorized feature list. ⌘K focuses search from anywhere; ↑/↓ move the
+/// categorized feature list. ⌘T opens the full search from anywhere; ↑/↓ move the
 /// selection from the field; ⏎ runs instant actions straight away. Holding ⌘
 /// shows ⌘1–⌘9/⌘0 badges on the first ten rows; the shortcuts themselves live
 /// on the app-level Go menu, so they jump to a row from anywhere in the app.
@@ -137,10 +137,10 @@ struct SidebarPaletteView: View {
                     .focused($searchFocused)
                     .overlay(alignment: .trailing) {
                         if state.searchText.isEmpty {
-                            KeyHint("⌘K")
+                            KeyHint("⌘T")
                                 .padding(.trailing, 6)
                                 .allowsHitTesting(false)
-                                .help("⌘K opens the full search")
+                                .help("⌘T opens the full search")
                         } else {
                             Button {
                                 state.searchText = ""
@@ -245,7 +245,6 @@ struct SidebarPaletteView: View {
             bottomBar
         }
         .background(.bgSurface)
-        .onChange(of: state.focusSearchToken) { searchFocused = true }
         // Keyboard highlight: keep the top result highlighted as the query
         // changes, and drop the highlight when the field loses focus (only the
         // active tab's pill remains).

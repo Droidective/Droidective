@@ -15,7 +15,7 @@ function matches(query: string, keys: string, name: string): boolean {
   return q === "" || `${keys} ${name}`.toLowerCase().includes(q)
 }
 
-/** The hero's animated ⌘K palette — types real queries and live-filters the list. */
+/** The hero's animated ⌘T palette — types real queries and live-filters the list. */
 export function PaletteDemo() {
   const reducedMotion = usePrefersReducedMotion()
   const [query, setQuery] = useState("")
@@ -83,7 +83,7 @@ export function PaletteDemo() {
         <span className="font-mono text-[15px] text-green">&gt;</span>
         <span className="min-h-5 font-mono text-base">{query}</span>
         <span className="-ml-0.5 inline-block h-4.5 w-2 animate-[blink_1.05s_steps(1)_infinite] bg-green shadow-[0_0_8px_rgba(155,224,33,0.3)] motion-reduce:animate-none" />
-        <kbd className="ml-auto rounded-md border border-border-2 bg-white/3 px-1.75 py-0.75 text-[11px] text-muted">⌘K</kbd>
+        <kbd className="ml-auto rounded-md border border-border-2 bg-white/3 px-1.75 py-0.75 text-[11px] text-muted">⌘T</kbd>
       </div>
 
       {/* Results */}
@@ -118,7 +118,7 @@ export function PaletteDemo() {
           <b className="font-medium text-muted">↩</b> run
         </span>
         <span>
-          <b className="font-medium text-muted">⌘K</b> search
+          <b className="font-medium text-muted">⌘T</b> search
         </span>
         <span>
           <b className="font-medium text-muted">esc</b> close

@@ -27,7 +27,7 @@ struct TourView: View {
              shortcut: nil),
         Step(icon: "magnifyingglass", title: "Find anything fast",
              body: "Press the shortcut from anywhere to search every feature and jump straight to one.",
-             shortcut: "⌘K"),
+             shortcut: "⌘T"),
         Step(icon: "sidebar.left", title: "Your feature sidebar",
              body: "Features are grouped by category — toggle grouping off to drag them into your own order. Right-click any one to pin, enable, or disable it. With the search field focused, hold ⌘ to jump to a row with ⌘1–⌘9. The shortcut hides the sidebar.",
              shortcut: "⌘B"),

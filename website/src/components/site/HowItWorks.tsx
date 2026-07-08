@@ -24,11 +24,11 @@ const steps = [
   },
   {
     n: "03 / go",
-    title: "Press ⌘K and run",
+    title: "Press ⌘T and run",
     body: "Search any of the 56 tools and run it. The Setup Doctor confirms your toolchain on first launch.",
     code: (
       <>
-        <span className="text-green">⌘K</span> mirror screen   ↩
+        <span className="text-green">⌘T</span> mirror screen   ↩
       </>
     ),
   },
