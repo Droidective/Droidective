@@ -218,17 +218,20 @@ struct RootView: View {
     private static var dragJanitorInstalled = false
 
     /// A drag has no "ended without a drop" callback: releasing a dragged tab
-    /// outside the window (or cancelling with Esc) fires no drop delegate, so
-    /// `draggingTabID` — and the insertion guideline keyed off it — stayed
+    /// (or a terminal rail row) outside any drop target fires no delegate, so
+    /// the drag state — and the insertion guideline keyed off it — stayed
     /// stuck. Normal mouse events don't flow while a drag session runs, so the
     /// first one arriving with drag state still set means exactly that ending;
-    /// clear it there. Installed once.
+    /// clear it there. Installed once. This is also what lets the Terminal
+    /// drop its whole-view cleanup catch, which blocked the pane's tab drops
+    /// (drops route to the deepest region by geometry, not type).
     private func installDragJanitor() {
         guard !RootView.dragJanitorInstalled else { return }
         RootView.dragJanitorInstalled = true
         let state = self.state
         NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDown]) { event in
             if state.draggingTabID != nil { state.draggingTabID = nil }
+            if state.terminals.railDragActive { state.terminals.clearRailDrag() }
             return event
         }
     }

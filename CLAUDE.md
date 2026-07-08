@@ -238,6 +238,20 @@ platforms annotation without a runner.
 - **`.task(id:)` keys must include readiness** (`targetSerials.first`), not just
   serial — a device authorizing keeps the same serial and the view must reload.
   Guard `!Task.isCancelled` before writing fetched results into @State.
+- **Drops route by geometry, not type — and drags need declared UTIs.** SwiftUI
+  hands a drop to the *deepest* drop region under the cursor even when that
+  target's `onDrop(of:)` types don't match the drag (no fallthrough to
+  ancestors), and hidden keep-alive tabs (`opacity(0)` +
+  `allowsHitTesting(false)`) still register their drop regions — so a
+  whole-view `.onDrop` inside a feature silently kills the pane's tab drops
+  whenever that tab is merely open (this broke drop-to-split from v2.8.1 until
+  the Terminal's catch-all was removed). Never attach a feature-wide `.onDrop`;
+  scope targets tightly and let `RootView.installDragJanitor` clear abandoned
+  drag state (normal mouse events don't flow during a drag session, so the
+  first one that arrives with drag state set means the drag ended dropless).
+  In-app drags ride private UTIs (`DragTypes.swift`) that must be declared in
+  `UTExportedTypeDeclarations` (project.yml) — macOS won't put an undeclared
+  UTI on the drag pasteboard, which kills the drag *silently*.
 - **Empty states under a toolbar must `.frame(maxWidth/maxHeight: .infinity)`** —
   otherwise the whole VStack centers and the toolbar floats mid-window.
 - **`HSplitView` ignores SwiftUI safe-area insets** (it's NSSplitView-backed) —
