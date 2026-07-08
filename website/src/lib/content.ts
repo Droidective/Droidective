@@ -16,7 +16,7 @@ export const GITHUB_URL = "https://github.com/Droidective/Droidective"
 export const LINKEDIN_URL = "https://www.linkedin.com/in/rohindh"
 export const RELEASES_URL = `${GITHUB_URL}/releases`
 export const LATEST_RELEASE_URL = `${GITHUB_URL}/releases/latest`
-export const APP_VERSION = "v2.8.3"
+export const APP_VERSION = "v2.9.0"
 
 export interface PaletteCommand {
   icon: LucideIcon
