@@ -43,7 +43,7 @@ private struct ToastView: View {
                 Button {
                     NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: revealPath)])
                 } label: {
-                    Label("Reveal", systemImage: "magnifyingglass")
+                    Label("Open in Finder", systemImage: "folder")
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)

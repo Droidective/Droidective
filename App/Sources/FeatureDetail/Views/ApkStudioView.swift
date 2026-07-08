@@ -151,7 +151,7 @@ private struct RecompileTab: View {
                     .font(.app(.callout)).foregroundStyle(.textMuted)
                 if let sourceDir {
                     LabeledContent("Sources", value: sourceDir.lastPathComponent)
-                    Button("Reveal sources in Finder") {
+                    Button("Open sources in Finder") {
                         NSWorkspace.shared.activateFileViewerSelecting([sourceDir])
                     }
                 } else {
@@ -160,7 +160,7 @@ private struct RecompileTab: View {
                 }
             }
             Section("2 · Edit the files") {
-                Text("Open the revealed folder in your editor, change resources / smali / the manifest, then come back.")
+                Text("Open the sources folder in your editor, change resources / smali / the manifest, then come back.")
                     .font(.app(.callout)).foregroundStyle(.textMuted)
             }
             Section("3 · Rebuild") {
@@ -184,7 +184,7 @@ private struct RecompileTab: View {
                 HStack {
                     Button("Sign the rebuilt APK") { onRebuilt(rebuiltURL) }
                         .buttonStyle(.borderedProminent)
-                    Button("Reveal in Finder") {
+                    Button("Open in Finder") {
                         NSWorkspace.shared.activateFileViewerSelecting([rebuiltURL])
                     }
                 }

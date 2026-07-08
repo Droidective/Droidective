@@ -855,7 +855,7 @@ struct ScreenshotEditorView: View {
                     .help("Discard and take another")
                 if let lastSavedURL {
                     Button { NSWorkspace.shared.activateFileViewerSelecting([lastSavedURL]) } label: {
-                        Label("Reveal", systemImage: "folder")
+                        Label("Open in Finder", systemImage: "folder")
                     }
                 }
                 Button { copy() } label: { Label("Copy", systemImage: "doc.on.clipboard") }

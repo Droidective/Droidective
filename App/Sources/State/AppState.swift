@@ -321,6 +321,37 @@ final class AppState {
         NSApp.activate(ignoringOtherApps: true)
         return panel.runModal() == .OK ? panel.url : nil
     }
+
+    /// UserDefaults flag: the one-time capture-folder ask already ran.
+    static let captureFolderPromptedKey = "captureFolderPrompted"
+
+    /// One-time ask before the first *silent* save into the capture folder:
+    /// keep the ~/Downloads/Droidective default or pick a folder, and note that
+    /// Settings ▸ Privacy can change it later. Saves that already show a save
+    /// panel don't call this — the user picks a location there anyway.
+    func confirmCaptureFolderOnce() {
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: Self.captureFolderPromptedKey) else { return }
+        defaults.set(true, forKey: Self.captureFolderPromptedKey)
+        // A folder chosen in Settings before the first save answers the question.
+        if let path = defaults.string(forKey: ScreenCaptureService.captureFolderDefaultsKey),
+           !path.trimmingCharacters(in: .whitespaces).isEmpty {
+            return
+        }
+        let alert = NSAlert()
+        alert.messageText = "Where should Droidective save captures?"
+        alert.informativeText = """
+        Screenshots, recordings, and other saved files go to Downloads/Droidective \
+        unless you pick another folder. You can change this anytime in Settings ▸ Privacy.
+        """
+        alert.addButton(withTitle: "Use Downloads/Droidective")
+        alert.addButton(withTitle: "Choose Folder…")
+        NSApp.activate(ignoringOtherApps: true)
+        if alert.runModal() == .alertSecondButtonReturn,
+           let folder = askSaveFolder(prompt: "Save captures here") {
+            defaults.set(folder.path, forKey: ScreenCaptureService.captureFolderDefaultsKey)
+        }
+    }
     /// Last result per feature id, shown inline in the detail pane.
     var lastResults: [String: (result: FeatureResult, at: Date)] = [:]
     /// Per-serial enrichment for the device picker (version, battery).
@@ -1040,6 +1071,11 @@ final class AppState {
             await runScreenshot()
             return
         }
+        // Bug reports zip into the capture folder with no save panel — the
+        // one-time folder ask covers them like every other silent save.
+        if feature.id == "bug-report" {
+            confirmCaptureFolderOnce()
+        }
 
         var params = params
         // A state-override fired without an explicit target flips its current
@@ -1318,6 +1354,7 @@ final class AppState {
             showToast(Toast(message: "No device connected.", ok: false))
             return
         }
+        confirmCaptureFolderOnce()
         if delaySeconds > 0 {
             showToast(Toast(message: "Capturing in \(delaySeconds)s…", ok: true))
             try? await Task.sleep(for: .seconds(delaySeconds))

@@ -198,13 +198,13 @@ struct DecompileBrowserView: View {
                     .help("Find in file (⌘F)")
                 Menu {
                     Button("Open APK in jadx-GUI") { Task { await openInJadxGui() } }
-                    Button("Reveal decompiled files in Finder") { revealOutput() }
+                    Button("Open decompiled files in Finder") { revealOutput() }
                 } label: {
                     Label("Open externally", systemImage: "arrow.up.forward.app")
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
-                .help("Open the APK in the full jadx GUI, or reveal the files to edit them in another tool")
+                .help("Open the APK in the full jadx GUI, or open the files in Finder to edit them in another tool")
                 if !embedded {
                     Button("Decompile another") { apkURL = nil; self.root = nil; selection = nil }
                 }

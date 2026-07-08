@@ -96,6 +96,7 @@ private struct RecordingDecisionModifier: ViewModifier {
     }
 
     private func save(_ pending: URL) {
+        state.confirmCaptureFolderOnce()
         do {
             let dir = try ScreenCaptureService.ensureCaptureDir()
             let dest = dir.appendingPathComponent("recording_\(ScreenCaptureService.stamp()).mp4")
@@ -144,6 +145,7 @@ private struct ImageDecisionModifier: ViewModifier {
             state.showToast(Toast(message: "Couldn’t encode the screenshot.", ok: false))
             return
         }
+        state.confirmCaptureFolderOnce()
         do {
             let dir = try ScreenCaptureService.ensureCaptureDir()
             let dest = dir.appendingPathComponent("screenshot_\(ScreenCaptureService.stamp()).png")

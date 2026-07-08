@@ -481,6 +481,7 @@ struct ScreenRecordView: View {
         stopPreviewPolling()
         do {
             let temp = try await recorder.stop()
+            state.confirmCaptureFolderOnce()
             let dir = try ScreenCaptureService.ensureCaptureDir()
             let dest = dir.appendingPathComponent("recording_\(ScreenCaptureService.stamp()).mp4")
             try FileManager.default.moveItem(at: temp, to: dest)
