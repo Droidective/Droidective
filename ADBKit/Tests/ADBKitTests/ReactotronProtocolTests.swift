@@ -18,6 +18,28 @@ import Testing
         #expect(value["c"]?["d"]?.doubleValue == 2.5)
     }
 
+    /// The "Copy as JSON" buttons on the State tab copy `prettyJSON` — sorted
+    /// keys, pretty-printed, slashes unescaped — so the output must be stable,
+    /// valid JSON.
+    @Test func prettyJSONEmitsSortedReadableJSON() throws {
+        let value = try JSONDecoder().decode(
+            JSONValue.self,
+            from: Data(#"{"b":{"url":"https://x.dev/a"},"a":[1,true,null]}"#.utf8)
+        )
+        let pretty = value.prettyJSON
+        #expect(pretty.contains("\"a\" : [") || pretty.contains("\"a\": ["))
+        #expect(pretty.contains("https://x.dev/a"))
+        #expect(!pretty.contains("\\/"))
+        // Keys come out sorted, so "a" precedes "b" regardless of input order.
+        let aIndex = try #require(pretty.range(of: "\"a\""))
+        let bIndex = try #require(pretty.range(of: "\"b\""))
+        #expect(aIndex.lowerBound < bIndex.lowerBound)
+        // Round-trips as valid JSON.
+        let decoded = try JSONDecoder().decode(JSONValue.self, from: Data(pretty.utf8))
+        #expect(decoded["a"]?.arrayValue?.count == 3)
+        #expect(decoded["b"]?["url"]?.stringValue == "https://x.dev/a")
+    }
+
     // MARK: - Envelope
 
     @Test func decodesEnvelopeFields() throws {

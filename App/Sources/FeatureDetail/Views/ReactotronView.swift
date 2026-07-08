@@ -645,10 +645,10 @@ struct ReactotronView: View {
     private var serverErrorBanner: some View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 12))
+                .font(.app(size: 12))
                 .foregroundStyle(.red)
             Text(session.connection.text(app: nil))
-                .font(.caption)
+                .font(.app(.caption))
                 .lineLimit(2)
                 .textSelection(.enabled)
             Spacer(minLength: 8)
@@ -672,7 +672,7 @@ struct ReactotronView: View {
             Spacer()
 
             Text("\(session.displayedItems.count) events")
-                .font(.caption)
+                .font(.app(.caption))
                 .foregroundStyle(.tertiary)
 
             Button {
@@ -756,7 +756,7 @@ struct ReactotronView: View {
                     Image(systemName: "info.circle")
                     Text("Needs the `reactotron-redux` or `reactotron-mst` plugin wired into your store.")
                 }
-                .font(.caption)
+                .font(.app(.caption))
                 .foregroundStyle(.tertiary)
                 .padding(.top, 2)
             }
@@ -772,6 +772,9 @@ struct ReactotronView: View {
             subtitle: "Pull the whole store and drill into any branch."
         ) {
             if let count = session.storeState?.objectValue?.count { CountChip(count: count, suffix: "keys") }
+            if let storeState = session.storeState {
+                CopyButton(label: "Copy JSON") { storeState.prettyJSON }
+            }
             Button { session.loadStateTree() } label: { Label("Refresh", systemImage: "arrow.clockwise") }
                 .controlSize(.small)
         } content: {
@@ -782,7 +785,7 @@ struct ReactotronView: View {
             } else if session.awaitingStateTree {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
-                    Text("Requesting store state…").font(.system(size: 11)).foregroundStyle(.textMuted)
+                    Text("Requesting store state…").font(.app(size: 11)).foregroundStyle(.textMuted)
                     Spacer()
                 }
                 .cardInset()
@@ -832,7 +835,7 @@ struct ReactotronView: View {
         HStack(alignment: .top, spacing: 10) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(path)
-                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                    .font(.app(size: 12, weight: .semibold, design: .monospaced))
                     .foregroundStyle(.rtKey)
                 if let value = session.subscriptionValues[path] {
                     // A collapsible, colored tree instead of a raw JSON string —
@@ -840,11 +843,14 @@ struct ReactotronView: View {
                     JSONTreeView(root: value, showSearch: false)
                 } else {
                     Text("waiting for a change…")
-                        .font(.system(size: 11, design: .monospaced))
+                        .font(.app(size: 11, design: .monospaced))
                         .foregroundStyle(.secondary)
                 }
             }
             Spacer(minLength: 8)
+            if let value = session.subscriptionValues[path] {
+                CopyButton(label: "Copy JSON") { value.prettyJSON }
+            }
             Button { session.removeSubscription(path) } label: {
                 Image(systemName: "xmark.circle.fill")
             }
@@ -865,7 +871,7 @@ struct ReactotronView: View {
         } content: {
             TextField(#"{ "type": "INCREMENT" }"#, text: $dispatchText, axis: .vertical)
                 .brandField()
-                .font(.system(size: 12, design: .monospaced))
+                .font(.app(size: 12, design: .monospaced))
                 .lineLimit(2...6)
             HStack {
                 Spacer()
@@ -918,17 +924,17 @@ struct ReactotronView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Text("REPL").font(.system(size: 13, weight: .semibold))
+                    Text("REPL").font(.app(size: 13, weight: .semibold))
                     Spacer()
                     Button { session.sendReplLs() } label: { Image(systemName: "arrow.clockwise") }
                         .buttonStyle(IconButtonStyle())
                         .help("Refresh available values")
                 }
                 Text("Evaluate JS against values your app registered with `Reactotron.repl(name, value)`.")
-                    .font(.caption).foregroundStyle(.textMuted)
+                    .font(.app(.caption)).foregroundStyle(.textMuted)
                 if !session.replNames.isEmpty {
                     Text("Available: \(session.replNames.joined(separator: ", "))")
-                        .font(.system(size: 11, design: .monospaced))
+                        .font(.app(size: 11, design: .monospaced))
                         .foregroundStyle(.textMuted)
                 }
                 TextField("e.g. store.getState()", text: $replCode, axis: .vertical)
@@ -942,9 +948,9 @@ struct ReactotronView: View {
                         .disabled(replCode.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
                 if let replResultText = session.replResultText {
-                    Text("Result").font(.system(size: 12, weight: .semibold))
+                    Text("Result").font(.app(size: 12, weight: .semibold))
                     Text(replResultText)
-                        .font(.system(size: 11, design: .monospaced))
+                        .font(.app(size: 11, design: .monospaced))
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(8)
@@ -1121,7 +1127,7 @@ private struct TimelinePane: View {
 
             if !search.isEmpty || filter != .all {
                 Text("\(visible.count)")
-                    .font(.caption)
+                    .font(.app(.caption))
                     .foregroundStyle(.textMuted)
             }
 
@@ -1233,20 +1239,20 @@ private struct RtRow: View {
     private func header(_ presentation: RtPresentation) -> some View {
         HStack(spacing: 8) {
             Image(systemName: expanded ? "chevron.down" : "chevron.right")
-                .font(.system(size: 11, weight: .bold))
+                .font(.app(size: 11, weight: .bold))
                 .foregroundStyle(.secondary)
                 .frame(width: 16)
                 .opacity(canExpand ? 1 : 0)
             Text(Self.timeFormatter.string(from: item.receivedAt))
-                .font(.system(size: 11, design: .monospaced))
+                .font(.app(size: 11, design: .monospaced))
                 .foregroundStyle(.textMuted)
             Text(presentation.badge)
-                .font(.system(size: 10, weight: .bold))
+                .font(.app(size: 10, weight: .bold))
                 .foregroundStyle(presentation.badgeColor)
                 .fixedSize()
             if !presentation.primary.isEmpty {
                 Text(presentation.primary)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.app(size: 12, weight: .medium))
                     .foregroundStyle(presentation.primaryColor)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -1280,7 +1286,7 @@ private struct RtRow: View {
     private func imageBody(uri: String, caption: String?, width: Double?, height: Double?) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             if let caption, !caption.isEmpty {
-                Text(caption).font(.system(size: 12)).foregroundStyle(.primary)
+                Text(caption).font(.app(size: 12)).foregroundStyle(.primary)
             }
             RtImageThumbnail(uri: uri)
             if let width, let height {
@@ -1310,7 +1316,7 @@ private struct RtRow: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(url)
-                .font(.system(size: 11, design: .monospaced))
+                .font(.app(size: 11, design: .monospaced))
                 .foregroundStyle(.rtKey)
                 .textSelection(.enabled)
                 .lineLimit(3)
@@ -1351,7 +1357,7 @@ private struct RtRow: View {
                     treeSection(title: nil, object: message)
                 default:
                     Text(String((message.stringValue ?? message.jsonString).prefix(20_000)))
-                        .font(.system(size: 12, design: .monospaced))
+                        .font(.app(size: 12, design: .monospaced))
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -1360,7 +1366,7 @@ private struct RtRow: View {
                 VStack(alignment: .leading, spacing: 1) {
                     ForEach(Array(stack.enumerated()), id: \.offset) { _, frame in
                         Text("\(frame.functionName.isEmpty ? "?" : frame.functionName)  \(frame.fileName):\(frame.lineNumber.map(String.init) ?? "?")")
-                            .font(.system(size: 10, design: .monospaced))
+                            .font(.app(size: 10, design: .monospaced))
                             .foregroundStyle(.textMuted)
                     }
                 }
@@ -1376,11 +1382,11 @@ private struct RtRow: View {
     private func metaRow(_ label: String, _ value: String, color: Color) -> some View {
         HStack(spacing: 10) {
             Text(label)
-                .font(.system(size: 11))
+                .font(.app(size: 11))
                 .foregroundStyle(.textMuted)
                 .frame(width: 72, alignment: .leading)
             Text(value)
-                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .font(.app(size: 11, weight: .medium, design: .monospaced))
                 .foregroundStyle(color)
                 .textSelection(.enabled)
         }
@@ -1390,7 +1396,7 @@ private struct RtRow: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 if let title {
-                    Text(title).font(.system(size: 9, weight: .semibold)).foregroundStyle(.tertiary)
+                    Text(title).font(.app(size: 9, weight: .semibold)).foregroundStyle(.tertiary)
                 }
                 Spacer()
                 CopyButton { object.prettyJSON }
@@ -1485,7 +1491,7 @@ private struct RtImageThumbnail: View {
 
     private var fallback: some View {
         Text(uri.isEmpty ? "No image" : "Can't render image\n\(String(uri.prefix(140)))")
-            .font(.system(size: 10, design: .monospaced))
+            .font(.app(size: 10, design: .monospaced))
             .foregroundStyle(.textMuted)
             .padding(8)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1503,7 +1509,7 @@ private struct RtImageOverlay: View {
             HStack {
                 Spacer()
                 Button { dismiss() } label: {
-                    Image(systemName: "xmark.circle.fill").font(.title2)
+                    Image(systemName: "xmark.circle.fill").font(.app(.title2))
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
@@ -1571,10 +1577,10 @@ private struct SnapshotRow: View {
                 Button { expanded.toggle() } label: {
                     HStack(spacing: 6) {
                         Image(systemName: expanded ? "chevron.down" : "chevron.right")
-                            .font(.system(size: 10, weight: .bold))
+                            .font(.app(size: 10, weight: .bold))
                             .foregroundStyle(.secondary)
                         Text(time)
-                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                            .font(.app(size: 11, weight: .semibold, design: .monospaced))
                             .foregroundStyle(.rtNumber)
                     }
                     .contentShape(Rectangle())
@@ -1582,6 +1588,7 @@ private struct SnapshotRow: View {
                 .buttonStyle(.plain)
                 .help(expanded ? "Hide the snapshot" : "Show the snapshot")
                 Spacer(minLength: 8)
+                CopyButton(label: "Copy JSON") { state.prettyJSON }
                 Button("Restore", action: onRestore).controlSize(.small)
                 Button(action: onDelete) { Image(systemName: "trash") }
                     .buttonStyle(.plain)
@@ -1609,11 +1616,11 @@ private struct JSONTreeView: View {
             if showSearch {
                 HStack(spacing: 4) {
                     Image(systemName: "magnifyingglass")
-                        .font(.system(size: 9))
+                        .font(.app(size: 9))
                         .foregroundStyle(.tertiary)
                     TextField("Search keys & values…", text: $search)
                         .textFieldStyle(.plain)
-                        .font(.system(size: 11, design: .monospaced))
+                        .font(.app(size: 11, design: .monospaced))
                     if !search.isEmpty {
                         Button { search = "" } label: { Image(systemName: "xmark.circle.fill") }
                             .buttonStyle(.plain)
@@ -1628,7 +1635,7 @@ private struct JSONTreeView: View {
                 }
                 if nodes.isEmpty {
                     Text(search.isEmpty ? "(empty)" : "No matches")
-                        .font(.system(size: 11))
+                        .font(.app(size: 11))
                         .foregroundStyle(.tertiary)
                 }
             }
@@ -1671,7 +1678,7 @@ private struct JSONTreeView: View {
             }
             if node.isContainer, search.isEmpty {
                 Image(systemName: expanded.contains(node.path) ? "chevron.down" : "chevron.right")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.app(size: 10, weight: .bold))
                     .foregroundStyle(.secondary)
                     .frame(width: 14)
             } else {
@@ -1679,14 +1686,14 @@ private struct JSONTreeView: View {
             }
             if !node.key.isEmpty {
                 Text(node.key)
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(.app(size: 11, design: .monospaced))
                     .foregroundStyle(.rtKey)
                 Text(":")
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(.app(size: 11, design: .monospaced))
                     .foregroundStyle(.tertiary)
             }
             Text(node.valuePreview)
-                .font(.system(size: 11, design: .monospaced))
+                .font(.app(size: 11, design: .monospaced))
                 .foregroundStyle(node.valueColor)
                 .lineLimit(1)
                 .textSelection(.enabled)
@@ -1791,15 +1798,15 @@ private struct CommandCard: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(command.title ?? command.command)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.app(size: 13, weight: .semibold))
                     if command.title != nil {
                         Text(command.command)
-                            .font(.system(size: 11, design: .monospaced))
+                            .font(.app(size: 11, design: .monospaced))
                             .foregroundStyle(.textMuted)
                     }
                     if let description = command.description {
                         Text(description)
-                            .font(.caption)
+                            .font(.app(.caption))
                             .foregroundStyle(.textMuted)
                     }
                 }
@@ -1852,12 +1859,12 @@ private struct ReactotronOnboarding: View {
     private var errorBody: some View {
         VStack(spacing: 14) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 40))
+                .font(.app(size: 40))
                 .foregroundStyle(.red)
             Text(connection == .portInUse ? "Port 9090 is taken" : "Reactotron server error")
-                .font(.title3.weight(.semibold))
+                .font(.app(.title3).weight(.semibold))
             Text(connection.text(app: nil))
-                .font(.callout)
+                .font(.app(.callout))
                 .foregroundStyle(.textMuted)
                 .multilineTextAlignment(.center)
                 .textSelection(.enabled)
@@ -1872,22 +1879,22 @@ private struct ReactotronOnboarding: View {
     private var waitingBody: some View {
         VStack(spacing: 14) {
             Image(systemName: "antenna.radiowaves.left.and.right")
-                .font(.system(size: 40))
+                .font(.app(size: 40))
                 .foregroundStyle(.textMuted)
             Text("Waiting for your app")
-                .font(.title3.weight(.semibold))
+                .font(.app(.title3).weight(.semibold))
             Text("Droidective is the Reactotron server — it listens on :9090 and already ran `adb reverse tcp:9090 tcp:9090`. Add the client to your app and reload:")
-                .font(.callout)
+                .font(.app(.callout))
                 .foregroundStyle(.textMuted)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 460)
             Text(Self.snippet)
-                .font(.system(size: 11, design: .monospaced))
+                .font(.app(size: 11, design: .monospaced))
                 .textSelection(.enabled)
                 .padding(12)
                 .background(Color.bgSurface, in: RoundedRectangle(cornerRadius: 6))
             Text("Needs `reactotron-react-native` installed in the app and a dev build.")
-                .font(.caption)
+                .font(.app(.caption))
                 .foregroundStyle(.tertiary)
 
             alreadyRunningHint
@@ -1903,14 +1910,14 @@ private struct ReactotronOnboarding: View {
             ZStack {
                 Circle().fill(Color.rtName.opacity(0.16)).frame(width: 30, height: 30)
                 Image(systemName: "lightbulb.fill")
-                    .font(.system(size: 13))
+                    .font(.app(size: 13))
                     .foregroundStyle(.rtName)
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text("Already running your app?")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.app(size: 12, weight: .semibold))
                 Text("Restart it so it reconnects.")
-                    .font(.caption)
+                    .font(.app(.caption))
                     .foregroundStyle(.textMuted)
             }
             Spacer(minLength: 12)
@@ -1972,19 +1979,19 @@ private struct RestartAppMenu: View {
                 ZStack {
                     Circle().fill(Color.brandAccent.opacity(0.16)).frame(width: 30, height: 30)
                     Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.app(size: 13, weight: .semibold))
                         .foregroundStyle(.brandAccent)
                 }
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Restart app")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.app(size: 13, weight: .semibold))
                     Text("Force-stop and relaunch so it reconnects")
-                        .font(.system(size: 10))
+                        .font(.app(size: 10))
                         .foregroundStyle(.textMuted)
                 }
                 Spacer()
                 Button { showPicker = false } label: {
-                    Image(systemName: "xmark.circle.fill").font(.system(size: 15))
+                    Image(systemName: "xmark.circle.fill").font(.app(size: 15))
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.tertiary)
@@ -1994,11 +2001,11 @@ private struct RestartAppMenu: View {
 
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 11))
+                    .font(.app(size: 11))
                     .foregroundStyle(.tertiary)
                 TextField("Search apps…", text: $search)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 12))
+                    .font(.app(size: 12))
                     .focused($searchFocused)
                 if !search.isEmpty {
                     Button { search = "" } label: { Image(systemName: "xmark.circle.fill") }
@@ -2046,7 +2053,7 @@ private struct RestartAppMenu: View {
 
     private func hint(_ text: String) -> some View {
         Text(text)
-            .font(.caption)
+            .font(.app(.caption))
             .foregroundStyle(.textMuted)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -2087,10 +2094,10 @@ private struct AppPickerRow: View {
                     .frame(width: 28, height: 28)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(restartAppDisplayName(package))
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.app(size: 12, weight: .medium))
                         .lineLimit(1)
                     Text(package)
-                        .font(.system(size: 10, design: .monospaced))
+                        .font(.app(size: 10, design: .monospaced))
                         .foregroundStyle(.textMuted)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -2139,12 +2146,12 @@ private struct StateCard<Trailing: View, Content: View>: View {
                         .fill(tint.opacity(0.16))
                         .frame(width: 26, height: 26)
                     Image(systemName: icon)
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.app(size: 12, weight: .semibold))
                         .foregroundStyle(tint)
                 }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.system(size: 13, weight: .semibold))
-                    Text(subtitle).font(.system(size: 11)).foregroundStyle(.textMuted)
+                    Text(title).font(.app(size: 13, weight: .semibold))
+                    Text(subtitle).font(.app(size: 11)).foregroundStyle(.textMuted)
                 }
                 Spacer(minLength: 8)
                 HStack(spacing: 8) { trailing() }
@@ -2164,7 +2171,7 @@ private struct CountChip: View {
 
     var body: some View {
         Text("\(count) \(suffix)")
-            .font(.system(size: 10, weight: .medium))
+            .font(.app(size: 10, weight: .medium))
             .foregroundStyle(.textMuted)
             .padding(.horizontal, 7)
             .padding(.vertical, 2)
@@ -2184,10 +2191,10 @@ private struct EmptyHint: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: icon)
-                .font(.system(size: 14))
+                .font(.app(size: 14))
                 .foregroundStyle(.tertiary)
             Text(message)
-                .font(.system(size: 11))
+                .font(.app(size: 11))
                 .foregroundStyle(.textMuted)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 8)
@@ -2243,7 +2250,7 @@ private struct CopyButton: View {
                 Image(systemName: copied ? "checkmark" : icon)
                 Text(copied ? "Copied" : label)
             }
-            .font(.system(size: 11, weight: .medium))
+            .font(.app(size: 11, weight: .medium))
             .foregroundStyle(copied ? Color.green.contrastingForeground(for: colorScheme) : Color.primary)
             .padding(.horizontal, 11)
             .padding(.vertical, 5)
