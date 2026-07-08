@@ -225,6 +225,66 @@ import Testing
         #expect(args.contains(["-s", "S1", "shell", "run-as", "'com.front.app'", "id"]))
     }
 
+    @Test func devHostRemoteFallsBackToSetpropWhenTheWriteCannotBeVerified() async {
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["-s"], stdout: "")
+        // run-as probe and write succeed, but the prefs read back without the
+        // host — the write silently didn't land, so fall back to setprop.
+        runner.script(argsPrefix: ["-s", "S1", "shell", "run-as", "'com.demo.app'", "cat"], stdout: "<map></map>")
+        runner.script(argsPrefix: ["-s", "S1", "shell", "getprop"], stdout: "192.168.1.99\n")
+        let engine = await makeEngine(runner)
+
+        let result = await engine.run(
+            featureID: "rn-dev-host", serial: "S1",
+            params: ["host": .string("192.168.1.99:8081"), "packageId": .string("com.demo.app")]
+        )
+        #expect(result.ok)
+        #expect(result.message.contains("metro.host=192.168.1.99"))
+        let args = runner.invocations.map(\.arguments)
+        #expect(args.contains(["-s", "S1", "shell", "setprop", "metro.host", "'192.168.1.99'"]))
+    }
+
+    @Test func devHostRemoteDoesNotClaimARelaunchWhenTheAppHasNoLauncherActivity() async {
+        let runner = MockProcessRunner()
+        let prefsXML = FeatureEngine.upsertDebugHTTPHost(nil, hostPort: "192.168.1.99:8081")
+        runner.script(argsPrefix: ["-s"], stdout: "")
+        runner.script(argsPrefix: ["-s", "S1", "shell", "run-as", "'com.demo.app'", "cat"], stdout: prefsXML)
+        runner.script(
+            argsPrefix: ["-s", "S1", "shell", "monkey"],
+            stdout: "** No activities found to run, monkey aborted."
+        )
+        let engine = await makeEngine(runner)
+
+        let result = await engine.run(
+            featureID: "rn-dev-host", serial: "S1",
+            params: ["host": .string("192.168.1.99:8081"), "packageId": .string("com.demo.app")]
+        )
+        #expect(result.ok)
+        #expect(result.message.contains("reopen the app"))
+        #expect(!result.message.contains("relaunched"))
+    }
+
+    @Test func devHostRemoteShellQuotesAHostilePackage() async {
+        let runner = MockProcessRunner()
+        let hostile = "com.evil; rm -rf /"
+        let prefsXML = FeatureEngine.upsertDebugHTTPHost(nil, hostPort: "192.168.1.99:8081")
+        runner.script(argsPrefix: ["-s"], stdout: "")
+        runner.script(argsPrefix: ["-s", "S1", "shell", "run-as", shellQuote(hostile), "cat"], stdout: prefsXML)
+        let engine = await makeEngine(runner)
+
+        let result = await engine.run(
+            featureID: "rn-dev-host", serial: "S1",
+            params: ["host": .string("192.168.1.99:8081"), "packageId": .string(hostile)]
+        )
+        #expect(result.ok)
+        let args = runner.invocations.map(\.arguments)
+        // Every run-as token carries the single-quoted package, never a raw
+        // metacharacter the device shell could split on.
+        #expect(args.contains(["-s", "S1", "shell", "run-as", shellQuote(hostile), "id"]))
+        #expect(args.contains(["-s", "S1", "shell", "am", "force-stop", shellQuote(hostile)]))
+        #expect(!args.contains { $0.contains(hostile) })
+    }
+
     @Test func devHostRemoteFallsBackToSetpropWhenTheAppIsNotDebuggable() async {
         let runner = MockProcessRunner()
         runner.script(argsPrefix: ["-s"], stdout: "")

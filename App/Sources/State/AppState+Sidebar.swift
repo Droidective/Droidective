@@ -32,15 +32,12 @@ extension AppState {
     /// opened). System screens (Home itself, the catalog) are excluded —
     /// they're chrome, not tools.
     var frequentFeatures: [FeatureDef] {
-        let candidates = enabledFeatures.filter {
-            $0.kind != .system && usageStats.count(for: $0.id) >= 2
-        }
-        let sorted = candidates.enumerated().sorted { lhs, rhs in
-            let countL = usageStats.count(for: lhs.element.id)
-            let countR = usageStats.count(for: rhs.element.id)
-            return countL != countR ? countL > countR : lhs.offset < rhs.offset
-        }
-        return sorted.prefix(6).map(\.element)
+        let candidates = enabledFeatures.filter { $0.kind != .system }
+        let byID = Dictionary(uniqueKeysWithValues: candidates.map { ($0.id, $0) })
+        return usageStats
+            .frequent(among: candidates.map(\.id), minUses: 2)
+            .prefix(6)
+            .compactMap { byID[$0] }
     }
 
     var visibleFeatures: [FeatureDef] {

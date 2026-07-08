@@ -559,14 +559,21 @@ public struct FeatureEngine: Sendable {
         // the new host (stop only after the write verifiably landed, so the
         // fallback paths still have the app around if run-as flaked).
         _ = try await client.run(on: serial, ["shell", "am", "force-stop", shellQuote(package)])
-        _ = try await client.run(
+        let relaunch = try await client.run(
             on: serial,
             ["shell", "monkey", "-p", shellQuote(package), "-c", "android.intent.category.LAUNCHER", "1"]
         )
-        return FeatureResult(
-            ok: true,
-            message: "Pointed \(package) at \(hostPort) — wrote debug_http_host and relaunched the app."
-        )
+        // monkey exits 0 even when the app has no LAUNCHER activity (custom
+        // launch category, deep-link-only) — it just prints "No activities
+        // found … aborted". Don't claim a relaunch that didn't happen, or the
+        // user is told all is well while the app sits force-stopped.
+        let relaunched = relaunch.succeeded
+            && !relaunch.stdout.contains("No activities")
+            && !relaunch.stderr.contains("No activities")
+        let tail = relaunched
+            ? "wrote debug_http_host and relaunched the app."
+            : "wrote debug_http_host — reopen the app to load the new host."
+        return FeatureResult(ok: true, message: "Pointed \(package) at \(hostPort) — \(tail)")
     }
 
     /// Inserts or replaces the `debug_http_host` entry in a SharedPreferences
