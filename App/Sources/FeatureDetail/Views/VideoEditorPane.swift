@@ -132,6 +132,12 @@ struct VideoEditorPane: View {
             editorHeader
             Divider()
             playerSection
+            // Crop mode pauses playback; trimming brings AVKit's own transport,
+            // so the bar steps back while either owns the player.
+            if !cropMode {
+                VideoTransportBar(player: player, duration: assetDuration)
+                    .disabled(isTrimming || !playerReady)
+            }
             Divider()
             ScrollView { controls.padding(16) }
                 .frame(maxHeight: 300)
