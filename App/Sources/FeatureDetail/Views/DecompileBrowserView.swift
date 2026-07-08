@@ -252,6 +252,9 @@ struct DecompileBrowserView: View {
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
+            // Selection follows the control accent, not the scene tint — see
+            // the Apps list.
+            .tint(.brandAccent)
         } else {
             centered { Text("No matching files").font(.app(.callout)).foregroundStyle(.textMuted) }
         }

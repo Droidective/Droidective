@@ -106,7 +106,7 @@ enum ToastStyle {
 
     static func color(_ level: Toast.Level) -> Color {
         switch level {
-        case .success: Color("BrandAccent")
+        case .success: .brandAccent
         case .info: Color("TextMuted")
         case .warning: .orange
         case .error: .red

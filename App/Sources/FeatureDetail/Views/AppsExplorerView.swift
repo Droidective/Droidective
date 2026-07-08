@@ -107,6 +107,10 @@ struct AppsExplorerView: View {
                             }
                             .tag(app.packageId)
                         }
+                        // The list's selection highlight follows the control
+                        // accent (the bundled asset), not the scene tint — set
+                        // it here so a custom accent recolors selection too.
+                        .tint(.brandAccent)
                         .frame(minWidth: 260)
                     }
                     HStack {
