@@ -173,7 +173,11 @@ struct VideoEditorPane: View {
                         .frame(width: fitted.width, height: fitted.height)
                     CropBox(crop: bind(\.crop), videoFrame: fitted)
                 } else {
-                    let size = playerSize(in: geo.size)
+                    // While trimming, take the full pane width: AVKit's trim
+                    // strip spans the player view, and a portrait-fitted width
+                    // leaves the handles unusably cramped on long clips (the
+                    // video just letterboxes meanwhile).
+                    let size = isTrimming ? geo.size : playerSize(in: geo.size)
                     VideoPlayerView(player: player, trimmer: trimmer)
                         .frame(width: size.width, height: size.height)
                         .overlay {
