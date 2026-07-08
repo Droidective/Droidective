@@ -101,7 +101,7 @@ private struct SidebarDrop: DropDelegate {
 }
 
 /// Raycast-style command palette: pinned search field on top of the
-/// categorized feature list. ⌘K focuses search from anywhere; ↑/↓ move the
+/// categorized feature list. ⌘T opens the full search from anywhere; ↑/↓ move the
 /// selection from the field; ⏎ runs instant actions straight away. Holding ⌘
 /// shows ⌘1–⌘9/⌘0 badges on the first ten rows; the shortcuts themselves live
 /// on the app-level Go menu, so they jump to a row from anywhere in the app.
@@ -133,14 +133,14 @@ struct SidebarPaletteView: View {
                 TextField("Search features…", text: $state.searchText)
                     .brandField()
                     .controlSize(.large)
-                    .font(.title3)
+                    .font(.app(.title3))
                     .focused($searchFocused)
                     .overlay(alignment: .trailing) {
                         if state.searchText.isEmpty {
-                            KeyHint("⌘K")
+                            KeyHint("⌘T")
                                 .padding(.trailing, 6)
                                 .allowsHitTesting(false)
-                                .help("⌘K opens the full search")
+                                .help("⌘T opens the full search")
                         } else {
                             Button {
                                 state.searchText = ""
@@ -245,7 +245,6 @@ struct SidebarPaletteView: View {
             bottomBar
         }
         .background(.bgSurface)
-        .onChange(of: state.focusSearchToken) { searchFocused = true }
         // Keyboard highlight: keep the top result highlighted as the query
         // changes, and drop the highlight when the field loses focus (only the
         // active tab's pill remains).
@@ -284,7 +283,7 @@ struct SidebarPaletteView: View {
                 state.requestFeature("home")
             } label: {
                 Image(systemName: "house")
-                    .font(.title2)
+                    .font(.app(.title2))
                     .frame(height: 22)
                     .contentShape(Rectangle())
             }
@@ -299,7 +298,7 @@ struct SidebarPaletteView: View {
                     state.hiddenFeatureCount > 0 ? "+ \(state.hiddenFeatureCount) more features" : "Manage features",
                     systemImage: "square.grid.2x2"
                 )
-                .font(.body)
+                .font(.app(.body))
                 .lineLimit(1)
             }
             .buttonStyle(.plain)
@@ -311,7 +310,7 @@ struct SidebarPaletteView: View {
                 state.requestFeature("about")
             } label: {
                 Image(systemName: "info.circle")
-                    .font(.title2)
+                    .font(.app(.title2))
                     .frame(height: 22)
                     .contentShape(Rectangle())
             }
@@ -321,7 +320,7 @@ struct SidebarPaletteView: View {
 
             SettingsLink {
                 Image(systemName: "gearshape")
-                    .font(.title2)
+                    .font(.app(.title2))
                     .frame(height: 22)
                     .contentShape(Rectangle())
             }
@@ -622,7 +621,7 @@ struct FeatureRowView: View {
                 state.toggleFavorite(feature.id)
             } label: {
                 Image(systemName: isPinned ? "pin.fill" : "pin")
-                    .font(.caption)
+                    .font(.app(.caption))
                     .foregroundStyle(isPinned ? AnyShapeStyle(.brandAccent) : AnyShapeStyle(.textMuted))
                     .frame(width: 18, height: 18)
                     .contentShape(Rectangle())
@@ -697,7 +696,7 @@ struct FeatureRowView: View {
                         .lineLimit(1)
                     if let subtitle = feature.subtitle {
                         Text(subtitle)
-                            .font(.footnote)
+                            .font(.app(.footnote))
                             .foregroundStyle(.textMuted)
                             .lineLimit(1)
                     }
@@ -759,13 +758,13 @@ private struct HotkeyPopover: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Hotkey · \(feature.title)")
-                .font(.headline)
+                .font(.app(.headline))
             Text("Press your shortcut — e.g. ⌘⌃Y. ⎋ cancels, ⌫ clears.")
-                .font(.caption)
+                .font(.app(.caption))
                 .foregroundStyle(.textMuted)
             HotkeyRecorderField(name: HotkeyManager.featureName(feature.id), autoFocus: true)
             Text("Global — fires even when Droidective is in the background.")
-                .font(.caption)
+                .font(.app(.caption))
                 .foregroundStyle(.textMuted)
         }
         .padding(14)

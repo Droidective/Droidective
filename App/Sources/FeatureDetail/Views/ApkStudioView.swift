@@ -61,7 +61,7 @@ struct ApkStudioView: View {
             .labelsHidden()
             .fixedSize()
             Spacer()
-            Text(apk.lastPathComponent).font(.caption).foregroundStyle(.textMuted).lineLimit(1)
+            Text(apk.lastPathComponent).font(.app(.caption)).foregroundStyle(.textMuted).lineLimit(1)
             Button("Open another APK") { open(nil) }
         }
         .padding(8)
@@ -88,10 +88,10 @@ struct ApkStudioView: View {
 
     private var picker: some View {
         VStack(spacing: 12) {
-            Image(systemName: "wrench.and.screwdriver").font(.system(size: 46)).foregroundStyle(.brandAccent)
-            Text("Drop an APK to inspect, decompile, recompile, and sign").font(.title3.weight(.medium))
+            Image(systemName: "wrench.and.screwdriver").font(.app(size: 46)).foregroundStyle(.brandAccent)
+            Text("Drop an APK to inspect, decompile, recompile, and sign").font(.app(.title3).weight(.medium))
             Text("Load it once, then switch tabs — everything in one place.")
-                .font(.callout).foregroundStyle(.textMuted)
+                .font(.app(.callout)).foregroundStyle(.textMuted)
             Button("Choose APK…") { choose() }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -148,7 +148,7 @@ private struct RecompileTab: View {
         Form {
             Section("1 · Decode resources") {
                 Text("Disassemble the APK to smali + decoded resources with apktool, so you can edit it.")
-                    .font(.callout).foregroundStyle(.textMuted)
+                    .font(.app(.callout)).foregroundStyle(.textMuted)
                 if let sourceDir {
                     LabeledContent("Sources", value: sourceDir.lastPathComponent)
                     Button("Reveal sources in Finder") {
@@ -161,7 +161,7 @@ private struct RecompileTab: View {
             }
             Section("2 · Edit the files") {
                 Text("Open the revealed folder in your editor, change resources / smali / the manifest, then come back.")
-                    .font(.callout).foregroundStyle(.textMuted)
+                    .font(.app(.callout)).foregroundStyle(.textMuted)
             }
             Section("3 · Rebuild") {
                 Button(busy ? "Rebuilding…" : "Rebuild APK") { Task { await rebuild() } }

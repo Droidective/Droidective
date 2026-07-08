@@ -31,12 +31,12 @@ struct NotificationPanelView: View {
     private var header: some View {
         HStack(spacing: 10) {
             Text("Notifications")
-                .font(.headline)
+                .font(.app(.headline))
             Spacer()
             if state.notifications.count > 1 {
                 Button("Clear all") { state.clearNotifications() }
                     .buttonStyle(.plain)
-                    .font(.callout)
+                    .font(.app(.callout))
                     .foregroundStyle(.textMuted)
                     .help("Clear all notifications")
             }
@@ -49,13 +49,13 @@ struct NotificationPanelView: View {
     private var emptyState: some View {
         VStack(spacing: 10) {
             Image(systemName: "bell.slash")
-                .font(.system(size: 30))
+                .font(.app(size: 30))
                 .foregroundStyle(.textMuted)
             Text("No notifications")
-                .font(.callout)
+                .font(.app(.callout))
                 .foregroundStyle(.textMain)
             Text("Errors, warnings, and key results show up here.")
-                .font(.footnote)
+                .font(.app(.footnote))
                 .foregroundStyle(.textMuted)
                 .multilineTextAlignment(.center)
         }
@@ -76,12 +76,12 @@ private struct NotificationRow: View {
                 .frame(width: 20)
             VStack(alignment: .leading, spacing: 5) {
                 Text(note.message)
-                    .font(.callout)
+                    .font(.app(.callout))
                     .foregroundStyle(.textMain)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 8) {
                     Text(note.date, format: .relative(presentation: .named))
-                        .font(.caption)
+                        .font(.app(.caption))
                         .foregroundStyle(.textMuted)
                     if let revealPath = note.revealPath {
                         Button {
@@ -130,7 +130,7 @@ struct NotificationBell: View {
                 .overlay(alignment: .topTrailing) {
                     if state.unreadNotifications > 0 && !state.showNotifications {
                         Text(state.unreadNotifications > 99 ? "99+" : "\(state.unreadNotifications)")
-                            .font(.system(size: 9, weight: .bold))
+                            .font(.app(size: 9, weight: .bold))
                             .foregroundStyle(.white)
                             .padding(.horizontal, 3)
                             .frame(minWidth: 9)

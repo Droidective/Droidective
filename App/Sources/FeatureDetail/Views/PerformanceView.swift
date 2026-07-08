@@ -136,7 +136,7 @@ struct PerformanceView: View {
                 summaryChips(last)
             }
             Text(statusText)
-                .font(.callout.monospacedDigit())
+                .font(.app(.callout).monospacedDigit())
                 .foregroundStyle(phase == .recording ? .textMain : .textMuted)
         }
         .padding(.horizontal, 12)
@@ -195,8 +195,8 @@ struct PerformanceView: View {
 
     private func chip(_ label: String, _ value: String, _ color: Color) -> some View {
         HStack(spacing: 4) {
-            Text(label).font(.caption2.weight(.semibold)).foregroundStyle(color)
-            Text(value).font(.caption.monospacedDigit())
+            Text(label).font(.app(.caption2).weight(.semibold)).foregroundStyle(color)
+            Text(value).font(.app(.caption).monospacedDigit())
         }
         .padding(.horizontal, 7)
         .padding(.vertical, 3)
@@ -301,7 +301,7 @@ struct PerformanceView: View {
             .overlay {
                 if !recentSamples.contains(where: { $0.appPssKb != nil }) {
                     Text("Waiting for the app's memory…")
-                        .font(.callout).foregroundStyle(.textMuted)
+                        .font(.app(.callout)).foregroundStyle(.textMuted)
                 }
             }
         }
@@ -332,7 +332,7 @@ struct PerformanceView: View {
             .overlay {
                 if !recentSamples.contains(where: { $0.appFps != nil }) {
                     Text("Waiting for rendered frames — interact with the app on the device.")
-                        .font(.callout)
+                        .font(.app(.callout))
                         .foregroundStyle(.textMuted)
                         .multilineTextAlignment(.center)
                         .padding()
@@ -385,7 +385,7 @@ struct PerformanceView: View {
                     overflowResolution: .init(x: .fit(to: .chart), y: .disabled)
                 ) {
                     Text(label(sample))
-                        .font(.caption2.monospacedDigit())
+                        .font(.app(.caption2).monospacedDigit())
                         .padding(.horizontal, 6)
                         .padding(.vertical, 3)
                         .background(Color.bgSurface, in: RoundedRectangle(cornerRadius: 5))
@@ -419,7 +419,7 @@ struct PerformanceView: View {
                 Divider()
                 if filteredProcesses.isEmpty {
                     Text(processes.isEmpty ? "Per-process data appears while recording." : "No processes match the filter.")
-                        .font(.callout)
+                        .font(.app(.callout))
                         .foregroundStyle(.textMuted)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.vertical, 8)
@@ -439,26 +439,26 @@ struct PerformanceView: View {
             Text("CPU").frame(width: 56, alignment: .trailing)
             Text("RAM").frame(width: 80, alignment: .trailing)
         }
-        .font(.caption.weight(.semibold))
+        .font(.app(.caption).weight(.semibold))
         .foregroundStyle(.textMuted)
     }
 
     private func processRow(_ process: ProcessLoad) -> some View {
         HStack(spacing: 8) {
             Text(process.name)
-                .font(.system(.callout, design: .monospaced))
+                .font(.app(.callout, design: .monospaced))
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Text("\(process.pid)")
-                .font(.caption.monospacedDigit())
+                .font(.app(.caption).monospacedDigit())
                 .foregroundStyle(.textMuted)
                 .frame(width: 64, alignment: .trailing)
             Text(process.cpuPercent.map { String(format: "%.1f%%", $0) } ?? "—")
-                .font(.caption.monospacedDigit())
+                .font(.app(.caption).monospacedDigit())
                 .frame(width: 56, alignment: .trailing)
             Text(process.pssKb.map { "\(mb($0)) MB" } ?? "—")
-                .font(.caption.monospacedDigit())
+                .font(.app(.caption).monospacedDigit())
                 .frame(width: 80, alignment: .trailing)
         }
         .padding(.vertical, 1)
@@ -481,8 +481,8 @@ struct PerformanceView: View {
     private func card(_ title: String, subtitle: String, @ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(title).font(.headline)
-                Text(subtitle).font(.caption).foregroundStyle(.textMuted)
+                Text(title).font(.app(.headline))
+                Text(subtitle).font(.app(.caption)).foregroundStyle(.textMuted)
                 Spacer()
             }
             content()

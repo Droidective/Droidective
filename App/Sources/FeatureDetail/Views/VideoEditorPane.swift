@@ -61,7 +61,7 @@ struct EditToggleStyle: ToggleStyle {
             configuration.isOn.toggle()
         } label: {
             configuration.label
-                .font(.callout.weight(.medium))
+                .font(.app(.callout).weight(.medium))
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
                 .background(configuration.isOn ? Color.brandAccent : Color.primary.opacity(0.07))
@@ -240,9 +240,9 @@ struct VideoEditorPane: View {
     // Focused crop mode — only crop actions are available.
     private var cropToolbar: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Label("Crop", systemImage: "crop").font(.headline)
+            Label("Crop", systemImage: "crop").font(.app(.headline))
             Text("Drag on the video to select the area to keep, then drag the corner handles to fine-tune. Reset (Esc) clears the selection.")
-                .font(.callout).foregroundStyle(.textMuted)
+                .font(.app(.callout)).foregroundStyle(.textMuted)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 10) {
                 Button("Reset") { apply { $0.crop = nil } }
@@ -284,7 +284,7 @@ struct VideoEditorPane: View {
                     apply { $0.rotation = ($0.rotation + 90) % 360 }
                 }
                 Text(edit.rotation == 0 ? "0°" : "\(edit.rotation)°")
-                    .font(.callout).foregroundStyle(.textMuted).monospacedDigit().frame(width: 36)
+                    .font(.app(.callout)).foregroundStyle(.textMuted).monospacedDigit().frame(width: 36)
                 Divider().frame(height: 18)
                 Toggle("Flip H", isOn: bind(\.flipH)).toggleStyle(EditToggleStyle())
                 Toggle("Flip V", isOn: bind(\.flipV)).toggleStyle(EditToggleStyle())
@@ -390,7 +390,7 @@ struct VideoEditorPane: View {
         _ title: String, @ViewBuilder _ content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.subheadline.weight(.semibold))
+            Text(title).font(.app(.subheadline).weight(.semibold))
             content()
         }
     }

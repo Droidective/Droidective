@@ -157,6 +157,9 @@ struct RootView: View {
         }
         migrateDefaultsIfNeeded()
         applyStoredTheme()
+        // Enumerate installed font families now so the Settings ▸ Appearance
+        // font picker opens instantly.
+        FontCatalog.preload()
         updateDockIcon()
         // Watch the app's own CPU/RAM and report sustained spikes to telemetry
         // with the features open at the time (consent-gated in Telemetry).
@@ -172,6 +175,7 @@ struct RootView: View {
         Telemetry.shared.featureBecameActive(state.activeTabID)
         installCloseTabMonitor()
         installDragJanitor()
+        installFocusRelease()
         switch LaunchPrompt.next(
             hasChosenRole: hasChosenRole, hasSeenTour: hasSeenTour,
             starPromptShown: starPromptShown,
@@ -232,6 +236,35 @@ struct RootView: View {
         NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDown]) { event in
             if state.draggingTabID != nil { state.draggingTabID = nil }
             if state.terminals.railDragActive { state.terminals.clearRailDrag() }
+            return event
+        }
+    }
+
+    private static var focusReleaseInstalled = false
+
+    /// Clicking outside the active text field should end its editing. macOS
+    /// keeps an `NSTextField`'s field editor first responder until something
+    /// else takes focus, so clicking empty chrome otherwise leaves the field
+    /// editing and swallowing keystrokes. On each left-click, if a field editor
+    /// is active and the click landed neither in it nor on the control it edits,
+    /// resign to the window — committing the field without closing panels
+    /// (`makeFirstResponder(nil)` keeps the window key). One monitor covers
+    /// every `TextField`/`SecureField`/search field in every window. Installed
+    /// once. Multi-line `TextEditor`s aren't field editors, so they're left
+    /// alone (their own click handling manages focus).
+    private func installFocusRelease() {
+        guard !RootView.focusReleaseInstalled else { return }
+        RootView.focusReleaseInstalled = true
+        NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown]) { event in
+            guard let window = event.window,
+                  let editor = window.firstResponder as? NSTextView, editor.isFieldEditor
+            else { return event }
+            let editedControl = editor.delegate as? NSView
+            let clickedInField = window.contentView?.hitTest(event.locationInWindow).map { hit in
+                hit === editor || hit.isDescendant(of: editor)
+                    || (editedControl.map { hit.isDescendant(of: $0) } ?? false)
+            } ?? false
+            if !clickedInField { window.makeFirstResponder(nil) }
             return event
         }
     }
@@ -591,7 +624,7 @@ private struct EditorPane: View {
                 .overlay(alignment: .leading) { Rectangle().fill(.brandAccent).frame(width: 2) }
                 .overlay {
                     Label("Drop to split", systemImage: "rectangle.split.2x1")
-                        .font(.headline)
+                        .font(.app(.headline))
                         .foregroundStyle(.brandAccent)
                 }
                 .frame(width: geo.size.width / 2, height: geo.size.height)
@@ -724,14 +757,14 @@ struct OperationProgressStrip: View {
                     .progressViewStyle(.linear)
                     .frame(maxWidth: 260)
                 Text("\(Int(fraction * 100))%")
-                    .font(.footnote.monospacedDigit())
+                    .font(.app(.footnote).monospacedDigit())
                     .foregroundStyle(.textMuted)
             } else {
                 ProgressView()
                     .controlSize(.small)
             }
             Text(operation.label)
-                .font(.footnote)
+                .font(.app(.footnote))
                 .foregroundStyle(.textMuted)
             Spacer()
         }

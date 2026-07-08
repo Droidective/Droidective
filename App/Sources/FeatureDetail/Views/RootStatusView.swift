@@ -50,15 +50,15 @@ struct RootStatusView: View {
     private func header(_ status: RootStatus) -> some View {
         HStack(spacing: 14) {
             Image(systemName: icon(status))
-                .font(.system(size: 38))
+                .font(.app(size: 38))
                 .foregroundStyle(tint(status))
             VStack(alignment: .leading, spacing: 2) {
                 Text(status.summary)
-                    .font(.title2).bold()
+                    .font(.app(.title2)).bold()
                 Text(status.hasRootShell
                     ? "A root shell is available over adb."
                     : "Root-only features need a granted su shell.")
-                    .font(.callout)
+                    .font(.app(.callout))
                     .foregroundStyle(.textMuted)
             }
             Spacer()
@@ -77,7 +77,7 @@ struct RootStatusView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(signal.name)
                 Text(signal.detail)
-                    .font(.footnote)
+                    .font(.app(.footnote))
                     .foregroundStyle(.textMuted)
             }
             Spacer()

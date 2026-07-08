@@ -12,14 +12,14 @@ final class KeyablePanel: NSPanel {
 }
 
 /// Owns one floating, borderless panel hosting SwiftUI content — the shared
-/// chassis of the ⌘K palette and the Quick Actions panel. Borderless removes
+/// chassis of the ⌘T palette and the Quick Actions panel. Borderless removes
 /// the 32pt title-bar region a hidden-title-bar `Window` scene always
 /// reserves, so the content sizes the panel exactly — flush at top and
 /// bottom. The panel resizes to its content, keeps its top edge anchored as
 /// results grow/shrink, and closes when it loses key (click-away) or on Esc.
 @MainActor
 final class FloatingPanelController {
-    /// The in-app ⌘K search palette.
+    /// The in-app ⌘T search palette.
     static let palette = FloatingPanelController(activatesApp: true)
 
     /// The global-hotkey Quick Actions panel. Non-activating: it takes key

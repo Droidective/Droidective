@@ -47,7 +47,7 @@ struct FormActionView: View {
                 .keyboardShortcut(.return, modifiers: .command)
 
                 Text("⌘⏎ to run")
-                    .font(.caption)
+                    .font(.app(.caption))
                     .foregroundStyle(.tertiary)
             }
             .padding(.top, 4)
@@ -55,7 +55,7 @@ struct FormActionView: View {
             if isSendText {
                 Toggle("Clear the text after sending", isOn: $clearAfterSend)
                     .toggleStyle(.checkbox)
-                    .font(.callout)
+                    .font(.app(.callout))
             }
 
             LastResultCard(featureID: feature.id)
@@ -99,7 +99,7 @@ struct FormActionView: View {
         default:
             VStack(alignment: .leading, spacing: 5) {
                 Text(field.label)
-                    .font(.callout)
+                    .font(.app(.callout))
                     .foregroundStyle(.textMuted)
                 control(for: field)
                     .frame(maxWidth: fieldWidth(for: field.control), alignment: .leading)

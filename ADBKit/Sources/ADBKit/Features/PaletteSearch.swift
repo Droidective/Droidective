@@ -1,6 +1,6 @@
 import Foundation
 
-/// Pure ordering for the search palettes — the in-app ⌘K palette and the Quick
+/// Pure ordering for the search palettes — the in-app ⌘T palette and the Quick
 /// Actions panel share it, so the ranking rules live here (tested) instead of
 /// in the views.
 public enum PaletteSearch {

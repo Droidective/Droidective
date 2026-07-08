@@ -139,7 +139,7 @@ struct LogTailView<Data: RandomAccessCollection, Row: View>: View
             withAnimation(.easeOut(duration: 0.25)) { leadingID = newestID }
         } label: {
             Image(systemName: newestEdge == .bottom ? "arrow.down" : "arrow.up")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.app(size: 15, weight: .semibold))
                 .foregroundStyle(.white)
                 .frame(width: 36, height: 36)
                 .background(.tint, in: Circle())

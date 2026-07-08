@@ -9,6 +9,7 @@ import UniformTypeIdentifiers
 /// CodeMirror editor (syntax highlighting, line numbers, ⌘F find).
 struct DecompileBrowserView: View {
     @Environment(AppState.self) private var state
+    @Environment(\.colorScheme) private var colorScheme
 
     @State private var mode: DecompileService.Mode = .jadx
     @State private var toolReady = false
@@ -74,8 +75,8 @@ struct DecompileBrowserView: View {
 
     private var setupGate: some View {
         VStack(spacing: 16) {
-            Image(systemName: "curlybraces.square").font(.system(size: 46)).foregroundStyle(.brandAccent)
-            Text("Set up the decompiler").font(.title2.weight(.semibold))
+            Image(systemName: "curlybraces.square").font(.app(size: 46)).foregroundStyle(.brandAccent)
+            Text("Set up the decompiler").font(.app(.title2).weight(.semibold))
             modePicker
             VStack(alignment: .leading, spacing: 8) {
                 setupRow(toolName, detail: "Decompiler — downloaded from GitHub releases, kept up to date.")
@@ -85,7 +86,7 @@ struct DecompileBrowserView: View {
             if download.active {
                 downloadProgress
             } else if let status {
-                Text(status).font(.callout).foregroundStyle(.orange).multilineTextAlignment(.center).frame(maxWidth: 460)
+                Text(status).font(.app(.callout)).foregroundStyle(.orange).multilineTextAlignment(.center).frame(maxWidth: 460)
             }
             Button(download.active ? "Downloading…" : "Download \(toolName) & continue") {
                 Task { await setUpTools() }
@@ -93,7 +94,7 @@ struct DecompileBrowserView: View {
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
             .disabled(download.active)
-            Text("Manage versions anytime in Settings ▸ Tools.").font(.caption).foregroundStyle(.textMuted)
+            Text("Manage versions anytime in Settings ▸ Tools.").font(.app(.caption)).foregroundStyle(.textMuted)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(28)
@@ -103,8 +104,8 @@ struct DecompileBrowserView: View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "arrow.down.circle").foregroundStyle(.brandAccent)
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.callout.weight(.medium))
-                Text(detail).font(.caption).foregroundStyle(.textMuted)
+                Text(title).font(.app(.callout).weight(.medium))
+                Text(detail).font(.app(.caption)).foregroundStyle(.textMuted)
             }
             Spacer()
         }
@@ -130,8 +131,8 @@ struct DecompileBrowserView: View {
         VStack(spacing: 14) {
             modePicker
             Spacer()
-            Image(systemName: "doc.badge.arrow.up").font(.system(size: 46)).foregroundStyle(.brandAccent)
-            Text("Drag an APK here to decompile with \(toolName)").font(.title3.weight(.medium))
+            Image(systemName: "doc.badge.arrow.up").font(.app(size: 46)).foregroundStyle(.brandAccent)
+            Text("Drag an APK here to decompile with \(toolName)").font(.app(.title3).weight(.medium))
             Button("Choose APK…") { choose() }
             Spacer()
         }
@@ -173,7 +174,7 @@ struct DecompileBrowserView: View {
                 }
             } else {
                 VStack(spacing: 12) {
-                    Image(systemName: "exclamationmark.triangle").font(.system(size: 36)).foregroundStyle(.orange)
+                    Image(systemName: "exclamationmark.triangle").font(.app(size: 36)).foregroundStyle(.orange)
                     Text(status ?? "Decompilation failed.")
                         .foregroundStyle(.textMuted).multilineTextAlignment(.center).frame(maxWidth: 480)
                     HStack {
@@ -191,7 +192,7 @@ struct DecompileBrowserView: View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
                 modePicker.controlSize(.small)
-                Text(apkURL?.lastPathComponent ?? "").font(.caption).foregroundStyle(.textMuted).lineLimit(1)
+                Text(apkURL?.lastPathComponent ?? "").font(.app(.caption)).foregroundStyle(.textMuted).lineLimit(1)
                 Spacer()
                 Button { findToken += 1 } label: { Label("Find", systemImage: "magnifyingglass") }
                     .help("Find in file (⌘F)")
@@ -245,15 +246,15 @@ struct DecompileBrowserView: View {
 
     @ViewBuilder private func fileTree(_ root: FileNode) -> some View {
         if let filtered = filteredNode(root, filter), let children = filtered.children {
-            List(selection: $selection) {
+            List {
                 OutlineGroup(children, children: \.children) { node in
-                    Label(node.name, systemImage: node.isDirectory ? "folder" : "doc.text").tag(node.path)
+                    treeRow(node)
                 }
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
         } else {
-            centered { Text("No matching files").font(.callout).foregroundStyle(.textMuted) }
+            centered { Text("No matching files").font(.app(.callout)).foregroundStyle(.textMuted) }
         }
     }
 
@@ -263,14 +264,14 @@ struct DecompileBrowserView: View {
         } else if searchHits.isEmpty {
             centered {
                 Text(filter.isEmpty ? "Type and press return to search the code" : "No matches")
-                    .font(.callout).foregroundStyle(.textMuted).multilineTextAlignment(.center)
+                    .font(.app(.callout)).foregroundStyle(.textMuted).multilineTextAlignment(.center)
             }
         } else {
             List(searchHits) { hit in
                 Button { loadInEditor(hit.path, line: hit.line) } label: {
                     VStack(alignment: .leading, spacing: 1) {
-                        Text("\((hit.path as NSString).lastPathComponent):\(hit.line)").font(.caption.weight(.medium))
-                        Text(hit.text).font(.caption.monospaced()).foregroundStyle(.textMuted).lineLimit(1)
+                        Text("\((hit.path as NSString).lastPathComponent):\(hit.line)").font(.app(.caption).weight(.medium))
+                        Text(hit.text).font(.app(.caption).monospaced()).foregroundStyle(.textMuted).lineLimit(1)
                     }
                 }
                 .buttonStyle(.plain)
@@ -399,6 +400,26 @@ struct DecompileBrowserView: View {
     }
 
     /// Open a file in the editor, optionally jumping to (and highlighting) a line.
+    /// One tree row with hand-drawn selection — same escape from the
+    /// control-accent List highlight as the Apps list. Directories keep their
+    /// disclosure triangles; tapping a file selects (and opens) it.
+    private func treeRow(_ node: FileNode) -> some View {
+        let isSelected = selection == node.path
+        let accentText = Color.brandAccent.contrastingForeground(for: colorScheme)
+        return Button { selection = node.path } label: {
+            Label(node.name, systemImage: node.isDirectory ? "folder" : "doc.text")
+                .foregroundStyle(isSelected ? accentText : Color.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .listRowBackground(
+            RoundedRectangle(cornerRadius: 5)
+                .fill(isSelected ? AnyShapeStyle(.brandAccent) : AnyShapeStyle(Color.clear))
+                .padding(.horizontal, 4)
+        )
+    }
+
     private func loadInEditor(_ path: String?, line: Int) {
         targetLine = line
         loadFile(path)

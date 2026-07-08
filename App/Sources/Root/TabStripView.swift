@@ -119,7 +119,7 @@ struct TabStripView: View {
             withAnimation(.easeInOut(duration: 0.2)) { proxy.scrollTo(ids[target], anchor: .leading) }
         } label: {
             Image(systemName: icon)
-                .font(.caption.weight(.semibold))
+                .font(.app(.caption).weight(.semibold))
                 .foregroundStyle(.textMuted)
                 .frame(width: 28, height: 28)
                 .contentShape(Rectangle())
@@ -197,7 +197,7 @@ struct TabStripView: View {
             state.openPalette?()
         } label: {
             Image(systemName: "plus")
-                .font(.callout.weight(.medium))
+                .font(.app(.callout).weight(.medium))
                 .foregroundStyle(.textMuted)
                 .frame(width: 28, height: 28)
                 .contentShape(Rectangle())
@@ -242,7 +242,7 @@ private struct TabChip: View {
         HStack(spacing: 6) {
             leading
             Text(title)
-                .font(.callout)
+                .font(.app(.callout))
                 .lineLimit(1)
                 .foregroundStyle(isActive ? AnyShapeStyle(.textMain) : AnyShapeStyle(.textMuted))
             closeButton
@@ -269,12 +269,12 @@ private struct TabChip: View {
             // Pulsing red dot while the tab is recording (screen / mirror /
             // performance / network capture).
             Image(systemName: "circle.fill")
-                .font(.system(size: 8))
+                .font(.app(size: 8))
                 .foregroundStyle(.red)
                 .symbolEffect(.pulse, options: .repeating)
         } else {
             Image(systemName: icon)
-                .font(.caption)
+                .font(.app(.caption))
                 .foregroundStyle(isActive ? AnyShapeStyle(.brandAccent) : AnyShapeStyle(.textMuted))
         }
     }
@@ -283,7 +283,7 @@ private struct TabChip: View {
         if hovering || isActive {
             Button(action: onClose) {
                 Image(systemName: "xmark")
-                    .font(.system(size: 9, weight: .bold))
+                    .font(.app(size: 9, weight: .bold))
                     .foregroundStyle(.textMuted)
                     .frame(width: 16, height: 16)
                     .contentShape(Rectangle())

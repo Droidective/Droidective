@@ -212,7 +212,7 @@ private struct MirrorStage: View {
     ) -> some View {
         Button(action: action) {
             Image(systemName: systemImage)
-                .font(.title3)
+                .font(.app(.title3))
                 .foregroundStyle(tint ?? .primary)
                 .frame(width: 44, height: 30)
                 .contentShape(Rectangle())
@@ -223,7 +223,7 @@ private struct MirrorStage: View {
 
     private func statusCard(icon: String, text: String) -> some View {
         VStack(spacing: 10) {
-            Image(systemName: icon).font(.system(size: 34))
+            Image(systemName: icon).font(.app(size: 34))
             Text(text).multilineTextAlignment(.center)
         }
         .foregroundStyle(.white)

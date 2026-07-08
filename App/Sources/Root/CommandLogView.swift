@@ -13,7 +13,7 @@ struct CommandLogView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("Command Log")
-                    .font(.headline)
+                    .font(.app(.headline))
                 Spacer()
                 Button {
                     Task { await refresh() }

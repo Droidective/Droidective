@@ -62,7 +62,7 @@ struct MeminfoView: View {
                     summaryCard(info)
                 }
                 Text("Refreshes every 2 seconds.")
-                    .font(.footnote)
+                    .font(.app(.footnote))
                     .foregroundStyle(.tertiary)
             }
             .centeredColumn(maxWidth: 640)
@@ -82,7 +82,7 @@ struct MeminfoView: View {
 
     private func stat(_ label: String, _ value: String, big: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(label).font(.footnote).foregroundStyle(.textMuted)
+            Text(label).font(.app(.footnote)).foregroundStyle(.textMuted)
             Text(value)
                 .font(big ? .system(.largeTitle, design: .rounded).weight(.semibold)
                           : .system(.title3, design: .rounded).weight(.medium))
@@ -93,8 +93,8 @@ struct MeminfoView: View {
     private var graphCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text("Total PSS over time").font(.headline)
-                Text("MB").font(.caption).foregroundStyle(.textMuted)
+                Text("Total PSS over time").font(.app(.headline))
+                Text("MB").font(.app(.caption)).foregroundStyle(.textMuted)
                 Spacer()
             }
             chart
@@ -103,7 +103,7 @@ struct MeminfoView: View {
                 .overlay {
                     if history.count < 2 {
                         Text("Collecting samples…")
-                            .font(.callout).foregroundStyle(.textMuted)
+                            .font(.app(.callout)).foregroundStyle(.textMuted)
                     }
                 }
         }
@@ -144,7 +144,7 @@ struct MeminfoView: View {
                         overflowResolution: .init(x: .fit(to: .chart), y: .disabled)
                     ) {
                         Text("\(Int(selected.elapsed))s · \(formatKb(selected.pssKb))")
-                            .font(.caption2.monospacedDigit())
+                            .font(.app(.caption2).monospacedDigit())
                             .padding(.horizontal, 6).padding(.vertical, 3)
                             .background(Color.bgSurface, in: RoundedRectangle(cornerRadius: 5))
                     }

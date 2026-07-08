@@ -191,7 +191,7 @@ struct FileExplorerView: View {
     private var selectionBar: some View {
         HStack(spacing: 8) {
             Text("\(selection.count) selected")
-                .font(.footnote)
+                .font(.app(.footnote))
                 .foregroundStyle(.textMuted)
             Spacer()
             Button("Copy") { clipboard = (selectedEntries.map(path(for:)), false) }
@@ -325,7 +325,7 @@ struct FileExplorerView: View {
             Spacer()
             if !entry.isDir {
                 Text(ByteCountFormatter.string(fromByteCount: Int64(entry.size), countStyle: .file))
-                    .font(.footnote)
+                    .font(.app(.footnote))
                     .foregroundStyle(.textMuted)
             }
         }
@@ -372,7 +372,7 @@ struct FileExplorerView: View {
             HStack {
                 Image(systemName: entry.isDir ? "folder.fill" : "doc")
                     .foregroundStyle(entry.isDir ? .textMain : .textMuted)
-                Text(entry.name).font(.headline)
+                Text(entry.name).font(.app(.headline))
                 Spacer()
                 Button("Done") { infoTarget = nil }
             }
@@ -397,7 +397,7 @@ struct FileExplorerView: View {
                         Text(path(for: entry)).textSelection(.enabled)
                     }
                     Text("Android doesn't record file creation time — Modified is the closest signal.")
-                        .font(.caption)
+                        .font(.app(.caption))
                         .foregroundStyle(.tertiary)
                 } else {
                     HStack {

@@ -42,7 +42,7 @@ struct BugReportView: View {
                         Text("Collecting screenshot, logs, and device info…").foregroundStyle(.textMuted)
                     }
                 } else if state.targetSerials.isEmpty {
-                    Text("Connect a device first.").font(.footnote).foregroundStyle(.textMuted)
+                    Text("Connect a device first.").font(.app(.footnote)).foregroundStyle(.textMuted)
                 }
 
                 if let last = lastReport, last.result.ok, let path = last.result.revealPath {
@@ -52,7 +52,7 @@ struct BugReportView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Bug report saved").foregroundStyle(.textMain)
                             Text((path as NSString).lastPathComponent)
-                                .font(.footnote).foregroundStyle(.textMuted)
+                                .font(.app(.footnote)).foregroundStyle(.textMuted)
                         }
                         Spacer()
                         Button("Reveal in Finder") {
@@ -69,7 +69,7 @@ struct BugReportView: View {
             Image(systemName: icon).foregroundStyle(.textMuted).frame(width: 22)
             VStack(alignment: .leading, spacing: 1) {
                 Text(title).foregroundStyle(.textMain)
-                Text(detail).font(.footnote).foregroundStyle(.textMuted)
+                Text(detail).font(.app(.footnote)).foregroundStyle(.textMuted)
             }
             Spacer()
         }

@@ -635,7 +635,7 @@ struct JSConsoleView: View {
                 .focused($findFocused)
                 .onSubmit { session.findNext() }
                 .onKeyPress(.escape) { session.closeFind(); return .handled }
-            Text(session.findCountLabel).font(.caption.monospacedDigit()).foregroundStyle(.secondary).fixedSize()
+            Text(session.findCountLabel).font(.app(.caption).monospacedDigit()).foregroundStyle(.secondary).fixedSize()
             Button { session.findPrev() } label: { Image(systemName: "chevron.up") }
                 .buttonStyle(IconButtonStyle(size: .small))
                 .disabled(session.findMatchIDs.isEmpty)
@@ -672,7 +672,7 @@ struct JSConsoleView: View {
     private var statusBadge: some View {
         HStack(spacing: 6) {
             Circle().fill(statusColor).frame(width: 8, height: 8)
-            Text(statusText).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            Text(statusText).font(.app(.caption)).foregroundStyle(.secondary).lineLimit(1)
         }
         .fixedSize()
     }
@@ -722,7 +722,7 @@ struct JSConsoleView: View {
 
     private var portField: some View {
         HStack(spacing: 4) {
-            Text("Port").font(.caption).foregroundStyle(.secondary)
+            Text("Port").font(.app(.caption)).foregroundStyle(.secondary)
             TextField("8081", text: $portText)
                 .frame(width: 52)
                 .multilineTextAlignment(.center)
@@ -751,7 +751,7 @@ struct JSConsoleView: View {
             Button { session.newestFirst.toggle() } label: { Image(systemName: "arrow.up.arrow.down") }
                 .buttonStyle(IconButtonStyle())
                 .help("Order: \(session.newestFirst ? "newest first" : "oldest first") — tap to flip")
-            Toggle("Time", isOn: $session.showTimestamps).toggleStyle(.checkbox).font(.caption)
+            Toggle("Time", isOn: $session.showTimestamps).toggleStyle(.checkbox).font(.app(.caption))
             Button { session.clear() } label: { Image(systemName: "trash") }
                 .buttonStyle(IconButtonStyle())
                 .help("Clear the console")
@@ -773,9 +773,9 @@ struct JSConsoleView: View {
                 Image(systemName: "line.3.horizontal.decrease.circle")
                 Text(allShown ? "All levels" : "Levels \(shown)/\(JSLevel.allCases.count)")
                     .fixedSize()
-                Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
+                Image(systemName: "chevron.down").font(.app(size: 9, weight: .semibold))
             }
-            .font(.caption)
+            .font(.app(.caption))
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .background(.quaternary.opacity(allShown ? 0 : 0.7), in: Capsule())
@@ -790,7 +790,7 @@ struct JSConsoleView: View {
     private var levelPicker: some View {
         @Bindable var session = state.jsConsoleSession
         return VStack(alignment: .leading, spacing: 8) {
-            Text("Show levels").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            Text("Show levels").font(.app(.caption).weight(.semibold)).foregroundStyle(.secondary)
             ForEach(JSLevel.allCases, id: \.self) { level in
                 Toggle(isOn: Binding(
                     get: { !session.hiddenLevels.contains(level) },
@@ -814,7 +814,7 @@ struct JSConsoleView: View {
                 Button("Hide All") { session.hiddenLevels = Set(JSLevel.allCases) }
                     .disabled(session.hiddenLevels.count == JSLevel.allCases.count)
             }
-            .font(.caption)
+            .font(.app(.caption))
             .buttonStyle(.link)
         }
         .padding(12)
@@ -912,13 +912,13 @@ struct JSConsoleView: View {
     private var inputBar: some View {
         HStack(alignment: .bottom, spacing: 8) {
             Image(systemName: "chevron.right")
-                .font(.system(.body, design: .monospaced))
+                .font(.app(.body, design: .monospaced))
                 .foregroundStyle(session.isConnected ? Color.accentColor : .secondary)
                 .padding(.bottom, 5)
             ZStack(alignment: .topLeading) {
                 if input.isEmpty {
                     Text("Evaluate JavaScript…  (⇧⏎ for a new line)")
-                        .font(.system(.body, design: .monospaced))
+                        .font(.app(.body, design: .monospaced))
                         .foregroundStyle(.tertiary)
                         .padding(.leading, 5)
                         .allowsHitTesting(false)
@@ -965,7 +965,7 @@ private struct JSEntryRow: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             if showTimestamp {
                 Text(entry.at, format: .dateTime.hour().minute().second())
-                    .font(.caption2.monospacedDigit())
+                    .font(.app(.caption2).monospacedDigit())
                     .foregroundStyle(JSConsoleTheme.muted)
                     .padding(.top, 1)
             }
@@ -1010,7 +1010,7 @@ private struct JSEntryRow: View {
 
     private func icon(_ name: String, _ style: some ShapeStyle) -> some View {
         Image(systemName: name)
-            .font(.caption)
+            .font(.app(.caption))
             .foregroundStyle(style)
             .frame(width: 14)
             .padding(.top, 2)
@@ -1033,7 +1033,7 @@ private struct JSEntryRow: View {
 
     private func line(_ text: String, base: Color) -> some View {
         highlightedText(text, query: query, base: base, current: isCurrentFind)
-            .font(.system(.callout, design: .monospaced))
+            .font(.app(.callout, design: .monospaced))
             .lineSpacing(2)
             .textSelection(.enabled)
             .fixedSize(horizontal: false, vertical: true)
@@ -1053,7 +1053,7 @@ private struct JSEntryRow: View {
                         line(text, base: level.consoleTextColor)
                     } else {
                         coloredTokenText(tokens, query: query, current: isCurrentFind)
-                            .font(.system(.callout, design: .monospaced))
+                            .font(.app(.callout, design: .monospaced))
                             .lineSpacing(2)
                             .textSelection(.enabled)
                             .fixedSize(horizontal: false, vertical: true)
@@ -1148,7 +1148,7 @@ private struct JSValueView: View {
                 } label: {
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
                         Image(systemName: expanded ? "chevron.down" : "chevron.right")
-                            .font(.system(size: 10, weight: .bold))
+                            .font(.app(size: 10, weight: .bold))
                             .foregroundStyle(.secondary)
                             .frame(width: 14)
                         summaryText
@@ -1172,7 +1172,7 @@ private struct JSValueView: View {
 
     private var summaryText: some View {
         coloredTokenText(object.tokens, query: query, current: false)
-            .font(.system(.callout, design: .monospaced))
+            .font(.app(.callout, design: .monospaced))
             .textSelection(.enabled)
     }
 
@@ -1200,7 +1200,7 @@ private struct JSValueView: View {
             // start rather than the feed reflowing to its end.
             ExpandedTree(node: snapshot, session: session)
         } else if failed {
-            Text("Couldn't read this value.").font(.caption).foregroundStyle(.tertiary)
+            Text("Couldn't read this value.").font(.app(.caption)).foregroundStyle(.tertiary)
         }
     }
 
@@ -1293,11 +1293,11 @@ private struct SnapChildrenView: View {
         Text(query.isEmpty
             ? (node.type == "array" ? "(empty array)" : "(no enumerable properties)")
             : "No matches")
-            .font(.caption).foregroundStyle(.tertiary)
+            .font(.app(.caption)).foregroundStyle(.tertiary)
     }
 
     private func moreRow(_ text: String) -> some View {
-        Text(text).font(.caption).foregroundStyle(.tertiary)
+        Text(text).font(.app(.caption)).foregroundStyle(.tertiary)
     }
 }
 
@@ -1326,12 +1326,12 @@ private struct SnapValueView: View {
                 } label: {
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
                         Image(systemName: isOpen ? "chevron.down" : "chevron.right")
-                            .font(.system(size: 10, weight: .bold))
+                            .font(.app(size: 10, weight: .bold))
                             .foregroundStyle(.secondary)
                             .frame(width: 14)
                         labelText
                         highlightedText(summary, query: highlight, base: jsColor(.className))
-                            .font(.system(.callout, design: .monospaced))
+                            .font(.app(.callout, design: .monospaced))
                     }
                     .contentShape(Rectangle())
                 }
@@ -1346,7 +1346,7 @@ private struct SnapValueView: View {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 labelText
                 highlightedText(primitiveText, query: highlight, base: jsColor(kind))
-                    .font(.system(.callout, design: .monospaced))
+                    .font(.app(.callout, design: .monospaced))
                     .textSelection(.enabled)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1356,7 +1356,7 @@ private struct SnapValueView: View {
     @ViewBuilder private var labelText: some View {
         if let label {
             highlightedText("\(label):", query: highlight, base: jsColor(.key))
-                .font(.system(.callout, design: .monospaced))
+                .font(.app(.callout, design: .monospaced))
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -1397,7 +1397,7 @@ private struct StackView: View {
         VStack(alignment: .leading, spacing: 1) {
             ForEach(stack.callFrames.prefix(8)) { frame in
                 Text(frame.display)
-                    .font(.caption2.monospaced())
+                    .font(.app(.caption2).monospaced())
                     .foregroundStyle(JSConsoleTheme.muted)
             }
         }

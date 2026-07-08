@@ -34,7 +34,7 @@ struct CatalogView: View {
                 Text(feature.title)
                 if let subtitle = feature.subtitle {
                     Text(subtitle)
-                        .font(.footnote)
+                        .font(.app(.footnote))
                         .foregroundStyle(.textMuted)
                 }
             }
@@ -91,7 +91,7 @@ struct GroupHeaderView: View {
         HStack(spacing: 6) {
             if onToggleCollapse != nil {
                 Image(systemName: collapsed ? "chevron.right" : "chevron.down")
-                    .font(.caption2)
+                    .font(.app(.caption2))
                     .foregroundStyle(.textMuted)
                     .frame(width: 9)
             }
@@ -100,7 +100,7 @@ struct GroupHeaderView: View {
             if showsDragHandle, reordering {
                 let grip = Image(systemName: "line.3.horizontal")
                     .foregroundStyle(.brandAccent)
-                    .font(.body)
+                    .font(.app(.body))
                 if let dragProvider {
                     grip.onDrag(dragProvider).help("Drag to reorder this group")
                 } else {

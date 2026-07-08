@@ -25,7 +25,7 @@ extension ShapeStyle where Self == Color {
     /// Subtitles, timestamps, labels, and quiet navigation/input icons.
     static var textMuted: Color { Color("TextMuted") }
     /// "The electricity" — CTAs, active toggles, selection, loaders, logo mark.
-    /// Honors a user-chosen accent (Settings ▸ General) when set, otherwise the
+    /// Honors a user-chosen accent (Settings ▸ Appearance) when set, otherwise the
     /// bundled asset. A fixed color either way, so it doesn't desaturate on focus
     /// loss the way the system accent would. Read fresh per render; the app keys
     /// its root view on the stored accent so a change rebuilds and re-reads it.
@@ -43,10 +43,12 @@ extension ShapeStyle where Self == Color {
 let accentColorDefaultsKey = "accentColorHex"
 
 extension Color {
-    /// Parse "#RRGGBB" / "RRGGBB" as sRGB. nil on malformed input.
+    /// Parse "#RRGGBB" / "RRGGBB" (or the "#RGB" shorthand) as sRGB. nil on
+    /// malformed input.
     init?(hex: String) {
         var s = hex.trimmingCharacters(in: .whitespaces)
         if s.hasPrefix("#") { s.removeFirst() }
+        if s.count == 3 { s = s.map { "\($0)\($0)" }.joined() }
         guard s.count == 6, let value = UInt32(s, radix: 16) else { return nil }
         self.init(
             .sRGB,

@@ -7,6 +7,7 @@ import SwiftUI
 /// permission toggles.
 struct AppsExplorerView: View {
     @Environment(AppState.self) private var state
+    @Environment(\.colorScheme) private var colorScheme
     @State private var apps: [AppListing]?
     @State private var states: [String: AppLifecycle] = [:]
     @State private var search = ""
@@ -83,35 +84,14 @@ struct AppsExplorerView: View {
                         ContentUnavailableView.search(text: search)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
-                        List(visibleApps, selection: $selectedPackage) { app in
-                            HStack(spacing: 8) {
-                                AppIconView(packageId: app.packageId, name: app.displayName, serial: serial)
-                                    .frame(width: 28, height: 28)
-                                VStack(alignment: .leading, spacing: 1) {
-                                    HStack(spacing: 6) {
-                                        Text(app.displayName)
-                                        if app.isSystem {
-                                            Text("system")
-                                                .font(.caption2)
-                                                .foregroundStyle(.textMuted)
-                                                .padding(.horizontal, 4)
-                                                .background(Color.bgSurface, in: Capsule())
-                                        }
-                                        lifecycleBadge(for: app.packageId)
-                                    }
-                                    Text("\(app.packageId)\(app.versionName.map { " · v\($0)" } ?? "")")
-                                        .font(.footnote)
-                                        .foregroundStyle(.textMuted)
-                                        .lineLimit(1)
-                                }
-                            }
-                            .tag(app.packageId)
+                        List(visibleApps) { app in
+                            appRow(app)
                         }
                         .frame(minWidth: 260)
                     }
                     HStack {
                         Text("\(visibleApps.count) of \(apps.count) apps")
-                            .font(.caption)
+                            .font(.app(.caption))
                             .foregroundStyle(.tertiary)
                         Spacer()
                     }
@@ -145,6 +125,50 @@ struct AppsExplorerView: View {
         }
     }
 
+    /// One app row with hand-drawn selection. The native `List(selection:)`
+    /// highlight follows the control accent — the bundled green asset, which a
+    /// custom accent can't recolor — so the row draws its own `.brandAccent`
+    /// background instead.
+    private func appRow(_ app: AppListing) -> some View {
+        let isSelected = selectedPackage == app.packageId
+        let accentText = Color.brandAccent.contrastingForeground(for: colorScheme)
+        return Button { selectedPackage = app.packageId } label: {
+            HStack(spacing: 8) {
+                AppIconView(packageId: app.packageId, name: app.displayName, serial: serial)
+                    .frame(width: 28, height: 28)
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 6) {
+                        Text(app.displayName)
+                            .foregroundStyle(isSelected ? accentText : Color.primary)
+                        if app.isSystem {
+                            Text("system")
+                                .font(.app(.caption2))
+                                .foregroundStyle(isSelected ? accentText.opacity(0.8) : Color.textMuted)
+                                .padding(.horizontal, 4)
+                                .background(
+                                    isSelected ? AnyShapeStyle(accentText.opacity(0.15)) : AnyShapeStyle(Color.bgSurface),
+                                    in: Capsule()
+                                )
+                        }
+                        lifecycleBadge(for: app.packageId)
+                    }
+                    Text("\(app.packageId)\(app.versionName.map { " · v\($0)" } ?? "")")
+                        .font(.app(.footnote))
+                        .foregroundStyle(isSelected ? accentText.opacity(0.8) : Color.textMuted)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .listRowBackground(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(isSelected ? AnyShapeStyle(.brandAccent) : AnyShapeStyle(Color.clear))
+                .padding(.horizontal, 6)
+        )
+    }
+
     @ViewBuilder
     private func lifecycleBadge(for packageId: String) -> some View {
         if let lifecycle = states[packageId], lifecycle.removed {
@@ -166,7 +190,7 @@ struct AppsExplorerView: View {
 
     private func badge(_ text: String, _ color: Color) -> some View {
         Text(text)
-            .font(.caption2)
+            .font(.app(.caption2))
             .foregroundStyle(color)
             .padding(.horizontal, 4)
             .background(color.opacity(0.15), in: Capsule())
@@ -226,7 +250,7 @@ private struct AppDetailPane: View {
                     AppIconView(packageId: packageId, name: derivedName, serial: state.targetSerials.first ?? "")
                         .frame(width: 40, height: 40)
                     Text(packageId)
-                        .font(.callout)
+                        .font(.app(.callout))
                         .textSelection(.enabled)
                 }
                 if let info, info.installed {
@@ -286,7 +310,7 @@ private struct AppDetailPane: View {
                                 VStack(alignment: .leading) {
                                     Text(permission.shortName)
                                     Text(permission.name)
-                                        .font(.caption)
+                                        .font(.app(.caption))
                                         .foregroundStyle(.textMuted)
                                 }
                             }
@@ -374,7 +398,7 @@ private struct AppDetailPane: View {
             VStack(spacing: 0) {
                 HStack {
                     Text("Files · \(packageId)")
-                        .font(.headline)
+                        .font(.app(.headline))
                         .lineLimit(1)
                         .truncationMode(.middle)
                     Spacer()
@@ -557,7 +581,7 @@ struct MonogramIcon: View {
             .fill(color.gradient)
             .overlay(
                 Text(initial)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.app(size: 13, weight: .semibold))
                     .foregroundStyle(color.contrastingForeground)
                     .minimumScaleFactor(0.6)
             )

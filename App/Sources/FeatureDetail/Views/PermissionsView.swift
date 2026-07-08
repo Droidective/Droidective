@@ -50,7 +50,7 @@ struct PermissionsView: View {
                     VStack(alignment: .leading) {
                         Text(entry.shortName)
                         Text(entry.name)
-                            .font(.footnote)
+                            .font(.app(.footnote))
                             .foregroundStyle(.textMuted)
                     }
                     if isMutating {

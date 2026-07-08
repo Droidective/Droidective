@@ -26,10 +26,10 @@ struct ScreenshotView: View {
         VStack(spacing: 20) {
             VStack(spacing: 10) {
                 Image(systemName: "camera")
-                    .font(.system(size: 46))
+                    .font(.app(size: 46))
                     .foregroundStyle(.textMuted)
                 Text("Capture a screenshot")
-                    .font(.title3.weight(.semibold))
+                    .font(.app(.title3).weight(.semibold))
                 Text("Grab the device screen, then mark it up, crop, and save —\nnothing is written to disk until you choose to.")
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.textMuted)
@@ -60,7 +60,7 @@ struct ScreenshotView: View {
 
             if state.targetSerials.isEmpty {
                 Text("Connect a device to capture.")
-                    .font(.footnote)
+                    .font(.app(.footnote))
                     .foregroundStyle(.textMuted)
             }
         }

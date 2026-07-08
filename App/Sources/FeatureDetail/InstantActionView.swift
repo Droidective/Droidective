@@ -46,7 +46,7 @@ struct InstantActionView: View {
                 .keyboardShortcut(.return, modifiers: .command)
 
                 Text("Runs instantly. Tip: just click it in the sidebar — no need to open this.")
-                    .font(.callout)
+                    .font(.app(.callout))
                     .foregroundStyle(.textMuted)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 340)

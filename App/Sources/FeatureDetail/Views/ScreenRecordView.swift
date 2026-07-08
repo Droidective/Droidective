@@ -100,7 +100,7 @@ struct ScreenRecordView: View {
                         .fill(Color.brandAccent.opacity(0.12))
                         .frame(width: 96, height: 96)
                     Image(systemName: "video.fill")
-                        .font(.system(size: 38))
+                        .font(.app(size: 38))
                         .foregroundStyle(.brandAccent)
                 }
             }
@@ -116,13 +116,13 @@ struct ScreenRecordView: View {
                             Text(startedAt, style: .timer)
                         }
                     }
-                    .font(.system(size: 30, weight: .semibold, design: .monospaced))
+                    .font(.app(size: 30, weight: .semibold, design: .monospaced))
                     .monospacedDigit()
                     Text(isPaused ? "Paused" : "Recording…")
-                        .font(.subheadline)
+                        .font(.app(.subheadline))
                         .foregroundStyle(isPaused ? Color.secondary : Color.red)
                 } else {
-                    Text("Ready to record").font(.title2.weight(.semibold))
+                    Text("Ready to record").font(.app(.title2).weight(.semibold))
                 }
             }
 
@@ -161,7 +161,7 @@ struct ScreenRecordView: View {
 
     private var recBadge: some View {
         Label(isPaused ? "PAUSED" : "REC", systemImage: isPaused ? "pause.fill" : "record.circle.fill")
-            .font(.caption2.weight(.bold))
+            .font(.app(.caption2).weight(.bold))
             .foregroundStyle(.white)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
@@ -209,7 +209,7 @@ struct ScreenRecordView: View {
 
     @ViewBuilder private var hints: some View {
         if state.targetSerials.isEmpty {
-            Text("Connect a device to record.").font(.footnote).foregroundStyle(.textMuted)
+            Text("Connect a device to record.").font(.app(.footnote)).foregroundStyle(.textMuted)
         }
     }
 
@@ -225,11 +225,11 @@ struct ScreenRecordView: View {
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "chevron.right")
-                            .font(.caption.weight(.semibold))
+                            .font(.app(.caption).weight(.semibold))
                             .foregroundStyle(.textMuted)
                             .rotationEffect(.degrees(showAdvanced ? 90 : 0))
                         Text("Advanced options")
-                            .font(.callout.weight(.medium))
+                            .font(.app(.callout).weight(.medium))
                         Spacer()
                     }
                     .contentShape(Rectangle())

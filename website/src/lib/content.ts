@@ -47,7 +47,7 @@ export interface Feature {
 }
 
 export const features: Feature[] = [
-  { icon: Search, title: "Command palette", body: "Fuzzy-search every tool and run it instantly. Pin favorites, bind global hotkeys, and stop looking up adb flags.", shell: "⌘K → run anything" },
+  { icon: Search, title: "Command palette", body: "Fuzzy-search every tool and run it instantly. Pin favorites, bind global hotkeys, and stop looking up adb flags.", shell: "⌘T → run anything" },
   { icon: Cast, title: "Screen mirror & record", body: "A friendly GUI for scrcpy — mirror and control the device, tune bitrate, FPS and crop, record to file or GIF.", shell: "scrcpy --max-size 1920" },
   { icon: ScrollText, title: "Logcat & crash catcher", body: "Stream logs with level, tag and per-app filters, follow an app across restarts, grab the last crash for Slack or Jira.", shell: "adb logcat -v color" },
   { icon: Folder, title: "Device file explorer", body: "Browse shared storage — or the whole filesystem on rooted devices — copy, move, delete, and push/pull to your Mac.", shell: "adb pull /sdcard/..." },
@@ -69,7 +69,7 @@ export interface Guide {
 
 export const guides: Guide[] = [
   { icon: Atom, title: "React Native debugging", body: "Built-in Reactotron, the dev menu, JS reload, and Metro port forwarding — one RN hub, no terminal.", cta: "Open the RN guide →", href: "/react-native-debugger.html" },
-  { icon: Search, title: "Android developers", body: "Tail logcat, watch performance, browse device files, and drive apps — every adb command behind ⌘K.", cta: "For Android developers →", href: "/for-android-developers.html" },
+  { icon: Search, title: "Android developers", body: "Tail logcat, watch performance, browse device files, and drive apps — every adb command behind ⌘T.", cta: "For Android developers →", href: "/for-android-developers.html" },
   { icon: Bug, title: "QA & testers", body: "Reproduce, capture, and report bugs in minutes — fake state, mark up a screenshot, pull a full bug report.", cta: "For QA & testers →", href: "/for-qa-and-testers.html" },
   { icon: Activity, title: "Support teams", body: "See the device, pull the diagnostics, close the ticket — mirror the screen and grab logs, no adb needed.", cta: "For support teams →", href: "/for-support-teams.html" },
   { icon: Cast, title: "scrcpy GUI for Mac", body: "A native GUI for scrcpy — mirror, control, and record your Android screen, with ffmpeg bundled in.", cta: "scrcpy GUI for Mac →", href: "/scrcpy-gui-mac.html" },
@@ -89,14 +89,14 @@ export const showcases: Showcase[] = [
   {
     eyebrow: "the palette",
     title: "One keystroke to everything",
-    body: "Hit ⌘K from any screen and fuzzy-search all 56 tools. The device bar follows you, so every command targets the device you mean.",
+    body: "Hit ⌘T from any screen and fuzzy-search all 56 tools. The device bar follows you, so every command targets the device you mean.",
     ticks: [
       { lead: "Pin favorites", rest: " and bind global hotkeys" },
       { lead: "Target one device", rest: " or fan out to all of them" },
       { lead: "Every run is logged", rest: " with the exact adb command" },
     ],
     image: "/assets/screenshot-palette.webp",
-    alt: "Droidective ⌘K command palette filtering features for the query 'screen' — Screenshot, Screen Record, Mirror Screen and more",
+    alt: "Droidective ⌘T command palette filtering features for the query 'screen' — Screenshot, Screen Record, Mirror Screen and more",
     flip: false,
   },
   {

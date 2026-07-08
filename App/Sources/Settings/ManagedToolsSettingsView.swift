@@ -39,7 +39,7 @@ struct ManagedToolsSettingsView: View {
         Form {
             Section {
                 Text("Downloaded from each tool's GitHub releases and kept in Application Support. frida-server and frida-gadget are device-specific — manage them from the Frida screen.")
-                    .font(.footnote).foregroundStyle(.textMuted)
+                    .font(.app(.footnote)).foregroundStyle(.textMuted)
             }
             Section("Tools") {
                 ForEach(Self.items, id: \.tool) { row($0) }
@@ -49,7 +49,7 @@ struct ManagedToolsSettingsView: View {
                     Label(checking ? "Checking…" : "Check for updates", systemImage: "arrow.clockwise")
                 }
                 .disabled(checking || busy != nil)
-                if let error { Text(error).font(.footnote).foregroundStyle(.orange) }
+                if let error { Text(error).font(.app(.footnote)).foregroundStyle(.orange) }
             }
             Section("Decompiled cache") {
                 LabeledContent("Size", value: ByteCountFormatter.string(fromByteCount: cacheSize, countStyle: .file))
@@ -61,7 +61,7 @@ struct ManagedToolsSettingsView: View {
                     .disabled(cacheSize == 0)
                 }
                 Text("jadx/apktool output — reused while the app is open and cleared automatically when you quit. The downloaded tools above are kept.")
-                    .font(.footnote).foregroundStyle(.textMuted)
+                    .font(.app(.footnote)).foregroundStyle(.textMuted)
             }
         }
         .formStyle(.grouped)
@@ -98,7 +98,7 @@ struct ManagedToolsSettingsView: View {
                     if let upgrade = upgrades[item.tool] {
                         Button("Update to \(upgrade)") { Task { await install(item.tool) } }.disabled(busy != nil)
                     } else {
-                        Text("up to date").font(.caption).foregroundStyle(.textMuted)
+                        Text("up to date").font(.app(.caption)).foregroundStyle(.textMuted)
                     }
                     Menu {
                         Button("Reveal in Finder") { reveal(item.tool) }
@@ -115,7 +115,7 @@ struct ManagedToolsSettingsView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.name)
                 Text(subtitle(item))
-                    .font(.caption).foregroundStyle(.textMuted)
+                    .font(.app(.caption)).foregroundStyle(.textMuted)
             }
         }
     }

@@ -39,7 +39,7 @@ struct QuickActionFormView: View {
                 .disabled(running)
                 .keyboardShortcut(.return, modifiers: .command)
                 Text("⏎ or ⌘⏎ to run")
-                    .font(.caption)
+                    .font(.app(.caption))
                     .foregroundStyle(.textMuted)
             }
         }
@@ -77,7 +77,7 @@ struct QuickActionFormView: View {
         default:
             VStack(alignment: .leading, spacing: 4) {
                 Text(field.label)
-                    .font(.caption)
+                    .font(.app(.caption))
                     .foregroundStyle(.textMuted)
                 control(for: field)
             }
@@ -124,7 +124,7 @@ struct QuickActionFormView: View {
             let range = (field.min ?? 0)...(field.max ?? 1)
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(field.label): \(sliderValues[field.name] ?? defaultSlider(field), specifier: "%.2f")")
-                    .font(.caption)
+                    .font(.app(.caption))
                     .foregroundStyle(.textMuted)
                 Slider(value: sliderBinding(for: field), in: range, step: field.step ?? 1)
             }

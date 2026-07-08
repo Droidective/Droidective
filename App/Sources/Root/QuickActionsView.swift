@@ -287,12 +287,12 @@ struct QuickActionsView: View {
         HStack(spacing: 12) {
             if stack.isEmpty {
                 Image(systemName: "bolt.fill")
-                    .font(.title)
+                    .font(.app(.title))
                     .foregroundStyle(.brandAccent)
             } else {
                 Button(action: pop) {
                     Image(systemName: "chevron.left")
-                        .font(.title2.weight(.semibold))
+                        .font(.app(.title2).weight(.semibold))
                         .foregroundStyle(.textMuted)
                         .contentShape(Rectangle())
                 }
@@ -301,15 +301,15 @@ struct QuickActionsView: View {
             }
             if let feature = formFeature {
                 Text(feature.title)
-                    .font(.title)
+                    .font(.app(.title))
                 Spacer()
                 Image(systemName: feature.icon)
-                    .font(.title2)
+                    .font(.app(.title2))
                     .foregroundStyle(.brandAccent)
             } else {
                 TextField(searchPlaceholder, text: $query)
                     .textFieldStyle(.plain)
-                    .font(.title)
+                    .font(.app(.title))
                     .focused($searchFocused)
                     .onSubmit { if let row = highlightedRow { activate(row) } }
                     .onKeyPress(.downArrow) { moveVertical(1); return .handled }
@@ -365,7 +365,7 @@ struct QuickActionsView: View {
             } else {
                 Divider()
                 Text(emptyMessage)
-                    .font(.callout)
+                    .font(.app(.callout))
                     .foregroundStyle(.textMuted)
                     .padding(14)
             }
@@ -417,7 +417,7 @@ struct QuickActionsView: View {
                     }
                     if grid.isEmpty && appOpeners.isEmpty {
                         Text(query.isEmpty ? "Nothing to run yet" : "No matching actions")
-                            .font(.callout)
+                            .font(.app(.callout))
                             .foregroundStyle(.textMuted)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 24)
@@ -438,7 +438,7 @@ struct QuickActionsView: View {
 
     private func sectionLabel(_ title: String) -> some View {
         Text(title)
-            .font(.caption.weight(.semibold))
+            .font(.app(.caption).weight(.semibold))
             .foregroundStyle(.textMuted)
             .padding(.horizontal, 4)
     }
@@ -816,12 +816,12 @@ struct QuickActionsView: View {
                 ProgressView().controlSize(.small).frame(height: 26)
             } else {
                 Image(systemName: row.icon)
-                    .font(.title2)
+                    .font(.app(.title2))
                     .frame(height: 26)
                     .foregroundStyle(isHighlighted ? AnyShapeStyle(accentText) : AnyShapeStyle(.brandAccent))
             }
             Text(row.title)
-                .font(.caption)
+                .font(.app(.caption))
                 .multilineTextAlignment(.center)
                 .lineLimit(2, reservesSpace: true)
         }
@@ -835,7 +835,7 @@ struct QuickActionsView: View {
         .overlay(alignment: .topTrailing) {
             if isPinned(row) {
                 Image(systemName: "pin.fill")
-                    .font(.system(size: 8))
+                    .font(.app(size: 8))
                     .foregroundStyle(isHighlighted ? AnyShapeStyle(accentText.opacity(0.8)) : AnyShapeStyle(.brandAccent))
                     .padding(4)
             }
@@ -872,7 +872,7 @@ struct QuickActionsView: View {
                     .foregroundStyle(row.destructive && !isHighlighted ? AnyShapeStyle(.red) : AnyShapeStyle(.primary))
                 if let subtitle = row.subtitle {
                     Text(subtitle)
-                        .font(.caption)
+                        .font(.app(.caption))
                         .foregroundStyle(isHighlighted ? accentText.opacity(0.75) : .secondary)
                         .lineLimit(1)
                 }
@@ -880,26 +880,26 @@ struct QuickActionsView: View {
             Spacer()
             if isPinned(row) {
                 Image(systemName: "pin.fill")
-                    .font(.caption2)
+                    .font(.app(.caption2))
                     .foregroundStyle(isHighlighted ? AnyShapeStyle(accentText.opacity(0.8)) : AnyShapeStyle(.brandAccent))
             }
             if isArmed {
                 Text("⏎ to confirm")
-                    .font(.caption2.weight(.semibold))
+                    .font(.app(.caption2).weight(.semibold))
                     .foregroundStyle(isHighlighted ? AnyShapeStyle(accentText) : AnyShapeStyle(.orange))
             } else if let badge = row.badge {
                 Text(badge)
-                    .font(.caption2)
+                    .font(.app(.caption2))
                     .foregroundStyle(isHighlighted ? accentText.opacity(0.75) : .secondary)
             }
             if case .openInApp = row.action {
                 Image(systemName: "arrow.up.forward.app")
-                    .font(.caption)
+                    .font(.app(.caption))
                     .foregroundStyle(isHighlighted ? accentText.opacity(0.75) : .secondary)
             }
             if row.pushes {
                 Image(systemName: "chevron.right")
-                    .font(.caption)
+                    .font(.app(.caption))
                     .foregroundStyle(isHighlighted ? accentText.opacity(0.75) : .secondary)
             }
             if showsDigitHint, index < 8 {
@@ -999,20 +999,20 @@ struct QuickActionsView: View {
             if runningRowID != nil {
                 ProgressView().controlSize(.small)
                 Text("Running…")
-                    .font(.caption)
+                    .font(.app(.caption))
                     .foregroundStyle(.textMuted)
             } else if let armedRowID, let row = flatItems.first(where: { $0.id == armedRowID }) {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
                 Text("Press ⏎ again to \(row.title.lowercased()) — this can't be undone")
-                    .font(.caption)
+                    .font(.app(.caption))
                     .foregroundStyle(.orange)
                     .lineLimit(1)
             } else if let lastRun {
                 Image(systemName: lastRun.ok ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                     .foregroundStyle(lastRun.ok ? Color.brandAccent : Color.orange)
                 Text(lastRun.message)
-                    .font(.caption)
+                    .font(.app(.caption))
                     .lineLimit(1)
                     .truncationMode(.tail)
                 if let path = lastRun.revealPath {
@@ -1020,7 +1020,7 @@ struct QuickActionsView: View {
                         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
                     }
                     .buttonStyle(.link)
-                    .font(.caption)
+                    .font(.app(.caption))
                     .help("Show in Finder")
                 }
                 if let copyText = lastRun.copyText {
@@ -1029,11 +1029,11 @@ struct QuickActionsView: View {
                         NSPasteboard.general.setString(copyText, forType: .string)
                     }
                     .buttonStyle(.link)
-                    .font(.caption)
+                    .font(.app(.caption))
                 }
             } else if let context = footerContext {
                 Label(context.text, systemImage: context.icon)
-                    .font(.caption)
+                    .font(.app(.caption))
                     .foregroundStyle(.textMuted)
                     .lineLimit(1)
             }
@@ -1089,7 +1089,7 @@ struct QuickActionsView: View {
     private func footerHint(_ key: String, _ label: String) -> some View {
         HStack(spacing: 5) {
             KeyHint(key)
-            Text(label).font(.caption2).foregroundStyle(.textMuted)
+            Text(label).font(.app(.caption2)).foregroundStyle(.textMuted)
         }
     }
 

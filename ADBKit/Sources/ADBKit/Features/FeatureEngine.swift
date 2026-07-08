@@ -458,10 +458,11 @@ public struct FeatureEngine: Sendable {
     }
 
     /// Point the app at a Metro dev server, best mechanism first: a localhost
-    /// host (or bare port) reverse-tunnels the port; a remote host sets the
-    /// `metro.host` system property where SELinux allows it (emulators, rooted
-    /// devices); otherwise the dev menu is opened so the host can be set by
-    /// hand — production Android offers no adb path to write it.
+    /// host (or bare port) reverse-tunnels the port; a remote host writes RN's
+    /// `debug_http_host` preference via `run-as` (dev builds are debuggable)
+    /// and relaunches the app; where `run-as` is refused, the `metro.host`
+    /// system property is tried (emulators, rooted devices); otherwise the dev
+    /// menu is opened so the host can be set by hand.
     private func setDevServerHost(serial: String, params: [String: FeatureValue]) async throws -> FeatureResult {
         let raw = (params["host"]?.stringValue ?? "").trimmingCharacters(in: .whitespaces)
         guard !raw.isEmpty else {
@@ -496,6 +497,17 @@ public struct FeatureEngine: Sendable {
                 fallback: "Failed to reverse tcp:\(port)"
             )
         }
+        // The preference RN actually reads (DevInternalSettings.debug_http_host)
+        // carries host *and* port, and dev builds are debuggable — so run-as
+        // can write it directly. Chosen bundle first, else the app in front.
+        var package = params["packageId"]?.stringValue ?? ""
+        if package.isEmpty {
+            package = (try await inspection.getForegroundPackage(serial: serial)) ?? ""
+        }
+        if !package.isEmpty,
+           let result = try await writeDebugHTTPHost(serial: serial, package: package, host: host, port: port) {
+            return result
+        }
         _ = try await client.run(on: serial, ["shell", "setprop", "metro.host", shellQuote(host)])
         let readBack = try await client.run(on: serial, ["shell", "getprop", "metro.host"])
         if readBack.stdout.trimmingCharacters(in: .whitespacesAndNewlines) == host {
@@ -514,6 +526,83 @@ public struct FeatureEngine: Sendable {
             message: "This device blocks setting a dev host over adb — sent the dev-menu shortcut instead. "
                 + "With your RN dev build in the foreground, choose “Change Bundle Location” and enter \(host):\(port)."
         )
+    }
+
+    /// Writes `debug_http_host` into the app's default SharedPreferences via
+    /// `run-as` and relaunches the app so RN reads the new value. Returns nil
+    /// when the device refuses (app not debuggable, `run-as` broken) so the
+    /// caller can fall back to `metro.host`/the dev menu.
+    private func writeDebugHTTPHost(
+        serial: String, package: String, host: String, port: Int
+    ) async throws(AdbError) -> FeatureResult? {
+        let probe = try await client.run(on: serial, ["shell", "run-as", shellQuote(package), "id"])
+        guard probe.succeeded else { return nil }
+
+        // run-as starts in the app's data dir, so the prefs path is relative.
+        let prefsPath = "shared_prefs/\(package)_preferences.xml"
+        let existing = try await client.run(
+            on: serial, ["shell", "run-as", shellQuote(package), "cat", shellQuote(prefsPath)]
+        )
+        let hostPort = "\(host):\(port)"
+        let merged = Self.upsertDebugHTTPHost(existing.succeeded ? existing.stdout : nil, hostPort: hostPort)
+        let script = "mkdir -p shared_prefs && printf '%s' \(shellQuote(merged)) > \(shellQuote(prefsPath))"
+        let write = try await client.run(
+            on: serial, ["shell", "run-as", shellQuote(package), "sh", "-c", shellQuote(script)]
+        )
+        guard write.succeeded else { return nil }
+        let readBack = try await client.run(
+            on: serial, ["shell", "run-as", shellQuote(package), "cat", shellQuote(prefsPath)]
+        )
+        guard readBack.stdout.contains(Self.xmlEscape(hostPort)) else { return nil }
+
+        // The running app caches its prefs in memory — restart it so RN loads
+        // the new host (stop only after the write verifiably landed, so the
+        // fallback paths still have the app around if run-as flaked).
+        _ = try await client.run(on: serial, ["shell", "am", "force-stop", shellQuote(package)])
+        let relaunch = try await client.run(
+            on: serial,
+            ["shell", "monkey", "-p", shellQuote(package), "-c", "android.intent.category.LAUNCHER", "1"]
+        )
+        // monkey exits 0 even when the app has no LAUNCHER activity (custom
+        // launch category, deep-link-only) — it just prints "No activities
+        // found … aborted". Don't claim a relaunch that didn't happen, or the
+        // user is told all is well while the app sits force-stopped.
+        let relaunched = relaunch.succeeded
+            && !relaunch.stdout.contains("No activities")
+            && !relaunch.stderr.contains("No activities")
+        let tail = relaunched
+            ? "wrote debug_http_host and relaunched the app."
+            : "wrote debug_http_host — reopen the app to load the new host."
+        return FeatureResult(ok: true, message: "Pointed \(package) at \(hostPort) — \(tail)")
+    }
+
+    /// Inserts or replaces the `debug_http_host` entry in a SharedPreferences
+    /// XML document; a missing/foreign document is replaced with a fresh map.
+    /// Pure so it's testable without a device.
+    static func upsertDebugHTTPHost(_ xml: String?, hostPort: String) -> String {
+        let entry = "<string name=\"debug_http_host\">\(xmlEscape(hostPort))</string>"
+        guard let xml, xml.contains("<map") else {
+            return "<?xml version='1.0' encoding='utf-8' standalone='yes' ?>\n<map>\n    \(entry)\n</map>\n"
+        }
+        if let existing = xml.range(
+            of: "<string name=\"debug_http_host\">[^<]*</string>", options: .regularExpression
+        ) {
+            return xml.replacingCharacters(in: existing, with: entry)
+        }
+        if let emptyMap = xml.range(of: "<map\\s*/>", options: .regularExpression) {
+            return xml.replacingCharacters(in: emptyMap, with: "<map>\n    \(entry)\n</map>")
+        }
+        if let close = xml.range(of: "</map>") {
+            return xml.replacingCharacters(in: close, with: "    \(entry)\n</map>")
+        }
+        return xml
+    }
+
+    static func xmlEscape(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
     }
 
     /// "host:port" → (host, port); a bare port means localhost; a bare host

@@ -32,7 +32,7 @@ struct InstallAppView: View {
             targetSummary
             if let lastResult {
                 Text(lastResult)
-                    .font(.callout)
+                    .font(.app(.callout))
                     .foregroundStyle(.textMuted)
             }
             Spacer(minLength: 0)
@@ -50,11 +50,11 @@ struct InstallAppView: View {
     private var stagedCard: some View {
         VStack(spacing: 12) {
             Image(systemName: "arrow.down.app.fill")
-                .font(.system(size: 46))
+                .font(.app(size: 46))
                 .foregroundStyle(.brandAccent)
             VStack(spacing: 6) {
                 Text(staged.count == 1 ? "Ready to install" : "Ready to install \(staged.count) APKs")
-                    .font(.title3.weight(.medium))
+                    .font(.app(.title3).weight(.medium))
                 ForEach(staged, id: \.self) { url in
                     apkRow(url)
                 }
@@ -99,12 +99,12 @@ struct InstallAppView: View {
         let info = apkInfos[url]
         VStack(spacing: 1) {
             Text(info?.label ?? url.lastPathComponent)
-                .font(.callout.weight(.medium))
+                .font(.app(.callout).weight(.medium))
                 .lineLimit(1)
                 .truncationMode(.middle)
             if let info {
                 Text(apkSubtitle(info))
-                    .font(.caption)
+                    .font(.app(.caption))
                     .foregroundStyle(.textMuted)
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -124,10 +124,10 @@ struct InstallAppView: View {
     private var dropZone: some View {
         VStack(spacing: 12) {
             Image(systemName: installing ? "arrow.down.circle.dotted" : "arrow.down.app")
-                .font(.system(size: 46))
+                .font(.app(size: 46))
                 .foregroundStyle(.brandAccent)
             Text(installing ? "Installing…" : "Drag an APK here")
-                .font(.title3.weight(.medium))
+                .font(.app(.title3).weight(.medium))
             Button("Choose APK…") { pickAndInstall() }
                 .disabled(installing)
         }
@@ -150,11 +150,11 @@ struct InstallAppView: View {
     @ViewBuilder private var targetSummary: some View {
         if targets.isEmpty {
             Label("Connect a device to install onto", systemImage: "iphone.slash")
-                .font(.callout)
+                .font(.app(.callout))
                 .foregroundStyle(.textMuted)
         } else {
             Text("Installs on \(targets.map(\.label).joined(separator: ", "))")
-                .font(.callout)
+                .font(.app(.callout))
                 .foregroundStyle(.textMuted)
                 .multilineTextAlignment(.center)
         }

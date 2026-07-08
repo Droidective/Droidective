@@ -134,9 +134,15 @@ struct ADTApp: App {
     @AppStorage("showMenuBarExtra") private var showMenuBarExtra = true
     @AppStorage("sidebarWidth") private var sidebarWidth = 300.0
     @AppStorage(sidebarAutoHideDefaultsKey) private var sidebarAutoHide = false
-    /// The user-chosen accent. Read here so changing it re-renders the scene and
-    /// re-keys RootView (`.id`), forcing every `.brandAccent` to re-resolve.
+    /// The user-chosen accent and font. Read here so changing them re-renders
+    /// the scene and re-keys RootView (`.id`), forcing every `.brandAccent`
+    /// and `Font.app` to re-resolve.
     @AppStorage(accentColorDefaultsKey) private var accentHex = ""
+    @AppStorage(appFontFamilyDefaultsKey) private var appFontFamily = ""
+    @AppStorage(appFontSizeScaleDefaultsKey) private var appFontSizeScale = 1.0
+
+    /// One key covering every appearance pref the view tree resolves statically.
+    private var appearanceKey: String { "\(accentHex)|\(appFontFamily)|\(appFontSizeScale)" }
 
     /// ⌃1…⌃9 accelerators for jumping straight to a tab by position.
     private static let tabDigitKeys: [KeyEquivalent] = ["1", "2", "3", "4", "5", "6", "7", "8", "9"]
@@ -201,10 +207,11 @@ struct ADTApp: App {
                 // the Mac's system accent color, which otherwise overrides the
                 // AccentColor asset.
                 .tint(.brandAccent)
-                // Re-key on the accent so changing it rebuilds the tree and every
-                // `.brandAccent` re-resolves. AppState (and its device list) is
-                // owned above this view, so the rebuild preserves it.
-                .id(accentHex)
+                // Re-key on the appearance prefs so changing the accent or font
+                // rebuilds the tree and every `.brandAccent`/`Font.app`
+                // re-resolves. AppState (and its device list) is owned above
+                // this view, so the rebuild preserves it.
+                .id(appearanceKey)
                 .onAppear {
                     // Wire the delegate ↔ state references through the adaptor
                     // instance: on macOS `NSApp.delegate` is SwiftUI's own
@@ -254,8 +261,8 @@ struct ADTApp: App {
             }
 
             CommandMenu("Tab") {
-                // ⌘T / ⌘K both open the search palette; the chosen feature opens
-                // in a tab (a new one, or refocuses it if already open).
+                // ⌘T opens the search palette; the chosen feature opens in a
+                // tab (a new one, or refocuses it if already open).
                 Button("New Tab") {
                     appState.activateMainWindow()
                     appState.openPalette?()
@@ -304,6 +311,14 @@ struct ADTApp: App {
                 #endif
             }
 
+            // The stock ⌘, opens Settings without bringing the app forward, so
+            // it lands hidden behind the floating, non-activating Quick Actions
+            // panel. Replace it with one that dismisses the panel and activates
+            // the app first.
+            CommandGroup(replacing: .appSettings) {
+                OpenSettingsButton()
+            }
+
             CommandGroup(replacing: .help) {
                 Button("Report an Issue…") { appState.reportBug() }
                 Button("Request a Feature…") { appState.requestFeature() }
@@ -316,7 +331,6 @@ struct ADTApp: App {
                 Button("Find Feature") {
                     appState.openPalette?()
                 }
-                .keyboardShortcut("k", modifiers: .command)
 
                 Button("Manage Features") {
                     appState.activateMainWindow()
@@ -379,12 +393,29 @@ struct ADTApp: App {
             SettingsView()
                 .environment(appState)
                 .tint(.brandAccent)
+                .id(appearanceKey)
         }
 
         MenuBarExtra("Droidective", systemImage: "iphone.gen3", isInserted: $showMenuBarExtra) {
             MenuBarView()
                 .environment(appState)
         }
+    }
+}
+
+/// Settings… menu item (⌘,). Opens the SwiftUI Settings scene, but first
+/// closes the Quick Actions panel and activates the app so the Settings window
+/// comes to the front instead of behind the panel's floating level.
+private struct OpenSettingsButton: View {
+    @Environment(\.openSettings) private var openSettings
+
+    var body: some View {
+        Button("Settings…") {
+            FloatingPanelController.quickActions.close()
+            NSApp.activate(ignoringOtherApps: true)
+            openSettings()
+        }
+        .keyboardShortcut(",", modifiers: .command)
     }
 }
 

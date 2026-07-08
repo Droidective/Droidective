@@ -15,11 +15,11 @@ struct BundleManagerView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Saved Bundles")
-                .font(.headline)
+                .font(.app(.headline))
 
             if state.bundles.isEmpty {
                 Text("Save an app's bundle id once, then pick it from dropdowns across the app.")
-                    .font(.footnote)
+                    .font(.app(.footnote))
                     .foregroundStyle(.textMuted)
             } else {
                 List(state.bundles) { bundle in
@@ -27,7 +27,7 @@ struct BundleManagerView: View {
                         VStack(alignment: .leading) {
                             Text(bundle.nickname)
                             Text(bundle.packageId)
-                                .font(.footnote)
+                                .font(.app(.footnote))
                                 .foregroundStyle(.textMuted)
                         }
                         Spacer()
@@ -55,7 +55,7 @@ struct BundleManagerView: View {
             Divider()
 
             Text(editingBundle == nil ? "Add new bundle" : "Edit bundle")
-                .font(.subheadline.bold())
+                .font(.app(.subheadline).bold())
             TextField("Nickname (e.g. My App)", text: $nickname)
                 .brandField()
             TextField("Package id (e.g. com.myapp)", text: $packageId)

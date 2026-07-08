@@ -64,10 +64,10 @@ struct ApkInspectorView: View {
     private var dropZone: some View {
         VStack(spacing: 12) {
             Image(systemName: "doc.text.magnifyingglass")
-                .font(.system(size: 46))
+                .font(.app(size: 46))
                 .foregroundStyle(.brandAccent)
             Text(loading ? "Inspecting…" : "Drag an APK here to inspect")
-                .font(.title3.weight(.medium))
+                .font(.app(.title3).weight(.medium))
             Button("Choose APK…") { choose() }
                 .disabled(loading)
         }
@@ -114,9 +114,9 @@ struct ApkInspectorView: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(info.label ?? info.fileName)
-                        .font(.title2.weight(.semibold))
+                        .font(.app(.title2).weight(.semibold))
                     if let package = info.packageName {
-                        Text(package).font(.callout).foregroundStyle(.textMuted).textSelection(.enabled)
+                        Text(package).font(.app(.callout)).foregroundStyle(.textMuted).textSelection(.enabled)
                     }
                 }
                 Spacer()
@@ -141,10 +141,10 @@ struct ApkInspectorView: View {
 
     private func listSection(_ title: String, systemImage: String, items: [String]) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Label("\(title) (\(items.count))", systemImage: systemImage).font(.headline)
+            Label("\(title) (\(items.count))", systemImage: systemImage).font(.app(.headline))
             ForEach(items, id: \.self) { item in
                 Text(item)
-                    .font(.callout.monospaced())
+                    .font(.app(.callout).monospaced())
                     .foregroundStyle(.textMuted)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -157,10 +157,10 @@ struct ApkInspectorView: View {
 
     @ViewBuilder private func signingSection(_ report: ApkReport) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("Signing", systemImage: "checkmark.seal").font(.headline)
+            Label("Signing", systemImage: "checkmark.seal").font(.app(.headline))
             if report.signers.isEmpty && report.signatureSchemes.isEmpty {
                 Text("Signing details need the Android SDK's apksigner and a Java runtime.")
-                    .font(.callout).foregroundStyle(.textMuted)
+                    .font(.app(.callout)).foregroundStyle(.textMuted)
             } else {
                 if !report.signatureSchemes.isEmpty {
                     FlowChips { ForEach(report.signatureSchemes, id: \.self) { chip($0.uppercased()) } }
@@ -168,11 +168,11 @@ struct ApkInspectorView: View {
                 ForEach(Array(report.signers.enumerated()), id: \.offset) { _, signer in
                     VStack(alignment: .leading, spacing: 2) {
                         if let dn = signer.subjectDN {
-                            Text(dn).font(.callout).textSelection(.enabled)
+                            Text(dn).font(.app(.callout)).textSelection(.enabled)
                         }
                         if let sha = signer.sha256 {
                             Text("SHA-256: \(sha)")
-                                .font(.caption.monospaced()).foregroundStyle(.textMuted).textSelection(.enabled)
+                                .font(.app(.caption).monospaced()).foregroundStyle(.textMuted).textSelection(.enabled)
                         }
                     }
                 }
@@ -185,14 +185,14 @@ struct ApkInspectorView: View {
 
     private func chip(_ text: String) -> some View {
         Text(text)
-            .font(.caption)
+            .font(.app(.caption))
             .padding(.horizontal, 8).padding(.vertical, 3)
             .background(.quaternary, in: Capsule())
     }
 
     private func badge(_ text: String, color: Color) -> some View {
         Text(text)
-            .font(.caption.weight(.semibold))
+            .font(.app(.caption).weight(.semibold))
             .foregroundStyle(color)
             .padding(.horizontal, 8).padding(.vertical, 3)
             .background(color.opacity(0.15), in: Capsule())

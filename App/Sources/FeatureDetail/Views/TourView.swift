@@ -27,7 +27,7 @@ struct TourView: View {
              shortcut: nil),
         Step(icon: "magnifyingglass", title: "Find anything fast",
              body: "Press the shortcut from anywhere to search every feature and jump straight to one.",
-             shortcut: "⌘K"),
+             shortcut: "⌘T"),
         Step(icon: "sidebar.left", title: "Your feature sidebar",
              body: "Features are grouped by category — toggle grouping off to drag them into your own order. Right-click any one to pin, enable, or disable it. With the search field focused, hold ⌘ to jump to a row with ⌘1–⌘9. The shortcut hides the sidebar.",
              shortcut: "⌘B"),
@@ -63,22 +63,22 @@ struct TourView: View {
         let step = steps[index]
         return VStack(spacing: 18) {
             Image(systemName: step.icon)
-                .font(.system(size: 54))
+                .font(.app(size: 54))
                 .foregroundStyle(.brandAccent)
                 .symbolRenderingMode(.hierarchical)
             Text(step.title)
-                .font(.title.bold())
+                .font(.app(.title).bold())
                 .multilineTextAlignment(.center)
             if let shortcut = step.shortcut {
                 Text(shortcut)
-                    .font(.title3.weight(.semibold))
+                    .font(.app(.title3).weight(.semibold))
                     .monospaced()
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
                     .background(Color.bgSurface, in: RoundedRectangle(cornerRadius: 8))
             }
             Text(step.body)
-                .font(.body)
+                .font(.app(.body))
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.textMuted)
                 .frame(maxWidth: 420)
@@ -131,14 +131,14 @@ struct TourView: View {
     private var hotkeyContent: some View {
         VStack(spacing: 18) {
             Image(systemName: "bolt.fill")
-                .font(.system(size: 54))
+                .font(.app(size: 54))
                 .foregroundStyle(.brandAccent)
                 .symbolRenderingMode(.hierarchical)
             Text("One more thing: Quick Actions")
-                .font(.title.bold())
+                .font(.app(.title).bold())
                 .multilineTextAlignment(.center)
             Text("A global hotkey summons the Quick Actions panel from any app — run adb actions, manage apps, and boot emulators without opening the window. Pick one now, or change it anytime in Settings ▸ Hotkeys.")
-                .font(.body)
+                .font(.app(.body))
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.textMuted)
                 .frame(maxWidth: 420)
@@ -147,7 +147,7 @@ struct TourView: View {
                 HotkeyRecorderField(name: .quickActions)
                     .frame(width: 220)
                 Text("Recommended: ⇧⌘Space — it's free on a stock Mac, and Spotlight keeps ⌘Space.")
-                    .font(.footnote)
+                    .font(.app(.footnote))
                     .foregroundStyle(.textMuted)
             }
         }

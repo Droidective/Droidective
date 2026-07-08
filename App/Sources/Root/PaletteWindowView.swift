@@ -2,7 +2,7 @@ import ADBKit
 import AppKit
 import SwiftUI
 
-/// Spotlight-style floating search palette (⌘K): type, arrow through matches,
+/// Spotlight-style floating search palette (⌘T): type, arrow through matches,
 /// ⏎ opens the feature in the main window. ⌘P pins / ⌘E enables-disables the
 /// highlighted feature. Pinned features lead the list when not searching. Esc
 /// closes.
@@ -59,7 +59,7 @@ struct PaletteWindowView: View {
             } else if !query.isEmpty {
                 Divider()
                 Text("No matching features")
-                    .font(.callout)
+                    .font(.app(.callout))
                     .foregroundStyle(.textMuted)
                     .padding(14)
             }
@@ -88,11 +88,11 @@ struct PaletteWindowView: View {
     private var searchField: some View {
         HStack(spacing: 12) {
             Image(systemName: "magnifyingglass")
-                .font(.title)
+                .font(.app(.title))
                 .foregroundStyle(.textMuted)
             TextField("Search features…", text: $query)
                 .textFieldStyle(.plain)
-                .font(.title)
+                .font(.app(.title))
                 .focused($fieldFocused)
                 .onSubmit { open(at: highlighted) }
                 .onKeyPress(.downArrow) { move(1); return .handled }
@@ -136,7 +136,7 @@ struct PaletteWindowView: View {
     private func footerHint(_ key: String, _ label: String) -> some View {
         HStack(spacing: 5) {
             KeyHint(key)
-            Text(label).font(.caption2).foregroundStyle(.textMuted)
+            Text(label).font(.app(.caption2)).foregroundStyle(.textMuted)
         }
     }
 
@@ -149,7 +149,7 @@ struct PaletteWindowView: View {
                 Text(feature.title)
                 if let subtitle = feature.subtitle {
                     Text(subtitle)
-                        .font(.caption)
+                        .font(.app(.caption))
                         .foregroundStyle(isHighlighted ? accentText.opacity(0.75) : .secondary)
                         .lineLimit(1)
                 }
@@ -157,12 +157,12 @@ struct PaletteWindowView: View {
             Spacer()
             if state.layout.favorites.contains(feature.id) {
                 Image(systemName: "pin.fill")
-                    .font(.caption2)
+                    .font(.app(.caption2))
                     .foregroundStyle(isHighlighted ? AnyShapeStyle(accentText.opacity(0.8)) : AnyShapeStyle(.brandAccent))
             }
             if !state.layout.effectiveEnabledIDs.contains(feature.id) {
                 Text("disabled")
-                    .font(.caption2)
+                    .font(.app(.caption2))
                     .foregroundStyle(isHighlighted ? accentText.opacity(0.75) : .secondary)
             }
             if index < 8 {
@@ -190,7 +190,10 @@ struct PaletteWindowView: View {
         let feature = visibleMatches[index]
         close()
         state.activateMainWindow()
-        state.requestFeature(feature.id)
+        // openFeature honors firesWithoutScreen: instant/toggle actions (Copy
+        // Device IP, overrides…) run in place with a toast instead of opening
+        // a pointless detail tab.
+        state.openFeature(feature)
     }
 
     private func togglePinHighlighted() {
@@ -208,7 +211,7 @@ struct PaletteWindowView: View {
     }
 }
 
-/// A small keycap-style hint badge (e.g. ⌘K, ⌘1). `prominent` styles it for a
+/// A small keycap-style hint badge (e.g. ⌘T, ⌘1). `prominent` styles it for a
 /// highlighted/accent background.
 struct KeyHint: View {
     let text: String
@@ -224,7 +227,7 @@ struct KeyHint: View {
 
     var body: some View {
         Text(text)
-            .font(.caption2.weight(.medium))
+            .font(.app(.caption2).weight(.medium))
             .foregroundStyle(prominent ? AnyShapeStyle(accentText) : AnyShapeStyle(.textMuted))
             .padding(.horizontal, 5)
             .padding(.vertical, 2)

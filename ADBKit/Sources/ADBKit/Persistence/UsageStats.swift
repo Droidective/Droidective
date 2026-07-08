@@ -54,4 +54,21 @@ public struct UsageStats: Codable, Sendable, Equatable {
             }
             .map(\.element)
     }
+
+    /// The ids used at least `minUses` times, ordered strictly by use count
+    /// (descending) with the input order as the stable tiebreak — deliberately
+    /// *not* recency, so a just-opened feature doesn't jump to the front (that
+    /// made Home's "Frequently used" strip degenerate into "last used"). Callers
+    /// pass an already-meaningfully-ordered list (e.g. sidebar order) so ties
+    /// resolve to that. Pure so it's testable without an `AppState`.
+    public func frequent(among ids: [String], minUses: Int) -> [String] {
+        ids.enumerated()
+            .filter { count(for: $0.element) >= minUses }
+            .sorted { lhs, rhs in
+                let countL = count(for: lhs.element)
+                let countR = count(for: rhs.element)
+                return countL != countR ? countL > countR : lhs.offset < rhs.offset
+            }
+            .map(\.element)
+    }
 }

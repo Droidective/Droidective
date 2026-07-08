@@ -15,18 +15,18 @@ struct CommandLogRow: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: expanded ? "chevron.down" : "chevron.right")
-                        .font(.caption)
+                        .font(.app(.caption))
                         .foregroundStyle(.textMuted)
                     Text(entry.command)
-                        .font(.system(.callout, design: .monospaced))
+                        .font(.app(.callout, design: .monospaced))
                         .lineLimit(expanded ? nil : 1)
                         .multilineTextAlignment(.leading)
                     Spacer(minLength: 6)
                     Text(Self.exitLabel(entry))
-                        .font(.caption)
+                        .font(.app(.caption))
                         .foregroundStyle(entry.exitCode == 0 ? Color.brandAccent : Color.red)
                     Text(entry.timestamp, style: .time)
-                        .font(.caption)
+                        .font(.app(.caption))
                         .foregroundStyle(.textMuted)
                 }
                 .contentShape(Rectangle())
@@ -42,7 +42,7 @@ struct CommandLogRow: View {
                 }
                 if entry.stdout.isEmpty && entry.stderr.isEmpty {
                     Text("(no output)")
-                        .font(.caption)
+                        .font(.app(.caption))
                         .foregroundStyle(.tertiary)
                         .padding(.leading, 18)
                 }
@@ -53,7 +53,7 @@ struct CommandLogRow: View {
     @ViewBuilder
     private func outputBlock(_ text: String, tint: Color?) -> some View {
         Text(text)
-            .font(.system(.caption, design: .monospaced))
+            .font(.app(.caption, design: .monospaced))
             .foregroundStyle(tint ?? .primary)
             .textSelection(.enabled)
             .padding(6)

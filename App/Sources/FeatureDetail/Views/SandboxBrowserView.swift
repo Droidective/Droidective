@@ -111,7 +111,7 @@ struct SandboxBrowserView: View {
             Spacer()
             if !entry.isDir {
                 Text(ByteCountFormatter.string(fromByteCount: Int64(entry.size), countStyle: .file))
-                    .font(.footnote)
+                    .font(.app(.footnote))
                     .foregroundStyle(.textMuted)
                 Button {
                     pull(entry)

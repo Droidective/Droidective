@@ -55,7 +55,7 @@ struct DeviceBarView: View {
                 OverridesPillView()
                 if state.adbMissing {
                     Label("adb not found", systemImage: "exclamationmark.triangle.fill")
-                        .font(.footnote)
+                        .font(.app(.footnote))
                         .foregroundStyle(.orange)
                     Button(state.installingTool == .adb ? "Installing…" : "Install") {
                         state.installTool(.adb)
@@ -177,6 +177,10 @@ struct DeviceBarView: View {
         .fixedSize()
         .controlSize(.large)
         .foregroundStyle(pillTextColor)
+        // The borderless pop-up tints its title with the control accent (the
+        // bundled green asset, which ignores a custom accent) — tint it with
+        // the intended title color so `.foregroundStyle` actually shows.
+        .tint(pillTextColor)
         .padding(.horizontal, 10)
         .padding(.vertical, 4)
         .background(pillTextColor.opacity(0.06), in: RoundedRectangle(cornerRadius: 7))
@@ -205,7 +209,9 @@ struct DeviceBarView: View {
 
     private var deviceStatusColor: Color {
         guard let device = selectedDevice else { return Color("TextMuted") }
-        if device.isReady { return .green }
+        // Ready rides the accent (it doubles as the bar's active marker);
+        // trouble states keep their semaphore colors.
+        if device.isReady { return .brandAccent }
         if device.state == "unauthorized" { return .orange }
         return .red
     }
@@ -217,7 +223,7 @@ struct DeviceBarView: View {
     }
 
     private var bundleIconColor: Color {
-        state.selectedBundle == nil ? Color("TextMuted") : Color("BrandAccent")
+        state.selectedBundle == nil ? Color("TextMuted") : .brandAccent
     }
 
     private var deviceStatusHelp: String {
@@ -310,6 +316,8 @@ struct DeviceBarView: View {
         .fixedSize()
         .controlSize(.large)
         .foregroundStyle(pillTextColor)
+        // Same accent-asset tinting escape as the device pill above.
+        .tint(pillTextColor)
         .padding(.horizontal, 10)
         .padding(.vertical, 4)
         .background(pillTextColor.opacity(0.06), in: RoundedRectangle(cornerRadius: 7))

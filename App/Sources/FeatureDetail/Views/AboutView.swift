@@ -42,12 +42,12 @@ struct AboutView: View {
                 .frame(width: 60, height: 60)
             VStack(alignment: .leading, spacing: 4) {
                 Text("Droidective")
-                    .font(.largeTitle.bold())
+                    .font(.app(.largeTitle).bold())
                 Text(versionLine)
-                    .font(.callout.monospacedDigit())
+                    .font(.app(.callout).monospacedDigit())
                     .foregroundStyle(.textMuted)
                 Text("An Android & React Native debugging command palette, driven over adb.")
-                    .font(.body)
+                    .font(.app(.body))
                     .foregroundStyle(.textMuted)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -121,7 +121,7 @@ struct AboutView: View {
     // MARK: - Building blocks
 
     private func sectionTitle(_ text: String) -> some View {
-        Text(text).font(.title2.bold())
+        Text(text).font(.app(.title2).bold())
     }
 
     private func linkRow(
@@ -133,13 +133,13 @@ struct AboutView: View {
     ) -> some View {
         HStack(alignment: .center, spacing: 12) {
             Image(systemName: icon)
-                .font(.title2)
+                .font(.app(.title2))
                 .foregroundStyle(.textMuted)
                 .frame(width: 26)
             VStack(alignment: .leading, spacing: 4) {
-                Text(title).font(.headline)
+                Text(title).font(.app(.headline))
                 Text(detail)
-                    .font(.callout)
+                    .font(.app(.callout))
                     .foregroundStyle(.textMuted)
                     .fixedSize(horizontal: false, vertical: true)
             }

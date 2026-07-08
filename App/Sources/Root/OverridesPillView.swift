@@ -22,7 +22,7 @@ struct OverridesPillView: View {
                 }
             } label: {
                 Label(pillTitle, systemImage: "exclamationmark.circle.fill")
-                    .font(.footnote)
+                    .font(.app(.footnote))
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
