@@ -7,7 +7,7 @@
     <language>en</language>
     <item>
       <title>Droidective 2.9.0</title>
-      <sparkle:version>300</sparkle:version>
+      <sparkle:version>302</sparkle:version>
       <sparkle:shortVersionString>2.9.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <description><![CDATA[
@@ -24,47 +24,55 @@ pre { background: color-mix(in srgb, currentColor 8%, transparent); padding: .6e
 pre code { background: none; padding: 0; }
 a { color: #2f9e44; }
 </style>
-<p>Adds iOS Simulator support, per-feature product analytics, and a redesigned
-role picker, and ships a rebuilt marketing site.</p>
+<p>Adds a background mode with a global Quick Actions panel, a terminal tab rail
+with a find bar, and a Dock-style auto-hiding sidebar.</p>
 <h3>New features</h3>
 <ul>
 <li>
-<strong>iOS Simulators in the device bar</strong> — booted iOS Simulators now sit alongside
-Android devices, and features adapt to the selected platform. Screenshot, dark
-mode, demo mode, fake battery, and deep links run against a simulator through
-<code>xcrun simctl</code>; push notifications are a new Simulator-only tool. The
-Emulators &amp; Simulators screen lists and boots or shuts down simulators, and a
-new iOS Developer role leads with them. A feature that only applies to Android
-shows a platform-mismatch state with a one-click switch to a connected device.
-The registry grows from 55 to 56 tools.</li>
+<strong>Background mode &amp; the Quick Actions panel</strong> — with "Keep running in the
+background" on (Settings ▸ General, the default), closing the main window
+hides Droidective from the Dock and stops its kept-alive sessions (terminal
+shells, Reactotron, the JS-console tunnels) while the menu bar icon, global
+hotkeys, and a new Quick Actions panel stay available; ⌘Q still quits fully,
+and relaunching from Finder reopens the window. The <strong>Quick Actions panel</strong> is
+a non-activating floating mini app on a global hotkey (record one in
+Settings ▸ Hotkeys): a grid of everything runnable in place — saved custom
+commands, every enabled instant, toggle, and form action, plus Manage Apps,
+Emulators, and Install APK — with an "Open in Droidective" list for the
+full-app screens. Form actions run in the panel, destructive app verbs take a
+confirming second press, and with several devices connected each action asks
+which to target (⌘⏎ runs on all). Double-clicking an APK in Finder opens it
+here to install in place or hand to APK Studio. The panel mirrors the app's
+role and catalog curation and resumes where you left off when reopened within
+a configurable window.</li>
+<li>
+<strong>Terminal tab rail &amp; find bar</strong> — terminal shells group into a collapsible
+rail with drag reordering, and a find bar (⌘F, then ⌘G / ⇧⌘G) searches the
+focused shell. Drag-selection autoscrolls, with a right-click context menu.</li>
+<li>
+<strong>Auto-hiding sidebar</strong> — a Dock-style mode (Settings ▸ Appearance) where the
+sidebar slides over the content when you push the pointer to the window's
+left edge, freeing horizontal space; ⌘B still shows and hides it.</li>
 </ul>
 <h3>Improvements</h3>
 <ul>
 <li>
-<strong>Role picker redesign</strong> — each role card carries a tool-count pill and
-feature-preview chips, with hover, press, and keyboard-focus states, a
-staggered entrance, and Reduce Motion respected.</li>
+<strong>Screen Recorder live preview</strong> — the recorder shows a live preview of the
+device while it captures.</li>
 <li>
-<strong>Product analytics</strong> — anonymous usage is now attributed per feature (which
-tool was open when an event, hang, or crash occurred), with install-level
-retention and the target-device landscape. It stays on by default with opt-out
-in Settings → Privacy; no serials, paths, package ids, SSIDs, or command text
-are ever sent, and the first-run consent prompt has been removed.</li>
-<li>
-<strong>Reactotron &amp; logs</strong> — Reactotron subscriptions and snapshots render as
-readable trees, expanded console objects are bounded and searchable in place,
-and log auto-follow is steadier while scrolling.</li>
+<strong>Selectable logcat</strong> — logcat is backed by a text view, so lines can be
+selected across line breaks and copied.</li>
 </ul>
 <h3>Fixes</h3>
 <ul>
-<li>Security hardening from an audit pass — device-shell values are consistently
-shell-quoted — plus a JS Console crash fix and React Native console UX
-follow-ups.</li>
+<li>Screen Recorder pause and resume controls no longer wedge mid-recording.</li>
+<li>CPU-overuse diagnostics are waived while screen mirroring — which is expected
+to be CPU-heavy — so it no longer files false performance incidents.</li>
 </ul>
 <p>Installed copies update in place via Sparkle.</p>
 ]]></description>
-      <pubDate>Tue, 07 Jul 2026 20:18:56 +0000</pubDate>
-      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v2.9.0/Droidective-v2.9.0.dmg" sparkle:edSignature="O+5OEsxdybfGzGBRkw8kOdA7JZBLRh4XtPfYdaerdf8D9YKLW6p+PTDvbOaOSol9PysAbIOilZivylE75E5DAg==" length="45961119" type="application/octet-stream" />
+      <pubDate>Wed, 08 Jul 2026 02:16:04 +0000</pubDate>
+      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v2.9.0/Droidective-v2.9.0.dmg" sparkle:edSignature="ln/ImNk+SLj+5RVa+/ZelUTZOX0h/IH6G5InKBHExqZDNd6aUaeEr2K08oSOQd9G417jeyXguqBQnG1Qn6HPCg==" length="45961312" type="application/octet-stream" />
     </item>
   </channel>
 </rss>
