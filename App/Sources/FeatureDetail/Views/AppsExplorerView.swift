@@ -7,6 +7,7 @@ import SwiftUI
 /// permission toggles.
 struct AppsExplorerView: View {
     @Environment(AppState.self) private var state
+    @Environment(\.colorScheme) private var colorScheme
     @State private var apps: [AppListing]?
     @State private var states: [String: AppLifecycle] = [:]
     @State private var search = ""
@@ -83,34 +84,9 @@ struct AppsExplorerView: View {
                         ContentUnavailableView.search(text: search)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
-                        List(visibleApps, selection: $selectedPackage) { app in
-                            HStack(spacing: 8) {
-                                AppIconView(packageId: app.packageId, name: app.displayName, serial: serial)
-                                    .frame(width: 28, height: 28)
-                                VStack(alignment: .leading, spacing: 1) {
-                                    HStack(spacing: 6) {
-                                        Text(app.displayName)
-                                        if app.isSystem {
-                                            Text("system")
-                                                .font(.app(.caption2))
-                                                .foregroundStyle(.textMuted)
-                                                .padding(.horizontal, 4)
-                                                .background(Color.bgSurface, in: Capsule())
-                                        }
-                                        lifecycleBadge(for: app.packageId)
-                                    }
-                                    Text("\(app.packageId)\(app.versionName.map { " · v\($0)" } ?? "")")
-                                        .font(.app(.footnote))
-                                        .foregroundStyle(.textMuted)
-                                        .lineLimit(1)
-                                }
-                            }
-                            .tag(app.packageId)
+                        List(visibleApps) { app in
+                            appRow(app)
                         }
-                        // The list's selection highlight follows the control
-                        // accent (the bundled asset), not the scene tint — set
-                        // it here so a custom accent recolors selection too.
-                        .tint(.brandAccent)
                         .frame(minWidth: 260)
                     }
                     HStack {
@@ -147,6 +123,50 @@ struct AppsExplorerView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+    }
+
+    /// One app row with hand-drawn selection. The native `List(selection:)`
+    /// highlight follows the control accent — the bundled green asset, which a
+    /// custom accent can't recolor — so the row draws its own `.brandAccent`
+    /// background instead.
+    private func appRow(_ app: AppListing) -> some View {
+        let isSelected = selectedPackage == app.packageId
+        let accentText = Color.brandAccent.contrastingForeground(for: colorScheme)
+        return Button { selectedPackage = app.packageId } label: {
+            HStack(spacing: 8) {
+                AppIconView(packageId: app.packageId, name: app.displayName, serial: serial)
+                    .frame(width: 28, height: 28)
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 6) {
+                        Text(app.displayName)
+                            .foregroundStyle(isSelected ? accentText : Color.primary)
+                        if app.isSystem {
+                            Text("system")
+                                .font(.app(.caption2))
+                                .foregroundStyle(isSelected ? accentText.opacity(0.8) : Color.textMuted)
+                                .padding(.horizontal, 4)
+                                .background(
+                                    isSelected ? AnyShapeStyle(accentText.opacity(0.15)) : AnyShapeStyle(Color.bgSurface),
+                                    in: Capsule()
+                                )
+                        }
+                        lifecycleBadge(for: app.packageId)
+                    }
+                    Text("\(app.packageId)\(app.versionName.map { " · v\($0)" } ?? "")")
+                        .font(.app(.footnote))
+                        .foregroundStyle(isSelected ? accentText.opacity(0.8) : Color.textMuted)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .listRowBackground(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(isSelected ? AnyShapeStyle(.brandAccent) : AnyShapeStyle(Color.clear))
+                .padding(.horizontal, 6)
+        )
     }
 
     @ViewBuilder

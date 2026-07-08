@@ -9,6 +9,7 @@ import UniformTypeIdentifiers
 /// CodeMirror editor (syntax highlighting, line numbers, ⌘F find).
 struct DecompileBrowserView: View {
     @Environment(AppState.self) private var state
+    @Environment(\.colorScheme) private var colorScheme
 
     @State private var mode: DecompileService.Mode = .jadx
     @State private var toolReady = false
@@ -245,16 +246,13 @@ struct DecompileBrowserView: View {
 
     @ViewBuilder private func fileTree(_ root: FileNode) -> some View {
         if let filtered = filteredNode(root, filter), let children = filtered.children {
-            List(selection: $selection) {
+            List {
                 OutlineGroup(children, children: \.children) { node in
-                    Label(node.name, systemImage: node.isDirectory ? "folder" : "doc.text").tag(node.path)
+                    treeRow(node)
                 }
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
-            // Selection follows the control accent, not the scene tint — see
-            // the Apps list.
-            .tint(.brandAccent)
         } else {
             centered { Text("No matching files").font(.app(.callout)).foregroundStyle(.textMuted) }
         }
@@ -402,6 +400,26 @@ struct DecompileBrowserView: View {
     }
 
     /// Open a file in the editor, optionally jumping to (and highlighting) a line.
+    /// One tree row with hand-drawn selection — same escape from the
+    /// control-accent List highlight as the Apps list. Directories keep their
+    /// disclosure triangles; tapping a file selects (and opens) it.
+    private func treeRow(_ node: FileNode) -> some View {
+        let isSelected = selection == node.path
+        let accentText = Color.brandAccent.contrastingForeground(for: colorScheme)
+        return Button { selection = node.path } label: {
+            Label(node.name, systemImage: node.isDirectory ? "folder" : "doc.text")
+                .foregroundStyle(isSelected ? accentText : Color.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .listRowBackground(
+            RoundedRectangle(cornerRadius: 5)
+                .fill(isSelected ? AnyShapeStyle(.brandAccent) : AnyShapeStyle(Color.clear))
+                .padding(.horizontal, 4)
+        )
+    }
+
     private func loadInEditor(_ path: String?, line: Int) {
         targetLine = line
         loadFile(path)
