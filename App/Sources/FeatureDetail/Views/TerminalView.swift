@@ -187,7 +187,7 @@ struct TerminalView: View {
         // row stuck dimmed. Catch those here and clear the drag state — only
         // a target while a rail drag is in flight, so it never swallows text
         // drops headed for the terminal.
-        .onDrop(of: [.plainText], delegate: TabDragCancelCatch(
+        .onDrop(of: [.terminalRailItem], delegate: TabDragCancelCatch(
             isDragging: draggedTabID != nil || draggedGroupID != nil,
             clear: {
                 draggedTabID = nil
@@ -305,7 +305,7 @@ struct TerminalView: View {
                         .overlay(alignment: .top) {
                             guideline(dropSlot == .railEnd).padding(.horizontal, 8)
                         }
-                        .onDrop(of: [.plainText], delegate: RailTailDropDelegate(
+                        .onDrop(of: [.terminalRailItem], delegate: RailTailDropDelegate(
                             terminals: terminals,
                             draggedTabID: $draggedTabID, draggedGroupID: $draggedGroupID,
                             dropSlot: $dropSlot
@@ -377,9 +377,9 @@ struct TerminalView: View {
         .overlay(alignment: .bottom) { guideline(dropSlot == .intoGroup(group.id)).offset(y: 1) }
         .onDrag {
             draggedGroupID = group.id
-            return NSItemProvider(object: "group:\(group.id.uuidString)" as NSString)
+            return privateDragItem(.terminalRailItem, "group:\(group.id.uuidString)")
         }
-        .onDrop(of: [.plainText], delegate: GroupHeaderDropDelegate(
+        .onDrop(of: [.terminalRailItem], delegate: GroupHeaderDropDelegate(
             group: group.id, terminals: terminals,
             draggedTabID: $draggedTabID, draggedGroupID: $draggedGroupID,
             dropSlot: $dropSlot
@@ -439,9 +439,9 @@ struct TerminalView: View {
         }
         .onDrag {
             draggedTabID = tab.id
-            return NSItemProvider(object: "tab:\(tab.id.uuidString)" as NSString)
+            return privateDragItem(.terminalRailItem, "tab:\(tab.id.uuidString)")
         }
-        .onDrop(of: [.plainText], delegate: TabRowDropDelegate(
+        .onDrop(of: [.terminalRailItem], delegate: TabRowDropDelegate(
             row: tab.id, isLoose: !indented, terminals: terminals,
             draggedTabID: $draggedTabID, draggedGroupID: $draggedGroupID,
             dropSlot: $dropSlot

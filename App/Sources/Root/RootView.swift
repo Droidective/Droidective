@@ -1,6 +1,7 @@
 import ADBKit
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct RootView: View {
     @Environment(AppState.self) private var state
@@ -352,7 +353,7 @@ struct RootView: View {
         // split-create overlay stuck blocking the pane. Catch those here and
         // clear it. Only a target while a tab drag is in flight; returns false so
         // it never swallows a real drop (inner targets are hit first).
-        .onDrop(of: [.text], delegate: TabDragCancelCatch(
+        .onDrop(of: [.workspaceTab], delegate: TabDragCancelCatch(
             isDragging: state.draggingTabID != nil,
             clear: { state.draggingTabID = nil }
         ))
@@ -536,7 +537,7 @@ private struct EditorPane: View {
             TabStripView(group: index)
             TabHostView(group: index)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .onDrop(of: [.text], delegate: TabPaneDrop(
+                .onDrop(of: [.workspaceTab], delegate: TabPaneDrop(
                     draggingID: state.draggingTabID,
                     onDrop: { id in
                         if state.isSplit {
@@ -549,7 +550,11 @@ private struct EditorPane: View {
                     onTargetedChange: { contentTargeted = $0 }
                 ))
                 .overlay(alignment: .trailing) {
-                    if !state.isSplit, contentTargeted { splitPreview }
+                    // Only promise a split the model will honor: `split()`
+                    // requires >1 tab (something must stay behind), so a
+                    // single-tab drag shows no preview instead of a dead one.
+                    if !state.isSplit, contentTargeted,
+                       state.openTabIDs(inGroup: index).count > 1 { splitPreview }
                 }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
