@@ -25,16 +25,22 @@ extension AppState {
         return usageStats.rank(curated.map(\.id)).compactMap { byID[$0] }
     }
 
-    /// Home's "Frequently used" strip: enabled features the user has actually
-    /// opened (usage count > 0), most-used first. System screens (Home itself,
-    /// the catalog) are excluded — they're chrome, not tools.
+    /// Home's "Frequently used" strip: enabled features used more than once,
+    /// ordered strictly by use count (sidebar order breaks ties — deliberately
+    /// not recency, which made the strip degenerate into "last used": single
+    /// uses all tie, and a feature jumped to the front the moment it was
+    /// opened). System screens (Home itself, the catalog) are excluded —
+    /// they're chrome, not tools.
     var frequentFeatures: [FeatureDef] {
-        let candidates = enabledFeatures.filter { $0.kind != .system }
-        let byID = Dictionary(uniqueKeysWithValues: candidates.map { ($0.id, $0) })
-        let ranked = usageStats.rank(candidates.map(\.id))
-            .filter { usageStats.count(for: $0) > 0 }
-            .prefix(6)
-        return ranked.compactMap { byID[$0] }
+        let candidates = enabledFeatures.filter {
+            $0.kind != .system && usageStats.count(for: $0.id) >= 2
+        }
+        let sorted = candidates.enumerated().sorted { lhs, rhs in
+            let countL = usageStats.count(for: lhs.element.id)
+            let countR = usageStats.count(for: rhs.element.id)
+            return countL != countR ? countL > countR : lhs.offset < rhs.offset
+        }
+        return sorted.prefix(6).map(\.element)
     }
 
     var visibleFeatures: [FeatureDef] {
