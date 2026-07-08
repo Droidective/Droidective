@@ -16,7 +16,7 @@ export const GITHUB_URL = "https://github.com/Droidective/Droidective"
 export const LINKEDIN_URL = "https://www.linkedin.com/in/rohindh"
 export const RELEASES_URL = `${GITHUB_URL}/releases`
 export const LATEST_RELEASE_URL = `${GITHUB_URL}/releases/latest`
-export const APP_VERSION = "v2.9.1"
+export const APP_VERSION = "v2.9.2"
 
 export interface PaletteCommand {
   icon: LucideIcon
@@ -163,7 +163,8 @@ export const galleryShots = [
 ]
 
 export const releases: { version: string; date: string; latest?: boolean; html: string }[] = [
-  { version: "v2.9.1", date: "Jul 2026", latest: true, html: "<b>Home search &amp; a Frequently used strip</b> — find any tool from the Home screen and jump to your most-used ones — plus <b>font and accent-color customization</b> in Settings ▸ Appearance. Fixes: the React Native dev-server host now writes <code>debug_http_host</code> so it works on physical devices, text fields release focus when you click away, <kbd>⌘,</kbd> no longer opens Settings behind the Quick Actions panel, and drop-to-split works again in the Terminal. The command palette moves to <kbd>⌘T</kbd>." },
+  { version: "v2.9.2", date: "Jul 2026", latest: true, html: "<b>Mirror in its own window</b> — pop the live mirror out beside your workspace from a button on its control bar; it follows the device-bar selection, which now <b>switches sessions reliably</b>, with a Reconnect button when a stream dies. The <b>video editor</b> gets full-width native controls and trim strip (no more cramped portrait layout), every Reveal button becomes <b>Open in Finder</b>, and the first quick save asks once where captures should go." },
+  { version: "v2.9.1", date: "Jul 2026", html: "<b>Home search &amp; a Frequently used strip</b> — find any tool from the Home screen and jump to your most-used ones — plus <b>font and accent-color customization</b> in Settings ▸ Appearance. Fixes: the React Native dev-server host now writes <code>debug_http_host</code> so it works on physical devices, text fields release focus when you click away, <kbd>⌘,</kbd> no longer opens Settings behind the Quick Actions panel, and drop-to-split works again in the Terminal. The command palette moves to <kbd>⌘T</kbd>." },
   { version: "v2.9.0", date: "Jul 2026", html: "<b>Background mode &amp; a global Quick Actions panel</b> — closing the window keeps Droidective running in the menu bar, and a non-activating Raycast-style panel on a global hotkey runs any adb action, manages apps, boots emulators, and installs APKs without the main window — with per-device targeting and Finder APK routing. Plus a <b>terminal tab rail</b> with a find bar and a <b>Dock-style auto-hiding sidebar</b>." },
   { version: "v2.8.3", date: "Jul 2026", html: "<b>iOS Simulator support</b> — booted iOS Simulators sit in the same device bar as Android devices, and features adapt to the selection: screenshot, dark mode, demo mode, fake battery, and deep links run through <code>xcrun simctl</code>, with push notifications as a Simulator-only tool and a new iOS Developer role. Plus a <b>redesigned role picker</b>, <b>per-feature product analytics</b> (anonymous, opt-out), and Reactotron/log readability fixes." },
   { version: "v2.8.2", date: "Jul 2026", html: "<b>JS Console reconnect fix</b> — a race killed each fresh Metro connection and leaked the old socket, so the console reconnected in a loop and spammed the dev server; connections are now generation-guarded with a bounded handshake, so it connects once and stays connected. Plus <b>anonymous performance self-monitoring</b> — sustained high CPU or memory in the app is reported with the features open at the time (opt-out in Settings → Privacy)." },

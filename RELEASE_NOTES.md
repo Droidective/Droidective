@@ -1,3 +1,39 @@
+## Droidective v2.9.2
+
+Screen-mirror quality of life — a pop-out mirror window and reliable device
+switching — plus video-editor and save-flow fixes.
+
+### New features
+
+- **Mirror in its own window** — a window button on the mirror's control bar
+  moves the live mirror into a dedicated "Screen Mirror" window (also in the
+  macOS Window menu), so it can sit beside the main workspace or other apps.
+  The window follows the device-bar selection, and an in-window recording still
+  guards quit and device switches.
+
+### Improvements
+
+- **The mirror follows device switches reliably** — reconnects are serialized,
+  so switching devices quickly can't tangle two sessions or leave one streaming
+  in the background, and the stopped/failed screens gain a **Reconnect** button.
+- **"Open in Finder" everywhere** — every "Reveal" button now says Open in
+  Finder, and the first quick save asks once where captures should go
+  (changeable anytime in Settings ▸ Privacy).
+- Toasts dismiss from a macOS-notification-style close button on the top-left
+  corner.
+- Anonymous hang reports carry more triage context (opt-out in
+  Settings ▸ Privacy).
+
+### Fixes
+
+- **Video editor controls no longer collapse on portrait clips** — the player
+  takes the full pane (the video letterboxes inside), so the native playback
+  controls and the trim strip get the full width. Trimming long recordings is
+  workable again, and cancelling a trim no longer leaves an empty controls pill
+  floating over the video.
+
+Installed copies update in place via Sparkle.
+
 ## Droidective v2.9.1
 
 Adds Home feature search and a Frequently-used strip, font and accent-color
