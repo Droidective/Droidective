@@ -190,7 +190,10 @@ struct PaletteWindowView: View {
         let feature = visibleMatches[index]
         close()
         state.activateMainWindow()
-        state.requestFeature(feature.id)
+        // openFeature honors firesWithoutScreen: instant/toggle actions (Copy
+        // Device IP, overrides…) run in place with a toast instead of opening
+        // a pointless detail tab.
+        state.openFeature(feature)
     }
 
     private func togglePinHighlighted() {
