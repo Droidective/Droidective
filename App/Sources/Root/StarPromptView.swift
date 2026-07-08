@@ -14,16 +14,16 @@ struct StarPromptView: View {
     var body: some View {
         VStack(spacing: 18) {
             Image(systemName: "star.fill")
-                .font(.system(size: 34, weight: .semibold))
+                .font(.app(size: 34, weight: .semibold))
                 .foregroundStyle(.brandAccent)
                 .frame(width: 64, height: 64)
                 .background(Color.brandAccent.opacity(0.12), in: RoundedRectangle(cornerRadius: 16))
 
             VStack(spacing: 7) {
                 Text("Enjoying Droidective?")
-                    .font(.title2.bold())
+                    .font(.app(.title2).bold())
                 Text("A star on GitHub helps other Android and React Native developers find it. It takes a moment and genuinely helps.")
-                    .font(.callout)
+                    .font(.app(.callout))
                     .foregroundStyle(.textMuted)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
@@ -43,7 +43,7 @@ struct StarPromptView: View {
 
                 Button("Maybe Later") { dismiss() }
                     .buttonStyle(.plain)
-                    .font(.callout)
+                    .font(.app(.callout))
                     .foregroundStyle(.textMuted)
             }
         }

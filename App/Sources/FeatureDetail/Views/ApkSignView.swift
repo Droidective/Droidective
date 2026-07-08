@@ -73,10 +73,10 @@ struct ApkSignView: View {
     private var dropZone: some View {
         VStack(spacing: 12) {
             Image(systemName: "signature")
-                .font(.system(size: 46))
+                .font(.app(size: 46))
                 .foregroundStyle(.brandAccent)
             Text("Drag an APK here to sign")
-                .font(.title3.weight(.medium))
+                .font(.app(.title3).weight(.medium))
             Button("Choose APK…") { choose() }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -133,7 +133,7 @@ struct ApkSignView: View {
                 "No debug keystore at ~/.android/debug.keystore yet — build any app once, or use your own keystore.",
                 systemImage: "exclamationmark.triangle"
             )
-            .font(.caption).foregroundStyle(.orange)
+            .font(.app(.caption)).foregroundStyle(.orange)
         }
     }
 
@@ -164,7 +164,7 @@ struct ApkSignView: View {
         Button(creating ? "Creating…" : "Create keystore") { createKeystore() }
             .disabled(!canCreate)
         Text("Creates a self-signed RSA-2048 keystore (valid ~27 years) and selects it for signing.")
-            .font(.caption).foregroundStyle(.textMuted)
+            .font(.app(.caption)).foregroundStyle(.textMuted)
     }
 
     @ViewBuilder private func resultRow(_ message: String) -> some View {
@@ -173,7 +173,7 @@ struct ApkSignView: View {
                 Label(message, systemImage: "checkmark.seal.fill").foregroundStyle(.green)
                 if !resultSchemes.isEmpty {
                     Text("Verified: " + resultSchemes.map { $0.uppercased() }.joined(separator: ", "))
-                        .font(.caption).foregroundStyle(.textMuted)
+                        .font(.app(.caption)).foregroundStyle(.textMuted)
                 }
                 Button("Reveal in Finder") {
                     if let signedURL { NSWorkspace.shared.activateFileViewerSelecting([signedURL]) }

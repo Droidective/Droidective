@@ -19,9 +19,9 @@ struct CustomCommandsView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Custom Commands").font(.headline)
+                    Text("Custom Commands").font(.app(.headline))
                     Text("Define adb actions, terminal commands, or script runs with {bundleId} and {serial} placeholders.")
-                        .font(.footnote)
+                        .font(.app(.footnote))
                         .foregroundStyle(.textMuted)
                 }
                 Spacer()
@@ -56,7 +56,7 @@ struct CustomCommandsView: View {
                         VStack(alignment: .leading) {
                             Text(command.name)
                             Text(command.kind == .adb ? "adb \(command.command)" : "$ \(command.command)")
-                                .font(.system(.footnote, design: .monospaced))
+                                .font(.app(.footnote, design: .monospaced))
                                 .foregroundStyle(.textMuted)
                         }
                         Spacer()
@@ -117,7 +117,7 @@ struct CustomCommandsView: View {
 
     private var editor: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(editing == nil ? "New Command" : "Edit Command").font(.headline)
+            Text(editing == nil ? "New Command" : "Edit Command").font(.app(.headline))
             TextField("Name", text: $draftName)
                 .brandField()
             Picker("Runs", selection: $draftKind) {
@@ -128,7 +128,7 @@ struct CustomCommandsView: View {
             .labelsHidden()
             TextField(draftCommandPrompt, text: $draftCommand)
                 .brandField()
-                .font(.system(.body, design: .monospaced))
+                .font(.app(.body, design: .monospaced))
             if draftKind == .shell {
                 HStack(spacing: 8) {
                     Button {
@@ -138,7 +138,7 @@ struct CustomCommandsView: View {
                     }
                     .controlSize(.small)
                     Text("Runs through your login shell — script files, pipes, and PATH all work.")
-                        .font(.caption)
+                        .font(.app(.caption))
                         .foregroundStyle(.textMuted)
                 }
             }
@@ -229,12 +229,12 @@ struct CustomCommandsView: View {
     private var presetLibrary: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Preset Commands").font(.headline)
+                Text("Preset Commands").font(.app(.headline))
                 Spacer()
                 Button("Done") { showPresets = false }
             }
             Text("Common adb commands. Add one to your list, then run or edit it.")
-                .font(.footnote)
+                .font(.app(.footnote))
                 .foregroundStyle(.textMuted)
             ScrollView {
                 VStack(spacing: 0) {
@@ -255,16 +255,16 @@ struct CustomCommandsView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(preset.name)
                 Text("adb \(preset.command)")
-                    .font(.system(.footnote, design: .monospaced))
+                    .font(.app(.footnote, design: .monospaced))
                     .foregroundStyle(.textMuted)
                 Text(preset.detail)
-                    .font(.caption)
+                    .font(.app(.caption))
                     .foregroundStyle(.textMuted)
             }
             Spacer(minLength: 8)
             if added {
                 Label("Added", systemImage: "checkmark")
-                    .font(.caption)
+                    .font(.app(.caption))
                     .foregroundStyle(.textMuted)
             } else {
                 Button("Add") { add(preset) }

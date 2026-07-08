@@ -85,7 +85,7 @@ struct DevMetricsOverlay: View {
             metric("CPU", String(format: "%.1f%%", monitor.cpuPercent))
             metric("NET", "↓\(DevMetrics.formatRate(monitor.downBytesPerSec))  ↑\(DevMetrics.formatRate(monitor.upBytesPerSec))")
         }
-        .font(.system(size: 10, weight: .medium, design: .monospaced))
+        .font(.app(size: 10, weight: .medium, design: .monospaced))
         .foregroundStyle(.white)
         .padding(.horizontal, 8)
         .padding(.vertical, 6)

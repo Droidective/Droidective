@@ -65,7 +65,7 @@ struct EmulatorsView: View {
         VStack(spacing: 0) {
             HStack {
                 Text("\((avds ?? []).count + (simulators ?? []).count) virtual devices")
-                    .font(.footnote)
+                    .font(.app(.footnote))
                     .foregroundStyle(.textMuted)
                 Spacer()
                 Button {
@@ -129,7 +129,7 @@ struct EmulatorsView: View {
                                 : "Show all \(ordered.count) simulators",
                             systemImage: showAllSimulators ? "chevron.up" : "chevron.down"
                         )
-                        .font(.footnote)
+                        .font(.app(.footnote))
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.brandAccent)
@@ -147,7 +147,7 @@ struct EmulatorsView: View {
                 Text(avd.displayName)
                 if let serial = avd.runningSerial {
                     Text("Running — \(serial)")
-                        .font(.footnote)
+                        .font(.app(.footnote))
                         .foregroundStyle(.brandAccent)
                 }
             }
@@ -191,14 +191,14 @@ struct EmulatorsView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(simulator.name)
                 Text(simulator.isBooted ? "Booted — \(simulator.runtime)" : simulator.runtime)
-                    .font(.footnote)
+                    .font(.app(.footnote))
                     .foregroundStyle(simulator.isBooted ? .brandAccent : .textMuted)
             }
             Spacer()
 
             if !simulator.isAvailable {
                 Text("Runtime missing")
-                    .font(.footnote)
+                    .font(.app(.footnote))
                     .foregroundStyle(.textMuted)
             } else if simulator.isBooted {
                 Button("Shut Down") {

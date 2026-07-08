@@ -40,10 +40,10 @@ struct HubSection<Content: View, Accessory: View>: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.headline).foregroundStyle(.textMain)
+                    Text(title).font(.app(.headline)).foregroundStyle(.textMain)
                     if let subtitle {
                         Text(subtitle)
-                            .font(.callout)
+                            .font(.app(.callout))
                             .foregroundStyle(.textMuted)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -82,7 +82,7 @@ struct HubField: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text(label).font(.caption).foregroundStyle(.textMuted)
+            Text(label).font(.app(.caption)).foregroundStyle(.textMuted)
             TextField("", text: $text, prompt: prompt.map(Text.init))
                 .brandField()
                 .labelsHidden()

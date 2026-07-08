@@ -51,7 +51,7 @@ struct WirelessAdbSection: View {
                 .disabled(busy || host.isEmpty || connectionPort.isEmpty)
 
             Text("The pairing port (from \"Pair device with pairing code\") differs from the connection port shown on the device's Wireless debugging screen.")
-                .font(.footnote)
+                .font(.app(.footnote))
                 .foregroundStyle(.textMuted)
                 .fixedSize(horizontal: false, vertical: true)
         }

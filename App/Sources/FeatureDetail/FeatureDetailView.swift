@@ -162,7 +162,7 @@ struct FeatureDescription: View {
             Image(systemName: "info.circle")
                 .foregroundStyle(.textMuted)
             Text(.init(note))
-                .font(.callout)
+                .font(.app(.callout))
                 .foregroundStyle(.textMuted)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)

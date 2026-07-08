@@ -342,7 +342,7 @@ struct TerminalView: View {
     private func railButton(_ symbol: String, help: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.callout.weight(.medium))
+                .font(.app(.callout).weight(.medium))
                 .foregroundStyle(.textMuted)
                 .frame(width: 26, height: 26)
                 .contentShape(Rectangle())
@@ -354,15 +354,15 @@ struct TerminalView: View {
     private func groupHeader(_ group: TerminalTabs.Group) -> some View {
         HStack(spacing: 6) {
             Image(systemName: "chevron.right")
-                .font(.system(size: 9, weight: .bold))
+                .font(.app(size: 9, weight: .bold))
                 .rotationEffect(.degrees(group.isCollapsed ? 0 : 90))
                 .foregroundStyle(.textMuted)
             Text(group.name)
-                .font(.callout.weight(.semibold))
+                .font(.app(.callout).weight(.semibold))
                 .lineLimit(1)
                 .foregroundStyle(.textMuted)
             Text("\(group.tabIDs.count)")
-                .font(.caption)
+                .font(.app(.caption))
                 .foregroundStyle(.tertiary)
             Spacer(minLength: 0)
         }
@@ -399,10 +399,10 @@ struct TerminalView: View {
         let isActive = tab.id == terminals.activeID
         return HStack(spacing: 8) {
             Image(systemName: "terminal")
-                .font(.body)
+                .font(.app(.body))
                 .foregroundStyle(isActive ? AnyShapeStyle(.brandAccent) : AnyShapeStyle(.textMuted))
             Text(tab.name)
-                .font(.callout)
+                .font(.app(.callout))
                 .lineLimit(1)
                 .foregroundStyle(isActive ? AnyShapeStyle(.textMain) : AnyShapeStyle(.textMuted))
             Spacer(minLength: 0)
@@ -410,7 +410,7 @@ struct TerminalView: View {
                 state.closeTerminalShell(tab.id)
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.app(size: 10, weight: .bold))
                     .foregroundStyle(.textMuted)
                     .frame(width: 20, height: 20)
                     .contentShape(Rectangle())

@@ -61,7 +61,7 @@ struct SystemRestrictionsView: View {
                     .buttonStyle(.bordered)
                 } else {
                     Text("Connect a rooted device to relax SELinux or remount the system partition.")
-                        .font(.callout)
+                        .font(.app(.callout))
                         .foregroundStyle(.textMuted)
                 }
             }

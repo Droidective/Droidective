@@ -42,20 +42,20 @@ struct RolePickerView: View {
     private var header: some View {
         VStack(spacing: 8) {
             Image(systemName: "square.grid.2x2.fill")
-                .font(.system(size: 38))
+                .font(.app(size: 38))
                 .foregroundStyle(.brandAccent)
                 .symbolRenderingMode(.hierarchical)
                 .padding(.bottom, 2)
             Text("Welcome to Droidective".uppercased())
-                .font(.caption.weight(.semibold))
+                .font(.app(.caption).weight(.semibold))
                 .kerning(1.2)
                 .foregroundStyle(.brandAccent)
             Text("What do you do?")
-                .font(.largeTitle.bold())
+                .font(.app(.largeTitle).bold())
                 .foregroundStyle(.textMain)
             Text("Pick a role and we'll start you with the tools you'll use most. "
                 + "Everything else is one click away — and you can change this anytime.")
-                .font(.body)
+                .font(.app(.body))
                 .foregroundStyle(.textMuted)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 480)
@@ -73,7 +73,7 @@ struct RolePickerView: View {
                 "Show me everything — all \(FeatureRegistry.catalogFeatureIDs.count) tools",
                 systemImage: "square.grid.3x3"
             )
-            .font(.callout)
+            .font(.app(.callout))
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
             .contentShape(Rectangle())
@@ -110,7 +110,7 @@ private struct RoleCard: View {
             VStack(alignment: .leading, spacing: 9) {
                 HStack(alignment: .top) {
                     Image(systemName: role.icon)
-                        .font(.system(size: 19, weight: .medium))
+                        .font(.app(size: 19, weight: .medium))
                         .foregroundStyle(.brandAccent)
                         .symbolRenderingMode(.hierarchical)
                         .frame(width: 38, height: 38)
@@ -120,17 +120,17 @@ private struct RoleCard: View {
                         )
                     Spacer(minLength: 8)
                     Text("\(curated.count) tools")
-                        .font(.caption)
+                        .font(.app(.caption))
                         .foregroundStyle(.textMuted)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
                         .background(.bgRoot, in: Capsule())
                 }
                 Text(role.label)
-                    .font(.title3.weight(.semibold))
+                    .font(.app(.title3).weight(.semibold))
                     .foregroundStyle(.textMain)
                 Text(role.blurb)
-                    .font(.callout)
+                    .font(.app(.callout))
                     .foregroundStyle(.textMuted)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
@@ -167,7 +167,7 @@ private struct RoleCard: View {
         HStack(spacing: 6) {
             ForEach(previewFeatures) { feature in
                 Label(feature.title, systemImage: feature.icon)
-                    .font(.caption)
+                    .font(.app(.caption))
                     .lineLimit(1)
                     .foregroundStyle(.textMuted)
                     .padding(.horizontal, 8)
@@ -177,7 +177,7 @@ private struct RoleCard: View {
             }
             if curated.count > previewFeatures.count {
                 Text("+\(curated.count - previewFeatures.count)")
-                    .font(.caption)
+                    .font(.app(.caption))
                     .foregroundStyle(.textMuted)
             }
         }

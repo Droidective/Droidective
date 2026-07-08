@@ -17,7 +17,7 @@ struct LastResultCard: View {
                         .textSelection(.enabled)
                     Spacer()
                     Text(entry.at, style: .time)
-                        .font(.caption)
+                        .font(.app(.caption))
                         .foregroundStyle(.tertiary)
                 }
 

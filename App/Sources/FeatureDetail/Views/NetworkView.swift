@@ -114,7 +114,7 @@ struct NetworkView: View {
                     }
                 } else {
                     Text("Watching device-wide download & upload throughput, sampled from /proc/net/dev once a second. Press Record to capture an exportable session.")
-                        .font(.caption)
+                        .font(.app(.caption))
                         .foregroundStyle(.textMuted)
                 }
             }
@@ -169,10 +169,10 @@ struct NetworkView: View {
     private func readout(_ title: String, _ bytesPerSec: Double, _ icon: String, _ color: Color) -> some View {
         VStack(spacing: 4) {
             Label(title, systemImage: icon)
-                .font(.caption.weight(.semibold))
+                .font(.app(.caption).weight(.semibold))
                 .foregroundStyle(color)
             Text(speed(bytesPerSec))
-                .font(.system(.title, design: .rounded).weight(.semibold).monospacedDigit())
+                .font(.app(.title, design: .rounded).weight(.semibold).monospacedDigit())
         }
         .frame(maxWidth: .infinity)
     }
@@ -212,9 +212,9 @@ struct NetworkView: View {
 
     private func total(_ title: String, _ bytes: UInt64, _ color: Color) -> some View {
         VStack(spacing: 2) {
-            Text(title).font(.caption).foregroundStyle(.textMuted)
+            Text(title).font(.app(.caption)).foregroundStyle(.textMuted)
             Text(bytesLabel(bytes))
-                .font(.title3.monospacedDigit())
+                .font(.app(.title3).monospacedDigit())
                 .foregroundStyle(color)
         }
         .frame(maxWidth: .infinity)
@@ -228,12 +228,12 @@ struct NetworkView: View {
                     Text("Download").frame(width: 110, alignment: .trailing)
                     Text("Upload").frame(width: 110, alignment: .trailing)
                 }
-                .font(.caption.weight(.semibold))
+                .font(.app(.caption).weight(.semibold))
                 .foregroundStyle(.textMuted)
                 Divider()
                 if interfaces.isEmpty {
                     Text("Per-interface speeds appear while live.")
-                        .font(.callout)
+                        .font(.app(.callout))
                         .foregroundStyle(.textMuted)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.vertical, 6)
@@ -241,13 +241,13 @@ struct NetworkView: View {
                     ForEach(interfaces) { interface in
                         HStack(spacing: 8) {
                             Text(interface.name)
-                                .font(.system(.callout, design: .monospaced))
+                                .font(.app(.callout, design: .monospaced))
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             Text(speed(interface.downloadBytesPerSec))
-                                .font(.caption.monospacedDigit())
+                                .font(.app(.caption).monospacedDigit())
                                 .frame(width: 110, alignment: .trailing)
                             Text(speed(interface.uploadBytesPerSec))
-                                .font(.caption.monospacedDigit())
+                                .font(.app(.caption).monospacedDigit())
                                 .frame(width: 110, alignment: .trailing)
                         }
                         .padding(.vertical, 1)
@@ -263,9 +263,9 @@ struct NetworkView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center, spacing: 8) {
-                Text(title).font(.headline)
+                Text(title).font(.app(.headline))
                 if let accessory { accessory }
-                Text(subtitle).font(.caption).foregroundStyle(.textMuted)
+                Text(subtitle).font(.app(.caption)).foregroundStyle(.textMuted)
                 Spacer()
             }
             content()

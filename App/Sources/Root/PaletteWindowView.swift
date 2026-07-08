@@ -59,7 +59,7 @@ struct PaletteWindowView: View {
             } else if !query.isEmpty {
                 Divider()
                 Text("No matching features")
-                    .font(.callout)
+                    .font(.app(.callout))
                     .foregroundStyle(.textMuted)
                     .padding(14)
             }
@@ -88,11 +88,11 @@ struct PaletteWindowView: View {
     private var searchField: some View {
         HStack(spacing: 12) {
             Image(systemName: "magnifyingglass")
-                .font(.title)
+                .font(.app(.title))
                 .foregroundStyle(.textMuted)
             TextField("Search features…", text: $query)
                 .textFieldStyle(.plain)
-                .font(.title)
+                .font(.app(.title))
                 .focused($fieldFocused)
                 .onSubmit { open(at: highlighted) }
                 .onKeyPress(.downArrow) { move(1); return .handled }
@@ -136,7 +136,7 @@ struct PaletteWindowView: View {
     private func footerHint(_ key: String, _ label: String) -> some View {
         HStack(spacing: 5) {
             KeyHint(key)
-            Text(label).font(.caption2).foregroundStyle(.textMuted)
+            Text(label).font(.app(.caption2)).foregroundStyle(.textMuted)
         }
     }
 
@@ -149,7 +149,7 @@ struct PaletteWindowView: View {
                 Text(feature.title)
                 if let subtitle = feature.subtitle {
                     Text(subtitle)
-                        .font(.caption)
+                        .font(.app(.caption))
                         .foregroundStyle(isHighlighted ? accentText.opacity(0.75) : .secondary)
                         .lineLimit(1)
                 }
@@ -157,12 +157,12 @@ struct PaletteWindowView: View {
             Spacer()
             if state.layout.favorites.contains(feature.id) {
                 Image(systemName: "pin.fill")
-                    .font(.caption2)
+                    .font(.app(.caption2))
                     .foregroundStyle(isHighlighted ? AnyShapeStyle(accentText.opacity(0.8)) : AnyShapeStyle(.brandAccent))
             }
             if !state.layout.effectiveEnabledIDs.contains(feature.id) {
                 Text("disabled")
-                    .font(.caption2)
+                    .font(.app(.caption2))
                     .foregroundStyle(isHighlighted ? accentText.opacity(0.75) : .secondary)
             }
             if index < 8 {
@@ -227,7 +227,7 @@ struct KeyHint: View {
 
     var body: some View {
         Text(text)
-            .font(.caption2.weight(.medium))
+            .font(.app(.caption2).weight(.medium))
             .foregroundStyle(prominent ? AnyShapeStyle(accentText) : AnyShapeStyle(.textMuted))
             .padding(.horizontal, 5)
             .padding(.vertical, 2)

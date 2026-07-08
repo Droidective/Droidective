@@ -81,7 +81,7 @@ struct CloseButton: View {
             action()
         } label: {
             Image(systemName: "xmark")
-                .font(.system(size: 9, weight: .semibold))
+                .font(.app(size: 9, weight: .semibold))
                 .foregroundStyle(hovering ? AnyShapeStyle(.textMain) : AnyShapeStyle(.textMuted))
                 .frame(width: 18, height: 18)
                 .background(Circle().fill(.textMuted.opacity(hovering ? 0.18 : 0)))

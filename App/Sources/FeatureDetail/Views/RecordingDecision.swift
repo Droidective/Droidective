@@ -15,7 +15,7 @@ private struct MediaDecisionView: View {
 
     var body: some View {
         VStack(spacing: 18) {
-            Text(title).font(.headline)
+            Text(title).font(.app(.headline))
 
             Group {
                 if let preview {
@@ -23,7 +23,7 @@ private struct MediaDecisionView: View {
                 } else if loadingPreview {
                     ProgressView()
                 } else {
-                    Image(systemName: "photo").font(.largeTitle).foregroundStyle(.secondary)
+                    Image(systemName: "photo").font(.app(.largeTitle)).foregroundStyle(.secondary)
                 }
             }
             .frame(width: 360, height: 240)

@@ -83,7 +83,7 @@ struct DeviceInfoView: View {
 
             HubSection("All properties (\(props.count))") {
                 Text("Type in the filter box above to search every raw getprop value.")
-                    .font(.footnote)
+                    .font(.app(.footnote))
                     .foregroundStyle(.textMuted)
             }
         }
@@ -98,15 +98,15 @@ struct DeviceInfoView: View {
                     .fill(Color.brandAccent.opacity(0.14))
                     .frame(width: 56, height: 56)
                 Image(systemName: "iphone.gen3")
-                    .font(.system(size: 26))
+                    .font(.app(size: 26))
                     .foregroundStyle(.brandAccent)
             }
             VStack(alignment: .leading, spacing: 6) {
                 Text(deviceTitle(props))
-                    .font(.title2.bold())
+                    .font(.app(.title2).bold())
                     .lineLimit(1)
                 Text(osLine(props))
-                    .font(.callout)
+                    .font(.app(.callout))
                     .foregroundStyle(.textMuted)
                 identityChips(props)
             }
@@ -150,8 +150,8 @@ struct DeviceInfoView: View {
 
     private func chip(_ icon: String, _ text: String) -> some View {
         HStack(spacing: 4) {
-            Image(systemName: icon).font(.system(size: 9, weight: .semibold))
-            Text(text).font(.caption.monospacedDigit()).textSelection(.enabled)
+            Image(systemName: icon).font(.app(size: 9, weight: .semibold))
+            Text(text).font(.app(.caption).monospacedDigit()).textSelection(.enabled)
         }
         .foregroundStyle(.textMuted)
         .padding(.horizontal, 8)
@@ -251,11 +251,11 @@ struct DeviceInfoView: View {
                 List(matches, id: \.key) { prop in
                     HStack(alignment: .firstTextBaseline) {
                         Text(prop.key)
-                            .font(.system(.callout, design: .monospaced))
+                            .font(.app(.callout, design: .monospaced))
                             .textSelection(.enabled)
                         Spacer()
                         Text(prop.value)
-                            .font(.system(.callout, design: .monospaced))
+                            .font(.app(.callout, design: .monospaced))
                             .foregroundStyle(.textMuted)
                             .textSelection(.enabled)
                     }
@@ -303,21 +303,21 @@ private struct DeviceStatCard: View {
                         .fill(tint.opacity(0.16))
                         .frame(width: 28, height: 28)
                     Image(systemName: icon)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.app(size: 13, weight: .semibold))
                         .foregroundStyle(tint)
                 }
                 Text(title)
-                    .font(.callout.weight(.semibold))
+                    .font(.app(.callout).weight(.semibold))
                     .foregroundStyle(.textMuted)
                 Spacer(minLength: 0)
             }
             VStack(alignment: .leading, spacing: 3) {
                 Text(value)
-                    .font(.title3.weight(.semibold))
+                    .font(.app(.title3).weight(.semibold))
                     .monospacedDigit()
                     .lineLimit(1)
                 Text(caption)
-                    .font(.caption)
+                    .font(.app(.caption))
                     .foregroundStyle(.textMuted)
                     .lineLimit(1)
             }

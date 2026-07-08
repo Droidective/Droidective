@@ -55,7 +55,7 @@ struct DeviceBarView: View {
                 OverridesPillView()
                 if state.adbMissing {
                     Label("adb not found", systemImage: "exclamationmark.triangle.fill")
-                        .font(.footnote)
+                        .font(.app(.footnote))
                         .foregroundStyle(.orange)
                     Button(state.installingTool == .adb ? "Installing…" : "Install") {
                         state.installTool(.adb)

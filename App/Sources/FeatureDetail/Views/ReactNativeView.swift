@@ -31,7 +31,7 @@ struct ReactNativeView: View {
                 }
                 if state.targetSerials.isEmpty {
                     Text("Connect a device to use these.")
-                        .font(.footnote)
+                        .font(.app(.footnote))
                         .foregroundStyle(.textMuted)
                 }
             }
@@ -107,10 +107,10 @@ struct ReactNativeView: View {
                 Image(systemName: icon).foregroundStyle(.textMuted).frame(width: 22)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title).foregroundStyle(.textMain)
-                    Text(detail).font(.footnote).foregroundStyle(.textMuted)
+                    Text(detail).font(.app(.footnote)).foregroundStyle(.textMuted)
                 }
                 Spacer()
-                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.textMuted)
+                Image(systemName: "chevron.right").font(.app(.caption)).foregroundStyle(.textMuted)
             }
             .contentShape(Rectangle())
             .padding(.vertical, 7)

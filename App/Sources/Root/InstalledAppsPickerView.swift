@@ -22,7 +22,7 @@ struct InstalledAppsPickerView: View {
         VStack(spacing: 0) {
             HStack {
                 Text("Installed apps")
-                    .font(.headline)
+                    .font(.app(.headline))
                 Spacer()
                 Button("Cancel") { dismiss() }
             }
@@ -58,7 +58,7 @@ struct InstalledAppsPickerView: View {
                                 Spacer()
                                 if state.bundles.contains(where: { $0.packageId == package }) {
                                     Text("saved")
-                                        .font(.caption)
+                                        .font(.app(.caption))
                                         .foregroundStyle(.textMuted)
                                 }
                             }

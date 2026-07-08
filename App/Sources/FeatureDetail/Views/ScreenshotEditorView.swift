@@ -266,7 +266,7 @@ struct ScreenshotEditorView: View {
 
                 HStack(spacing: 5) {
                     Image(systemName: activeRedactStyle == .blur ? "drop.fill" : "circle.lefthalf.filled")
-                        .font(.caption)
+                        .font(.app(.caption))
                         .foregroundStyle(.textMuted)
                     Slider(
                         value: activeRedactStyle == .blur ? blurBinding : opacityBinding,
@@ -841,7 +841,7 @@ struct ScreenshotEditorView: View {
         HStack(spacing: 10) {
             if cropping {
                 Text("Drag to choose a crop area")
-                    .font(.footnote)
+                    .font(.app(.footnote))
                     .foregroundStyle(.textMuted)
                 Spacer()
                 Button("Cancel") { cropping = false; cropRect = nil; cropRotation = 0; cropDrag = .none; cropDragOrigin = nil }
@@ -874,7 +874,7 @@ struct ScreenshotEditorView: View {
             Button { zoom = 1; pinchAnchor = 1 } label: { Text("Fit") }
             Button { zoom = min(8, zoom * 1.25); pinchAnchor = zoom } label: { Image(systemName: "plus.magnifyingglass") }
             Text("\(Int(zoom * 100))%")
-                .font(.caption.monospacedDigit())
+                .font(.app(.caption).monospacedDigit())
                 .foregroundStyle(.textMuted)
                 .frame(width: 44, alignment: .leading)
         }

@@ -63,7 +63,7 @@ struct DeepLinksSection: View {
             VStack(alignment: .leading, spacing: 1) {
                 if !link.label.isEmpty { Text(link.label).foregroundStyle(.textMain) }
                 Text(link.url)
-                    .font(.footnote)
+                    .font(.app(.footnote))
                     .foregroundStyle(.textMuted)
                     .textSelection(.enabled)
             }
@@ -94,7 +94,7 @@ struct DeepLinksSection: View {
     private var editor: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(editingLink == nil ? "Add Deep Link" : "Edit Deep Link")
-                .font(.headline)
+                .font(.app(.headline))
             TextField("URL (e.g. myapp://orders/123)", text: $draftURL)
                 .brandField()
             TextField("Label (optional)", text: $draftLabel)

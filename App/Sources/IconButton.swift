@@ -58,7 +58,7 @@ private struct IconButtonBody: View {
 
     var body: some View {
         configuration.label
-            .font(.system(size: size.glyph, weight: .medium))
+            .font(.app(size: size.glyph, weight: .medium))
             .frame(width: size.side, height: size.side)
             .background(
                 RoundedRectangle(cornerRadius: 6, style: .continuous)

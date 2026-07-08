@@ -24,8 +24,8 @@ struct VideoEditorView: View {
     private var emptyState: some View {
         VStack(spacing: 20) {
             VStack(spacing: 10) {
-                Image(systemName: "film").font(.system(size: 46)).foregroundStyle(.textMuted)
-                Text("Edit a video").font(.title3.weight(.semibold))
+                Image(systemName: "film").font(.app(size: 46)).foregroundStyle(.textMuted)
+                Text("Edit a video").font(.app(.title3).weight(.semibold))
                 Text("Open a video to trim, rotate, crop, change speed, convert, and compress —\nor record one from Screen Record.")
                     .multilineTextAlignment(.center).foregroundStyle(.textMuted)
             }

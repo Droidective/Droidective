@@ -157,6 +157,9 @@ struct RootView: View {
         }
         migrateDefaultsIfNeeded()
         applyStoredTheme()
+        // Enumerate installed font families now so the Settings ▸ Appearance
+        // font picker opens instantly.
+        FontCatalog.preload()
         updateDockIcon()
         // Watch the app's own CPU/RAM and report sustained spikes to telemetry
         // with the features open at the time (consent-gated in Telemetry).
@@ -591,7 +594,7 @@ private struct EditorPane: View {
                 .overlay(alignment: .leading) { Rectangle().fill(.brandAccent).frame(width: 2) }
                 .overlay {
                     Label("Drop to split", systemImage: "rectangle.split.2x1")
-                        .font(.headline)
+                        .font(.app(.headline))
                         .foregroundStyle(.brandAccent)
                 }
                 .frame(width: geo.size.width / 2, height: geo.size.height)
@@ -724,14 +727,14 @@ struct OperationProgressStrip: View {
                     .progressViewStyle(.linear)
                     .frame(maxWidth: 260)
                 Text("\(Int(fraction * 100))%")
-                    .font(.footnote.monospacedDigit())
+                    .font(.app(.footnote).monospacedDigit())
                     .foregroundStyle(.textMuted)
             } else {
                 ProgressView()
                     .controlSize(.small)
             }
             Text(operation.label)
-                .font(.footnote)
+                .font(.app(.footnote))
                 .foregroundStyle(.textMuted)
             Spacer()
         }

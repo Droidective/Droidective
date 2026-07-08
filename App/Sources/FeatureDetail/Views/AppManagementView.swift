@@ -29,8 +29,8 @@ struct AppManagementView: View {
         VStack(alignment: .leading, spacing: 16) {
             if let bundle = state.selectedBundle {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(bundle.nickname).font(.headline)
-                    Text(bundle.packageId).font(.footnote).foregroundStyle(.textMuted)
+                    Text(bundle.nickname).font(.app(.headline))
+                    Text(bundle.packageId).font(.app(.footnote)).foregroundStyle(.textMuted)
                 }
             }
 
@@ -43,7 +43,7 @@ struct AppManagementView: View {
 
             Divider()
 
-            Text("Destructive").font(.subheadline).foregroundStyle(.textMuted)
+            Text("Destructive").font(.app(.subheadline)).foregroundStyle(.textMuted)
             HStack(spacing: 8) {
                 destructiveButton(.clearData, "Clear Data")
                 destructiveButton(.uninstall, "Uninstall")

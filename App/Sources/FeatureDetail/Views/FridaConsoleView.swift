@@ -40,15 +40,15 @@ struct FridaConsoleView: View {
                 Button("Stop frida-server") { Task { await stopServer(serial) } }
                     .disabled(busy || !serverRunning)
                 Text("Then connect from a terminal: `frida-ps -U` or `frida -U -n <app>`.")
-                    .font(.caption).foregroundStyle(.textMuted)
+                    .font(.app(.caption)).foregroundStyle(.textMuted)
             }
             Section("frida-gadget (non-rooted)") {
                 Button(busy ? "Working…" : "Download frida-gadget (.so)") { Task { await downloadGadget(serial) } }
                     .disabled(busy)
                 if let gadgetPath {
-                    Text(gadgetPath).font(.caption.monospaced()).foregroundStyle(.textMuted).textSelection(.enabled)
+                    Text(gadgetPath).font(.app(.caption).monospaced()).foregroundStyle(.textMuted).textSelection(.enabled)
                     Text("Inject it into a repackaged APK (e.g. `objection patchapk`), then connect with `frida -U -n Gadget`.")
-                        .font(.caption).foregroundStyle(.textMuted)
+                        .font(.app(.caption)).foregroundStyle(.textMuted)
                 }
             }
             if download.active {
@@ -61,7 +61,7 @@ struct FridaConsoleView: View {
                 }
             }
             if let status {
-                Section { Text(status).font(.callout).foregroundStyle(.textMuted) }
+                Section { Text(status).font(.app(.callout)).foregroundStyle(.textMuted) }
             }
         }
         .formStyle(.grouped)

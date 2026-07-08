@@ -92,7 +92,7 @@ struct AppsExplorerView: View {
                                         Text(app.displayName)
                                         if app.isSystem {
                                             Text("system")
-                                                .font(.caption2)
+                                                .font(.app(.caption2))
                                                 .foregroundStyle(.textMuted)
                                                 .padding(.horizontal, 4)
                                                 .background(Color.bgSurface, in: Capsule())
@@ -100,7 +100,7 @@ struct AppsExplorerView: View {
                                         lifecycleBadge(for: app.packageId)
                                     }
                                     Text("\(app.packageId)\(app.versionName.map { " · v\($0)" } ?? "")")
-                                        .font(.footnote)
+                                        .font(.app(.footnote))
                                         .foregroundStyle(.textMuted)
                                         .lineLimit(1)
                                 }
@@ -111,7 +111,7 @@ struct AppsExplorerView: View {
                     }
                     HStack {
                         Text("\(visibleApps.count) of \(apps.count) apps")
-                            .font(.caption)
+                            .font(.app(.caption))
                             .foregroundStyle(.tertiary)
                         Spacer()
                     }
@@ -166,7 +166,7 @@ struct AppsExplorerView: View {
 
     private func badge(_ text: String, _ color: Color) -> some View {
         Text(text)
-            .font(.caption2)
+            .font(.app(.caption2))
             .foregroundStyle(color)
             .padding(.horizontal, 4)
             .background(color.opacity(0.15), in: Capsule())
@@ -226,7 +226,7 @@ private struct AppDetailPane: View {
                     AppIconView(packageId: packageId, name: derivedName, serial: state.targetSerials.first ?? "")
                         .frame(width: 40, height: 40)
                     Text(packageId)
-                        .font(.callout)
+                        .font(.app(.callout))
                         .textSelection(.enabled)
                 }
                 if let info, info.installed {
@@ -286,7 +286,7 @@ private struct AppDetailPane: View {
                                 VStack(alignment: .leading) {
                                     Text(permission.shortName)
                                     Text(permission.name)
-                                        .font(.caption)
+                                        .font(.app(.caption))
                                         .foregroundStyle(.textMuted)
                                 }
                             }
@@ -374,7 +374,7 @@ private struct AppDetailPane: View {
             VStack(spacing: 0) {
                 HStack {
                     Text("Files · \(packageId)")
-                        .font(.headline)
+                        .font(.app(.headline))
                         .lineLimit(1)
                         .truncationMode(.middle)
                     Spacer()
@@ -557,7 +557,7 @@ struct MonogramIcon: View {
             .fill(color.gradient)
             .overlay(
                 Text(initial)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.app(size: 13, weight: .semibold))
                     .foregroundStyle(color.contrastingForeground)
                     .minimumScaleFactor(0.6)
             )

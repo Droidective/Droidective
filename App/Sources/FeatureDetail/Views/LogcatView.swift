@@ -70,7 +70,7 @@ struct LogcatView: View {
                 .labelsHidden()
                 .frame(width: 110)
             }
-            .font(.callout)
+            .font(.app(.callout))
 
             LabeledContent("App") {
                 Picker("App", selection: $packageFilter) {
@@ -82,7 +82,7 @@ struct LogcatView: View {
                 .labelsHidden()
                 .frame(width: 140)
             }
-            .font(.callout)
+            .font(.app(.callout))
 
             TextField("Search lines…", text: $search)
                 .brandField()
@@ -127,7 +127,7 @@ struct LogcatView: View {
                 .fill(statusColor)
                 .frame(width: 7, height: 7)
             Text(statusText)
-                .font(.caption)
+                .font(.app(.caption))
                 .foregroundStyle(.textMuted)
             if let tagFilter {
                 Button {
@@ -137,7 +137,7 @@ struct LogcatView: View {
                         Text("tag: \(tagFilter)")
                         Image(systemName: "xmark.circle.fill")
                     }
-                    .font(.caption)
+                    .font(.app(.caption))
                 }
                 .buttonStyle(.plain)
                 .padding(.horizontal, 6)
@@ -148,11 +148,11 @@ struct LogcatView: View {
             Spacer()
             if !search.isEmpty {
                 Text("\(visible.count) of \(lines.count) lines match")
-                    .font(.caption)
+                    .font(.app(.caption))
                     .foregroundStyle(.textMuted)
             } else {
                 Text("\(lines.count) lines")
-                    .font(.caption)
+                    .font(.app(.caption))
                     .foregroundStyle(.tertiary)
             }
         }
@@ -226,7 +226,7 @@ struct LogcatView: View {
             jumpToken += 1
         } label: {
             Image(systemName: "arrow.down")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.app(size: 15, weight: .semibold))
                 .foregroundStyle(.white)
                 .frame(width: 36, height: 36)
                 .background(.tint, in: Circle())

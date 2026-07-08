@@ -45,7 +45,7 @@ struct CrashView: View {
             if let crash {
                 ScrollView {
                     Text(crash)
-                        .font(.system(size: 11, design: .monospaced))
+                        .font(.app(size: 11, design: .monospaced))
                         .foregroundStyle(.red)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
