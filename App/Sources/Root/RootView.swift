@@ -171,6 +171,7 @@ struct RootView: View {
         Telemetry.shared.trackAppLaunched(launchCount: launchCount)
         Telemetry.shared.featureBecameActive(state.activeTabID)
         installCloseTabMonitor()
+        installDragJanitor()
         switch LaunchPrompt.next(
             hasChosenRole: hasChosenRole, hasSeenTour: hasSeenTour,
             starPromptShown: starPromptShown,
@@ -211,6 +212,24 @@ struct RootView: View {
             else { return event }
             state.closeActiveTab()
             return nil
+        }
+    }
+
+    private static var dragJanitorInstalled = false
+
+    /// A drag has no "ended without a drop" callback: releasing a dragged tab
+    /// outside the window (or cancelling with Esc) fires no drop delegate, so
+    /// `draggingTabID` — and the insertion guideline keyed off it — stayed
+    /// stuck. Normal mouse events don't flow while a drag session runs, so the
+    /// first one arriving with drag state still set means exactly that ending;
+    /// clear it there. Installed once.
+    private func installDragJanitor() {
+        guard !RootView.dragJanitorInstalled else { return }
+        RootView.dragJanitorInstalled = true
+        let state = self.state
+        NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDown]) { event in
+            if state.draggingTabID != nil { state.draggingTabID = nil }
+            return event
         }
     }
 
