@@ -1,7 +1,42 @@
-## Droidective v2.9.0
+## Droidective v2.9.1
 
-Adds a background mode with a global Quick Actions panel, a terminal tab rail
-with a find bar, and a Dock-style auto-hiding sidebar.
+Adds Home feature search and a Frequently-used strip, font and accent-color
+customization, and a round of fixes.
+
+### New features
+
+- **Home feature search & Frequently-used strip** — an inline search under the
+  Home header finds any tool (⏎ opens the top match, Esc clears), and a
+  Frequently-used strip surfaces the features you open most, ordered by use
+  count.
+- **Font customization** — Settings ▸ Appearance gains a font-family picker over
+  the installed macOS families and a text-size scale; every UI font follows the
+  choice (the terminal and screenshot-annotation canvas keep their own).
+- **Accent-color customization** — pick from preset swatches, the color well, or
+  a hex field (`#RRGGBB` / `#RGB`), and the accent now reaches the surfaces that
+  used to ignore it (device/bundle pills, list selection in Apps and the
+  decompile tree, success toasts).
+
+### Improvements
+
+- The command palette shortcut moves to **⌘T** everywhere.
+- The **⌘T palette** now runs instant actions in place (e.g. Copy Device IP
+  copies and shows a toast) instead of opening a detail tab.
+- **Reactotron** gains **Copy as JSON** on the state tree, subscriptions, and
+  snapshots.
+
+### Fixes
+
+- **Set Dev Server Host** now works on physical devices: it writes React
+  Native's `debug_http_host` preference via `run-as` and relaunches the app,
+  falling back to `setprop metro.host` and the dev menu.
+- **Text fields release focus when you click away** — clicking outside a field
+  no longer leaves it holding the keyboard.
+- **⌘,** no longer opens Settings hidden behind the Quick Actions panel.
+- **Drop-to-split works again in the Terminal** — a leftover whole-view drop
+  target had blocked dropping a tab into a pane.
+
+Installed copies update in place via Sparkle.
 
 ### New features
 
