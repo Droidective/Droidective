@@ -21,15 +21,13 @@ extension UTType {
 /// state (`draggingTabID` and friends), so the payload is only a marker that
 /// keeps the item off the plain-text type.
 func privateDragItem(_ type: UTType, _ payload: String) -> NSItemProvider {
-    let provider = NSItemProvider()
-    // `.all` visibility, not `.ownProcess`: macOS bridges the item to the
-    // system drag pasteboard, and a process-restricted representation can be
-    // dropped in that bridge — the payload is a non-sensitive marker anyway.
-    provider.registerDataRepresentation(
-        forTypeIdentifier: type.identifier, visibility: .all
-    ) { completion in
-        completion(Data(payload.utf8), nil)
-        return nil
-    }
-    return provider
+    // Register the marker eagerly (`init(item:typeIdentifier:)`) rather than
+    // through a `registerDataRepresentation` load handler: the payload is a
+    // small static marker known up front, so there's nothing to load lazily,
+    // and the closure-based API's completion is imported main-actor-isolated —
+    // calling it from the handler's nonisolated context fails to compile under
+    // whole-module (Release) builds (Debug's incremental build missed it).
+    // Legacy item registration is process-global (equivalent to `.all`
+    // visibility), so the drag still survives macOS's system-pasteboard bridge.
+    NSItemProvider(item: Data(payload.utf8) as NSData, typeIdentifier: type.identifier)
 }
