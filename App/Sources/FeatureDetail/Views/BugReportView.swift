@@ -55,7 +55,7 @@ struct BugReportView: View {
                                 .font(.app(.footnote)).foregroundStyle(.textMuted)
                         }
                         Spacer()
-                        Button("Reveal in Finder") {
+                        Button("Open in Finder") {
                             NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
                         }
                     }

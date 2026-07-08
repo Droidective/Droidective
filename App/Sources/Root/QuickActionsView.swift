@@ -1016,7 +1016,7 @@ struct QuickActionsView: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
                 if let path = lastRun.revealPath {
-                    Button("Reveal") {
+                    Button("Open in Finder") {
                         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
                     }
                     .buttonStyle(.link)

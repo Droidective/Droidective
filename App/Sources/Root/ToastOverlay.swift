@@ -43,13 +43,11 @@ private struct ToastView: View {
                 Button {
                     NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: revealPath)])
                 } label: {
-                    Label("Reveal", systemImage: "magnifyingglass")
+                    Label("Open in Finder", systemImage: "folder")
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
             }
-
-            CloseButton(help: "Dismiss") { state.dismissToast(toast.id) }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -62,8 +60,36 @@ private struct ToastView: View {
                 .padding(.vertical, 8)
         }
         .clipShape(RoundedRectangle(cornerRadius: 10))
+        // After the clip, so the button can hang off the corner — the macOS
+        // notification placement.
+        .overlay(alignment: .topLeading) {
+            ToastCloseButton { state.dismissToast(toast.id) }
+                .offset(x: -6, y: -6)
+        }
         .shadow(radius: 10, y: 3)
         .transition(.move(edge: .top).combined(with: .opacity))
+    }
+}
+
+/// macOS-notification-style dismiss: a small filled circle hanging off the
+/// toast's top-left corner (the panel rows keep the inline `CloseButton`).
+private struct ToastCloseButton: View {
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "xmark")
+                .font(.app(size: 9, weight: .semibold))
+                .foregroundStyle(hovering ? AnyShapeStyle(.textMain) : AnyShapeStyle(.textMuted))
+                .frame(width: 20, height: 20)
+                .background(Circle().fill(.regularMaterial))
+                .overlay(Circle().strokeBorder(.textMuted.opacity(0.35), lineWidth: 0.5))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help("Dismiss")
     }
 }
 

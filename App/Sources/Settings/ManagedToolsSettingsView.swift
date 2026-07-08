@@ -55,7 +55,7 @@ struct ManagedToolsSettingsView: View {
                 LabeledContent("Size", value: ByteCountFormatter.string(fromByteCount: cacheSize, countStyle: .file))
                 HStack {
                     Button("Clear now") { clearCache() }.disabled(cacheSize == 0)
-                    Button("Reveal in Finder") {
+                    Button("Open in Finder") {
                         NSWorkspace.shared.activateFileViewerSelecting([AppPaths.decompiledCacheDir])
                     }
                     .disabled(cacheSize == 0)
@@ -101,7 +101,7 @@ struct ManagedToolsSettingsView: View {
                         Text("up to date").font(.app(.caption)).foregroundStyle(.textMuted)
                     }
                     Menu {
-                        Button("Reveal in Finder") { reveal(item.tool) }
+                        Button("Open in Finder") { reveal(item.tool) }
                         Button("Delete", role: .destructive) { confirmDelete = item.tool }
                     } label: {
                         Image(systemName: "ellipsis.circle")

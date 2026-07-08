@@ -171,8 +171,12 @@ struct VideoEditorPane: View {
                     VideoPlayerView(player: player, trimmer: trimmer)
                         .frame(width: size.width, height: size.height)
                         .overlay {
+                            // Pinned to the letterboxed video, not the full
+                            // player frame, so the dim/outline maps to pixels.
                             if transformActive, let crop = edit.crop {
+                                let fitted = fittedVideoRect(in: size)
                                 CropIndicator(crop: crop)
+                                    .frame(width: fitted.width, height: fitted.height)
                             }
                         }
                         .rotationEffect(.degrees(transformActive ? Double(edit.rotation) : 0))
@@ -189,20 +193,23 @@ struct VideoEditorPane: View {
         .background(Color.black)
     }
 
-    /// Pre-rotation player size: keeps the video's own aspect (so it fills the
-    /// frame) while sizing so the rotated footprint fits the container.
+    /// Player frame: the full container normally — AVKit's floating controls
+    /// (and the trim strip) span the view, and a frame hugging a narrow
+    /// portrait video crushes them into overlapping glyphs; the video simply
+    /// letterboxes inside. Only a 90°/270° rotation preview shrinks to the
+    /// video's own aspect, sized so the rotated footprint fits the container.
     private func playerSize(in container: CGSize) -> CGSize {
         guard let video = videoSize, video.width > 0, video.height > 0 else { return container }
-        let aspect = video.width / video.height
         let swap = transformActive && (((edit.rotation % 360) + 360) % 360) % 180 != 0
-        let footprintAspect = swap ? 1 / aspect : aspect
+        guard swap else { return container }
+        let footprintAspect = video.height / video.width
         var width = container.width
         var height = width / footprintAspect
         if height > container.height {
             height = container.height
             width = height * footprintAspect
         }
-        return swap ? CGSize(width: height, height: width) : CGSize(width: width, height: height)
+        return CGSize(width: height, height: width)
     }
 
     /// The unrotated, aspect-fit video rect — where the crop overlay is drawn.

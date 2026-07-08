@@ -3,9 +3,12 @@ import AVKit
 import SwiftUI
 
 /// Hosts an `AVPlayerView` — native transport controls (play/scrub/volume/
-/// frame-step/fullscreen) plus the built-in trim UI. The parent owns the
-/// `AVPlayer` so it can drive mute/speed/seek; this view just displays it and
-/// routes trim requests through `VideoTrimmer`.
+/// frame-step/fullscreen) plus the built-in trim UI. The floating controls
+/// collapse into overlapping glyphs when the view hugs a narrow portrait
+/// video, so the parent always hands it the full pane width and lets the
+/// video letterbox inside (see `VideoEditorPane.playerSize`). The parent owns
+/// the `AVPlayer` so it can drive mute/speed/seek; this view just displays it
+/// and routes trim requests through `VideoTrimmer`.
 struct VideoPlayerView: NSViewRepresentable {
     let player: AVPlayer
     let trimmer: VideoTrimmer

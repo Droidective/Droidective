@@ -175,7 +175,7 @@ struct ApkSignView: View {
                     Text("Verified: " + resultSchemes.map { $0.uppercased() }.joined(separator: ", "))
                         .font(.app(.caption)).foregroundStyle(.textMuted)
                 }
-                Button("Reveal in Finder") {
+                Button("Open in Finder") {
                     if let signedURL { NSWorkspace.shared.activateFileViewerSelecting([signedURL]) }
                 }
             }
