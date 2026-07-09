@@ -86,14 +86,13 @@ final class JSConsoleSession {
     static let maxEntries = 2000
     private static let portKey = "jsConsoleMetroPort"
     private static let timestampsKey = "jsConsoleShowTimestamps"
-    private static let newestFirstKey = "jsConsoleNewestFirst"
 
     /// The capped feed plus its filtered (level + text) projection, maintained
     /// incrementally (ADBKit's `FilteredLogBuffer`): a flush filters only the new
     /// batch against searchable text cached per entry, and a full recompute
     /// happens only when the filter itself changes — so a console burst costs
     /// O(batch) per flush, not O(buffer × object size). Chronological (oldest
-    /// first); the view reverses it lazily for the inverted scroll.
+    /// first), which is the feed's display order — newest at the bottom.
     private var buffer = FilteredLogBuffer<JSEntry>(capacity: JSConsoleSession.maxEntries)
     var filteredEntries: [JSEntry] { buffer.filtered }
     fileprivate var phase: JSPhase = .searching
@@ -106,9 +105,6 @@ final class JSConsoleSession {
     var searchText = "" { didSet { refilter() } }
     var hiddenLevels: Set<JSLevel> = [] { didSet { refilter() } }
     var showTimestamps: Bool { didSet { UserDefaults.standard.set(showTimestamps, forKey: Self.timestampsKey) } }
-    /// Newest-first puts new logs at the top (anchored there); otherwise the feed
-    /// tails at the bottom. Persisted for the JS console only.
-    var newestFirst: Bool { didSet { UserDefaults.standard.set(newestFirst, forKey: Self.newestFirstKey) } }
 
     /// ⌘F find-in-console: highlights matches across the (filtered) feed and
     /// navigates between them — separate from the Filter field, which hides rows.
@@ -160,7 +156,6 @@ final class JSConsoleSession {
         let savedPort = UserDefaults.standard.integer(forKey: Self.portKey)
         port = (1 ... 65535).contains(savedPort) ? savedPort : 8081
         showTimestamps = UserDefaults.standard.bool(forKey: Self.timestampsKey)
-        newestFirst = UserDefaults.standard.bool(forKey: Self.newestFirstKey)
     }
 
     /// Reset the connection back-references so the next connect re-welcomes.
@@ -748,9 +743,6 @@ struct JSConsoleView: View {
                 .buttonStyle(IconButtonStyle())
                 .help("Find & highlight in console (⌘F)")
                 .keyboardShortcut("f", modifiers: .command)
-            Button { session.newestFirst.toggle() } label: { Image(systemName: "arrow.up.arrow.down") }
-                .buttonStyle(IconButtonStyle())
-                .help("Order: \(session.newestFirst ? "newest first" : "oldest first") — tap to flip")
             Toggle("Time", isOn: $session.showTimestamps).toggleStyle(.checkbox).font(.app(.caption))
             Button { session.clear() } label: { Image(systemName: "trash") }
                 .buttonStyle(IconButtonStyle())
@@ -840,20 +832,16 @@ struct JSConsoleView: View {
         .environment(\.colorScheme, .dark)
     }
 
-    /// Newest at the top in "newest first", the bottom otherwise — LogTailView
-    /// tails the correct edge, pauses when the user scrolls off, and drives the
-    /// ⌘F match into view via `focusID`. LazyVStack + `.scrollPosition` (never
-    /// `defaultScrollAnchor`) keeps the big connect-time replay burst from
-    /// laying out every row up front — the 20–30s stall the old flip trick dodged.
-    @ViewBuilder
+    /// Chrome-style: newest at the bottom. LogTailViewV2 tails that edge, pauses
+    /// when the user scrolls off (new lines keep rendering without moving their
+    /// reading), overlays the jump-to-top/bottom buttons, and drives the ⌘F
+    /// match into view via `focusID`.
     private func scrollingLog(_ visible: [JSEntry]) -> some View {
-        if session.newestFirst {
-            LogTailView(entries: visible.reversed(), newestEdge: .top,
-                        focusID: session.currentFindID) { jsRow($0) }
-        } else {
-            LogTailView(entries: visible, newestEdge: .bottom,
-                        focusID: session.currentFindID) { jsRow($0) }
-        }
+        // No connection gate on the jump buttons: the buffer outlives the
+        // connection, and scrolling those logs is exactly what a disconnected
+        // session is for.
+        LogTailViewV2(entries: visible, newestEdge: .bottom,
+                      focusID: session.currentFindID) { jsRow($0) }
     }
 
     @ViewBuilder
