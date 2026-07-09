@@ -132,6 +132,9 @@ final class JSConsoleSession {
     @ObservationIgnored private var pendingEntries: [JSEntry] = []
     @ObservationIgnored private var flushTask: Task<Void, Never>?
     @ObservationIgnored private var welcomeTask: Task<Void, Never>?
+    /// The discovery/connection loop, owned by the session so tab close and
+    /// window close can stop it without going through a view update.
+    @ObservationIgnored private var discoveryTask: Task<Void, Never>?
     /// Console/exception events received on the current connection — used to tell
     /// when the post-connect replay burst has settled so the welcome can land.
     @ObservationIgnored private var receivedCount = 0
@@ -166,11 +169,30 @@ final class JSConsoleSession {
 
     // MARK: Lifecycle
 
-    /// Run discovery + connection for as long as the view is on screen. Driven by
-    /// the view's `.task`, so SwiftUI cancels it on disappear; the connection is
-    /// then torn down (the log buffer and the sticky target preference persist,
-    /// so re-opening the console reconnects to the same app and shows prior logs).
-    func activate(serials: [String]) async {
+    /// Begin discovery + connection. Idempotent: a running loop is kept. The
+    /// session owns the loop's `Task` (not the view's `.task`) so `AppState`
+    /// can stop it when the tab or the main window closes — a view inside a
+    /// closed-but-retained window may never process another update, so view-
+    /// keyed cancellation can't be trusted for that.
+    func start(serials: [String]) {
+        self.serials = serials
+        guard discoveryTask == nil else { return }
+        discoveryTask = Task { [weak self] in
+            await self?.activate(serials: serials)
+        }
+    }
+
+    /// Stop discovery and drop the connection. The log buffer and the sticky
+    /// target preference persist, so a later `start` reconnects to the same app
+    /// and shows prior logs. Idempotent.
+    func stop() {
+        discoveryTask?.cancel()
+        discoveryTask = nil
+    }
+
+    /// Run discovery + connection until cancelled; tears the connection down on
+    /// the way out.
+    private func activate(serials: [String]) async {
         self.serials = serials
         activateGeneration += 1
         let generation = activateGeneration
@@ -612,7 +634,11 @@ struct JSConsoleView: View {
             inputBar
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .task { await session.activate(serials: state.targetSerials) }
+        .onAppear { session.start(serials: state.targetSerials) }
+        // A real unmount (tab closed) — keep-alive tab switches never fire
+        // this. AppState also stops the session on tab/window close; both
+        // paths are idempotent.
+        .onDisappear { session.stop() }
         .onChange(of: state.targetSerials) { _, serials in session.updateSerials(serials) }
         .onAppear { portText = String(session.port) }
         .onChange(of: session.port) { _, newPort in portText = String(newPort) }

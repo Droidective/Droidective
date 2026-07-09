@@ -371,6 +371,13 @@ final class AppState {
             NSApp.setActivationPolicy(.regular)
             Task { self.bringMainWindowFront() }
         }
+        // Window close stopped the JS console's discovery (the view stays
+        // mounted, so its lifecycle hooks won't re-fire) — resume it for a
+        // still-open tab. Reactotron stays down: its screen offers an explicit
+        // Retry, and restarting a server socket shouldn't be a side effect.
+        if openFeatureIDs.contains("js-console") {
+            jsConsoleSession.start(serials: targetSerials)
+        }
     }
 
     private func bringMainWindowFront() {
@@ -891,6 +898,7 @@ final class AppState {
             Task { await reactotronSession.stop() }
         }
         if id == "js-console" {
+            jsConsoleSession.stop()
             Task { await jsConsoleSession.removeReverseTunnels() }
         }
         if id == "terminal" {

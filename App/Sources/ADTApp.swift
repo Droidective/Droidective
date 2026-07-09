@@ -49,9 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// icon. The app stays resident for the menu bar icon, global hotkeys, and
     /// the Quick Actions panel; quit still exits fully.
     @MainActor @objc private func windowWillClose(_ notification: Notification) {
-        guard !isQuitting, let appState,
-              UserDefaults.standard.object(forKey: keepRunningInBackgroundKey) as? Bool ?? true
-        else { return }
+        guard !isQuitting, let appState else { return }
         // Structural identification, not identifiers: SwiftUI re-stamps the
         // main window's identifier (`main-AppWindow-1`) by close time, so the
         // `droidective-main` tag can't be trusted here. Background mode starts
@@ -67,8 +65,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 && $0.canBecomeMain && !($0 is NSPanel)
         }
         guard !remaining else { return }
+        // Feature work always stops with the last window — sessions must not
+        // run behind a closed window in either mode. The background pref only
+        // decides whether the app then goes accessory (menu bar / hotkeys /
+        // Quick Actions) or stays a regular Dock app.
         appState.enterBackground()
-        if NSApp.activationPolicy() == .regular {
+        if UserDefaults.standard.object(forKey: keepRunningInBackgroundKey) as? Bool ?? true,
+           NSApp.activationPolicy() == .regular {
             NSApp.setActivationPolicy(.accessory)
         }
     }
