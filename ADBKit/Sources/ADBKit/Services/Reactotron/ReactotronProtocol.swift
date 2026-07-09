@@ -167,6 +167,45 @@ public enum ReactotronEvent: Sendable, Equatable {
     case unknown(type: String, payload: JSONValue?)
 }
 
+/// An HTTP status bucket for filtering API responses. `failure` is status 0 —
+/// how a request that never got a response (network error) arrives from the
+/// reactotron client.
+public enum HTTPStatusClass: Int, CaseIterable, Sendable, Identifiable {
+    case failure = 0
+    case success = 2
+    case redirect = 3
+    case clientError = 4
+    case serverError = 5
+
+    public var id: Int { rawValue }
+
+    public var label: String {
+        self == .failure ? "Failed" : "\(rawValue)xx"
+    }
+
+    /// The bucket for a concrete status code; nil for codes outside the
+    /// buckets (1xx, or garbage like a negative).
+    public init?(status: Int) {
+        guard status >= 0 else { return nil }
+        self.init(rawValue: status / 100)
+    }
+}
+
+public extension ReactotronEvent {
+    /// The HTTP method of an `apiResponse` event (uppercased at parse time);
+    /// nil for every other event.
+    var apiMethod: String? {
+        guard case let .apiResponse(method, _, _, _, _, _) = self else { return nil }
+        return method
+    }
+
+    /// The HTTP status of an `apiResponse` event; nil for every other event.
+    var apiStatus: Int? {
+        guard case let .apiResponse(_, _, status, _, _, _) = self else { return nil }
+        return status
+    }
+}
+
 public extension ReactotronEvent {
     /// Parse a raw frame into a typed timeline event.
     init(command: ReactotronCommand) {

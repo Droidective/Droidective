@@ -1,4 +1,5 @@
 import ADBKit
+import os
 import SwiftUI
 
 /// The live Reactotron session — server, adb-reverse tunnels, and the whole
@@ -95,6 +96,11 @@ final class ReactotronSession {
 
     func applyReverse(serials: [String]) async {
         guard let service else { return }
+        // In the unified log next to the server's connection-drop lines: a
+        // reverse re-apply that coincides with a drop is the tell that adb
+        // rebinding the tunnel killed the live socket.
+        Logger(subsystem: "com.rohindh.droidective", category: "reactotron-session")
+            .notice("re-applying adb reverse for \(serials.count) device(s)")
         reversedSerials = serials
         await service.reverse(serials: serials)
     }
@@ -388,7 +394,21 @@ final class ReactotronSession {
                 event: parsed, command: command, connectionId: connectionId,
                 important: command.isImportant, frameBytes: frameBytes
             ))
-        case let .disconnected(connectionId):
+        case let .disconnected(connectionId, reason):
+            // Before forgetting the client (its name captions the notice):
+            // spell out *why* the stream ended, in the timeline where the user
+            // is looking — a silent yellow dot reads as "Droidective broke".
+            if let notice = Self.disconnectNotice(
+                reason, app: clients.first { $0.id == connectionId }?.name
+            ) {
+                // Headline in the (one-line) row; the full explanation rides the
+                // command payload, which is what the row expands to.
+                enqueue(RtItem(
+                    event: .unknown(type: "disconnected", payload: .string(notice.headline)),
+                    command: ReactotronCommand(type: "disconnected", payload: .string(notice.detail)),
+                    connectionId: connectionId, important: true, frameBytes: 0
+                ))
+            }
             clients.removeAll { $0.id == connectionId }
             if selectedClient == connectionId { selectedClient = nil }
             if clients.isEmpty { commands.removeAll() }
@@ -409,6 +429,34 @@ final class ReactotronSession {
 
     private func isWholeStorePath(_ path: String?) -> Bool {
         path == nil || path?.isEmpty == true
+    }
+
+    /// The timeline row explaining a client drop; nil for teardown-driven
+    /// drops (server stop), which need no explanation. `headline` fits the
+    /// one-line row; `detail` is the expanded body.
+    private static func disconnectNotice(
+        _ reason: ReactotronServer.DisconnectReason?, app: String?
+    ) -> (headline: String, detail: String)? {
+        let name = app ?? "The app"
+        switch reason {
+        case .clientClosed(goingAway: true):
+            return (
+                headline: "\(name) hung up — events outpaced the connection (WS 1001). Expand for the fix.",
+                detail: "\(name) produced Reactotron events faster than the connection could "
+                    + "send them, so Android's WebSocket closed itself once 16 MB were queued "
+                    + "(close code 1001, going-away).\n\nVery large console.log / action payloads "
+                    + "are the usual cause — log IDs and summaries instead of whole objects.\n\n"
+                    + "Reload the app to reconnect."
+            )
+        case .clientClosed(goingAway: false):
+            let text = "\(name) closed the connection (app reloaded or exited)."
+            return (headline: text, detail: text)
+        case let .transportError(detail):
+            return (headline: "\(name) dropped: \(detail)",
+                    detail: "\(name) dropped: \(detail)")
+        case nil:
+            return nil
+        }
     }
 
     private func refreshConnectionState() {
@@ -589,13 +637,23 @@ struct ReactotronView: View {
 
     private var topTabs: some View {
         HStack(spacing: 8) {
-            // Connection state folded in here as a dot (full status on hover) —
-            // the detailed "Listening on :9090…" guidance lives in the timeline's
+            // Connection state as a dot plus the connected app's name — the
+            // detailed "Listening on :9090…" guidance lives in the timeline's
             // empty state, so a dedicated status bar would just repeat it.
-            Circle()
-                .fill(session.connection.color)
-                .frame(width: 7, height: 7)
-                .help(session.connection.text(app: session.connectedApp))
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(session.connection.color)
+                    .frame(width: 7, height: 7)
+                if let app = session.connectedApp {
+                    Text(app)
+                        .font(.app(.caption).weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .frame(maxWidth: 160, alignment: .leading)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+            }
+            .help(session.connection.text(app: session.connectedApp))
 
             Picker("View", selection: $tab) {
                 Text("Timeline").tag(RtTab.timeline)
@@ -1097,6 +1155,10 @@ private struct TimelinePane: View {
 
     @State private var search = ""
     @State private var filter: RtFilter = .all
+    /// Network-only refinements, shown while the Network category is selected
+    /// and cleared when it isn't: HTTP method and status class (2xx…5xx/Failed).
+    @State private var methodFilter: String?
+    @State private var statusFilter: HTTPStatusClass?
 
     var body: some View {
         // Filter once per render — the count badge, export button, and timeline
@@ -1119,6 +1181,16 @@ private struct TimelinePane: View {
             }
             .labelsHidden()
             .frame(width: 110)
+            .onChange(of: filter) { _, newFilter in
+                if newFilter != .network {
+                    methodFilter = nil
+                    statusFilter = nil
+                }
+            }
+
+            if filter == .network {
+                networkFilters
+            }
 
             SearchField(prompt: "Search…", text: $search)
                 .frame(maxWidth: 200)
@@ -1145,14 +1217,49 @@ private struct TimelinePane: View {
         .padding(.vertical, 6)
     }
 
+    /// The HTTP methods present in the buffer's API events, for the method
+    /// picker — only what the app actually sent, not a canned list.
+    private var seenMethods: [String] {
+        Array(Set(items.compactMap { $0.event.apiMethod })).sorted()
+    }
+
     private var filteredItems: [RtItem] {
         let query = search.trimmingCharacters(in: .whitespaces).lowercased()
         return items.filter { item in
             if filter != .all, item.event.category != filter { return false }
+            if let methodFilter, item.event.apiMethod != methodFilter { return false }
+            if let statusFilter,
+               item.event.apiStatus.flatMap({ HTTPStatusClass(status: $0) }) != statusFilter {
+                return false
+            }
             // item.searchText is lowercased at creation, so this is a plain,
             // allocation-free substring check.
             if !query.isEmpty, !item.searchText.contains(query) { return false }
             return true
+        }
+    }
+
+    private var networkFilters: some View {
+        HStack(spacing: 6) {
+            Picker("Method", selection: $methodFilter) {
+                Text("Method").tag(String?.none)
+                ForEach(seenMethods, id: \.self) { method in
+                    Text(method).tag(Optional(method))
+                }
+            }
+            .labelsHidden()
+            .fixedSize()
+            .help("Show only requests with this HTTP method")
+
+            Picker("Status", selection: $statusFilter) {
+                Text("Status").tag(HTTPStatusClass?.none)
+                ForEach(HTTPStatusClass.allCases) { statusClass in
+                    Text(statusClass.label).tag(Optional(statusClass))
+                }
+            }
+            .labelsHidden()
+            .fixedSize()
+            .help("Show only responses in this status class")
         }
     }
 
@@ -2335,6 +2442,14 @@ private extension ReactotronEvent {
         case .replResult:
             return RtPresentation(badge: "REPL", badgeColor: .rtBadge, primary: "result", primaryColor: .primary)
         case let .unknown(type, payload):
+            // The session's synthetic drop notice — not a wire event; it gets
+            // warning styling and an untruncated headline.
+            if type == "disconnected" {
+                return RtPresentation(
+                    badge: "DISCONNECTED", badgeColor: .orange,
+                    primary: payload?.stringValue ?? "", primaryColor: .primary
+                )
+            }
             return RtPresentation(
                 badge: type.uppercased(), badgeColor: .secondary,
                 primary: payload?.stringValue.map { String($0.prefix(140)) } ?? "", primaryColor: .secondary

@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import os
 
 /// A Reactotron-compatible WebSocket server. The RN app (running
 /// `reactotron-react-native`) is the client; this is the server it connects to
@@ -24,6 +25,21 @@ public actor ReactotronServer {
         }
     }
 
+    /// Why a client connection ended, carried on `.disconnected` so the UI can
+    /// say more than a yellow dot. A clean close with `goingAway` (WS 1001)
+    /// from an Android client is OkHttp bailing out after its outgoing queue
+    /// passed 16 MiB — the app produced events faster than the transport could
+    /// drain them (huge console.log payloads, typically).
+    public enum DisconnectReason: Sendable, Equatable {
+        case clientClosed(goingAway: Bool)
+        case transportError(String)
+    }
+
+    /// The disconnect reason for a client-sent WS close frame.
+    public static func closeReason(_ code: NWProtocolWebSocket.CloseCode) -> DisconnectReason {
+        .clientClosed(goingAway: code == .protocolCode(.goingAway))
+    }
+
     /// Events surfaced to the UI as the server runs. `frameBytes` is the wire
     /// size of the frame a command was decoded from, so the timeline can keep
     /// its retained payloads within a byte budget.
@@ -31,7 +47,8 @@ public actor ReactotronServer {
         case listening(port: UInt16)
         case connected(connectionId: Int, intro: ReactotronCommand, frameBytes: Int)
         case command(connectionId: Int, command: ReactotronCommand, frameBytes: Int)
-        case disconnected(connectionId: Int)
+        /// `reason` is nil for teardown-driven drops (stop, listener death).
+        case disconnected(connectionId: Int, reason: DisconnectReason?)
         case failed(reason: String, portInUse: Bool)
     }
 
@@ -42,6 +59,10 @@ public actor ReactotronServer {
     }
 
     private static let queue = DispatchQueue(label: "com.rohindh.droidective.reactotron-server")
+    /// Why a client dropped is invisible in the UI (the dot just goes yellow) —
+    /// keep the transport's own words in the unified log for field diagnosis:
+    /// `log show --predicate 'subsystem == "com.rohindh.droidective"'`.
+    private static let log = Logger(subsystem: "com.rohindh.droidective", category: "reactotron-server")
 
     private let port: UInt16
     private var listener: NWListener?
@@ -149,8 +170,12 @@ public actor ReactotronServer {
 
         box.connection.stateUpdateHandler = { [weak self] state in
             switch state {
-            case .failed, .cancelled:
-                Task { await self?.dropConnection(id) }
+            case let .failed(error):
+                Self.log.error("connection #\(id) failed: \(error, privacy: .public)")
+                Task { await self?.dropConnection(id, reason: .transportError("\(error)")) }
+            case .cancelled:
+                Self.log.notice("connection #\(id) cancelled")
+                Task { await self?.dropConnection(id, reason: nil) }
             default:
                 break
             }
@@ -159,10 +184,13 @@ public actor ReactotronServer {
         Self.receiveLoop(box, id: id, server: self)
     }
 
-    private func dropConnection(_ id: Int) {
+    /// Drops the connection and reports why. Racing drop paths (close frame,
+    /// then the socket error, then cancelled) all land here; the first wins,
+    /// which is the most specific one — the close frame beats its aftermath.
+    private func dropConnection(_ id: Int, reason: DisconnectReason?) {
         guard let box = connections.removeValue(forKey: id) else { return }
         box.connection.cancel()
-        continuation?.yield(.disconnected(connectionId: id))
+        continuation?.yield(.disconnected(connectionId: id, reason: reason))
     }
 
     /// Recursive receive loop, off the actor (like `MirrorTransport.receiveLoop`).
@@ -180,14 +208,17 @@ public actor ReactotronServer {
                         Task { await server.handleFrame(connectionId: id, data: content) }
                     }
                 case .close:
-                    Task { await server.dropConnection(id) }
+                    log.notice("connection #\(id): client sent WS close, code=\(String(describing: metadata.closeCode), privacy: .public)")
+                    let reason = closeReason(metadata.closeCode)
+                    Task { await server.dropConnection(id, reason: reason) }
                     return
                 default:
                     break
                 }
             }
-            if error != nil {
-                Task { await server.dropConnection(id) }
+            if let error {
+                log.error("connection #\(id) receive failed: \(error, privacy: .public)")
+                Task { await server.dropConnection(id, reason: .transportError("\(error)")) }
                 return
             }
             receiveLoop(box, id: id, server: server)
