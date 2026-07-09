@@ -6,9 +6,9 @@
     <description>Most recent Droidective updates.</description>
     <language>en</language>
     <item>
-      <title>Droidective 2.9.2</title>
-      <sparkle:version>328</sparkle:version>
-      <sparkle:shortVersionString>2.9.2</sparkle:shortVersionString>
+      <title>Droidective 2.9.3</title>
+      <sparkle:version>340</sparkle:version>
+      <sparkle:shortVersionString>2.9.3</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <description><![CDATA[
 <style>
@@ -24,45 +24,58 @@ pre { background: color-mix(in srgb, currentColor 8%, transparent); padding: .6e
 pre code { background: none; padding: 0; }
 a { color: #2f9e44; }
 </style>
-<p>Screen-mirror quality of life — a pop-out mirror window and reliable device
-switching — plus video-editor and save-flow fixes.</p>
+<p>The streaming log feeds — Logcat, JS Console, and the Reactotron timeline —
+rebuilt around one scroll behavior, plus JS-console connection fixes and
+Reactotron network filters.</p>
 <h3>New features</h3>
 <ul>
 <li>
-<strong>Mirror in its own window</strong> — a window button on the mirror's control bar
-moves the live mirror into a dedicated "Screen Mirror" window (also in the
-macOS Window menu), so it can sit beside the main workspace or other apps.
-The window follows the device-bar selection, and an in-window recording still
-guards quit and device switches.</li>
+<strong>Jump to top / bottom in every log feed</strong> — floating buttons overlay Logcat,
+the JS Console, and the Reactotron timeline; each hides while you're at its
+edge, and both hide when there's nothing to scroll. Jumping to the newest
+edge resumes live following.</li>
+<li>
+<strong>Reactotron network filters</strong> — pick the Network view in a timeline pane and
+filter by HTTP method (the ones your app actually sent) and status class
+(2xx–5xx, plus Failed for requests that never got a response) — per pane, so
+a split view can watch two slices.</li>
+<li>
+<strong>Reactotron explains disconnects</strong> — when a client drops, an expandable
+DISCONNECTED row lands in the timeline where streaming stopped, naming the
+app and the reason — including the Android case where the app queues events
+faster than the connection drains and its WebSocket hangs up at a 16 MB
+backlog.</li>
 </ul>
 <h3>Improvements</h3>
 <ul>
 <li>
-<strong>The mirror follows device switches reliably</strong> — reconnects are serialized,
-so switching devices quickly can't tangle two sessions or leave one streaming
-in the background, and the stopped/failed screens gain a <strong>Reconnect</strong> button.</li>
+<strong>Interruption-free reading while streaming</strong> — scroll away from the newest
+line and new logs keep rendering without dragging your view; return to the
+edge (or tap the jump button) and following resumes. The reverse-order
+toggles are gone: JS Console and Logcat tail at the bottom, Reactotron keeps
+newest at top.</li>
 <li>
-<strong>"Open in Finder" everywhere</strong> — every "Reveal" button now says Open in
-Finder, and the first quick save asks once where captures should go
-(changeable anytime in Settings ▸ Privacy).</li>
-<li>Toasts dismiss from a macOS-notification-style close button on the top-left
-corner.</li>
-<li>Anonymous hang reports carry more triage context (opt-out in
-Settings ▸ Privacy).</li>
+<strong>Steady under event storms</strong> — the feeds no longer re-render per scrolled
+pixel or per streamed event, which could peg the CPU and hang the app under
+a fast Reactotron stream.</li>
+<li>The connected app's name shows next to Reactotron's status dot.</li>
 </ul>
 <h3>Fixes</h3>
 <ul>
 <li>
-<strong>Video editor controls no longer collapse on portrait clips</strong> — the player
-takes the full pane (the video letterboxes inside), so the native playback
-controls and the trim strip get the full width. Trimming long recordings is
-workable again, and cancelling a trim no longer leaves an empty controls pill
-floating over the video.</li>
+<strong>JS console no longer loops "connecting…"</strong> — apps logging large objects
+tripped a 1 MiB socket cap on the post-connect replay (close code 1009), and
+every reconnect replayed the same burst. The cap is now 64 MiB.</li>
+<li>
+<strong>Consoles stop with their UI</strong> — closing the JS console or Reactotron tab,
+or the main window (in either background-mode setting), tears the connection
+down instead of leaving it reconnecting in the background; reopening the
+window resumes the JS console's discovery.</li>
 </ul>
 <p>Installed copies update in place via Sparkle.</p>
 ]]></description>
-      <pubDate>Thu, 09 Jul 2026 04:56:48 +0000</pubDate>
-      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v2.9.2/Droidective-v2.9.2.dmg" sparkle:edSignature="9D92MTNzKTAemkDQlBf8WxoizAsol1w96R1+AzEMxSYfTfedBK5zOHU6jS4PeXfVL5PPR84x0lNPtbd/Qrl/BA==" length="46011485" type="application/octet-stream" />
+      <pubDate>Thu, 09 Jul 2026 11:37:35 +0000</pubDate>
+      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v2.9.3/Droidective-v2.9.3.dmg" sparkle:edSignature="rItZEN4H6AUaGqjaxeax5tlxNj/zQq8HkFthbe2kHgfw5EMlAWYfwJo6qkiH4KH86IxPh1M7zYIdIbRcL9dhCA==" length="46008163" type="application/octet-stream" />
     </item>
   </channel>
 </rss>
