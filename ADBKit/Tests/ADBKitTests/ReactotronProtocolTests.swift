@@ -272,4 +272,54 @@ import Testing
         }
         #expect(type == "some.future.command")
     }
+
+    // MARK: API filter accessors — back the timeline's method/status filters.
+
+    @Test func apiAccessorsExposeMethodAndStatus() throws {
+        let command = try ReactotronCommand.decode(
+            #"{"type":"api.response","important":false,"date":"d","deltaTime":1,"payload":{"duration":10,"request":{"method":"post","url":"https://api.example.com/orders"},"response":{"status":404}}}"#
+        )
+        let event = ReactotronEvent(command: command)
+        #expect(event.apiMethod == "POST")
+        #expect(event.apiStatus == 404)
+    }
+
+    @Test func apiAccessorsAreNilForOtherEvents() {
+        let event = ReactotronEvent.log(level: .debug, message: "GET /not-an-api", stack: [])
+        #expect(event.apiMethod == nil)
+        #expect(event.apiStatus == nil)
+    }
+
+    @Test func statusClassBucketsCodes() {
+        #expect(HTTPStatusClass(status: 200) == .success)
+        #expect(HTTPStatusClass(status: 204) == .success)
+        #expect(HTTPStatusClass(status: 302) == .redirect)
+        #expect(HTTPStatusClass(status: 404) == .clientError)
+        #expect(HTTPStatusClass(status: 503) == .serverError)
+    }
+
+    @Test func statusZeroIsTheFailureBucket() {
+        // A request that never got a response arrives with status 0.
+        #expect(HTTPStatusClass(status: 0) == .failure)
+        #expect(HTTPStatusClass.failure.label == "Failed")
+    }
+
+    @Test func statusClassRejectsOutOfRangeCodes() {
+        #expect(HTTPStatusClass(status: 100) == nil)   // 1xx: not a filter bucket
+        #expect(HTTPStatusClass(status: 601) == nil)
+        #expect(HTTPStatusClass(status: -1) == nil)
+    }
+
+    // MARK: Disconnect reasons — the timeline's "why did streaming stop" row.
+
+    @Test func goingAwayCloseMapsToTheQueueOverflowReason() {
+        // OkHttp (RN Android) sends 1001 when its 16 MiB send queue overflows.
+        #expect(ReactotronServer.closeReason(.protocolCode(.goingAway))
+            == .clientClosed(goingAway: true))
+    }
+
+    @Test func normalCloseIsAPlainClientClose() {
+        #expect(ReactotronServer.closeReason(.protocolCode(.normalClosure))
+            == .clientClosed(goingAway: false))
+    }
 }
