@@ -77,6 +77,11 @@ public actor JSConsoleClient {
     ) async throws -> AsyncStream<Event> {
         teardown(reason: "reconnecting", notify: true)
         let task = URLSession.shared.webSocketTask(with: Self.debuggerRequest(for: url))
+        // The default cap is 1 MiB, and a single CDP frame can far exceed it —
+        // an app logging big objects trips it on the post-connect replay, the
+        // socket dies with close code 1009 ("message too big"), and the
+        // reconnect replays the same buffer: an endless connect/close loop.
+        task.maximumMessageSize = 64 << 20
         self.task = task
         let generation = generation
         let (stream, continuation) = AsyncStream.makeStream(of: Event.self)
