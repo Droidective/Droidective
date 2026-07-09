@@ -19,10 +19,10 @@ struct LogcatView: View {
     /// One-shot: the App filter is seeded from the device bar's chosen bundle
     /// the first time the view appears, then left to the user.
     @State private var seededPackageFilter = false
-    /// Mirrors the log pane's follow state; drives the jump button.
-    @State private var isTailing = true
-    /// Incremented by the jump button to ask the pane to scroll to newest.
-    @State private var jumpToken = 0
+    /// Mirrors the log pane's edge/scrollability state; drives the jump buttons.
+    @State private var edges = LogScrollEdges()
+    /// Set by the jump buttons to ask the pane to snap to an edge.
+    @State private var jump: LogJumpRequest?
 
     private static let levels: [(value: String, label: String)] = [
         ("All", "All levels"), ("V", "Verbose"), ("D", "Debug"),
@@ -201,40 +201,29 @@ struct LogcatView: View {
         // An NSTextView-backed pane: real cross-line selection with drag
         // autoscroll (the SwiftUI list trapped selection inside each row).
         // It follows new lines while parked at the bottom and pauses the
-        // moment the user scrolls up.
-        ZStack(alignment: .bottomTrailing) {
-            SelectableLogView(
-                lines: visible,
-                search: search,
-                isTailing: $isTailing,
-                jumpToken: jumpToken,
-                onFilterTag: { tagFilter = $0 }
+        // moment the user scrolls up; the shared jump controls overlay it.
+        SelectableLogView(
+            lines: visible,
+            search: search,
+            edges: $edges,
+            jump: jump,
+            onFilterTag: { tagFilter = $0 }
+        )
+        .overlay {
+            LogJumpControls(
+                edges: edges,
+                enabled: !visible.isEmpty,
+                newestEdge: .bottom,
+                onJumpToTop: { requestJump(to: .top) },
+                onJumpToBottom: { requestJump(to: .bottom) }
             )
-            if !isTailing {
-                jumpButton
-                    .padding(16)
-                    .transition(.scale(scale: 0.85).combined(with: .opacity))
-            }
         }
-        .animation(.snappy(duration: 0.2), value: isTailing)
         .background(.background)
         .overlay { emptyOverlay }
     }
 
-    private var jumpButton: some View {
-        Button {
-            jumpToken += 1
-        } label: {
-            Image(systemName: "arrow.down")
-                .font(.app(size: 15, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 36, height: 36)
-                .background(.tint, in: Circle())
-                .shadow(radius: 4, y: 2)
-        }
-        .buttonStyle(.plain)
-        .help("Jump to the newest logs")
-        .accessibilityLabel("Jump to newest")
+    private func requestJump(to edge: VerticalEdge) {
+        jump = LogJumpRequest(token: (jump?.token ?? 0) + 1, edge: edge)
     }
 
     private func export() {

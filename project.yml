@@ -124,6 +124,7 @@ targets:
       - App/Tests
       - App/Sources/State/LaunchPrompt.swift
       - App/Sources/Theme.swift
+      - App/Sources/LogScrollGeometry.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.rohindh.droidective.tests

@@ -1097,13 +1097,13 @@ private struct TimelinePane: View {
 
     @State private var search = ""
     @State private var filter: RtFilter = .all
-    @State private var newestFirst = true
 
     var body: some View {
         // Filter once per render — the count badge, export button, and timeline
         // all read the same result instead of each recomputing the filter.
         let visible = filteredItems
-        let ordered = newestFirst ? Array(visible.reversed()) : visible
+        // Newest first: the fixed timeline order (matches the Reactotron app).
+        let ordered = Array(visible.reversed())
         return VStack(spacing: 0) {
             paneToolbar(visible: visible)
             Divider()
@@ -1139,15 +1139,6 @@ private struct TimelinePane: View {
             .buttonStyle(IconButtonStyle())
             .help("Export this pane's filtered timeline to JSON")
             .disabled(visible.isEmpty)
-
-            Button {
-                newestFirst.toggle()
-            } label: {
-                Image(systemName: "arrow.up.arrow.down")
-                    .foregroundStyle(newestFirst ? Color.brandAccent : Color.secondary)
-            }
-            .buttonStyle(IconButtonStyle())
-            .help(newestFirst ? "Newest first — click for oldest first" : "Oldest first — click for newest first")
         }
         .controlSize(.small)
         .padding(.horizontal, 10)
@@ -1166,9 +1157,9 @@ private struct TimelinePane: View {
     }
 
     private func timeline(ordered: [RtItem]) -> some View {
-        // Newest events land at the top in newest-first, the bottom otherwise —
-        // LogTailView follows whichever edge and pauses when the user scrolls off.
-        LogTailView(entries: ordered, newestEdge: newestFirst ? .top : .bottom) { item in
+        // Newest events land at the top — LogTailViewV2 follows that edge, pauses
+        // when the user scrolls off, and overlays the jump-to-top/bottom buttons.
+        LogTailViewV2(entries: ordered, newestEdge: .top) { item in
             RtRow(item: item)
             Divider()
         }

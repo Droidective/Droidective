@@ -11,15 +11,16 @@ import SwiftUI
 struct SelectableLogView: NSViewRepresentable {
     let lines: [LogLine]
     let search: String
-    /// True while the view is parked at the bottom following new lines; the
-    /// caller shows its "jump to newest" button when this goes false.
-    @Binding var isTailing: Bool
-    /// Increment to ask the view to scroll back to the newest line.
-    let jumpToken: Int
+    /// Which ends the viewport touches and whether it can scroll at all — the
+    /// caller feeds this to the shared `LogJumpControls`. While parked at the
+    /// bottom the view follows new lines; scrolling away pauses that.
+    @Binding var edges: LogScrollEdges
+    /// Bump the token to snap the view to the requested edge.
+    let jump: LogJumpRequest?
     let onFilterTag: (String) -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(isTailing: $isTailing)
+        Coordinator(edges: $edges)
     }
 
     func makeNSView(context: Context) -> NSScrollView {
@@ -53,14 +54,14 @@ struct SelectableLogView: NSViewRepresentable {
     func updateNSView(_ nsView: NSScrollView, context: Context) {
         context.coordinator.onFilterTag = onFilterTag
         context.coordinator.update(lines: lines, search: search)
-        context.coordinator.handleJump(token: jumpToken)
+        context.coordinator.handleJump(jump)
     }
 
     // MARK: - Coordinator
 
     @MainActor
     final class Coordinator: NSObject {
-        private let isTailing: Binding<Bool>
+        private let edges: Binding<LogScrollEdges>
         var onFilterTag: ((String) -> Void)?
 
         private weak var textView: LogTextView?
@@ -74,8 +75,8 @@ struct SelectableLogView: NSViewRepresentable {
         private var renderedSearch = ""
         private var lastJumpToken: Int?
 
-        init(isTailing: Binding<Bool>) {
-            self.isTailing = isTailing
+        init(edges: Binding<LogScrollEdges>) {
+            self.edges = edges
         }
 
         func install(textView: LogTextView, scrollView: NSScrollView) {
@@ -95,34 +96,44 @@ struct SelectableLogView: NSViewRepresentable {
         }
 
         @objc private func scrolled() {
-            syncTailing()
+            syncEdges()
         }
 
-        private func syncTailing() {
-            let atBottom = isAtBottom
-            guard atBottom != isTailing.wrappedValue else { return }
+        private func syncEdges() {
+            let measured = measuredEdges
+            guard measured != edges.wrappedValue else { return }
             // This can run inside a SwiftUI update pass (scroll notifications,
             // updateNSView) — defer the state write out of it.
             Task { @MainActor in
-                self.isTailing.wrappedValue = atBottom
+                self.edges.wrappedValue = measured
             }
         }
 
-        /// Within this many points of the bottom still counts as tailing,
-        /// covering sub-pixel rounding and the follow scroll itself.
-        private var isAtBottom: Bool {
-            guard let scrollView, let document = scrollView.documentView else { return true }
+        /// Within 30 points of an edge still counts as touching it, covering
+        /// sub-pixel rounding and the follow scroll itself.
+        private var measuredEdges: LogScrollEdges {
+            guard let scrollView, let document = scrollView.documentView else {
+                return LogScrollEdges()
+            }
             let visible = scrollView.contentView.bounds
-            return visible.maxY >= document.frame.height - 30
+            return LogScrollEdges(
+                atTop: visible.minY <= 30,
+                atBottom: visible.maxY >= document.frame.height - 30,
+                isScrollable: document.frame.height > visible.height + 1
+            )
         }
 
-        func handleJump(token: Int) {
-            guard lastJumpToken != nil, token != lastJumpToken else {
-                lastJumpToken = token
-                return
+        /// Following new lines is the bottom-edge state; `update` consults it
+        /// before appending to decide whether to keep the view pinned there.
+        private var isAtBottom: Bool { measuredEdges.atBottom }
+
+        func handleJump(_ request: LogJumpRequest?) {
+            guard let request, request.token != lastJumpToken else { return }
+            lastJumpToken = request.token
+            switch request.edge {
+            case .top: scrollToTop()
+            case .bottom: scrollToBottom()
             }
-            lastJumpToken = token
-            scrollToBottom()
         }
 
         // MARK: Content diffing
@@ -137,9 +148,9 @@ struct SelectableLogView: NSViewRepresentable {
             defer {
                 if wasTailing { scrollToBottom() }
                 // Appends below the viewport don't fire a scroll notification,
-                // so the follow state must also sync here or the jump button
-                // never appears while parked in scrollback.
-                syncTailing()
+                // so the edge state must also sync here or the jump buttons
+                // never update while parked in scrollback.
+                syncEdges()
             }
 
             if search != renderedSearch {
@@ -215,6 +226,13 @@ struct SelectableLogView: NSViewRepresentable {
         private func scrollToBottom() {
             guard let textView, let storage = textView.textStorage else { return }
             textView.scrollRangeToVisible(NSRange(location: storage.length, length: 0))
+        }
+
+        private func scrollToTop() {
+            guard let scrollView else { return }
+            let clip = scrollView.contentView
+            clip.scroll(to: NSPoint(x: clip.bounds.origin.x, y: 0))
+            scrollView.reflectScrolledClipView(clip)
         }
 
         /// The line under a character index — prefix-sums `lineLengths` (the
