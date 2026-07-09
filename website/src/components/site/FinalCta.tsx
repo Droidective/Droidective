@@ -3,12 +3,10 @@ import { Download, Star } from "lucide-react"
 import ShinyText from "@/components/ShinyText"
 import { Reveal } from "@/components/site/Reveal"
 import { Button } from "@/components/ui/button"
-import { useLatestDmg } from "@/hooks/useLatestDmg"
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion"
-import { GITHUB_URL } from "@/lib/content"
+import { DOWNLOAD_URL, GITHUB_URL } from "@/lib/content"
 
 export function FinalCta() {
-  const dmgUrl = useLatestDmg()
   const reducedMotion = usePrefersReducedMotion()
 
   return (
@@ -35,7 +33,7 @@ export function FinalCta() {
               size="lg"
               className="h-auto rounded-xl px-5 py-3 text-[15px] font-bold shadow-glow transition-transform duration-150 hover:-translate-y-px hover:bg-green-bright"
             >
-              <a href={dmgUrl}>
+              <a href={DOWNLOAD_URL}>
                 <Download aria-hidden />
                 Download for macOS
               </a>

@@ -15,7 +15,10 @@ import {
 export const GITHUB_URL = "https://github.com/Droidective/Droidective"
 export const LINKEDIN_URL = "https://www.linkedin.com/in/rohindh"
 export const RELEASES_URL = `${GITHUB_URL}/releases`
-export const LATEST_RELEASE_URL = `${GITHUB_URL}/releases/latest`
+// GitHub's permanent latest-release asset URL: every release uploads a
+// stable-named Droidective.dmg (see ci.yml), so this always serves the
+// newest version — no appcast fetch, nothing cached to go stale.
+export const DOWNLOAD_URL = `${GITHUB_URL}/releases/latest/download/Droidective.dmg`
 export const APP_VERSION = "v2.9.3"
 
 export interface PaletteCommand {

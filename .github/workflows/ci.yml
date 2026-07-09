@@ -162,10 +162,18 @@ jobs:
           rm -f "$RUNNER_TEMP/ac_api.p8"
       - name: Extract notes for this release
         run: awk '/^## /{c++} c==1{print} c==2{exit}' RELEASE_NOTES.md > release-body.md
+      # A stable-named copy backs the site's download button via the permanent
+      # /releases/latest/download/Droidective.dmg URL — always the newest
+      # release, no appcast fetch, no Pages/browser cache staleness.
+      - name: Add a stable-named copy for the latest-download link
+        run: cp "DerivedData/Build/Products/Release/Droidective-${GITHUB_REF_NAME}.dmg" \
+               "DerivedData/Build/Products/Release/Droidective.dmg"
       - name: Publish release with build
         uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b  # v3.0.1
         with:
-          files: DerivedData/Build/Products/Release/Droidective-*.dmg
+          files: |
+            DerivedData/Build/Products/Release/Droidective-*.dmg
+            DerivedData/Build/Products/Release/Droidective.dmg
           body_path: release-body.md
           fail_on_unmatched_files: true
       - name: Sign update and publish appcast to main
