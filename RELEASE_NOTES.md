@@ -1,3 +1,49 @@
+## Droidective v2.9.3
+
+The streaming log feeds — Logcat, JS Console, and the Reactotron timeline —
+rebuilt around one scroll behavior, plus JS-console connection fixes and
+Reactotron network filters.
+
+### New features
+
+- **Jump to top / bottom in every log feed** — floating buttons overlay Logcat,
+  the JS Console, and the Reactotron timeline; each hides while you're at its
+  edge, and both hide when there's nothing to scroll. Jumping to the newest
+  edge resumes live following.
+- **Reactotron network filters** — pick the Network view in a timeline pane and
+  filter by HTTP method (the ones your app actually sent) and status class
+  (2xx–5xx, plus Failed for requests that never got a response) — per pane, so
+  a split view can watch two slices.
+- **Reactotron explains disconnects** — when a client drops, an expandable
+  DISCONNECTED row lands in the timeline where streaming stopped, naming the
+  app and the reason — including the Android case where the app queues events
+  faster than the connection drains and its WebSocket hangs up at a 16 MB
+  backlog.
+
+### Improvements
+
+- **Interruption-free reading while streaming** — scroll away from the newest
+  line and new logs keep rendering without dragging your view; return to the
+  edge (or tap the jump button) and following resumes. The reverse-order
+  toggles are gone: JS Console and Logcat tail at the bottom, Reactotron keeps
+  newest at top.
+- **Steady under event storms** — the feeds no longer re-render per scrolled
+  pixel or per streamed event, which could peg the CPU and hang the app under
+  a fast Reactotron stream.
+- The connected app's name shows next to Reactotron's status dot.
+
+### Fixes
+
+- **JS console no longer loops "connecting…"** — apps logging large objects
+  tripped a 1 MiB socket cap on the post-connect replay (close code 1009), and
+  every reconnect replayed the same burst. The cap is now 64 MiB.
+- **Consoles stop with their UI** — closing the JS console or Reactotron tab,
+  or the main window (in either background-mode setting), tears the connection
+  down instead of leaving it reconnecting in the background; reopening the
+  window resumes the JS console's discovery.
+
+Installed copies update in place via Sparkle.
+
 ## Droidective v2.9.2
 
 Screen-mirror quality of life — a pop-out mirror window and reliable device
