@@ -17,6 +17,12 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
+      // Two HTML entries: the landing page and the full-changelog page —
+      // GitHub Pages serves dist/changelog/index.html at /changelog/.
+      input: {
+        main: path.resolve(__dirname, "index.html"),
+        changelog: path.resolve(__dirname, "changelog/index.html"),
+      },
       output: {
         manualChunks: {
           react: ["react", "react-dom"],

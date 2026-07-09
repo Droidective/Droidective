@@ -197,7 +197,7 @@ export const faqs: { q: string; html: string }[] = [
 export const footerLinks = [
   { label: "GitHub", href: GITHUB_URL },
   { label: "Releases", href: RELEASES_URL },
-  { label: "Changelog", href: "#changelog" },
+  { label: "Changelog", href: "/changelog/" },
   { label: "Issues", href: `${GITHUB_URL}/issues` },
   { label: "License", href: `${GITHUB_URL}/blob/main/LICENSE` },
   { label: "Privacy", href: "/privacy.html" },
