@@ -6,9 +6,9 @@
     <description>Most recent Droidective updates.</description>
     <language>en</language>
     <item>
-      <title>Droidective 2.9.1</title>
-      <sparkle:version>317</sparkle:version>
-      <sparkle:shortVersionString>2.9.1</sparkle:shortVersionString>
+      <title>Droidective 2.9.2</title>
+      <sparkle:version>328</sparkle:version>
+      <sparkle:shortVersionString>2.9.2</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <description><![CDATA[
 <style>
@@ -24,97 +24,45 @@ pre { background: color-mix(in srgb, currentColor 8%, transparent); padding: .6e
 pre code { background: none; padding: 0; }
 a { color: #2f9e44; }
 </style>
-<p>Adds Home feature search and a Frequently-used strip, font and accent-color
-customization, and a round of fixes.</p>
+<p>Screen-mirror quality of life — a pop-out mirror window and reliable device
+switching — plus video-editor and save-flow fixes.</p>
 <h3>New features</h3>
 <ul>
 <li>
-<strong>Home feature search &amp; Frequently-used strip</strong> — an inline search under the
-Home header finds any tool (⏎ opens the top match, Esc clears), and a
-Frequently-used strip surfaces the features you open most, ordered by use
-count.</li>
-<li>
-<strong>Font customization</strong> — Settings ▸ Appearance gains a font-family picker over
-the installed macOS families and a text-size scale; every UI font follows the
-choice (the terminal and screenshot-annotation canvas keep their own).</li>
-<li>
-<strong>Accent-color customization</strong> — pick from preset swatches, the color well, or
-a hex field (<code>#RRGGBB</code> / <code>#RGB</code>), and the accent now reaches the surfaces that
-used to ignore it (device/bundle pills, list selection in Apps and the
-decompile tree, success toasts).</li>
-</ul>
-<h3>Improvements</h3>
-<ul>
-<li>The command palette shortcut moves to <strong>⌘T</strong> everywhere.</li>
-<li>The <strong>⌘T palette</strong> now runs instant actions in place (e.g. Copy Device IP
-copies and shows a toast) instead of opening a detail tab.</li>
-<li>
-<strong>Reactotron</strong> gains <strong>Copy as JSON</strong> on the state tree, subscriptions, and
-snapshots.</li>
-</ul>
-<h3>Fixes</h3>
-<ul>
-<li>
-<strong>Set Dev Server Host</strong> now works on physical devices: it writes React
-Native's <code>debug_http_host</code> preference via <code>run-as</code> and relaunches the app,
-falling back to <code>setprop metro.host</code> and the dev menu.</li>
-<li>
-<strong>Text fields release focus when you click away</strong> — clicking outside a field
-no longer leaves it holding the keyboard.</li>
-<li>
-<strong>⌘,</strong> no longer opens Settings hidden behind the Quick Actions panel.</li>
-<li>
-<strong>Drop-to-split works again in the Terminal</strong> — a leftover whole-view drop
-target had blocked dropping a tab into a pane.</li>
-</ul>
-<p>Installed copies update in place via Sparkle.</p>
-<h3>New features</h3>
-<ul>
-<li>
-<strong>Background mode &amp; the Quick Actions panel</strong> — with "Keep running in the
-background" on (Settings ▸ General, the default), closing the main window
-hides Droidective from the Dock and stops its kept-alive sessions (terminal
-shells, Reactotron, the JS-console tunnels) while the menu bar icon, global
-hotkeys, and a new Quick Actions panel stay available; ⌘Q still quits fully,
-and relaunching from Finder reopens the window. The <strong>Quick Actions panel</strong> is
-a non-activating floating mini app on a global hotkey (record one in
-Settings ▸ Hotkeys): a grid of everything runnable in place — saved custom
-commands, every enabled instant, toggle, and form action, plus Manage Apps,
-Emulators, and Install APK — with an "Open in Droidective" list for the
-full-app screens. Form actions run in the panel, destructive app verbs take a
-confirming second press, and with several devices connected each action asks
-which to target (⌘⏎ runs on all). Double-clicking an APK in Finder opens it
-here to install in place or hand to APK Studio. The panel mirrors the app's
-role and catalog curation and resumes where you left off when reopened within
-a configurable window.</li>
-<li>
-<strong>Terminal tab rail &amp; find bar</strong> — terminal shells group into a collapsible
-rail with drag reordering, and a find bar (⌘F, then ⌘G / ⇧⌘G) searches the
-focused shell. Drag-selection autoscrolls, with a right-click context menu.</li>
-<li>
-<strong>Auto-hiding sidebar</strong> — a Dock-style mode (Settings ▸ Appearance) where the
-sidebar slides over the content when you push the pointer to the window's
-left edge, freeing horizontal space; ⌘B still shows and hides it.</li>
+<strong>Mirror in its own window</strong> — a window button on the mirror's control bar
+moves the live mirror into a dedicated "Screen Mirror" window (also in the
+macOS Window menu), so it can sit beside the main workspace or other apps.
+The window follows the device-bar selection, and an in-window recording still
+guards quit and device switches.</li>
 </ul>
 <h3>Improvements</h3>
 <ul>
 <li>
-<strong>Screen Recorder live preview</strong> — the recorder shows a live preview of the
-device while it captures.</li>
+<strong>The mirror follows device switches reliably</strong> — reconnects are serialized,
+so switching devices quickly can't tangle two sessions or leave one streaming
+in the background, and the stopped/failed screens gain a <strong>Reconnect</strong> button.</li>
 <li>
-<strong>Selectable logcat</strong> — logcat is backed by a text view, so lines can be
-selected across line breaks and copied.</li>
+<strong>"Open in Finder" everywhere</strong> — every "Reveal" button now says Open in
+Finder, and the first quick save asks once where captures should go
+(changeable anytime in Settings ▸ Privacy).</li>
+<li>Toasts dismiss from a macOS-notification-style close button on the top-left
+corner.</li>
+<li>Anonymous hang reports carry more triage context (opt-out in
+Settings ▸ Privacy).</li>
 </ul>
 <h3>Fixes</h3>
 <ul>
-<li>Screen Recorder pause and resume controls no longer wedge mid-recording.</li>
-<li>CPU-overuse diagnostics are waived while screen mirroring — which is expected
-to be CPU-heavy — so it no longer files false performance incidents.</li>
+<li>
+<strong>Video editor controls no longer collapse on portrait clips</strong> — the player
+takes the full pane (the video letterboxes inside), so the native playback
+controls and the trim strip get the full width. Trimming long recordings is
+workable again, and cancelling a trim no longer leaves an empty controls pill
+floating over the video.</li>
 </ul>
 <p>Installed copies update in place via Sparkle.</p>
 ]]></description>
-      <pubDate>Wed, 08 Jul 2026 13:40:26 +0000</pubDate>
-      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v2.9.1/Droidective-v2.9.1.dmg" sparkle:edSignature="U9zIGvCgB7x0duwAZn6WRkjSweDYNlgGmho9JuEcugS84yqP5MeCC5wDNFe2I54gFuM88Dclvvrikbq7IFoRBA==" length="46823282" type="application/octet-stream" />
+      <pubDate>Thu, 09 Jul 2026 04:56:48 +0000</pubDate>
+      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v2.9.2/Droidective-v2.9.2.dmg" sparkle:edSignature="9D92MTNzKTAemkDQlBf8WxoizAsol1w96R1+AzEMxSYfTfedBK5zOHU6jS4PeXfVL5PPR84x0lNPtbd/Qrl/BA==" length="46011485" type="application/octet-stream" />
     </item>
   </channel>
 </rss>
