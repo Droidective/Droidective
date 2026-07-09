@@ -5,12 +5,10 @@ import DotGrid from "@/components/DotGrid"
 import { PaletteDemo } from "@/components/site/PaletteDemo"
 import { Reveal } from "@/components/site/Reveal"
 import { Button } from "@/components/ui/button"
-import { useLatestDmg } from "@/hooks/useLatestDmg"
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion"
-import { APP_VERSION, GITHUB_URL } from "@/lib/content"
+import { APP_VERSION, DOWNLOAD_URL, GITHUB_URL } from "@/lib/content"
 
 export function Hero() {
-  const dmgUrl = useLatestDmg()
   const reducedMotion = usePrefersReducedMotion()
 
   return (
@@ -69,7 +67,7 @@ export function Hero() {
               size="lg"
               className="h-auto rounded-xl px-5 py-3 text-[15px] font-bold shadow-glow transition-transform duration-150 hover:-translate-y-px hover:bg-green-bright"
             >
-              <a href={dmgUrl}>
+              <a href={DOWNLOAD_URL}>
                 <Download aria-hidden />
                 Download for macOS
               </a>

@@ -3,8 +3,7 @@ import { useState } from "react"
 import { Download, Menu, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { useLatestDmg } from "@/hooks/useLatestDmg"
-import { GITHUB_URL } from "@/lib/content"
+import { DOWNLOAD_URL, GITHUB_URL } from "@/lib/content"
 
 const navLinks = [
   { label: "Features", href: "#features" },
@@ -18,7 +17,6 @@ const navLinks = [
 ]
 
 export function Nav() {
-  const dmgUrl = useLatestDmg()
   const [menuOpen, setMenuOpen] = useState(false)
 
   return (
@@ -42,7 +40,7 @@ export function Nav() {
             asChild
             className="h-auto rounded-xl px-4 py-2 text-sm font-bold shadow-glow hover:bg-green-bright"
           >
-            <a href={dmgUrl}>
+            <a href={DOWNLOAD_URL}>
               <Download aria-hidden />
               Download
             </a>
