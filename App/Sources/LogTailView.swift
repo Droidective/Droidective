@@ -120,11 +120,16 @@ struct LogTailView<Data: RandomAccessCollection, Row: View>: View
     }
 
     /// Rows laid out newest-first. `.bottom` feeds reverse the display order and
-    /// un-flip each row (the scroll view flip above mirrors the whole stack).
+    /// un-flip each row (the scroll view flip above mirrors the whole stack). The
+    /// per-row flip is wrapped in a `VStack` so it applies to one settled view: a
+    /// `row` builder returning multiple views (e.g. a row + `Divider`) is a bare
+    /// `TupleView`, and `scaleEffect` on that doesn't un-flip cleanly, which left
+    /// the rows upside-down.
     @ViewBuilder private var orderedRows: some View {
         if newestEdge == .bottom {
             ForEach(entries.reversed()) { entry in
-                row(entry).scaleEffect(x: 1, y: -1, anchor: .center)
+                VStack(spacing: 0) { row(entry) }
+                    .scaleEffect(x: 1, y: -1, anchor: .center)
             }
         } else {
             ForEach(entries) { entry in
