@@ -174,7 +174,11 @@ struct DeviceBarView: View {
         // back the boxed button affordance the borderless style drops — both
         // derived from the resolved title color, so they adapt to light and dark.
         .menuStyle(.borderlessButton)
-        .fixedSize()
+        // Cap-and-truncate rather than `.fixedSize()`: a rigid pill made the
+        // whole bar incompressible, so a narrow pane (or a bundle pill on top)
+        // pushed the bar past the window and clipped it on both edges. A max
+        // width lets a long device label truncate and the bar shrink to fit.
+        .frame(maxWidth: 200, alignment: .leading)
         .controlSize(.large)
         .foregroundStyle(pillTextColor)
         // The borderless pop-up tints its title with the control accent (the
@@ -313,7 +317,9 @@ struct DeviceBarView: View {
         // the default pop-up button carries its own leading inset, which made
         // the icon→pill gap read wider than the device pair's.
         .menuStyle(.borderlessButton)
-        .fixedSize()
+        // Same cap-and-truncate as the device pill (not `.fixedSize()`) so the
+        // bundle pair can compress instead of forcing the whole bar off-screen.
+        .frame(maxWidth: 240, alignment: .leading)
         .controlSize(.large)
         .foregroundStyle(pillTextColor)
         // Same accent-asset tinting escape as the device pill above.
@@ -332,6 +338,9 @@ struct DeviceBarView: View {
                 Text(bundle.nickname)
                     .fontWeight(.semibold)
                     .lineLimit(1)
+                    // The nickname is the identifier — when the pill is squeezed
+                    // narrow, let the package id truncate first.
+                    .layoutPriority(1)
                 Text(bundle.packageId)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
