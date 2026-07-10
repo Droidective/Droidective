@@ -154,6 +154,11 @@ final class JSConsoleSession {
 
     var isConnected: Bool { connectedTarget != nil }
 
+    /// Whether the console holds any output at all (unfiltered). The filter row
+    /// keys off this, so an active filter that hides every row still leaves a
+    /// way to clear it.
+    var hasEntries: Bool { !buffer.entries.isEmpty }
+
     init(adb: AdbClient) {
         self.adb = adb
         let savedPort = UserDefaults.standard.integer(forKey: Self.portKey)
@@ -619,15 +624,28 @@ struct JSConsoleView: View {
 
     private var session: JSConsoleSession { state.jsConsoleSession }
 
+    /// The filter row earns its space once the console is live or already holds
+    /// output. Gated on the *unfiltered* buffer (`hasEntries`), so an active
+    /// filter that hides every row can't strand the user with no way to clear it.
+    private var showFilterBar: Bool {
+        session.isConnected || session.hasEntries
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             connectionBar
             Divider()
-            filterBar
-            Divider()
-            if session.findVisible {
-                findBar
+            // The filter / levels / find / clear row is only useful once there's
+            // something in the console. While it's waiting for a target with an
+            // empty buffer, hide it (and the find bar it opens) — the connection
+            // bar above stays so the target can still be chosen.
+            if showFilterBar {
+                filterBar
                 Divider()
+                if session.findVisible {
+                    findBar
+                    Divider()
+                }
             }
             logArea
             Divider()
