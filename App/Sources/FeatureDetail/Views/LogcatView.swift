@@ -38,10 +38,15 @@ struct LogcatView: View {
         // instead of each re-scanning the full buffer while searching.
         let visible = visibleLines
         return VStack(spacing: 0) {
-            toolbar
-            Divider()
-            statusBar(visible: visible)
-            Divider()
+            // With no device there's nothing to filter, pause, export, or clear —
+            // hide the toolbar and status strip and let the empty state below
+            // carry the "connect a device" message.
+            if !state.targetSerials.isEmpty {
+                toolbar
+                Divider()
+                statusBar(visible: visible)
+                Divider()
+            }
             logList(visible: visible)
         }
         .task(id: taskKey) { await streamLoop() }
