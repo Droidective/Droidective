@@ -28,9 +28,10 @@ struct TourDemoLoop<Content: View>: View {
     }
 }
 
-/// The framed stage every demo renders on.
+/// The framed stage every demo renders on. A nil height (the default) lets
+/// the stage flex to fill the page instead of leaving dead space.
 struct TourDemoCanvas<Content: View>: View {
-    var height: CGFloat = 300
+    var height: CGFloat?
     @ViewBuilder var content: Content
 
     var body: some View {
@@ -387,7 +388,7 @@ struct SettingsHotkeysTourDemo: View {
 
 /// ⇧⌘Space presses → the floating panel pops over a dimmed desktop.
 struct QuickActionsTourDemo: View {
-    var height: CGFloat = 190
+    var height: CGFloat?
 
     private static let tiles: [(String, String)] = [
         ("camera.viewfinder", "Screenshot"), ("arrow.clockwise", "Reload JS"),

@@ -7,7 +7,8 @@ import SwiftUI
 /// the clip holds its first frame instead of looping.
 struct TourClipView<Fallback: View>: View {
     let clipName: String
-    var height: CGFloat = 300
+    /// Nil (the default) lets the stage flex to whatever height the page has.
+    var height: CGFloat?
     @ViewBuilder var fallback: Fallback
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 

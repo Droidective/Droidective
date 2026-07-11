@@ -51,7 +51,7 @@ struct TourView: View {
             Divider()
             controls
         }
-        .frame(width: 680, height: 640)
+        .frame(width: 780, height: 700)
         .onAppear { quickActionsShortcut = KeyboardShortcuts.getShortcut(for: .quickActions) }
         .onChange(of: HotkeyRecording.shared.active) {
             quickActionsShortcut = KeyboardShortcuts.getShortcut(for: .quickActions)
@@ -60,7 +60,10 @@ struct TourView: View {
 
     private var content: some View {
         VStack(spacing: 16) {
+            // The stage flexes to absorb whatever height the text below
+            // doesn't need — no dead space between the clip and the controls.
             demo
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .id(index)   // restart the loop when the page changes
             Text(page.title)
                 .font(.app(.title2).bold())
@@ -69,15 +72,15 @@ struct TourView: View {
                 .font(.app(.body))
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.textMuted)
-                .frame(maxWidth: 500)
+                .frame(maxWidth: 560)
                 .fixedSize(horizontal: false, vertical: true)
             if isLast {
                 hotkeyAsk
             }
-            Spacer(minLength: 0)
         }
         .padding(.horizontal, 28)
         .padding(.top, 24)
+        .padding(.bottom, 20)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
@@ -95,7 +98,7 @@ struct TourView: View {
         case .settings:
             TourClipView(clipName: "tour-settings") { SettingsHotkeysTourDemo() }
         case .quickActions:
-            TourClipView(clipName: "tour-quick-actions", height: 250) { QuickActionsTourDemo(height: 250) }
+            TourClipView(clipName: "tour-quick-actions") { QuickActionsTourDemo() }
         }
     }
 
@@ -120,7 +123,7 @@ struct TourView: View {
 
     private var controls: some View {
         HStack {
-            Button(isLast && quickActionsShortcut == nil ? "Maybe Later" : "Skip") { finish() }
+            Button(isLast && quickActionsShortcut == nil ? "Maybe Later" : "Skip") { skip() }
                 .buttonStyle(.plain)
                 .foregroundStyle(.textMuted)
                 // A quiet, secondary action — suppress the accent-colored
@@ -167,6 +170,18 @@ struct TourView: View {
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 14)
+    }
+
+    /// Skipping mid-tour still lands on the Quick Actions page while no
+    /// hotkey is recorded — the panel is only reachable through its shortcut,
+    /// so closing without one would quietly leave the feature unusable. With
+    /// a hotkey already set (or from that page's "Maybe Later"), skip closes.
+    private func skip() {
+        if !isLast, quickActionsShortcut == nil {
+            withAnimation { index = Self.pages.count - 1 }
+        } else {
+            finish()
+        }
     }
 
     private func finish() {
