@@ -68,7 +68,7 @@ opening it — verify those by hand.
 ## Build / test / run
 
 ```
-make test          # ADBKit unit tests (cd ADBKit && swift test) — 702 tests, keep green
+make test          # ADBKit unit tests (cd ADBKit && swift test) — 705 tests, keep green
 make build         # xcodegen generate + xcodebuild Debug
 make run           # build + open the .app
 ```
@@ -399,6 +399,14 @@ compile or test time* — lean on it instead of manual vigilance.
 ## Status
 
 Feature-complete across all planned milestones plus several UX rounds (latest:
+**v3.0.0** — **terminal split panes** (⌘D/⇧⌘D via the tested `TerminalSplitTree`,
+cwd inheritance into new tabs/panes, a Chrome-style top tab strip option), an
+**onboarding tour rebuilt around recordings of the real app**, redesigned
+**React Native and Connection hubs** (described action cards, a Metro port
+field, the device's live Wi-Fi network + IP), **custom commands through the
+login shell** (rc aliases resolve; optionally typed into a Terminal tab), JS
+Console **Reload JS / Restart app**, and a **Pinned section on Home** with a
+permanent Home icon leading the tab strip. Before that,
 **v2.9.0** — **background mode** (closing the main window keeps Droidective
 resident in the menu bar, drops the Dock icon, and stops kept-alive sessions;
 ⌘Q still quits) with a global **Quick Actions panel** (a non-activating
@@ -414,7 +422,7 @@ jadx/apktool, recompile, and sign — with keystore creation) plus Frida setup, 
 custom accent color, launching emulators from the device bar, per-feature
 connect-a-device empty states, a live-preview hotkey recorder, and a Settings
 split into Appearance/Privacy; managed tools download from GitHub releases into
-Application Support and are sized/removable in Settings); 702 tests green;
+Application Support and are sized/removable in Settings); 705 tests green;
 builds clean with zero warnings (enforced as errors in CI). Verified live against a
 physical device and an Android emulator. Release builds are Developer ID-signed +
 notarized and bundle scrcpy/ffmpeg (see `RELEASING.md`). Open gaps: the Apps
