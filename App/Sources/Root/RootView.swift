@@ -357,7 +357,8 @@ struct RootView: View {
             split
                 .frame(
                     width: geo.size.width / state.fontScale,
-                    height: geo.size.height / state.fontScale
+                    height: geo.size.height / state.fontScale,
+                    alignment: .topLeading
                 )
                 .scaleEffect(state.fontScale, anchor: .topLeading)
         }
