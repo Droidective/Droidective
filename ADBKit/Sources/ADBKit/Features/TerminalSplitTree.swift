@@ -18,6 +18,23 @@ public struct TerminalSplitTree: Equatable, Sendable {
     public indirect enum Node: Equatable, Sendable {
         case pane(UUID)
         case split(Direction, [Node])
+
+        /// The subtree's first pane in layout order — a stable identity for a
+        /// split's children when rendering. Positional identity goes stale
+        /// when a sibling closes: the panes after it shift slots, and a
+        /// renderer keyed on position would hand an existing slot a different
+        /// pane. Nil only for a hand-built empty split; the tree never makes one.
+        public var firstPaneID: UUID? {
+            switch self {
+            case .pane(let id):
+                return id
+            case .split(_, let children):
+                for child in children {
+                    if let id = child.firstPaneID { return id }
+                }
+                return nil
+            }
+        }
     }
 
     /// Nil once every pane has been removed — the owning tab is done.

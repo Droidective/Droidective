@@ -272,8 +272,11 @@ final class TerminalSession {
     /// Give this shell keyboard focus — called after a neighboring pane or
     /// tab closes so typing lands in the survivor without a click.
     func takeFocus() {
-        guard let terminalView, terminalView.window != nil else { return }
-        terminalView.window?.makeFirstResponder(terminalView)
+        guard let terminalView, let window = terminalView.window else { return }
+        // A background sibling exiting on its own must not yank the keyboard
+        // out of a text field (the rename sheet, the find bar) mid-typing.
+        if window.firstResponder is NSText { return }
+        window.makeFirstResponder(terminalView)
     }
 
     /// Coalesce frame changes into one repaint nudge after the layout
@@ -330,6 +333,9 @@ final class TerminalSession {
             if pid != 0 {
                 Darwin.kill(pid, SIGHUP)
             }
+            // Detach the dead view: on a pane close, the SwiftUI container it
+            // sat in can outlive it (a surviving sibling mounts there next).
+            terminalView.removeFromSuperview()
         }
         terminalView = nil
     }
@@ -423,7 +429,6 @@ struct NativeTerminalView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSView {
         let container = TerminalPaneContainer()
-        container.onClick = { [weak session] in session?.onFocus?() }
         mount(in: container, coordinator: context.coordinator)
         return container
     }
@@ -434,7 +439,17 @@ struct NativeTerminalView: NSViewRepresentable {
 
     private func mount(in container: NSView, coordinator: Coordinator) {
         let terminal = session.view(serial: serial)
+        // Re-set on every update, not just on make: SwiftUI may reuse this
+        // container for a different session, and a click must focus the shell
+        // that lives here now, not the one mounted first.
+        (container as? TerminalPaneContainer)?.onClick = { [weak session] in
+            session?.onFocus?()
+        }
         if terminal.superview !== container {
+            // Evict whatever an earlier session left mounted here.
+            for stale in container.subviews where stale !== terminal {
+                stale.removeFromSuperview()
+            }
             terminal.removeFromSuperview()
             terminal.translatesAutoresizingMaskIntoConstraints = false
             container.addSubview(terminal)

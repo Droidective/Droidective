@@ -156,12 +156,12 @@ final class TerminalManager {
     func splitActivePane(_ direction: TerminalSplitTree.Direction) {
         guard let tabID = activeID, var tab = tabsByID[tabID] else { return }
         let paneID = UUID()
-        let session = TerminalSession(
-            startDirectory: tab.activeSession?.currentDirectory
-        )
         guard tab.splits.split(pane: tab.activePaneID, direction: direction, adding: paneID) else {
             return
         }
+        let session = TerminalSession(
+            startDirectory: tab.activeSession?.currentDirectory
+        )
         tab.sessions[paneID] = session
         tab.activePaneID = paneID
         tabsByID[tabID] = tab
@@ -894,7 +894,12 @@ private struct TerminalSplitNodeView: View {
                 ? AnyLayout(HStackLayout(spacing: 0))
                 : AnyLayout(VStackLayout(spacing: 0))
             layout {
-                ForEach(Array(children.enumerated()), id: \.offset) { index, child in
+                // Children keyed by their subtree's first pane, not position:
+                // closing a middle sibling shifts the ones after it, and
+                // positional identity would hand a surviving slot a different
+                // session (its container's old shell view and click routing
+                // going stale with it).
+                ForEach(Array(children.enumerated()), id: \.element.firstPaneID) { index, child in
                     if index > 0 {
                         Rectangle()
                             .fill(Color.white.opacity(0.16))

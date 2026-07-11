@@ -111,6 +111,22 @@ struct TerminalSplitTreeTests {
         #expect(tree.paneIDs == [a])
     }
 
+    // MARK: - Identity
+
+    @Test func firstPaneIDIsTheSubtreesLeadingPane() {
+        let a = UUID(), b = UUID(), c = UUID()
+        var tree = TerminalSplitTree(pane: a)
+        tree.split(pane: a, direction: .vertical, adding: b)
+        tree.split(pane: b, direction: .horizontal, adding: c)
+        #expect(tree.root?.firstPaneID == a)
+        guard case .split(_, let children)? = tree.root else {
+            Issue.record("expected a split root")
+            return
+        }
+        // The nested horizontal split identifies as its leading pane, b.
+        #expect(children.map(\.firstPaneID) == [a, b])
+    }
+
     // MARK: - Focus math
 
     @Test func neighborIsTheNextPaneOrThePreviousWhenLast() {
