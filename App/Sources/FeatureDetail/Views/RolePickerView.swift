@@ -36,7 +36,28 @@ struct RolePickerView: View {
         .padding(40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.bgRoot)
+        .overlay(alignment: .topTrailing) { closeButton }
         .onAppear { appeared = true }
+    }
+
+    /// Re-opened from Home ("Change role"), the picker must be escapable
+    /// without re-picking: choosing any role — even the current one — re-seeds
+    /// the curated set and resets every open tab. Hidden on first run, where
+    /// picking (or "show me everything") is the only sensible exit.
+    @ViewBuilder private var closeButton: some View {
+        if hasChosenRole {
+            Button {
+                state.presentRolePicker = false
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.app(size: 22))
+                    .foregroundStyle(.tertiary)
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut(.cancelAction)
+            .padding(18)
+            .help("Close without changing your role")
+        }
     }
 
     private var header: some View {
