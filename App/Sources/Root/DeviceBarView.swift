@@ -115,7 +115,7 @@ struct DeviceBarView: View {
     @ViewBuilder
     private var deviceControl: some View {
         @Bindable var state = state
-        Menu {
+        CapWidth(cap: 200) { Menu {
             if state.devices.isEmpty {
                 Text("No devices connected")
             }
@@ -174,11 +174,7 @@ struct DeviceBarView: View {
         // back the boxed button affordance the borderless style drops — both
         // derived from the resolved title color, so they adapt to light and dark.
         .menuStyle(.borderlessButton)
-        // Cap-and-truncate rather than `.fixedSize()`: a rigid pill made the
-        // whole bar incompressible, so a narrow pane (or a bundle pill on top)
-        // pushed the bar past the window and clipped it on both edges. A max
-        // width lets a long device label truncate and the bar shrink to fit.
-        .frame(maxWidth: 200, alignment: .leading)
+        }
         .controlSize(.large)
         .foregroundStyle(pillTextColor)
         // The borderless pop-up tints its title with the control accent (the
@@ -262,8 +258,9 @@ struct DeviceBarView: View {
     }
 
     /// True when the selected feature works with an app bundle. Custom
-    /// commands (commands may require one) and logcat (its app filter is
-    /// driven by saved bundles) are included.
+    /// commands (commands may require one), logcat (its app filter is
+    /// driven by saved bundles), and the React Native hub (deep links are
+    /// saved per bundle; process death kills the selected bundle) are included.
     private var bundlePickerVisible: Bool {
         guard let id = state.activeTabID,
               let feature = FeatureRegistry.byID[id] else { return false }
@@ -271,6 +268,7 @@ struct DeviceBarView: View {
             || feature.id == "custom-commands"
             || feature.id == "logcat"
             || feature.id == "performance"
+            || feature.id == "react-native"
     }
 
     // MARK: - Bundle pill
@@ -278,7 +276,7 @@ struct DeviceBarView: View {
     /// One menu does everything: pick (auto-selects), add from the device's
     /// installed apps, grab the on-screen app, add manually, manage.
     private var bundleControl: some View {
-        Menu {
+        CapWidth(cap: 240) { Menu {
             ForEach(state.bundles) { bundle in
                 Button {
                     state.selectBundle(bundle.id)
@@ -317,9 +315,7 @@ struct DeviceBarView: View {
         // the default pop-up button carries its own leading inset, which made
         // the icon→pill gap read wider than the device pair's.
         .menuStyle(.borderlessButton)
-        // Same cap-and-truncate as the device pill (not `.fixedSize()`) so the
-        // bundle pair can compress instead of forcing the whole bar off-screen.
-        .frame(maxWidth: 240, alignment: .leading)
+        }
         .controlSize(.large)
         .foregroundStyle(pillTextColor)
         // Same accent-asset tinting escape as the device pill above.
@@ -349,5 +345,28 @@ struct DeviceBarView: View {
                     .foregroundStyle(.secondary)
             }
         }
+    }
+}
+
+/// Width = min(content, cap, available) for the bar's menu pills: hugs a short
+/// label ("Choose app bundle…"), truncates a long one at `cap`, and still
+/// compresses when the bar runs out of room. Neither stock tool does all
+/// three — `.frame(maxWidth:)` greedily fills the cap and strands dead space
+/// inside the pill border behind a short label, and `.fixedSize()` made the
+/// whole bar incompressible (a narrow pane clipped it on both edges).
+private struct CapWidth: Layout {
+    let cap: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let subview = subviews.first else { return .zero }
+        let limit = min(proposal.width ?? .infinity, cap)
+        let size = subview.sizeThatFits(ProposedViewSize(width: limit, height: proposal.height))
+        return CGSize(width: min(size.width, limit), height: size.height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(
+            at: CGPoint(x: bounds.minX, y: bounds.midY), anchor: .leading,
+            proposal: ProposedViewSize(width: bounds.width, height: bounds.height))
     }
 }
