@@ -254,6 +254,73 @@ struct TabsSplitTourDemo: View {
     }
 }
 
+// MARK: - Reactotron
+
+/// One streaming timeline → split → each pane gets its own filter
+/// (API traffic left, logs right).
+struct ReactotronTourDemo: View {
+    private static let mixed: [(String, String, Bool)] = [
+        ("ACTION", "stream/fetchPosts", true),
+        ("DEBUG", "[saga] fetched 100 posts", false),
+        ("API", "GET /posts", true),
+        ("ACTION", "stream/tick", true),
+        ("DEBUG", "[ticker] tick #96", false),
+    ]
+
+    var body: some View {
+        TourDemoCanvas {
+            TourDemoLoop(phases: 3) { phase in
+                HStack(spacing: 0) {
+                    pane(
+                        label: phase >= 2 ? "API only" : "All events",
+                        rows: phase >= 2 ? Self.mixed.filter { $0.0 == "API" } : Self.mixed
+                    )
+                    if phase >= 1 {
+                        Divider()
+                        pane(
+                            label: phase >= 2 ? "Logs only" : "All events",
+                            rows: phase >= 2 ? Self.mixed.filter { $0.0 == "DEBUG" } : Self.mixed
+                        )
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                    }
+                }
+            }
+        }
+    }
+
+    private func pane(label: String, rows: [(String, String, Bool)]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "line.3.horizontal.decrease.circle")
+                    .font(.app(size: 11))
+                    .foregroundStyle(.secondary)
+                Text(label)
+                    .font(.app(size: 10, weight: .medium))
+                    .foregroundStyle(.brandAccent)
+                Spacer(minLength: 0)
+            }
+            ForEach(rows.indices, id: \.self) { index in
+                let row = rows[index]
+                HStack(spacing: 6) {
+                    Text(row.0)
+                        .font(.app(size: 8, weight: .bold))
+                        .foregroundStyle(row.0 == "ACTION" ? .orange : row.0 == "API" ? Color.brandAccent : .secondary)
+                    Text(row.1)
+                        .font(.app(size: 10, design: .monospaced))
+                        .foregroundStyle(row.2 ? AnyShapeStyle(.primary) : AnyShapeStyle(.textMuted))
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                }
+                .padding(.vertical, 3)
+                if index < rows.count - 1 { Divider().opacity(0.4) }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+}
+
 // MARK: - 3. Roles
 
 /// Cycle three roles; the featured tool chips swap with each one.
