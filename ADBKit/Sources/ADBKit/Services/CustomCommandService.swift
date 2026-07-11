@@ -3,8 +3,9 @@ import Foundation
 /// User-defined command macros with {bundleId} / {serial} placeholders.
 /// `.adb` commands are tokenized with quote support and passed to adb as
 /// discrete arguments — never through a shell. `.shell` commands (plain
-/// terminal command lines or script files) run through `zsh -lc`, so they
-/// behave like the user's Terminal.
+/// terminal command lines or script files) run through the user's login shell
+/// with its interactive rc sourced best-effort, so aliases and PATH behave
+/// like the user's Terminal.
 public struct CustomCommandService: Sendable {
     public enum TemplateError: Error, LocalizedError, Equatable {
         case empty
@@ -21,9 +22,14 @@ public struct CustomCommandService: Sendable {
     }
 
     let client: AdbClient
+    let loginShell: String
 
-    public init(client: AdbClient) {
+    public init(
+        client: AdbClient,
+        loginShell: String = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
+    ) {
         self.client = client
+        self.loginShell = loginShell
     }
 
     /// Split a template into argv tokens, honoring single/double quotes.
@@ -59,6 +65,20 @@ public struct CustomCommandService: Sendable {
         }
         if tokens.isEmpty { throw .empty }
         return tokens
+    }
+
+    /// The line a "run in Terminal" tab types into its shell: placeholders
+    /// substituted, adb commands given their `adb` prefix (the tab's
+    /// ANDROID_SERIAL export targets the device, but the typed line stays
+    /// explicit and editable), shell commands as written.
+    public static func terminalLine(
+        command: CustomCommand, bundleId: String?, serial: String
+    ) throws(TemplateError) -> String {
+        let line = try substitute(template: command.command, bundleId: bundleId, serial: serial)
+        if command.kind == .adb, !line.hasPrefix("adb ") {
+            return "adb \(line)"
+        }
+        return line
     }
 
     /// Substitute {bundleId} / {serial} into a template. Throws when the
@@ -129,13 +149,43 @@ public struct CustomCommandService: Sendable {
         }
     }
 
+    /// Build the login-shell invocation for a `.shell` command line. A plain
+    /// `-lc <line>` misses aliases from the user's *interactive* rc file
+    /// (`.zshrc`/`.bashrc` are only read by interactive shells), so zsh and
+    /// bash get a preamble that sources it best-effort (output suppressed —
+    /// interactive rc files print banners and may error without a TTY) and
+    /// then `eval`s the line: both shells parse ahead of alias definition, so
+    /// without the re-parse a just-sourced alias still wouldn't expand. The
+    /// line rides as a positional `$1`, never spliced into the script — no
+    /// quoting, no injection surface beyond what the user typed. Other shells
+    /// (fish sources its config unconditionally) keep the plain form.
+    static func shellInvocation(line: String, shellPath: String) -> (executable: String, arguments: [String]) {
+        let shell = shellPath.isEmpty ? "/bin/zsh" : shellPath
+        switch URL(fileURLWithPath: shell).lastPathComponent {
+        case "zsh":
+            return (shell, [
+                "-lc",
+                "[ -f ~/.zshrc ] && source ~/.zshrc >/dev/null 2>&1; eval \"$1\"",
+                "droidective", line,
+            ])
+        case "bash":
+            return (shell, [
+                "-lc",
+                "shopt -s expand_aliases; [ -f ~/.bashrc ] && source ~/.bashrc >/dev/null 2>&1; eval \"$1\"",
+                "droidective", line,
+            ])
+        default:
+            return (shell, ["-lc", line])
+        }
+    }
+
     /// Run a `.shell` command line through the user's login shell, so PATH,
-    /// dotfile setup, and plain script-file paths (e.g. ~/scripts/reset.sh)
-    /// behave exactly like Terminal — deliberately not device-scoped; use the
-    /// {serial} placeholder to target the selected device. Recorded on the
-    /// shared command log like every adb run. The 10-minute ceiling is a hang
-    /// stop, sized so real work (a gradle build, a long pull) isn't cut off
-    /// like it would be at adb's usual 120s.
+    /// dotfile setup, aliases, and plain script-file paths (e.g.
+    /// ~/scripts/reset.sh) behave like Terminal — deliberately not
+    /// device-scoped; use the {serial} placeholder to target the selected
+    /// device. Recorded on the shared command log like every adb run. The
+    /// 10-minute ceiling is a hang stop, sized so real work (a gradle build, a
+    /// long pull) isn't cut off like it would be at adb's usual 120s.
     private func runShell(command: CustomCommand, bundleId: String?, serial: String) async -> FeatureResult {
         let line: String
         do {
@@ -150,9 +200,10 @@ public struct CustomCommandService: Sendable {
         }
         let clock = ContinuousClock()
         let started = clock.now
+        let invocation = CustomCommandService.shellInvocation(line: line, shellPath: loginShell)
         let output = await client.runner.run(
-            executable: "/bin/zsh",
-            arguments: ["-lc", line],
+            executable: invocation.executable,
+            arguments: invocation.arguments,
             timeout: .seconds(600),
             maxOutputBytes: AdbClient.defaultMaxOutput
         )

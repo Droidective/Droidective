@@ -52,6 +52,10 @@ public struct CustomCommand: Codable, Sendable, Equatable, Identifiable {
     public var kind: CustomCommandKind
     public var needsBundle: Bool
     public var createdAt: Double
+    /// Where a run shows its output: false = the headless runner with a toast
+    /// (silent), true = typed into a fresh in-app Terminal tab — live output,
+    /// prompts, ctrl-C.
+    public var runsInTerminal: Bool
 
     public init(
         id: String = UUID().uuidString,
@@ -59,7 +63,8 @@ public struct CustomCommand: Codable, Sendable, Equatable, Identifiable {
         command: String,
         kind: CustomCommandKind = .adb,
         needsBundle: Bool,
-        createdAt: Double
+        createdAt: Double,
+        runsInTerminal: Bool = false
     ) {
         self.id = id
         self.name = name
@@ -67,9 +72,11 @@ public struct CustomCommand: Codable, Sendable, Equatable, Identifiable {
         self.kind = kind
         self.needsBundle = needsBundle
         self.createdAt = createdAt
+        self.runsInTerminal = runsInTerminal
     }
 
-    /// Saves that predate `kind` decode as adb commands.
+    /// Saves that predate `kind` decode as adb commands; saves that predate
+    /// `runsInTerminal` decode as silent.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
@@ -78,6 +85,7 @@ public struct CustomCommand: Codable, Sendable, Equatable, Identifiable {
         kind = try container.decodeIfPresent(CustomCommandKind.self, forKey: .kind) ?? .adb
         needsBundle = try container.decode(Bool.self, forKey: .needsBundle)
         createdAt = try container.decode(Double.self, forKey: .createdAt)
+        runsInTerminal = try container.decodeIfPresent(Bool.self, forKey: .runsInTerminal) ?? false
     }
 }
 

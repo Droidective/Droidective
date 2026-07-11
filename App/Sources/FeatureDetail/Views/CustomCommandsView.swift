@@ -13,6 +13,7 @@ struct CustomCommandsView: View {
     @State private var draftCommand = ""
     @State private var draftKind: CustomCommandKind = .adb
     @State private var draftNeedsBundle = false
+    @State private var draftRunsInTerminal = false
     @State private var pendingDelete: CustomCommand?
 
     var body: some View {
@@ -35,6 +36,7 @@ struct CustomCommandsView: View {
                     draftCommand = ""
                     draftKind = .adb
                     draftNeedsBundle = false
+                    draftRunsInTerminal = false
                     showEditor = true
                 } label: {
                     Label("New", systemImage: "plus")
@@ -63,15 +65,20 @@ struct CustomCommandsView: View {
                         Button {
                             run(command)
                         } label: {
-                            Image(systemName: "play.fill").foregroundStyle(.brandAccent)
+                            Image(systemName: command.runsInTerminal ? "terminal.fill" : "play.fill")
+                                .foregroundStyle(.brandAccent)
                         }
                         .buttonStyle(.plain)
+                        .help(command.runsInTerminal
+                            ? "Run in a Terminal tab — live output, prompts"
+                            : "Run silently and show the result as a toast")
                         Button {
                             editing = command
                             draftName = command.name
                             draftCommand = command.command
                             draftKind = command.kind
                             draftNeedsBundle = command.needsBundle
+                            draftRunsInTerminal = command.runsInTerminal
                             showEditor = true
                         } label: {
                             Image(systemName: "pencil")
@@ -142,6 +149,19 @@ struct CustomCommandsView: View {
                         .foregroundStyle(.textMuted)
                 }
             }
+            VStack(alignment: .leading, spacing: 5) {
+                Picker("Show output", selection: $draftRunsInTerminal) {
+                    Text("Silently (toast)").tag(false)
+                    Text("In a Terminal tab").tag(true)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                Text(draftRunsInTerminal
+                    ? "Opens an in-app Terminal tab and types the command — live output, prompts, ctrl-C."
+                    : "Runs in the background; the result arrives as a toast.")
+                    .font(.app(.caption))
+                    .foregroundStyle(.textMuted)
+            }
             SwitchRow("Requires a saved bundle", isOn: $draftNeedsBundle)
             HStack {
                 Spacer()
@@ -173,8 +193,9 @@ struct CustomCommandsView: View {
         panel.allowsMultipleSelection = false
         panel.message = "Choose a script or executable to run"
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        // shellQuote, not ad-hoc doubling: the line runs through `zsh -lc`, so
-        // $, backticks, and parens in a path would otherwise expand or break.
+        // shellQuote, not ad-hoc doubling: the line runs through the user's
+        // login shell, so $, backticks, and parens in a path would otherwise
+        // expand or break.
         let quoted = shellQuote(url.path)
         draftCommand = draftCommand.trimmingCharacters(in: .whitespaces).isEmpty
             ? quoted
@@ -187,6 +208,7 @@ struct CustomCommandsView: View {
             command.command = draftCommand
             command.kind = draftKind
             command.needsBundle = draftNeedsBundle
+            command.runsInTerminal = draftRunsInTerminal
             commands[index] = command
         } else {
             commands.append(CustomCommand(
@@ -194,7 +216,8 @@ struct CustomCommandsView: View {
                 command: draftCommand,
                 kind: draftKind,
                 needsBundle: draftNeedsBundle,
-                createdAt: Date().timeIntervalSince1970 * 1000
+                createdAt: Date().timeIntervalSince1970 * 1000,
+                runsInTerminal: draftRunsInTerminal
             ))
         }
         persist()
@@ -214,6 +237,17 @@ struct CustomCommandsView: View {
         }
         let serial = state.targetSerials.first ?? ""
         let bundleId = state.selectedBundle?.packageId
+        if command.runsInTerminal {
+            do {
+                let line = try CustomCommandService.terminalLine(
+                    command: command, bundleId: bundleId, serial: serial
+                )
+                state.runInTerminal(line, named: command.name)
+            } catch {
+                state.showToast(Toast(message: error.localizedDescription, ok: false))
+            }
+            return
+        }
         Task {
             await CommandLog.userInitiated {
                 let result = await state.env.engine.customCommands.run(

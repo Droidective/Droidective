@@ -67,10 +67,12 @@ import Testing
         #expect(runner.invocations.last?.arguments == ["-s", "S1", "shell", "echo", "hi"])
     }
 
-    @Test func shellKindRunsTheLineThroughZsh() async {
+    @Test func shellKindRunsTheLineThroughTheLoginShell() async {
         let runner = MockProcessRunner()
         runner.script(argsPrefix: ["-lc"], stdout: "ran")
-        let service = CustomCommandService(client: await makeTestClient(runner: runner))
+        let service = CustomCommandService(
+            client: await makeTestClient(runner: runner), loginShell: "/bin/zsh"
+        )
         let command = CustomCommand(
             name: "Script", command: "~/scripts/reset.sh {serial}", kind: .shell,
             needsBundle: false, createdAt: 0
@@ -82,14 +84,92 @@ import Testing
         let invocation = runner.invocations.last
         #expect(invocation?.executable == "/bin/zsh")
         // The line is not device-scoped (no ANDROID_SERIAL export) — {serial}
-        // is the only way a shell command targets the selection.
-        #expect(invocation?.arguments == ["-lc", "~/scripts/reset.sh S1"])
+        // is the only way a shell command targets the selection. It rides as a
+        // positional $1 so rc-sourced aliases expand via eval without any
+        // splicing/quoting of the user's line.
+        #expect(invocation?.arguments == [
+            "-lc",
+            "[ -f ~/.zshrc ] && source ~/.zshrc >/dev/null 2>&1; eval \"$1\"",
+            "droidective", "~/scripts/reset.sh S1",
+        ])
+    }
+
+    @Test func terminalLinePrefixesAdbAndSubstitutes() throws {
+        let adb = CustomCommand(
+            name: "Force stop", command: "shell am force-stop {bundleId}",
+            kind: .adb, needsBundle: true, createdAt: 0
+        )
+        #expect(try CustomCommandService.terminalLine(command: adb, bundleId: "com.app", serial: "S1")
+            == "adb shell am force-stop com.app")
+
+        // An "adb" the user already typed isn't doubled.
+        let typed = CustomCommand(
+            name: "Typed", command: "adb devices", kind: .adb, needsBundle: false, createdAt: 0
+        )
+        #expect(try CustomCommandService.terminalLine(command: typed, bundleId: nil, serial: "")
+            == "adb devices")
+
+        // Shell lines pass through as written, placeholders substituted.
+        let shell = CustomCommand(
+            name: "Script", command: "~/scripts/reset.sh {serial}",
+            kind: .shell, needsBundle: false, createdAt: 0
+        )
+        #expect(try CustomCommandService.terminalLine(command: shell, bundleId: nil, serial: "S1")
+            == "~/scripts/reset.sh S1")
+
+        let needsBundle = CustomCommand(
+            name: "Needs", command: "echo {bundleId}", kind: .shell, needsBundle: true, createdAt: 0
+        )
+        #expect(throws: CustomCommandService.TemplateError.missingBundle) {
+            try CustomCommandService.terminalLine(command: needsBundle, bundleId: nil, serial: "")
+        }
+    }
+
+    @Test func savesPredatingRunsInTerminalDecodeAsSilent() throws {
+        let json = Data("""
+        [{"id": "1", "name": "Old", "command": "devices", "needsBundle": false, "createdAt": 0}]
+        """.utf8)
+        let commands = try JSONDecoder().decode([CustomCommand].self, from: json)
+        #expect(commands[0].runsInTerminal == false)
+        #expect(commands[0].kind == .adb)
+    }
+
+    @Test func shellInvocationSourcesTheMatchingRcFile() {
+        let zsh = CustomCommandService.shellInvocation(line: "bs", shellPath: "/bin/zsh")
+        #expect(zsh.executable == "/bin/zsh")
+        #expect(zsh.arguments == [
+            "-lc",
+            "[ -f ~/.zshrc ] && source ~/.zshrc >/dev/null 2>&1; eval \"$1\"",
+            "droidective", "bs",
+        ])
+
+        // bash keeps aliases off in non-interactive shells — the preamble must
+        // switch them on before the eval re-parse.
+        let bash = CustomCommandService.shellInvocation(line: "bs", shellPath: "/opt/homebrew/bin/bash")
+        #expect(bash.executable == "/opt/homebrew/bin/bash")
+        #expect(bash.arguments == [
+            "-lc",
+            "shopt -s expand_aliases; [ -f ~/.bashrc ] && source ~/.bashrc >/dev/null 2>&1; eval \"$1\"",
+            "droidective", "bs",
+        ])
+
+        // fish (and anything else) sources its own config in every shell — no
+        // preamble, and no zsh/bash eval syntax assumed.
+        let fish = CustomCommandService.shellInvocation(line: "bs", shellPath: "/opt/homebrew/bin/fish")
+        #expect(fish.executable == "/opt/homebrew/bin/fish")
+        #expect(fish.arguments == ["-lc", "bs"])
+
+        // An empty SHELL falls back to zsh, the macOS default.
+        let fallback = CustomCommandService.shellInvocation(line: "bs", shellPath: "")
+        #expect(fallback.executable == "/bin/zsh")
     }
 
     @Test func shellKindSubstitutesBundleAndReportsFailure() async {
         let runner = MockProcessRunner()
         runner.script(argsPrefix: ["-lc"], stderr: "boom", exitCode: 1)
-        let service = CustomCommandService(client: await makeTestClient(runner: runner))
+        let service = CustomCommandService(
+            client: await makeTestClient(runner: runner), loginShell: "/bin/zsh"
+        )
         let command = CustomCommand(
             name: "Fails", command: "echo {bundleId}", kind: .shell,
             needsBundle: false, createdAt: 0
@@ -98,7 +178,7 @@ import Testing
         let result = await service.run(command: command, bundleId: "com.app", serial: "")
         #expect(result.ok == false)
         #expect(result.message == "boom")
-        #expect(runner.invocations.last?.arguments == ["-lc", "echo com.app"])
+        #expect(runner.invocations.last?.arguments.last == "echo com.app")
     }
 
     @Test func shellKindMissingBundleFailsWithoutRunning() async {

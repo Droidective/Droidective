@@ -190,8 +190,14 @@ final class TerminalSession {
     /// spawning shell's live working directory here; nil falls back to home.
     private let startDirectory: String?
 
-    init(startDirectory: String? = nil) {
+    /// Typed into the shell as soon as it starts (the custom commands'
+    /// "run in Terminal" path). Newline-terminated on send so it executes;
+    /// the PTY buffers it until the shell is ready to read.
+    private let initialCommand: String?
+
+    init(startDirectory: String? = nil, initialCommand: String? = nil) {
         self.startDirectory = startDirectory
+        self.initialCommand = initialCommand
     }
 
     /// Fired when the shell ends on its own (`exit`, EOF, a crash) — not when
@@ -266,6 +272,9 @@ final class TerminalSession {
             environment: environment.map { "\($0.key)=\($0.value)" },
             currentDirectory: cwd
         )
+        if let initialCommand {
+            view.send(txt: initialCommand + "\n")
+        }
         return view
     }
 
