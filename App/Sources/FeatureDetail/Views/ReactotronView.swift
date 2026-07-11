@@ -1445,29 +1445,45 @@ private struct RtRow: View {
         }
     }
 
-    /// Generous tap target — the whole header toggles the row.
+    /// The chevron cluster and the row's blank trailing space toggle
+    /// expansion; the action/log text itself stays OUT of the tap target so
+    /// it's selectable — a whole-row gesture swallowed drag-to-select, making
+    /// action and debug names uncopyable.
     private func header(_ presentation: RtPresentation) -> some View {
         HStack(spacing: 8) {
-            Image(systemName: expanded ? "chevron.down" : "chevron.right")
-                .font(.app(size: 11, weight: .bold))
-                .foregroundStyle(.secondary)
-                .frame(width: 16)
-                .opacity(canExpand ? 1 : 0)
-            Text(Self.timeFormatter.string(from: item.receivedAt))
-                .font(.app(size: 11, design: .monospaced))
-                .foregroundStyle(.textMuted)
-            Text(presentation.badge)
-                .font(.app(size: 10, weight: .bold))
-                .foregroundStyle(presentation.badgeColor)
-                .fixedSize()
+            HStack(spacing: 8) {
+                Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                    .font(.app(size: 11, weight: .bold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 16)
+                    .opacity(canExpand ? 1 : 0)
+                Text(Self.timeFormatter.string(from: item.receivedAt))
+                    .font(.app(size: 11, design: .monospaced))
+                    .foregroundStyle(.textMuted)
+                Text(presentation.badge)
+                    .font(.app(size: 10, weight: .bold))
+                    .foregroundStyle(presentation.badgeColor)
+                    .fixedSize()
+            }
+            .padding(.vertical, 10)
+            .contentShape(Rectangle())
+            .onTapGesture { if canExpand { expanded.toggle() } }
+
             if !presentation.primary.isEmpty {
                 Text(presentation.primary)
                     .font(.app(size: 12, weight: .medium))
                     .foregroundStyle(presentation.primaryColor)
                     .lineLimit(1)
                     .truncationMode(.middle)
+                    .textSelection(.enabled)
             }
-            Spacer(minLength: 8)
+
+            Rectangle()
+                .fill(.clear)
+                .frame(maxWidth: .infinity, minHeight: 28)
+                .contentShape(Rectangle())
+                .onTapGesture { if canExpand { expanded.toggle() } }
+
             if hovering || copiedLine {
                 Button {
                     copyToPasteboard(presentation.copyText)
@@ -1483,9 +1499,7 @@ private struct RtRow: View {
             }
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .contentShape(Rectangle())
-        .onTapGesture { if canExpand { expanded.toggle() } }
+        .frame(minHeight: 36)
         .onHover { hovering = $0 }
     }
 
