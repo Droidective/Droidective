@@ -61,16 +61,55 @@ struct JSEntry: Identifiable {
     let id: Int
     let kind: Kind
     let at: Date
-    /// Lowercased plain-text rendering, derived once at creation so the filter
-    /// and ⌘F never re-tokenize the value tree per flush (a Sentry-reported
-    /// main-thread hang during console bursts).
+    /// Lowercased plain-text head for the filter and ⌘F, derived once at
+    /// creation so they never re-tokenize the value tree per flush (a
+    /// Sentry-reported main-thread hang during console bursts). Capped like
+    /// Reactotron's search text AND built without materializing full values —
+    /// copying a replayed multi-megabyte string per entry just to keep this
+    /// head was the bulk of the reload CPU spike. Matching runs on the head.
     let searchableText: String
+    /// Rough retained size (the string payloads dominate; O(1) per arg) —
+    /// drives the buffer's byte budget.
+    let approximateBytes: Int
 
     init(id: Int, kind: Kind, at: Date) {
         self.id = id
         self.kind = kind
         self.at = at
-        searchableText = jsEntryPlainText(kind).lowercased()
+        let size = Self.approximateSize(kind)
+        approximateBytes = size
+        if size > 1_000_000 {
+            PerfLog.console.warning("ingested huge console entry: ~\(size, privacy: .public) bytes")
+        }
+        searchableText = Self.boundedSearchable(kind)
+    }
+
+    private static func boundedSearchable(_ kind: Kind, limit: Int = 2000) -> String {
+        switch kind {
+        case let .input(text): return String(text.prefix(limit)).lowercased()
+        case let .result(object): return object.inlineSummary(limit: limit).lowercased()
+        case let .evalError(details): return String(details.message.prefix(limit)).lowercased()
+        case let .notice(text): return String(text.prefix(limit)).lowercased()
+        case let .log(_, args, _):
+            var out = ""
+            for arg in args {
+                let remaining = limit - out.utf8.count
+                guard remaining > 0 else { break }
+                if !out.isEmpty { out += " " }
+                out += arg.inlineSummary(limit: remaining)
+            }
+            return out.lowercased()
+        }
+    }
+
+    private static func approximateSize(_ kind: Kind) -> Int {
+        switch kind {
+        case let .input(text): text.utf8.count + 256
+        case let .result(object): object.approximateBytes
+        case let .evalError(details): details.message.utf8.count + 512
+        case let .notice(text): text.utf8.count + 256
+        case let .log(_, args, _): args.reduce(256) { $0 + $1.approximateBytes }
+        }
     }
 }
 
@@ -93,7 +132,14 @@ final class JSConsoleSession {
     /// happens only when the filter itself changes — so a console burst costs
     /// O(batch) per flush, not O(buffer × object size). Chronological (oldest
     /// first), which is the feed's display order — newest at the bottom.
-    private var buffer = FilteredLogBuffer<JSEntry>(capacity: JSConsoleSession.maxEntries)
+    // The 128 MB byte budget (Reactotron's figure) matters as much as the
+    // count cap: 2000 entries each holding a multi-megabyte logged string
+    // would otherwise retain gigabytes.
+    private var buffer = FilteredLogBuffer<JSEntry>(
+        capacity: JSConsoleSession.maxEntries,
+        byteBudget: 128 << 20,
+        cost: { $0.approximateBytes }
+    )
     var filteredEntries: [JSEntry] { buffer.filtered }
     fileprivate var phase: JSPhase = .searching
     fileprivate var targets: [CDPTarget] = []
@@ -475,6 +521,100 @@ final class JSConsoleSession {
         ))
     }
 
+    /// Reload the app's JS bundle: `Page.reload` over the live CDP socket —
+    /// what React Native DevTools' ⌘R sends, handled natively by the app's
+    /// inspector integration. Runtimes without native reload support answer
+    /// with an error; fall back to the dev-menu double-R keyevent then.
+    func reloadJS() {
+        guard isConnected else { return }
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await cdp.reloadPage()
+            } catch {
+                await reloadViaKeyevent()
+            }
+        }
+    }
+
+    private func reloadViaKeyevent() async {
+        let serials = serials
+        guard !serials.isEmpty else {
+            app?.showToast(Toast(message: "Reload failed — the runtime didn't accept Page.reload.", ok: false))
+            return
+        }
+        await CommandLog.userInitiated {
+            for serial in serials {
+                _ = try? await adb.run(on: serial, ["shell", "input", "keyevent", "46", "46"])
+            }
+        }
+    }
+
+    /// Force-stop and relaunch the app under debug. While connected the app is
+    /// auto-detected: the target's `appId` (the application id Metro reports
+    /// for the exact app being debugged), else the user's last manual pick,
+    /// else the selected bundle. Disconnected — or when detection/relaunch
+    /// fails — the installed-apps picker opens instead. Discovery reconnects
+    /// by logical-device id once the app is back.
+    func restartApp() {
+        Task { [weak self] in await self?.performRestart() }
+    }
+
+    /// Drives the fallback installed-apps picker sheet.
+    var restartPickerVisible = false
+    /// The user's manual pick from the restart sheet, reused on later restarts
+    /// whenever the connected target doesn't report its own `appId`.
+    private var manualRestartPackage: String?
+
+    private func performRestart() async {
+        guard !serials.isEmpty else {
+            app?.showToast(Toast(message: "Can't restart — no device selected.", ok: false))
+            return
+        }
+        // Disconnected: no target reports an appId, and guessing from a stale
+        // pick or the selected bundle could restart the wrong app — ask.
+        let detected: String? = isConnected
+            ? connectedTarget?.appId ?? manualRestartPackage ?? app?.selectedBundle?.packageId
+            : nil
+        if let detected, await restart(package: detected) { return }
+        restartPickerVisible = true
+    }
+
+    /// A pick from the fallback sheet: restart it and remember the choice.
+    func restartPicked(_ package: String) {
+        manualRestartPackage = package
+        Task { [weak self] in
+            guard let self else { return }
+            if !(await restart(package: package)) {
+                app?.showToast(Toast(
+                    message: "Couldn't relaunch \(package) — is it installed on the selected device?",
+                    ok: false
+                ))
+            }
+        }
+    }
+
+    /// Force-stop + relaunch on every target device; true when any relaunch
+    /// worked (the toast reports success; failures fall back to the picker).
+    private func restart(package: String) async -> Bool {
+        let serials = serials
+        let control = AppControlService(client: adb)
+        let relaunched = await CommandLog.userInitiated {
+            var relaunched = 0
+            for serial in serials {
+                _ = try? await control.control(serial: serial, packageId: package, action: .stop)
+                if let result = try? await control.control(serial: serial, packageId: package, action: .open),
+                   result.ok {
+                    relaunched += 1
+                }
+            }
+            return relaunched
+        }
+        guard relaunched > 0 else { return false }
+        app?.showToast(Toast(message: "Restarting \(package)…", ok: true))
+        return true
+    }
+
     /// Remove the `adb reverse` bindings this console installed. Called when the
     /// tab closes (mirrors `ReactotronService.stop`), not on a tab switch.
     func removeReverseTunnels() async {
@@ -505,7 +645,9 @@ final class JSConsoleSession {
     /// Full recompute — only for when the filter itself changes (query text,
     /// level chips) or the feed is cleared; appends go through `appendEntries`.
     private func refilter() {
-        buffer.refilter(isIncluded: activeFilter)
+        PerfLog.measure(PerfLog.console, "refilter \(buffer.filtered.count) entries") {
+            buffer.refilter(isIncluded: activeFilter)
+        }
         rebuildFindMatches()
     }
 
@@ -515,9 +657,11 @@ final class JSConsoleSession {
             if !findMatchIDs.isEmpty { findMatchIDs = [] }
             return
         }
-        findMatchIDs = buffer.filtered
-            .filter { query.matches($0.searchableText) }
-            .map(\.id)
+        findMatchIDs = PerfLog.measure(PerfLog.console, "find scan over \(buffer.filtered.count) entries") {
+            buffer.filtered
+                .filter { query.matches($0.searchableText) }
+                .map(\.id)
+        }
     }
 
     // MARK: Appending (batched)
@@ -547,7 +691,9 @@ final class JSConsoleSession {
         guard !pendingEntries.isEmpty else { return }
         let batch = pendingEntries
         pendingEntries.removeAll(keepingCapacity: true)
-        appendEntries(batch)
+        PerfLog.measure(PerfLog.console, "flush \(batch.count) entries into \(buffer.filtered.count)") {
+            appendEntries(batch)
+        }
     }
 
     /// An entry that must appear now (user input, eval result, the welcome banner).
@@ -692,11 +838,26 @@ struct JSConsoleView: View {
     // MARK: Connection bar
 
     private var connectionBar: some View {
-        HStack(spacing: 10) {
+        @Bindable var session = state.jsConsoleSession
+        return HStack(spacing: 10) {
             statusBadge
             targetPicker
             portField
             Spacer(minLength: 8)
+            if session.isConnected {
+                Button { session.reloadJS() } label: {
+                    Label("Reload JS", systemImage: "arrow.clockwise")
+                }
+                .help("Reload the JS bundle — what ⌘R in React Native DevTools does")
+            }
+            if !state.targetSerials.isEmpty {
+                Button { session.restartApp() } label: {
+                    Label("Restart app", systemImage: "restart.circle")
+                }
+                .help(session.isConnected
+                    ? "Force-stop and relaunch the connected app on the device"
+                    : "Pick an app to force-stop and relaunch")
+            }
             if !state.targetSerials.isEmpty, !session.isConnected {
                 Button { Task { await session.reverseMetro() } } label: {
                     Label("adb reverse", systemImage: "arrow.left.arrow.right")
@@ -706,6 +867,11 @@ struct JSConsoleView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+        .sheet(isPresented: $session.restartPickerVisible) {
+            RestartAppPickerSheet(serial: state.targetSerials.first) { package in
+                session.restartPicked(package)
+            }
+        }
     }
 
     private var statusBadge: some View {
@@ -1300,22 +1466,32 @@ private struct SnapChildrenView: View {
     let session: JSConsoleSession
     var query: String = ""
 
+    /// Rows shown per level while an in-object search is active. The search
+    /// auto-expands every matching container, and the rows are not lazy — an
+    /// uncapped broad query over a big snapshot (the device allows up to
+    /// 20 000 nodes) laid out tens of thousands of views in one pass.
+    private static let maxSearchRows = 100
+
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             if node.type == "array", let items = node.items {
-                let shown = items.enumerated().filter { query.isEmpty || $0.element.matches(query) }
+                let matched = items.enumerated().filter { query.isEmpty || $0.element.matches(query) }
+                let shown = query.isEmpty ? matched : Array(matched.prefix(Self.maxSearchRows))
                 if shown.isEmpty { emptyRow }
                 ForEach(shown, id: \.offset) { index, child in
                     SnapValueView(label: String(index), node: child, session: session, query: query)
                 }
                 if query.isEmpty, let hidden = node.hiddenCount, hidden > 0 { moreRow("…(+\(hidden) more)") }
+                if matched.count > shown.count { moreRow("…(+\(matched.count - shown.count) more matches — narrow the search)") }
             } else if let entries = node.entries {
-                let shown = entries.enumerated().filter { query.isEmpty || $0.element.node.matches(query, key: $0.element.name) }
+                let matched = entries.enumerated().filter { query.isEmpty || $0.element.node.matches(query, key: $0.element.name) }
+                let shown = query.isEmpty ? matched : Array(matched.prefix(Self.maxSearchRows))
                 if shown.isEmpty { emptyRow }
                 ForEach(shown, id: \.offset) { _, entry in
                     SnapValueView(label: entry.name, node: entry.node, session: session, query: query)
                 }
                 if query.isEmpty, node.truncated == true { moreRow("…(more)") }
+                if matched.count > shown.count { moreRow("…(+\(matched.count - shown.count) more matches — narrow the search)") }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1575,22 +1751,55 @@ func jsColor(_ kind: JSTokenKind) -> Color {
     JSConsoleTheme.token(kind)
 }
 
+/// The most characters one console text block renders. A `console.log` of a
+/// multi-megabyte string otherwise becomes a `Text` whose layout stalls the
+/// app for seconds and skews the lazy feed's height estimates into a huge
+/// blank scroll canvas (the "empty space, then logs, then a hang" report).
+/// Copy paths keep the untruncated value; the cutoff note says what's hidden.
+let jsDisplayCharacterLimit = 10_000
+
+private func jsTruncationNote(hiddenCharacters: Int) -> AttributedString {
+    var note = AttributedString("  …(+\(hiddenCharacters) more characters — truncated for display)")
+    note.foregroundColor = JSConsoleTheme.muted
+    return note
+}
+
 /// Syntax-colored `Text` for a value's tokens, with find matches highlighted.
+/// Bounded to `jsDisplayCharacterLimit` characters.
 func coloredTokenText(_ tokens: [JSToken], query: String, current: Bool) -> Text {
     var attr = AttributedString()
+    var remaining = jsDisplayCharacterLimit
+    var hidden = 0
     for token in tokens {
-        var segment = AttributedString(token.text)
+        // utf8.count is O(1) on native strings; .count would re-walk a 3MB
+        // token's characters on every render just to size the note.
+        let tokenLength = token.text.utf8.count
+        guard remaining > 0 else { hidden += tokenLength; continue }
+        let piece = tokenLength <= remaining ? token.text : String(token.text.prefix(remaining))
+        hidden += tokenLength - piece.utf8.count
+        remaining -= piece.utf8.count
+        var segment = AttributedString(piece)
         segment.foregroundColor = jsColor(token.kind)
         attr += segment
+    }
+    if hidden > 0 {
+        PerfLog.console.warning("row render truncated: \(hidden, privacy: .public) chars over the display cap")
+        attr += jsTruncationNote(hiddenCharacters: hidden)
     }
     applyFindHighlight(&attr, query: query, current: current)
     return Text(attr)
 }
 
-/// A single-color `Text` (input/notice/error lines) with find matches highlighted.
+/// A single-color `Text` (input/notice/error lines) with find matches
+/// highlighted. Bounded to `jsDisplayCharacterLimit` characters.
 func highlightedText(_ string: String, query: String, base: Color, current: Bool = false) -> Text {
-    var attr = AttributedString(string)
+    var attr = AttributedString(String(string.prefix(jsDisplayCharacterLimit)))
     attr.foregroundColor = base
+    let hidden = string.utf8.count - jsDisplayCharacterLimit
+    if hidden > 0 {
+        PerfLog.console.warning("line render truncated: \(hidden, privacy: .public) chars over the display cap")
+        attr += jsTruncationNote(hiddenCharacters: hidden)
+    }
     applyFindHighlight(&attr, query: query, current: current)
     return Text(attr)
 }

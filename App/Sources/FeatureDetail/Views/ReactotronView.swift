@@ -587,6 +587,14 @@ struct ReactotronView: View {
     /// host-wide, so any connected device should be able to reach it.
     private var readySerials: [String] { state.devices.filter(\.isReady).map(\.serial) }
 
+    /// The app name the Restart button should target: the selected client's,
+    /// else the lone connected client's. Nil (several clients, none selected —
+    /// or none connected) leaves detection to the foreground-app fallback.
+    private var restartClientName: String? {
+        if let id = session.selectedClient { return session.clients.first { $0.id == id }?.name }
+        return session.clients.count == 1 ? session.clients[0].name : nil
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             topTabs
@@ -682,9 +690,9 @@ struct ReactotronView: View {
                 .controlSize(.small)
                 .fixedSize()
             }
-            RestartAppMenu()
+            RestartAppMenu(clientName: restartClientName)
                 .controlSize(.small)
-                .help("Force-stop and relaunch an app so it reconnects")
+                .help("Force-stop and relaunch the connected app so it reconnects")
             Button {
                 session.reverseNow(serials: readySerials)
             } label: {
@@ -1125,19 +1133,40 @@ private struct ClientInfo: Identifiable {
     }
 }
 
-private enum RtFilter: String, CaseIterable, Identifiable {
-    case all, log, network, state, display, other
+/// The timeline's filterable event kinds — the same set, grouping, and display
+/// names as the Reactotron desktop app's timeline filter dialog. Events the
+/// dialog doesn't cover (REPL, custom commands, state responses) are always
+/// shown.
+private enum RtEventKind: String, CaseIterable, Identifiable {
+    case log, image, display
+    case connection, benchmark, api
+    case asyncStorage
+    case action, saga, subscription
+
     var id: String { rawValue }
+
     var label: String {
         switch self {
-        case .all: "All"
-        case .log: "Logs"
-        case .network: "Network"
-        case .state: "State"
-        case .display: "Display"
-        case .other: "Other"
+        case .log: "Log"
+        case .image: "Image"
+        case .display: "Custom Display"
+        case .connection: "Connection"
+        case .benchmark: "Benchmark"
+        case .api: "API"
+        case .asyncStorage: "Mutations"
+        case .action: "Action"
+        case .saga: "Saga"
+        case .subscription: "Subscription Changed"
         }
     }
+
+    /// The filter popover's sections, mirroring Reactotron's dialog.
+    static let groups: [(name: String, kinds: [RtEventKind])] = [
+        ("Informational", [.log, .image, .display]),
+        ("General", [.connection, .benchmark, .api]),
+        ("Async Storage", [.asyncStorage]),
+        ("State & Sagas", [.action, .saga, .subscription]),
+    ]
 }
 
 // MARK: - Timeline pane
@@ -1154,50 +1183,55 @@ private struct TimelinePane: View {
     let onRetry: () -> Void
 
     @State private var search = ""
-    @State private var filter: RtFilter = .all
-    /// Network-only refinements, shown while the Network category is selected
-    /// and cleared when it isn't: HTTP method and status class (2xx…5xx/Failed).
+    /// Event kinds toggled off in the filter popover — empty means everything
+    /// shows, matching Reactotron's hide-what-you-untick model.
+    @State private var hiddenKinds: Set<RtEventKind> = []
+    /// API-only refinements, set from the filter popover and cleared when the
+    /// API kind is hidden: HTTP method and status class (2xx…5xx/Failed).
     @State private var methodFilter: String?
     @State private var statusFilter: HTTPStatusClass?
+    @State private var showFilterSheet = false
 
     var body: some View {
         // Filter once per render — the count badge, export button, and timeline
         // all read the same result instead of each recomputing the filter.
         let visible = filteredItems
-        // Newest first: the fixed timeline order (matches the Reactotron app).
-        let ordered = Array(visible.reversed())
         return VStack(spacing: 0) {
             paneToolbar(visible: visible)
             Divider()
-            timeline(ordered: ordered)
+            // Newest first: the fixed timeline order (matches the Reactotron
+            // app). Lazily reversed — materializing a 2000-item copy per
+            // render was measurable during streaming bursts.
+            timeline(ordered: visible.reversed())
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    /// Whether any popover filter narrows the timeline (drives the filled
+    /// filter icon and the count badge).
+    private var isFiltering: Bool {
+        !hiddenKinds.isEmpty || methodFilter != nil || statusFilter != nil
+    }
+
     private func paneToolbar(visible: [RtItem]) -> some View {
         HStack(spacing: 10) {
-            Picker("Filter", selection: $filter) {
-                ForEach(RtFilter.allCases) { Text($0.label).tag($0) }
+            Button {
+                showFilterSheet = true
+            } label: {
+                Image(systemName: isFiltering
+                    ? "line.3.horizontal.decrease.circle.fill"
+                    : "line.3.horizontal.decrease.circle")
             }
-            .labelsHidden()
-            .frame(width: 110)
-            .onChange(of: filter) { _, newFilter in
-                if newFilter != .network {
-                    methodFilter = nil
-                    statusFilter = nil
-                }
-            }
-
-            if filter == .network {
-                networkFilters
-            }
+            .buttonStyle(IconButtonStyle())
+            .help("Filter the timeline by event type")
+            .sheet(isPresented: $showFilterSheet) { filterSheet }
 
             SearchField(prompt: "Search…", text: $search)
                 .frame(maxWidth: 200)
 
             Spacer()
 
-            if !search.isEmpty || filter != .all {
+            if !search.isEmpty || isFiltering {
                 Text("\(visible.count)")
                     .font(.app(.caption))
                     .foregroundStyle(.textMuted)
@@ -1226,7 +1260,7 @@ private struct TimelinePane: View {
     private var filteredItems: [RtItem] {
         let query = search.trimmingCharacters(in: .whitespaces).lowercased()
         return items.filter { item in
-            if filter != .all, item.event.category != filter { return false }
+            if let kind = item.event.kind, hiddenKinds.contains(kind) { return false }
             if let methodFilter, item.event.apiMethod != methodFilter { return false }
             if let statusFilter,
                item.event.apiStatus.flatMap({ HTTPStatusClass(status: $0) }) != statusFilter {
@@ -1237,6 +1271,82 @@ private struct TimelinePane: View {
             if !query.isEmpty, !item.searchText.contains(query) { return false }
             return true
         }
+    }
+
+    /// The Reactotron-style filter dialog, presented as a modal sheet like the
+    /// desktop app's "Timeline Filter": every event kind as a checkbox in the
+    /// same groups, the API method/status refinements nested under the API
+    /// toggle, and Check all / Uncheck all shortcuts.
+    private var filterSheet: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Timeline Filter")
+                    .font(.app(.title3).bold())
+                Text("Checked event types appear in the timeline.")
+                    .font(.app(.callout))
+                    .foregroundStyle(.textMuted)
+            }
+            ForEach(RtEventKind.groups, id: \.name) { group in
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(group.name)
+                        .font(.app(size: 10, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                    HStack(spacing: 16) {
+                        ForEach(group.kinds) { kind in
+                            Toggle(kind.label, isOn: shows(kind))
+                                .toggleStyle(.checkbox)
+                        }
+                    }
+                    if group.kinds.contains(.api), !hiddenKinds.contains(.api) {
+                        // Indented + captioned so the pickers read as API
+                        // refinements, not filters for the whole group.
+                        HStack(spacing: 8) {
+                            Text("API only")
+                                .font(.app(size: 10))
+                                .foregroundStyle(.tertiary)
+                            networkFilters
+                        }
+                        .padding(.leading, 18)
+                    }
+                }
+            }
+            Divider()
+            HStack(spacing: 10) {
+                Button("Check all") { hiddenKinds = [] }
+                    .disabled(hiddenKinds.isEmpty)
+                Button("Uncheck all") {
+                    hiddenKinds = Set(RtEventKind.allCases)
+                    methodFilter = nil
+                    statusFilter = nil
+                }
+                .disabled(hiddenKinds.count == RtEventKind.allCases.count)
+                Spacer()
+                Button("Done") { showFilterSheet = false }
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 430, alignment: .leading)
+        .onExitCommand { showFilterSheet = false }
+    }
+
+    /// Whether `kind` is currently shown; hiding API also clears its
+    /// method/status refinements so they can't filter invisibly.
+    private func shows(_ kind: RtEventKind) -> Binding<Bool> {
+        Binding(
+            get: { !hiddenKinds.contains(kind) },
+            set: { shown in
+                if shown {
+                    hiddenKinds.remove(kind)
+                } else {
+                    hiddenKinds.insert(kind)
+                    if kind == .api {
+                        methodFilter = nil
+                        statusFilter = nil
+                    }
+                }
+            }
+        )
     }
 
     private var networkFilters: some View {
@@ -1263,7 +1373,7 @@ private struct TimelinePane: View {
         }
     }
 
-    private func timeline(ordered: [RtItem]) -> some View {
+    private func timeline(ordered: ReversedCollection<[RtItem]>) -> some View {
         // Newest events land at the top — LogTailViewV2 follows that edge, pauses
         // when the user scrolls off, and overlays the jump-to-top/bottom buttons.
         LogTailViewV2(entries: ordered, newestEdge: .top) { item in
@@ -1300,6 +1410,8 @@ private struct RtRow: View {
     let item: RtItem
     @State private var expanded = false
     @State private var apiTab: ApiTab = .response
+    @State private var hovering = false
+    @State private var copiedLine = false
 
     private static let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -1356,11 +1468,25 @@ private struct RtRow: View {
                     .truncationMode(.middle)
             }
             Spacer(minLength: 8)
+            if hovering || copiedLine {
+                Button {
+                    copyToPasteboard(presentation.copyText)
+                    copiedLine = true
+                    Task { try? await Task.sleep(for: .seconds(1.5)); copiedLine = false }
+                } label: {
+                    Image(systemName: copiedLine ? "checkmark" : "doc.on.doc")
+                        .font(.app(size: 11))
+                        .foregroundStyle(copiedLine ? .green : .secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Copy this line (right-click for the full object)")
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .contentShape(Rectangle())
         .onTapGesture { if canExpand { expanded.toggle() } }
+        .onHover { hovering = $0 }
     }
 
     @ViewBuilder
@@ -1385,6 +1511,7 @@ private struct RtRow: View {
         VStack(alignment: .leading, spacing: 8) {
             if let caption, !caption.isEmpty {
                 Text(caption).font(.app(size: 12)).foregroundStyle(.primary)
+                    .textSelection(.enabled)
             }
             RtImageThumbnail(uri: uri)
             if let width, let height {
@@ -1466,6 +1593,7 @@ private struct RtRow: View {
                         Text("\(frame.functionName.isEmpty ? "?" : frame.functionName)  \(frame.fileName):\(frame.lineNumber.map(String.init) ?? "?")")
                             .font(.app(size: 10, design: .monospaced))
                             .foregroundStyle(.textMuted)
+                            .textSelection(.enabled)
                     }
                 }
                 .padding(8)
@@ -2030,195 +2158,89 @@ private struct ReactotronOnboarding: View {
     }
 }
 
-/// Picks an installed third-party app and restarts it (force-stop → relaunch) so
-/// it reconnects to the Reactotron server. Opens a searchable dropdown — the
-/// package list is fetched per device.
+/// Restarts (force-stop → relaunch) the app being debugged so it reconnects to
+/// the Reactotron server. Detects the app automatically — the connected
+/// client's reported name matched against installed packages, else the
+/// foreground app — and only opens the searchable picker when detection or
+/// the relaunch fails.
 private struct RestartAppMenu: View {
+    /// The connected Reactotron client's app name, when one is connected —
+    /// the strongest detection signal (it names the exact app to restart).
+    var clientName: String?
+
     @Environment(AppState.self) private var state
-    @State private var apps: [String] = []
-    @State private var loading = false
+    @State private var restarting = false
     @State private var showPicker = false
-    @State private var search = ""
-    @FocusState private var searchFocused: Bool
 
     private var serial: String? {
         state.selectedSerial ?? state.devices.first(where: \.isReady)?.serial
     }
 
-    private var filtered: [String] {
-        guard !search.isEmpty else { return apps }
-        return apps.filter {
-            $0.localizedCaseInsensitiveContains(search)
-                || restartAppDisplayName($0).localizedCaseInsensitiveContains(search)
-        }
-    }
-
     var body: some View {
         Button {
-            showPicker = true
+            Task { await smartRestart() }
         } label: {
             Label("Restart app", systemImage: "arrow.clockwise.circle")
         }
-        .disabled(serial == nil)
-        .task(id: serial) { await load() }
-        .onChange(of: showPicker) { _, open in
-            if open {
-                search = ""
-                if apps.isEmpty { Task { await load() } }
-                Task { @MainActor in searchFocused = true }
-            }
-        }
-        .sheet(isPresented: $showPicker) { picker }
-    }
-
-    private var picker: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                ZStack {
-                    Circle().fill(Color.brandAccent.opacity(0.16)).frame(width: 30, height: 30)
-                    Image(systemName: "arrow.clockwise")
-                        .font(.app(size: 13, weight: .semibold))
-                        .foregroundStyle(.brandAccent)
-                }
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Restart app")
-                        .font(.app(size: 13, weight: .semibold))
-                    Text("Force-stop and relaunch so it reconnects")
-                        .font(.app(size: 10))
-                        .foregroundStyle(.textMuted)
-                }
-                Spacer()
-                Button { showPicker = false } label: {
-                    Image(systemName: "xmark.circle.fill").font(.app(size: 15))
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.tertiary)
-                .keyboardShortcut(.cancelAction)
-            }
-            .padding(12)
-
-            HStack(spacing: 6) {
-                Image(systemName: "magnifyingglass")
-                    .font(.app(size: 11))
-                    .foregroundStyle(.tertiary)
-                TextField("Search apps…", text: $search)
-                    .textFieldStyle(.plain)
-                    .font(.app(size: 12))
-                    .focused($searchFocused)
-                if !search.isEmpty {
-                    Button { search = "" } label: { Image(systemName: "xmark.circle.fill") }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.tertiary)
-                }
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(Color.bgRoot, in: RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.borderSubtle))
-            .padding(.horizontal, 12)
-            .padding(.bottom, 10)
-
-            Divider()
-            content
-        }
-        .frame(width: 360, height: 440)
-        .background(Color.bgSurface)
-    }
-
-    @ViewBuilder
-    private var content: some View {
-        if loading {
-            hint("Loading apps…")
-        } else if apps.isEmpty {
-            hint("No third-party apps found")
-        } else if filtered.isEmpty {
-            hint("No matches")
-        } else {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(filtered, id: \.self) { package in
-                        AppPickerRow(package: package, serial: serial ?? "") {
-                            showPicker = false
-                            restart(package)
-                        }
+        .disabled(serial == nil || restarting)
+        .sheet(isPresented: $showPicker) {
+            RestartAppPickerSheet(serial: serial) { package in
+                Task {
+                    if !(await restart(package)) {
+                        state.showToast(Toast(message: "Couldn't restart \(package)", ok: false))
                     }
                 }
-                .padding(.vertical, 4)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
-    private func hint(_ text: String) -> some View {
-        Text(text)
-            .font(.app(.caption))
-            .foregroundStyle(.textMuted)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+    /// Restart the detected app; fall back to the picker when nothing (or the
+    /// wrong thing) is detected, or the relaunch fails. With no client
+    /// connected there is nothing trustworthy to detect — the foreground app
+    /// could be anything — so ask straight away.
+    private func smartRestart() async {
+        guard serial != nil else { return }
+        guard clientName != nil else {
+            showPicker = true
+            return
+        }
+        restarting = true
+        defer { restarting = false }
+        if let detected = await detectPackage(), await restart(detected) { return }
+        showPicker = true
     }
 
-    private func load() async {
-        guard let serial else { apps = []; return }
-        loading = true
-        defer { loading = false }
+    /// The app to restart: the connected client's name matched against the
+    /// installed third-party packages, else the foreground app (only when it's
+    /// a third-party app — never the launcher). Nil means ask the user.
+    private func detectPackage() async -> String? {
+        guard let serial else { return nil }
+        return await CommandLog.userInitiated {
+            let control = AppControlService(client: state.env.client)
+            let installed = (try? await control.listInstalledPackages(serial: serial)) ?? []
+            if let clientName,
+               let matched = AppNameMatcher.match(appName: clientName, in: installed) {
+                return matched
+            }
+            if let foreground = try? await state.env.engine.inspection.getForegroundPackage(serial: serial),
+               installed.contains(foreground) {
+                return foreground
+            }
+            return nil
+        }
+    }
+
+    private func restart(_ package: String) async -> Bool {
+        guard let serial else { return false }
         let service = AppControlService(client: state.env.client)
-        apps = (try? await service.listInstalledPackages(serial: serial)) ?? []
-    }
-
-    private func restart(_ package: String) {
-        guard let serial else { return }
-        Task {
-            let service = AppControlService(client: state.env.client)
+        let result = await CommandLog.userInitiated {
             _ = try? await service.control(serial: serial, packageId: package, action: .stop)
-            let result = try? await service.control(serial: serial, packageId: package, action: .open)
-            if result?.ok == true {
-                state.showToast(Toast(message: "Restarting \(package)…", ok: true))
-            } else {
-                state.showToast(Toast(message: result?.message ?? "Couldn't restart \(package)", ok: false))
-            }
+            return try? await service.control(serial: serial, packageId: package, action: .open)
         }
+        guard result?.ok == true else { return false }
+        state.showToast(Toast(message: "Restarting \(package)…", ok: true))
+        return true
     }
-}
-
-private struct AppPickerRow: View {
-    let package: String
-    let serial: String
-    let action: () -> Void
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 10) {
-                AppIconView(packageId: package, name: restartAppDisplayName(package), serial: serial)
-                    .frame(width: 28, height: 28)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(restartAppDisplayName(package))
-                        .font(.app(size: 12, weight: .medium))
-                        .lineLimit(1)
-                    Text(package)
-                        .font(.app(size: 10, design: .monospaced))
-                        .foregroundStyle(.textMuted)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(hovering ? Color.brandAccent.opacity(0.16) : Color.clear, in: RoundedRectangle(cornerRadius: 6))
-            .contentShape(Rectangle())
-            .padding(.horizontal, 6)
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering = $0 }
-    }
-}
-
-/// Friendly app name from a package id ("com.foo.bar" → "Bar"), mirroring the
-/// Apps feature's `AppListing.displayName`.
-private func restartAppDisplayName(_ packageId: String) -> String {
-    packageId.split(separator: ".").last
-        .map { $0.prefix(1).uppercased() + $0.dropFirst() } ?? packageId
 }
 
 // MARK: - State tab building blocks
@@ -2383,13 +2405,24 @@ private func rtShortPath(_ url: String) -> String {
 }
 
 private extension ReactotronEvent {
-    var category: RtFilter {
+    /// The filterable kind matching Reactotron's filter dialog; nil for events
+    /// the dialog doesn't cover, which are always shown. Sagas arrive as
+    /// `.unknown` (the parser has no typed case), and the session's synthetic
+    /// disconnect notice rides the Connection toggle with `clientIntro`.
+    var kind: RtEventKind? {
         switch self {
         case .log: .log
-        case .apiResponse: .network
-        case .stateAction, .stateValuesChange: .state
-        case .display, .image: .display
-        default: .other
+        case .image: .image
+        case .display: .display
+        case .clientIntro: .connection
+        case .benchmark: .benchmark
+        case .apiResponse: .api
+        case .asyncStorage: .asyncStorage
+        case .stateAction: .action
+        case .stateValuesChange: .subscription
+        case let .unknown(type, _) where type == "saga.task.complete": .saga
+        case let .unknown(type, _) where type == "disconnected": .connection
+        default: nil
         }
     }
 

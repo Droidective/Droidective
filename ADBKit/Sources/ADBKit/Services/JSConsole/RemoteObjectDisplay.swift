@@ -50,6 +50,26 @@ public extension RemoteObject {
     /// and copy, so they never diverge from what's shown.
     var inlineSummary: String { tokens.map(\.text).joined() }
 
+    /// `inlineSummary` bounded to roughly `limit` characters. String values
+    /// take a prefix without materializing the full value — a multi-megabyte
+    /// `console.log` string must not be copied whole just to index its head
+    /// (that copy, once per replayed entry, was the reload CPU spike).
+    /// Non-string values are already small (object previews are truncated on
+    /// the device).
+    func inlineSummary(limit: Int) -> String {
+        if type == "string", let text = value?.stringValue, text.utf8.count > limit {
+            return "\"\(String(text.prefix(limit)))"
+        }
+        let full = inlineSummary
+        return full.utf8.count <= limit ? full : String(full.prefix(limit))
+    }
+
+    /// A rough retained-size estimate in bytes — the string payloads dominate;
+    /// O(1) on native strings. Drives the console buffer's byte budget.
+    var approximateBytes: Int {
+        (value?.stringValue?.utf8.count ?? 0) + (description?.utf8.count ?? 0) + 512
+    }
+
     private var numberString: String {
         // -0 / Infinity / NaN come back via description/unserializableValue.
         description ?? value.map(CDP.displayString) ?? unserializableValue ?? "0"

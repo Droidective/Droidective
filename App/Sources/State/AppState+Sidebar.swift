@@ -16,13 +16,22 @@ extension AppState {
         return FeatureRegistry.all.filter { enabled.contains($0.id) && !$0.isAbsorbedByHub }
     }
 
-    /// The launchpad grid: the role-curated enabled set in its curated order,
-    /// re-ranked by real usage (most-used first), with the curated order as the
-    /// stable fallback. Hub members stay excluded, exactly like the sidebar.
+    /// Pinned features in the user's order — the sidebar's Pinned section,
+    /// shared with Home so both surfaces show the same list.
+    var pinnedFeatures: [FeatureDef] {
+        ordered(enabledFeatures.filter { layout.favorites.contains($0.id) })
+    }
+
+    /// The launchpad grid: the enabled, non-pinned set in the exact order the
+    /// sidebar shows it (grouped by category order, or the flat order when
+    /// grouping is off) — Home mirrors the sidebar instead of re-ranking.
+    /// Collapsed groups still contribute their features; collapsing is a
+    /// sidebar-space affordance, not a preference against the feature.
     var launchpadFeatures: [FeatureDef] {
-        let curated = ordered(enabledFeatures)
-        let byID = Dictionary(uniqueKeysWithValues: curated.map { ($0.id, $0) })
-        return usageStats.rank(curated.map(\.id)).compactMap { byID[$0] }
+        let grouped = UserDefaults.standard.object(forKey: "groupSidebar") as? Bool ?? true
+        return grouped
+            ? orderedCategories.flatMap { enabledFeatures(in: $0) }
+            : orderedEnabledFeatures
     }
 
     /// Home's "Frequently used" strip: enabled features used more than once,
@@ -158,12 +167,7 @@ extension AppState {
     /// active search. Lets the Hotkeys settings list mirror the sidebar instead
     /// of dumping the full registry.
     var sidebarFeatures: [FeatureDef] {
-        let grouped = UserDefaults.standard.object(forKey: "groupSidebar") as? Bool ?? true
-        let pinned = ordered(enabledFeatures.filter { layout.favorites.contains($0.id) })
-        let rest = grouped
-            ? orderedCategories.flatMap { enabledFeatures(in: $0) }
-            : orderedEnabledFeatures
-        return pinned + rest
+        pinnedFeatures + launchpadFeatures
     }
 
     /// Every sidebar row in the order it's rendered right now — Pinned, then

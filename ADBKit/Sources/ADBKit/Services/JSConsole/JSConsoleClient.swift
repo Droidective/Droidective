@@ -139,6 +139,25 @@ public actor JSConsoleClient {
         return result?["result"]?["value"]?.stringValue
     }
 
+    /// Ask the app to reload its JS bundle — the mechanism React Native
+    /// DevTools' ⌘R uses: the app's inspector integration handles
+    /// `Page.reload` itself, no `Page` domain enable needed. The reply is
+    /// bounded by `replyTimeout` because a proxy relaying to a dead page never
+    /// answers, and an unbounded wait would suspend the caller forever;
+    /// runtimes without native reload support answer with a method-not-found
+    /// error, which lands here as `ClientError.transport` so the caller can
+    /// fall back to another mechanism.
+    public func reloadPage(replyTimeout: Duration = .seconds(5)) async throws {
+        let id = nextId
+        let deadline = Task { [weak self] in
+            try? await Task.sleep(for: replyTimeout)
+            guard !Task.isCancelled else { return }
+            await self?.resolve(id: id, .failure(ClientError.transport("Page.reload went unanswered.")))
+        }
+        defer { deadline.cancel() }
+        _ = try await send(method: "Page.reload", params: [:])
+    }
+
     /// Release the `console` object group — drops the device-side handles for
     /// everything evaluated/logged so far. Called when the console is cleared so
     /// remote objects don't accumulate. Best-effort.

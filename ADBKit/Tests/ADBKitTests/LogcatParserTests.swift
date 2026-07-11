@@ -11,6 +11,9 @@ import Testing
         #expect(line.level == "E")
         #expect(line.tag == "ReactNativeJS")
         #expect(line.message == "TypeError: undefined is not a function")
+        // The cached search key backs the view's per-keystroke filter — it
+        // must be the lowercased raw line.
+        #expect(line.searchKey == line.raw.lowercased())
     }
 
     @Test func parsesEmptyMessage() {

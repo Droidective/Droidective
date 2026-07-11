@@ -77,4 +77,87 @@ public extension JSONValue {
               let text = String(data: data, encoding: .utf8) else { return "" }
         return text.replacing(/"~~~ (.+?) ~~~"/) { match in String(match.1) }
     }
+
+    /// A bounded compact-JSON preview: reads like `jsonString` (sorted keys,
+    /// `~~~ … ~~~` markers unwrapped) but STOPS serializing once `maxLength`
+    /// characters are produced, so previewing a row costs O(maxLength) no
+    /// matter how big the payload is — `jsonString` walks the whole value,
+    /// which stalls the parse thread on a multi-megabyte `console.log`. The
+    /// result may cut off mid-token; it's a preview, not valid JSON.
+    func compactPreview(maxLength: Int) -> String {
+        var out = ""
+        out.reserveCapacity(min(maxLength, 512))
+        var remaining = maxLength
+        appendCompact(to: &out, remaining: &remaining)
+        return out
+    }
+
+    private func appendCompact(to out: inout String, remaining: inout Int) {
+        guard remaining > 0 else { return }
+        func emit(_ chunk: String) {
+            let piece = chunk.count <= remaining ? chunk : String(chunk.prefix(remaining))
+            out += piece
+            remaining -= piece.count
+        }
+        switch self {
+        case .null:
+            emit("null")
+        case let .bool(flag):
+            emit(flag ? "true" : "false")
+        case let .number(number):
+            emit(number.truncatingRemainder(dividingBy: 1) == 0 && abs(number) < 9e15
+                ? String(Int(number)) : String(number))
+        case let .string(text):
+            // The prefix/suffix guard keeps the anchored regex off megabyte
+            // strings — markers are short serialized functions/values.
+            if text.count < 2048, text.hasPrefix("~~~ "), text.hasSuffix(" ~~~"),
+               let marker = text.wholeMatch(of: /~~~ (.+) ~~~/) {
+                emit(String(marker.1))
+            } else {
+                emit("\"")
+                emit(Self.escapeForPreview(text, maxLength: remaining))
+                emit("\"")
+            }
+        case let .array(items):
+            emit("[")
+            for (index, item) in items.enumerated() {
+                guard remaining > 0 else { return }
+                if index > 0 { emit(",") }
+                item.appendCompact(to: &out, remaining: &remaining)
+            }
+            emit("]")
+        case let .object(dict):
+            emit("{")
+            // Sorted keys match `jsonString` for stable previews, but sorting
+            // a pathological 100k-key object isn't worth it — dictionary
+            // order is fine once nothing human is reading every key anyway.
+            let keys = dict.count <= 128 ? dict.keys.sorted() : Array(dict.keys)
+            for (index, key) in keys.enumerated() {
+                guard remaining > 0 else { return }
+                if index > 0 { emit(",") }
+                emit("\"")
+                emit(Self.escapeForPreview(key, maxLength: remaining))
+                emit("\":")
+                dict[key]?.appendCompact(to: &out, remaining: &remaining)
+            }
+            emit("}")
+        }
+    }
+
+    /// Minimal JSON string escaping over at most `maxLength` characters of
+    /// input — never walks a megabyte string to preview its head.
+    private static func escapeForPreview(_ text: String, maxLength: Int) -> String {
+        var out = ""
+        for character in text.prefix(maxLength) {
+            switch character {
+            case "\"": out += "\\\""
+            case "\\": out += "\\\\"
+            case "\n": out += "\\n"
+            case "\r": out += "\\r"
+            case "\t": out += "\\t"
+            default: out.append(character)
+            }
+        }
+        return out
+    }
 }

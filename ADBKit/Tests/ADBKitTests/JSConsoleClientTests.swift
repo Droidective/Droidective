@@ -108,6 +108,38 @@ import Testing
     }
 
     @Test(.timeLimit(.minutes(1)))
+    func reloadPageSendsPageReloadOverTheSocket() async throws {
+        let server = CDPTestServer()
+        let port = try await server.start()
+        defer { Task { await server.stop() } }
+
+        let client = JSConsoleClient()
+        let url = try #require(URL(string: "ws://127.0.0.1:\(port)"))
+        _ = try await client.connect(to: url)
+        try await client.reloadPage()
+        #expect(await server.receivedMethods.contains("Page.reload"))
+        await client.disconnect()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func reloadPageTimesOutInsteadOfHangingWhenUnanswered() async throws {
+        // A proxy relaying to a dead page never answers; the bounded wait must
+        // fail the call rather than suspend the caller forever.
+        let server = CDPTestServer()
+        let port = try await server.start()
+        defer { Task { await server.stop() } }
+
+        let client = JSConsoleClient()
+        let url = try #require(URL(string: "ws://127.0.0.1:\(port)"))
+        _ = try await client.connect(to: url)
+        await server.setMuted(true)
+        await #expect(throws: JSConsoleClient.ClientError.self) {
+            try await client.reloadPage(replyTimeout: .milliseconds(300))
+        }
+        await client.disconnect()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
     func closingTheSocketSurfacesClosedAndEndsTheStream() async throws {
         let server = CDPTestServer()
         let port = try await server.start()
@@ -143,6 +175,9 @@ private actor CDPTestServer {
     /// When muted, requests are read but never answered — a proxy holding a
     /// socket open for a page that will never respond.
     private var muted = false
+    /// Every CDP method received, in arrival order — lets tests assert what
+    /// actually went over the wire.
+    private(set) var receivedMethods: [String] = []
 
     func setMuted(_ muted: Bool) { self.muted = muted }
 
@@ -222,10 +257,11 @@ private actor CDPTestServer {
     }
 
     private func handleFrame(_ data: Data) {
-        guard !muted,
-              let root = try? JSONDecoder().decode(JSONValue.self, from: data),
+        guard let root = try? JSONDecoder().decode(JSONValue.self, from: data),
               let id = root["id"]?.intValue,
               let method = root["method"]?.stringValue else { return }
+        receivedMethods.append(method)
+        guard !muted else { return }
         send(.object(["id": .number(Double(id)), "result": replyResult(for: method)]))
     }
 

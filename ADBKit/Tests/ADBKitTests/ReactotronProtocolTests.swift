@@ -78,6 +78,58 @@ import Testing
         #expect(stack.first?.columnNumber == 7)
     }
 
+    @Test func logObjectAndArrayMessagesPreviewTheirContent() throws {
+        // `console.log({user})` and multi-arg logs must show the values on the
+        // collapsed row, not an opaque "{ 1 }" / "[ 2 ]" element count.
+        let object = try ReactotronCommand.decode(
+            #"{"type":"log","important":false,"date":"d","deltaTime":1,"payload":{"level":"debug","message":{"user":"Sam"}}}"#
+        )
+        guard case let .log(_, objectMessage, _) = ReactotronEvent(command: object) else {
+            Issue.record("expected .log"); return
+        }
+        #expect(objectMessage == #"{"user":"Sam"}"#)
+
+        let array = try ReactotronCommand.decode(
+            #"{"type":"log","important":false,"date":"d","deltaTime":1,"payload":{"level":"debug","message":["cart",{"count":2}]}}"#
+        )
+        guard case let .log(_, arrayMessage, _) = ReactotronEvent(command: array) else {
+            Issue.record("expected .log"); return
+        }
+        #expect(arrayMessage == #"["cart",{"count":2}]"#)
+    }
+
+    @Test func compactPreviewMatchesCompactJSONForSmallValues() {
+        let value = JSONValue.object([
+            "b": .array([.number(1), .bool(true), .null]),
+            "a": .string("hi \"there\"\n"),
+            "fn": .string("~~~ register() ~~~"),
+        ])
+        #expect(value.compactPreview(maxLength: 500) == #"{"a":"hi \"there\"\n","b":[1,true,null],"fn":register()}"#)
+    }
+
+    @Test func compactPreviewStopsAtTheBudgetOnHugeValues() {
+        // A megabyte string and a 50k-element array must cost O(budget) to
+        // preview — the old full-serialize-then-prefix stalled the parse path.
+        let huge = JSONValue.object([
+            "blob": .string(String(repeating: "x", count: 1_000_000)),
+            "list": .array(Array(repeating: JSONValue.number(7), count: 50_000)),
+        ])
+        let preview = huge.compactPreview(maxLength: 500)
+        #expect(preview.count == 500)   // emit clamps every chunk to the budget
+        #expect(preview.hasPrefix(#"{"blob":"xxx"#))
+    }
+
+    @Test func logMessagePreviewIsCappedAt500Characters() throws {
+        let long = String(repeating: "x", count: 600)
+        let command = try ReactotronCommand.decode(
+            #"{"type":"log","important":false,"date":"d","deltaTime":1,"payload":{"level":"debug","message":{"blob":"\#(long)"}}}"#
+        )
+        guard case let .log(_, message, _) = ReactotronEvent(command: command) else {
+            Issue.record("expected .log"); return
+        }
+        #expect(message.count == 500)
+    }
+
     @Test func parsesDisplay() throws {
         let command = try ReactotronCommand.decode(
             #"{"type":"display","important":false,"date":"d","deltaTime":1,"payload":{"name":"User","value":{"id":7,"name":"Sam"},"preview":"Sam"}}"#

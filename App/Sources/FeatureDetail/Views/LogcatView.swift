@@ -13,6 +13,10 @@ struct LogcatView: View {
     @State private var level = "All"
     @State private var packageFilter: String?
     @State private var tagFilter: String?
+    /// What the user is typing; debounced into `search` (which triggers a full
+    /// re-filter and NSTextView rebuild) so a fast typist over a full buffer
+    /// pays for one rebuild per pause, not one per keystroke.
+    @State private var searchInput = ""
     @State private var search = ""
     @State private var waitingForPackage: String?
     @State private var streamingPid: Int?
@@ -89,9 +93,16 @@ struct LogcatView: View {
             }
             .font(.app(.callout))
 
-            TextField("Search lines…", text: $search)
+            TextField("Search lines…", text: $searchInput)
                 .brandField()
                 .frame(maxWidth: 220)
+                .task(id: searchInput) {
+                    if !search.isEmpty || !searchInput.isEmpty {
+                        try? await Task.sleep(for: .milliseconds(200))
+                    }
+                    guard !Task.isCancelled else { return }
+                    search = searchInput
+                }
 
             Spacer()
 
@@ -195,9 +206,14 @@ struct LogcatView: View {
     // MARK: - Log list
 
     private var visibleLines: [LogLine] {
-        lines.filter { line in
+        // Lowercase the query once and match the per-line cached `searchKey` —
+        // this runs on every streamed batch, and a locale-aware scan over a
+        // full 5000-line buffer was the hottest part of searching while
+        // streaming.
+        let query = search.lowercased()
+        return lines.filter { line in
             if let tagFilter, line.tag != tagFilter { return false }
-            if !search.isEmpty && !line.raw.localizedCaseInsensitiveContains(search) { return false }
+            if !query.isEmpty && !line.searchKey.contains(query) { return false }
             return true
         }
     }

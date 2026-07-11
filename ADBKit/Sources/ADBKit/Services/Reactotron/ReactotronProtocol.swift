@@ -325,8 +325,11 @@ public extension ReactotronEvent {
         guard let value else { return "" }
         switch value {
         case let .string(text): return String(text.prefix(500))
-        case let .object(dict): return "{ \(dict.count) }"
-        case let .array(items): return "[ \(items.count) ]"
+        // Compact JSON so `console.log(object)` / multi-arg logs preview their
+        // content on the collapsed row (like Reactotron's desktop timeline),
+        // not an opaque element count. Bounded: serializing costs O(500)
+        // however big the logged object is.
+        case .object, .array: return value.compactPreview(maxLength: 500)
         case let .number(number):
             return number.truncatingRemainder(dividingBy: 1) == 0 && abs(number) < 9e15
                 ? String(Int(number)) : String(number)
