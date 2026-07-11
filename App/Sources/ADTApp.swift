@@ -241,6 +241,20 @@ struct ADTApp: App {
                 }
                 .keyboardShortcut("n", modifiers: .command)
 
+                // ⌘D/⇧⌘D split the focused pane, iTerm-style; the new shell
+                // starts in that pane's working directory.
+                Button("Split Terminal Vertically") {
+                    appState.terminals.splitActivePane(.vertical)
+                }
+                .keyboardShortcut("d", modifiers: .command)
+                .disabled(!terminalCommandsEnabled)
+
+                Button("Split Terminal Horizontally") {
+                    appState.terminals.splitActivePane(.horizontal)
+                }
+                .keyboardShortcut("d", modifiers: [.command, .shift])
+                .disabled(!terminalCommandsEnabled)
+
                 Button("Close Terminal") {
                     if let id = appState.terminals.activeID { appState.closeTerminalShell(id) }
                 }
@@ -348,19 +362,19 @@ struct ADTApp: App {
                 // Disabled outside the Terminal so ⌘F falls through to views
                 // with their own find (e.g. the JS console's filter).
                 Button("Find in Terminal…") {
-                    appState.terminals.activeTab?.session.showFindBar()
+                    appState.terminals.activeSession?.showFindBar()
                 }
                 .keyboardShortcut("f", modifiers: .command)
                 .disabled(!terminalCommandsEnabled)
 
                 Button("Find Next") {
-                    appState.terminals.activeTab?.session.findNext()
+                    appState.terminals.activeSession?.findNext()
                 }
                 .keyboardShortcut("g", modifiers: .command)
                 .disabled(!terminalCommandsEnabled)
 
                 Button("Find Previous") {
-                    appState.terminals.activeTab?.session.findPrevious()
+                    appState.terminals.activeSession?.findPrevious()
                 }
                 .keyboardShortcut("g", modifiers: [.command, .shift])
                 .disabled(!terminalCommandsEnabled)

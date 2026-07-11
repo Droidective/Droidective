@@ -4,16 +4,25 @@ import UniformTypeIdentifiers
 
 /// The Terminal feature's open shells. Owned by `AppState` (like
 /// `reactotronSession`) so every session, its scrollback, the tab names, and
-/// the group layout survive leaving the feature. Each tab is an independent
-/// PTY-backed zsh; where each tab sits (groups, order) lives in the pure
-/// `TerminalTabs` model so the moves are unit-tested in ADBKit.
+/// the group layout survive leaving the feature. Each tab holds one or more
+/// split panes, each an independent PTY-backed zsh; where each tab sits
+/// (groups, order) lives in the pure `TerminalTabs` model and each tab's pane
+/// arrangement in `TerminalSplitTree`, so the moves are unit-tested in ADBKit.
 @MainActor
 @Observable
 final class TerminalManager {
     struct Tab: Identifiable {
         let id = UUID()
         var name: String
-        let session: TerminalSession
+        /// How this tab's panes divide its space (⌘D / ⇧⌘D).
+        var splits: TerminalSplitTree
+        /// The pane holding keyboard focus while this tab is frontmost.
+        var activePaneID: UUID
+        /// One PTY-backed shell per pane.
+        fileprivate(set) var sessions: [UUID: TerminalSession] = [:]
+
+        var activeSession: TerminalSession? { sessions[activePaneID] }
+        func session(forPane id: UUID) -> TerminalSession? { sessions[id] }
     }
 
     private(set) var layout = TerminalTabs()
@@ -46,8 +55,9 @@ final class TerminalManager {
         railDropSlot = nil
     }
 
-    /// Set by `AppState`: a shell ended on its own (the user typed `exit`),
-    /// so its tab should close through the same path as the × / ⌘W.
+    /// Set by `AppState`: a tab's *last* shell ended on its own (the user typed
+    /// `exit`), so its tab should close through the same path as the × / ⌘W.
+    /// A pane that exits while siblings remain just folds back into them.
     var onShellExited: ((UUID) -> Void)?
 
     /// Every open tab in display order (groups top to bottom).
@@ -59,6 +69,10 @@ final class TerminalManager {
         activeID.flatMap { tabsByID[$0] }
     }
 
+    /// The shell holding keyboard focus — the active tab's active pane. Feeds
+    /// the menu bar's find commands and new shells' directory inheritance.
+    var activeSession: TerminalSession? { activeTab?.activeSession }
+
     func tab(_ id: UUID) -> Tab? { tabsByID[id] }
 
     /// The tabs of one group, in that group's order.
@@ -66,13 +80,22 @@ final class TerminalManager {
         group.tabIDs.compactMap { tabsByID[$0] }
     }
 
-    /// Open a fresh shell tab and focus it. It joins `group` when given, else
-    /// the active tab's group, else lands loose — a fresh rail has no groups.
+    /// Open a fresh shell tab and focus it. The shell starts in the focused
+    /// shell's working directory (home when there is none). It joins `group`
+    /// when given, else the active tab's group, else lands loose — a fresh
+    /// rail has no groups.
     func newTab(inGroup group: UUID? = nil) {
         counter += 1
-        let tab = Tab(name: "Terminal \(counter)", session: TerminalSession())
-        tab.session.onProcessExit = { [weak self] in self?.onShellExited?(tab.id) }
+        let paneID = UUID()
+        let session = TerminalSession(startDirectory: activeSession?.currentDirectory)
+        var tab = Tab(
+            name: "Terminal \(counter)",
+            splits: TerminalSplitTree(pane: paneID),
+            activePaneID: paneID
+        )
+        tab.sessions[paneID] = session
         tabsByID[tab.id] = tab
+        wire(session, tabID: tab.id, paneID: paneID)
         let destination = group ?? activeID.flatMap { layout.groupID(ofTab: $0) }
         layout.add(tab: tab.id, toGroup: destination)
         // A new shell in a collapsed group would be invisible — reveal it.
@@ -82,15 +105,20 @@ final class TerminalManager {
         activeID = tab.id
     }
 
-    /// Kill the tab's shell and remove it. Focus falls to the neighbor that
-    /// slid into its slot (mirroring the app's own tab-close behavior).
+    /// Kill every pane's shell and remove the tab. Focus falls to the neighbor
+    /// that slid into its slot (mirroring the app's own tab-close behavior).
     func close(_ id: UUID) {
         guard let tab = tabsByID[id] else { return }
         let neighbor = layout.neighbor(of: id)
-        tab.session.kill()
+        for session in tab.sessions.values {
+            session.kill()
+        }
         layout.remove(tab: id)
         tabsByID[id] = nil
-        if activeID == id { activeID = neighbor }
+        if activeID == id {
+            activeID = neighbor
+            focusActiveSessionSoon()
+        }
     }
 
     func rename(_ id: UUID, to rawName: String) {
@@ -104,7 +132,9 @@ final class TerminalManager {
     /// counters reset so a reopened feature starts at "Terminal 1" again.
     func killAll() {
         for tab in tabsByID.values {
-            tab.session.kill()
+            for session in tab.sessions.values {
+                session.kill()
+            }
         }
         tabsByID.removeAll()
         layout = TerminalTabs()
@@ -117,6 +147,99 @@ final class TerminalManager {
     func cycle(by offset: Int) {
         guard let current = activeID ?? layout.allTabIDs.first else { return }
         activeID = layout.tab(offset: offset, from: current)
+    }
+
+    // MARK: - Split panes
+
+    /// Split the focused pane (⌘D / ⇧⌘D): the new shell takes half its space,
+    /// starts in its working directory, and gets focus.
+    func splitActivePane(_ direction: TerminalSplitTree.Direction) {
+        guard let tabID = activeID, var tab = tabsByID[tabID] else { return }
+        let paneID = UUID()
+        let session = TerminalSession(
+            startDirectory: tab.activeSession?.currentDirectory
+        )
+        guard tab.splits.split(pane: tab.activePaneID, direction: direction, adding: paneID) else {
+            return
+        }
+        tab.sessions[paneID] = session
+        tab.activePaneID = paneID
+        tabsByID[tabID] = tab
+        wire(session, tabID: tabID, paneID: paneID)
+    }
+
+    /// Close one split pane (killing its shell); a sibling absorbs its space
+    /// and takes focus. Returns false when the pane is its tab's only one —
+    /// the caller closes the whole tab instead.
+    @discardableResult
+    func closePane(_ paneID: UUID, inTab tabID: UUID) -> Bool {
+        guard var tab = tabsByID[tabID], tab.splits.contains(paneID),
+              tab.splits.paneCount > 1
+        else { return false }
+        let neighbor = tab.splits.neighbor(of: paneID)
+        tab.sessions[paneID]?.kill()
+        tab.sessions[paneID] = nil
+        tab.splits.remove(pane: paneID)
+        if tab.activePaneID == paneID, let neighbor { tab.activePaneID = neighbor }
+        tabsByID[tabID] = tab
+        focusActiveSessionSoon()
+        return true
+    }
+
+    /// ⌘W: close the focused split pane. Returns false when the focused tab
+    /// has a single pane — the caller peels the whole tab instead.
+    func closeActivePane() -> Bool {
+        guard let tab = activeTab else { return false }
+        return closePane(tab.activePaneID, inTab: tab.id)
+    }
+
+    /// Close one pane, or hand the whole tab to the shell-exit path when it's
+    /// the last — the funnel for the pane × button and the right-click Close.
+    func closePaneOrTab(_ paneID: UUID, inTab tabID: UUID) {
+        if !closePane(paneID, inTab: tabID) {
+            onShellExited?(tabID)
+        }
+    }
+
+    /// Put the keyboard in the surviving shell after a close. Deferred a beat
+    /// so SwiftUI finishes unmounting the closed pane first — AppKit moves
+    /// first responder to the window during that teardown, which would
+    /// otherwise swallow the focus we just set.
+    private func focusActiveSessionSoon() {
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(80))
+            self?.activeSession?.takeFocus()
+        }
+    }
+
+    /// Route a session's callbacks back to its pane: an exit closes the pane
+    /// (or hands the tab close to `onShellExited` when it's the last one),
+    /// taking keyboard focus marks the pane active, and the right-click menu
+    /// acts on the pane it was opened over.
+    private func wire(_ session: TerminalSession, tabID: UUID, paneID: UUID) {
+        session.onProcessExit = { [weak self] in
+            self?.closePaneOrTab(paneID, inTab: tabID)
+        }
+        session.onFocus = { [weak self] in
+            guard let self, self.tabsByID[tabID] != nil else { return }
+            self.activeID = tabID
+            self.tabsByID[tabID]?.activePaneID = paneID
+        }
+        session.isInSplit = { [weak self] in
+            (self?.tabsByID[tabID]?.splits.paneCount ?? 1) > 1
+        }
+        session.onMenuAction = { [weak self] action in
+            guard let self, self.tabsByID[tabID] != nil else { return }
+            self.activeID = tabID
+            self.tabsByID[tabID]?.activePaneID = paneID
+            switch action {
+            case .splitVertically: self.splitActivePane(.vertical)
+            case .splitHorizontally: self.splitActivePane(.horizontal)
+            case .newTab: self.newTab()
+            case .rename: self.renameRequestID = tabID
+            case .close: self.closePaneOrTab(paneID, inTab: tabID)
+            }
+        }
     }
 
     // MARK: - Groups
@@ -178,25 +301,41 @@ final class TerminalManager {
     }
 }
 
-/// A real multi-tab terminal: each tab is its own PTY-backed login shell
-/// (SwiftTerm), with the selected device exported as ANDROID_SERIAL. Sessions
-/// are listed in a collapsible left rail — loose (ungrouped) by default; a
-/// right-click wraps a tab in a new group, tabs and groups drag-reorder and
-/// interleave, and a group deletes itself once its last tab leaves. Every
-/// session keeps running (scrollback intact) while you work in other features.
+/// A real multi-tab terminal: each tab is one or more split panes, each its
+/// own PTY-backed login shell (SwiftTerm), with the selected device exported
+/// as ANDROID_SERIAL. Sessions are listed in a collapsible left rail — or a
+/// Chrome-style strip along the top, toggleable — loose (ungrouped) by
+/// default; a right-click wraps a tab in a new group, tabs and groups
+/// drag-reorder and interleave, and a group deletes itself once its last tab
+/// leaves. ⌘D/⇧⌘D split the focused pane, and new shells start in the focused
+/// shell's directory. Every session keeps running (scrollback intact) while
+/// you work in other features.
 struct TerminalView: View {
     @Environment(AppState.self) private var state
     @State private var renaming: TerminalManager.Tab?
     @State private var renamingGroup: TerminalTabs.Group?
     @State private var renameDraft = ""
     @AppStorage("terminalRailCollapsed") private var railCollapsed = false
+    /// Where the tab list lives: a left rail (default) or a Chrome-style strip
+    /// along the top.
+    @AppStorage("terminalTabsOnTop") private var tabsOnTop = false
     private var terminals: TerminalManager { state.terminals }
 
     var body: some View {
-        HStack(spacing: 0) {
-            rail
-            Divider()
-            content
+        Group {
+            if tabsOnTop {
+                VStack(spacing: 0) {
+                    topStrip
+                    Divider()
+                    content
+                }
+            } else {
+                HStack(spacing: 0) {
+                    rail
+                    Divider()
+                    content
+                }
+            }
         }
         // No whole-view drop catch here: SwiftUI routes a drop to the deepest
         // drop region under the cursor by geometry, regardless of type match,
@@ -253,6 +392,39 @@ struct TerminalView: View {
         )
     }
 
+    // MARK: - Shared menus
+
+    /// One context menu for a tab wherever it renders (rail row / strip chip).
+    @ViewBuilder
+    private func tabMenu(_ tab: TerminalManager.Tab) -> some View {
+        Button("Rename…") { beginRename(tab) }
+        Button("New Group…") {
+            if let id = terminals.newGroup(containing: tab.id),
+               let group = terminals.layout.group(id) {
+                beginRenameGroup(group)
+            }
+        }
+        Divider()
+        Button("Split Vertically") {
+            terminals.activeID = tab.id
+            terminals.splitActivePane(.vertical)
+        }
+        Button("Split Horizontally") {
+            terminals.activeID = tab.id
+            terminals.splitActivePane(.horizontal)
+        }
+        Divider()
+        Button("Close Terminal") { state.closeTerminalShell(tab.id) }
+    }
+
+    @ViewBuilder
+    private func groupMenu(_ group: TerminalTabs.Group) -> some View {
+        Button("New Terminal Here") { terminals.newTab(inGroup: group.id) }
+        Button("Rename…") { beginRenameGroup(group) }
+        Divider()
+        Button("Close Group") { state.closeTerminalGroup(group.id) }
+    }
+
     // MARK: - Rail
 
     @ViewBuilder
@@ -282,6 +454,26 @@ struct TerminalView: View {
 
     private var expandedRail: some View {
         VStack(spacing: 0) {
+            // The controls live on top so New Terminal is always in reach —
+            // it used to hide at the rail's bottom, below the fold on tall
+            // tab lists.
+            HStack(spacing: 4) {
+                railButton("plus", help: "New terminal") {
+                    terminals.newTab()
+                }
+                Spacer()
+                railButton("rectangle.topthird.inset.filled", help: "Move tabs to the top (Chrome-style)") {
+                    tabsOnTop = true
+                }
+                railButton("sidebar.left", help: "Hide the terminal list") {
+                    railCollapsed = true
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+
+            Divider()
+
             ScrollView {
                 VStack(spacing: 0) {
                     LazyVStack(spacing: 2) {
@@ -320,20 +512,6 @@ struct TerminalView: View {
                 }
                 .frame(maxHeight: .infinity, alignment: .top)
             }
-
-            Divider()
-
-            HStack(spacing: 4) {
-                railButton("plus", help: "New terminal") {
-                    terminals.newTab()
-                }
-                Spacer()
-                railButton("sidebar.left", help: "Hide the terminal list") {
-                    railCollapsed = true
-                }
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
         }
         .frame(width: 210)
         .background(.bgSurface)
@@ -371,12 +549,7 @@ struct TerminalView: View {
         .contentShape(Rectangle())
         .onTapGesture(count: 2) { beginRenameGroup(group) }
         .onTapGesture { terminals.toggleCollapsed(group.id) }
-        .contextMenu {
-            Button("New Terminal Here") { terminals.newTab(inGroup: group.id) }
-            Button("Rename…") { beginRenameGroup(group) }
-            Divider()
-            Button("Close Group") { state.closeTerminalGroup(group.id) }
-        }
+        .contextMenu { groupMenu(group) }
         .opacity(terminals.railDraggedGroupID == group.id ? 0.4 : 1)
         // Above the header → a group reorders here; below it → a tab joins the
         // group.
@@ -428,17 +601,7 @@ struct TerminalView: View {
         .contentShape(Rectangle())
         .onTapGesture(count: 2) { beginRename(tab) }
         .onTapGesture { terminals.activeID = tab.id }
-        .contextMenu {
-            Button("Rename…") { beginRename(tab) }
-            Button("New Group…") {
-                if let id = terminals.newGroup(containing: tab.id),
-                   let group = terminals.layout.group(id) {
-                    beginRenameGroup(group)
-                }
-            }
-            Divider()
-            Button("Close Terminal") { state.closeTerminalShell(tab.id) }
-        }
+        .contextMenu { tabMenu(tab) }
         .opacity(terminals.railDraggedTabID == tab.id ? 0.4 : 1)
         // A tab drops before this row; a group dragged over a loose row
         // interleaves before it. Both draw the guideline above the row.
@@ -455,6 +618,153 @@ struct TerminalView: View {
         }
         .onDrop(of: [.terminalRailItem], delegate: TabRowDropDelegate(
             row: tab.id, isLoose: !indented, terminals: terminals
+        ))
+    }
+
+    // MARK: - Top strip (Chrome-style tabs)
+
+    /// The horizontal alternative to the rail: tab chips along the top, the
+    /// same groups/context menus/drag-reorder, with + right after the last
+    /// tab, Chrome-style.
+    private var topStrip: some View {
+        HStack(spacing: 4) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 4) {
+                    ForEach(terminals.layout.entries) { entry in
+                        switch entry {
+                        case .tab(let id):
+                            if let tab = terminals.tab(id) { tabChip(tab, grouped: false) }
+                        case .group(let group):
+                            groupChip(group)
+                            if !group.isCollapsed {
+                                ForEach(terminals.tabs(in: group)) { tab in
+                                    tabChip(tab, grouped: true)
+                                }
+                            }
+                        }
+                    }
+                    railButton("plus", help: "New terminal") {
+                        terminals.newTab()
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+            }
+
+            // The strip's empty tail: dropping a drag here lands it at the
+            // very end (loose), like the rail's bottom zone.
+            Color.clear
+                .frame(minWidth: 24, maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .overlay(alignment: .leading) {
+                    verticalGuideline(terminals.railDropSlot == .railEnd)
+                }
+                .onDrop(of: [.terminalRailItem], delegate: RailTailDropDelegate(
+                    terminals: terminals
+                ))
+
+            railButton("sidebar.left", help: "Move tabs to a sidebar") {
+                tabsOnTop = false
+            }
+            .padding(.trailing, 8)
+        }
+        .frame(height: 38)
+        .background(.bgSurface)
+    }
+
+    private func tabChip(_ tab: TerminalManager.Tab, grouped: Bool) -> some View {
+        let isActive = tab.id == terminals.activeID
+        return HStack(spacing: 6) {
+            Image(systemName: "terminal")
+                .font(.app(.caption))
+                .foregroundStyle(isActive ? AnyShapeStyle(.brandAccent) : AnyShapeStyle(.textMuted))
+            Text(tab.name)
+                .font(.app(.callout))
+                .lineLimit(1)
+                .foregroundStyle(isActive ? AnyShapeStyle(.textMain) : AnyShapeStyle(.textMuted))
+            Button {
+                state.closeTerminalShell(tab.id)
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.app(size: 9, weight: .bold))
+                    .foregroundStyle(.textMuted)
+                    .frame(width: 16, height: 16)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Close this terminal (kills its shell)")
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 28)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(
+                    isActive
+                        ? AnyShapeStyle(.brandAccent.opacity(0.14))
+                        : grouped
+                            ? AnyShapeStyle(.textMuted.opacity(0.08))
+                            : AnyShapeStyle(.clear)
+                )
+        )
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2) { beginRename(tab) }
+        .onTapGesture { terminals.activeID = tab.id }
+        .contextMenu { tabMenu(tab) }
+        .opacity(terminals.railDraggedTabID == tab.id ? 0.4 : 1)
+        // Left of the chip: a tab drops before it; a group dragged over a
+        // loose chip interleaves before it — the rail's slots, rotated 90°.
+        .overlay(alignment: .leading) {
+            verticalGuideline(
+                terminals.railDropSlot == .beforeTab(tab.id)
+                    || (!grouped && terminals.railDropSlot == .beforeGroup(tab.id))
+            )
+            .offset(x: -3)
+        }
+        .onDrag {
+            terminals.railDraggedTabID = tab.id
+            return privateDragItem(.terminalRailItem, "tab:\(tab.id.uuidString)")
+        }
+        .onDrop(of: [.terminalRailItem], delegate: TabRowDropDelegate(
+            row: tab.id, isLoose: !grouped, terminals: terminals
+        ))
+    }
+
+    private func groupChip(_ group: TerminalTabs.Group) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: "chevron.right")
+                .font(.app(size: 8, weight: .bold))
+                .rotationEffect(.degrees(group.isCollapsed ? 0 : 90))
+                .foregroundStyle(.textMuted)
+            Text(group.name)
+                .font(.app(.callout).weight(.semibold))
+                .lineLimit(1)
+                .foregroundStyle(.textMuted)
+            Text("\(group.tabIDs.count)")
+                .font(.app(.caption))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 28)
+        .background(RoundedRectangle(cornerRadius: 6).fill(.textMuted.opacity(0.12)))
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2) { beginRenameGroup(group) }
+        .onTapGesture { terminals.toggleCollapsed(group.id) }
+        .contextMenu { groupMenu(group) }
+        .opacity(terminals.railDraggedGroupID == group.id ? 0.4 : 1)
+        // Left of the chip → a group reorders here; right of it → a tab joins
+        // the group (the rail header's above/below slots, rotated).
+        .overlay(alignment: .leading) {
+            verticalGuideline(terminals.railDropSlot == .beforeGroup(group.id)).offset(x: -3)
+        }
+        .overlay(alignment: .trailing) {
+            verticalGuideline(terminals.railDropSlot == .intoGroup(group.id)).offset(x: 3)
+        }
+        .onDrag {
+            terminals.railDraggedGroupID = group.id
+            return privateDragItem(.terminalRailItem, "group:\(group.id.uuidString)")
+        }
+        .onDrop(of: [.terminalRailItem], delegate: GroupHeaderDropDelegate(
+            group: group.id, terminals: terminals
         ))
     }
 
@@ -476,6 +786,23 @@ struct TerminalView: View {
         RoundedRectangle(cornerRadius: 1).fill(Color.brandAccent).frame(width: 3, height: 6)
     }
 
+    /// The guideline turned upright for the top strip's chips.
+    @ViewBuilder
+    private func verticalGuideline(_ show: Bool) -> some View {
+        if show {
+            VStack(spacing: 0) {
+                verticalGuidelineCap
+                Rectangle().fill(Color.brandAccent).frame(width: 2)
+                verticalGuidelineCap
+            }
+            .frame(width: 6)
+        }
+    }
+
+    private var verticalGuidelineCap: some View {
+        RoundedRectangle(cornerRadius: 1).fill(Color.brandAccent).frame(width: 6, height: 3)
+    }
+
     private func beginRename(_ tab: TerminalManager.Tab) {
         renameDraft = tab.name
         renaming = tab
@@ -494,10 +821,14 @@ struct TerminalView: View {
         // shells keep rendering into their scrollback instead of pausing.
         ZStack {
             ForEach(terminals.tabs) { tab in
-                NativeTerminalView(
-                    session: tab.session,
+                TerminalSplitNodeView(
+                    node: tab.splits.root,
+                    tab: tab,
                     serial: state.targetSerials.first,
-                    isActive: tab.id == terminals.activeID
+                    isActiveTab: tab.id == terminals.activeID,
+                    onClosePane: { paneID in
+                        terminals.closePaneOrTab(paneID, inTab: tab.id)
+                    }
                 )
                 .opacity(tab.id == terminals.activeID ? 1 : 0)
                 .allowsHitTesting(tab.id == terminals.activeID)
@@ -505,6 +836,80 @@ struct TerminalView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.black)
+    }
+}
+
+/// Renders one tab's split tree: a pane is its shell, a split lays its
+/// children out along its direction with hairline separators, recursing.
+private struct TerminalSplitNodeView: View {
+    let node: TerminalSplitTree.Node?
+    let tab: TerminalManager.Tab
+    let serial: String?
+    let isActiveTab: Bool
+    let onClosePane: (UUID) -> Void
+
+    var body: some View {
+        switch node {
+        case nil:
+            Color.black
+        case .pane(let paneID)?:
+            if let session = tab.session(forPane: paneID) {
+                let isSplit = tab.splits.paneCount > 1
+                NativeTerminalView(
+                    session: session,
+                    serial: serial,
+                    isActive: isActiveTab && paneID == tab.activePaneID
+                )
+                // In a split, the shell sits inside a small gutter so the
+                // focus ring never draws over the first/last row of text.
+                .padding(isSplit ? 3 : 0)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .overlay {
+                    // With multiple panes, mark where the keyboard goes.
+                    if isSplit, paneID == tab.activePaneID {
+                        RoundedRectangle(cornerRadius: 2)
+                            .strokeBorder(Color.brandAccent.opacity(0.5), lineWidth: 1)
+                            .allowsHitTesting(false)
+                    }
+                }
+                .overlay(alignment: .topTrailing) {
+                    if isSplit {
+                        Button {
+                            onClosePane(paneID)
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.app(size: 13))
+                                .foregroundStyle(.white.opacity(0.35))
+                                .background(Circle().fill(Color.black.opacity(0.6)))
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .padding(6)
+                        .help("Close this pane (kills its shell)")
+                    }
+                }
+            }
+        case .split(let direction, let children)?:
+            let layout = direction == .vertical
+                ? AnyLayout(HStackLayout(spacing: 0))
+                : AnyLayout(VStackLayout(spacing: 0))
+            layout {
+                ForEach(Array(children.enumerated()), id: \.offset) { index, child in
+                    if index > 0 {
+                        Rectangle()
+                            .fill(Color.white.opacity(0.16))
+                            .frame(
+                                width: direction == .vertical ? 1 : nil,
+                                height: direction == .horizontal ? 1 : nil
+                            )
+                    }
+                    TerminalSplitNodeView(
+                        node: child, tab: tab, serial: serial, isActiveTab: isActiveTab,
+                        onClosePane: onClosePane
+                    )
+                }
+            }
+        }
     }
 }
 

@@ -68,7 +68,7 @@ opening it — verify those by hand.
 ## Build / test / run
 
 ```
-make test          # ADBKit unit tests (cd ADBKit && swift test) — 549 tests, keep green
+make test          # ADBKit unit tests (cd ADBKit && swift test) — 701 tests, keep green
 make build         # xcodegen generate + xcodebuild Debug
 make run           # build + open the .app
 ```
@@ -178,7 +178,12 @@ Most `.view` features are full-screen bespoke panels (file-explorer, apps,
 emulators, device-info, logcat, crash-catcher, sandbox-browser, performance,
 network-speed, wifi, root-status, screen-record, scrcpy, reactotron, js-console,
 terminal — multi-tab PTY login shells via SwiftTerm, with the device selected at
-open exported as ANDROID_SERIAL — + the custom-commands/catalog system panels). Several are **hub** screens — `react-native`, `simulate`,
+open exported as ANDROID_SERIAL; tabs split into panes (⌘D/⇧⌘D — the pure
+`TerminalSplitTree` model, tested in ADBKit; ⌘W peels a pane, then the tab), a
+new shell inherits the focused shell's cwd (read from the kernel via
+`proc_pidinfo`, no OSC 7 needed), and the tab list toggles between the left
+rail and a Chrome-style top strip (`terminalTabsOnTop`) — + the
+custom-commands/catalog system panels). Several are **hub** screens — `react-native`, `simulate`,
 and `connection` gather related instant-/form-/toggle-actions into one scrollable
 grouped `Form`; `apk-studio` is a tabbed workspace over one loaded APK (Inspect/
 Decompile/Recompile/Sign). (The Apps explorer similarly covers per-app
@@ -409,7 +414,7 @@ jadx/apktool, recompile, and sign — with keystore creation) plus Frida setup, 
 custom accent color, launching emulators from the device bar, per-feature
 connect-a-device empty states, a live-preview hotkey recorder, and a Settings
 split into Appearance/Privacy; managed tools download from GitHub releases into
-Application Support and are sized/removable in Settings); 654 tests green;
+Application Support and are sized/removable in Settings); 701 tests green;
 builds clean with zero warnings (enforced as errors in CI). Verified live against a
 physical device and an Android emulator. Release builds are Developer ID-signed +
 notarized and bundle scrcpy/ffmpeg (see `RELEASING.md`). Open gaps: the Apps

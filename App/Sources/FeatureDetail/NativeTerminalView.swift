@@ -7,8 +7,32 @@ import SwiftUI
 /// so a selection stops dead at the visible edge. This subclass drives the
 /// scroll itself, and adds the other desktop-terminal table stakes SwiftTerm
 /// leaves to the host: a right-click Copy/Paste menu and find-bar entry points.
+/// What the terminal's right-click menu can ask of the owning manager —
+/// routed out through `TerminalSession.onMenuAction`.
+enum TerminalMenuAction: Int {
+    case splitVertically = 1
+    case splitHorizontally
+    case newTab
+    case rename
+    case close
+}
+
 final class DroidTerminalView: LocalProcessTerminalView {
     private var dragWatchTimer: Timer?
+
+    /// Routes the terminal-management items of the right-click menu.
+    var onMenuAction: ((TerminalMenuAction) -> Void)?
+    /// Whether this shell shares its tab with other split panes — picks the
+    /// Close item's title (pane vs terminal).
+    var isInSplit: (() -> Bool)?
+    /// Fired on every frame change; the session debounces it into a prompt
+    /// repaint nudge once the layout settles.
+    var onFrameChanged: (() -> Void)?
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        onFrameChanged?()
+    }
 
     /// SwiftTerm seals `mouseDragged` as `public` (not `open`), so the drag
     /// can't be observed by override. But every drag-selection announces
@@ -85,8 +109,10 @@ final class DroidTerminalView: LocalProcessTerminalView {
         max(1, min(6, Int(overshoot / 12)))
     }
 
-    /// Right-click menu. Items target self so validation runs through
-    /// SwiftTerm's `validateUserInterfaceItem` (Copy needs a selection).
+    /// Right-click menu: the standard edit/find items (targeting self so
+    /// validation runs through SwiftTerm's `validateUserInterfaceItem` — Copy
+    /// needs a selection) plus the terminal-management actions, routed to the
+    /// manager via `onMenuAction`.
     override func menu(for event: NSEvent) -> NSMenu? {
         let menu = NSMenu()
         addItem(to: menu, title: "Copy", action: #selector(SwiftTerm.TerminalView.copy(_:)), key: "c")
@@ -98,6 +124,19 @@ final class DroidTerminalView: LocalProcessTerminalView {
             action: #selector(SwiftTerm.TerminalView.performFindPanelAction(_:)), key: "f"
         )
         find.tag = Int(NSFindPanelAction.showFindPanel.rawValue)
+        menu.addItem(.separator())
+        addAction(to: menu, title: "Split Vertically", action: .splitVertically, key: "d")
+        addAction(to: menu, title: "Split Horizontally", action: .splitHorizontally, key: "d",
+                  modifiers: [.command, .shift])
+        addAction(to: menu, title: "New Terminal", action: .newTab, key: "n")
+        addAction(to: menu, title: "Rename Terminal…", action: .rename, key: "r",
+                  modifiers: [.command, .shift])
+        menu.addItem(.separator())
+        addAction(
+            to: menu,
+            title: (isInSplit?() ?? false) ? "Close Pane" : "Close Terminal",
+            action: .close, key: "w"
+        )
         return menu
     }
 
@@ -107,6 +146,31 @@ final class DroidTerminalView: LocalProcessTerminalView {
         item.target = self
         menu.addItem(item)
         return item
+    }
+
+    private func addAction(
+        to menu: NSMenu, title: String, action: TerminalMenuAction, key: String,
+        modifiers: NSEvent.ModifierFlags = [.command]
+    ) {
+        let item = NSMenuItem(
+            title: title, action: #selector(performMenuAction(_:)), keyEquivalent: key
+        )
+        item.keyEquivalentModifierMask = modifiers
+        item.target = self
+        item.tag = action.rawValue
+        menu.addItem(item)
+    }
+
+    @objc private func performMenuAction(_ sender: NSMenuItem) {
+        guard let action = TerminalMenuAction(rawValue: sender.tag) else { return }
+        onMenuAction?(action)
+    }
+
+    /// SwiftTerm's validation knows only its own selectors and would leave
+    /// the management items (split/new/rename/close) permanently disabled.
+    override func validateUserInterfaceItem(_ item: NSValidatedUserInterfaceItem) -> Bool {
+        if item.action == #selector(performMenuAction(_:)) { return true }
+        return super.validateUserInterfaceItem(item)
     }
 }
 
@@ -122,9 +186,49 @@ final class TerminalSession {
     /// respawned an orphan shell for every closed tab.
     private var killed = false
 
+    /// Where the login shell starts. New tabs and split panes inherit the
+    /// spawning shell's live working directory here; nil falls back to home.
+    private let startDirectory: String?
+
+    init(startDirectory: String? = nil) {
+        self.startDirectory = startDirectory
+    }
+
     /// Fired when the shell ends on its own (`exit`, EOF, a crash) — not when
     /// `kill()` tears it down — so the owning tab can close like the × does.
     var onProcessExit: (() -> Void)?
+
+    /// Fired when the user clicks into this shell's pane — lets the manager
+    /// track which pane of a split tab is active.
+    var onFocus: (() -> Void)?
+
+    /// A right-click menu action on this shell (split, new tab, rename,
+    /// close) — handled by the manager, which knows the pane's tab.
+    var onMenuAction: ((TerminalMenuAction) -> Void)?
+
+    /// Whether this shell shares its tab with other split panes (the menu's
+    /// Close item says Pane vs Terminal) — answered by the manager.
+    var isInSplit: (() -> Bool)?
+
+    /// The debounced repaint nudge scheduled while this pane's frame is
+    /// changing (split, pane close, window resize, layout toggle).
+    private var repaintNudge: Task<Void, Never>?
+
+    /// The shell's live working directory, read from the kernel
+    /// (`proc_pidinfo`) so it needs no OSC 7 shell configuration. Nil until
+    /// the shell has started (a tab never shown has no process yet).
+    var currentDirectory: String? {
+        guard let pid = terminalView?.process.shellPid, pid != 0 else { return nil }
+        var info = proc_vnodepathinfo()
+        let size = Int32(MemoryLayout<proc_vnodepathinfo>.stride)
+        guard proc_pidinfo(pid, PROC_PIDVNODEPATHINFO, 0, &info, size) > 0 else { return nil }
+        let path = withUnsafeBytes(of: info.pvi_cdir.vip_path) { buffer -> String? in
+            guard let base = buffer.baseAddress else { return nil }
+            return String(cString: base.assumingMemoryBound(to: CChar.self))
+        }
+        guard let path, !path.isEmpty else { return nil }
+        return path
+    }
 
     /// The session's terminal view, starting the login shell on first use. The
     /// selected device serial is exported as `ANDROID_SERIAL` so `adb` targets
@@ -134,6 +238,12 @@ final class TerminalSession {
         let view = DroidTerminalView(frame: .zero)
         view.font = Self.terminalFont(size: 12)
         view.processDelegate = self
+        view.onMenuAction = { [weak self] action in self?.onMenuAction?(action) }
+        view.isInSplit = { [weak self] in self?.isInSplit?() ?? false }
+        // Any frame change (split, pane close, window resize) can leave the
+        // shell's prompt drawn for the old width — nudge a redisplay once the
+        // layout stops moving.
+        view.onFrameChanged = { [weak self] in self?.scheduleRepaintNudge() }
         terminalView = view
         guard !killed else { return view } // dead husk for the unmount pass
 
@@ -142,13 +252,70 @@ final class TerminalSession {
         if let serial, !serial.isEmpty {
             environment["ANDROID_SERIAL"] = serial
         }
+        // The inherited directory may have been deleted since it was read —
+        // fall back to home rather than failing the spawn.
+        var isDirectory: ObjCBool = false
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let cwd = startDirectory.flatMap { dir -> String? in
+            FileManager.default.fileExists(atPath: dir, isDirectory: &isDirectory)
+                && isDirectory.boolValue ? dir : nil
+        } ?? home
         view.startProcess(
             executable: environment["SHELL"] ?? "/bin/zsh",
             args: ["-l"],
             environment: environment.map { "\($0.key)=\($0.value)" },
-            currentDirectory: FileManager.default.homeDirectoryForCurrentUser.path
+            currentDirectory: cwd
         )
         return view
+    }
+
+    /// Give this shell keyboard focus — called after a neighboring pane or
+    /// tab closes so typing lands in the survivor without a click.
+    func takeFocus() {
+        guard let terminalView, terminalView.window != nil else { return }
+        terminalView.window?.makeFirstResponder(terminalView)
+    }
+
+    /// Coalesce frame changes into one repaint nudge after the layout
+    /// settles — a mid-churn nudge would redisplay at a transient size.
+    private func scheduleRepaintNudge() {
+        repaintNudge?.cancel()
+        repaintNudge = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled else { return }
+            await self?.forcePromptRedisplay()
+        }
+    }
+
+    /// Force the shell to redisplay its prompt at the current size. Splitting
+    /// narrows the surviving pane, which soft-wraps the prompt row; zle's
+    /// first WINCH redraw over that wrapped row lands misaligned (its
+    /// relative cursor moves don't account for the wrap) and zsh skips
+    /// redisplay entirely when the size hasn't changed, so a plain SIGWINCH
+    /// can't clean it up. Detour the PTY winsize one column down and back:
+    /// the kernel delivers two real WINCHes, and the second redisplay — from
+    /// zle's now self-consistent state — repaints cleanly at the true size.
+    /// (The kernel signals the tty's foreground process group, so vim/htop
+    /// relayout too.)
+    func forcePromptRedisplay() async {
+        guard let terminalView, terminalView.process.running else { return }
+        let terminal = terminalView.getTerminal()
+        guard terminal.cols > 1 else { return }
+        var detour = winsize(
+            ws_row: UInt16(terminal.rows), ws_col: UInt16(terminal.cols - 1),
+            ws_xpixel: 0, ws_ypixel: 0
+        )
+        _ = PseudoTerminalHelpers.setWinSize(
+            masterPtyDescriptor: terminalView.process.childfd, windowSize: &detour
+        )
+        try? await Task.sleep(for: .milliseconds(80))
+        // Restore through SwiftTerm's own numbers in case a real resize
+        // landed in between.
+        guard let view = self.terminalView, view.process.running else { return }
+        var size = view.getWindowSize()
+        _ = PseudoTerminalHelpers.setWinSize(
+            masterPtyDescriptor: view.process.childfd, windowSize: &size
+        )
     }
 
     /// Terminate the shell and drop the view — used when a terminal tab closes.
@@ -156,6 +323,7 @@ final class TerminalSession {
     /// interactive zsh *ignores* — follow up with SIGHUP, which it honors.
     func kill() {
         killed = true
+        repaintNudge?.cancel()
         if let terminalView {
             let pid = terminalView.process.shellPid
             terminalView.terminate()
@@ -215,6 +383,24 @@ extension TerminalSession: LocalProcessTerminalViewDelegate {
     }
 }
 
+/// The container a session's terminal mounts into. SwiftTerm seals
+/// `becomeFirstResponder`/`mouseDown` as `public` (not `open`), so a click
+/// into a pane can't be observed on the terminal view itself — the container
+/// spots it in `hitTest` instead (called on the way to routing the click) and
+/// tells the session, which is how a split pane takes focus.
+private final class TerminalPaneContainer: NSView {
+    var onClick: (() -> Void)?
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let hit = super.hitTest(point)
+        if hit != nil, let event = NSApp.currentEvent,
+           event.type == .leftMouseDown || event.type == .rightMouseDown || event.type == .otherMouseDown {
+            onClick?()
+        }
+        return hit
+    }
+}
+
 /// SwiftUI host for one terminal session. SwiftUI tears down and recreates the
 /// representable when a tab is hidden/reshown; returning the session's view
 /// directly let SwiftUI reset it, spawning a fresh-looking shell. Instead we
@@ -223,7 +409,7 @@ extension TerminalSession: LocalProcessTerminalViewDelegate {
 struct NativeTerminalView: NSViewRepresentable {
     let session: TerminalSession
     let serial: String?
-    /// Whether this session's tab is the focused one in the terminal strip.
+    /// Whether this session's pane is the focused one in the terminal strip.
     let isActive: Bool
 
     /// Remembers the last activation state so focus is grabbed only on the
@@ -236,7 +422,8 @@ struct NativeTerminalView: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> NSView {
-        let container = NSView()
+        let container = TerminalPaneContainer()
+        container.onClick = { [weak session] in session?.onFocus?() }
         mount(in: container, coordinator: context.coordinator)
         return container
     }

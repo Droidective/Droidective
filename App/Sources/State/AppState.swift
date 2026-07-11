@@ -823,10 +823,11 @@ final class AppState {
 
     /// Close the focused pane's active tab (⌘W).
     func closeActiveTab() {
-        // ⌘W inside the Terminal feature peels one shell tab at a time (focus
-        // slides to its neighbor); the feature tab itself closes only once no
-        // shells remain.
+        // ⌘W inside the Terminal feature peels one split pane, then one shell
+        // tab at a time (focus slides to its neighbor); the feature tab itself
+        // closes only once no shells remain.
         if workspace.activeTab == "terminal", let shellID = terminals.activeID {
+            if terminals.closeActivePane() { return }
             closeTerminalShell(shellID)
             return
         }
