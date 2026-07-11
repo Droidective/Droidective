@@ -280,18 +280,6 @@ struct SidebarPaletteView: View {
     private var bottomBar: some View {
         HStack(spacing: 16) {
             Button {
-                state.requestFeature("home")
-            } label: {
-                Image(systemName: "house")
-                    .font(.app(.title2))
-                    .frame(height: 22)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(state.activeTabID == "home" ? AnyShapeStyle(.brandAccent) : AnyShapeStyle(.textMuted))
-            .help("Home — overview & getting started")
-
-            Button {
                 state.requestFeature("catalog")
             } label: {
                 Label(
