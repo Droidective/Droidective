@@ -8,6 +8,10 @@ public struct LogLine: Sendable, Equatable, Identifiable {
     public let level: String
     public let tag: String
     public let message: String
+    /// `raw` lowercased once at ingest, so the search filter is a plain
+    /// substring check per line instead of a locale-aware case-insensitive
+    /// scan re-done for the full buffer on every streamed batch.
+    public let searchKey: String
 
     public init(raw: String, time: String, pid: String, level: String, tag: String, message: String) {
         self.id = UUID()
@@ -17,6 +21,7 @@ public struct LogLine: Sendable, Equatable, Identifiable {
         self.level = level
         self.tag = tag
         self.message = message
+        searchKey = raw.lowercased()
     }
 
     public static func == (lhs: LogLine, rhs: LogLine) -> Bool {

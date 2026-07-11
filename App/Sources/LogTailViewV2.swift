@@ -7,6 +7,9 @@ import SwiftUI
 @MainActor
 private final class TailMeasure {
     var geometry = TailGeometry()
+    /// Last content height reported to PerfLog, so geometry logging fires on
+    /// meaningful jumps instead of per pixel.
+    var lastLoggedContentHeight: CGFloat = -1
 }
 
 /// The v2 log scroller, shared by every streaming feed (JS Console, Reactotron;
@@ -20,6 +23,10 @@ private final class TailMeasure {
 ///   edge resumes.
 /// - Jump-to-top / jump-to-bottom buttons overlay the feed; each hides at its
 ///   own edge, both hide when the feed is empty or too short to scroll.
+/// - `.bottom`-feed content shorter than the viewport is stretched to fill it
+///   with the rows pinned at the visual top — a handful of lines must not sit
+///   under a screen of empty space. Structural layout never switches (the
+///   stretch is a `minHeight` that overflowing content makes a no-op).
 /// - `focusID` scrolls an externally-selected row (e.g. a ⌘F match) into view.
 ///
 /// Tailing is decided by the `.scrollPosition` *binding*, not the measured
@@ -77,6 +84,11 @@ struct LogTailViewV2<Data: RandomAccessCollection, Row: View>: View
         newestEdge == .bottom ? entries.first?.id : entries.last?.id
     }
 
+    /// The viewport height, mirrored into state (guarded, half-point
+    /// tolerance) so short `.bottom` feeds can stretch their content to fill
+    /// it — see the `minHeight` note on `orderedRows` below.
+    @State private var fillHeight: CGFloat = 0
+
     /// -1 flips `.bottom` feeds so a newest-first layout reads newest-at-bottom.
     private var flip: CGFloat { newestEdge == .bottom ? -1 : 1 }
 
@@ -85,6 +97,17 @@ struct LogTailViewV2<Data: RandomAccessCollection, Row: View>: View
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) { orderedRows }
                     .scrollTargetLayout()
+                    // Short `.bottom` feeds: stretch the content to the
+                    // viewport and pin the rows at the content's *end* — the
+                    // flip renders that at the visual top, so a handful of
+                    // lines reads top-down instead of sitting at the bottom
+                    // of a screen of empty space. A no-op once the content
+                    // overflows (and for `.top` feeds, which are unstretched),
+                    // so the layout never switches structure.
+                    .frame(
+                        minHeight: newestEdge == .bottom && fillHeight > 0 ? fillHeight : nil,
+                        alignment: .bottom
+                    )
                     .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("logtail")) }) { frame in
                         measure.geometry.contentLeadingOffset = frame.minY
                         measure.geometry.contentHeight = frame.height
@@ -95,6 +118,7 @@ struct LogTailViewV2<Data: RandomAccessCollection, Row: View>: View
             .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { height in
                 measure.geometry.viewportHeight = height
                 syncEdges()
+                if abs(fillHeight - height) > 0.5 { fillHeight = height }
             }
             // Let a row scroll its own header into view (e.g. when an object is
             // expanded). In the flipped newest-at-bottom layout the per-row flip
@@ -121,7 +145,16 @@ struct LogTailViewV2<Data: RandomAccessCollection, Row: View>: View
                 // A feed (re)starting from empty always tails — a clear while
                 // paused must not leave the next stream un-followed.
                 if old == nil { setTailing(true) }
-                if isTailing, let newest { leadingID = newest }   // cheap: first row, offset 0
+                if isTailing, let newest {
+                    leadingID = newest   // cheap: first row, offset 0
+                } else if let anchored = leadingID, !entries.contains(where: { $0.id == anchored }) {
+                    // The anchored row was cleared/trimmed away while paused —
+                    // without a live anchor the scroll view can park the
+                    // viewport in empty space past the content. Snap back to
+                    // the newest edge and resume tailing.
+                    setTailing(true)
+                    leadingID = newest
+                }
             }
             .onChange(of: focusID) { _, id in
                 guard let id else { return }
@@ -181,6 +214,23 @@ struct LogTailViewV2<Data: RandomAccessCollection, Row: View>: View
             derived.atBottom = isTailing
         }
         if derived != edges { edges = derived }
+        logGeometryIfNotable()
+    }
+
+    /// PerfLog trace for the blank-canvas investigation: content height vs
+    /// entry count exposes inflated lazy estimates, and offset shows where the
+    /// viewport is parked. Logged on ≥500pt content-height jumps only.
+    private func logGeometryIfNotable() {
+        let geometry = measure.geometry
+        guard abs(geometry.contentHeight - measure.lastLoggedContentHeight) > 500 else { return }
+        measure.lastLoggedContentHeight = geometry.contentHeight
+        PerfLog.feed.info("""
+            geometry: content=\(Int(geometry.contentHeight), privacy: .public) \
+            viewport=\(Int(geometry.viewportHeight), privacy: .public) \
+            offset=\(Int(geometry.contentLeadingOffset), privacy: .public) \
+            entries=\(entries.count, privacy: .public) \
+            fill=\(Int(fillHeight), privacy: .public)
+            """)
     }
 
     /// Both jumps move by SETTING the binding — never `proxy.scrollTo`, whose
