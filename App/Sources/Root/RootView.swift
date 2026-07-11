@@ -86,6 +86,7 @@ struct RootView: View {
                     window.setFrame(screen.visibleFrame, display: true)
                 }
                 window.setFrameAutosaveName(autosaveName)
+                WindowMinSizeGuard.shared.attach(to: window)
             })
             .overlay {
                 // Full-window takeover (macOS has no fullScreenCover), shown
@@ -690,6 +691,56 @@ private final class WindowReaderView: NSView {
         guard !resolved, let window else { return }
         resolved = true
         onWindow?(window)
+    }
+}
+
+/// Keeps the main window at or above 85% of its screen's usable area — the
+/// dense multi-pane layout degrades below that. Sets `NSWindow.minSize` (so
+/// resize drags stop at the floor) and re-applies when the window changes
+/// screens or the display configuration changes, growing the window back if a
+/// restored/saved frame is under the floor of the current screen.
+@MainActor
+final class WindowMinSizeGuard {
+    static let shared = WindowMinSizeGuard()
+    static let screenFraction = 0.85
+    private weak var window: NSWindow?
+    private var observers: [NSObjectProtocol] = []
+
+    func attach(to window: NSWindow) {
+        self.window = window
+        let center = NotificationCenter.default
+        observers.forEach(center.removeObserver)
+        let reapply: @Sendable (Notification) -> Void = { _ in
+            MainActor.assumeIsolated { WindowMinSizeGuard.shared.apply() }
+        }
+        observers = [
+            center.addObserver(
+                forName: NSWindow.didChangeScreenNotification, object: window, queue: .main,
+                using: reapply),
+            center.addObserver(
+                forName: NSApplication.didChangeScreenParametersNotification, object: nil,
+                queue: .main, using: reapply),
+        ]
+        apply()
+    }
+
+    private func apply() {
+        guard let window, let screen = window.screen ?? NSScreen.main else { return }
+        let visible = screen.visibleFrame
+        let floor = NSSize(
+            width: (visible.width * Self.screenFraction).rounded(),
+            height: (visible.height * Self.screenFraction).rounded())
+        window.minSize = floor
+        guard !window.styleMask.contains(.fullScreen) else { return }
+        var frame = window.frame
+        guard frame.width < floor.width || frame.height < floor.height else { return }
+        frame.size.width = max(frame.width, floor.width)
+        frame.size.height = max(frame.height, floor.height)
+        // Growing can push the frame past the screen edge — slide it back in
+        // (the floor is 85% of `visible`, so it always fits).
+        frame.origin.x = min(max(frame.origin.x, visible.minX), visible.maxX - frame.width)
+        frame.origin.y = min(max(frame.origin.y, visible.minY), visible.maxY - frame.height)
+        window.setFrame(frame, display: true)
     }
 }
 
