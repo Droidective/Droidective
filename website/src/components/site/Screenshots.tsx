@@ -54,14 +54,31 @@ export function Screenshots() {
                   showcase.flip && "min-[940px]:order-1",
                 )}
               >
-                <img
-                  src={showcase.image}
-                  alt={showcase.alt}
-                  width={1600}
-                  height={1012}
-                  loading="lazy"
-                  className="block h-auto w-full"
-                />
+                {showcase.video ? (
+                  <video
+                    className="block h-auto w-full"
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                    preload="metadata"
+                    poster={showcase.image}
+                    width={1600}
+                    height={1012}
+                    aria-label={showcase.alt}
+                  >
+                    <source src={showcase.video} type="video/mp4" />
+                  </video>
+                ) : (
+                  <img
+                    src={showcase.image}
+                    alt={showcase.alt}
+                    width={1600}
+                    height={1012}
+                    loading="lazy"
+                    className="block h-auto w-full"
+                  />
+                )}
               </div>
             </div>
           </Reveal>

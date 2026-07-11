@@ -19,7 +19,7 @@ export const RELEASES_URL = `${GITHUB_URL}/releases`
 // stable-named Droidective.dmg (see ci.yml), so this always serves the
 // newest version — no appcast fetch, nothing cached to go stale.
 export const DOWNLOAD_URL = `${GITHUB_URL}/releases/latest/download/Droidective.dmg`
-export const APP_VERSION = "v2.9.3"
+export const APP_VERSION = "v3.0.0"
 
 export interface PaletteCommand {
   icon: LucideIcon
@@ -86,6 +86,7 @@ export interface Showcase {
   image: string
   alt: string
   flip: boolean
+  video?: string
 }
 
 export const showcases: Showcase[] = [
@@ -111,9 +112,24 @@ export const showcases: Showcase[] = [
       { lead: "Split into two panes", rest: " and drag a tab across the divide" },
       { lead: "Tabs keep running", rest: " in the background while you work elsewhere" },
     ],
-    image: "/assets/screenshot-split.webp",
-    alt: "Droidective split into two panes — a streaming logcat on the left and a live scrcpy screen mirror of the device on the right, with a multi-tab strip across the top",
+    image: "/assets/poster-tabs.webp",
+    alt: "Screen recording of Droidective opening features in tabs and dragging a tab across the divider to split the window into two panes",
     flip: true,
+    video: "/assets/tour-tabs.mp4",
+  },
+  {
+    eyebrow: "quick actions",
+    title: "Debug without leaving your app",
+    body: "A Raycast-style panel on a global hotkey, summoned over whatever you're working in — run any adb action, manage apps, boot emulators, or install an APK without switching to the main window.",
+    ticks: [
+      { lead: "Every action in one grid", rest: " — toggles, forms, and your custom commands" },
+      { lead: "Pick a device per action", rest: ", or ⌘⏎ to run on all of them" },
+      { lead: "Closes out of your way", rest: " — it never steals focus from your app" },
+    ],
+    image: "/assets/poster-quick-actions.webp",
+    alt: "Screen recording of the Droidective Quick Actions panel summoned over a browser window and running a device action",
+    flip: false,
+    video: "/assets/tour-quick-actions.mp4",
   },
   {
     eyebrow: "logs & diagnostics",
@@ -126,7 +142,7 @@ export const showcases: Showcase[] = [
     ],
     image: "/assets/screenshot-logcat.webp",
     alt: "Droidective live logcat streaming color-coded log lines with level, app, tag and text filters",
-    flip: false,
+    flip: true,
   },
   {
     eyebrow: "performance",
@@ -139,7 +155,7 @@ export const showcases: Showcase[] = [
     ],
     image: "/assets/screenshot-performance.webp",
     alt: "Droidective performance monitor charting per-core CPU, system RAM and network throughput live during a recording",
-    flip: true,
+    flip: false,
   },
   {
     eyebrow: "react native",
@@ -151,22 +167,39 @@ export const showcases: Showcase[] = [
       { lead: "Set the dev-server host", rest: "; save deep links per app" },
     ],
     image: "/assets/screenshot-react.webp",
-    alt: "Droidective React Native hub — reload JS, open the dev menu, force process death, forward Metro, and set the dev-server host",
+    alt: "Droidective React Native hub — quick-action cards for reload JS, dev menu and process death, with a Metro bundler section for port forwarding and the dev-server host",
+    flip: true,
+  },
+  {
+    eyebrow: "reactotron",
+    title: "Reactotron, built in",
+    body: "Droidective is the Reactotron server — point your app's client at it and a live timeline of logs, actions, and network requests streams in. No separate Reactotron app to install or keep open.",
+    ticks: [
+      { lead: "Split the timeline", rest: " and give each pane its own filter" },
+      { lead: "Filter network traffic", rest: " by HTTP method and status class" },
+      { lead: "Disconnects explained", rest: " right in the timeline, with the app's name" },
+    ],
+    image: "/assets/poster-reactotron.webp",
+    alt: "Screen recording of Droidective's built-in Reactotron timeline split into two panes, each filtered to a different event type",
     flip: false,
+    video: "/assets/tour-reactotron.mp4",
   },
 ]
 
 export const galleryShots = [
-  { image: "/assets/screenshot-apps.webp", alt: "Droidective apps explorer listing all installed and system apps with a selected app's info, permissions, and controls", title: "Apps explorer", caption: "Every installed & system app — info, permissions, force-stop, pull APK." },
+  { image: "/assets/screenshot-terminal.webp", alt: "Droidective's built-in terminal split into two panes with ⌘D, each running adb commands against the connected emulator", title: "Terminal with split panes", caption: "Login shells in tabs — ⌘D splits the pane, and every shell targets the selected device." },
+  { image: "/assets/screenshot-connection.webp", alt: "Droidective connection hub showing the device's Wi-Fi network and IP, reverse port forwarding, wireless ADB, and pairing", title: "Wireless & connection", caption: "The device's live Wi-Fi network & IP, one-click adb reverse, and wireless debugging." },
+  { image: "/assets/screenshot-apps.webp", alt: "Droidective apps explorer listing installed and system apps with a selected app's info, permissions, and controls", title: "Apps explorer", caption: "Every installed & system app — info, permissions, force-stop, pull APK." },
   { image: "/assets/screenshot-files.webp", alt: "Droidective file explorer browsing the device's /sdcard directory", title: "File explorer", caption: "Browse, push & pull device files with a real progress bar." },
   { image: "/assets/screenshot-device.webp", alt: "Droidective device info showing RAM, storage, battery health and CPU for the connected device", title: "Device info", caption: "RAM, storage, battery health, CPU, and every getprop — searchable." },
   { image: "/assets/screenshot-hotkeys.webp", alt: "Droidective hotkeys settings — record a global shortcut to show the app, and a per-feature shortcut for any tool", title: "Global hotkeys", caption: "Bind a global shortcut to summon the app, and one per feature." },
-  { image: "/assets/screenshot-tabs.webp", alt: "Droidective home screen with a multi-tab strip across the top — Home, Logcat, File Explorer, Device Info, React Native, Apps, Connection", title: "Tabbed home", caption: "Your most-used tools front and center, each a tab away." },
+  { image: "/assets/screenshot-tabs.webp", alt: "Droidective home screen with a multi-tab strip across the top — File Explorer, Device Info, Connection, Performance Monitor, Apps, and Terminal behind a permanent Home icon", title: "Tabbed home", caption: "Your most-used tools front and center, each a tab away." },
   { image: "/assets/screenshot-catalog.webp", alt: "Droidective feature catalog listing all 56 tools with on/off toggles", title: "Feature catalog", caption: "Toggle, reorder, and pin any of the 56 tools." },
 ]
 
 export const releases: { version: string; date: string; latest?: boolean; html: string }[] = [
-  { version: "v2.9.3", date: "Jul 2026", latest: true, html: "<b>Log feeds rebuilt</b> — Logcat, the JS Console, and the Reactotron timeline share one scroll behavior: jump-to-top/bottom buttons, interruption-free reading while logs stream, and no more CPU spikes under event storms. The <b>JS console</b> stops looping “connecting…” on large payloads, both consoles shut down with their tab or window, and <b>Reactotron</b> adds HTTP method/status filters, shows the connected app's name, and explains client disconnects right in the timeline." },
+  { version: "v3.0.0", date: "Jul 2026", latest: true, html: "<b>Terminal split panes</b> — <kbd>⌘D</kbd> splits the shell side by side, <kbd>⇧⌘D</kbd> stacks it, and new tabs and panes open in the focused shell's working directory — no shell config needed — with the tab list dockable as a left rail or a Chrome-style top strip. The <b>onboarding tour is rebuilt</b> around recordings of the real app, the <b>React Native and Connection hubs are redesigned</b> (described action cards, a Metro port field, your device's live Wi-Fi network and IP), <b>custom commands run in your login shell</b> — aliases work, optionally in a Terminal tab — and the JS Console gains <b>Reload JS and Restart app</b>." },
+  { version: "v2.9.3", date: "Jul 2026", html: "<b>Log feeds rebuilt</b> — Logcat, the JS Console, and the Reactotron timeline share one scroll behavior: jump-to-top/bottom buttons, interruption-free reading while logs stream, and no more CPU spikes under event storms. The <b>JS console</b> stops looping “connecting…” on large payloads, both consoles shut down with their tab or window, and <b>Reactotron</b> adds HTTP method/status filters, shows the connected app's name, and explains client disconnects right in the timeline." },
   { version: "v2.9.2", date: "Jul 2026", html: "<b>Mirror in its own window</b> — pop the live mirror out beside your workspace from a button on its control bar; it follows the device-bar selection, which now <b>switches sessions reliably</b>, with a Reconnect button when a stream dies. The <b>video editor</b> gets full-width native controls and trim strip (no more cramped portrait layout), every Reveal button becomes <b>Open in Finder</b>, and the first quick save asks once where captures should go." },
   { version: "v2.9.1", date: "Jul 2026", html: "<b>Home search &amp; a Frequently used strip</b> — find any tool from the Home screen and jump to your most-used ones — plus <b>font and accent-color customization</b> in Settings ▸ Appearance. Fixes: the React Native dev-server host now writes <code>debug_http_host</code> so it works on physical devices, text fields release focus when you click away, <kbd>⌘,</kbd> no longer opens Settings behind the Quick Actions panel, and drop-to-split works again in the Terminal. The command palette moves to <kbd>⌘T</kbd>." },
   { version: "v2.9.0", date: "Jul 2026", html: "<b>Background mode &amp; a global Quick Actions panel</b> — closing the window keeps Droidective running in the menu bar, and a non-activating Raycast-style panel on a global hotkey runs any adb action, manages apps, boots emulators, and installs APKs without the main window — with per-device targeting and Finder APK routing. Plus a <b>terminal tab rail</b> with a find bar and a <b>Dock-style auto-hiding sidebar</b>." },
