@@ -2,106 +2,139 @@ import AppKit
 import KeyboardShortcuts
 import SwiftUI
 
-/// A short paged walkthrough shown once on first launch (and replayable from
-/// Home). Each step explains one part of the app; finishing or skipping marks
-/// the tour seen so it won't reappear. Completing it (not skipping) ends on a
-/// one-time ask to record a Quick Actions hotkey — shown only while none is
-/// set, so a replay after recording one just closes.
+/// The onboarding tour, shown once on first launch and replayable from Home:
+/// five pages, each led by a looping animated demo (see `TourDemos.swift`) —
+/// the sidebar, tabs & split panes, roles, settings & hotkeys, and finally the
+/// Quick Actions panel with an inline ask to record its global hotkey (the
+/// recorder shows only while no hotkey is set). Finishing or skipping marks
+/// the tour seen so it won't reappear.
 struct TourView: View {
     @Environment(AppState.self) private var state
     @AppStorage("hasSeenTour") private var hasSeenTour = false
     @State private var index = 0
-    @State private var pickingHotkey = false
     @State private var quickActionsShortcut: KeyboardShortcuts.Shortcut?
 
-    private struct Step {
-        let icon: String
-        let title: String
-        let body: String
-        let shortcut: String?
+    private enum Demo {
+        case sidebar, tabs, roles, settings, quickActions
     }
 
-    private let steps: [Step] = [
-        Step(icon: "iphone.gen3", title: "Welcome to Droidective",
-             body: "Your command center for debugging Android and React Native apps over adb. Here's a 30-second tour.",
-             shortcut: nil),
-        Step(icon: "magnifyingglass", title: "Find anything fast",
-             body: "Press the shortcut from anywhere to search every feature and jump straight to one.",
-             shortcut: "⌘T"),
-        Step(icon: "sidebar.left", title: "Your feature sidebar",
-             body: "Features are grouped by category — toggle grouping off to drag them into your own order. Right-click any one to pin, enable, or disable it. With the search field focused, hold ⌘ to jump to a row with ⌘1–⌘9. The shortcut hides the sidebar.",
-             shortcut: "⌘B"),
-        Step(icon: "iphone.badge.play", title: "The device bar",
-             body: "The bar up top shows the connected device and selected app bundle. It stays put as you move between features.",
-             shortcut: nil),
-        Step(icon: "chart.line.uptrend.xyaxis", title: "Monitor performance",
-             body: "Performance Monitor charts per-core CPU, RAM, FPS, and per-process usage live; Network Speed tracks download/upload. Record a session and export it to JSON or CSV.",
-             shortcut: nil),
-        Step(icon: "checkmark.seal", title: "You're all set",
-             body: "Open the Feature Catalog to switch on more tools, and Settings for theme and the setup Doctor. ⌘= / ⌘- zoom the whole UI. Revisit this tour anytime from Home.",
-             shortcut: "⌘,"),
+    private struct Page {
+        let demo: Demo
+        let title: String
+        let body: String
+    }
+
+    private static let pages: [Page] = [
+        Page(demo: .sidebar, title: "Your feature sidebar",
+             body: "Every tool lives in the sidebar, grouped by category. Right-click to pin favorites, "
+                 + "drag to reorder, or press ⌘T and search — ⏎ opens the top match."),
+        Page(demo: .tabs, title: "Tabs & split panes",
+             body: "Open features in tabs with the + button (or ⌘T). Drag a tab onto the content "
+                 + "to split the pane and watch two features side by side — logs next to performance."),
+        Page(demo: .roles, title: "Pick your role",
+             body: "Your role curates which tools lead — React Native, QA, Android, security, and more. "
+                 + "It's a starting point, not a limit: change it anytime from Home, and add any tool back."),
+        Page(demo: .settings, title: "Settings & hotkeys",
+             body: "⌘, opens Settings: theme, the setup Doctor that checks your toolchain, and Hotkeys — "
+                 + "give any feature a global shortcut that works even while Droidective is in the background."),
+        Page(demo: .quickActions, title: "Quick Actions, from anywhere",
+             body: "One hotkey summons a Raycast-style panel over any app — run adb actions, manage apps, "
+                 + "and boot emulators without opening the window."),
     ]
 
-    private var isLast: Bool { index == steps.count - 1 }
+    private var isLast: Bool { index == Self.pages.count - 1 }
+    private var page: Page { Self.pages[index] }
 
     var body: some View {
         VStack(spacing: 0) {
-            if pickingHotkey {
-                hotkeyContent
-                Divider()
-                hotkeyControls
-            } else {
-                content
-                Divider()
-                controls
-            }
+            content
+            Divider()
+            controls
         }
-        .frame(width: 540, height: 440)
+        .frame(width: 780, height: 700)
+        .onAppear { quickActionsShortcut = KeyboardShortcuts.getShortcut(for: .quickActions) }
+        .onChange(of: HotkeyRecording.shared.active) {
+            quickActionsShortcut = KeyboardShortcuts.getShortcut(for: .quickActions)
+        }
     }
 
     private var content: some View {
-        let step = steps[index]
-        return VStack(spacing: 18) {
-            Image(systemName: step.icon)
-                .font(.app(size: 54))
-                .foregroundStyle(.brandAccent)
-                .symbolRenderingMode(.hierarchical)
-            Text(step.title)
-                .font(.app(.title).bold())
+        VStack(spacing: 16) {
+            // The stage flexes to absorb whatever height the text below
+            // doesn't need — no dead space between the clip and the controls.
+            demo
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .id(index)   // restart the loop when the page changes
+            Text(page.title)
+                .font(.app(.title2).bold())
                 .multilineTextAlignment(.center)
-            if let shortcut = step.shortcut {
-                Text(shortcut)
-                    .font(.app(.title3).weight(.semibold))
-                    .monospaced()
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color.bgSurface, in: RoundedRectangle(cornerRadius: 8))
-            }
-            Text(step.body)
+            Text(page.body)
                 .font(.app(.body))
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.textMuted)
-                .frame(maxWidth: 420)
+                .frame(maxWidth: 560)
                 .fixedSize(horizontal: false, vertical: true)
+            if isLast {
+                hotkeyAsk
+            }
         }
+        .padding(.horizontal, 28)
+        .padding(.top, 24)
+        .padding(.bottom, 20)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(32)
+    }
+
+    /// Each page leads with a looping recording of the real app
+    /// (`App/Resources/Tour/tour-*.mp4`); the drawn demo is the fallback for
+    /// a build without recordings.
+    @ViewBuilder private var demo: some View {
+        switch page.demo {
+        case .sidebar:
+            TourClipView(clipName: "tour-sidebar") { SidebarTourDemo() }
+        case .tabs:
+            TourClipView(clipName: "tour-tabs") { TabsSplitTourDemo() }
+        case .roles:
+            TourClipView(clipName: "tour-roles") { RolesTourDemo() }
+        case .settings:
+            TourClipView(clipName: "tour-settings") { SettingsHotkeysTourDemo() }
+        case .quickActions:
+            TourClipView(clipName: "tour-quick-actions") { QuickActionsTourDemo() }
+        }
+    }
+
+    /// The final page's inline recorder — only while no hotkey is set; once
+    /// one is recorded it shows the choice instead of nagging.
+    @ViewBuilder private var hotkeyAsk: some View {
+        if quickActionsShortcut == nil {
+            VStack(spacing: 6) {
+                HotkeyRecorderField(name: .quickActions)
+                    .frame(width: 220)
+                Text("Recommended: ⇧⌘Space — free on a stock Mac; Spotlight keeps ⌘Space.")
+                    .font(.app(.footnote))
+                    .foregroundStyle(.textMuted)
+            }
+        } else {
+            Label("Quick Actions is on \(quickActionsShortcut.map(String.init(describing:)) ?? "")",
+                  systemImage: "checkmark.circle.fill")
+                .font(.app(.callout))
+                .foregroundStyle(.brandAccent)
+        }
     }
 
     private var controls: some View {
         HStack {
-            Button("Skip") { finish() }
+            Button(isLast && quickActionsShortcut == nil ? "Maybe Later" : "Skip") { skip() }
                 .buttonStyle(.plain)
                 .foregroundStyle(.textMuted)
                 // A quiet, secondary action — suppress the accent-colored
                 // keyboard focus ring so it doesn't read as a primary button.
                 .focusEffectDisabled()
-                .opacity(isLast ? 0 : 1)
+                .opacity(isLast && quickActionsShortcut != nil ? 0 : 1)
 
             Spacer()
 
             HStack(spacing: 7) {
-                ForEach(steps.indices, id: \.self) { i in
+                ForEach(Self.pages.indices, id: \.self) { i in
                     Circle()
                         .fill(i == index ? AnyShapeStyle(.brandAccent) : AnyShapeStyle(.quaternary))
                         .frame(width: 7, height: 7)
@@ -114,89 +147,41 @@ struct TourView: View {
                 if index > 0 {
                     Button("Back") { withAnimation { index -= 1 } }
                 }
-                Button(isLast ? "Get Started" : "Next") {
-                    if isLast {
-                        advancePastTour()
-                    } else {
-                        withAnimation { index += 1 }
+                if !isLast {
+                    Button("Next") { withAnimation { index += 1 } }
+                        .keyboardShortcut(.defaultAction)
+                } else if quickActionsShortcut == nil {
+                    Button("Use ⇧⌘Space") {
+                        // Launcher-style but free on a stock Mac: ⌘Space is
+                        // Spotlight, ⌥Space is usually Raycast/Alfred, and
+                        // ⌃Space/⌃⌥Space switch input sources.
+                        KeyboardShortcuts.setShortcut(
+                            KeyboardShortcuts.Shortcut(.space, modifiers: [.shift, .command]),
+                            for: .quickActions
+                        )
+                        finish()
                     }
-                }
-                .keyboardShortcut(.defaultAction)
-            }
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 14)
-    }
-
-    private var hotkeyContent: some View {
-        VStack(spacing: 18) {
-            Image(systemName: "bolt.fill")
-                .font(.app(size: 54))
-                .foregroundStyle(.brandAccent)
-                .symbolRenderingMode(.hierarchical)
-            Text("One more thing: Quick Actions")
-                .font(.app(.title).bold())
-                .multilineTextAlignment(.center)
-            Text("A global hotkey summons the Quick Actions panel from any app — run adb actions, manage apps, and boot emulators without opening the window. Pick one now, or change it anytime in Settings ▸ Hotkeys.")
-                .font(.app(.body))
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.textMuted)
-                .frame(maxWidth: 420)
-                .fixedSize(horizontal: false, vertical: true)
-            VStack(spacing: 8) {
-                HotkeyRecorderField(name: .quickActions)
-                    .frame(width: 220)
-                Text("Recommended: ⇧⌘Space — it's free on a stock Mac, and Spotlight keeps ⌘Space.")
-                    .font(.app(.footnote))
-                    .foregroundStyle(.textMuted)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(32)
-        .onChange(of: HotkeyRecording.shared.active) {
-            quickActionsShortcut = KeyboardShortcuts.getShortcut(for: .quickActions)
-        }
-    }
-
-    private var hotkeyControls: some View {
-        HStack {
-            Button("Maybe Later") { finish() }
-                .buttonStyle(.plain)
-                .foregroundStyle(.textMuted)
-                .focusEffectDisabled()
-                .keyboardShortcut(.cancelAction)
-
-            Spacer()
-
-            if quickActionsShortcut == nil {
-                Button("Use ⇧⌘Space") {
-                    // Launcher-style but free on a stock Mac: ⌘Space is
-                    // Spotlight, ⌥Space is usually Raycast/Alfred, and
-                    // ⌃Space/⌃⌥Space switch input sources.
-                    KeyboardShortcuts.setShortcut(
-                        KeyboardShortcuts.Shortcut(.space, modifiers: [.shift, .command]),
-                        for: .quickActions
-                    )
-                    finish()
-                }
-                .keyboardShortcut(.defaultAction)
-            } else {
-                Button("Done") { finish() }
                     .keyboardShortcut(.defaultAction)
+                } else {
+                    Button("Get Started") { finish() }
+                        .keyboardShortcut(.defaultAction)
+                }
             }
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 14)
     }
 
-    /// Completing the tour asks for a Quick Actions hotkey — but only while
-    /// none is recorded, so it never nags after a choice (or a replay).
-    private func advancePastTour() {
-        hasSeenTour = true
-        if KeyboardShortcuts.getShortcut(for: .quickActions) == nil {
-            withAnimation { pickingHotkey = true }
+    /// Skipping mid-tour jumps straight to the Quick Actions page — the
+    /// tour's payoff, and the hotkey ask when none is recorded (the panel is
+    /// only reachable through its shortcut, so closing without one would
+    /// quietly leave the feature unusable). From that page, Skip/"Maybe
+    /// Later" closes.
+    private func skip() {
+        if isLast {
+            finish()
         } else {
-            state.presentTour = false
+            withAnimation { index = Self.pages.count - 1 }
         }
     }
 
