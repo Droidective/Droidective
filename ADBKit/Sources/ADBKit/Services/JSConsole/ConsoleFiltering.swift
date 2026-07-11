@@ -32,9 +32,20 @@ public struct FilteredLogBuffer<Entry: Identifiable> where Entry.ID: Comparable 
     public private(set) var entries: [Entry] = []
     public private(set) var filtered: [Entry] = []
     private let capacity: Int
+    /// Optional retained-size ceiling: when the summed `cost` of the buffer
+    /// exceeds it, oldest entries are evicted (the newest always survives).
+    /// Guards against a count cap alone retaining gigabytes when every entry
+    /// carries a multi-megabyte payload.
+    private let byteBudget: Int
+    private let cost: (Entry) -> Int
+    /// Per-entry costs aligned with `entries`, so eviction never re-measures.
+    private var costs: [Int] = []
+    private var totalCost = 0
 
-    public init(capacity: Int) {
+    public init(capacity: Int, byteBudget: Int = .max, cost: @escaping (Entry) -> Int = { _ in 0 }) {
         self.capacity = max(1, capacity)
+        self.byteBudget = byteBudget
+        self.cost = cost
     }
 
     /// Append a batch, extending `filtered` with just the batch's matches.
@@ -42,6 +53,11 @@ public struct FilteredLogBuffer<Entry: Identifiable> where Entry.ID: Comparable 
     /// with; pass `nil` when no filter is active (the fast path).
     public mutating func append(_ batch: [Entry], isIncluded: ((Entry) -> Bool)?) {
         entries.append(contentsOf: batch)
+        for entry in batch {
+            let entryCost = cost(entry)
+            costs.append(entryCost)
+            totalCost += entryCost
+        }
         if let isIncluded {
             filtered.append(contentsOf: batch.filter(isIncluded))
         } else {
@@ -63,13 +79,24 @@ public struct FilteredLogBuffer<Entry: Identifiable> where Entry.ID: Comparable 
     public mutating func removeAll() {
         entries.removeAll()
         filtered.removeAll()
+        costs.removeAll()
+        totalCost = 0
     }
 
     private mutating func evictOverflow() {
-        let overflow = entries.count - capacity
-        guard overflow > 0 else { return }
-        let lastEvictedID = entries[overflow - 1].id
-        entries.removeFirst(overflow)
+        var evict = max(0, entries.count - capacity)
+        var freed = costs.prefix(evict).reduce(0, +)
+        // Byte budget: keep growing the eviction window while over, always
+        // leaving the newest entry (one oversized entry mustn't empty the feed).
+        while totalCost - freed > byteBudget, evict < entries.count - 1 {
+            freed += costs[evict]
+            evict += 1
+        }
+        guard evict > 0 else { return }
+        let lastEvictedID = entries[evict - 1].id
+        entries.removeFirst(evict)
+        costs.removeFirst(evict)
+        totalCost -= freed
         let evictedFromFiltered = filtered.prefix { $0.id <= lastEvictedID }.count
         if evictedFromFiltered > 0 { filtered.removeFirst(evictedFromFiltered) }
     }

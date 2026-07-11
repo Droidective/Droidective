@@ -61,23 +61,55 @@ struct JSEntry: Identifiable {
     let id: Int
     let kind: Kind
     let at: Date
-    /// Lowercased plain-text rendering, derived once at creation so the filter
-    /// and ⌘F never re-tokenize the value tree per flush (a Sentry-reported
-    /// main-thread hang during console bursts). Capped like Reactotron's
-    /// search text: a `console.log` of a megabyte string must not retain a
-    /// megabyte copy per row and turn every filter/⌘F keystroke into a
-    /// buffer-wide megabyte scan — matching runs against the head.
+    /// Lowercased plain-text head for the filter and ⌘F, derived once at
+    /// creation so they never re-tokenize the value tree per flush (a
+    /// Sentry-reported main-thread hang during console bursts). Capped like
+    /// Reactotron's search text AND built without materializing full values —
+    /// copying a replayed multi-megabyte string per entry just to keep this
+    /// head was the bulk of the reload CPU spike. Matching runs on the head.
     let searchableText: String
+    /// Rough retained size (the string payloads dominate; O(1) per arg) —
+    /// drives the buffer's byte budget.
+    let approximateBytes: Int
 
     init(id: Int, kind: Kind, at: Date) {
         self.id = id
         self.kind = kind
         self.at = at
-        let plain = jsEntryPlainText(kind)
-        if plain.count > 100_000 {
-            PerfLog.console.warning("ingested huge console entry: \(plain.count, privacy: .public) chars")
+        let size = Self.approximateSize(kind)
+        approximateBytes = size
+        if size > 1_000_000 {
+            PerfLog.console.warning("ingested huge console entry: ~\(size, privacy: .public) bytes")
         }
-        searchableText = String(plain.prefix(2000)).lowercased()
+        searchableText = Self.boundedSearchable(kind)
+    }
+
+    private static func boundedSearchable(_ kind: Kind, limit: Int = 2000) -> String {
+        switch kind {
+        case let .input(text): return String(text.prefix(limit)).lowercased()
+        case let .result(object): return object.inlineSummary(limit: limit).lowercased()
+        case let .evalError(details): return String(details.message.prefix(limit)).lowercased()
+        case let .notice(text): return String(text.prefix(limit)).lowercased()
+        case let .log(_, args, _):
+            var out = ""
+            for arg in args {
+                let remaining = limit - out.utf8.count
+                guard remaining > 0 else { break }
+                if !out.isEmpty { out += " " }
+                out += arg.inlineSummary(limit: remaining)
+            }
+            return out.lowercased()
+        }
+    }
+
+    private static func approximateSize(_ kind: Kind) -> Int {
+        switch kind {
+        case let .input(text): text.utf8.count + 256
+        case let .result(object): object.approximateBytes
+        case let .evalError(details): details.message.utf8.count + 512
+        case let .notice(text): text.utf8.count + 256
+        case let .log(_, args, _): args.reduce(256) { $0 + $1.approximateBytes }
+        }
     }
 }
 
@@ -100,7 +132,14 @@ final class JSConsoleSession {
     /// happens only when the filter itself changes — so a console burst costs
     /// O(batch) per flush, not O(buffer × object size). Chronological (oldest
     /// first), which is the feed's display order — newest at the bottom.
-    private var buffer = FilteredLogBuffer<JSEntry>(capacity: JSConsoleSession.maxEntries)
+    // The 128 MB byte budget (Reactotron's figure) matters as much as the
+    // count cap: 2000 entries each holding a multi-megabyte logged string
+    // would otherwise retain gigabytes.
+    private var buffer = FilteredLogBuffer<JSEntry>(
+        capacity: JSConsoleSession.maxEntries,
+        byteBudget: 128 << 20,
+        cost: { $0.approximateBytes }
+    )
     var filteredEntries: [JSEntry] { buffer.filtered }
     fileprivate var phase: JSPhase = .searching
     fileprivate var targets: [CDPTarget] = []
@@ -1714,10 +1753,13 @@ func coloredTokenText(_ tokens: [JSToken], query: String, current: Bool) -> Text
     var remaining = jsDisplayCharacterLimit
     var hidden = 0
     for token in tokens {
-        guard remaining > 0 else { hidden += token.text.count; continue }
-        let piece = token.text.count <= remaining ? token.text : String(token.text.prefix(remaining))
-        hidden += token.text.count - piece.count
-        remaining -= piece.count
+        // utf8.count is O(1) on native strings; .count would re-walk a 3MB
+        // token's characters on every render just to size the note.
+        let tokenLength = token.text.utf8.count
+        guard remaining > 0 else { hidden += tokenLength; continue }
+        let piece = tokenLength <= remaining ? token.text : String(token.text.prefix(remaining))
+        hidden += tokenLength - piece.utf8.count
+        remaining -= piece.utf8.count
         var segment = AttributedString(piece)
         segment.foregroundColor = jsColor(token.kind)
         attr += segment
@@ -1735,7 +1777,7 @@ func coloredTokenText(_ tokens: [JSToken], query: String, current: Bool) -> Text
 func highlightedText(_ string: String, query: String, base: Color, current: Bool = false) -> Text {
     var attr = AttributedString(String(string.prefix(jsDisplayCharacterLimit)))
     attr.foregroundColor = base
-    let hidden = string.count - jsDisplayCharacterLimit
+    let hidden = string.utf8.count - jsDisplayCharacterLimit
     if hidden > 0 {
         PerfLog.console.warning("line render truncated: \(hidden, privacy: .public) chars over the display cap")
         attr += jsTruncationNote(hiddenCharacters: hidden)

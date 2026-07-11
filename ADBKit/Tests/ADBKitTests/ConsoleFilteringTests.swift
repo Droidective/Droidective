@@ -77,6 +77,32 @@ private struct Row: Identifiable, Equatable {
         #expect(buffer.filtered.isEmpty)
     }
 
+    @Test func byteBudgetEvictsOldestWhenCountCapIsNowhereNear() {
+        // 10-entry cap but a 100-byte budget: three 40-byte rows exceed it, so
+        // the oldest goes even though the count cap alone would keep all three.
+        var buffer = FilteredLogBuffer<Row>(capacity: 10, byteBudget: 100, cost: { _ in 40 })
+        buffer.append([Row(1), Row(2), Row(3)], isIncluded: nil)
+        #expect(buffer.entries.map(\.id) == [2, 3])
+        #expect(buffer.filtered == buffer.entries)
+    }
+
+    @Test func byteBudgetAlwaysKeepsTheNewestEntry() {
+        // One entry alone over budget must not empty the feed.
+        var buffer = FilteredLogBuffer<Row>(capacity: 10, byteBudget: 100, cost: { _ in 500 })
+        buffer.append([Row(1)], isIncluded: nil)
+        buffer.append([Row(2)], isIncluded: nil)
+        #expect(buffer.entries.map(\.id) == [2])
+    }
+
+    @Test func byteBudgetEvictionDropsEvictedRowsFromFiltered() {
+        var buffer = FilteredLogBuffer<Row>(capacity: 10, byteBudget: 90, cost: { _ in 40 })
+        let filter: (Row) -> Bool = { $0.id % 2 == 1 }
+        buffer.append([Row(1), Row(2)], isIncluded: filter)
+        buffer.append([Row(3)], isIncluded: filter)   // over budget → Row(1) evicted
+        #expect(buffer.entries.map(\.id) == [2, 3])
+        #expect(buffer.filtered.map(\.id) == [3])
+    }
+
     @Test func textQueryIncrementalAppendMatchesFullRecompute() {
         let query = ConsoleQuery("Error")
         let match: (Row) -> Bool = { query.matches($0.text) }

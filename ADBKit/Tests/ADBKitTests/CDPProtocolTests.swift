@@ -183,6 +183,29 @@ import Testing
         RemoteObject(json: (try? JSONDecoder().decode(JSONValue.self, from: Data(json.utf8))) ?? .null)
     }
 
+    @Test func boundedInlineSummaryTakesAPrefixOfHugeStrings() {
+        // A multi-megabyte logged string must not be materialized whole to
+        // index its head — the bounded summary takes a prefix directly.
+        let huge = RemoteObject(json: .object([
+            "type": .string("string"), "value": .string(String(repeating: "x", count: 1_000_000)),
+        ]))
+        let summary = huge.inlineSummary(limit: 100)
+        #expect(summary == "\"" + String(repeating: "x", count: 100))
+        // Small values render exactly like the unbounded summary.
+        let small = remote(#"{"type":"string","value":"hi"}"#)
+        #expect(small.inlineSummary(limit: 100) == small.inlineSummary)
+        let number = remote(#"{"type":"number","value":42}"#)
+        #expect(number.inlineSummary(limit: 100) == "42")
+    }
+
+    @Test func approximateBytesTracksStringPayloadSize() {
+        let huge = RemoteObject(json: .object([
+            "type": .string("string"), "value": .string(String(repeating: "x", count: 5000)),
+        ]))
+        #expect(huge.approximateBytes >= 5000)
+        #expect(remote(#"{"type":"number","value":42}"#).approximateBytes < 1024)
+    }
+
     @Test func inlineSummaryRendersPrimitives() {
         #expect(remote(#"{"type":"string","value":"hi"}"#).inlineSummary == "\"hi\"")
         #expect(remote(#"{"type":"number","value":42}"#).inlineSummary == "42")
