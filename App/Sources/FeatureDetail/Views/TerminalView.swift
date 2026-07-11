@@ -81,15 +81,19 @@ final class TerminalManager {
     }
 
     /// Open a fresh shell tab and focus it. The shell starts in the focused
-    /// shell's working directory (home when there is none). It joins `group`
-    /// when given, else the active tab's group, else lands loose — a fresh
-    /// rail has no groups.
-    func newTab(inGroup group: UUID? = nil) {
+    /// shell's working directory (home when there is none), and types
+    /// `initialCommand` as soon as it spawns when one is given. It joins
+    /// `group` when given, else the active tab's group, else lands loose — a
+    /// fresh rail has no groups.
+    func newTab(inGroup group: UUID? = nil, name: String? = nil, initialCommand: String? = nil) {
         counter += 1
         let paneID = UUID()
-        let session = TerminalSession(startDirectory: activeSession?.currentDirectory)
+        let session = TerminalSession(
+            startDirectory: activeSession?.currentDirectory,
+            initialCommand: initialCommand
+        )
         var tab = Tab(
-            name: "Terminal \(counter)",
+            name: name ?? "Terminal \(counter)",
             splits: TerminalSplitTree(pane: paneID),
             activePaneID: paneID
         )
@@ -310,6 +314,16 @@ final class TerminalManager {
 /// leaves. ⌘D/⇧⌘D split the focused pane, and new shells start in the focused
 /// shell's directory. Every session keeps running (scrollback intact) while
 /// you work in other features.
+extension AppState {
+    /// Open the Terminal feature on a fresh shell that immediately runs
+    /// `line` — the "continue in a real terminal" path for a command whose
+    /// output is interactive or long-running (watch modes, prompts, builds).
+    func runInTerminal(_ line: String, named name: String? = nil) {
+        terminals.newTab(name: name, initialCommand: line)
+        requestFeature("terminal")
+    }
+}
+
 struct TerminalView: View {
     @Environment(AppState.self) private var state
     @State private var renaming: TerminalManager.Tab?

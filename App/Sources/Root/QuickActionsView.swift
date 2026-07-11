@@ -1332,6 +1332,23 @@ struct QuickActionsView: View {
             lastRun = QuickRunOutcome(message: "Pick a saved bundle first.", ok: false)
             return
         }
+        // A terminal-destined command needs the main window — the panel can't
+        // host a PTY. Open it there and hand off.
+        if command.runsInTerminal {
+            do {
+                let line = try CustomCommandService.terminalLine(
+                    command: command,
+                    bundleId: state.selectedBundle?.packageId,
+                    serial: panelTargetSerial ?? ""
+                )
+                state.runInTerminal(line, named: command.name)
+                state.activateMainWindow()
+                lastRun = QuickRunOutcome(message: "Opened in Terminal", ok: true)
+            } catch {
+                lastRun = QuickRunOutcome(message: error.localizedDescription, ok: false)
+            }
+            return
+        }
         // Device-scoped commands honor an "All devices" approval (the footer
         // advertises it); shell commands without {serial} run once.
         let deviceScoped = command.kind == .adb || command.command.contains("{serial}")
