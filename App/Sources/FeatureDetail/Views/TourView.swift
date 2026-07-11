@@ -172,15 +172,16 @@ struct TourView: View {
         .padding(.vertical, 14)
     }
 
-    /// Skipping mid-tour still lands on the Quick Actions page while no
-    /// hotkey is recorded — the panel is only reachable through its shortcut,
-    /// so closing without one would quietly leave the feature unusable. With
-    /// a hotkey already set (or from that page's "Maybe Later"), skip closes.
+    /// Skipping mid-tour jumps straight to the Quick Actions page — the
+    /// tour's payoff, and the hotkey ask when none is recorded (the panel is
+    /// only reachable through its shortcut, so closing without one would
+    /// quietly leave the feature unusable). From that page, Skip/"Maybe
+    /// Later" closes.
     private func skip() {
-        if !isLast, quickActionsShortcut == nil {
-            withAnimation { index = Self.pages.count - 1 }
-        } else {
+        if isLast {
             finish()
+        } else {
+            withAnimation { index = Self.pages.count - 1 }
         }
     }
 
