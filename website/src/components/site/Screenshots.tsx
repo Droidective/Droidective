@@ -21,7 +21,7 @@ export function Screenshots() {
           poster="/assets/demo-poster.webp"
           width={1280}
           height={810}
-          aria-label="Droidective in action — pressing ⌘T to jump between live Logcat, Device Info, and the File Explorer on a connected Android emulator"
+          aria-label="Droidective in action — pressing ⌘T to jump between live Logcat, Device Info, the File Explorer, and the React Native hub on a connected Android emulator"
         >
           <source src="/assets/demo.mp4" type="video/mp4" />
         </video>
