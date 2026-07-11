@@ -640,8 +640,14 @@ struct ReactotronView: View {
     private var content: some View {
         switch tab {
         case .timeline:
-            timelineControls
-            Divider()
+            // Single pane: the global controls ride the pane's own toolbar so
+            // the timeline isn't topped by two stacked strips. The dedicated
+            // strip appears only in split mode, where the pane toolbars are
+            // per-pane and the globals need a home of their own.
+            if split {
+                timelineControls
+                Divider()
+            }
             timelineBody
         case .commands:
             commandsPane
@@ -782,16 +788,41 @@ struct ReactotronView: View {
                 pane(showOnboarding: false)
             }
         } else {
-            pane(showOnboarding: true)
+            pane(showOnboarding: true, trailing: AnyView(paneGlobalControls))
         }
     }
 
-    private func pane(showOnboarding: Bool) -> some View {
+    /// The strip's controls restyled for the pane toolbar (single-pane mode).
+    private var paneGlobalControls: some View {
+        HStack(spacing: 10) {
+            Text("\(session.displayedItems.count) events")
+                .font(.app(.caption))
+                .foregroundStyle(.tertiary)
+            Button {
+                split.toggle()
+            } label: {
+                Image(systemName: "rectangle.split.2x1")
+            }
+            .buttonStyle(IconButtonStyle())
+            .help("Split into two panes")
+            Button {
+                session.clearTimeline()
+            } label: {
+                Image(systemName: "trash")
+            }
+            .buttonStyle(IconButtonStyle())
+            .help("Clear the timeline")
+            .disabled(session.items.isEmpty)
+        }
+    }
+
+    private func pane(showOnboarding: Bool, trailing: AnyView? = nil) -> some View {
         TimelinePane(
             items: session.displayedItems,
             targetEmpty: state.targetSerials.isEmpty,
             connection: session.connection,
             showOnboarding: showOnboarding,
+            trailing: trailing,
             onExport: { session.export($0) },
             onRetry: { Task { await session.start(serials: readySerials) } }
         )
@@ -1190,6 +1221,9 @@ private struct TimelinePane: View {
     let targetEmpty: Bool
     let connection: RtConnection
     let showOnboarding: Bool
+    /// Extra trailing toolbar content — the global timeline controls when the
+    /// pane is the only one on screen (no dedicated strip above it).
+    let trailing: AnyView?
     let onExport: ([RtItem]) -> Void
     let onRetry: () -> Void
 
@@ -1256,6 +1290,10 @@ private struct TimelinePane: View {
             .buttonStyle(IconButtonStyle())
             .help("Export this pane's filtered timeline to JSON")
             .disabled(visible.isEmpty)
+
+            if let trailing {
+                trailing
+            }
         }
         .controlSize(.small)
         .padding(.horizontal, 10)
