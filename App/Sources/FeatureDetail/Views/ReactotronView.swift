@@ -580,6 +580,9 @@ struct ReactotronView: View {
     @State private var dispatchText = ""
     @State private var replCode = ""
     @State private var showDisconnectAlert = false
+    /// One-time first-open intro (the recorded split/filter demo).
+    @AppStorage("hasSeenReactotronIntro") private var hasSeenIntro = false
+    @State private var showIntro = false
 
     private var session: ReactotronSession { state.reactotronSession }
 
@@ -622,6 +625,14 @@ struct ReactotronView: View {
         } message: {
             Text("Reactotron keeps listening on :9090 and the timeline stays as it is. "
                 + "Reconnect a device or start an emulator to keep receiving events.")
+        }
+        // First open only: what makes this screen different (split timeline,
+        // per-pane filters), as a recorded demo. Any dismissal marks it seen.
+        .onAppear {
+            if !hasSeenIntro { showIntro = true }
+        }
+        .sheet(isPresented: $showIntro, onDismiss: { hasSeenIntro = true }) {
+            ReactotronIntroSheet()
         }
     }
 
@@ -2169,6 +2180,36 @@ private struct ReactotronOnboarding: View {
         .frame(maxWidth: 460)
         .background(Color.bgSurface, in: RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.borderSubtle))
+    }
+}
+
+/// One-time intro shown the first time Reactotron opens: the recorded demo of
+/// the split timeline with a different filter per pane — the two things that
+/// set this screen apart from the other log feeds. Marks itself seen on any
+/// dismissal; the recording is the same `tour-reactotron` clip the tour
+/// infrastructure bundles, with the drawn demo as fallback.
+private struct ReactotronIntroSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: 16) {
+            TourClipView(clipName: "tour-reactotron") { ReactotronTourDemo() }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            Text("Reactotron, built in")
+                .font(.app(.title2).bold())
+            Text("Droidective is the Reactotron server — your app's actions, API calls, and logs "
+                + "stream into this timeline live. Split it and give each pane its own filter: "
+                + "API traffic on one side, logs on the other.")
+                .font(.app(.body))
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.textMuted)
+                .frame(maxWidth: 540)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Got it") { dismiss() }
+                .keyboardShortcut(.defaultAction)
+        }
+        .padding(24)
+        .frame(width: 680, height: 600)
     }
 }
 

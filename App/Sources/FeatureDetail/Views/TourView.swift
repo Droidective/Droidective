@@ -15,7 +15,7 @@ struct TourView: View {
     @State private var quickActionsShortcut: KeyboardShortcuts.Shortcut?
 
     private enum Demo {
-        case sidebar, tabs, reactotron, roles, settings, quickActions
+        case sidebar, tabs, roles, settings, quickActions
     }
 
     private struct Page {
@@ -31,10 +31,6 @@ struct TourView: View {
         Page(demo: .tabs, title: "Tabs & split panes",
              body: "Open features in tabs with the + button (or ⌘T). Drag a tab onto the content "
                  + "to split the pane and watch two features side by side — logs next to performance."),
-        Page(demo: .reactotron, title: "Reactotron, built in",
-             body: "Droidective is the Reactotron server — your app's actions, API calls, and logs stream "
-                 + "into the timeline live. Split it and give each pane its own filter: API traffic on one "
-                 + "side, logs on the other."),
         Page(demo: .roles, title: "Pick your role",
              body: "Your role curates which tools lead — React Native, QA, Android, security, and more. "
                  + "It's a starting point, not a limit: change it anytime from Home, and add any tool back."),
@@ -97,8 +93,6 @@ struct TourView: View {
             TourClipView(clipName: "tour-sidebar") { SidebarTourDemo() }
         case .tabs:
             TourClipView(clipName: "tour-tabs") { TabsSplitTourDemo() }
-        case .reactotron:
-            TourClipView(clipName: "tour-reactotron") { ReactotronTourDemo() }
         case .roles:
             TourClipView(clipName: "tour-roles") { RolesTourDemo() }
         case .settings:
