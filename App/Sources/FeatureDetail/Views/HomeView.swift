@@ -3,10 +3,10 @@ import AppKit
 import SwiftUI
 
 /// The landing screen, now a role-aware launchpad: an inline feature search, a
-/// strip of the features used most, a grid of the user's curated tools (sorted
-/// by what they use most), an expandable "More features" section to add the
-/// rest, the keyboard shortcuts that drive the app, and the no-device
-/// onboarding when nothing is connected.
+/// strip of the features used most, the pinned features, a grid of the user's
+/// curated tools in the same order as the sidebar, an expandable "More
+/// features" section to add the rest, the keyboard shortcuts that drive the
+/// app, and the no-device onboarding when nothing is connected.
 struct HomeView: View {
     @Environment(AppState.self) private var state
     @Environment(\.colorScheme) private var colorScheme
@@ -27,6 +27,7 @@ struct HomeView: View {
                         connectCard
                     }
                     frequentSection
+                    pinnedSection
                     launchpadSection
                     moreFeaturesSection
                     shortcutsSection
@@ -197,12 +198,33 @@ struct HomeView: View {
         .help("Your role decides which tools start here — change it anytime")
     }
 
+    // MARK: - Pinned
+
+    /// The sidebar's Pinned section, mirrored on Home in the same order.
+    @ViewBuilder private var pinnedSection: some View {
+        let pinned = state.pinnedFeatures
+        if !pinned.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                sectionTitle("Pinned")
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 210), spacing: 12)],
+                    alignment: .leading,
+                    spacing: 12
+                ) {
+                    ForEach(pinned) { feature in
+                        FeatureCard(feature: feature) { state.openFeature(feature) }
+                    }
+                }
+            }
+        }
+    }
+
     // MARK: - Launchpad
 
     private var launchpadSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             sectionTitle("Your tools")
-            Text("Your most-used features, front and center. Add more below or from the sidebar.")
+            Text("Everything on your sidebar, in the same order. Add more below or from the sidebar.")
                 .font(.app(.callout))
                 .foregroundStyle(.textMuted)
             LazyVGrid(
