@@ -1253,6 +1253,9 @@ struct QuickActionsView: View {
         case .openInApp(let feature):
             onClose()
             state.activateMainWindow()
+            // requestFeature only emits telemetry; the adaptive-ranking
+            // engagement is recorded separately (parity with openFeature).
+            state.noteFeatureUse(feature.id)
             state.requestFeature(feature.id)
         case .installAPK:
             pickAndInstallAPKs()
