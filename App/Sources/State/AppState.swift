@@ -1414,7 +1414,8 @@ final class AppState {
                         serial: serial, platform: platform(for: serial), to: dest
                     )
                 }
-                let result = FeatureResult(ok: true, message: "Screenshot saved", revealPath: file.path)
+                let result = FeatureResult(
+                    ok: true, message: "Saved \(file.lastPathComponent)", revealPath: file.path)
                 lastResults["screenshot"] = (result, Date())
                 showToast(Toast(message: "Screenshot saved to \(dir.lastPathComponent)", ok: true, revealPath: file.path))
             } catch {
