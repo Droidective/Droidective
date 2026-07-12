@@ -55,6 +55,9 @@ struct TabStripView: View {
                     .frame(maxHeight: .infinity)
                     .background(widthReader { contentWidth = $0 })
                     .background(scrollOffsetReader)
+                    // Slide chips into place on reorder (and when tabs
+                    // open/close) instead of snapping.
+                    .animation(.easeInOut(duration: 0.15), value: tabIDs)
                 }
                 .coordinateSpace(name: "tabStrip")
                 .frame(maxWidth: .infinity)
@@ -79,7 +82,7 @@ struct TabStripView: View {
         // the natural way to drag a tab across a split. Chip drops sit deeper,
         // so precise before/after placement still wins over this catch-all.
         .onDrop(of: [.workspaceTab], delegate: TabPaneDrop(
-            draggingID: state.draggingTabID,
+            state: state,
             onDrop: { id in
                 state.dropTab(id, intoGroup: group, before: nil)
                 state.draggingTabID = nil
@@ -149,6 +152,9 @@ struct TabStripView: View {
         .background(widthReader { chipWidths[id] = $0 })
         .overlay(alignment: .leading) { guideline(visible: dropSlot == TabDropSlot(targetID: id, after: false)) }
         .overlay(alignment: .trailing) { guideline(visible: dropSlot == TabDropSlot(targetID: id, after: true)) }
+        // While this chip rides the cursor as the drag image, fade the
+        // stationary original so the tab doesn't read as duplicated.
+        .opacity(state.draggingTabID == id ? 0.3 : 1)
         .onDrag {
             state.draggingTabID = id
             // A private type, not an NSString: a plain-text drag is captured at
@@ -160,10 +166,9 @@ struct TabStripView: View {
             targetID: id,
             width: chipWidths[id] ?? 0,
             order: tabIDs,
-            draggingID: state.draggingTabID,
+            state: state,
             setSlot: { dropSlot = $0 },
-            move: { dragged, before in state.dropTab(dragged, intoGroup: group, before: before) },
-            end: { state.draggingTabID = nil }
+            move: { dragged, before in state.dropTab(dragged, intoGroup: group, before: before) }
         ))
         .contextMenu { tabMenu(for: id) }
     }
@@ -339,14 +344,22 @@ struct TabDropSlot: Equatable {
 /// half inserts it before that chip, on the right half after it, and reports the
 /// insertion slot so the strip can draw a guideline. `move` is a no-op when the
 /// ids resolve to the same slot (handled by `SidebarOrdering`).
+///
+/// The dragged id is read live from `AppState.draggingTabID`, never captured:
+/// after a drop the chips shift under the stationary cursor and the dying drag
+/// session can deliver one more dropEntered/dropUpdated to whichever chip lands
+/// there — a frozen id would repaint the guideline that `performDrop` just
+/// cleared. (The terminal rail's delegates read their manager live for the
+/// same reason.)
 private struct TabReorderDrop: DropDelegate {
     let targetID: String
     let width: CGFloat
     let order: [String]
-    let draggingID: String?
+    let state: AppState
     let setSlot: (TabDropSlot?) -> Void
     let move: (_ dragged: String, _ beforeTargetID: String?) -> Void
-    let end: () -> Void
+
+    private var draggingID: String? { state.draggingTabID }
 
     func validateDrop(info: DropInfo) -> Bool { draggingID != nil }
     func dropEntered(info: DropInfo) { setSlot(slot(info)) }
@@ -358,8 +371,9 @@ private struct TabReorderDrop: DropDelegate {
 
     func performDrop(info: DropInfo) -> Bool {
         setSlot(nil)
-        end()
-        guard let dragged = draggingID, dragged != targetID else { return false }
+        let dragged = draggingID
+        state.draggingTabID = nil
+        guard let dragged, dragged != targetID else { return false }
         let dropAfter = width > 0 && info.location.x > width / 2
         if dropAfter, let index = order.firstIndex(of: targetID) {
             // After the target = before the tab that follows it (or to the end).
@@ -370,9 +384,10 @@ private struct TabReorderDrop: DropDelegate {
         return true
     }
 
-    /// The slot under the cursor — nil while over the dragged chip itself.
+    /// The slot under the cursor — nil while over the dragged chip itself,
+    /// and nil once the drag has ended (a trailing enter/update after the drop).
     private func slot(_ info: DropInfo) -> TabDropSlot? {
-        guard draggingID != targetID else { return nil }
+        guard let dragging = draggingID, dragging != targetID else { return nil }
         return TabDropSlot(targetID: targetID, after: width > 0 && info.location.x > width / 2)
     }
 }
