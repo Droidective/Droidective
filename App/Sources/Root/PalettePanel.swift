@@ -115,10 +115,14 @@ final class FloatingPanelController {
     }
 
 
-    /// Center on screen, and remember the top edge so later resizes grow
-    /// downward from there instead of drifting up off the bottom-left origin.
+    /// Center on the screen the mouse is on (a global-hotkey panel should
+    /// appear where the user is working, not on the primary display), and
+    /// remember the top edge so later resizes grow downward from there
+    /// instead of drifting up off the bottom-left origin.
     private func positionInitially(_ panel: NSPanel) {
-        guard let screen = panel.screen ?? NSScreen.main else { return }
+        let mouse = NSEvent.mouseLocation
+        let mouseScreen = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) }
+        guard let screen = mouseScreen ?? panel.screen ?? NSScreen.main else { return }
         let frame = panel.frame
         let visible = screen.visibleFrame
         let x = visible.midX - frame.width / 2

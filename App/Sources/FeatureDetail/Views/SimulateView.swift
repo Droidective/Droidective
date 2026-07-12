@@ -29,25 +29,37 @@ struct SimulateView: View {
     }
 
     var body: some View {
-        if state.targetSerials.isEmpty {
-            ContentUnavailableView(
-                "No device connected", systemImage: "iphone.slash",
-                description: Text("Connect a device to simulate its state.")
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else {
-            HubColumn {
-                if !state.activeOverrides.isEmpty {
-                    Button("Reset all overrides", role: .destructive) { state.resetAllOverrides() }
-                        .buttonStyle(.bordered)
-                }
-                sharedSections
-                if isSimulator {
-                    pushNotificationSection
-                } else {
-                    androidOnlySections
+        Group {
+            if state.targetSerials.isEmpty {
+                ContentUnavailableView(
+                    "No device connected", systemImage: "iphone.slash",
+                    description: Text("Connect a device to simulate its state.")
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                HubColumn {
+                    if !state.activeOverrides.isEmpty {
+                        Button("Reset all overrides", role: .destructive) { state.resetAllOverrides() }
+                            .buttonStyle(.bordered)
+                    }
+                    sharedSections
+                    if isSimulator {
+                        pushNotificationSection
+                    } else {
+                        androidOnlySections
+                    }
                 }
             }
+        }
+        // The form values describe one device — don't carry a half-typed
+        // density or proxy over to the next target.
+        .onChange(of: state.targetSerials.first) {
+            batteryLevel = 5.0
+            batteryUnplugged = true
+            fontScale = 1.0
+            density = ""
+            locale = "en-US"
+            proxy = ""
         }
     }
 

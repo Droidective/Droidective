@@ -372,12 +372,15 @@ struct NetworkView: View {
         }
 
         guard isRecording else { return }
-        if baselineRx == nil {
+        // A total below its baseline means the device's counters reset (a
+        // reboot) — re-baseline instead of underflowing into a bogus total.
+        if baselineRx == nil || sample.totalRxBytes < (baselineRx ?? 0)
+            || sample.totalTxBytes < (baselineTx ?? 0) {
             baselineRx = sample.totalRxBytes
             baselineTx = sample.totalTxBytes
         }
-        sessionRx = sample.totalRxBytes &- (baselineRx ?? sample.totalRxBytes)
-        sessionTx = sample.totalTxBytes &- (baselineTx ?? sample.totalTxBytes)
+        sessionRx = sample.totalRxBytes - (baselineRx ?? sample.totalRxBytes)
+        sessionTx = sample.totalTxBytes - (baselineTx ?? sample.totalTxBytes)
         let recElapsed = Date().timeIntervalSince(recordStart ?? Date())
         recorded.append(Sample(
             elapsed: recElapsed,

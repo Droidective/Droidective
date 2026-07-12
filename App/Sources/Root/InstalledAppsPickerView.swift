@@ -73,7 +73,7 @@ struct InstalledAppsPickerView: View {
             }
         }
         .frame(width: 420, height: 380)
-        .task(id: includeSystem) { await load() }
+        .task(id: "\(state.targetSerials.first ?? "")|\(includeSystem)") { await load() }
     }
 
     private func load() async {

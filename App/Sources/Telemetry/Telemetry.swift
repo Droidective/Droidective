@@ -28,6 +28,10 @@ final class Telemetry {
     private var activeFeatureID: String?
     private var activeSince: Date?
 
+    /// Launch is reported from RootView's appear, which re-fires when the root
+    /// re-keys on an appearance change — gate it to once per process.
+    private var launchTracked = false
+
     /// A random, persistent, non-personal id for this install. Generated once and
     /// reused so distinct-user and retention analytics work without any PII.
     private static var deviceID: String {
@@ -153,6 +157,8 @@ final class Telemetry {
     /// One session-start event per launch, carrying the running launch count so
     /// activation and retention are measurable.
     func trackAppLaunched(launchCount: Int) {
+        guard !launchTracked else { return }
+        launchTracked = true
         track("app_launched", ["launch_count": launchCount])
     }
 
@@ -162,20 +168,18 @@ final class Telemetry {
         track("role_selected", ["role": role, "is_change": isChange])
     }
 
-    /// A device became visible and its details resolved. Anonymous environment
-    /// signal — no serial — so the target Android landscape (versions, emulator
-    /// vs. physical, wireless) is knowable for roadmap decisions.
-    func trackDeviceConnected(isEmulator: Bool, androidVersion: String?, model: String?, isWireless: Bool) {
+    /// A device became visible. Carries only connection-shape flags — no
+    /// device identity (model, OS version, serial), matching the app's "no
+    /// device data" promise in Settings ▸ Privacy and the privacy policy.
+    func trackDeviceConnected(isEmulator: Bool, isWireless: Bool) {
         track("device_connected", [
             "is_emulator": isEmulator,
-            "android_version": androidVersion ?? "unknown",
-            "device_model": model ?? "unknown",
             "is_wireless": isWireless,
         ])
         if crashReportingEnabled, sentryRunning {
             let crumb = Breadcrumb(level: .info, category: "device")
             let kind = isEmulator ? "emulator" : (isWireless ? "wireless" : "usb")
-            crumb.message = "connected: \(model ?? "unknown") · Android \(androidVersion ?? "?") · \(kind)"
+            crumb.message = "connected: \(kind)"
             SentrySDK.addBreadcrumb(crumb)
         }
     }

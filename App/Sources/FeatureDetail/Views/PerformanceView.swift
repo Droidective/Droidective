@@ -78,8 +78,9 @@ struct PerformanceView: View {
             content
         }
         .onChange(of: serial) {
+            // Stop sampling but keep an unsaved recording exportable — it's
+            // cleared when a new recording starts or via the leave guard.
             stop()
-            samples = []
             processes = []
         }
         .onChange(of: samples.isEmpty) { _, empty in
