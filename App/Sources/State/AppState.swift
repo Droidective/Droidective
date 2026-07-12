@@ -513,20 +513,32 @@ final class AppState {
         } else if selectedSerial == nil {
             selectedSerial = ready.first?.serial
         }
-        if selectedSerial != before || (selectedSerial != nil && activeOverrides.isEmpty) {
+        // Refetch overrides when the selection changed, or once when the
+        // selected device becomes ready — not on every unrelated device-list
+        // change (an empty override set is the common steady state, so
+        // "empty" alone can't mean "never loaded").
+        let readySelected = selectedDevice?.isReady == true
+        if selectedSerial != before || (readySelected && overridesFetchedForSerial != selectedSerial) {
             Task { await refreshOverrides() }
         }
         // Picker enrichment reads getprop over adb — Android only; a
         // simulator's runtime label already rides in `Device.product`.
         for device in ready
-        where device.platform == .android && deviceDetails[device.serial] == nil {
+        where device.platform == .android && deviceDetails[device.serial] == nil
+            && !deviceDetailsFetching.contains(device.serial) {
+            deviceDetailsFetching.insert(device.serial)
             Task {
                 let details = await DeviceDetails.fetch(client: env.client, serial: device.serial)
                 deviceDetails[device.serial] = details
+                deviceDetailsFetching.remove(device.serial)
                 reportDeviceConnected(device, details: details)
             }
         }
     }
+
+    /// Serials with a `DeviceDetails.fetch` in flight, so a device-list change
+    /// mid-fetch doesn't spawn a duplicate getprop probe.
+    private var deviceDetailsFetching: Set<String> = []
 
     /// Emit an anonymous `device_connected` once per device this session (no
     /// serial leaves the machine — it's only the local dedup key). Android
@@ -567,12 +579,17 @@ final class AppState {
     // MARK: - Overrides
 
     var activeOverrides: [ActiveOverride] = []
+    /// The ready serial the overrides were last fetched for; nil until the
+    /// selected device has been probed. Gates the devices-changed refetch.
+    private var overridesFetchedForSerial: String?
 
     func refreshOverrides() async {
         guard let device = selectedDevice, device.isReady else {
             activeOverrides = []
+            overridesFetchedForSerial = nil
             return
         }
+        overridesFetchedForSerial = device.serial
         switch device.platform {
         case .android:
             activeOverrides = (try? await env.engine.overrides.active(serial: device.serial)) ?? []
