@@ -24,10 +24,23 @@ public enum AdbError: Error, LocalizedError, Sendable {
 /// A GUI app launched from Finder inherits a minimal PATH that usually
 /// excludes Homebrew and the Android SDK, so we never call a bare `adb`. We
 /// probe well-known install locations and, as a fallback, ask the user's
-/// login shell (which loads their full PATH) to resolve it. Results are
-/// cached until `clearCache()` (e.g. after a tool install).
+/// login shell (which loads their full PATH) to resolve it. Found paths are
+/// cached until `clearCache()` (e.g. after a tool install); "not found"
+/// expires after `notFoundTTL` so installing a tool mid-session is noticed.
 public actor ToolLocator {
-    private var cache: [Tool: String?] = [:]
+    /// One finished lookup. `expiresAt` is set only on negative results;
+    /// found and seeded paths never expire on their own.
+    private struct CachedLookup {
+        let path: String?
+        let expiresAt: Date?
+    }
+
+    /// How long "not found" is trusted before re-probing. Long enough that the
+    /// 2 s device poll doesn't spawn a login shell on every tick, short enough
+    /// that a tool installed mid-session shows up without a manual Re-detect.
+    static let notFoundTTL: TimeInterval = 30
+
+    private var cache: [Tool: CachedLookup] = [:]
     /// Caches for tools resolved outside the `Tool` enum — the SDK build-tools
     /// directory (aapt2/apksigner/zipalign live there) and the JDK's `java`
     /// (needed to run the Java-based APK tools). Kept out of the Doctor's tool
@@ -37,30 +50,47 @@ public actor ToolLocator {
     private var javaCache: String??
     private let runner: any ProcessRunning
     private let environment: [String: String]
+    private let now: @Sendable () -> Date
+    private let isExecutableFile: @Sendable (String) -> Bool
     private let fileManager = FileManager.default
 
     public init(
         runner: any ProcessRunning = SystemProcessRunner(),
-        environment: [String: String] = ProcessInfo.processInfo.environment
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        now: @escaping @Sendable () -> Date = { Date() },
+        isExecutableFile: @escaping @Sendable (String) -> Bool = {
+            FileManager.default.isExecutableFile(atPath: $0)
+        }
     ) {
         self.runner = runner
         self.environment = environment
+        self.now = now
+        self.isExecutableFile = isExecutableFile
     }
 
     public func resolve(_ tool: Tool) async -> String? {
-        if let cached = cache[tool] { return cached }
+        if let cached = cache[tool] {
+            if let expiresAt = cached.expiresAt, now() >= expiresAt {
+                cache[tool] = nil
+            } else {
+                return cached.path
+            }
+        }
 
         var resolved: String? = nil
-        for candidate in candidatePaths(for: tool) where fileManager.isExecutableFile(atPath: candidate) {
+        for candidate in candidatePaths(for: tool) where isExecutableFile(candidate) {
             resolved = candidate
             break
         }
         if resolved == nil {
             resolved = await resolveViaLoginShell(tool)
         }
-        // Negative results are cached too — Settings → Tools → "Re-detect"
-        // and the brew-install flow call clearCache() to heal.
-        cache[tool] = resolved
+        // "Not found" is cached with a TTL; Settings → Tools → "Re-detect"
+        // and the brew-install flow still call clearCache() to heal at once.
+        cache[tool] = CachedLookup(
+            path: resolved,
+            expiresAt: resolved == nil ? now().addingTimeInterval(Self.notFoundTTL) : nil
+        )
         return resolved
     }
 
@@ -115,7 +145,7 @@ public actor ToolLocator {
     private func buildToolBinary(_ name: String) async -> String? {
         guard let dir = await buildToolsDir() else { return nil }
         let path = "\(dir)/\(name)"
-        return fileManager.isExecutableFile(atPath: path) ? path : nil
+        return isExecutableFile(path) ? path : nil
     }
 
     /// Resolve a `java` launcher for the Java-based APK tools (apksigner, jadx,
@@ -127,7 +157,7 @@ public actor ToolLocator {
             environment["JAVA_HOME"].map { "\($0)/bin/java" },
             "/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/java",
         ].compactMap(\.self)
-        var resolved = candidates.first { fileManager.isExecutableFile(atPath: $0) }
+        var resolved = candidates.first { isExecutableFile($0) }
         if resolved == nil { resolved = await resolveJavaHome() }
         if resolved == nil { resolved = await resolveViaLoginShellCommand("java") }
         javaCache = .some(resolved)
@@ -144,13 +174,13 @@ public actor ToolLocator {
         let home = output.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !home.isEmpty else { return nil }
         let java = "\(home)/bin/java"
-        return fileManager.isExecutableFile(atPath: java) ? java : nil
+        return isExecutableFile(java) ? java : nil
     }
 
     /// Pre-populate the cache with a known path (tests, or a user-pinned
-    /// tool location).
+    /// tool location). Seeded entries never expire — not even seeded nils.
     public func seed(_ tool: Tool, path: String?) {
-        cache[tool] = path
+        cache[tool] = CachedLookup(path: path, expiresAt: nil)
     }
 
     /// Pre-populate the build-tools directory and `java` launcher (tests).
@@ -211,7 +241,7 @@ public actor ToolLocator {
             .split(whereSeparator: \.isNewline)
             .last
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-        guard let resolved, fileManager.isExecutableFile(atPath: resolved) else { return nil }
+        guard let resolved, isExecutableFile(resolved) else { return nil }
         return resolved
     }
 }
