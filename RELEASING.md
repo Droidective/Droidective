@@ -130,15 +130,16 @@ it. Without the token, the cask step is skipped.
 
 ### 6. SEO / discoverability (optional but recommended)
 
-On-page SEO is already in `site/index.html` (title, meta description, Open
-Graph, Twitter card, JSON-LD `SoftwareApplication`, `sitemap.xml`, `robots.txt`).
+On-page SEO is already in `website/index.html` (title, meta description, Open
+Graph, Twitter card, JSON-LD `SoftwareApplication`) plus `site/sitemap.xml` and
+`site/robots.txt`; the built React landing page ships it all from `website/dist`.
 Ranking for competitive terms still needs links and time:
 
 - Set the repo's **About → Website** to `https://droidective.com/`.
 - Add the URL to the README and link it from anywhere you can.
 - Verify the site in **Google Search Console** (URL-prefix property; use the
-  meta-tag method — add the `google-site-verification` tag to `index.html`), then
-  submit `sitemap.xml`.
+  meta-tag method — add the `google-site-verification` tag to
+  `website/index.html`), then submit `sitemap.xml`.
 - Earn backlinks: Show HN, r/androiddev, r/reactnative, Product Hunt, and
   "awesome-android" / "awesome-react-native" lists.
 - Expect long-tail phrases ("all-in-one Android debugging tool for macOS") to
@@ -226,8 +227,9 @@ Copy this into the release PR and tick each item.
 - [ ] App runs and the changed features are verified live against a device or emulator.
 - [ ] Bump `MARKETING_VERSION` in `project.yml` to the new `X.Y.Z`.
 - [ ] Add a `## Droidective vX.Y.Z` section to the top of `RELEASE_NOTES.md` (summary, New features, Improvements, Install). Plain, factual language — no superlatives.
-- [ ] Feature counts updated if they changed: registry total in `README.md` and `CLAUDE.md`, marketing count in `site/index.html`.
-- [ ] Screenshots refreshed if the UI changed: `site/assets/screenshot-home.png` and `screenshot-catalog.png` (1512×948 window → 3024×1896 @2× Retina; Dock hidden; default layout — nothing pinned/collapsed).
+- [ ] Bump `APP_VERSION` in `website/src/lib/content.ts` and add the release to `releases` there — it drives the hero badge, the changelog, and (at build time) the JSON-LD `softwareVersion` in `website/index.html`.
+- [ ] Feature counts updated if they changed: registry total in `README.md` and `CLAUDE.md`, marketing count in `website/src/lib/content.ts` and `website/index.html` (and the `site/*.html` SEO subpages).
+- [ ] Screenshots refreshed if the UI changed: `site/assets/screenshot-home.png` and `screenshot-catalog.png` (1512×948 window → 3024×1896 @2× Retina; Dock hidden; default layout — nothing pinned/collapsed). The og:image PNGs (`screenshot-device/catalog/react/logcat.png`) are regenerated from their updated `.webp` files with `sips -s format png <in>.webp --out <out>.png`.
 - [ ] `README.md`, `CLAUDE.md`, and `docs/` updated for new features or changed behavior.
 - [ ] Diff re-read for leftover debug/seed/temp code, dead code, and unclear naming; nothing agent-only (`.claude/`) committed.
 

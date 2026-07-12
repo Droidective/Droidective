@@ -60,7 +60,7 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
         LSApplicationCategoryType: public.app-category.developer-tools
-        NSHumanReadableCopyright: ""
+        NSHumanReadableCopyright: "© 2026 Rohindh R"
         SentryDSN: $(SENTRY_DSN)
         PostHogKey: $(POSTHOG_KEY)
         SUFeedURL: https://droidective.com/appcast.xml
