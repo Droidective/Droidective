@@ -6,9 +6,9 @@
     <description>Most recent Droidective updates.</description>
     <language>en</language>
     <item>
-      <title>Droidective 2.9.3</title>
-      <sparkle:version>340</sparkle:version>
-      <sparkle:shortVersionString>2.9.3</sparkle:shortVersionString>
+      <title>Droidective 3.0.0</title>
+      <sparkle:version>369</sparkle:version>
+      <sparkle:shortVersionString>3.0.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <description><![CDATA[
 <style>
@@ -24,58 +24,95 @@ pre { background: color-mix(in srgb, currentColor 8%, transparent); padding: .6e
 pre code { background: none; padding: 0; }
 a { color: #2f9e44; }
 </style>
-<p>The streaming log feeds — Logcat, JS Console, and the Reactotron timeline —
-rebuilt around one scroll behavior, plus JS-console connection fixes and
-Reactotron network filters.</p>
+<p>Terminal split panes with working-directory inheritance, an onboarding tour
+built from recordings of the real app, redesigned React Native and Connection
+hubs, custom commands through your login shell, and JS Console reload/restart.</p>
 <h3>New features</h3>
 <ul>
 <li>
-<strong>Jump to top / bottom in every log feed</strong> — floating buttons overlay Logcat,
-the JS Console, and the Reactotron timeline; each hides while you're at its
-edge, and both hide when there's nothing to scroll. Jumping to the newest
-edge resumes live following.</li>
+<strong>Terminal split panes</strong> — ⌘D splits the focused shell side by side, ⇧⌘D
+stacks it (File menu, tab context menus, or the terminal's right-click menu).
+Splits nest, ⌘W closes the pane first and then the tab, <code>exit</code> folds a pane
+back into its siblings, and the surviving shell takes keyboard focus.</li>
 <li>
-<strong>Reactotron network filters</strong> — pick the Network view in a timeline pane and
-filter by HTTP method (the ones your app actually sent) and status class
-(2xx–5xx, plus Failed for requests that never got a response) — per pane, so
-a split view can watch two slices.</li>
+<strong>New shells open where you are</strong> — new tabs and split panes start in the
+focused shell's live working directory, read from the kernel, so no OSC 7 or
+shell configuration is needed.</li>
 <li>
-<strong>Reactotron explains disconnects</strong> — when a client drops, an expandable
-DISCONNECTED row lands in the timeline where streaming stopped, naming the
-app and the reason — including the Android case where the app queues events
-faster than the connection drains and its WebSocket hangs up at a 16 MB
-backlog.</li>
+<strong>Terminal tabs on top</strong> — a toggle switches the tab list between the left
+rail and a Chrome-style strip along the top, keeping groups, context menus,
+and drag-reorder in both layouts.</li>
+<li>
+<strong>Custom commands run in your login shell</strong> — shell commands source your
+interactive rc, so <code>.zshrc</code>/<code>.bashrc</code> aliases and PATH additions resolve.
+Each command also chooses where it runs: silently with a toast, or typed
+into a fresh in-app Terminal tab with live output.</li>
+<li>
+<strong>JS Console: Reload JS and Restart app</strong> — reload the running bundle over
+CDP (with a dev-menu fallback) or force-stop and relaunch the target app,
+with a searchable app picker when detection can't find it.</li>
+<li>
+<strong>React Native hub redesign</strong> — quick actions are cards with visible
+descriptions, and Metro forwarding gets its own section with a port field
+(prefilled 8081) beside USB / Wi-Fi dev-server rows. The device bar shows
+the bundle pill on the hub, so Deep Links and Process Death target a
+visible, changeable bundle.</li>
+<li>
+<strong>Connection hub shows your device's network</strong> — "This device" replaces the
+blind copy button with the live Wi-Fi network name and IP, a Copy IP
+button, and a refresh accessory.</li>
+<li>
+<strong>Pinned section on Home</strong> — the launchpad follows the sidebar's order and
+mirrors its pinned features; Home itself becomes a permanent house icon
+leading the tab strip instead of a closable tab.</li>
 </ul>
 <h3>Improvements</h3>
 <ul>
 <li>
-<strong>Interruption-free reading while streaming</strong> — scroll away from the newest
-line and new logs keep rendering without dragging your view; return to the
-edge (or tap the jump button) and following resumes. The reverse-order
-toggles are gone: JS Console and Logcat tail at the bottom, Reactotron keeps
-newest at top.</li>
+<strong>The onboarding tour is rebuilt</strong> around five pages, each led by a looping
+screen recording of the real app — sidebar, tabs and drag-to-split, roles,
+settings and hotkeys, and the Quick Actions panel summoned over a browser.
+Skip from any page jumps to the hotkey ask, and Reduce Motion holds a still
+frame. Reactotron gets a one-time intro demo on first open.</li>
 <li>
-<strong>Steady under event storms</strong> — the feeds no longer re-render per scrolled
-pixel or per streamed event, which could peg the CPU and hang the app under
-a fast Reactotron stream.</li>
-<li>The connected app's name shows next to Reactotron's status dot.</li>
+<strong>Reactotron timeline</strong> — filters move into a Timeline Filter dialog
+matching the Reactotron app's (grouped checkboxes with method/status
+refinements), rows preview object payloads inline with a hover copy button,
+the log text is selectable, and Restart app auto-detects the running app.
+In single-pane mode the timeline sits under two bars instead of three.</li>
+<li>
+<strong>Steady with huge console payloads</strong> — a multi-megabyte <code>console.log</code> no
+longer stalls the JS Console: rows render bounded previews and the buffer
+gets a byte budget on top of its entry cap.</li>
+<li>
+<strong>Idle toolbars stay out of the way</strong> — Logcat's filter toolbar hides until
+a device connects, and the JS Console's until it's connected or holds
+output.</li>
+<li>
+<strong>Device-bar pills size to their content</strong> — short labels hug, long device
+names and package ids truncate, and the bar compresses cleanly in narrow
+windows.</li>
+<li>The main window keeps at least 85% of the screen's visible frame, and the
+role picker can be closed with Esc when reopened from Home instead of
+resetting your tabs.</li>
 </ul>
 <h3>Fixes</h3>
 <ul>
 <li>
-<strong>JS console no longer loops "connecting…"</strong> — apps logging large objects
-tripped a 1 MiB socket cap on the post-connect replay (close code 1009), and
-every reconnect replayed the same burst. The cap is now 64 MiB.</li>
+<strong>Nothing clips at the minimum window width</strong> — on tabs showing the bundle
+pill, the device bar could push the layout past the window, cutting off
+sidebar icons on the left and bar controls on the right.</li>
 <li>
-<strong>Consoles stop with their UI</strong> — closing the JS console or Reactotron tab,
-or the main window (in either background-mode setting), tears the connection
-down instead of leaving it reconnecting in the background; reopening the
-window resumes the JS console's discovery.</li>
+<strong>Dropping a tab no longer leaves a stale highlight</strong> — the ending drag
+session could re-light a pane's drop highlight or a reorder guideline right
+after the drop. Tab drags also read better now: the dragged chip fades in
+place while its ghost rides the cursor, and reordered chips slide instead
+of snapping.</li>
 </ul>
 <p>Installed copies update in place via Sparkle.</p>
 ]]></description>
-      <pubDate>Thu, 09 Jul 2026 11:37:35 +0000</pubDate>
-      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v2.9.3/Droidective-v2.9.3.dmg" sparkle:edSignature="rItZEN4H6AUaGqjaxeax5tlxNj/zQq8HkFthbe2kHgfw5EMlAWYfwJo6qkiH4KH86IxPh1M7zYIdIbRcL9dhCA==" length="46008163" type="application/octet-stream" />
+      <pubDate>Sun, 12 Jul 2026 01:42:06 +0000</pubDate>
+      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.0.0/Droidective-v3.0.0.dmg" sparkle:edSignature="De8kZaAjzOVOZzCFELokB7FNJCmh0qNC8zrtOJkNCA/JUyW4SzNdNYQL7fAPA7H8ohZG9bjb4la73A9BIQ0PDg==" length="51282149" type="application/octet-stream" />
     </item>
   </channel>
 </rss>
