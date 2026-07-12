@@ -84,6 +84,13 @@ struct FridaConsoleView: View {
         let progress = download
         defer { busy = false; progress.finish() }
         do {
+            status = "Checking root access…"
+            guard await state.env.engine.root.detect(serial: serial).hasRootShell else {
+                let name = state.devices.first { $0.serial == serial }?.label ?? serial
+                status = "frida-server needs a rooted device — \(name) is not rooted. "
+                    + "Use frida-gadget below for non-rooted devices."
+                return
+            }
             status = "Resolving device architecture…"
             guard let deviceArch = try await state.env.engine.frida.deviceArch(serial: serial) else {
                 status = "Couldn't determine a supported device architecture."
@@ -101,8 +108,15 @@ struct FridaConsoleView: View {
                 _ = try await state.env.engine.frida.installServer(localPath: local, serial: serial)
                 _ = try await state.env.engine.frida.startServer(serial: serial)
             }
-            serverRunning = try await state.env.engine.frida.isServerRunning(serial: serial)
-            status = serverRunning ? "frida-server is running." : "Started — confirm with `frida-ps -U`. A rooted device is required."
+            // pidof can lag the spawn — poll briefly before declaring failure.
+            for _ in 0..<8 {
+                serverRunning = try await state.env.engine.frida.isServerRunning(serial: serial)
+                if serverRunning { break }
+                try? await Task.sleep(for: .milliseconds(250))
+            }
+            status = serverRunning
+                ? "frida-server is running — connect with `frida-ps -U`."
+                : "frida-server didn't start — check `su` access on the device, then try again."
         } catch {
             status = "Failed: \(error.localizedDescription)"
         }
