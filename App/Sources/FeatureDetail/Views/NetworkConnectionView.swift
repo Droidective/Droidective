@@ -12,29 +12,47 @@ struct NetworkConnectionView: View {
     @State private var wifiStatus: WifiStatus?
     @State private var statusLoaded = false
 
+    /// The hub's status sections are adb-backed; a selected iOS Simulator
+    /// gets an inline notice instead of adb runs against its UDID. The
+    /// wireless-connect flow stays available — it needs no ready device.
+    private var selectedSimulator: Device? {
+        guard let serial = state.targetSerials.first else { return nil }
+        return state.devices.first { $0.serial == serial && $0.platform == .iosSimulator }
+    }
+
     var body: some View {
         HubColumn {
-            deviceSection
+            if let simulator = selectedSimulator {
+                HubSection("This device") {
+                    Text("\(simulator.label) is an iOS Simulator — Wi-Fi status, port reversing, and Private DNS are Android features. Wireless ADB below still works for Android devices on your network.")
+                        .foregroundStyle(.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } else {
+                deviceSection
 
-            HubSection(
-                "Reverse a port",
-                subtitle: "adb reverse tunnels a device port to this Mac — e.g. Metro on 8081."
-            ) {
-                HStack(spacing: 10) {
-                    TextField("", text: $reversePort, prompt: Text("8081"))
-                        .brandField()
-                        .labelsHidden()
-                        .frame(maxWidth: 120)
-                    Button("Forward") {
-                        run("reverse-port", ["port": .string(reversePort.trimmingCharacters(in: .whitespaces))])
+                HubSection(
+                    "Reverse a port",
+                    subtitle: "adb reverse tunnels a device port to this Mac — e.g. Metro on 8081."
+                ) {
+                    HStack(spacing: 10) {
+                        TextField("", text: $reversePort, prompt: Text("8081"))
+                            .brandField()
+                            .labelsHidden()
+                            .frame(maxWidth: 120)
+                        Button("Forward") {
+                            run("reverse-port", ["port": .string(reversePort.trimmingCharacters(in: .whitespaces))])
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(state.targetSerials.isEmpty || reversePort.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(state.targetSerials.isEmpty || reversePort.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
 
             WirelessAdbSection()
-            PrivateDnsSection()
+            if selectedSimulator == nil {
+                PrivateDnsSection()
+            }
         }
     }
 

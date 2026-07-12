@@ -12,8 +12,12 @@ struct WirelessAdbSection: View {
     @State private var connectionPort = "5555"
     @State private var busy = false
 
-    private var usbDevices: [Device] { state.devices.filter { !$0.isWireless && $0.isReady } }
-    private var wirelessDevices: [Device] { state.devices.filter(\.isWireless) }
+    private var usbDevices: [Device] {
+        state.devices.filter { $0.platform == .android && !$0.isWireless && $0.isReady }
+    }
+    private var wirelessDevices: [Device] {
+        state.devices.filter { $0.platform == .android && $0.isWireless }
+    }
 
     var body: some View {
         HubSection("Wireless ADB", subtitle: "Switch a USB-connected device to debugging over Wi-Fi.") {
