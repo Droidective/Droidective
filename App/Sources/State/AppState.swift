@@ -1092,12 +1092,15 @@ final class AppState {
     /// Run a feature. `explicitTargets` overrides the device-bar selection —
     /// the Quick Actions panel passes its own pick (or run-on-all fan-out)
     /// since `targetSerials`' run-all gating keys off the active tab, which is
-    /// meaningless with no window.
+    /// meaningless with no window. Returns the per-serial outcomes so a
+    /// caller fanning out to several devices can aggregate them —
+    /// `lastResults` only keeps the last one.
+    @discardableResult
     func run(
         feature: FeatureDef,
         params: [String: FeatureValue],
         on explicitTargets: [String]? = nil
-    ) async {
+    ) async -> [(serial: String, result: FeatureResult)] {
         isRunningFeature = true
         defer { isRunningFeature = false }
         Telemetry.shared.trackFeatureUsed(feature.id, kind: feature.kind.rawValue)
@@ -1108,7 +1111,7 @@ final class AppState {
         // view instead opens the capture in the editor and saves on demand.
         if feature.id == "screenshot" {
             await runScreenshot()
-            return
+            return []
         }
         // Bug reports zip into the capture folder with no save panel — the
         // one-time folder ask covers them like every other silent save.
@@ -1126,7 +1129,7 @@ final class AppState {
         if feature.needsBundle {
             guard let bundle = selectedBundle else {
                 showToast(Toast(message: "Pick a saved bundle first.", ok: false))
-                return
+                return []
             }
             params["packageId"] = .string(bundle.packageId)
         } else if params["packageId"] == nil, let bundle = selectedBundle {
@@ -1136,25 +1139,27 @@ final class AppState {
         }
 
         let engine = env.engine
-        await CommandLog.userInitiated {
+        let outcomes: [(serial: String, result: FeatureResult)] = await CommandLog.userInitiated {
             if !feature.needsDevice {
                 let result = await engine.run(featureID: feature.id, serial: "", params: params)
                 self.lastResults[feature.id] = (result, Date())
                 self.show(result)
-                return
+                return [("", result)]
             }
 
             let targets = explicitTargets ?? self.targetSerials
             guard !targets.isEmpty else {
                 self.showToast(Toast(message: "No device connected.", ok: false))
-                return
+                return []
             }
+            var outcomes: [(serial: String, result: FeatureResult)] = []
             for serial in targets {
                 let result = await engine.run(
                     featureID: feature.id, serial: serial,
                     platform: self.platform(for: serial), params: params
                 )
                 self.lastResults[feature.id] = (result, Date())
+                outcomes.append((serial, result))
                 if targets.count > 1 {
                     let label = self.devices.first { $0.serial == serial }?.label ?? serial
                     self.show(FeatureResult(
@@ -1167,10 +1172,12 @@ final class AppState {
                     self.show(result)
                 }
             }
+            return outcomes
         }
         if feature.isStateOverride {
             await refreshOverrides()
         }
+        return outcomes
     }
 
     private func show(_ result: FeatureResult) {

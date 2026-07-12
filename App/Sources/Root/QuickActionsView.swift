@@ -1327,11 +1327,25 @@ struct QuickActionsView: View {
         lastRun = nil
         Task {
             let started = Date()
-            await state.run(feature: feature, params: [:], on: explicitTargets(for: feature))
-            let fresh = state.lastResults[feature.id].flatMap { entry in
-                entry.at >= started ? QuickRunOutcome(result: entry.result) : nil
+            let outcomes = await state.run(feature: feature, params: [:], on: explicitTargets(for: feature))
+            if outcomes.count > 1 {
+                // `lastResults` is last-wins per serial, so aggregate the
+                // fan-out here — mirroring the custom-command path.
+                let okCount = outcomes.filter(\.result.ok).count
+                finish(QuickRunOutcome(
+                    message: "\(feature.title) — ok on \(okCount) of \(outcomes.count) devices",
+                    ok: okCount == outcomes.count
+                ))
+            } else if let outcome = outcomes.first {
+                finish(QuickRunOutcome(result: outcome.result))
+            } else {
+                // No per-serial outcomes (e.g. the screenshot quick path) —
+                // fall back to a result the run recorded, if fresh.
+                let fresh = state.lastResults[feature.id].flatMap { entry in
+                    entry.at >= started ? QuickRunOutcome(result: entry.result) : nil
+                }
+                finish(fresh ?? QuickRunOutcome(message: "Done", ok: true))
             }
-            finish(fresh ?? QuickRunOutcome(message: "Done", ok: true))
         }
     }
 
