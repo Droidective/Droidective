@@ -563,15 +563,21 @@ struct TabHostView: View {
 }
 
 /// Accepts a tab dragged from a strip onto a pane (or the split-create zone).
-/// The dragged id lives in `AppState.draggingTabID`; the dropped `.text` item
-/// only triggers the drop. `onTargetedChange` drives an optional hover highlight.
+/// The dragged id is read live from `AppState.draggingTabID`, never captured:
+/// after a drop the views shift under the stationary cursor and the dying drag
+/// session can deliver one more dropEntered to whatever lands there — a frozen
+/// id would re-light the target after the drop already cleared it. The dropped
+/// item only triggers the drop. `onTargetedChange` drives an optional hover
+/// highlight.
 struct TabPaneDrop: DropDelegate {
-    let draggingID: String?
+    let state: AppState
     let onDrop: (String) -> Void
     var onTargetedChange: ((Bool) -> Void)?
 
+    private var draggingID: String? { state.draggingTabID }
+
     func validateDrop(info: DropInfo) -> Bool { draggingID != nil }
-    func dropEntered(info: DropInfo) { onTargetedChange?(true) }
+    func dropEntered(info: DropInfo) { if draggingID != nil { onTargetedChange?(true) } }
     func dropExited(info: DropInfo) { onTargetedChange?(false) }
     func performDrop(info: DropInfo) -> Bool {
         onTargetedChange?(false)
@@ -597,7 +603,7 @@ private struct EditorPane: View {
             TabHostView(group: index)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .onDrop(of: [.workspaceTab], delegate: TabPaneDrop(
-                    draggingID: state.draggingTabID,
+                    state: state,
                     onDrop: { id in
                         if state.isSplit {
                             state.moveTab(id, toGroup: index)

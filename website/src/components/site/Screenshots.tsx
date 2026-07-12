@@ -21,7 +21,7 @@ export function Screenshots() {
           poster="/assets/demo-poster.webp"
           width={1280}
           height={810}
-          aria-label="Droidective in action — pressing ⌘T to jump between live Logcat, Device Info, and the File Explorer on a connected Android emulator"
+          aria-label="Droidective in action — pressing ⌘T to jump between live Logcat, Device Info, the File Explorer, and the React Native hub on a connected Android emulator"
         >
           <source src="/assets/demo.mp4" type="video/mp4" />
         </video>
@@ -54,14 +54,31 @@ export function Screenshots() {
                   showcase.flip && "min-[940px]:order-1",
                 )}
               >
-                <img
-                  src={showcase.image}
-                  alt={showcase.alt}
-                  width={1600}
-                  height={1012}
-                  loading="lazy"
-                  className="block h-auto w-full"
-                />
+                {showcase.video ? (
+                  <video
+                    className="block h-auto w-full"
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                    preload="metadata"
+                    poster={showcase.image}
+                    width={1600}
+                    height={1012}
+                    aria-label={showcase.alt}
+                  >
+                    <source src={showcase.video} type="video/mp4" />
+                  </video>
+                ) : (
+                  <img
+                    src={showcase.image}
+                    alt={showcase.alt}
+                    width={1600}
+                    height={1012}
+                    loading="lazy"
+                    className="block h-auto w-full"
+                  />
+                )}
               </div>
             </div>
           </Reveal>

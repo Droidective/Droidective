@@ -1,3 +1,78 @@
+## Droidective v3.0.0
+
+Terminal split panes with working-directory inheritance, an onboarding tour
+built from recordings of the real app, redesigned React Native and Connection
+hubs, custom commands through your login shell, and JS Console reload/restart.
+
+### New features
+
+- **Terminal split panes** — ⌘D splits the focused shell side by side, ⇧⌘D
+  stacks it (File menu, tab context menus, or the terminal's right-click menu).
+  Splits nest, ⌘W closes the pane first and then the tab, `exit` folds a pane
+  back into its siblings, and the surviving shell takes keyboard focus.
+- **New shells open where you are** — new tabs and split panes start in the
+  focused shell's live working directory, read from the kernel, so no OSC 7 or
+  shell configuration is needed.
+- **Terminal tabs on top** — a toggle switches the tab list between the left
+  rail and a Chrome-style strip along the top, keeping groups, context menus,
+  and drag-reorder in both layouts.
+- **Custom commands run in your login shell** — shell commands source your
+  interactive rc, so `.zshrc`/`.bashrc` aliases and PATH additions resolve.
+  Each command also chooses where it runs: silently with a toast, or typed
+  into a fresh in-app Terminal tab with live output.
+- **JS Console: Reload JS and Restart app** — reload the running bundle over
+  CDP (with a dev-menu fallback) or force-stop and relaunch the target app,
+  with a searchable app picker when detection can't find it.
+- **React Native hub redesign** — quick actions are cards with visible
+  descriptions, and Metro forwarding gets its own section with a port field
+  (prefilled 8081) beside USB / Wi-Fi dev-server rows. The device bar shows
+  the bundle pill on the hub, so Deep Links and Process Death target a
+  visible, changeable bundle.
+- **Connection hub shows your device's network** — "This device" replaces the
+  blind copy button with the live Wi-Fi network name and IP, a Copy IP
+  button, and a refresh accessory.
+- **Pinned section on Home** — the launchpad follows the sidebar's order and
+  mirrors its pinned features; Home itself becomes a permanent house icon
+  leading the tab strip instead of a closable tab.
+
+### Improvements
+
+- **The onboarding tour is rebuilt** around five pages, each led by a looping
+  screen recording of the real app — sidebar, tabs and drag-to-split, roles,
+  settings and hotkeys, and the Quick Actions panel summoned over a browser.
+  Skip from any page jumps to the hotkey ask, and Reduce Motion holds a still
+  frame. Reactotron gets a one-time intro demo on first open.
+- **Reactotron timeline** — filters move into a Timeline Filter dialog
+  matching the Reactotron app's (grouped checkboxes with method/status
+  refinements), rows preview object payloads inline with a hover copy button,
+  the log text is selectable, and Restart app auto-detects the running app.
+  In single-pane mode the timeline sits under two bars instead of three.
+- **Steady with huge console payloads** — a multi-megabyte `console.log` no
+  longer stalls the JS Console: rows render bounded previews and the buffer
+  gets a byte budget on top of its entry cap.
+- **Idle toolbars stay out of the way** — Logcat's filter toolbar hides until
+  a device connects, and the JS Console's until it's connected or holds
+  output.
+- **Device-bar pills size to their content** — short labels hug, long device
+  names and package ids truncate, and the bar compresses cleanly in narrow
+  windows.
+- The main window keeps at least 85% of the screen's visible frame, and the
+  role picker can be closed with Esc when reopened from Home instead of
+  resetting your tabs.
+
+### Fixes
+
+- **Nothing clips at the minimum window width** — on tabs showing the bundle
+  pill, the device bar could push the layout past the window, cutting off
+  sidebar icons on the left and bar controls on the right.
+- **Dropping a tab no longer leaves a stale highlight** — the ending drag
+  session could re-light a pane's drop highlight or a reorder guideline right
+  after the drop. Tab drags also read better now: the dragged chip fades in
+  place while its ghost rides the cursor, and reordered chips slide instead
+  of snapping.
+
+Installed copies update in place via Sparkle.
+
 ## Droidective v2.9.3
 
 The streaming log feeds — Logcat, JS Console, and the Reactotron timeline —
