@@ -6,9 +6,9 @@
     <description>Most recent Droidective updates.</description>
     <language>en</language>
     <item>
-      <title>Droidective 3.0.0</title>
-      <sparkle:version>369</sparkle:version>
-      <sparkle:shortVersionString>3.0.0</sparkle:shortVersionString>
+      <title>Droidective 3.0.1</title>
+      <sparkle:version>376</sparkle:version>
+      <sparkle:shortVersionString>3.0.1</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <description><![CDATA[
 <style>
@@ -24,95 +24,78 @@ pre { background: color-mix(in srgb, currentColor 8%, transparent); padding: .6e
 pre code { background: none; padding: 0; }
 a { color: #2f9e44; }
 </style>
-<p>Terminal split panes with working-directory inheritance, an onboarding tour
-built from recordings of the real app, redesigned React Native and Connection
-hubs, custom commands through your login shell, and JS Console reload/restart.</p>
-<h3>New features</h3>
+<p>A bug-fix release: confirmations before destructive actions, several features
+that now work without an Android device selected, honest status messages, and
+tighter analytics.</p>
+<h3>Fixes</h3>
 <ul>
 <li>
-<strong>Terminal split panes</strong> — ⌘D splits the focused shell side by side, ⇧⌘D
-stacks it (File menu, tab context menus, or the terminal's right-click menu).
-Splits nest, ⌘W closes the pane first and then the tab, <code>exit</code> folds a pane
-back into its siblings, and the surviving shell takes keyboard focus.</li>
+<strong>Uninstall asks first</strong> — the Uninstall button in the Apps list now shows a
+confirmation, matching Clear Data. It previously removed the app and its data
+on the first click.</li>
 <li>
-<strong>New shells open where you are</strong> — new tabs and split panes start in the
-focused shell's live working directory, read from the kernel, so no OSC 7 or
-shell configuration is needed.</li>
+<strong>Logcat streams after a device authorizes</strong> — opening Logcat on a device
+that was still unauthorized left the stream empty even after you approved the
+adb prompt. It now starts as soon as the device is ready.</li>
 <li>
-<strong>Terminal tabs on top</strong> — a toggle switches the tab list between the left
-rail and a Chrome-style strip along the top, keeping groups, context menus,
-and drag-reorder in both layouts.</li>
+<strong>APK tools open without a device</strong> — APK Studio, APK Inspector, Sign APK, and
+Decompile APK work on local files and no longer require an Android device;
+they stayed usable with only an iOS Simulator selected.</li>
 <li>
-<strong>Custom commands run in your login shell</strong> — shell commands source your
-interactive rc, so <code>.zshrc</code>/<code>.bashrc</code> aliases and PATH additions resolve.
-Each command also chooses where it runs: silently with a toast, or typed
-into a fresh in-app Terminal tab with live output.</li>
+<strong>Monkey Test confirms before running</strong> — it warns before sending random
+events, and when a long run hits the time limit it reports that events were
+already sent instead of "failed".</li>
 <li>
-<strong>JS Console: Reload JS and Restart app</strong> — reload the running bundle over
-CDP (with a dev-menu fallback) or force-stop and relaunch the target app,
-with a searchable app picker when detection can't find it.</li>
+<strong>Frida on a non-rooted device</strong> — Frida now checks for root before pushing
+the server and shows a clear message pointing to frida-gadget, instead of a
+status that said "Started" while also requiring root.</li>
 <li>
-<strong>React Native hub redesign</strong> — quick actions are cards with visible
-descriptions, and Metro forwarding gets its own section with a port field
-(prefilled 8081) beside USB / Wi-Fi dev-server rows. The device bar shows
-the bundle pill on the hub, so Deep Links and Process Death target a
-visible, changeable bundle.</li>
+<strong>Change Locale is honest</strong> — the toast now says the locale change was
+requested (a full system change can require root) rather than claiming it
+was set.</li>
 <li>
-<strong>Connection hub shows your device's network</strong> — "This device" replaces the
-blind copy button with the live Wi-Fi network name and IP, a Copy IP
-button, and a refresh accessory.</li>
+<strong>Crash Catcher shows one crash</strong> — the last-crash view no longer runs
+together multiple crashes when several are buffered.</li>
 <li>
-<strong>Pinned section on Home</strong> — the launchpad follows the sidebar's order and
-mirrors its pinned features; Home itself becomes a permanent house icon
-leading the tab strip instead of a closable tab.</li>
+<strong>Reactotron opens without an Android device</strong> — its server is host-side, so
+it no longer requires an Android device to be selected.</li>
+<li>
+<strong>Screen Record surfaces a disconnect</strong> — if the device drops mid-recording,
+the timer stops and the captured footage is kept for saving, instead of the
+timer running on against a dead stream.</li>
+<li>
+<strong>Performance recording survives a disconnect</strong> — samples are kept and stay
+exportable when the device disconnects, rather than being cleared.</li>
+<li>
+<strong>Network Speed totals</strong> — session download/upload totals no longer jump to a
+bogus value if the device reboots mid-recording.</li>
+<li>
+<strong>Quick Actions panel</strong> — "all devices" only fans out actions that support it
+(matching the main window), multi-device runs report each device's outcome,
+the panel opens on the display under the pointer, and a quick screenshot names
+the saved file.</li>
+<li>Manage App's confirmation states how many devices it affects; the app picker
+refreshes when you switch devices; and tool detection re-checks after you
+install adb (or another tool) while the app is open.</li>
+</ul>
+<h3>Privacy</h3>
+<ul>
+<li>Anonymous analytics no longer include the device model or Android version —
+only whether the device is an emulator or wireless. This matches the privacy
+policy and the Settings description.</li>
 </ul>
 <h3>Improvements</h3>
 <ul>
 <li>
-<strong>The onboarding tour is rebuilt</strong> around five pages, each led by a looping
-screen recording of the real app — sidebar, tabs and drag-to-split, roles,
-settings and hotkeys, and the Quick Actions panel summoned over a browser.
-Skip from any page jumps to the hotkey ask, and Reduce Motion holds a still
-frame. Reactotron gets a one-time intro demo on first open.</li>
-<li>
-<strong>Reactotron timeline</strong> — filters move into a Timeline Filter dialog
-matching the Reactotron app's (grouped checkboxes with method/status
-refinements), rows preview object payloads inline with a hover copy button,
-the log text is selectable, and Restart app auto-detects the running app.
-In single-pane mode the timeline sits under two bars instead of three.</li>
-<li>
-<strong>Steady with huge console payloads</strong> — a multi-megabyte <code>console.log</code> no
-longer stalls the JS Console: rows render bounded previews and the buffer
-gets a byte budget on top of its entry cap.</li>
-<li>
-<strong>Idle toolbars stay out of the way</strong> — Logcat's filter toolbar hides until
-a device connects, and the JS Console's until it's connected or holds
-output.</li>
-<li>
-<strong>Device-bar pills size to their content</strong> — short labels hug, long device
-names and package ids truncate, and the bar compresses cleanly in narrow
-windows.</li>
-<li>The main window keeps at least 85% of the screen's visible frame, and the
-role picker can be closed with Esc when reopened from Home instead of
-resetting your tabs.</li>
-</ul>
-<h3>Fixes</h3>
-<ul>
-<li>
-<strong>Nothing clips at the minimum window width</strong> — on tabs showing the bundle
-pill, the device bar could push the layout past the window, cutting off
-sidebar icons on the left and bar controls on the right.</li>
-<li>
-<strong>Dropping a tab no longer leaves a stale highlight</strong> — the ending drag
-session could re-light a pane's drop highlight or a reorder guideline right
-after the drop. Tab drags also read better now: the dragged chip fades in
-place while its ghost rides the cursor, and reordered chips slide instead
-of snapping.</li>
+<strong>Bundled developer tools are pinned</strong> — jadx, apktool, uber-apk-signer,
+frida-server, and the bundled Java runtime install known-good pinned versions
+instead of whatever is latest upstream.</li>
+<li>Third-party license notices now cover every bundled and linked component.</li>
 </ul>
 <p>Installed copies update in place via Sparkle.</p>
 ]]></description>
-      <pubDate>Sun, 12 Jul 2026 01:42:06 +0000</pubDate>
-      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.0.0/Droidective-v3.0.0.dmg" sparkle:edSignature="De8kZaAjzOVOZzCFELokB7FNJCmh0qNC8zrtOJkNCA/JUyW4SzNdNYQL7fAPA7H8ohZG9bjb4la73A9BIQ0PDg==" length="51282149" type="application/octet-stream" />
+      <pubDate>Sun, 12 Jul 2026 10:24:10 +0000</pubDate>
+      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.0.1/Droidective-v3.0.1.dmg" sparkle:edSignature="enjLXG48itzLg8s8k6laYbaxhDXvgBt/84jJUKzjd0nBQ/ME0ujb2REXMQ16ffzdSwUWopY3C8tz9UH9J/5fAQ==" length="51320857" type="application/octet-stream" />
     </item>
   </channel>
 </rss>
