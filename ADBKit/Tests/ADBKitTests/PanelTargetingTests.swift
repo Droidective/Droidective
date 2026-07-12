@@ -74,7 +74,8 @@ import Testing
 
     @Test func fanOutReturnsEveryLiveApprovedDeviceWhenMoreThanOne() {
         let targets = PanelTargeting.fanOut(
-            picked: nil, selected: "A", approved: ["A", "B", "C"], ready: ["A", "B", "C"]
+            picked: nil, selected: "A", approved: ["A", "B", "C"], ready: ["A", "B", "C"],
+            supportsRunAll: true
         )
         #expect(targets == ["A", "B", "C"])
     }
@@ -83,38 +84,51 @@ import Testing
         // Approved A+B, but B disconnected — one live approved device is not a
         // fan-out; fall to the single-target rule (the live pick here).
         let targets = PanelTargeting.fanOut(
-            picked: "A", selected: "B", approved: ["A", "B"], ready: ["A"]
+            picked: "A", selected: "B", approved: ["A", "B"], ready: ["A"],
+            supportsRunAll: true
         )
         #expect(targets == ["A"])
     }
 
     @Test func fanOutIsSingleTargetWhenThereIsNoApproval() {
         let targets = PanelTargeting.fanOut(
-            picked: "A", selected: "B", approved: nil, ready: ["A", "B"]
+            picked: "A", selected: "B", approved: nil, ready: ["A", "B"],
+            supportsRunAll: true
         )
         #expect(targets == ["A"])
     }
 
     @Test func fanOutIsEmptyWhenNothingIsReady() {
         let targets = PanelTargeting.fanOut(
-            picked: "A", selected: "B", approved: ["A", "B"], ready: []
+            picked: "A", selected: "B", approved: ["A", "B"], ready: [],
+            supportsRunAll: true
         )
         #expect(targets.isEmpty)
+    }
+
+    @Test func fanOutNeverFansOutAFeatureWithoutRunAllSupport() {
+        // An "All devices" approval on a single-device feature falls through to
+        // the single-target rule — parity with the main window's run-all gate.
+        let targets = PanelTargeting.fanOut(
+            picked: nil, selected: "B", approved: ["A", "B", "C"], ready: ["A", "B", "C"],
+            supportsRunAll: false
+        )
+        #expect(targets == ["B"])
     }
 
     // MARK: - runTargets
 
     @Test func runTargetsIsNilForAFeatureThatNeedsNoDeviceEvenWithDevicesReady() {
         let targets = PanelTargeting.runTargets(
-            needsDevice: false, picked: "A", selected: "B",
+            needsDevice: false, supportsRunAll: true, picked: "A", selected: "B",
             approved: ["A", "B"], ready: ["A", "B"]
         )
         #expect(targets == nil)
     }
 
-    @Test func runTargetsFansOutForADeviceFeature() {
+    @Test func runTargetsFansOutForADeviceFeatureThatSupportsRunAll() {
         let targets = PanelTargeting.runTargets(
-            needsDevice: true, picked: nil, selected: "A",
+            needsDevice: true, supportsRunAll: true, picked: nil, selected: "A",
             approved: ["A", "B"], ready: ["A", "B"]
         )
         #expect(targets == ["A", "B"])
@@ -122,7 +136,7 @@ import Testing
 
     @Test func runTargetsIsASingleElementForADeviceFeatureWithNoApproval() {
         let targets = PanelTargeting.runTargets(
-            needsDevice: true, picked: "B", selected: "A",
+            needsDevice: true, supportsRunAll: true, picked: "B", selected: "A",
             approved: nil, ready: ["A", "B"]
         )
         #expect(targets == ["B"])
@@ -130,9 +144,17 @@ import Testing
 
     @Test func runTargetsIsEmptyForADeviceFeatureWithNothingReady() {
         let targets = PanelTargeting.runTargets(
-            needsDevice: true, picked: "A", selected: "B",
+            needsDevice: true, supportsRunAll: true, picked: "A", selected: "B",
             approved: nil, ready: []
         )
         #expect(targets == [])
+    }
+
+    @Test func runTargetsIgnoresAnAllDevicesApprovalWhenTheFeatureLacksRunAll() {
+        let targets = PanelTargeting.runTargets(
+            needsDevice: true, supportsRunAll: false, picked: "C", selected: "A",
+            approved: ["A", "B", "C"], ready: ["A", "B", "C"]
+        )
+        #expect(targets == ["C"])
     }
 }
