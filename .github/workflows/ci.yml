@@ -166,8 +166,9 @@ jobs:
       # /releases/latest/download/Droidective.dmg URL — always the newest
       # release, no appcast fetch, no Pages/browser cache staleness.
       - name: Add a stable-named copy for the latest-download link
-        run: cp "DerivedData/Build/Products/Release/Droidective-${GITHUB_REF_NAME}.dmg" \
-               "DerivedData/Build/Products/Release/Droidective.dmg"
+        run: |
+          cp "DerivedData/Build/Products/Release/Droidective-${GITHUB_REF_NAME}.dmg" \
+             "DerivedData/Build/Products/Release/Droidective.dmg"
       - name: Publish release with build
         uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b  # v3.0.1
         with:
