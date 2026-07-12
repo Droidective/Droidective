@@ -99,6 +99,12 @@ public struct CrashExtractor: Sendable {
                 on: serial, ["logcat", "-d", "-b", "main", "-t", "1000"], maxOutputBytes: Self.maxLogcatBytes
             )
             block = Self.extractLastCrash(mainBuffer.stdout)
+        } else {
+            // The crash buffer accumulates every crash since the last clear —
+            // narrow it to the most recent one. When no line matches the crash
+            // pattern (some native traces), keep the whole buffer over nothing.
+            let latest = Self.extractLastCrash(block)
+            if !latest.isEmpty { block = latest }
         }
 
         block = Self.boundedBlock(block)
