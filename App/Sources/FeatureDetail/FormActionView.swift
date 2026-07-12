@@ -11,6 +11,7 @@ struct FormActionView: View {
     @State private var boolValues: [String: Bool] = [:]
     @State private var sliderValues: [String: Double] = [:]
     @State private var presets = Presets()
+    @State private var confirmingRun = false
     @FocusState private var focusedField: String?
     /// Send Text: wipe the field after a successful send, for firing a sequence
     /// of inputs without hand-clearing between them. Persisted choice.
@@ -37,7 +38,11 @@ struct FormActionView: View {
 
             HStack(spacing: 10) {
                 Button {
-                    submit()
+                    if feature.isDestructive {
+                        confirmingRun = true
+                    } else {
+                        submit()
+                    }
                 } label: {
                     Label("Run", systemImage: "play.fill")
                 }
@@ -61,6 +66,13 @@ struct FormActionView: View {
             LastResultCard(featureID: feature.id)
         }
         .centeredCard()
+        .confirmationDialog(
+            feature.confirmLabel ?? "\(feature.title) can disrupt the device. Run it?",
+            isPresented: $confirmingRun
+        ) {
+            Button("Run \(feature.title)", role: .destructive) { submit() }
+            Button("Cancel", role: .cancel) {}
+        }
         .onAppear { seedDefaults() }
         .task(id: feature.id) {
             // Put the cursor in the first text-like field so the user can type
