@@ -233,7 +233,6 @@ export const faqs: { q: string; html: string }[] = [
   { q: "What do I need installed?", html: "Just Android <code>adb</code>. Droidective finds it via <code>ANDROID_HOME</code>, the default SDK path, or Homebrew, and offers a one-click install if it's missing. <code>scrcpy</code> and <code>ffmpeg</code> ship inside the app, so mirroring, recording, and video export work out of the box — only the Android <code>emulator</code> is optional, for AVD management." },
   { q: "Does it send my data anywhere?", html: 'Anonymous crash reports and usage analytics are on by default (opt-out) — both disclosed on first launch and controlled in Settings → Privacy. Device serials, file paths, and command contents are never sent. See the <a href="/privacy.html">privacy page</a> for details.' },
   { q: "Does it work with React Native?", html: "Yes — there's a dedicated React Native hub: open the dev menu, reload the JS bundle, reverse the Metro port, save deep links per app, and set the dev-server host." },
-  { q: "Can I install it with Homebrew?", html: "Yes — <code>brew install --cask rohindh-r/tap/droidective</code>. Updates still arrive through Sparkle; <code>brew upgrade</code> defers to it." },
   { q: "Apple Silicon or Intel?", html: "Both. Droidective runs on any Mac with macOS 14 Sonoma or later." },
 ]
 
