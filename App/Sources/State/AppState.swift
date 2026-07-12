@@ -531,7 +531,7 @@ final class AppState {
                 let details = await DeviceDetails.fetch(client: env.client, serial: device.serial)
                 deviceDetails[device.serial] = details
                 deviceDetailsFetching.remove(device.serial)
-                reportDeviceConnected(device, details: details)
+                reportDeviceConnected(device)
             }
         }
     }
@@ -542,14 +542,11 @@ final class AppState {
 
     /// Emit an anonymous `device_connected` once per device this session (no
     /// serial leaves the machine — it's only the local dedup key). Android
-    /// only — the fields are Android-shaped and simulators skip the details
-    /// fetch that triggers it.
-    private func reportDeviceConnected(_ device: Device, details: DeviceDetails) {
+    /// only — simulators skip the details fetch that triggers it.
+    private func reportDeviceConnected(_ device: Device) {
         guard reportedDeviceSerials.insert(device.serial).inserted else { return }
         Telemetry.shared.trackDeviceConnected(
             isEmulator: device.serial.hasPrefix("emulator-"),
-            androidVersion: details.androidVersion,
-            model: device.model,
             isWireless: device.isWireless
         )
     }
