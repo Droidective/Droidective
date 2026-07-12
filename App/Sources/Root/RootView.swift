@@ -153,9 +153,15 @@ struct RootView: View {
         }
         // A double-clicked APK opens the Quick Actions panel on its options
         // screen (install in place / APK Studio / the Install App screen)
-        // instead of taking over the main window.
+        // instead of taking over the main window. Anything else handed to
+        // "Open With → Droidective" gets a toast instead of silence.
         InstallInbox.shared.onReceive = { urls in
-            QuickActionsPanel.showAPKOptions(urls, state: state)
+            let apks = urls.filter { $0.pathExtension.lowercased() == "apk" }
+            for other in urls where other.pathExtension.lowercased() != "apk" {
+                state.showToast(Toast(message: "Not an APK: \(other.lastPathComponent)", ok: false))
+            }
+            guard !apks.isEmpty else { return }
+            QuickActionsPanel.showAPKOptions(apks, state: state)
         }
         migrateDefaultsIfNeeded()
         applyStoredTheme()
