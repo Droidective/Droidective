@@ -34,7 +34,7 @@ struct LogcatView: View {
     ]
 
     private var taskKey: String {
-        "\(state.selectedSerial ?? "none")|\(level)|\(packageFilter ?? "all")"
+        "\(state.targetSerials.first ?? "none")|\(level)|\(packageFilter ?? "all")"
     }
 
     var body: some View {
