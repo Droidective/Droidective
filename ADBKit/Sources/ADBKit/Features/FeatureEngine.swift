@@ -364,6 +364,12 @@ public struct FeatureEngine: Sendable {
                 ["shell", "monkey", "-p", shellQuote(package), "-v", String(count)],
                 timeout: .seconds(120)
             )
+            if result.timedOut {
+                return FeatureResult(
+                    ok: false,
+                    message: "Monkey stopped after 120s — events already sent were delivered."
+                )
+            }
             return result.succeeded
                 ? FeatureResult(ok: true, message: "Fired \(count) random events at \(package)")
                 : FeatureResult(ok: false, message: friendlyAdbError(result, fallback: "Monkey run failed"))

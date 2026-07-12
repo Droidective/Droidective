@@ -49,6 +49,25 @@ import Testing
         ])
     }
 
+    @Test func monkeyTimeoutReportsDeliveredEventsHonestly() async {
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["-s"], stdout: "Events injected: 4021", exitCode: nil, timedOut: true)
+        let engine = await makeEngine(runner)
+
+        let result = await engine.run(
+            featureID: "monkey", serial: "S1",
+            params: ["packageId": .string("com.demo"), "count": .number(100_000)]
+        )
+        #expect(!result.ok)
+        #expect(result.message == "Monkey stopped after 120s — events already sent were delivered.")
+    }
+
+    @Test func monkeyIsMarkedDestructiveWithConfirmationCopy() {
+        let monkey = FeatureRegistry.byID["monkey"]
+        #expect(monkey?.isDestructive == true)
+        #expect(monkey?.confirmLabel == "Send random events")
+    }
+
     @Test func processDeathKillsTheChosenBundleAndVerifiesDeath() async {
         let runner = MockProcessRunner()
         runner.script(argsPrefix: ["-s"], stdout: "")

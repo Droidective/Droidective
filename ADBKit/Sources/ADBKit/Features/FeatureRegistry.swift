@@ -485,12 +485,14 @@ public enum FeatureRegistry {
             subtitle: "Fire random events to hunt for crashes",
             keywords: ["monkey", "stress", "random", "fuzz", "crash"],
             category: .appManagement, icon: "die.face.5", kind: .formAction, needsBundle: true,
+            isDestructive: true,
             fields: [
                 FieldDef(
                     name: "count", label: "Event count", control: .number,
                     defaultValue: .number(500), min: 1, max: 100_000
                 )
-            ]
+            ],
+            confirmLabel: "Send random events"
         ),
 
         // ── Logs & Diagnostics ───────────────────────────────────────────
