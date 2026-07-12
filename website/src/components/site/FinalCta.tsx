@@ -33,7 +33,7 @@ export function FinalCta() {
               size="lg"
               className="h-auto rounded-xl px-5 py-3 text-[15px] font-bold shadow-glow transition-transform duration-150 hover:-translate-y-px hover:bg-green-bright"
             >
-              <a href={DOWNLOAD_URL}>
+              <a href={DOWNLOAD_URL} data-dl="final-cta">
                 <Download aria-hidden />
                 Download for macOS
               </a>

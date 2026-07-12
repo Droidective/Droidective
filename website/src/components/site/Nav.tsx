@@ -40,7 +40,7 @@ export function Nav() {
             asChild
             className="h-auto rounded-xl px-4 py-2 text-sm font-bold shadow-glow hover:bg-green-bright"
           >
-            <a href={DOWNLOAD_URL}>
+            <a href={DOWNLOAD_URL} data-dl="nav">
               <Download aria-hidden />
               Download
             </a>
