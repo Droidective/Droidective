@@ -29,7 +29,7 @@ needs a new UI layer.
 
 ## Features
 
-A searchable palette (`⌘K`) of 50 adb actions, organised by category and
+A searchable palette (`⌘T`) of 56 tools, organised by category and
 gathered into focused hubs (React Native, Simulate, Connection, APK Studio) so
 the sidebar stays short. Every action is on by default; hide the ones you don't want from
 the in-app catalog.
