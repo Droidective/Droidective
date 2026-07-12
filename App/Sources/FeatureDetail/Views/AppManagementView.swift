@@ -69,9 +69,11 @@ struct AppManagementView: View {
 
     private var confirmTitle: String {
         let name = state.selectedBundle?.nickname ?? "the app"
+        let count = state.targetSerials.count
+        let scope = count > 1 ? "all \(count) selected devices" : "the device"
         return confirmingAction == .uninstall
-            ? "Uninstall \(name)? This removes the app from the device."
-            : "Clear all data for \(name)? This signs you out and wipes local storage."
+            ? "Uninstall \(name)? This removes the app from \(scope)."
+            : "Clear all data for \(name) on \(scope)? This signs you out and wipes local storage."
     }
 
     private func actionButton(
