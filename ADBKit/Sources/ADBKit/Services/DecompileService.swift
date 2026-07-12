@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 /// A node in a decompiled-output tree, for the browser view. `children` is nil
@@ -50,15 +51,16 @@ public struct DecompileService: Sendable {
         self.runner = runner
     }
 
-    /// Decompile `apkPath` into a `<name>-<mode>` dir under `outputRoot`. With
-    /// `reuseExisting` (the default), a previous decompile of the same APK+mode is
-    /// returned as-is — re-running jadx/apktool on every revisit would be slow and
-    /// the output is deterministic. Pass `false` to force a fresh run.
+    /// Decompile `apkPath` into a `<name>-<path hash>-<mode>` dir under
+    /// `outputRoot`. With `reuseExisting` (the default), a previous decompile of
+    /// the same APK+mode is returned as-is — re-running jadx/apktool on every
+    /// revisit would be slow and the output is deterministic. Pass `false` to
+    /// force a fresh run.
     public func decompile(
         apkPath: String, mode: Mode, into outputRoot: URL, reuseExisting: Bool = true
     ) async throws -> URL {
-        let name = URL(fileURLWithPath: apkPath).deletingPathExtension().lastPathComponent
-        let outDir = outputRoot.appendingPathComponent("\(name)-\(mode.rawValue)", isDirectory: true)
+        let outDir = outputRoot.appendingPathComponent(
+            Self.outputDirName(apkPath: apkPath, mode: mode), isDirectory: true)
         if reuseExisting, (try? FileManager.default.contentsOfDirectory(atPath: outDir.path).isEmpty) == false {
             return outDir
         }
@@ -124,6 +126,16 @@ public struct DecompileService: Sendable {
         guard result.exitCode == 0 else {
             throw DecompileError.failed(result.stderrText.isEmpty ? result.stdoutText : result.stderrText)
         }
+    }
+
+    /// Cache-directory name for one APK+mode: the APK's basename plus the first
+    /// 8 hex chars of a SHA-256 over its full path, so same-named APKs from
+    /// different folders never share (or clobber) each other's cached output.
+    static func outputDirName(apkPath: String, mode: Mode) -> String {
+        let name = URL(fileURLWithPath: apkPath).deletingPathExtension().lastPathComponent
+        let hash = SHA256.hash(data: Data(apkPath.utf8))
+            .prefix(4).map { String(format: "%02x", $0) }.joined()
+        return "\(name)-\(hash)-\(mode.rawValue)"
     }
 
     // MARK: - Pure argument builders
