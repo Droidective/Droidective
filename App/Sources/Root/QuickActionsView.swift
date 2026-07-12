@@ -57,10 +57,15 @@ enum QuickActionsPanel {
 
     private static func present(state: AppState) {
         // While backgrounded the device poll is widened, so the list can be
-        // stale — refresh once on open.
+        // stale — refresh once on open, and tighten polling while the panel
+        // is up so a device plugged in mid-session appears promptly.
         state.refreshDevices()
+        state.setQuickPanelOpen(true)
         let controller = FloatingPanelController.quickActions
-        controller.onClosed = { QuickPanelMemory.shared.closedAt = Date() }
+        controller.onClosed = {
+            state.setQuickPanelOpen(false)
+            QuickPanelMemory.shared.closedAt = Date()
+        }
         controller.show { close in
             QuickActionsView(onClose: close)
                 .environment(state)

@@ -945,10 +945,26 @@ final class AppState {
         FeatureRegistry.byID[id] != nil || ["home", "about", "catalog"].contains(id)
     }
 
+    private var isForeground = true
+    private var quickPanelOpen = false
+
     /// Widen device polling while the app is backgrounded so an idle, hidden
     /// window stops spawning `adb devices` / `simctl list` every few seconds;
     /// restore it on foreground.
     func setForeground(_ active: Bool) {
+        isForeground = active
+        applyPollInterval()
+    }
+
+    /// An open Quick Actions panel needs a fresh device list even while the
+    /// app is backgrounded, so it counts as foreground for the poll rate.
+    func setQuickPanelOpen(_ open: Bool) {
+        quickPanelOpen = open
+        applyPollInterval()
+    }
+
+    private func applyPollInterval() {
+        let active = isForeground || quickPanelOpen
         let interval: Duration = active ? .seconds(2) : .seconds(10)
         Task { [monitor = env.monitor] in await monitor.setPollInterval(interval) }
         let simInterval: Duration = active ? .seconds(3) : .seconds(15)
