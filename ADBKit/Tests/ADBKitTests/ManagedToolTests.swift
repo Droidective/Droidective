@@ -101,13 +101,14 @@ import Testing
 
     // MARK: catalog invariants
 
-    @Test func everyManagedToolHasASpecAndReleaseURL() {
+    @Test func everyManagedToolHasASpecWithAPinnedReleaseURL() {
         for tool in ManagedTool.allCases {
             let spec = ManagedToolSpec.catalog[tool]
             #expect(spec != nil, "missing catalog spec for \(tool.rawValue)")
             #expect(spec?.tool == tool)
-            #expect(spec?.latestReleaseURL?.absoluteString
-                == "https://api.github.com/repos/\(spec!.owner)/\(spec!.repo)/releases/latest")
+            #expect(spec?.pinnedTag.isEmpty == false, "\(tool.rawValue) needs a pinned tag")
+            #expect(spec?.pinnedReleaseURL?.absoluteString
+                == "https://api.github.com/repos/\(spec!.owner)/\(spec!.repo)/releases/tags/\(spec!.pinnedTag)")
         }
     }
 }

@@ -96,14 +96,18 @@ final class DownloadProgressDelegate: NSObject, URLSessionDownloadDelegate, @unc
     }
 }
 
-/// Downloads managed tools from their GitHub releases into Application Support,
-/// verifies them, extracts them, and tracks the installed version so the app can
-/// offer in-place upgrades. The signed `.app` is read-only, so tools live under
-/// `rootDirectory` (Application Support), never inside the bundle.
+/// Downloads managed tools from their pinned GitHub releases into Application
+/// Support, extracts them, and tracks the installed version so the app can
+/// offer in-place upgrades when a new pin ships. The signed `.app` is
+/// read-only, so tools live under `rootDirectory` (Application Support), never
+/// inside the bundle.
 ///
 /// Downloading and running third-party binaries is the riskiest part of the
-/// feature, so every download is fetched over HTTPS and, when the release
-/// publishes an asset digest, verified against it before use.
+/// feature. Each tool is fetched over HTTPS at the exact release tag pinned in
+/// `ManagedToolSpec.catalog`, so a hijacked "latest" release is never pulled
+/// automatically. The asset digest check is a transit-corruption guard only —
+/// the digest comes from the same API response as the download URL and many
+/// assets don't publish one — not an independent supply-chain verification.
 public actor ManagedToolStore {
     public enum StoreError: Error, LocalizedError, Equatable {
         case unsupported(ManagedTool)
@@ -193,15 +197,16 @@ public actor ManagedToolStore {
         return total
     }
 
-    /// Newer version tag available for `tool`, or nil when it's current. A tool
-    /// that isn't installed yet reports the latest tag as "available".
+    /// The pinned tag when it's newer than the installed version (app updates
+    /// ship new pins), or nil when the install is current. A tool that isn't
+    /// installed yet reports the pin as "available". No network involved.
     public func upgradeAvailable(_ tool: ManagedTool, arch: String = "") async throws -> String? {
-        let (_, release) = try await fetchRelease(tool)
-        guard let installed = installedVersion(tool) else { return release.tagName }
-        return ManagedToolReleases.isNewer(release.tagName, than: installed) ? release.tagName : nil
+        guard let spec = ManagedToolSpec.catalog[tool] else { throw StoreError.unsupported(tool) }
+        guard let installed = installedVersion(tool) else { return spec.pinnedTag }
+        return ManagedToolReleases.isNewer(spec.pinnedTag, than: installed) ? spec.pinnedTag : nil
     }
 
-    /// Download (or upgrade to) the latest release of `tool` and return the
+    /// Download (or upgrade to) the pinned release of `tool` and return the
     /// runnable's path. Idempotent: re-running with the current version reuses
     /// the existing install.
     @discardableResult
@@ -237,7 +242,7 @@ public actor ManagedToolStore {
 
     private func fetchRelease(_ tool: ManagedTool) async throws -> (ManagedToolSpec, GitHubRelease) {
         guard let spec = ManagedToolSpec.catalog[tool] else { throw StoreError.unsupported(tool) }
-        guard let url = spec.latestReleaseURL else { throw StoreError.noReleaseURL }
+        guard let url = spec.pinnedReleaseURL else { throw StoreError.noReleaseURL }
         return (spec, try ManagedToolReleases.parse(try await http.data(from: url)))
     }
 
@@ -269,7 +274,10 @@ public actor ManagedToolStore {
     }
 
     /// Verify a download against the release's `sha256:…` digest, when present.
-    /// Older releases omit it; we proceed (HTTPS still applies) but can't checksum.
+    /// The digest comes from the same GitHub API response as the download URL,
+    /// so this only catches transit corruption — an attacker who can alter the
+    /// release can alter the digest too. Many assets carry no digest at all; we
+    /// then proceed on HTTPS alone.
     private func verifyDigest(_ file: URL, expected: String?) throws {
         guard let expected, expected.hasPrefix("sha256:") else { return }
         let want = String(expected.dropFirst("sha256:".count)).lowercased()

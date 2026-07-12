@@ -9,11 +9,15 @@ import Testing
     final class MockHTTP: HTTPFetching, @unchecked Sendable {
         let releaseJSON: Data
         let assetBytes: Data
+        private(set) var requested: [URL] = []
         init(releaseJSON: Data, assetBytes: Data) {
             self.releaseJSON = releaseJSON
             self.assetBytes = assetBytes
         }
-        func data(from url: URL) async throws -> Data { releaseJSON }
+        func data(from url: URL) async throws -> Data {
+            requested.append(url)
+            return releaseJSON
+        }
         func download(from url: URL, to destination: URL, onProgress: (@Sendable (Double) -> Void)?) async throws {
             onProgress?(1)
             try assetBytes.write(to: destination, options: .atomic)
@@ -41,6 +45,8 @@ import Testing
         #expect(await store.installedVersion(.apktool) == "v2.11.0")
         #expect(await store.resolve(.apktool) == path)
         #expect(FileManager.default.contents(atPath: path) == bytes)
+        // The release is fetched at the pinned tag, never `releases/latest`.
+        #expect(http.requested == [ManagedToolSpec.catalog[.apktool]?.pinnedReleaseURL].compactMap(\.self))
     }
 
     @Test func locationSizeAndRemoveManageTheInstall() async throws {
@@ -97,18 +103,25 @@ import Testing
         #expect(await store.resolve(.temurinJre) == path)
     }
 
-    @Test func detectsAnUpgradeAndAppliesIt() async throws {
+    @Test func upgradeAvailableComparesTheInstalledVersionAgainstThePin() async throws {
         let root = tempRoot()
-        let v210 = MockHTTP(releaseJSON: releaseJSON(tag: "v2.10.0", assetName: "apktool_2.10.0.jar"), assetBytes: Data("a".utf8))
-        let store = ManagedToolStore(rootDirectory: root, http: v210)
-        _ = try await store.install(.apktool)
-        #expect(try await store.upgradeAvailable(.apktool) == nil)   // same tag → current
+        let pin = try #require(ManagedToolSpec.catalog[.apktool]?.pinnedTag)
+        // Not installed → the pin itself is "available", with no network fetch.
+        let old = MockHTTP(releaseJSON: releaseJSON(tag: "v2.10.0", assetName: "apktool_2.10.0.jar"), assetBytes: Data("a".utf8))
+        let store = ManagedToolStore(rootDirectory: root, http: old)
+        #expect(try await store.upgradeAvailable(.apktool) == pin)
+        #expect(old.requested.isEmpty)
 
-        let v211 = MockHTTP(releaseJSON: releaseJSON(tag: "v2.11.0", assetName: "apktool_2.11.0.jar"), assetBytes: Data("b".utf8))
-        let upgraded = ManagedToolStore(rootDirectory: root, http: v211)
-        #expect(try await upgraded.upgradeAvailable(.apktool) == "v2.11.0")
+        // An install older than the pin (from a previous app version) → pin offered.
+        _ = try await store.install(.apktool)
+        #expect(try await store.upgradeAvailable(.apktool) == pin)
+
+        // At the pin → current.
+        let pinned = MockHTTP(releaseJSON: releaseJSON(tag: pin, assetName: "apktool_3.0.2.jar"), assetBytes: Data("b".utf8))
+        let upgraded = ManagedToolStore(rootDirectory: root, http: pinned)
         _ = try await upgraded.install(.apktool)
-        #expect(await upgraded.installedVersion(.apktool) == "v2.11.0")
+        #expect(await upgraded.installedVersion(.apktool) == pin)
+        #expect(try await upgraded.upgradeAvailable(.apktool) == nil)
     }
 
     @Test func decompressesXzAssetIntoTheRunnableBinary() async throws {
