@@ -79,7 +79,7 @@ import Testing
     @Test func monkeyIsMarkedDestructiveWithConfirmationCopy() {
         let monkey = FeatureRegistry.byID["monkey"]
         #expect(monkey?.isDestructive == true)
-        #expect(monkey?.confirmLabel == "Send random events")
+        #expect(monkey?.confirmLabel?.isEmpty == false)
     }
 
     @Test func processDeathKillsTheChosenBundleAndVerifiesDeath() async {

@@ -492,7 +492,8 @@ public enum FeatureRegistry {
                     defaultValue: .number(500), min: 1, max: 100_000
                 )
             ],
-            confirmLabel: "Send random events"
+            confirmLabel: "Send random taps, swipes, and keys to the app? "
+                + "They can press anything on screen, and a run can't be stopped midway."
         ),
 
         // ── Logs & Diagnostics ───────────────────────────────────────────
