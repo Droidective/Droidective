@@ -265,11 +265,14 @@ public struct AppInspectionService: Sendable {
     }
 
     public func sandboxPull(serial: String, packageId: String, filePath: String, to destination: URL? = nil) async throws -> URL {
-        // `exec-out` joins its arguments and runs them through the device shell,
-        // exactly like `adb shell` — so the package and path must be shellQuote'd
-        // (see sandboxList) or a hostile path is command injection.
+        // `exec-out` execs its argv directly on the device (shell protocol v2),
+        // so each element is a literal argument — unlike `adb shell`, which joins
+        // its args and runs them through the device shell. The package and path
+        // therefore go raw: a shellQuote'd value would reach `run-as`/`cat` with
+        // the literal quotes and fail (`unknown package: 'com.pkg'`). There is no
+        // device shell to inject into here — a space or `$` in the path is safe.
         let output = try await client.runBinary(
-            on: serial, ["exec-out", "run-as", shellQuote(packageId), "cat", shellQuote(filePath)],
+            on: serial, ["exec-out", "run-as", packageId, "cat", filePath],
             timeout: .seconds(120)
         )
         if Self.isNotDebuggable(output.stderrText) {

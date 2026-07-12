@@ -27,7 +27,7 @@ import Testing
         ])
     }
 
-    @Test func sandboxPullQuotesPackageAndPath() async throws {
+    @Test func sandboxPullPassesRawArgvBecauseExecOutDoesNotUseAShell() async throws {
         let runner = MockProcessRunner()
         runner.script(argsPrefix: ["-s"], stdout: "file bytes")
         let service = AppInspectionService(client: await makeTestClient(runner: runner))
@@ -38,8 +38,11 @@ import Testing
         _ = try await service.sandboxPull(
             serial: "S1", packageId: "com.app", filePath: "/data/shared prefs/a.xml", to: dest
         )
+        // `exec-out` execs argv directly on the device — quoting would send the
+        // literal quotes to run-as/cat and fail. The space in the path is a
+        // single argv element, so no escaping is needed or wanted.
         #expect(runner.invocations.last?.arguments == [
-            "-s", "S1", "exec-out", "run-as", "'com.app'", "cat", "'/data/shared prefs/a.xml'",
+            "-s", "S1", "exec-out", "run-as", "com.app", "cat", "/data/shared prefs/a.xml",
         ])
     }
 }
