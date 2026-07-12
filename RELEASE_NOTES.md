@@ -1,3 +1,63 @@
+## Droidective v3.0.1
+
+A bug-fix release: confirmations before destructive actions, several features
+that now work without an Android device selected, honest status messages, and
+tighter analytics.
+
+### Fixes
+
+- **Uninstall asks first** — the Uninstall button in the Apps list now shows a
+  confirmation, matching Clear Data. It previously removed the app and its data
+  on the first click.
+- **Logcat streams after a device authorizes** — opening Logcat on a device
+  that was still unauthorized left the stream empty even after you approved the
+  adb prompt. It now starts as soon as the device is ready.
+- **APK tools open without a device** — APK Studio, APK Inspector, Sign APK, and
+  Decompile APK work on local files and no longer require an Android device;
+  they stayed usable with only an iOS Simulator selected.
+- **Monkey Test confirms before running** — it warns before sending random
+  events, and when a long run hits the time limit it reports that events were
+  already sent instead of "failed".
+- **Frida on a non-rooted device** — Frida now checks for root before pushing
+  the server and shows a clear message pointing to frida-gadget, instead of a
+  status that said "Started" while also requiring root.
+- **Change Locale is honest** — the toast now says the locale change was
+  requested (a full system change can require root) rather than claiming it
+  was set.
+- **Crash Catcher shows one crash** — the last-crash view no longer runs
+  together multiple crashes when several are buffered.
+- **Reactotron opens without an Android device** — its server is host-side, so
+  it no longer requires an Android device to be selected.
+- **Screen Record surfaces a disconnect** — if the device drops mid-recording,
+  the timer stops and the captured footage is kept for saving, instead of the
+  timer running on against a dead stream.
+- **Performance recording survives a disconnect** — samples are kept and stay
+  exportable when the device disconnects, rather than being cleared.
+- **Network Speed totals** — session download/upload totals no longer jump to a
+  bogus value if the device reboots mid-recording.
+- **Quick Actions panel** — "all devices" only fans out actions that support it
+  (matching the main window), multi-device runs report each device's outcome,
+  the panel opens on the display under the pointer, and a quick screenshot names
+  the saved file.
+- Manage App's confirmation states how many devices it affects; the app picker
+  refreshes when you switch devices; and tool detection re-checks after you
+  install adb (or another tool) while the app is open.
+
+### Privacy
+
+- Anonymous analytics no longer include the device model or Android version —
+  only whether the device is an emulator or wireless. This matches the privacy
+  policy and the Settings description.
+
+### Improvements
+
+- **Bundled developer tools are pinned** — jadx, apktool, uber-apk-signer,
+  frida-server, and the bundled Java runtime install known-good pinned versions
+  instead of whatever is latest upstream.
+- Third-party license notices now cover every bundled and linked component.
+
+Installed copies update in place via Sparkle.
+
 ## Droidective v3.0.0
 
 Terminal split panes with working-directory inheritance, an onboarding tour
