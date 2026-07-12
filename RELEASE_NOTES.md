@@ -65,6 +65,11 @@ hubs, custom commands through your login shell, and JS Console reload/restart.
 - **Nothing clips at the minimum window width** — on tabs showing the bundle
   pill, the device bar could push the layout past the window, cutting off
   sidebar icons on the left and bar controls on the right.
+- **Dropping a tab no longer leaves a stale highlight** — the ending drag
+  session could re-light a pane's drop highlight or a reorder guideline right
+  after the drop. Tab drags also read better now: the dragged chip fades in
+  place while its ghost rides the cursor, and reordered chips slide instead
+  of snapping.
 
 Installed copies update in place via Sparkle.
 
