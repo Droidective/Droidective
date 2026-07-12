@@ -31,6 +31,22 @@ import Testing
         #expect(DecompileService.jadxLibDir(forRunnable: "/x/bin/jadx") == "/x/lib")
     }
 
+    // MARK: cache directory naming
+
+    @Test func outputDirNameSeparatesSameNamedApksFromDifferentFolders() {
+        let debug = DecompileService.outputDirName(apkPath: "/builds/debug/app.apk", mode: .jadx)
+        let release = DecompileService.outputDirName(apkPath: "/builds/release/app.apk", mode: .jadx)
+        #expect(debug != release)
+        #expect(debug.hasPrefix("app-"))
+        #expect(debug.hasSuffix("-jadx"))
+    }
+
+    @Test func outputDirNameIsStableForTheSamePathAndVariesByMode() {
+        let first = DecompileService.outputDirName(apkPath: "/x/a.apk", mode: .jadx)
+        #expect(first == DecompileService.outputDirName(apkPath: "/x/a.apk", mode: .jadx))
+        #expect(first != DecompileService.outputDirName(apkPath: "/x/a.apk", mode: .apktool))
+    }
+
     // MARK: output tree
 
     @Test func treeListsDirectoriesFirstThenFilesAlphabetically() throws {
@@ -88,12 +104,27 @@ import Testing
         // downloaded tool, decompile still returns the cached dir instead of
         // throwing toolMissing — proving it never tried to run the decompiler.
         let out = Self.tempDir()
-        let dir = out.appendingPathComponent("a-jadx", isDirectory: true)
+        let dir = out.appendingPathComponent(
+            DecompileService.outputDirName(apkPath: "/x/a.apk", mode: .jadx), isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try "class A {}".write(to: dir.appendingPathComponent("A.java"), atomically: true, encoding: .utf8)
         let service = await Self.makeService(java: nil)
         let result = try await service.decompile(apkPath: "/x/a.apk", mode: .jadx, into: out)
         #expect(result == dir)
+    }
+
+    @Test func decompileDoesNotReuseACacheFromASameNamedApkElsewhere() async throws {
+        // /debug/a.apk was decompiled earlier; /release/a.apk must not be served
+        // that cache — with no tools available the fresh run fails loudly instead.
+        let out = Self.tempDir()
+        let cached = out.appendingPathComponent(
+            DecompileService.outputDirName(apkPath: "/debug/a.apk", mode: .jadx), isDirectory: true)
+        try FileManager.default.createDirectory(at: cached, withIntermediateDirectories: true)
+        try "class A {}".write(to: cached.appendingPathComponent("A.java"), atomically: true, encoding: .utf8)
+        let service = await Self.makeService(java: nil)
+        await #expect(throws: DecompileService.DecompileError.self) {
+            try await service.decompile(apkPath: "/release/a.apk", mode: .jadx, into: out)
+        }
     }
 
     private static func makeService(java: String?) async -> DecompileService {

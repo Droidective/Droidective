@@ -25,6 +25,11 @@ struct ScreenRecordView: View {
     @State private var recordedURL: URL?
     /// A finished recording awaiting the Discard/Save/Edit choice.
     @State private var decisionURL: URL?
+    /// The serial the active recording targets, watched for disconnects.
+    @State private var recordingSerial: String?
+    /// The recording device vanished mid-capture: the captured segments are
+    /// kept and only Stop (save/edit/discard) remains.
+    @State private var deviceLost = false
     @State private var showAdvanced = false
     @State private var limitTask: Task<Void, Never>?
     /// Identifies this view's leave guard so a stale clear can't wipe another's.
@@ -62,6 +67,12 @@ struct ScreenRecordView: View {
             }
         }
         .recordingDecision(url: $decisionURL) { recordedURL = $0 }
+        .onChange(of: state.devices) {
+            guard isRecording, !isStopping, !deviceLost, let recordingSerial,
+                  !state.devices.contains(where: { $0.serial == recordingSerial && $0.isReady })
+            else { return }
+            Task { await handleDeviceLost() }
+        }
         .onChange(of: state.pendingExit?.saving) { _, saving in
             if saving == true, isRecording, state.pendingExitConcerns(tabFeatureID) {
                 Task { await saveRecordingForLeave() }
@@ -118,9 +129,13 @@ struct ScreenRecordView: View {
                     }
                     .font(.app(size: 30, weight: .semibold, design: .monospaced))
                     .monospacedDigit()
-                    Text(isPaused ? "Paused" : "Recording…")
+                    Text(deviceLost
+                        ? "Device disconnected — recording stopped"
+                        : (isPaused ? "Paused" : "Recording…"))
                         .font(.app(.subheadline))
-                        .foregroundStyle(isPaused ? Color.secondary : Color.red)
+                        .foregroundStyle(deviceLost
+                            ? Color.orange
+                            : (isPaused ? Color.secondary : Color.red))
                 } else {
                     Text("Ready to record").font(.app(.title2).weight(.semibold))
                 }
@@ -160,18 +175,25 @@ struct ScreenRecordView: View {
     }
 
     private var recBadge: some View {
-        Label(isPaused ? "PAUSED" : "REC", systemImage: isPaused ? "pause.fill" : "record.circle.fill")
+        Label(deviceLost ? "STOPPED" : (isPaused ? "PAUSED" : "REC"),
+              systemImage: deviceLost ? "stop.fill" : (isPaused ? "pause.fill" : "record.circle.fill"))
             .font(.app(.caption2).weight(.bold))
             .foregroundStyle(.white)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(isPaused ? Color.secondary : Color.red, in: Capsule())
-            .symbolEffect(.pulse, isActive: !isPaused)
+            .background(deviceLost ? Color.orange : (isPaused ? Color.secondary : Color.red), in: Capsule())
+            .symbolEffect(.pulse, isActive: !isPaused && !deviceLost)
             .padding(8)
     }
 
     @ViewBuilder private var recordControlButtons: some View {
-        if isRecording {
+        if deviceLost {
+            Button { Task { await stop() } } label: {
+                Label("Stop & Save", systemImage: "stop.fill").frame(width: 140)
+            }
+            .buttonStyle(.borderedProminent).tint(.red).controlSize(.large)
+            .disabled(isStopping)
+        } else if isRecording {
             HStack(spacing: 12) {
                 Button {
                     // Claim the busy gate synchronously, before spawning the
@@ -317,6 +339,8 @@ struct ScreenRecordView: View {
             isRecording = true
             isPaused = false
             pausedAt = nil
+            recordingSerial = serial
+            deviceLost = false
             startedAt = Date()
             startPreviewPolling()
             // Lock the device/bundle pickers for the duration, as the
@@ -382,6 +406,19 @@ struct ScreenRecordView: View {
             pausedAt = Date()
             isPaused = true
         }
+    }
+
+    /// The recording device dropped off adb mid-capture. Finalize the segment
+    /// being written (keeping it, like a pause) and freeze the UI in a
+    /// "recording stopped" state — Stop & Save assembles what was captured.
+    private func handleDeviceLost() async {
+        guard let recorder, isRecording, !isStopping else { return }
+        limitTask?.cancel()
+        await recorder.pause()
+        guard isRecording, !isStopping else { return }
+        deviceLost = true
+        pausedAt = Date()
+        isPaused = true
     }
 
     /// Seconds of active (non-paused) recording elapsed so far.
@@ -457,6 +494,8 @@ struct ScreenRecordView: View {
         pausedAt = nil
         isStopping = false
         startedAt = nil
+        recordingSerial = nil
+        deviceLost = false
         self.recorder = nil
         stopPreviewPolling()
         state.setRecording(false, owner: "screen-record")
@@ -478,6 +517,8 @@ struct ScreenRecordView: View {
         isPaused = false
         pausedAt = nil
         startedAt = nil
+        recordingSerial = nil
+        deviceLost = false
         stopPreviewPolling()
         do {
             let temp = try await recorder.stop()

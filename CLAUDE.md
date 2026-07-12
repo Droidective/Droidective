@@ -308,8 +308,8 @@ platforms annotation without a runner.
   registry `FieldDef`s in-panel (`QuickActionFormView`); app verbs come from
   `AppControlService.AppAction` (destructive ones need a second ⏎). With >1
   device connected, every device-scoped action pushes a pick-device
-  interstitial; ⌘⏎ there runs on all devices (any device feature — the panel
-  fans out explicit targets itself, not gated on `supportsRunAll`). Targets
+  interstitial; ⌘⏎ there runs on all devices (offered and applied only for
+  `supportsRunAll` features — parity with the main window). Targets
   always ride explicitly through `run(on:)` — never the device-bar
   selection, whose run-on-all state belongs to the hidden window.
   ←→/↑↓ navigate the root grid even while a query is typed. Esc (or the

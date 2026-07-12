@@ -57,10 +57,15 @@ enum QuickActionsPanel {
 
     private static func present(state: AppState) {
         // While backgrounded the device poll is widened, so the list can be
-        // stale — refresh once on open.
+        // stale — refresh once on open, and tighten polling while the panel
+        // is up so a device plugged in mid-session appears promptly.
         state.refreshDevices()
+        state.setQuickPanelOpen(true)
         let controller = FloatingPanelController.quickActions
-        controller.onClosed = { QuickPanelMemory.shared.closedAt = Date() }
+        controller.onClosed = {
+            state.setQuickPanelOpen(false)
+            QuickPanelMemory.shared.closedAt = Date()
+        }
         controller.show { close in
             QuickActionsView(onClose: close)
                 .environment(state)
@@ -1201,13 +1206,15 @@ struct QuickActionsView: View {
     /// Explicit targets for `AppState.run(feature:params:on:)` — always the
     /// panel's own single pick or "All devices" fan-out, never the device
     /// bar's `targetSerials` (whose run-on-all state belongs to the hidden main
-    /// window, and whose selection can lag a guard-deferred switch). An "All
-    /// devices" pick fans out any device feature, not just `supportsRunAll`
-    /// ones, since the panel loops explicit targets. See `PanelTargeting`.
+    /// window, and whose selection can lag a guard-deferred switch). Fan-out
+    /// is gated on `supportsRunAll`, matching the main window — an "All
+    /// devices" approval on a single-device feature falls back to the single
+    /// target. See `PanelTargeting`.
     private func explicitTargets(for feature: FeatureDef) -> [String]? {
         PanelTargeting.runTargets(
-            needsDevice: feature.needsDevice, picked: pickedSerial,
-            selected: state.selectedSerial, approved: approvedAllSerials, ready: readySerials
+            needsDevice: feature.needsDevice, supportsRunAll: feature.supportsRunAll,
+            picked: pickedSerial, selected: state.selectedSerial,
+            approved: approvedAllSerials, ready: readySerials
         )
     }
 
@@ -1220,10 +1227,10 @@ struct QuickActionsView: View {
         guard readyDevices.count > 1 else { return (false, false) }
         switch action {
         case .runFeature(let feature):
-            return (feature.needsDevice, feature.needsDevice)
+            return (feature.needsDevice, feature.needsDevice && feature.supportsRunAll)
         case .push(.form(let id)):
             guard let feature = FeatureRegistry.byID[id] else { return (false, false) }
-            return (feature.needsDevice, feature.needsDevice)
+            return (feature.needsDevice, feature.needsDevice && feature.supportsRunAll)
         case .push(.apps):
             // The apps list is inherently one device's.
             return (true, false)
@@ -1248,6 +1255,9 @@ struct QuickActionsView: View {
         case .openInApp(let feature):
             onClose()
             state.activateMainWindow()
+            // requestFeature only emits telemetry; the adaptive-ranking
+            // engagement is recorded separately (parity with openFeature).
+            state.noteFeatureUse(feature.id)
             state.requestFeature(feature.id)
         case .installAPK:
             pickAndInstallAPKs()
@@ -1319,11 +1329,25 @@ struct QuickActionsView: View {
         lastRun = nil
         Task {
             let started = Date()
-            await state.run(feature: feature, params: [:], on: explicitTargets(for: feature))
-            let fresh = state.lastResults[feature.id].flatMap { entry in
-                entry.at >= started ? QuickRunOutcome(result: entry.result) : nil
+            let outcomes = await state.run(feature: feature, params: [:], on: explicitTargets(for: feature))
+            if outcomes.count > 1 {
+                // `lastResults` is last-wins per serial, so aggregate the
+                // fan-out here — mirroring the custom-command path.
+                let okCount = outcomes.filter(\.result.ok).count
+                finish(QuickRunOutcome(
+                    message: "\(feature.title) — ok on \(okCount) of \(outcomes.count) devices",
+                    ok: okCount == outcomes.count
+                ))
+            } else if let outcome = outcomes.first {
+                finish(QuickRunOutcome(result: outcome.result))
+            } else {
+                // No per-serial outcomes (e.g. the screenshot quick path) —
+                // fall back to a result the run recorded, if fresh.
+                let fresh = state.lastResults[feature.id].flatMap { entry in
+                    entry.at >= started ? QuickRunOutcome(result: entry.result) : nil
+                }
+                finish(fresh ?? QuickRunOutcome(message: "Done", ok: true))
             }
-            finish(fresh ?? QuickRunOutcome(message: "Done", ok: true))
         }
     }
 
@@ -1355,7 +1379,7 @@ struct QuickActionsView: View {
         let targets: [String] = deviceScoped
             ? PanelTargeting.fanOut(
                 picked: pickedSerial, selected: state.selectedSerial,
-                approved: approvedAllSerials, ready: readySerials
+                approved: approvedAllSerials, ready: readySerials, supportsRunAll: true
             )
             : (panelTargetSerial.map { [$0] } ?? [])
         if command.kind == .adb, targets.isEmpty {
@@ -1443,7 +1467,7 @@ struct QuickActionsView: View {
     private func install(_ urls: [URL]) {
         let serials = PanelTargeting.fanOut(
             picked: pickedSerial, selected: state.selectedSerial,
-            approved: approvedAllSerials, ready: readySerials
+            approved: approvedAllSerials, ready: readySerials, supportsRunAll: true
         )
         guard !serials.isEmpty else {
             lastRun = QuickRunOutcome(message: "No device connected.", ok: false)

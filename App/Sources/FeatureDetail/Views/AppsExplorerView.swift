@@ -240,6 +240,7 @@ private struct AppDetailPane: View {
     @State private var managing = false
     @State private var showFiles = false
     @State private var confirmingClearData = false
+    @State private var confirmingUninstall = false
 
     private var serial: String { state.targetSerials.first ?? "" }
 
@@ -372,7 +373,7 @@ private struct AppDetailPane: View {
                     .disabled(managing)
                     if canUninstall {
                         Button(role: .destructive) {
-                            uninstall()
+                            confirmingUninstall = true
                         } label: {
                             Label("Uninstall", systemImage: "trash")
                         }
@@ -389,6 +390,13 @@ private struct AppDetailPane: View {
             isPresented: $confirmingClearData
         ) {
             Button("Clear Data", role: .destructive) { runControl(.clearData) }
+            Button("Cancel", role: .cancel) {}
+        }
+        .confirmationDialog(
+            "Uninstall \(packageId)? This removes the app from the device.",
+            isPresented: $confirmingUninstall
+        ) {
+            Button("Uninstall", role: .destructive) { uninstall() }
             Button("Cancel", role: .cancel) {}
         }
         .task(id: "\(packageId)|\(state.targetSerials.first ?? "")") {

@@ -43,6 +43,38 @@ import Testing
         #expect(!runner.invocations.contains { $0.arguments.contains("main") })
     }
 
+    @Test func crashBufferWithSeveralCrashesYieldsOnlyTheMostRecent() async throws {
+        let runner = MockProcessRunner()
+        let buffer = """
+        E AndroidRuntime: FATAL EXCEPTION: main
+        E AndroidRuntime: java.lang.IllegalStateException: first boom
+        E AndroidRuntime:   at com.app.First.run(First.java:1)
+        E AndroidRuntime:   at com.app.First.main(First.java:2)
+        E AndroidRuntime: FATAL EXCEPTION: main
+        E AndroidRuntime: java.lang.NullPointerException: second boom
+        E AndroidRuntime:   at com.app.Second.run(Second.java:9)
+        """
+        runner.script(argsPrefix: ["-s", "S1", "logcat", "-d", "-b", "crash"], stdout: buffer)
+        let extractor = CrashExtractor(client: await makeTestClient(runner: runner))
+
+        let crash = try await extractor.lastCrash(serial: "S1", format: .plain)
+        #expect(crash?.contains("second boom") == true)
+        #expect(crash?.contains("first boom") == false)
+    }
+
+    @Test func crashBufferContentWithoutAPatternMatchIsShownAsIs() async throws {
+        // Some traces don't hit the crash pattern; the buffer must still surface.
+        let runner = MockProcessRunner()
+        runner.script(
+            argsPrefix: ["-s", "S1", "logcat", "-d", "-b", "crash"],
+            stdout: "F DEBUG: signal 11 (SIGSEGV), fault addr 0xdeadbeef"
+        )
+        let extractor = CrashExtractor(client: await makeTestClient(runner: runner))
+
+        let crash = try await extractor.lastCrash(serial: "S1", format: .plain)
+        #expect(crash == "F DEBUG: signal 11 (SIGSEGV), fault addr 0xdeadbeef")
+    }
+
     @Test func fallsBackToMainBufferWhenCrashBufferEmpty() async throws {
         let runner = MockProcessRunner()
         runner.script(argsPrefix: ["-s", "S1", "logcat", "-d", "-b", "crash"], stdout: "\n")

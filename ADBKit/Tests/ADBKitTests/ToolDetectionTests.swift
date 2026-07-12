@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import ADBKit
 
@@ -37,5 +38,61 @@ import Testing
         #expect(report[.ffmpeg]?.installed == false)
         #expect(report[.emulator]?.installed == false)
         #expect(report[.scrcpy]?.installed == false)
+    }
+}
+
+@Suite struct ToolLocatorCacheTests {
+    /// Controllable time source for the locator's negative-result TTL.
+    final class FakeClock: @unchecked Sendable {
+        private let lock = NSLock()
+        private var date = Date(timeIntervalSinceReferenceDate: 0)
+        var now: Date {
+            lock.lock()
+            defer { lock.unlock() }
+            return date
+        }
+        func advance(by seconds: TimeInterval) {
+            lock.lock()
+            date += seconds
+            lock.unlock()
+        }
+    }
+
+    private func makeLocator(
+        runner: MockProcessRunner, clock: FakeClock, executables: Set<String> = []
+    ) -> ToolLocator {
+        ToolLocator(
+            runner: runner, environment: [:],
+            now: { clock.now }, isExecutableFile: { executables.contains($0) }
+        )
+    }
+
+    @Test func notFoundExpiresSoAMidSessionInstallIsPickedUp() async {
+        let runner = MockProcessRunner()  // unscripted login shell → exit 1 → not found
+        let clock = FakeClock()
+        let locator = makeLocator(runner: runner, clock: clock)
+
+        #expect(await locator.resolve(.scrcpy) == nil)
+        #expect(await locator.resolve(.scrcpy) == nil)
+        // Within the TTL the miss is served from cache — a 2 s poll must not
+        // spawn a login shell on every tick.
+        #expect(runner.invocations.count == 1)
+
+        clock.advance(by: ToolLocator.notFoundTTL + 1)
+        #expect(await locator.resolve(.scrcpy) == nil)
+        #expect(runner.invocations.count == 2)  // TTL elapsed → probed again
+    }
+
+    @Test func foundPathsStayCachedIndefinitely() async {
+        let runner = MockProcessRunner()
+        let clock = FakeClock()
+        let locator = makeLocator(
+            runner: runner, clock: clock, executables: ["/opt/homebrew/bin/scrcpy"]
+        )
+
+        #expect(await locator.resolve(.scrcpy) == "/opt/homebrew/bin/scrcpy")
+        clock.advance(by: ToolLocator.notFoundTTL * 10)
+        #expect(await locator.resolve(.scrcpy) == "/opt/homebrew/bin/scrcpy")
+        #expect(runner.invocations.isEmpty)  // never needed the login shell
     }
 }

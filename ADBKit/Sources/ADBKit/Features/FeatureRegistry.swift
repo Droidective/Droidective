@@ -153,7 +153,8 @@ public enum FeatureRegistry {
                 "network", "api", "display", "log", "debug", "react native", "rn",
                 "9090", "infinite red", "devtools",
             ],
-            category: .reactNative, icon: "antenna.radiowaves.left.and.right", kind: .view
+            category: .reactNative, icon: "antenna.radiowaves.left.and.right", kind: .view,
+            needsDevice: false
         ),
         FeatureDef(
             id: "js-console", title: "JS Console",
@@ -392,7 +393,8 @@ public enum FeatureRegistry {
                 "disassemble", "resources", "recompile", "rebuild", "repackage", "patch", "build",
                 "sign", "signing", "zipalign", "keystore", "key", "debug key", "release", "resign", "re-sign",
             ],
-            category: .appManagement, icon: "wrench.and.screwdriver", kind: .view
+            category: .appManagement, icon: "wrench.and.screwdriver", kind: .view,
+            needsDevice: false
         ),
         FeatureDef(
             id: "apk-inspector", title: "APK Inspector",
@@ -402,7 +404,8 @@ public enum FeatureRegistry {
                 "signing", "signature", "certificate", "cert", "sha", "sdk", "min sdk",
                 "target sdk", "debuggable", "badging", "aapt", "apksigner", "reverse engineer",
             ],
-            category: .appManagement, icon: "doc.text.magnifyingglass", kind: .view
+            category: .appManagement, icon: "doc.text.magnifyingglass", kind: .view,
+            needsDevice: false
         ),
         FeatureDef(
             id: "apk-sign", title: "Sign APK",
@@ -411,7 +414,8 @@ public enum FeatureRegistry {
                 "sign", "signing", "apksigner", "zipalign", "keystore", "key", "certificate",
                 "debug key", "release", "resign", "re-sign", "jarsigner", "v2", "apk",
             ],
-            category: .appManagement, icon: "signature", kind: .view
+            category: .appManagement, icon: "signature", kind: .view,
+            needsDevice: false
         ),
         FeatureDef(
             id: "apk-decompile", title: "Decompile APK",
@@ -421,7 +425,8 @@ public enum FeatureRegistry {
                 "reverse engineer", "reverse engineering", "source", "java", "resources",
                 "disassemble", "manifest", "apk", "dex",
             ],
-            category: .appManagement, icon: "curlybraces.square", kind: .view
+            category: .appManagement, icon: "curlybraces.square", kind: .view,
+            needsDevice: false
         ),
         FeatureDef(
             id: "frida-console", title: "Frida",
@@ -480,12 +485,15 @@ public enum FeatureRegistry {
             subtitle: "Fire random events to hunt for crashes",
             keywords: ["monkey", "stress", "random", "fuzz", "crash"],
             category: .appManagement, icon: "die.face.5", kind: .formAction, needsBundle: true,
+            isDestructive: true,
             fields: [
                 FieldDef(
                     name: "count", label: "Event count", control: .number,
                     defaultValue: .number(500), min: 1, max: 100_000
                 )
-            ]
+            ],
+            confirmLabel: "Send random taps, swipes, and keys to the app? "
+                + "They can press anything on screen, and a run can't be stopped midway."
         ),
 
         // ── Logs & Diagnostics ───────────────────────────────────────────

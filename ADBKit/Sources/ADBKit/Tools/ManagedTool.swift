@@ -24,13 +24,18 @@ public enum ArtifactKind: Sendable, Equatable {
     case xzBinary
 }
 
-/// Static metadata for a managed tool: which GitHub repo to fetch it from, how
-/// to recognise the right release asset, and where the runnable sits once
-/// placed. Pure data — no I/O — so the catalog and its matchers are unit-tested.
+/// Static metadata for a managed tool: which GitHub repo and release tag to
+/// fetch it from, how to recognise the right release asset, and where the
+/// runnable sits once placed. Pure data — no I/O — so the catalog and its
+/// matchers are unit-tested.
 public struct ManagedToolSpec: Sendable, Equatable {
     public let tool: ManagedTool
     public let owner: String
     public let repo: String
+    /// The exact release tag the app installs — a known-good version pinned at
+    /// build time, so a compromised or broken "latest" release can't be pulled
+    /// automatically. App updates ship new pins.
+    public let pinnedTag: String
     public let kind: ArtifactKind
     /// Regex matched against a release asset's file name. `{arch}` is replaced
     /// with the target architecture for per-arch tools (Temurin uses the Mac's
@@ -41,46 +46,48 @@ public struct ManagedToolSpec: Sendable, Equatable {
     public let runnableName: String?
 
     public init(
-        tool: ManagedTool, owner: String, repo: String, kind: ArtifactKind,
+        tool: ManagedTool, owner: String, repo: String, pinnedTag: String, kind: ArtifactKind,
         assetPattern: String, runnableName: String? = nil
     ) {
         self.tool = tool
         self.owner = owner
         self.repo = repo
+        self.pinnedTag = pinnedTag
         self.kind = kind
         self.assetPattern = assetPattern
         self.runnableName = runnableName
     }
 
-    /// `GET /repos/{owner}/{repo}/releases/latest`.
-    public var latestReleaseURL: URL? {
-        URL(string: "https://api.github.com/repos/\(owner)/\(repo)/releases/latest")
+    /// `GET /repos/{owner}/{repo}/releases/tags/{pinnedTag}`.
+    public var pinnedReleaseURL: URL? {
+        URL(string: "https://api.github.com/repos/\(owner)/\(repo)/releases/tags/\(pinnedTag)")
     }
 
     public static let catalog: [ManagedTool: ManagedToolSpec] = [
         .jadx: ManagedToolSpec(
-            tool: .jadx, owner: "skylot", repo: "jadx", kind: .zipArchive,
+            tool: .jadx, owner: "skylot", repo: "jadx", pinnedTag: "v1.5.6", kind: .zipArchive,
             assetPattern: #"^jadx-\d.*\.zip$"#, runnableName: "jadx"),
         .apktool: ManagedToolSpec(
-            tool: .apktool, owner: "iBotPeaches", repo: "Apktool", kind: .jar,
+            tool: .apktool, owner: "iBotPeaches", repo: "Apktool", pinnedTag: "v3.0.2", kind: .jar,
             assetPattern: #"^apktool_.*\.jar$"#),
         .uberApkSigner: ManagedToolSpec(
-            tool: .uberApkSigner, owner: "patrickfav", repo: "uber-apk-signer", kind: .jar,
-            assetPattern: #"^uber-apk-signer-.*\.jar$"#),
+            tool: .uberApkSigner, owner: "patrickfav", repo: "uber-apk-signer", pinnedTag: "v1.3.0",
+            kind: .jar, assetPattern: #"^uber-apk-signer-.*\.jar$"#),
         .fridaServer: ManagedToolSpec(
-            tool: .fridaServer, owner: "frida", repo: "frida", kind: .xzBinary,
+            tool: .fridaServer, owner: "frida", repo: "frida", pinnedTag: "17.15.4", kind: .xzBinary,
             assetPattern: #"^frida-server-.*-android-{arch}\.xz$"#, runnableName: "frida-server"),
         .fridaGadget: ManagedToolSpec(
-            tool: .fridaGadget, owner: "frida", repo: "frida", kind: .xzBinary,
+            tool: .fridaGadget, owner: "frida", repo: "frida", pinnedTag: "17.15.4", kind: .xzBinary,
             assetPattern: #"^frida-gadget-.*-android-{arch}\.so\.xz$"#, runnableName: "frida-gadget.so"),
         .temurinJre: ManagedToolSpec(
-            tool: .temurinJre, owner: "adoptium", repo: "temurin21-binaries", kind: .tarGz,
+            tool: .temurinJre, owner: "adoptium", repo: "temurin21-binaries",
+            pinnedTag: "jdk-21.0.11+10", kind: .tarGz,
             assetPattern: #"^OpenJDK21U-jre_{arch}_mac_hotspot_.*\.tar\.gz$"#, runnableName: "java"),
     ]
 }
 
 /// One GitHub release and its downloadable assets, decoded from the
-/// `releases/latest` API response.
+/// `releases/tags/{tag}` API response.
 public struct GitHubRelease: Sendable, Equatable, Decodable {
     public let tagName: String
     public let assets: [Asset]

@@ -14,15 +14,14 @@ SIGN_IDENTITY="${SIGN_IDENTITY:--}"
 APP_DIR="DerivedData/Build/Products/Release"
 APP="$APP_DIR/Droidective.app"
 DMG="$APP_DIR/Droidective-${VERSION}.dmg"
-IDENTITY="${SIGN_IDENTITY:--}"
 
 if [[ ! -d "$APP" ]]; then
   echo "error: $APP not found — build the Release configuration first" >&2
   exit 1
 fi
 
-opts=(--force --sign "$IDENTITY")
-if [[ "$IDENTITY" != "-" ]]; then
+opts=(--force --sign "$SIGN_IDENTITY")
+if [[ "$SIGN_IDENTITY" != "-" ]]; then
   opts+=(--options runtime --timestamp)
 fi
 
@@ -73,8 +72,8 @@ rm -f "$DMG"
 hdiutil create -volname "Droidective" -srcfolder "$staging" -ov -format UDZO "$DMG"
 
 # Sign the DMG itself so the download carries a Developer ID signature too.
-if [[ "$IDENTITY" != "-" ]]; then
-  codesign --force --sign "$IDENTITY" --timestamp "$DMG"
+if [[ "$SIGN_IDENTITY" != "-" ]]; then
+  codesign --force --sign "$SIGN_IDENTITY" --timestamp "$DMG"
 fi
 
-echo "created $DMG (identity: $IDENTITY)"
+echo "created $DMG (identity: $SIGN_IDENTITY)"

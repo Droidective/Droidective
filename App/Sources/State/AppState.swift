@@ -513,31 +513,40 @@ final class AppState {
         } else if selectedSerial == nil {
             selectedSerial = ready.first?.serial
         }
-        if selectedSerial != before || (selectedSerial != nil && activeOverrides.isEmpty) {
+        // Refetch overrides when the selection changed, or once when the
+        // selected device becomes ready — not on every unrelated device-list
+        // change (an empty override set is the common steady state, so
+        // "empty" alone can't mean "never loaded").
+        let readySelected = selectedDevice?.isReady == true
+        if selectedSerial != before || (readySelected && overridesFetchedForSerial != selectedSerial) {
             Task { await refreshOverrides() }
         }
         // Picker enrichment reads getprop over adb — Android only; a
         // simulator's runtime label already rides in `Device.product`.
         for device in ready
-        where device.platform == .android && deviceDetails[device.serial] == nil {
+        where device.platform == .android && deviceDetails[device.serial] == nil
+            && !deviceDetailsFetching.contains(device.serial) {
+            deviceDetailsFetching.insert(device.serial)
             Task {
                 let details = await DeviceDetails.fetch(client: env.client, serial: device.serial)
                 deviceDetails[device.serial] = details
-                reportDeviceConnected(device, details: details)
+                deviceDetailsFetching.remove(device.serial)
+                reportDeviceConnected(device)
             }
         }
     }
 
+    /// Serials with a `DeviceDetails.fetch` in flight, so a device-list change
+    /// mid-fetch doesn't spawn a duplicate getprop probe.
+    private var deviceDetailsFetching: Set<String> = []
+
     /// Emit an anonymous `device_connected` once per device this session (no
     /// serial leaves the machine — it's only the local dedup key). Android
-    /// only — the fields are Android-shaped and simulators skip the details
-    /// fetch that triggers it.
-    private func reportDeviceConnected(_ device: Device, details: DeviceDetails) {
+    /// only — simulators skip the details fetch that triggers it.
+    private func reportDeviceConnected(_ device: Device) {
         guard reportedDeviceSerials.insert(device.serial).inserted else { return }
         Telemetry.shared.trackDeviceConnected(
             isEmulator: device.serial.hasPrefix("emulator-"),
-            androidVersion: details.androidVersion,
-            model: device.model,
             isWireless: device.isWireless
         )
     }
@@ -567,12 +576,17 @@ final class AppState {
     // MARK: - Overrides
 
     var activeOverrides: [ActiveOverride] = []
+    /// The ready serial the overrides were last fetched for; nil until the
+    /// selected device has been probed. Gates the devices-changed refetch.
+    private var overridesFetchedForSerial: String?
 
     func refreshOverrides() async {
         guard let device = selectedDevice, device.isReady else {
             activeOverrides = []
+            overridesFetchedForSerial = nil
             return
         }
+        overridesFetchedForSerial = device.serial
         switch device.platform {
         case .android:
             activeOverrides = (try? await env.engine.overrides.active(serial: device.serial)) ?? []
@@ -931,10 +945,26 @@ final class AppState {
         FeatureRegistry.byID[id] != nil || ["home", "about", "catalog"].contains(id)
     }
 
+    private var isForeground = true
+    private var quickPanelOpen = false
+
     /// Widen device polling while the app is backgrounded so an idle, hidden
     /// window stops spawning `adb devices` / `simctl list` every few seconds;
     /// restore it on foreground.
     func setForeground(_ active: Bool) {
+        isForeground = active
+        applyPollInterval()
+    }
+
+    /// An open Quick Actions panel needs a fresh device list even while the
+    /// app is backgrounded, so it counts as foreground for the poll rate.
+    func setQuickPanelOpen(_ open: Bool) {
+        quickPanelOpen = open
+        applyPollInterval()
+    }
+
+    private func applyPollInterval() {
+        let active = isForeground || quickPanelOpen
         let interval: Duration = active ? .seconds(2) : .seconds(10)
         Task { [monitor = env.monitor] in await monitor.setPollInterval(interval) }
         let simInterval: Duration = active ? .seconds(3) : .seconds(15)
@@ -1062,12 +1092,15 @@ final class AppState {
     /// Run a feature. `explicitTargets` overrides the device-bar selection —
     /// the Quick Actions panel passes its own pick (or run-on-all fan-out)
     /// since `targetSerials`' run-all gating keys off the active tab, which is
-    /// meaningless with no window.
+    /// meaningless with no window. Returns the per-serial outcomes so a
+    /// caller fanning out to several devices can aggregate them —
+    /// `lastResults` only keeps the last one.
+    @discardableResult
     func run(
         feature: FeatureDef,
         params: [String: FeatureValue],
         on explicitTargets: [String]? = nil
-    ) async {
+    ) async -> [(serial: String, result: FeatureResult)] {
         isRunningFeature = true
         defer { isRunningFeature = false }
         Telemetry.shared.trackFeatureUsed(feature.id, kind: feature.kind.rawValue)
@@ -1078,7 +1111,7 @@ final class AppState {
         // view instead opens the capture in the editor and saves on demand.
         if feature.id == "screenshot" {
             await runScreenshot()
-            return
+            return []
         }
         // Bug reports zip into the capture folder with no save panel — the
         // one-time folder ask covers them like every other silent save.
@@ -1096,7 +1129,7 @@ final class AppState {
         if feature.needsBundle {
             guard let bundle = selectedBundle else {
                 showToast(Toast(message: "Pick a saved bundle first.", ok: false))
-                return
+                return []
             }
             params["packageId"] = .string(bundle.packageId)
         } else if params["packageId"] == nil, let bundle = selectedBundle {
@@ -1106,25 +1139,27 @@ final class AppState {
         }
 
         let engine = env.engine
-        await CommandLog.userInitiated {
+        let outcomes: [(serial: String, result: FeatureResult)] = await CommandLog.userInitiated {
             if !feature.needsDevice {
                 let result = await engine.run(featureID: feature.id, serial: "", params: params)
                 self.lastResults[feature.id] = (result, Date())
                 self.show(result)
-                return
+                return [("", result)]
             }
 
             let targets = explicitTargets ?? self.targetSerials
             guard !targets.isEmpty else {
                 self.showToast(Toast(message: "No device connected.", ok: false))
-                return
+                return []
             }
+            var outcomes: [(serial: String, result: FeatureResult)] = []
             for serial in targets {
                 let result = await engine.run(
                     featureID: feature.id, serial: serial,
                     platform: self.platform(for: serial), params: params
                 )
                 self.lastResults[feature.id] = (result, Date())
+                outcomes.append((serial, result))
                 if targets.count > 1 {
                     let label = self.devices.first { $0.serial == serial }?.label ?? serial
                     self.show(FeatureResult(
@@ -1137,10 +1172,12 @@ final class AppState {
                     self.show(result)
                 }
             }
+            return outcomes
         }
         if feature.isStateOverride {
             await refreshOverrides()
         }
+        return outcomes
     }
 
     private func show(_ result: FeatureResult) {
@@ -1377,7 +1414,8 @@ final class AppState {
                         serial: serial, platform: platform(for: serial), to: dest
                     )
                 }
-                let result = FeatureResult(ok: true, message: "Screenshot saved", revealPath: file.path)
+                let result = FeatureResult(
+                    ok: true, message: "Saved \(file.lastPathComponent)", revealPath: file.path)
                 lastResults["screenshot"] = (result, Date())
                 showToast(Toast(message: "Screenshot saved to \(dir.lastPathComponent)", ok: true, revealPath: file.path))
             } catch {

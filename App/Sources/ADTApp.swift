@@ -22,9 +22,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor var isQuitting = false
 
     func application(_ application: NSApplication, open urls: [URL]) {
-        let apks = urls.filter { $0.pathExtension.lowercased() == "apk" }
-        guard !apks.isEmpty else { return }
-        InstallInbox.shared.receive(apks)
+        // Non-APKs ride along so the receiver can say "Not an APK" once the
+        // UI is up, instead of the open being silently ignored.
+        guard !urls.isEmpty else { return }
+        InstallInbox.shared.receive(urls)
     }
 
     /// Delete any decompiled-cache directories the previous quit set aside

@@ -31,14 +31,20 @@ public enum PanelTargeting {
         return live.isEmpty ? nil : live
     }
 
-    /// The concrete serials a run hits: the approved fan-out when more than one
-    /// approved device is still ready, otherwise the single target as a
-    /// one-element list ([] when nothing is ready). An approval that has shrunk
-    /// to one live device collapses to it — no spurious single-device fan-out.
+    /// The concrete serials a run hits: for a feature that supports run-all,
+    /// the approved fan-out when more than one approved device is still ready;
+    /// otherwise the single target as a one-element list ([] when nothing is
+    /// ready). An approval that has shrunk to one live device collapses to it —
+    /// no spurious single-device fan-out. A feature without `supportsRunAll`
+    /// never fans out, matching the main window (whose run-on-all toggle is
+    /// gated on the same flag) — an "All devices" approval then falls through
+    /// to the single-target rule.
     public static func fanOut(
-        picked: String?, selected: String?, approved: [String]?, ready: [String]
+        picked: String?, selected: String?, approved: [String]?, ready: [String],
+        supportsRunAll: Bool
     ) -> [String] {
-        if let live = approvedTargets(approved: approved, ready: ready), live.count > 1 {
+        if supportsRunAll,
+           let live = approvedTargets(approved: approved, ready: ready), live.count > 1 {
             return live
         }
         return singleTarget(picked: picked, selected: selected, ready: ready).map { [$0] } ?? []
@@ -50,10 +56,13 @@ public enum PanelTargeting {
     /// keeps the hidden window's run-on-all state from fanning a single pick
     /// out, and a guard-deferred device switch from retargeting the run.
     public static func runTargets(
-        needsDevice: Bool, picked: String?, selected: String?,
+        needsDevice: Bool, supportsRunAll: Bool, picked: String?, selected: String?,
         approved: [String]?, ready: [String]
     ) -> [String]? {
         guard needsDevice else { return nil }
-        return fanOut(picked: picked, selected: selected, approved: approved, ready: ready)
+        return fanOut(
+            picked: picked, selected: selected, approved: approved, ready: ready,
+            supportsRunAll: supportsRunAll
+        )
     }
 }

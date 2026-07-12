@@ -1,9 +1,14 @@
 import { Reveal } from "@/components/site/Reveal"
 import { SectionHead } from "@/components/site/SectionHead"
+import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion"
 import { galleryShots, showcases } from "@/lib/content"
 import { cn } from "@/lib/utils"
 
 export function Screenshots() {
+  // Under reduced motion the videos sit on their posters with controls
+  // instead of autoplaying.
+  const reducedMotion = usePrefersReducedMotion()
+
   return (
     <section id="screenshots" className="mx-auto max-w-[1120px] px-6 py-26 max-[620px]:py-18">
       <SectionHead center eyebrow="see it in action" title="Real screens. Real device.">
@@ -13,7 +18,8 @@ export function Screenshots() {
       <Reveal className="mx-auto mb-21 max-w-245 overflow-hidden rounded-2xl border border-border-2 bg-ink-700 shadow-[0_40px_100px_-30px_rgba(0,0,0,0.7)]">
         <video
           className="block h-auto w-full"
-          autoPlay
+          autoPlay={!reducedMotion}
+          controls={reducedMotion}
           muted
           loop
           playsInline
@@ -57,7 +63,8 @@ export function Screenshots() {
                 {showcase.video ? (
                   <video
                     className="block h-auto w-full"
-                    autoPlay
+                    autoPlay={!reducedMotion}
+                    controls={reducedMotion}
                     muted
                     loop
                     playsInline
