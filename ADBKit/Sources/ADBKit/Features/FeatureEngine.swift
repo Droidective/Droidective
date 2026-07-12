@@ -316,7 +316,7 @@ public struct FeatureEngine: Sendable {
             _ = try await overrides.applyLocale(serial: serial, locale: locale)
             return FeatureResult(
                 ok: true,
-                message: "Locale set to \(locale) — may need an app restart (full change can require root)."
+                message: "Locale change to \(locale) requested — a full system change can require root."
             )
 
         case "http-proxy":

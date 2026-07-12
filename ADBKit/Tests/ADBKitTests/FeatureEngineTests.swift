@@ -62,6 +62,20 @@ import Testing
         #expect(result.message == "Monkey stopped after 120s — events already sent were delivered.")
     }
 
+    @Test func localeReportsARequestNotACompletedChange() async {
+        // The LOCALE_CHANGED broadcast is best-effort (a full system change can
+        // require root), so the toast must not claim the locale was set.
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["-s"], stdout: "")
+        let engine = await makeEngine(runner)
+
+        let result = await engine.run(
+            featureID: "locale", serial: "S1", params: ["locale": .string("fr-FR")]
+        )
+        #expect(result.ok)
+        #expect(result.message == "Locale change to fr-FR requested — a full system change can require root.")
+    }
+
     @Test func monkeyIsMarkedDestructiveWithConfirmationCopy() {
         let monkey = FeatureRegistry.byID["monkey"]
         #expect(monkey?.isDestructive == true)
