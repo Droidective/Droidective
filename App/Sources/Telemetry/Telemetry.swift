@@ -28,6 +28,10 @@ final class Telemetry {
     private var activeFeatureID: String?
     private var activeSince: Date?
 
+    /// Launch is reported from RootView's appear, which re-fires when the root
+    /// re-keys on an appearance change — gate it to once per process.
+    private var launchTracked = false
+
     /// A random, persistent, non-personal id for this install. Generated once and
     /// reused so distinct-user and retention analytics work without any PII.
     private static var deviceID: String {
@@ -153,6 +157,8 @@ final class Telemetry {
     /// One session-start event per launch, carrying the running launch count so
     /// activation and retention are measurable.
     func trackAppLaunched(launchCount: Int) {
+        guard !launchTracked else { return }
+        launchTracked = true
         track("app_launched", ["launch_count": launchCount])
     }
 
