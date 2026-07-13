@@ -14,10 +14,10 @@ public struct ScrcpyServerInfo: Sendable, Equatable {
 
 /// Resolves `ScrcpyServerInfo`. The path/version parsing is pure and unit-tested;
 /// `resolve` wires it to the real toolchain. For now the server is reused from
-/// the installed scrcpy (Homebrew lays it beside the binary); bundling it in the
-/// app is a later packaging step.
+/// the installed scrcpy (its package lays the jar beside the binary); bundling
+/// it in the app is a later packaging step.
 public enum ScrcpyServerLocator {
-    /// Homebrew layout: `<prefix>/bin/scrcpy` → `<prefix>/share/scrcpy/scrcpy-server`.
+    /// Standard layout: `<prefix>/bin/scrcpy` → `<prefix>/share/scrcpy/scrcpy-server`.
     public static func jarPath(forBinary binaryPath: String) -> String {
         let binDir = (binaryPath as NSString).deletingLastPathComponent
         let prefix = (binDir as NSString).deletingLastPathComponent

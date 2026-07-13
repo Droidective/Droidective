@@ -261,7 +261,6 @@ final class AppState {
     var bundles: [AppBundle] = []
     var selectedBundleId: String?
     var adbStatus: ToolStatus?
-    var installingTool: Tool?
     /// APKs opened from Finder (double-click / Open With), handed to the Install
     /// App feature to stage for an explicit install. The view consumes (clears)
     /// it once shown.
@@ -520,17 +519,6 @@ final class AppState {
 
     func refreshToolStatus() async {
         adbStatus = await env.engine.toolDetection.detectAdb()
-    }
-
-    func installTool(_ tool: Tool) {
-        guard installingTool == nil else { return }
-        installingTool = tool
-        Task {
-            let result = await env.engine.toolDetection.installViaBrew(tool)
-            showToast(Toast(message: result.message, ok: result.ok))
-            await refreshToolStatus()
-            installingTool = nil
-        }
     }
 
     private func devicesChanged(_ devices: [Device]) {

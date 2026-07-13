@@ -7,15 +7,15 @@ public struct ToolStatus: Sendable, Equatable {
     public let installHint: String
 }
 
-/// Detects whether adb / scrcpy are installed and offers a one-click
-/// Homebrew install through the user's login shell.
+/// Detects whether the external tools are installed, with an install hint
+/// per missing one (shown by the Doctor and the device bar).
 public struct ToolDetectionService: Sendable {
     static let installHints: [Tool: String] = [
-        .adb: "Install Android platform-tools — `brew install --cask android-platform-tools` (or Android Studio).",
-        .scrcpy: "Install scrcpy to mirror the screen — `brew install scrcpy`.",
-        .ffmpeg: "Install ffmpeg for video editing & export — `brew install ffmpeg`.",
+        .adb: "Install Android platform-tools — via Android Studio, or from "
+            + "developer.android.com/tools/releases/platform-tools — then re-check.",
+        .scrcpy: "Install scrcpy from github.com/Genymobile/scrcpy (optional — the app bundles its own mirror server).",
+        .ffmpeg: "Install ffmpeg from ffmpeg.org (optional — the app bundles its own for video export).",
         .emulator: "Bundled with the Android SDK — install it via Android Studio → SDK Manager.",
-        .brew: "Install Homebrew from https://brew.sh, then re-check.",
     ]
 
     /// The flag each tool prints its version with.
@@ -24,7 +24,6 @@ public struct ToolDetectionService: Sendable {
         .scrcpy: ["--version"],
         .emulator: ["-version"],
         .ffmpeg: ["-version"],
-        .brew: ["--version"],
     ]
 
     let locator: ToolLocator
@@ -70,27 +69,4 @@ public struct ToolDetectionService: Sendable {
         return ToolStatus(installed: true, path: path, version: version, installHint: hint)
     }
 
-    /// Install a tool via Homebrew. Slow (minutes) — callers should show
-    /// progress and refresh detection afterwards.
-    public func installViaBrew(_ tool: Tool) async -> FeatureResult {
-        guard let brew = await locator.resolve(.brew) else {
-            return FeatureResult(
-                ok: false,
-                message: "Homebrew isn't installed. Install it from https://brew.sh, then try again."
-            )
-        }
-        let command = tool == .adb
-            ? "\(brew) install --cask android-platform-tools"
-            : "\(brew) install \(tool.rawValue)"
-        let output = await runner.run(
-            executable: "/bin/zsh", arguments: ["-lc", command],
-            timeout: .seconds(300), maxOutputBytes: 10 * 1024 * 1024
-        )
-        if output.exitCode == 0 {
-            await locator.clearCache()
-            return FeatureResult(ok: true, message: "\(tool.rawValue) installed successfully.")
-        }
-        let reason = output.stderrText.split(whereSeparator: \.isNewline).last.map(String.init) ?? "brew failed"
-        return FeatureResult(ok: false, message: "Couldn't install \(tool.rawValue): \(reason)")
-    }
 }

@@ -3,7 +3,6 @@ import Foundation
 public enum Tool: String, Sendable, CaseIterable {
     case adb
     case scrcpy
-    case brew
     case ffmpeg
     case emulator
 }
@@ -19,14 +18,15 @@ public enum AdbError: Error, LocalizedError, Sendable {
     }
 }
 
-/// Resolves absolute paths to external CLI tools (adb, scrcpy, brew, ffmpeg).
+/// Resolves absolute paths to external CLI tools (adb, scrcpy, ffmpeg).
 ///
 /// A GUI app launched from Finder inherits a minimal PATH that usually
-/// excludes Homebrew and the Android SDK, so we never call a bare `adb`. We
-/// probe well-known install locations and, as a fallback, ask the user's
-/// login shell (which loads their full PATH) to resolve it. Found paths are
-/// cached until `clearCache()` (e.g. after a tool install); "not found"
-/// expires after `notFoundTTL` so installing a tool mid-session is noticed.
+/// excludes package-manager prefixes and the Android SDK, so we never call a
+/// bare `adb`. We probe well-known install locations and, as a fallback, ask
+/// the user's login shell (which loads their full PATH) to resolve it. Found
+/// paths are cached until `clearCache()` (e.g. after a tool install); "not
+/// found" expires after `notFoundTTL` so installing a tool mid-session is
+/// noticed.
 public actor ToolLocator {
     /// One finished lookup. `expiresAt` is set only on negative results;
     /// found and seeded paths never expire on their own.
@@ -86,7 +86,7 @@ public actor ToolLocator {
             resolved = await resolveViaLoginShell(tool)
         }
         // "Not found" is cached with a TTL; Settings → Tools → "Re-detect"
-        // and the brew-install flow still call clearCache() to heal at once.
+        // still calls clearCache() to heal at once.
         cache[tool] = CachedLookup(
             path: resolved,
             expiresAt: resolved == nil ? now().addingTimeInterval(Self.notFoundTTL) : nil
@@ -101,8 +101,8 @@ public actor ToolLocator {
     }
 
     /// Newest SDK build-tools directory (e.g. …/build-tools/34.0.0), or nil when
-    /// none are installed. aapt2 / apksigner / zipalign all ship here (not via
-    /// Homebrew). Cached; cleared by `clearCache`.
+    /// none are installed. aapt2 / apksigner / zipalign all ship here (SDK
+    /// only). Cached; cleared by `clearCache`.
     public func buildToolsDir() async -> String? {
         if let cached = buildToolsDirCache { return cached }
         var resolved: String?
@@ -209,17 +209,19 @@ public actor ToolLocator {
     }
 
     private func candidatePaths(for tool: Tool) -> [String] {
-        let brewPrefixes = ["/opt/homebrew/bin", "/usr/local/bin"]
+        // The standard third-party install prefixes on macOS (Apple Silicon
+        // then Intel) — wherever the user's package manager put the binary.
+        let installPrefixes = ["/opt/homebrew/bin", "/usr/local/bin"]
 
         switch tool {
         case .adb:
             return sdkRoots.map { "\($0)/platform-tools/adb" }
-                + brewPrefixes.map { "\($0)/adb" }
+                + installPrefixes.map { "\($0)/adb" }
         case .emulator:
-            // The emulator launcher only ships with the SDK, not Homebrew.
+            // The emulator launcher only ships with the SDK.
             return sdkRoots.map { "\($0)/emulator/emulator" }
-        case .scrcpy, .brew, .ffmpeg:
-            return brewPrefixes.map { "\($0)/\(tool.rawValue)" }
+        case .scrcpy, .ffmpeg:
+            return installPrefixes.map { "\($0)/\(tool.rawValue)" }
         }
     }
 
@@ -228,7 +230,7 @@ public actor ToolLocator {
     }
 
     /// Ask the user's login shell (which loads their full PATH) to resolve a
-    /// command by name — the fallback for Homebrew/SDK tools off the app's PATH.
+    /// command by name — the fallback for tools installed off the app's PATH.
     private func resolveViaLoginShellCommand(_ name: String) async -> String? {
         let output = await runner.run(
             executable: "/bin/zsh",

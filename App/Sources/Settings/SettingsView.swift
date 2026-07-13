@@ -458,9 +458,9 @@ struct PrivacySettingsView: View {
     }
 }
 
-/// Setup Doctor: verifies the external toolchain (adb / emulator / Homebrew),
-/// shows each tool's version and path, and offers a Homebrew install for the
-/// brew-installable ones. scrcpy and ffmpeg aren't listed — the app bundles them.
+/// Setup Doctor: verifies the external toolchain (adb / emulator), shows each
+/// tool's version and path, and points at the install source when one is
+/// missing. scrcpy and ffmpeg aren't listed — the app bundles them.
 struct DoctorSettingsView: View {
     @Environment(AppState.self) private var state
     @State private var report: [Tool: ToolStatus] = [:]
@@ -470,21 +470,17 @@ struct DoctorSettingsView: View {
         let tool: Tool
         let name: String
         let purpose: String
-        /// false for tools we can't `brew install` (emulator ships with the
-        /// SDK; brew installs itself).
-        let brewInstallable: Bool
     }
 
     private static let checks: [Check] = [
-        Check(tool: .adb, name: "adb", purpose: "Required — powers every device action", brewInstallable: true),
-        Check(tool: .emulator, name: "emulator", purpose: "Launch & manage Android emulators", brewInstallable: false),
-        Check(tool: .brew, name: "Homebrew", purpose: "Installs the tools above", brewInstallable: false),
+        Check(tool: .adb, name: "adb", purpose: "Required — powers every device action"),
+        Check(tool: .emulator, name: "emulator", purpose: "Launch & manage Android emulators"),
     ]
 
-    /// Missing tools that actually block features (Homebrew alone isn't one).
+    /// Missing tools that actually block features.
     private var blockingMissing: [Tool] {
         Self.checks
-            .filter { $0.tool != .brew && report[$0.tool]?.installed == false }
+            .filter { report[$0.tool]?.installed == false }
             .map(\.tool)
     }
 
@@ -493,12 +489,7 @@ struct DoctorSettingsView: View {
             Section { summary }
             Section("Toolchain") {
                 ForEach(Self.checks, id: \.tool) { check in
-                    ToolRow(
-                        check: check,
-                        status: report[check.tool],
-                        installingTool: state.installingTool,
-                        onInstall: { state.installTool($0) }
-                    )
+                    ToolRow(check: check, status: report[check.tool])
                 }
             }
             Section {
@@ -512,10 +503,6 @@ struct DoctorSettingsView: View {
         }
         .formStyle(.grouped)
         .task { await redetect() }
-        .onChange(of: state.installingTool) { _, installing in
-            // A brew install finished — refresh so the row flips to installed.
-            if installing == nil { Task { await redetect() } }
-        }
     }
 
     @ViewBuilder
@@ -537,14 +524,12 @@ struct DoctorSettingsView: View {
     }
 
     /// One compact row: a status icon + the tool name, expandable to reveal
-    /// version, path, and (when missing) the install action. Uses a separate
+    /// version, path, and (when missing) the install hint. Uses a separate
     /// struct so each row owns its own isExpanded state, enabling a full-width
     /// Button label that makes the entire row tappable (not just the chevron).
     private struct ToolRow: View {
         let check: Check
         let status: ToolStatus?
-        let installingTool: Tool?
-        let onInstall: (Tool) -> Void
         @State private var isExpanded = false
 
         var body: some View {
@@ -561,17 +546,10 @@ struct DoctorSettingsView: View {
                             detailRow("Path", path)
                         }
                         if !status.installed {
-                            if check.brewInstallable {
-                                Button(installingTool == check.tool ? "Installing…" : "Install via Homebrew") {
-                                    onInstall(check.tool)
-                                }
-                                .disabled(installingTool != nil)
-                            } else {
-                                Text(status.installHint)
-                                    .font(.app(.callout))
-                                    .foregroundStyle(.textMuted)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
+                            Text(status.installHint)
+                                .font(.app(.callout))
+                                .foregroundStyle(.textMuted)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                 }
