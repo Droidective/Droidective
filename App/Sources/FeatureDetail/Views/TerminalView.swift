@@ -330,9 +330,9 @@ struct TerminalView: View {
     @State private var renamingGroup: TerminalTabs.Group?
     @State private var renameDraft = ""
     @AppStorage("terminalRailCollapsed") private var railCollapsed = false
-    /// Where the tab list lives: a left rail (default) or a Chrome-style strip
-    /// along the top.
-    @AppStorage("terminalTabsOnTop") private var tabsOnTop = false
+    /// Where the tab list lives: a Chrome-style strip along the top (default)
+    /// or a left rail.
+    @AppStorage("terminalTabsOnTop") private var tabsOnTop = true
     private var terminals: TerminalManager { state.terminals }
 
     var body: some View {

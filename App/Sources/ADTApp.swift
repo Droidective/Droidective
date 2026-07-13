@@ -329,14 +329,6 @@ struct ADTApp: App {
                 #endif
             }
 
-            // The stock ⌘, opens Settings without bringing the app forward, so
-            // it lands hidden behind the floating, non-activating Quick Actions
-            // panel. Replace it with one that dismisses the panel and activates
-            // the app first.
-            CommandGroup(replacing: .appSettings) {
-                OpenSettingsButton()
-            }
-
             CommandGroup(replacing: .help) {
                 Button("Report an Issue…") { appState.reportBug() }
                 Button("Request a Feature…") { appState.requestFeature() }
@@ -422,28 +414,22 @@ struct ADTApp: App {
                 .environment(appState)
                 .tint(.brandAccent)
                 .id(appearanceKey)
+                // The stock ⌘, opens Settings without bringing the app
+                // forward, so it lands hidden behind the floating,
+                // non-activating Quick Actions panel. A replaced .appSettings
+                // command fixed that, but macOS 26 adds its own Settings…
+                // item regardless — two menu entries — so the panel dismissal
+                // and activation ride the window appearing instead.
+                .onAppear {
+                    FloatingPanelController.quickActions.close()
+                    NSApp.activate(ignoringOtherApps: true)
+                }
         }
 
         MenuBarExtra("Droidective", systemImage: "iphone.gen3", isInserted: $showMenuBarExtra) {
             MenuBarView()
                 .environment(appState)
         }
-    }
-}
-
-/// Settings… menu item (⌘,). Opens the SwiftUI Settings scene, but first
-/// closes the Quick Actions panel and activates the app so the Settings window
-/// comes to the front instead of behind the panel's floating level.
-private struct OpenSettingsButton: View {
-    @Environment(\.openSettings) private var openSettings
-
-    var body: some View {
-        Button("Settings…") {
-            FloatingPanelController.quickActions.close()
-            NSApp.activate(ignoringOtherApps: true)
-            openSettings()
-        }
-        .keyboardShortcut(",", modifiers: .command)
     }
 }
 
