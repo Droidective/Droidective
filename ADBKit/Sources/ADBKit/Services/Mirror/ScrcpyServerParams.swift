@@ -8,7 +8,9 @@ import Foundation
 /// ourselves over `adb shell`. Kept pure/`Equatable` so the argument building is
 /// unit-testable without spawning anything.
 ///
-/// Confirmed against scrcpy 4.0 (`server.c` `execute_server` + live capture):
+/// Confirmed against scrcpy 4.0 (`server.c` `execute_server` + live capture);
+/// re-checked against the 4.1 server diff (additive only — a new
+/// `ignore_video_encoder_constraints` option and control type 22):
 /// only non-default values are emitted — the server fills in its own defaults,
 /// matching how the stock client builds the command.
 public struct ScrcpyServerParams: Sendable, Equatable {

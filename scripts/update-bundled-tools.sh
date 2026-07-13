@@ -5,7 +5,7 @@
 #   scripts/update-bundled-tools.sh [scrcpy_version]
 #
 # Downloads:
-#   - scrcpy-server  from the scrcpy GitHub release (default v4.0)
+#   - scrcpy-server  from the scrcpy GitHub release (default v4.1)
 #   - ffmpeg         latest static build, macOS arm64 (ffmpeg.martin-riedl.de)
 #
 # After running, bump the version constants in
@@ -14,7 +14,7 @@
 # ffmpeg is GPLv3 — see THIRD_PARTY_NOTICES.md.
 set -euo pipefail
 
-SCRCPY_VERSION="${1:-4.0}"
+SCRCPY_VERSION="${1:-4.1}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RES="$ROOT/App/Resources"
 TMP="$(mktemp -d)"
@@ -25,8 +25,8 @@ trap 'rm -rf "$TMP"' EXIT
 # rather than silently bundled. When intentionally updating a binary, run the
 # script, read the "got" hash from the mismatch error, and update the constant
 # here in the same commit that bumps the version.
-SCRCPY_SERVER_SHA256="84924bd564a1eb6089c872c7521f968058977f91f5ff02514a8c74aff3210f3a"
-FFMPEG_SHA256="ef4fe121377039053b0d7bed4a9aa46e7912918f5ba6424a1dd155f4eed625b0"
+SCRCPY_SERVER_SHA256="deacb991ed2509715160ffdc7907e47b4160eb30d1566217e9047fd5b8850cae"
+FFMPEG_SHA256="eaf91238e104dd0e262bc6510e25061855cc99a6955a721b0ac99660d58c473d"
 
 verify_sha256() {
   local file="$1" expected="$2" name="$3"
