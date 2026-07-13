@@ -18,14 +18,21 @@ extension AppState {
     /// app the user has for those (Terminal.app unless they changed it), and
     /// no automation permission is needed. The script exports ANDROID_SERIAL
     /// so `adb` lines target the selected device, like an in-app shell.
-    /// Failures (script write, no handler) surface as a toast.
-    func runCustomCommand(line: String, named name: String, serial: String, terminal: CustomCommandTerminal) {
+    /// Failures (script write, no handler) surface as a toast; the return
+    /// value carries the same outcome so a caller that isn't looking at the
+    /// main window (the Quick Actions panel) doesn't report success anyway.
+    @discardableResult
+    func runCustomCommand(
+        line: String, named name: String, serial: String, terminal: CustomCommandTerminal
+    ) -> Bool {
         switch terminal {
         case .droidective:
             runInTerminal(line, named: name)
             activateMainWindow()
+            return true
         case .defaultTerminal:
             do {
+                sweepStaleCommandScripts()
                 let script = CustomCommandService.commandScript(
                     line: line, serial: serial,
                     shellPath: ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
@@ -40,13 +47,32 @@ extension AppState {
                         message: "Couldn't open your default terminal for \(name).",
                         ok: false
                     ))
+                    return false
                 }
+                return true
             } catch {
                 showToast(Toast(
                     message: "Couldn't stage the command script — \(error.localizedDescription)",
                     ok: false
                 ))
+                return false
             }
+        }
+    }
+
+    /// Best-effort removal of `.command` scripts left by earlier runs — each
+    /// holds the exported serial and command line, and the terminal app only
+    /// needs the file while it opens, so anything older than an hour is
+    /// debris. Deleting immediately after `open` would race the launch.
+    private func sweepStaleCommandScripts() {
+        let fileManager = FileManager.default
+        let tempDir = fileManager.temporaryDirectory
+        guard let names = try? fileManager.contentsOfDirectory(atPath: tempDir.path) else { return }
+        for name in names where name.hasPrefix("droidective-") && name.hasSuffix(".command") {
+            let url = tempDir.appendingPathComponent(name)
+            let modified = (try? fileManager.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
+            guard let modified, Date().timeIntervalSince(modified) > 3600 else { continue }
+            try? fileManager.removeItem(at: url)
         }
     }
 }

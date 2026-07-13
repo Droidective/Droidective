@@ -176,12 +176,20 @@ struct TourView: View {
     }
 
     /// The last step's walkthrough: pressing the hotkey to open the panel is
-    /// the tour's finish line (confetti included), so spell out exactly how.
+    /// the tour's finish line (confetti included), so spell out exactly how —
+    /// plus the menu-bar fallback, because a hotkey another app already owns
+    /// silently never fires and this page has no other way out.
     private var tryGuide: some View {
         VStack(alignment: .leading, spacing: 6) {
             guideRow(1, "Press \(shortcutHint) — it works anywhere, even with this window closed.")
             guideRow(2, "Type to find an action, then ⏎ runs it on your device.")
             guideRow(3, "Esc closes the panel when you're done.")
+            Text("Nothing happening? Another app may already own \(shortcutHint) — open Quick "
+                + "Actions from Droidective's menu bar icon instead; that finishes the tour too.")
+                .font(.app(.footnote))
+                .foregroundStyle(.textMuted)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 4)
         }
         .padding(.top, 2)
     }

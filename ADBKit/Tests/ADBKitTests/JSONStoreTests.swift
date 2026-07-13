@@ -83,6 +83,17 @@ import Testing
         #expect(loaded.focusedGroup == nil)
     }
 
+    @Test func layoutWrittenBeforeQuickPanelHiddenIdsDecodesWithNil() async throws {
+        // A layout.json predating the Quick Actions hide toggles must decode
+        // with the field absent (nil = everything eligible shows).
+        let dir = try tempDir()
+        let legacy = #"{"favorites": ["screenshot"], "enabledIds": null}"#
+        try Data(legacy.utf8).write(to: dir.appendingPathComponent("layout.json"))
+        let store = JSONStore(filename: "layout.json", default: LayoutState(), directory: dir)
+        let loaded = await store.load()
+        #expect(loaded.quickPanelHiddenIds == nil)
+    }
+
     @Test func decodesReferenceAppPrefsShape() async throws {
         let dir = try tempDir()
         let referenceShape = #"{"selectedSerial": "X", "runOnAll": false, "selectedBundleId": null}"#

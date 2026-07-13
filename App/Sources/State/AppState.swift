@@ -8,7 +8,6 @@ import SwiftUI
 /// once, read via `@AppStorage` in the views and directly here.
 let sidebarAutoHideDefaultsKey = "sidebarAutoHide"
 
-
 /// A tappable follow-up a toast / notification row can carry, rendered as a
 /// button (see `AppState.performNotificationAction`).
 enum NotificationAction: Equatable, Sendable {

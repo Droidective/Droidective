@@ -1499,11 +1499,18 @@ struct QuickActionsView: View {
                     bundleId: bundleId,
                     serial: panelTargetSerial ?? ""
                 )
-                state.runCustomCommand(
+                let opened = state.runCustomCommand(
                     line: line, named: command.name,
                     serial: panelTargetSerial ?? "", terminal: command.terminal
                 )
-                lastRun = QuickRunOutcome(message: "Opened in \(command.terminal.displayName)", ok: true)
+                // The failure toast lands in the (possibly hidden) main
+                // window — the panel must not claim success over it.
+                lastRun = opened
+                    ? QuickRunOutcome(message: "Opened in \(command.terminal.displayName)", ok: true)
+                    : QuickRunOutcome(
+                        message: "Couldn't open \(command.terminal.displayName) for \(command.name).",
+                        ok: false
+                    )
             } catch {
                 lastRun = QuickRunOutcome(message: error.localizedDescription, ok: false)
             }
