@@ -67,8 +67,10 @@ the in-app catalog.
   and per-process usage charted live, recorded, and exported to JSON/CSV).
 - **Tool UX** — a multi-tab **Terminal** (real PTY login shells with the
   selected device exported as `ANDROID_SERIAL`), custom command macros with
-  `{bundleId}`/`{serial}` placeholders (adb argument vectors or plain shell
-  lines/scripts run through `zsh`), feature catalog with pinned items,
+  `{bundleId}`/`{serial}` placeholders (typed as full command lines — even
+  multi-line — with `adb` lines run safely as argument vectors and the rest
+  through `zsh`; output silently, in the in-app Terminal, or in your Mac's
+  default terminal), feature catalog with pinned items,
   per-feature + global hotkeys, menu-bar quick actions.
 
 Every feature has an inline how-it-works description (toggleable from
