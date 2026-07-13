@@ -1,3 +1,65 @@
+## Droidective v3.1.0
+
+Custom commands get a full rework, the Quick Actions panel becomes yours to
+curate, and dismissed updates stop disappearing.
+
+### Custom Commands
+
+- **One box, full command lines** — type commands exactly as you'd run them in
+  a terminal (`adb shell am force-stop {bundleId}`); the separate adb/Terminal
+  mode tabs are gone. Lines starting with `adb` still run through
+  Droidective's own adb — tokenized safely, device `-s` injected — and
+  everything else runs through your login shell.
+- **Multi-line commands** — the editor is a proper multi-line box; each line
+  runs in order through your shell. Save with ⌘⏎.
+- **Pick the terminal** — a command that shows output "in a terminal" can open
+  Droidective's Terminal (default) or your Mac's default terminal app, with
+  the selected device exported as `ANDROID_SERIAL` either way.
+- **Redesigned editor** — labeled fields, one-click `{bundleId}` / `{serial}`
+  chips, and a live cue showing where the line will run.
+
+### Quick Actions
+
+- **Pick an app in place** — running a `{bundleId}` command with no app
+  selected opens a picker (saved bundles first, then the device's installed
+  apps) instead of failing.
+- **Clear device guards** — a device-targeting command with nothing connected
+  says so up front, and the multi-device picker covers custom commands too.
+- **Pin custom commands** — ⌘P or right-click; pinned tiles lead the grid
+  alongside pinned features.
+- **Choose what shows** — right-click any action tile to hide it from the
+  panel; manage the full list under Settings ▸ General ▸ Quick Actions.
+
+### Updates
+
+- **Checks twice a day** instead of daily.
+- **Dismissed updates come back** — closing or skipping the update alert now
+  resurfaces it as a notification on every launch until you install, with a
+  Check for Updates button.
+
+### Welcome tour
+
+- The tour now ends in two Quick Actions steps: pick the global hotkey, then
+  a finale that draws your hotkey as animated keycaps — pressing it for real
+  opens the panel, finishes the tour, and fires a confetti celebration.
+
+### Terminal & tabs
+
+- The Terminal's tab list defaults to the Chrome-style top strip (the left
+  rail is one click away).
+- Tab strips gain right-click **Close Other Tabs** (anything with unsaved
+  work still asks first).
+
+### Fixes
+
+- The auto-hide sidebar no longer draws a stray horizontal line across its
+  middle when revealed.
+- The window title follows the active tab instead of sticking on
+  "About & Feedback".
+- One Settings… item in the app menu on macOS 26 (it was duplicated).
+- JS Console: clicking "adb reverse" right after typing a new Metro port now
+  reverses the new port — no ⏎ needed first.
+
 ## Droidective v3.0.1
 
 A bug-fix release: confirmations before destructive actions, several features
