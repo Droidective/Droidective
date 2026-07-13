@@ -859,7 +859,10 @@ struct JSConsoleView: View {
                     : "Pick an app to force-stop and relaunch")
             }
             if !state.targetSerials.isEmpty, !session.isConnected {
-                Button { Task { await session.reverseMetro() } } label: {
+                Button {
+                    commitTypedPort()
+                    Task { await session.reverseMetro() }
+                } label: {
                     Label("adb reverse", systemImage: "arrow.left.arrow.right")
                 }
                 .help("Route the device's tcp:\(session.port) to Metro on your Mac (USB devices)")
@@ -931,8 +934,21 @@ struct JSConsoleView: View {
             TextField("8081", text: $portText)
                 .frame(width: 52)
                 .multilineTextAlignment(.center)
-                .onSubmit { if let value = Int(portText) { session.setPort(value) } }
+                .onSubmit { commitTypedPort() }
                 .help("Metro dev-server port — varies per app")
+        }
+    }
+
+    /// Apply whatever's typed in the port field. Clicking a button doesn't
+    /// fire the field's onSubmit, so "type a new port → adb reverse" would
+    /// otherwise reverse the old port — the reverse buttons commit first.
+    /// Unparseable text snaps the field back to the port actually in use, so
+    /// the reverse never silently targets a port other than the one shown.
+    private func commitTypedPort() {
+        if let value = Int(portText) {
+            session.setPort(value)
+        } else {
+            portText = String(session.port)
         }
     }
 
@@ -1085,7 +1101,10 @@ struct JSConsoleView: View {
             Text(emptyDescription)
         } actions: {
             if !state.targetSerials.isEmpty, !session.isConnected {
-                Button("Run adb reverse for the device") { Task { await session.reverseMetro() } }
+                Button("Run adb reverse for the device") {
+                    commitTypedPort()
+                    Task { await session.reverseMetro() }
+                }
             }
         }
     }

@@ -43,6 +43,14 @@ public enum CustomCommandKind: String, Codable, Sendable, CaseIterable {
     case shell
 }
 
+/// Which terminal a `runsInTerminal` command opens in: the in-app Terminal
+/// feature, or the Mac's default terminal app — whichever one handles
+/// `.command` scripts (see `CustomCommandService.commandScript`).
+public enum CustomCommandTerminal: String, Codable, Sendable, CaseIterable {
+    case droidective
+    case defaultTerminal = "default"
+}
+
 public struct CustomCommand: Codable, Sendable, Equatable, Identifiable {
     public var id: String
     public var name: String
@@ -53,9 +61,13 @@ public struct CustomCommand: Codable, Sendable, Equatable, Identifiable {
     public var needsBundle: Bool
     public var createdAt: Double
     /// Where a run shows its output: false = the headless runner with a toast
-    /// (silent), true = typed into a fresh in-app Terminal tab — live output,
-    /// prompts, ctrl-C.
+    /// (silent), true = typed into a terminal — live output, prompts, ctrl-C.
     public var runsInTerminal: Bool
+    /// Which terminal a `runsInTerminal` command opens in; the in-app
+    /// Terminal feature by default.
+    public var terminal: CustomCommandTerminal
+    /// Pinned commands lead the Quick Actions panel's grid (⌘P there).
+    public var pinned: Bool
 
     public init(
         id: String = UUID().uuidString,
@@ -64,7 +76,9 @@ public struct CustomCommand: Codable, Sendable, Equatable, Identifiable {
         kind: CustomCommandKind = .adb,
         needsBundle: Bool,
         createdAt: Double,
-        runsInTerminal: Bool = false
+        runsInTerminal: Bool = false,
+        terminal: CustomCommandTerminal = .droidective,
+        pinned: Bool = false
     ) {
         self.id = id
         self.name = name
@@ -73,10 +87,13 @@ public struct CustomCommand: Codable, Sendable, Equatable, Identifiable {
         self.needsBundle = needsBundle
         self.createdAt = createdAt
         self.runsInTerminal = runsInTerminal
+        self.terminal = terminal
+        self.pinned = pinned
     }
 
     /// Saves that predate `kind` decode as adb commands; saves that predate
-    /// `runsInTerminal` decode as silent.
+    /// `runsInTerminal` decode as silent; saves that predate `terminal`
+    /// decode as the in-app Terminal.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
@@ -86,6 +103,12 @@ public struct CustomCommand: Codable, Sendable, Equatable, Identifiable {
         needsBundle = try container.decode(Bool.self, forKey: .needsBundle)
         createdAt = try container.decode(Double.self, forKey: .createdAt)
         runsInTerminal = try container.decodeIfPresent(Bool.self, forKey: .runsInTerminal) ?? false
+        // Tolerant of an unknown raw value (not just a missing key), so a
+        // retired terminal choice can never set the whole commands file aside
+        // as corrupt.
+        terminal = try container.decodeIfPresent(String.self, forKey: .terminal)
+            .flatMap(CustomCommandTerminal.init(rawValue:)) ?? .droidective
+        pinned = try container.decodeIfPresent(Bool.self, forKey: .pinned) ?? false
     }
 }
 
@@ -157,6 +180,10 @@ public struct LayoutState: Codable, Sendable, Equatable {
     /// Which group holds keyboard focus (index into `tabGroups`). Optional so
     /// older files decode.
     public var focusedGroup: Int?
+    /// Feature ids hidden from the Quick Actions panel's action grid (its
+    /// tiles' right-click Hide, and the Settings ▸ General toggles). nil/empty
+    /// = everything eligible shows. Optional so older files decode.
+    public var quickPanelHiddenIds: [String]?
 
     public init(
         enabledIds: [String]? = nil,
@@ -172,7 +199,8 @@ public struct LayoutState: Codable, Sendable, Equatable {
         roleChosen: Bool? = nil,
         seededRoleIds: [String]? = nil,
         tabGroups: [TabGroupState]? = nil,
-        focusedGroup: Int? = nil
+        focusedGroup: Int? = nil,
+        quickPanelHiddenIds: [String]? = nil
     ) {
         self.enabledIds = enabledIds
         self.favorites = favorites
@@ -188,6 +216,7 @@ public struct LayoutState: Codable, Sendable, Equatable {
         self.roleChosen = roleChosen
         self.tabGroups = tabGroups
         self.focusedGroup = focusedGroup
+        self.quickPanelHiddenIds = quickPanelHiddenIds
     }
 
     /// The effective enabled set: explicit user choice or registry defaults,

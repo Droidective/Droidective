@@ -81,8 +81,55 @@ public struct CustomCommandService: Sendable {
         return line
     }
 
-    /// Substitute {bundleId} / {serial} into a template. Throws when the
-    /// template needs a bundle and none is selected.
+    /// The contents of the temp `.command` script an external terminal app
+    /// (Terminal, iTerm2) opens for a "run in Terminal" custom command: the
+    /// user's login shell as the interpreter (with `-l` so PATH setup from
+    /// the login profile applies), the target device exported as
+    /// ANDROID_SERIAL (matching the in-app Terminal's scoping), then the
+    /// line as typed. The serial is `shellQuote`d — it reaches a Mac shell
+    /// verbatim, and a crafted serial must stay one assignment, not code.
+    public static func commandScript(line: String, serial: String, shellPath: String) -> String {
+        let shell = shellPath.isEmpty ? "/bin/zsh" : shellPath
+        var script = "#!\(shell) -l\n"
+        if !serial.isEmpty {
+            script += "export ANDROID_SERIAL=\(shellQuote(serial))\n"
+        }
+        script += line + "\n"
+        return script
+    }
+
+    /// The kind and stored template for a command line as typed: a leading
+    /// `adb` token means the adb runner (tokenized argv — no shell), stored
+    /// without the prefix like the presets; anything else is a login-shell
+    /// line as written. Multi-line drafts always run through the shell — an
+    /// adb argv can't hold several commands, and the shell treats each line
+    /// as its own command. Detected via `.newlines`, never `contains("\n")` —
+    /// a pasted CRLF pair is one Character and a bare-\n check misses it.
+    public static func draftParts(of line: String) -> (kind: CustomCommandKind, command: String) {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.rangeOfCharacter(from: .newlines) == nil else { return (.shell, trimmed) }
+        guard trimmed == "adb" || trimmed.hasPrefix("adb ") else { return (.shell, trimmed) }
+        return (.adb, String(trimmed.dropFirst("adb".count)).trimmingCharacters(in: .whitespaces))
+    }
+
+    /// Substituted values reach the user's *Mac* shell wherever the line runs
+    /// as shell code (a terminal tab, the `.command` script, the headless
+    /// login-shell runner). A plain serial or package id passes through
+    /// untouched — quoting every value would break templates that already
+    /// wrap a placeholder — but one carrying shell metacharacters (a USB
+    /// serial string is device-controlled) is single-quoted so it stays data,
+    /// not code. The tokenized adb path (`buildArgs`) substitutes into argv
+    /// and never needs this.
+    static func hostShellSafe(_ value: String) -> String {
+        let safe = CharacterSet(
+            charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._:/-@,+="
+        )
+        return value.rangeOfCharacter(from: safe.inverted) == nil ? value : shellQuote(value)
+    }
+
+    /// Substitute {bundleId} / {serial} into a template destined for a Mac
+    /// shell (see `hostShellSafe`). Throws when the template needs a bundle
+    /// and none is selected.
     public static func substitute(
         template: String, bundleId: String?, serial: String
     ) throws(TemplateError) -> String {
@@ -90,8 +137,8 @@ public struct CustomCommandService: Sendable {
             throw .missingBundle
         }
         return template
-            .replacingOccurrences(of: "{bundleId}", with: bundleId ?? "")
-            .replacingOccurrences(of: "{serial}", with: serial)
+            .replacingOccurrences(of: "{bundleId}", with: hostShellSafe(bundleId ?? ""))
+            .replacingOccurrences(of: "{serial}", with: hostShellSafe(serial))
     }
 
     /// Tokenize, then substitute placeholders *into each token*. The leading

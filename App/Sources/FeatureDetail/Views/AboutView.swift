@@ -30,7 +30,6 @@ struct AboutView: View {
             .padding(32)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .navigationTitle("About & Feedback")
     }
 
     // MARK: - Header

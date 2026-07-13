@@ -53,6 +53,7 @@ struct GeneralSettingsView: View {
     @AppStorage(quickPanelResumeMinutesKey) private var quickPanelResumeMinutes = 5
     @State private var openAtLoginOn = false
     @State private var showMenuItems = false
+    @State private var showQuickActionToggles = false
 
     /// True when the login item is registered (enabled, or pending the user's
     /// approval in System Settings).
@@ -134,6 +135,27 @@ struct GeneralSettingsView: View {
                 Text("Reopening the panel within this window returns to the screen and device you had — after that it starts fresh. Open the panel with its global hotkey (record one in the Hotkeys tab) or from the menu bar icon.")
                     .font(.app(.footnote))
                     .foregroundStyle(.textMuted)
+                DisclosureGroup(isExpanded: $showQuickActionToggles) {
+                    Text("Switched-off actions leave the panel's action grid — right-clicking a tile in the panel hides it too. Custom commands are managed on the Custom Commands screen.")
+                        .font(.app(.footnote))
+                        .foregroundStyle(.textMuted)
+                        .padding(.vertical, 6)
+                    ForEach(state.quickPanelEligibleActions) { feature in
+                        Toggle(feature.title, isOn: Binding(
+                            get: { !state.quickPanelHiddenIDs.contains(feature.id) },
+                            set: { state.setQuickPanelActionShown(feature.id, shown: $0) }
+                        ))
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                    }
+                } label: {
+                    Button { showQuickActionToggles.toggle() } label: {
+                        Text("Actions shown in the panel")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
             }
 
             #if !APPSTORE

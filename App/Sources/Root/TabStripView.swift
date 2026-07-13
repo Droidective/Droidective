@@ -190,7 +190,8 @@ struct TabStripView: View {
         }
     }
 
-    /// Right-click menu for a tab: move it across the split, or close it.
+    /// Right-click menu for a tab: move it across the split, or close it (or
+    /// everything else in this pane).
     @ViewBuilder
     private func tabMenu(for id: String) -> some View {
         if state.isSplit {
@@ -200,6 +201,8 @@ struct TabStripView: View {
         }
         Divider()
         Button("Close Tab") { state.closeTab(id) }
+        Button("Close Other Tabs") { state.closeOtherTabs(than: id, inGroup: group) }
+            .disabled(tabIDs.count < 2)
     }
 
     /// The fixed Home entry leading the strip — an icon-only chip that opens

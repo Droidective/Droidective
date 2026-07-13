@@ -66,6 +66,9 @@ targets:
         SUFeedURL: https://droidective.com/appcast.xml
         SUPublicEDKey: "ma0kTe35r55/PKmemQOEBX7n6SuZPZjOBo973SdJqJ8="
         SUEnableAutomaticChecks: true
+        # Twice a day (seconds) — morning and evening — instead of Sparkle's
+        # daily default.
+        SUScheduledCheckInterval: 43200
         UTImportedTypeDeclarations:
           - UTTypeIdentifier: com.android.package-archive
             UTTypeDescription: Android Package

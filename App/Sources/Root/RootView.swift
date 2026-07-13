@@ -70,6 +70,7 @@ struct RootView: View {
         let showExitDialog = state.pendingExit.map { !$0.saving } ?? false
         return zoomedContent
             .overlay(alignment: .topTrailing) { devMetricsOverlay }
+            .modifier(PostTourCelebration(state: state))
             .environment(\.colorScheme, injectedColorScheme)
             .preferredColorScheme(preferredScheme)
             .background(WindowAccessor { window in
@@ -163,6 +164,35 @@ struct RootView: View {
             guard !apks.isEmpty else { return }
             QuickActionsPanel.showAPKOptions(apks, state: state)
         }
+        #if !APPSTORE
+        // An update the user closed or skipped resurfaces here — once per
+        // launch, never at dismiss time — until it's installed. The
+        // notification's button runs Check for Updates (which also re-offers
+        // skipped versions; a user-initiated check ignores skips). The static
+        // guard keeps it to one reminder per process: in background mode this
+        // setup re-runs every time the main window reopens. Turning
+        // Settings ▸ Automatically check for updates off silences the
+        // reminder too — the user opted out of update prompts; the stored
+        // version is kept, so re-enabling the toggle resumes it.
+        if !RootView.updateReminderShown,
+           SparkleUpdater.shared.automaticallyChecksForUpdates,
+           let version = UserDefaults.standard.string(forKey: pendingUpdateVersionKey) {
+            RootView.updateReminderShown = true
+            let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
+            if version.compare(current, options: .numeric) == .orderedDescending {
+                state.showToast(Toast(
+                    message: "Droidective \(version) is available.",
+                    ok: true,
+                    level: .info,
+                    action: .checkForUpdates,
+                    important: true
+                ))
+            } else {
+                // Installed (or overtaken by a newer build) — stop reminding.
+                UserDefaults.standard.removeObject(forKey: pendingUpdateVersionKey)
+            }
+        }
+        #endif
         migrateDefaultsIfNeeded()
         applyStoredTheme()
         // Enumerate installed font families now so the Settings ▸ Appearance
@@ -209,6 +239,8 @@ struct RootView: View {
     /// reference; identifiers don't survive a close.)
     fileprivate static let mainWindowFrameAutosaveName = "droidective-main"
     private static var closeTabMonitorInstalled = false
+    /// One update reminder per process, not per main-window reopen.
+    private static var updateReminderShown = false
 
     /// ⌘W closes the active tab, not the window. A local key-down monitor
     /// intercepts ⌘W for the main window before AppKit's default Close-Window
@@ -440,7 +472,13 @@ struct RootView: View {
                 SidebarPaletteView()
                     .frame(width: overlaySidebarWidth)
                     .background(.bgSurface)
-                    .overlay(alignment: .trailing) { Divider() }
+                    // Not a Divider: in an overlay (ZStack context) a Divider
+                    // lays out horizontally, which painted a full-width line
+                    // across the sidebar's vertical middle every time the
+                    // overlay was revealed. Draw the trailing edge explicitly.
+                    .overlay(alignment: .trailing) {
+                        Rectangle().fill(Color.borderSubtle).frame(width: 1)
+                    }
                     .shadow(color: .black.opacity(0.35), radius: 14, x: 6)
                     .transition(.move(edge: .leading))
             }
@@ -498,10 +536,30 @@ struct RootView: View {
         return min(max(available * splitFraction, minPane), available - minPane)
     }
 
+    /// Window title for the focused pane's active tab. The chrome screens
+    /// (Home / Manage Features / About) aren't registry features, so they're
+    /// named here — this is the only `.navigationTitle` in the main window
+    /// (every tab stays mounted, so a per-view title from a hidden tab would
+    /// override the active one's).
     private var activeTitle: String {
-        guard let id = state.activeTabID else { return "" }
-        if id == "catalog" { return "Feature Catalog" }
-        return FeatureRegistry.byID[id]?.title ?? ""
+        switch state.activeTabID {
+        case nil: return ""
+        case "home": return "Home"
+        case "catalog": return "Feature Catalog"
+        case "about": return "About & Feedback"
+        case let id?: return FeatureRegistry.byID[id]?.title ?? ""
+        }
+    }
+}
+
+/// The confetti burst that rewards finishing the tour by opening the Quick
+/// Actions panel. Its own modifier (not part of RootView's body expression)
+/// to keep that body's type-check time in bounds.
+private struct PostTourCelebration: ViewModifier {
+    let state: AppState
+
+    func body(content: Content) -> some View {
+        content.overlay { ConfettiCelebration(trigger: state.confettiTrigger) }
     }
 }
 

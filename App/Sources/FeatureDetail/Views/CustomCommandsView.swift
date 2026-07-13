@@ -11,9 +11,9 @@ struct CustomCommandsView: View {
     @State private var showPresets = false
     @State private var draftName = ""
     @State private var draftCommand = ""
-    @State private var draftKind: CustomCommandKind = .adb
     @State private var draftNeedsBundle = false
     @State private var draftRunsInTerminal = false
+    @State private var draftTerminal: CustomCommandTerminal = .droidective
     @State private var pendingDelete: CustomCommand?
 
     var body: some View {
@@ -34,9 +34,9 @@ struct CustomCommandsView: View {
                     editing = nil
                     draftName = ""
                     draftCommand = ""
-                    draftKind = .adb
                     draftNeedsBundle = false
                     draftRunsInTerminal = false
+                    draftTerminal = .droidective
                     showEditor = true
                 } label: {
                     Label("New", systemImage: "plus")
@@ -49,7 +49,7 @@ struct CustomCommandsView: View {
                 ContentUnavailableView(
                     "No custom commands",
                     systemImage: "terminal",
-                    description: Text("Example: shell am force-stop {bundleId}")
+                    description: Text("Example: adb shell am force-stop {bundleId}")
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -60,6 +60,7 @@ struct CustomCommandsView: View {
                             Text(command.kind == .adb ? "adb \(command.command)" : "$ \(command.command)")
                                 .font(.app(.footnote, design: .monospaced))
                                 .foregroundStyle(.textMuted)
+                                .lineLimit(1)
                         }
                         Spacer()
                         Button {
@@ -70,15 +71,18 @@ struct CustomCommandsView: View {
                         }
                         .buttonStyle(.plain)
                         .help(command.runsInTerminal
-                            ? "Run in a Terminal tab — live output, prompts"
+                            ? "Run in \(command.terminal.displayName) — live output, prompts"
                             : "Run silently and show the result as a toast")
                         Button {
                             editing = command
                             draftName = command.name
-                            draftCommand = command.command
-                            draftKind = command.kind
+                            // Adb commands are stored as bare arguments (like
+                            // the presets); the editor shows the runnable line.
+                            draftCommand = command.kind == .adb
+                                ? "adb \(command.command)" : command.command
                             draftNeedsBundle = command.needsBundle
                             draftRunsInTerminal = command.runsInTerminal
+                            draftTerminal = command.terminal
                             showEditor = true
                         } label: {
                             Image(systemName: "pencil")
@@ -123,66 +127,148 @@ struct CustomCommandsView: View {
     }
 
     private var editor: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(editing == nil ? "New Command" : "Edit Command").font(.app(.headline))
-            TextField("Name", text: $draftName)
-                .brandField()
-            Picker("Runs", selection: $draftKind) {
-                Text("adb").tag(CustomCommandKind.adb)
-                Text("Terminal").tag(CustomCommandKind.shell)
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(editing == nil ? "New Command" : "Edit Command").font(.app(.headline))
+                Text("Type the line as you'd run it in a terminal — no separate adb mode.")
+                    .font(.app(.footnote))
+                    .foregroundStyle(.textMuted)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            TextField(draftCommandPrompt, text: $draftCommand)
-                .brandField()
-                .font(.app(.body, design: .monospaced))
-            if draftKind == .shell {
-                HStack(spacing: 8) {
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Name").font(.app(.caption)).foregroundStyle(.textMuted)
+                TextField("What it does — e.g. Restart app", text: $draftName)
+                    .brandField()
+            }
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Command").font(.app(.caption)).foregroundStyle(.textMuted)
+                HStack(alignment: .top, spacing: 8) {
+                    commandEditor
                     Button {
                         chooseScript()
                     } label: {
-                        Label("Choose script…", systemImage: "doc.badge.gearshape")
+                        Image(systemName: "doc.badge.gearshape")
+                            .contentShape(Rectangle())
                     }
-                    .controlSize(.small)
-                    Text("Runs through your login shell — script files, pipes, and PATH all work.")
-                        .font(.app(.caption))
-                        .foregroundStyle(.textMuted)
+                    .help("Choose a script or executable to run")
                 }
+                HStack(spacing: 6) {
+                    placeholderChip("{bundleId}", help: "Fills in the selected saved bundle's package id")
+                    placeholderChip("{serial}", help: "Fills in the selected device's serial")
+                }
+                // Live routing cue — replaces the old adb/Terminal tabs: the
+                // leading token decides where the line runs.
+                Label(
+                    draftRunsViaAdb
+                        ? "Starts with adb — runs through Droidective's adb against the selected device."
+                        : "Runs through your login shell — script files, pipes, aliases, and PATH all work.",
+                    systemImage: draftRunsViaAdb ? "smartphone" : "terminal"
+                )
+                .font(.app(.caption))
+                .foregroundStyle(.textMuted)
             }
+
             VStack(alignment: .leading, spacing: 5) {
+                Text("Output").font(.app(.caption)).foregroundStyle(.textMuted)
                 Picker("Show output", selection: $draftRunsInTerminal) {
                     Text("Silently (toast)").tag(false)
-                    Text("In a Terminal tab").tag(true)
+                    Text("In a terminal").tag(true)
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
+                if draftRunsInTerminal {
+                    Picker("Terminal", selection: $draftTerminal) {
+                        ForEach(CustomCommandTerminal.allCases, id: \.self) { terminal in
+                            Text(terminal.displayName).tag(terminal)
+                        }
+                    }
+                    .font(.app(.body))
+                }
                 Text(draftRunsInTerminal
-                    ? "Opens an in-app Terminal tab and types the command — live output, prompts, ctrl-C."
+                    ? "Opens \(draftTerminal.displayName) and runs the command — live output, prompts, ctrl-C."
                     : "Runs in the background; the result arrives as a toast.")
                     .font(.app(.caption))
                     .foregroundStyle(.textMuted)
             }
+
             SwitchRow("Requires a saved bundle", isOn: $draftNeedsBundle)
+
             HStack {
                 Spacer()
                 Button("Cancel") { showEditor = false }
+                    .keyboardShortcut(.cancelAction)
                 Button("Save") {
                     save()
                     showEditor = false
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(draftName.trimmingCharacters(in: .whitespaces).isEmpty
-                    || draftCommand.trimmingCharacters(in: .whitespaces).isEmpty)
+                // ⌘⏎, not plain ⏎ — Return belongs to the multi-line editor.
+                .keyboardShortcut(.return, modifiers: .command)
+                .disabled(!draftValid)
             }
         }
-        .padding(16)
-        .frame(width: 440)
+        .padding(20)
+        .frame(width: 480)
+        // Typing {bundleId} implies the command needs one — flip the switch on
+        // (once per appearance of the token; the user can still turn it off).
+        .onChange(of: draftCommand) { old, new in
+            if !old.contains("{bundleId}"), new.contains("{bundleId}") {
+                draftNeedsBundle = true
+            }
+        }
     }
 
-    private var draftCommandPrompt: String {
-        draftKind == .adb
-            ? "Command (e.g. shell am force-stop {bundleId})"
-            : "Command (e.g. ~/scripts/reset.sh {serial})"
+    /// Multi-line command editor (a TextField swallows pasted newlines).
+    /// Each line runs in order — multi-line always routes through the shell.
+    private var commandEditor: some View {
+        ZStack(alignment: .topLeading) {
+            TextEditor(text: $draftCommand)
+                .font(.app(.body, design: .monospaced))
+                .scrollContentBackground(.hidden)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 6)
+            if draftCommand.isEmpty {
+                Text("adb shell am force-stop {bundleId}")
+                    .font(.app(.body, design: .monospaced))
+                    .foregroundStyle(.textMuted)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 6)
+                    .allowsHitTesting(false)
+            }
+        }
+        .frame(minHeight: 64, maxHeight: 120)
+        .background(RoundedRectangle(cornerRadius: 8).fill(.quaternary.opacity(0.4)))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.separator))
+    }
+
+    /// A one-click insert for a template placeholder, appended to the command.
+    private func placeholderChip(_ token: String, help: String) -> some View {
+        Button {
+            let needsSpace = !(draftCommand.isEmpty || draftCommand.hasSuffix(" "))
+            draftCommand += needsSpace ? " \(token)" : token
+        } label: {
+            Text(token).font(.app(.caption, design: .monospaced))
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .help(help)
+    }
+
+    /// Leading-`adb`-token → adb runner (tokenized argv), anything else —
+    /// multi-line included — → login shell. The classifier is
+    /// `CustomCommandService.draftParts` (pure, tested in ADBKit — it's the
+    /// routing decision the argv-vs-shell handling keys off).
+    private static func draftParts(of line: String) -> (kind: CustomCommandKind, command: String) {
+        CustomCommandService.draftParts(of: line)
+    }
+
+    private var draftRunsViaAdb: Bool { Self.draftParts(of: draftCommand).kind == .adb }
+
+    /// A name plus a command with substance — a bare "adb" saves nothing.
+    private var draftValid: Bool {
+        !draftName.trimmingCharacters(in: .whitespaces).isEmpty
+            && !Self.draftParts(of: draftCommand).command.isEmpty
     }
 
     /// Pick a script file and drop its (quoted) path into the command field,
@@ -203,21 +289,24 @@ struct CustomCommandsView: View {
     }
 
     private func save() {
+        let parts = Self.draftParts(of: draftCommand)
         if var command = editing, let index = commands.firstIndex(where: { $0.id == command.id }) {
             command.name = draftName
-            command.command = draftCommand
-            command.kind = draftKind
+            command.command = parts.command
+            command.kind = parts.kind
             command.needsBundle = draftNeedsBundle
             command.runsInTerminal = draftRunsInTerminal
+            command.terminal = draftTerminal
             commands[index] = command
         } else {
             commands.append(CustomCommand(
                 name: draftName,
-                command: draftCommand,
-                kind: draftKind,
+                command: parts.command,
+                kind: parts.kind,
                 needsBundle: draftNeedsBundle,
                 createdAt: Date().timeIntervalSince1970 * 1000,
-                runsInTerminal: draftRunsInTerminal
+                runsInTerminal: draftRunsInTerminal,
+                terminal: draftTerminal
             ))
         }
         persist()
@@ -242,7 +331,9 @@ struct CustomCommandsView: View {
                 let line = try CustomCommandService.terminalLine(
                     command: command, bundleId: bundleId, serial: serial
                 )
-                state.runInTerminal(line, named: command.name)
+                state.runCustomCommand(
+                    line: line, named: command.name, serial: serial, terminal: command.terminal
+                )
             } catch {
                 state.showToast(Toast(message: error.localizedDescription, ok: false))
             }

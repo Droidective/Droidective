@@ -8,6 +8,18 @@ import SwiftUI
 /// once, read via `@AppStorage` in the views and directly here.
 let sidebarAutoHideDefaultsKey = "sidebarAutoHide"
 
+/// A tappable follow-up a toast / notification row can carry, rendered as a
+/// button (see `AppState.performNotificationAction`).
+enum NotificationAction: Equatable, Sendable {
+    case checkForUpdates
+
+    var buttonTitle: String {
+        switch self {
+        case .checkForUpdates: return "Check for Updates"
+        }
+    }
+}
+
 struct Toast: Identifiable, Equatable {
     enum Level: Equatable {
         case success, info, warning, error
@@ -19,6 +31,7 @@ struct Toast: Identifiable, Equatable {
     let level: Level
     var copyText: String?
     var revealPath: String?
+    var action: NotificationAction?
     /// Whether this is kept in the notifications history. Errors and warnings
     /// always are; a success only when it produced an artifact (a reveal
     /// path) — routine confirmations like "Copied" are dropped.
@@ -30,6 +43,7 @@ struct Toast: Identifiable, Equatable {
         level: Level? = nil,
         copyText: String? = nil,
         revealPath: String? = nil,
+        action: NotificationAction? = nil,
         important: Bool? = nil
     ) {
         self.message = message
@@ -38,6 +52,7 @@ struct Toast: Identifiable, Equatable {
         self.level = resolved
         self.copyText = copyText
         self.revealPath = revealPath
+        self.action = action
         self.important = important
             ?? (resolved == .error || resolved == .warning || revealPath != nil)
     }
@@ -50,6 +65,7 @@ struct AppNotification: Identifiable, Equatable {
     let level: Toast.Level
     var copyText: String?
     var revealPath: String?
+    var action: NotificationAction?
     let date: Date
 }
 
@@ -133,6 +149,24 @@ final class AppState {
     var sidebarVisible = true
     /// Drives the first-launch / replayable welcome tour sheet.
     var presentTour = false
+    /// True while the tour's final "try Quick Actions" page is on screen —
+    /// opening the panel is the tour's only exit (see TourView).
+    var awaitingQuickActionsTry = false
+    /// Bumped to fire a confetti burst over the main window (see
+    /// `ConfettiCelebration` in RootView).
+    var confettiTrigger = 0
+
+    /// Called whenever the Quick Actions panel opens. While the tour's final
+    /// page is waiting for it, the open finishes the tour — marks it seen,
+    /// closes the sheet, and pops confetti.
+    func noteQuickActionsOpened() {
+        guard awaitingQuickActionsTry else { return }
+        awaitingQuickActionsTry = false
+        // The tour's own @AppStorage("hasSeenTour") readers observe this.
+        UserDefaults.standard.set(true, forKey: "hasSeenTour")
+        presentTour = false
+        confettiTrigger += 1
+    }
     /// Drives the first-launch role picker (a full-window takeover) and the
     /// "Change role" flow. Picking a role seeds a curated feature set.
     var presentRolePicker = false
@@ -835,6 +869,17 @@ final class AppState {
         }
     }
 
+    /// Close every tab in pane `group` except `id` (the strip's context menu).
+    /// Home is spared — it rides the strip's permanent house button, not a
+    /// chip. Each close routes through `closeTab`, so a guarded tab (a live
+    /// recording, open shells) still gets its confirmation instead of being
+    /// dropped silently — it stays open if the user cancels.
+    func closeOtherTabs(than id: String, inGroup group: Int) {
+        for other in openTabIDs(inGroup: group) where other != id && other != "home" {
+            closeTab(other)
+        }
+    }
+
     /// Close the focused pane's active tab (⌘W).
     func closeActiveTab() {
         // ⌘W inside the Terminal feature peels one split pane, then one shell
@@ -1274,6 +1319,7 @@ final class AppState {
                     level: toast.level,
                     copyText: toast.copyText,
                     revealPath: toast.revealPath,
+                    action: toast.action,
                     date: Date()
                 ),
                 at: 0
@@ -1304,6 +1350,20 @@ final class AppState {
 
     func dismissToast(_ id: UUID) {
         toasts.removeAll { $0.id == id }
+    }
+
+    /// Perform a notification's follow-up (the button on its toast / panel
+    /// row).
+    func performNotificationAction(_ action: NotificationAction) {
+        switch action {
+        case .checkForUpdates:
+            #if !APPSTORE
+            // Activate first — Sparkle's update window is useless behind an
+            // accessory app's hidden windows.
+            NSApp.activate(ignoringOtherApps: true)
+            SparkleUpdater.shared.checkForUpdates()
+            #endif
+        }
     }
 
     // MARK: - Role
