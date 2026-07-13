@@ -1,4 +1,5 @@
 import { About } from "@/components/site/About"
+import { Blog } from "@/components/site/Blog"
 import { Changelog } from "@/components/site/Changelog"
 import { Contribute } from "@/components/site/Contribute"
 import { Faq } from "@/components/site/Faq"
@@ -29,6 +30,7 @@ export default function App() {
         <Screenshots />
         <HowItWorks />
         <Guides />
+        <Blog />
         <Changelog />
         <Faq />
         <Contribute />
