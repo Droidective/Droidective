@@ -51,6 +51,13 @@ curate, and dismissed updates stop disappearing.
 - Tab strips gain right-click **Close Other Tabs** (anything with unsaved
   work still asks first).
 
+### Removed
+
+- The app no longer installs tools via Homebrew. The setup Doctor and the
+  device bar now link to the official install source (Android Studio or the
+  platform-tools download) instead of running `brew` for you — already
+  installed tools keep being found wherever they live.
+
 ### Fixes
 
 - The auto-hide sidebar no longer draws a stray horizontal line across its
