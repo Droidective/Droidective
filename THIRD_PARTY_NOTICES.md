@@ -3,7 +3,7 @@
 ## scrcpy-server
 
 `App/Resources/scrcpy-server` is the device-side server from
-[scrcpy](https://github.com/Genymobile/scrcpy) (v4.0), bundled and pushed to the
+[scrcpy](https://github.com/Genymobile/scrcpy) (v4.1), bundled and pushed to the
 device so the in-app screen mirror works without a separate scrcpy install.
 
 - Project: scrcpy — Copyright (C) 2018 Genymobile / Romain Vimont
@@ -15,7 +15,7 @@ is bundled.
 
 ## ffmpeg
 
-`App/Resources/ffmpeg` is a static build of [ffmpeg](https://ffmpeg.org) (v8.1.1,
+`App/Resources/ffmpeg` is a static build of [ffmpeg](https://ffmpeg.org) (v8.1.2,
 macOS arm64), bundled and run on the Mac to power the video editor's exports
 (trim/crop/rotate/scale/speed and mp4/mov/mkv/webm/gif encoding) without a
 separate ffmpeg install.

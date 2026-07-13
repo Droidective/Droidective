@@ -21,7 +21,7 @@ import Testing
         if let info = await ScrcpyServerLocator.resolve(locator: locator) { return info }
         let env = ProcessInfo.processInfo.environment
         guard let jar = env["SCRCPY_SERVER_JAR"] else { return nil }
-        return ScrcpyServerInfo(jarPath: jar, version: env["SCRCPY_VERSION"] ?? "4.0")
+        return ScrcpyServerInfo(jarPath: jar, version: env["SCRCPY_VERSION"] ?? "4.1")
     }
 
     @Test(.enabled(if: liveEnabled))

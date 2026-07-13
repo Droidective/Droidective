@@ -16,7 +16,7 @@ enum BundledTools {
     /// scrcpy-server payload version. MUST match the bundled `scrcpy-server`
     /// binary — `app_process` is launched with it and the server aborts on a
     /// version mismatch. Keep in lockstep with the binary in `App/Resources`.
-    static let scrcpyVersion = "4.0"
+    static let scrcpyVersion = "4.1"
 
     private static let scrcpyServerResource = "scrcpy-server"
     private static let ffmpegResource = "ffmpeg"
