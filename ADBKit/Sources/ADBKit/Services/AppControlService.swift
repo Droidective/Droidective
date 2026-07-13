@@ -5,6 +5,7 @@ import Foundation
 public struct AppControlService: Sendable {
     public enum AppAction: String, Sendable, CaseIterable {
         case open
+        case restart
         case stop
         case minimize
         case clearCache
@@ -25,14 +26,13 @@ public struct AppControlService: Sendable {
     public func control(serial: String, packageId: String, action: AppAction) async throws(AdbError) -> FeatureResult {
         switch action {
         case .open:
-            let result = try await client.run(on: serial, [
-                "shell", "monkey", "-p", shellQuote(packageId), "-c", "android.intent.category.LAUNCHER", "1",
-            ])
-            let combined = result.stdout + result.stderr
-            let launched = result.succeeded && combined.range(of: "No activities found", options: .caseInsensitive) == nil
-            return launched
-                ? FeatureResult(ok: true, message: "Opened app")
-                : FeatureResult(ok: false, message: "Couldn't launch — no launcher activity found.")
+            return try await launch(serial: serial, packageId: packageId, successMessage: "Opened app")
+
+        case .restart:
+            // Stop first; its outcome doesn't gate the relaunch — force-stop
+            // of a not-running app is a no-op.
+            _ = try await client.run(on: serial, ["shell", "am", "force-stop", shellQuote(packageId)])
+            return try await launch(serial: serial, packageId: packageId, successMessage: "Restarted")
 
         case .stop:
             let result = try await client.run(on: serial, ["shell", "am", "force-stop", shellQuote(packageId)])
@@ -62,6 +62,66 @@ public struct AppControlService: Sendable {
                 ? FeatureResult(ok: true, message: "Uninstalled")
                 : FeatureResult(ok: false, message: friendlyAdbError(result, fallback: "Failed to uninstall"))
         }
+    }
+
+    /// Launch the package's launcher activity. Resolution-first: ask the
+    /// device for the component (`cmd package resolve-activity`) and start it
+    /// by name (`am start -n`) — the old `monkey` mechanism is a do-nothing
+    /// stub on some OEM/custom builds, exiting 0 without launching anything.
+    /// Monkey stays as the fallback for pre-7.1 devices without `cmd`. A
+    /// failure is honest about why: not installed vs no enabled launcher.
+    private func launch(
+        serial: String, packageId: String, successMessage: String
+    ) async throws(AdbError) -> FeatureResult {
+        if let component = try await resolveLauncherComponent(serial: serial, packageId: packageId) {
+            let start = try await client.run(on: serial, ["shell", "am", "start", "-n", shellQuote(component)])
+            let failed = !start.succeeded
+                || (start.stdout + start.stderr).range(of: "Error", options: .caseInsensitive) != nil
+            if !failed { return FeatureResult(ok: true, message: successMessage) }
+        }
+        // Fallback: fire the launcher intent with monkey. Success requires
+        // the injected-events line — a stub monkey exits 0 injecting nothing.
+        let monkey = try await client.run(on: serial, [
+            "shell", "monkey", "-p", shellQuote(packageId), "-c", "android.intent.category.LAUNCHER", "1",
+        ])
+        let combined = monkey.stdout + monkey.stderr
+        if monkey.succeeded,
+           combined.range(of: "Events injected", options: .caseInsensitive) != nil,
+           combined.range(of: "No activities found", options: .caseInsensitive) == nil {
+            return FeatureResult(ok: true, message: successMessage)
+        }
+        let installed = try await listInstalledPackages(serial: serial, includeSystem: true)
+            .contains(packageId)
+        return FeatureResult(
+            ok: false,
+            message: installed
+                ? "Couldn't launch \(packageId) — it has no enabled launcher activity."
+                : "\(packageId) isn't installed on this device."
+        )
+    }
+
+    /// The launcher component `cmd package resolve-activity` reports, or nil
+    /// when unresolvable: no launcher activity, a pre-7.1 device without
+    /// `cmd`, or a multi-launcher package that resolves to the system chooser
+    /// (a component outside the package, which must not be started).
+    func resolveLauncherComponent(serial: String, packageId: String) async throws(AdbError) -> String? {
+        let result = try await client.run(on: serial, [
+            "shell", "cmd", "package", "resolve-activity", "--brief", "--user", "current",
+            "-c", "android.intent.category.LAUNCHER", shellQuote(packageId),
+        ])
+        guard result.succeeded else { return nil }
+        return Self.launcherComponent(in: result.stdout, packageId: packageId)
+    }
+
+    /// Pure parser: the `<packageId>/<activity>` component line from
+    /// `resolve-activity --brief` output (the component is the last line;
+    /// anything outside the package — e.g. the chooser — is rejected).
+    static func launcherComponent(in output: String, packageId: String) -> String? {
+        for line in output.components(separatedBy: .newlines).reversed() {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix(packageId + "/") { return trimmed }
+        }
+        return nil
     }
 
     /// Installed package ids, sorted. `includeSystem: false` lists only

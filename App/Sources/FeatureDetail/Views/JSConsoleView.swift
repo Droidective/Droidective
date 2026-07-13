@@ -594,16 +594,16 @@ final class JSConsoleSession {
         }
     }
 
-    /// Force-stop + relaunch on every target device; true when any relaunch
-    /// worked (the toast reports success; failures fall back to the picker).
+    /// Force-stop + relaunch on every target device (the service's `.restart`
+    /// verb); true when any relaunch worked (the toast reports success;
+    /// failures fall back to the picker).
     private func restart(package: String) async -> Bool {
         let serials = serials
         let control = AppControlService(client: adb)
         let relaunched = await CommandLog.userInitiated {
             var relaunched = 0
             for serial in serials {
-                _ = try? await control.control(serial: serial, packageId: package, action: .stop)
-                if let result = try? await control.control(serial: serial, packageId: package, action: .open),
+                if let result = try? await control.control(serial: serial, packageId: package, action: .restart),
                    result.ok {
                     relaunched += 1
                 }
