@@ -81,6 +81,23 @@ public struct CustomCommandService: Sendable {
         return line
     }
 
+    /// The contents of the temp `.command` script an external terminal app
+    /// (Terminal, iTerm2) opens for a "run in Terminal" custom command: the
+    /// user's login shell as the interpreter (with `-l` so PATH setup from
+    /// the login profile applies), the target device exported as
+    /// ANDROID_SERIAL (matching the in-app Terminal's scoping), then the
+    /// line as typed. The serial is `shellQuote`d — it reaches a Mac shell
+    /// verbatim, and a crafted serial must stay one assignment, not code.
+    public static func commandScript(line: String, serial: String, shellPath: String) -> String {
+        let shell = shellPath.isEmpty ? "/bin/zsh" : shellPath
+        var script = "#!\(shell) -l\n"
+        if !serial.isEmpty {
+            script += "export ANDROID_SERIAL=\(shellQuote(serial))\n"
+        }
+        script += line + "\n"
+        return script
+    }
+
     /// Substitute {bundleId} / {serial} into a template. Throws when the
     /// template needs a bundle and none is selected.
     public static func substitute(

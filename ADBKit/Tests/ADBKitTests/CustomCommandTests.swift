@@ -134,6 +134,52 @@ import Testing
         #expect(commands[0].kind == .adb)
     }
 
+    @Test func decodesLegacySavesWithoutTerminalAsInApp() throws {
+        let json = Data("""
+        [{"id": "1", "name": "Old", "command": "devices", "needsBundle": false, "createdAt": 0, "runsInTerminal": true}]
+        """.utf8)
+        let commands = try JSONDecoder().decode([CustomCommand].self, from: json)
+        #expect(commands[0].terminal == .droidective)
+        #expect(commands[0].pinned == false)
+    }
+
+    @Test func unknownTerminalValueDecodesAsInAppNotCorrupt() throws {
+        // A retired terminal choice must never set the whole file aside.
+        let json = Data("""
+        [{"id": "1", "name": "Old", "command": "devices", "needsBundle": false, "createdAt": 0, "terminal": "iterm"}]
+        """.utf8)
+        let commands = try JSONDecoder().decode([CustomCommand].self, from: json)
+        #expect(commands[0].terminal == .droidective)
+    }
+
+    @Test func commandScriptExportsQuotedSerialAndRunsTheLine() {
+        let script = CustomCommandService.commandScript(
+            line: "adb shell am force-stop com.app",
+            serial: "emu'; reboot; '",
+            shellPath: "/bin/zsh"
+        )
+        // The serial reaches a Mac shell verbatim — it must stay one quoted
+        // assignment, never become code.
+        #expect(script == """
+        #!/bin/zsh -l
+        export ANDROID_SERIAL='emu'\\''; reboot; '\\'''
+        adb shell am force-stop com.app
+
+        """)
+    }
+
+    @Test func commandScriptSkipsSerialExportWhenEmpty() {
+        let script = CustomCommandService.commandScript(
+            line: "~/scripts/reset.sh", serial: "", shellPath: "/opt/homebrew/bin/fish"
+        )
+        #expect(script == "#!/opt/homebrew/bin/fish -l\n~/scripts/reset.sh\n")
+    }
+
+    @Test func commandScriptFallsBackToZshForEmptyShell() {
+        let script = CustomCommandService.commandScript(line: "ls", serial: "S1", shellPath: "")
+        #expect(script.hasPrefix("#!/bin/zsh -l\n"))
+    }
+
     @Test func shellInvocationSourcesTheMatchingRcFile() {
         let zsh = CustomCommandService.shellInvocation(line: "bs", shellPath: "/bin/zsh")
         #expect(zsh.executable == "/bin/zsh")
