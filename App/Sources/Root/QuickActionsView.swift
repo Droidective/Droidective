@@ -61,6 +61,9 @@ enum QuickActionsPanel {
         // is up so a device plugged in mid-session appears promptly.
         state.refreshDevices()
         state.setQuickPanelOpen(true)
+        // Completes the tour's final "press the hotkey" step (and earns the
+        // confetti) when that page is waiting for this open.
+        state.noteQuickActionsOpened()
         let controller = FloatingPanelController.quickActions
         controller.onClosed = {
             state.setQuickPanelOpen(false)
@@ -88,6 +91,9 @@ enum QuickScreen: Equatable {
     /// Interstitial before a device-scoped action when several devices are
     /// connected; `allowAll` offers the ⌘⏎ run-on-all path.
     case pickDevice(allowAll: Bool)
+    /// Interstitial before a {bundleId} custom command when no bundle is
+    /// selected: saved bundles plus the target device's installed apps.
+    case pickBundle
     /// Options for APKs opened from Finder: install in place, or hand them to
     /// APK Studio / the Install App screen in the main window.
     case apk([URL])
@@ -161,8 +167,11 @@ struct QuickActionsView: View {
     @State private var runningRowID: String?
     /// Destructive row armed by a first ⏎, awaiting the confirming second.
     @State private var armedRowID: String?
-    /// The action held while the device interstitial is up.
+    /// The action held while the device or bundle interstitial is up.
     @State private var pendingAction: QuickRow.Action?
+    /// The bundle interstitial's pick — scopes only the action it precedes
+    /// (cleared on every fresh activation, so each run re-asks).
+    @State private var pickedBundleId: String?
     /// This session's explicit device pick; nil until the interstitial ran.
     @State private var pickedSerial: String?
     /// The serials approved by an "All devices" pick, nil otherwise.
@@ -261,8 +270,10 @@ struct QuickActionsView: View {
     private func syncMemory() {
         let memory = QuickPanelMemory.shared
         memory.stack = stack.filter {
-            if case .pickDevice = $0 { return false }
-            return true
+            switch $0 {
+            case .pickDevice, .pickBundle: return false
+            default: return true
+            }
         }
         memory.pickedSerial = pickedSerial
         memory.approvedAllSerials = approvedAllSerials
@@ -334,6 +345,7 @@ struct QuickActionsView: View {
         case .appActions(_, let display): return display
         case .emulators: return "Boot an emulator or simulator…"
         case .pickDevice: return "Pick a device for this action…"
+        case .pickBundle: return "Pick an app for this command…"
         case .apk(let urls):
             return urls.count == 1 ? urls[0].lastPathComponent : "\(urls.count) APKs"
         case .form: return ""
@@ -399,6 +411,7 @@ struct QuickActionsView: View {
                                 gridTile(row, isHighlighted: index == highlighted)
                                     .id(row.id)
                                     .onTapGesture { activate(row) }
+                                    .contextMenu { gridTileMenu(row) }
                                     .accessibilityElement(children: .combine)
                                     .accessibilityAddTraits(index == highlighted ? [.isButton, .isSelected] : .isButton)
                                     .accessibilityLabel(row.title)
@@ -456,6 +469,10 @@ struct QuickActionsView: View {
         case .emulators where emulatorsLoading: return "Looking for emulators and simulators…"
         case .emulators: return "No emulators or simulators found"
         case .pickDevice: return "No ready devices"
+        case .pickBundle where state.bundles.isEmpty && panelTargetSerial == nil:
+            return "Connect a device to list its apps, or save a bundle in the app"
+        case .pickBundle where installedApps == nil: return "Loading apps…"
+        case .pickBundle: return "No matching apps"
         default: return query.isEmpty ? "Nothing to run yet" : "No matching actions"
         }
     }
@@ -486,6 +503,8 @@ struct QuickActionsView: View {
             /// Resolve the interstitial, then perform the held action.
             case chooseDevice(serial: String, label: String)
             case chooseAllDevices
+            /// Resolve the bundle interstitial, then perform the held action.
+            case chooseBundle(packageId: String)
         }
 
         let id: String
@@ -509,6 +528,7 @@ struct QuickActionsView: View {
         case .appActions(let packageId, _): return appActionRows(packageId)
         case .emulators: return Array(emulatorRows.prefix(8))
         case .pickDevice: return pickDeviceRows
+        case .pickBundle: return pickBundleRows
         case .apk(let urls): return apkRows(urls)
         case .form: return []
         }
@@ -546,14 +566,24 @@ struct QuickActionsView: View {
                     : .runFeature(feature)
             )
         }
+        // Actions the user switched off for the panel (a tile's right-click
+        // Hide / Settings ▸ Quick Actions) leave the grid entirely — search
+        // included; unhide from Settings.
+        let hidden = state.quickPanelHiddenIDs
+        if !hidden.isEmpty {
+            rows.removeAll { row in
+                pinnableFeatureID(of: row).map(hidden.contains) ?? false
+            }
+        }
         guard query.isEmpty else { return rows }
         // Pinned tiles lead the whole grid — native screens included, in the
         // favorites' own order — ahead of commands and the registry order.
+        // Pinned custom commands ride along after them, in list order.
         let favorites = state.layout.favorites
         var pinned: [QuickRow] = []
         var rest: [QuickRow] = []
         for row in rows {
-            if let id = pinnableFeatureID(of: row), favorites.contains(id) {
+            if isPinned(row) {
                 pinned.append(row)
             } else {
                 rest.append(row)
@@ -596,6 +626,8 @@ struct QuickActionsView: View {
     /// rest. Each fronts a registry feature and follows its enabledness, so
     /// the panel mirrors the app's role/catalog curation here too.
     private var nativeRows: [QuickRow] {
+        // The panel-hidden filter happens in `rootGridItems`, keyed off each
+        // row's fronted feature id, so it covers these screens too.
         let enabled = state.layout.effectiveEnabledIDs
         var rows: [QuickRow] = []
         if enabled.contains("apps"), matchesNative(title: "Manage Apps", keywords: [
@@ -813,6 +845,40 @@ struct QuickActionsView: View {
         }
     }
 
+    /// The bundle interstitial's rows: saved bundles first, then the target
+    /// device's installed apps. The pick substitutes {bundleId} for the held
+    /// command only — it doesn't change the app-wide bundle selection.
+    private var pickBundleRows: [QuickRow] {
+        let saved = state.bundles.filter {
+            query.isEmpty
+                || $0.nickname.localizedCaseInsensitiveContains(query)
+                || $0.packageId.localizedCaseInsensitiveContains(query)
+        }
+        var rows: [QuickRow] = saved.map { bundle in
+            QuickRow(
+                id: "bundle:\(bundle.packageId)", icon: "app.badge",
+                title: bundle.nickname, subtitle: bundle.packageId,
+                badge: "saved",
+                action: .chooseBundle(packageId: bundle.packageId)
+            )
+        }
+        let savedIds = Set(saved.map(\.packageId))
+        let installed = (installedApps ?? []).filter { packageId in
+            guard !savedIds.contains(packageId) else { return false }
+            return query.isEmpty
+                || packageId.localizedCaseInsensitiveContains(query)
+                || AppListing.displayName(for: packageId).localizedCaseInsensitiveContains(query)
+        }
+        rows += installed.prefix(8).map { packageId in
+            QuickRow(
+                id: "bundle:\(packageId)", icon: "app.badge",
+                title: AppListing.displayName(for: packageId), subtitle: packageId,
+                action: .chooseBundle(packageId: packageId)
+            )
+        }
+        return rows
+    }
+
     // MARK: - Row rendering
 
     private func gridTile(_ row: QuickRow, isHighlighted: Bool) -> some View {
@@ -851,7 +917,43 @@ struct QuickActionsView: View {
     }
 
     private func isPinned(_ row: QuickRow) -> Bool {
-        pinnableFeatureID(of: row).map { state.layout.favorites.contains($0) } ?? false
+        pinState(of: row) == true
+    }
+
+    /// Whether the row is currently pinned — nil for rows that can't be
+    /// (devices, verbs, installed apps). Features share the app's favorites;
+    /// custom commands carry their own flag.
+    private func pinState(of row: QuickRow?) -> Bool? {
+        if case .runCommand(let command) = row?.action { return command.pinned }
+        return pinnableFeatureID(of: row).map { state.layout.favorites.contains($0) }
+    }
+
+    /// ⌘P / the tile menu: flip the row's pin wherever it's kept.
+    private func togglePin(of row: QuickRow?) {
+        if case .runCommand(let command) = row?.action {
+            guard let index = commands.firstIndex(where: { $0.id == command.id }) else { return }
+            commands[index].pinned.toggle()
+            let snapshot = commands
+            Task { try? await state.env.stores.customCommands.save(snapshot) }
+            return
+        }
+        if let id = pinnableFeatureID(of: row) { state.toggleFavorite(id) }
+    }
+
+    /// A tile's right-click menu: pin/unpin, and — for feature-backed actions
+    /// (commands are managed in Custom Commands) — hide it from the panel.
+    /// Unhide from Settings ▸ General ▸ Quick Actions.
+    @ViewBuilder private func gridTileMenu(_ row: QuickRow) -> some View {
+        if let pinned = pinState(of: row) {
+            Button(pinned ? "Unpin" : "Pin", systemImage: pinned ? "pin.slash" : "pin") {
+                togglePin(of: row)
+            }
+        }
+        if let id = pinnableFeatureID(of: row) {
+            Button("Hide from Quick Actions", systemImage: "eye.slash") {
+                state.setQuickPanelActionShown(id, shown: false)
+            }
+        }
     }
 
     private func rowView(
@@ -940,9 +1042,7 @@ struct QuickActionsView: View {
                 .keyboardShortcut(key, modifiers: .command)
             }
             Button("") {
-                if let id = pinnableFeatureID(of: highlightedRow) {
-                    state.toggleFavorite(id)
-                }
+                togglePin(of: highlightedRow)
             }
             .keyboardShortcut("p", modifiers: .command)
             if case .pickDevice(allowAll: true) = screen {
@@ -964,6 +1064,7 @@ struct QuickActionsView: View {
     private var taskKey: String {
         switch screen {
         case .apps: return "apps:\(panelTargetSerial ?? "")"
+        case .pickBundle: return "pickBundle:\(panelTargetSerial ?? "")"
         case .emulators: return "emulators"
         default: return "static"
         }
@@ -971,7 +1072,7 @@ struct QuickActionsView: View {
 
     private func loadScreenData() async {
         switch screen {
-        case .apps:
+        case .apps, .pickBundle:
             installedApps = nil
             guard let serial = panelTargetSerial else {
                 installedApps = []
@@ -1052,8 +1153,8 @@ struct QuickActionsView: View {
                 .buttonStyle(.plain)
                 .help("Run on every connected device")
             }
-            if let id = pinnableFeatureID(of: highlightedRow) {
-                footerHint("⌘P", state.layout.favorites.contains(id) ? "Unpin" : "Pin")
+            if let pinned = pinState(of: highlightedRow) {
+                footerHint("⌘P", pinned ? "Unpin" : "Pin")
             }
             footerHint("⏎", isFormScreen ? "Run" : "Select")
             footerHint("esc", stack.isEmpty ? "Close" : "Back")
@@ -1177,6 +1278,9 @@ struct QuickActionsView: View {
             return
         }
         armedRowID = nil
+        // A fresh activation re-asks for its own bundle — a pick made for an
+        // earlier command must not silently scope this one.
+        if case .chooseBundle = row.action {} else { pickedBundleId = nil }
         // Several devices and no choice yet: ask first, hold the action.
         let choice = deviceChoice(for: row.action)
         if choice.needed {
@@ -1302,6 +1406,9 @@ struct QuickActionsView: View {
             approvedAllSerials = readyDevices.map(\.serial)
             pickedSerial = nil
             resumePendingAfterPick()
+        case .chooseBundle(let packageId):
+            pickedBundleId = packageId
+            resumePendingAfterPick()
         }
     }
 
@@ -1351,23 +1458,52 @@ struct QuickActionsView: View {
         }
     }
 
+    /// Whether a command's run needs a bundle id to substitute.
+    private func commandNeedsBundle(_ command: CustomCommand) -> Bool {
+        command.needsBundle || command.command.contains("{bundleId}")
+    }
+
+    /// The bundle id a command's {bundleId} resolves to: the interstitial's
+    /// pick for this action, else the app-wide saved-bundle selection.
+    private var resolvedBundleId: String? {
+        pickedBundleId ?? state.selectedBundle?.packageId
+    }
+
     private func run(_ command: CustomCommand) {
-        if command.needsBundle, state.selectedBundle == nil {
-            lastRun = QuickRunOutcome(message: "Pick a saved bundle first.", ok: false)
+        // {bundleId} with nothing selected: hold the run and let the user
+        // pick an app right here (saved bundles + the device's installed
+        // list) instead of erroring out.
+        if commandNeedsBundle(command), resolvedBundleId == nil {
+            pendingAction = .runCommand(command)
+            push(.pickBundle)
             return
         }
-        // A terminal-destined command needs the main window — the panel can't
-        // host a PTY. Open it there and hand off.
+        // A device-targeting command with nothing connected can only fail —
+        // say what's missing up front (a serial substituted as "" is worse).
+        let deviceScoped = command.kind == .adb || command.command.contains("{serial}")
+        if deviceScoped, readySerials.isEmpty {
+            lastRun = QuickRunOutcome(
+                message: "Connect a device (or boot an emulator) to run \(command.name).",
+                ok: false
+            )
+            return
+        }
+        let bundleId = resolvedBundleId
+        // A terminal-destined command hands off to the command's chosen
+        // terminal — the panel can't host a PTY. The in-app choice opens the
+        // main window; the external ones launch that app.
         if command.runsInTerminal {
             do {
                 let line = try CustomCommandService.terminalLine(
                     command: command,
-                    bundleId: state.selectedBundle?.packageId,
+                    bundleId: bundleId,
                     serial: panelTargetSerial ?? ""
                 )
-                state.runInTerminal(line, named: command.name)
-                state.activateMainWindow()
-                lastRun = QuickRunOutcome(message: "Opened in Terminal", ok: true)
+                state.runCustomCommand(
+                    line: line, named: command.name,
+                    serial: panelTargetSerial ?? "", terminal: command.terminal
+                )
+                lastRun = QuickRunOutcome(message: "Opened in \(command.terminal.displayName)", ok: true)
             } catch {
                 lastRun = QuickRunOutcome(message: error.localizedDescription, ok: false)
             }
@@ -1375,20 +1511,14 @@ struct QuickActionsView: View {
         }
         // Device-scoped commands honor an "All devices" approval (the footer
         // advertises it); shell commands without {serial} run once.
-        let deviceScoped = command.kind == .adb || command.command.contains("{serial}")
         let targets: [String] = deviceScoped
             ? PanelTargeting.fanOut(
                 picked: pickedSerial, selected: state.selectedSerial,
                 approved: approvedAllSerials, ready: readySerials, supportsRunAll: true
             )
             : (panelTargetSerial.map { [$0] } ?? [])
-        if command.kind == .adb, targets.isEmpty {
-            lastRun = QuickRunOutcome(message: "No device connected.", ok: false)
-            return
-        }
         runningRowID = "command:\(command.id)"
         lastRun = nil
-        let bundleId = state.selectedBundle?.packageId
         Task {
             var okCount = 0
             var lastResult = FeatureResult(ok: false, message: "\(command.name) didn't run")

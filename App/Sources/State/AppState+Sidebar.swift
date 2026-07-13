@@ -312,6 +312,30 @@ extension AppState {
         persistLayout()
     }
 
+    /// Feature ids hidden from the Quick Actions panel's action grid — set
+    /// from Settings ▸ General ▸ Quick Actions or a tile's right-click Hide.
+    var quickPanelHiddenIDs: Set<String> { Set(layout.quickPanelHiddenIds ?? []) }
+
+    func setQuickPanelActionShown(_ featureID: String, shown: Bool) {
+        var hidden = Set(layout.quickPanelHiddenIds ?? [])
+        if shown { hidden.remove(featureID) } else { hidden.insert(featureID) }
+        layout.quickPanelHiddenIds = hidden.isEmpty ? nil : hidden.sorted()
+        persistLayout()
+    }
+
+    /// Everything the Quick Actions grid can offer, pre-hide: the panel's
+    /// native screens (they front the registry features they replace) then
+    /// every implemented action. The Settings show/hide toggles iterate this.
+    var quickPanelEligibleActions: [FeatureDef] {
+        let native = ["apps", "emulators", "install-app"]
+            .filter { layout.effectiveEnabledIDs.contains($0) }
+            .compactMap { FeatureRegistry.byID[$0] }
+        return native + PaletteSearch.quickActions(
+            query: "", implemented: FeatureEngine.implementedIDs,
+            enabled: layout.effectiveEnabledIDs, favorites: layout.favorites
+        )
+    }
+
     func persistLayout() {
         // Until bootstrap has loaded the persisted layout, `layout` is still the
         // default — writing it would overwrite the user's saved data.
