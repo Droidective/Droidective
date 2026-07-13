@@ -35,7 +35,8 @@ curate, and dismissed updates stop disappearing.
 - **Checks twice a day** instead of daily.
 - **Dismissed updates come back** — closing or skipping the update alert now
   resurfaces it as a notification on every launch until you install, with a
-  Check for Updates button.
+  Check for Updates button. Turning off automatic update checks in Settings
+  silences the reminder too.
 
 ### Welcome tour
 
