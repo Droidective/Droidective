@@ -129,9 +129,12 @@ Node 22 in CI; scroll reveals and the hero palette demo must keep their
   info/meminfo/sandbox), AppsExplorer, FileExplorer, Overrides, ScreenCapture,
   ScreenRecorder (records through a headless `MirrorSession` on the bundled
   scrcpy server — no desktop scrcpy), Crash, BugReport, Connection (wireless),
-  CustomCommand (adb kind → tokenized argv, never a shell; Terminal kind →
-  `zsh -lc`, deliberately not device-scoped — `{serial}` targets the
-  selection), ToolDetection, AdbKeyboardInstaller, Emulator, Simulator (simctl:
+  CustomCommand (one free-typed line; a leading `adb` token infers the adb
+  kind → tokenized argv, never a shell; anything else — multi-line included —
+  runs through `zsh -lc`, deliberately not device-scoped — `{serial}` targets
+  the selection; a `runsInTerminal` command opens the in-app Terminal or the
+  Mac's default terminal app via a temp `.command` script per its stored
+  `terminal`), ToolDetection, AdbKeyboardInstaller, Emulator, Simulator (simctl:
   boot/shutdown, openurl, appearance, status_bar, screenshot, APNS push —
   backs the cross-platform runners and the Emulators screen's simulator
   section), AppIcon,
@@ -296,11 +299,17 @@ platforms annotation without a runner.
   mistaken for a window close). The app stays resident for the menu bar, the
   per-feature hotkeys, and `QuickActionsPanel` — a **non-activating**
   `FloatingPanelController` panel (global hotkey in Settings ▸ Hotkeys; the
-  welcome tour's "Get Started" ends on a record-a-hotkey ask recommending
-  ⇧⌘Space, shown only while none is set) that is
+  welcome tour ends on two mandatory pages — record the hotkey (Next gated
+  until one is set, ⇧⌘Space recommended), then a try-it finale whose keycap
+  animation waits for the real press: opening the panel is the tour's only
+  exit and fires the confetti, `AppState.noteQuickActionsOpened`) that is
   a small push-navigation mini app. The root is a *grid* of everything
-  runnable in place — saved custom commands, every *enabled* implemented
-  instant/toggle/form action (mirrors the app's role/catalog curation; hub
+  runnable in place — saved custom commands (pinnable, stored on the
+  command), every *enabled* implemented
+  instant/toggle/form action minus the panel-hidden set
+  (`LayoutState.quickPanelHiddenIds` — a tile's right-click Hide, managed in
+  Settings ▸ General ▸ Quick Actions)
+  (mirrors the app's role/catalog curation; hub
   members ride their hub's enabledness, pinned features lead — ⌘P toggles,
   shared with the app's favorites; `PaletteSearch.quickActions`, tested),
   Manage Apps / Emulators / Install APK — with an "Open in Droidective" list
@@ -399,6 +408,14 @@ compile or test time* — lean on it instead of manual vigilance.
 ## Status
 
 Feature-complete across all planned milestones plus several UX rounds (latest:
+**v3.1.0** — **custom commands reworked** (one free-typed multi-line box, adb
+inferred from the leading token, per-command choice of the in-app Terminal or
+the Mac's default terminal), a **curatable Quick Actions panel** (pin custom
+commands, hide actions, a pick-an-app interstitial for `{bundleId}` runs),
+**twice-daily update checks** with a launch reminder for a dismissed update,
+and a **two-page tour finale** (record the hotkey, then press it for real —
+confetti on completion; terminal tabs now default to the top strip). Before
+that,
 **v3.0.0** — **terminal split panes** (⌘D/⇧⌘D via the tested `TerminalSplitTree`,
 cwd inheritance into new tabs/panes, a Chrome-style top tab strip option), an
 **onboarding tour rebuilt around recordings of the real app**, redesigned
