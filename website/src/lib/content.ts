@@ -79,7 +79,6 @@ export const guides: Guide[] = [
   { icon: Bug, title: "QA & testers", body: "Reproduce, capture, and report bugs in minutes — fake state, mark up a screenshot, pull a full bug report.", cta: "For QA & testers →", href: "/for-qa-and-testers.html" },
   { icon: Activity, title: "Support teams", body: "See the device, pull the diagnostics, close the ticket — mirror the screen and grab logs, no adb needed.", cta: "For support teams →", href: "/for-support-teams.html" },
   { icon: ShieldCheck, title: "Security & pentest", body: "Inspect, decompile and re-sign APKs, set up Frida, browse app data, and route traffic through Burp — one pipeline.", cta: "For security testers →", href: "/for-security-testers.html" },
-  { icon: Cast, title: "scrcpy GUI for Mac", body: "A native GUI for scrcpy — mirror, control, and record your Android screen, with ffmpeg bundled in.", cta: "scrcpy GUI for Mac →", href: "/scrcpy-gui-mac.html" },
 ]
 
 export interface Showcase {
