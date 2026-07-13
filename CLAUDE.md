@@ -415,6 +415,9 @@ inferred from the leading token, per-command choice of the in-app Terminal or
 the Mac's default terminal), a **curatable Quick Actions panel** (pin custom
 commands, hide actions, a pick-an-app interstitial for `{bundleId}` runs),
 **twice-daily update checks** with a launch reminder for a dismissed update,
+an app **Restart verb** everywhere apps are managed (with launching by
+resolved activity, fixing stub-`monkey` devices), **no more Homebrew
+installs** (the Doctor links to install sources instead),
 and a **two-page tour finale** (record the hotkey, then press it for real —
 confetti on completion; terminal tabs now default to the top strip). Before
 that,

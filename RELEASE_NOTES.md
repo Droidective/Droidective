@@ -30,6 +30,17 @@ curate, and dismissed updates stop disappearing.
 - **Choose what shows** — right-click any action tile to hide it from the
   panel; manage the full list under Settings ▸ General ▸ Quick Actions.
 
+### App management
+
+- **Restart, everywhere apps are managed** — a one-click force-stop +
+  relaunch in the Apps explorer, the Manage App screen, and the Quick
+  Actions panel; the JS Console's Restart app rides the same path.
+- **Launching works on more devices** — apps open via their resolved
+  launcher activity (`am start`) instead of relying on `monkey`, which is a
+  do-nothing stub on some OEM/custom Android builds. When a launch does
+  fail, the message now says whether the app is missing or just has no
+  launcher activity.
+
 ### Updates
 
 - **Checks twice a day** instead of daily.
