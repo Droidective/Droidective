@@ -1,8 +1,28 @@
-import { readFileSync } from "node:fs"
+import { readdirSync, readFileSync } from "node:fs"
 import path from "node:path"
 import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
 import { defineConfig, type Plugin } from "vite"
+
+// Every blog/**/index.html is a static entry (the index plus one per post).
+// Scanning keeps Rollup's input list in sync as posts are added — regenerate
+// the HTML with scripts/gen-blog-html.mjs and the new page is picked up here.
+function blogInputs(): Record<string, string> {
+  const blogDir = path.resolve(__dirname, "blog")
+  const inputs: Record<string, string> = {}
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name)
+      if (entry.isDirectory()) walk(full)
+      else if (entry.name === "index.html") {
+        const rel = path.relative(__dirname, full).replace(/[/\\]index\.html$/, "")
+        inputs[rel.replace(/[/\\]/g, "-")] = full
+      }
+    }
+  }
+  walk(blogDir)
+  return inputs
+}
 
 // Keeps index.html's JSON-LD "softwareVersion" in lockstep with the single
 // version source, APP_VERSION in src/lib/content.ts — no manual bump needed.
@@ -38,6 +58,7 @@ export default defineConfig({
       input: {
         main: path.resolve(__dirname, "index.html"),
         changelog: path.resolve(__dirname, "changelog/index.html"),
+        ...blogInputs(),
       },
       output: {
         manualChunks: {
