@@ -48,6 +48,14 @@ private struct ToastView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
             }
+
+            if let action = toast.action {
+                Button(action.buttonTitle) {
+                    state.performNotificationAction(action)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)

@@ -101,6 +101,13 @@ private struct NotificationRow: View {
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                     }
+                    if let action = note.action {
+                        Button(action.buttonTitle) {
+                            state.performNotificationAction(action)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                    }
                 }
             }
             Spacer(minLength: 0)
