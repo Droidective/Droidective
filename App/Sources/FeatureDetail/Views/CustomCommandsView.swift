@@ -255,17 +255,12 @@ struct CustomCommandsView: View {
         .help(help)
     }
 
-    /// The kind and stored template for the typed line: a leading `adb` token
-    /// means the adb runner (the app's resolved adb, tokenized argv — no
-    /// shell), stored without the prefix like the presets; anything else is a
-    /// login-shell line as written. Multi-line drafts always run through the
-    /// shell — an adb argv can't hold several commands, and the shell treats
-    /// each line as its own command.
+    /// Leading-`adb`-token → adb runner (tokenized argv), anything else —
+    /// multi-line included — → login shell. The classifier is
+    /// `CustomCommandService.draftParts` (pure, tested in ADBKit — it's the
+    /// routing decision the argv-vs-shell handling keys off).
     private static func draftParts(of line: String) -> (kind: CustomCommandKind, command: String) {
-        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.contains("\n") else { return (.shell, trimmed) }
-        guard trimmed == "adb" || trimmed.hasPrefix("adb ") else { return (.shell, trimmed) }
-        return (.adb, String(trimmed.dropFirst("adb".count)).trimmingCharacters(in: .whitespaces))
+        CustomCommandService.draftParts(of: line)
     }
 
     private var draftRunsViaAdb: Bool { Self.draftParts(of: draftCommand).kind == .adb }

@@ -85,9 +85,9 @@ and `⌘=`/`⌘-` font zoom. Files pulled from the device always ask where to sa
 - macOS 14 (Sonoma) or later
 - [Android platform-tools](https://developer.android.com/tools/releases/platform-tools)
   (`adb`) — found automatically via `ANDROID_HOME`, `~/Library/Android/sdk`, or
-  Homebrew; the app offers a one-click install if it's missing.
+  the standard install prefixes; if it's missing the app links to the download.
 - Optional: the Android SDK `emulator` (AVD management). The `scrcpy` server
-  payload and a static `ffmpeg` ship **inside the app** — no `brew install` needed.
+  payload and a static `ffmpeg` ship **inside the app** — no separate install needed.
 
 ## Building
 
@@ -103,7 +103,7 @@ make run                  # build and launch
 after a fresh clone if you want to open it in Xcode.
 
 The app runs **without the App Sandbox** (it must spawn `adb`, the bundled
-`ffmpeg`, the `emulator`, and `brew`). Local builds are ad-hoc signed; release
+`ffmpeg`, and the `emulator`). Local builds are ad-hoc signed; release
 builds are signed with a Developer ID and notarized (see [`RELEASING.md`](RELEASING.md)).
 
 ## Install a release build

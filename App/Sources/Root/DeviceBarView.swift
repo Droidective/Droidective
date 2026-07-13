@@ -1,4 +1,5 @@
 import ADBKit
+import AppKit
 import SwiftUI
 
 /// Persistent device context above the detail pane, on a single row: the device
@@ -57,11 +58,15 @@ struct DeviceBarView: View {
                     Label("adb not found", systemImage: "exclamationmark.triangle.fill")
                         .font(.app(.footnote))
                         .foregroundStyle(.orange)
-                    Button(state.installingTool == .adb ? "Installing…" : "Install") {
-                        state.installTool(.adb)
+                    // Opens Google's platform-tools page — the app doesn't
+                    // install tools itself.
+                    Button("How to install") {
+                        NSWorkspace.shared.open(
+                            URL(string: "https://developer.android.com/tools/releases/platform-tools")!
+                        )
                     }
                     .controlSize(.mini)
-                    .disabled(state.installingTool != nil)
+                    .help("adb ships with Android platform-tools — install it via Android Studio or this download page, then re-check in Settings ▸ Doctor")
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

@@ -125,6 +125,50 @@ import Testing
         }
     }
 
+    @Test func draftPartsRoutesLeadingAdbTokenToAdbKind() {
+        #expect(CustomCommandService.draftParts(of: "adb shell am force-stop {bundleId}")
+            == (.adb, "shell am force-stop {bundleId}"))
+        #expect(CustomCommandService.draftParts(of: "  adb devices  ") == (.adb, "devices"))
+        // A bare "adb" is adb-kind with nothing to run — the editor rejects it.
+        #expect(CustomCommandService.draftParts(of: "adb") == (.adb, ""))
+    }
+
+    @Test func draftPartsRoutesEverythingElseToShell() {
+        #expect(CustomCommandService.draftParts(of: "~/scripts/reset.sh {serial}")
+            == (.shell, "~/scripts/reset.sh {serial}"))
+        // Only the exact "adb " token — a longer word or different case is a
+        // shell command (the login shell resolves it, right or wrong).
+        #expect(CustomCommandService.draftParts(of: "adbx devices") == (.shell, "adbx devices"))
+        #expect(CustomCommandService.draftParts(of: "ADB devices") == (.shell, "ADB devices"))
+        // Pinned: a tab separator isn't the "adb " prefix, so it stays shell.
+        #expect(CustomCommandService.draftParts(of: "adb\tdevices") == (.shell, "adb\tdevices"))
+        #expect(CustomCommandService.draftParts(of: "   ") == (.shell, ""))
+    }
+
+    @Test func draftPartsForcesMultiLineToShellIncludingCRLF() {
+        #expect(CustomCommandService.draftParts(of: "adb devices\necho done").kind == .shell)
+        // "\r\n" is ONE Swift Character — contains("\n") misses it, so the
+        // check must go through .newlines or a pasted CRLF draft would be
+        // misrouted as a single adb argv line.
+        #expect(CustomCommandService.draftParts(of: "adb devices\r\necho done").kind == .shell)
+    }
+
+    @Test func substitutionQuotesHostShellMetacharactersOnly() throws {
+        // A plain serial/package id passes through untouched…
+        #expect(try CustomCommandService.substitute(
+            template: "scrcpy -s {serial}", bundleId: nil, serial: "192.168.1.5:5555"
+        ) == "scrcpy -s 192.168.1.5:5555")
+        // …but a crafted one is quoted before it reaches the Mac shell (the
+        // terminal tab, the .command script, or the eval'd headless line),
+        // where it would otherwise run as code.
+        #expect(try CustomCommandService.substitute(
+            template: "adb -s {serial} shell date", bundleId: nil, serial: "$(touch /tmp/pwned)"
+        ) == "adb -s '$(touch /tmp/pwned)' shell date")
+        #expect(try CustomCommandService.substitute(
+            template: "echo {bundleId}", bundleId: "com.app'; reboot; '", serial: ""
+        ) == "echo 'com.app'\\''; reboot; '\\'''")
+    }
+
     @Test func savesPredatingRunsInTerminalDecodeAsSilent() throws {
         let json = Data("""
         [{"id": "1", "name": "Old", "command": "devices", "needsBundle": false, "createdAt": 0}]

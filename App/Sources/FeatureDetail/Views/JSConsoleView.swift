@@ -942,8 +942,14 @@ struct JSConsoleView: View {
     /// Apply whatever's typed in the port field. Clicking a button doesn't
     /// fire the field's onSubmit, so "type a new port → adb reverse" would
     /// otherwise reverse the old port — the reverse buttons commit first.
+    /// Unparseable text snaps the field back to the port actually in use, so
+    /// the reverse never silently targets a port other than the one shown.
     private func commitTypedPort() {
-        if let value = Int(portText) { session.setPort(value) }
+        if let value = Int(portText) {
+            session.setPort(value)
+        } else {
+            portText = String(session.port)
+        }
     }
 
     // MARK: Filter bar
