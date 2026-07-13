@@ -2,7 +2,8 @@ import ADBKit
 import Foundation
 
 /// Single source of truth for the third-party binaries shipped inside the app
-/// bundle, so Droidective is self-contained (no `brew install scrcpy`/`ffmpeg`).
+/// bundle, so Droidective is self-contained (no separate scrcpy/ffmpeg
+/// install needed).
 ///
 /// **Updating a bundled tool** (scalable on purpose): run
 /// `scripts/update-bundled-tools.sh`, which downloads the pinned versions into

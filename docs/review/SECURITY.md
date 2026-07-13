@@ -1,7 +1,7 @@
 # Security
 
 Droidective is an **open-source, public repo** that spawns local tools (adb,
-scrcpy, emulator, ffmpeg, brew) and runs commands against a connected device. The
+scrcpy, emulator, ffmpeg) and runs commands against a connected device. The
 threat model is small but real: leaked secrets in git history, shell injection
 through device-side commands, and unsafe file operations on the user's machine.
 
@@ -68,7 +68,7 @@ exports, persisted state).
 
 ## External tools & supply chain
 
-- The app resolves adb/scrcpy/brew/ffmpeg/emulator via `ToolLocator`. Don't add a
+- The app resolves adb/scrcpy/ffmpeg/emulator via `ToolLocator`. Don't add a
   new external binary dependency without justification — each is attack surface.
 - Bundled binaries (scrcpy-server, static ffmpeg) are refreshed by a script and
   versioned in one place (`BundledTools`); a new or bumped binary is reviewed for

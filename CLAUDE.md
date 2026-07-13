@@ -10,7 +10,7 @@ Two layers, strictly separated so a second **Apple** UI (iPad/visionOS) could
 reuse ADBKit almost as-is. Note the honest scope: a Linux/Windows port re-does
 the UI **plus** the macOS-bound seams inside ADBKit — the Mirror media stack
 (CoreMedia/VideoToolbox/AVFoundation), the Network.framework socket servers,
-`ToolLocator`'s Homebrew/SDK paths + `zsh -lc`, and `.lzma`/`tar` extraction;
+`ToolLocator`'s macOS install/SDK paths + `zsh -lc`, and `.lzma`/`tar` extraction;
 an iOS companion can't run `Process` at all, so it would need a remote-host
 protocol, not just a UI swap. Keep the existing seams (`ProcessRunning`,
 injected directories) and don't pre-abstract the rest until a port is scheduled.
@@ -78,7 +78,7 @@ The agent loop I use: edit → `cd ADBKit && swift test` → `xcodegen generate`
 lands at `DerivedData/Build/Products/Debug/Droidective.app`.
 
 `brew install xcodegen` if missing. App is ad-hoc signed, sandbox OFF (it must
-spawn adb/scrcpy/emulator/brew).
+spawn adb/scrcpy/emulator).
 
 ## Marketing site
 
@@ -97,8 +97,9 @@ Node 22 in CI; scroll reveals and the hero palette demo must keep their
 ## Key types (ADBKit)
 
 - `Exec/`: `ProcessRunning` protocol → `SystemProcessRunner` (real) +
-  `MockProcessRunner` (tests). `ToolLocator` (actor) resolves adb/scrcpy/brew/
-  ffmpeg/emulator via SDK paths → Homebrew → `zsh -lc` fallback, cached.
+  `MockProcessRunner` (tests). `ToolLocator` (actor) resolves adb/scrcpy/
+  ffmpeg/emulator via SDK paths → the standard install prefixes → `zsh -lc`
+  fallback, cached.
   `AdbClient` (structured `AdbResult`, never throws on non-zero exit, only on
   `.adbNotFound`). `SimctlClient` (AdbClient's `xcrun simctl` twin for iOS
   Simulators — same `AdbResult` shape, throws only on missing Xcode).
@@ -148,8 +149,9 @@ Node 22 in CI; scroll reveals and the hero palette demo must keep their
   `ScreenRecordOptions` struct. **Bundled binaries** (scrcpy-server + a static
   GPLv3 ffmpeg) live in `App/Resources/`, resolved by the App-layer `BundledTools`
   (single version source); `scripts/update-bundled-tools.sh` refreshes them. The
-  app needs no `brew install scrcpy`/`ffmpeg`; the Doctor only checks adb /
-  emulator / Homebrew.
+  app needs no separate scrcpy/ffmpeg install; the Doctor only checks adb /
+  emulator (pointing at the install source when one is missing — the app
+  never installs tools itself).
 - `Persistence/`: `JSONStore<T>` (actor, atomic write, sets aside corrupt
   files as `.corrupt`), `Stores` (Bundles, DeepLinks, CustomCommands,
   LayoutState, Presets, OverridesMap, Prefs) in
