@@ -280,6 +280,10 @@ private struct AppDetailPane: View {
                         Label("Open", systemImage: "play.fill")
                     }
                     .buttonStyle(.borderedProminent)
+                    Button { runControl(.restart) } label: {
+                        Label("Restart", systemImage: "arrow.clockwise")
+                    }
+                    .buttonStyle(.bordered)
                     Button { runControl(.stop) } label: {
                         Label("Force Stop", systemImage: "stop.fill")
                     }

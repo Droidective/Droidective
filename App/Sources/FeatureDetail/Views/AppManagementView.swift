@@ -1,7 +1,7 @@
 import ADBKit
 import SwiftUI
 
-/// Open, stop, minimize, clear, or uninstall the selected bundle's app.
+/// Open, restart, stop, minimize, clear, or uninstall the selected bundle's app.
 struct AppManagementView: View {
     @Environment(AppState.self) private var state
     @State private var pendingAction: AppControlService.AppAction?
@@ -36,6 +36,7 @@ struct AppManagementView: View {
 
             HStack(spacing: 8) {
                 actionButton(.open, "Open", "play.fill", prominent: true)
+                actionButton(.restart, "Restart", "arrow.clockwise")
                 actionButton(.stop, "Force Stop", "stop.fill")
                 actionButton(.minimize, "Minimize", "arrow.down.right.square")
                 actionButton(.clearCache, "Clear Cache", "internaldrive")

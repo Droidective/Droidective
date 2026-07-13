@@ -720,6 +720,7 @@ struct QuickActionsView: View {
     private static func verbTitle(_ verb: AppControlService.AppAction) -> String {
         switch verb {
         case .open: return "Open"
+        case .restart: return "Restart"
         case .stop: return "Force Stop"
         case .minimize: return "Minimize"
         case .clearCache: return "Clear Cache"
@@ -731,6 +732,7 @@ struct QuickActionsView: View {
     private static func verbIcon(_ verb: AppControlService.AppAction) -> String {
         switch verb {
         case .open: return "play.circle"
+        case .restart: return "arrow.clockwise.circle"
         case .stop: return "stop.circle"
         case .minimize: return "chevron.down.circle"
         case .clearCache: return "eraser"
