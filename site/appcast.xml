@@ -6,9 +6,9 @@
     <description>Most recent Droidective updates.</description>
     <language>en</language>
     <item>
-      <title>Droidective 3.0.1</title>
-      <sparkle:version>376</sparkle:version>
-      <sparkle:shortVersionString>3.0.1</sparkle:shortVersionString>
+      <title>Droidective 3.1.0</title>
+      <sparkle:version>396</sparkle:version>
+      <sparkle:shortVersionString>3.1.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <description><![CDATA[
 <style>
@@ -24,78 +24,99 @@ pre { background: color-mix(in srgb, currentColor 8%, transparent); padding: .6e
 pre code { background: none; padding: 0; }
 a { color: #2f9e44; }
 </style>
-<p>A bug-fix release: confirmations before destructive actions, several features
-that now work without an Android device selected, honest status messages, and
-tighter analytics.</p>
+<p>Custom commands get a full rework, the Quick Actions panel becomes yours to
+curate, and dismissed updates stop disappearing.</p>
+<h3>Custom Commands</h3>
+<ul>
+<li>
+<strong>One box, full command lines</strong> — type commands exactly as you'd run them in
+a terminal (<code>adb shell am force-stop {bundleId}</code>); the separate adb/Terminal
+mode tabs are gone. Lines starting with <code>adb</code> still run through
+Droidective's own adb — tokenized safely, device <code>-s</code> injected — and
+everything else runs through your login shell.</li>
+<li>
+<strong>Multi-line commands</strong> — the editor is a proper multi-line box; each line
+runs in order through your shell. Save with ⌘⏎.</li>
+<li>
+<strong>Pick the terminal</strong> — a command that shows output "in a terminal" can open
+Droidective's Terminal (default) or your Mac's default terminal app, with
+the selected device exported as <code>ANDROID_SERIAL</code> either way.</li>
+<li>
+<strong>Redesigned editor</strong> — labeled fields, one-click <code>{bundleId}</code> / <code>{serial}</code>
+chips, and a live cue showing where the line will run.</li>
+</ul>
+<h3>Quick Actions</h3>
+<ul>
+<li>
+<strong>Pick an app in place</strong> — running a <code>{bundleId}</code> command with no app
+selected opens a picker (saved bundles first, then the device's installed
+apps) instead of failing.</li>
+<li>
+<strong>Clear device guards</strong> — a device-targeting command with nothing connected
+says so up front, and the multi-device picker covers custom commands too.</li>
+<li>
+<strong>Pin custom commands</strong> — ⌘P or right-click; pinned tiles lead the grid
+alongside pinned features.</li>
+<li>
+<strong>Choose what shows</strong> — right-click any action tile to hide it from the
+panel; manage the full list under Settings ▸ General ▸ Quick Actions.</li>
+</ul>
+<h3>App management</h3>
+<ul>
+<li>
+<strong>Restart, everywhere apps are managed</strong> — a one-click force-stop +
+relaunch in the Apps explorer, the Manage App screen, and the Quick
+Actions panel; the JS Console's Restart app rides the same path.</li>
+<li>
+<strong>Launching works on more devices</strong> — apps open via their resolved
+launcher activity (<code>am start</code>) instead of relying on <code>monkey</code>, which is a
+do-nothing stub on some OEM/custom Android builds. When a launch does
+fail, the message now says whether the app is missing or just has no
+launcher activity.</li>
+</ul>
+<h3>Updates</h3>
+<ul>
+<li>
+<strong>Checks twice a day</strong> instead of daily.</li>
+<li>
+<strong>Dismissed updates come back</strong> — closing or skipping the update alert now
+resurfaces it as a notification on every launch until you install, with a
+Check for Updates button. Turning off automatic update checks in Settings
+silences the reminder too.</li>
+</ul>
+<h3>Welcome tour</h3>
+<ul>
+<li>The tour now ends in two Quick Actions steps: pick the global hotkey, then
+a finale that draws your hotkey as animated keycaps — pressing it for real
+opens the panel, finishes the tour, and fires a confetti celebration.</li>
+</ul>
+<h3>Terminal &amp; tabs</h3>
+<ul>
+<li>The Terminal's tab list defaults to the Chrome-style top strip (the left
+rail is one click away).</li>
+<li>Tab strips gain right-click <strong>Close Other Tabs</strong> (anything with unsaved
+work still asks first).</li>
+</ul>
+<h3>Removed</h3>
+<ul>
+<li>The app no longer installs tools via Homebrew. The setup Doctor and the
+device bar now link to the official install source (Android Studio or the
+platform-tools download) instead of running <code>brew</code> for you — already
+installed tools keep being found wherever they live.</li>
+</ul>
 <h3>Fixes</h3>
 <ul>
-<li>
-<strong>Uninstall asks first</strong> — the Uninstall button in the Apps list now shows a
-confirmation, matching Clear Data. It previously removed the app and its data
-on the first click.</li>
-<li>
-<strong>Logcat streams after a device authorizes</strong> — opening Logcat on a device
-that was still unauthorized left the stream empty even after you approved the
-adb prompt. It now starts as soon as the device is ready.</li>
-<li>
-<strong>APK tools open without a device</strong> — APK Studio, APK Inspector, Sign APK, and
-Decompile APK work on local files and no longer require an Android device;
-they stayed usable with only an iOS Simulator selected.</li>
-<li>
-<strong>Monkey Test confirms before running</strong> — it warns before sending random
-events, and when a long run hits the time limit it reports that events were
-already sent instead of "failed".</li>
-<li>
-<strong>Frida on a non-rooted device</strong> — Frida now checks for root before pushing
-the server and shows a clear message pointing to frida-gadget, instead of a
-status that said "Started" while also requiring root.</li>
-<li>
-<strong>Change Locale is honest</strong> — the toast now says the locale change was
-requested (a full system change can require root) rather than claiming it
-was set.</li>
-<li>
-<strong>Crash Catcher shows one crash</strong> — the last-crash view no longer runs
-together multiple crashes when several are buffered.</li>
-<li>
-<strong>Reactotron opens without an Android device</strong> — its server is host-side, so
-it no longer requires an Android device to be selected.</li>
-<li>
-<strong>Screen Record surfaces a disconnect</strong> — if the device drops mid-recording,
-the timer stops and the captured footage is kept for saving, instead of the
-timer running on against a dead stream.</li>
-<li>
-<strong>Performance recording survives a disconnect</strong> — samples are kept and stay
-exportable when the device disconnects, rather than being cleared.</li>
-<li>
-<strong>Network Speed totals</strong> — session download/upload totals no longer jump to a
-bogus value if the device reboots mid-recording.</li>
-<li>
-<strong>Quick Actions panel</strong> — "all devices" only fans out actions that support it
-(matching the main window), multi-device runs report each device's outcome,
-the panel opens on the display under the pointer, and a quick screenshot names
-the saved file.</li>
-<li>Manage App's confirmation states how many devices it affects; the app picker
-refreshes when you switch devices; and tool detection re-checks after you
-install adb (or another tool) while the app is open.</li>
+<li>The auto-hide sidebar no longer draws a stray horizontal line across its
+middle when revealed.</li>
+<li>The window title follows the active tab instead of sticking on
+"About &amp; Feedback".</li>
+<li>One Settings… item in the app menu on macOS 26 (it was duplicated).</li>
+<li>JS Console: clicking "adb reverse" right after typing a new Metro port now
+reverses the new port — no ⏎ needed first.</li>
 </ul>
-<h3>Privacy</h3>
-<ul>
-<li>Anonymous analytics no longer include the device model or Android version —
-only whether the device is an emulator or wireless. This matches the privacy
-policy and the Settings description.</li>
-</ul>
-<h3>Improvements</h3>
-<ul>
-<li>
-<strong>Bundled developer tools are pinned</strong> — jadx, apktool, uber-apk-signer,
-frida-server, and the bundled Java runtime install known-good pinned versions
-instead of whatever is latest upstream.</li>
-<li>Third-party license notices now cover every bundled and linked component.</li>
-</ul>
-<p>Installed copies update in place via Sparkle.</p>
 ]]></description>
-      <pubDate>Sun, 12 Jul 2026 10:24:10 +0000</pubDate>
-      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.0.1/Droidective-v3.0.1.dmg" sparkle:edSignature="enjLXG48itzLg8s8k6laYbaxhDXvgBt/84jJUKzjd0nBQ/ME0ujb2REXMQ16ffzdSwUWopY3C8tz9UH9J/5fAQ==" length="51320857" type="application/octet-stream" />
+      <pubDate>Mon, 13 Jul 2026 12:12:36 +0000</pubDate>
+      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.1.0/Droidective-v3.1.0.dmg" sparkle:edSignature="vLEkjrq5NBOuo5RJADAWOHHXaxRG7XTKwLwAXRLJmwlws62Qbttod9MNr28psTtlbtPulQdvzZxrHPZMqCs7Ag==" length="52001339" type="application/octet-stream" />
     </item>
   </channel>
 </rss>
