@@ -170,8 +170,12 @@ struct RootView: View {
         // notification's button runs Check for Updates (which also re-offers
         // skipped versions; a user-initiated check ignores skips). The static
         // guard keeps it to one reminder per process: in background mode this
-        // setup re-runs every time the main window reopens.
+        // setup re-runs every time the main window reopens. Turning
+        // Settings ▸ Automatically check for updates off silences the
+        // reminder too — the user opted out of update prompts; the stored
+        // version is kept, so re-enabling the toggle resumes it.
         if !RootView.updateReminderShown,
+           SparkleUpdater.shared.automaticallyChecksForUpdates,
            let version = UserDefaults.standard.string(forKey: pendingUpdateVersionKey) {
             RootView.updateReminderShown = true
             let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
