@@ -68,7 +68,7 @@ opening it — verify those by hand.
 ## Build / test / run
 
 ```
-make test          # ADBKit unit tests (cd ADBKit && swift test) — 705 tests, keep green
+make test          # ADBKit unit tests (cd ADBKit && swift test) — 744 tests, keep green
 make build         # xcodegen generate + xcodebuild Debug
 make run           # build + open the .app
 ```
@@ -410,6 +410,13 @@ compile or test time* — lean on it instead of manual vigilance.
 ## Status
 
 Feature-complete across all planned milestones plus several UX rounds (latest:
+**v3.2.0** — **wireless pair & connect from the device dropdown**: a
+"Wireless debugging" menu section opens `WirelessConnectSheet`, a guided
+three-tab sheet (Android 11+ pairing-code steps, direct `ip:port` connect,
+one-click USB→Wi-Fi tcpip bootstrap) over the existing `ConnectionService`,
+with pasted endpoints parsed by the pure `ConnectionService.parseEndpoint`
+(tested, IPv6 included) gating the buttons, adb's reason shown inline on
+failure, and a successful connect auto-selecting the device. Before that,
 **v3.1.0** — **custom commands reworked** (one free-typed multi-line box, adb
 inferred from the leading token, per-command choice of the in-app Terminal or
 the Mac's default terminal), a **curatable Quick Actions panel** (pin custom
@@ -444,7 +451,7 @@ jadx/apktool, recompile, and sign — with keystore creation) plus Frida setup, 
 custom accent color, launching emulators from the device bar, per-feature
 connect-a-device empty states, a live-preview hotkey recorder, and a Settings
 split into Appearance/Privacy; managed tools download from GitHub releases into
-Application Support and are sized/removable in Settings); 705 tests green;
+Application Support and are sized/removable in Settings); 744 tests green;
 builds clean with zero warnings (enforced as errors in CI). Verified live against a
 physical device and an Android emulator. Release builds are Developer ID-signed +
 notarized and bundle scrcpy/ffmpeg (see `RELEASING.md`). Open gaps: the Apps

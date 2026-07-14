@@ -36,8 +36,8 @@ the in-app catalog.
 
 - **Input & clipboard** — send text (Unicode via ADBKeyboard, auto-offered),
   copy the device's Wi-Fi IP.
-- **Connection** — reverse ports, wireless ADB wizard (tcpip + Android 11
-  pairing), disconnect, run-on-all fan-out, **emulator manager** (list / launch
+- **Connection** — reverse ports, wireless ADB (tcpip + Android 11 pairing —
+  guided from the device dropdown), disconnect, run-on-all fan-out, **emulator manager** (list / launch
   / cold-boot / wipe / stop your Android Studio AVDs), and a live **network
   speed** monitor (download/upload over time, per-interface, recorded + exported).
 - **React Native** — dev menu, reload JS, saved deep links per app, simulate

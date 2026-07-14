@@ -12,6 +12,7 @@ struct DeviceBarView: View {
     @AppStorage(sidebarAutoHideDefaultsKey) private var sidebarAutoHide = false
     @State private var showBundleManager = false
     @State private var showInstalledApps = false
+    @State private var wirelessSheet: WirelessSheetMode?
     @State private var refreshSpin = 0.0
 
     var body: some View {
@@ -109,6 +110,9 @@ struct DeviceBarView: View {
         .sheet(isPresented: $showInstalledApps) {
             InstalledAppsPickerView()
         }
+        .sheet(item: $wirelessSheet) { mode in
+            WirelessConnectSheet(mode: mode)
+        }
     }
 
     private var selectedDevice: Device? {
@@ -156,6 +160,18 @@ struct DeviceBarView: View {
                             Label("\(simulator.name) · \(simulator.runtime)", systemImage: "play.circle")
                         }
                     }
+                }
+            }
+            Section("Wireless debugging") {
+                Button {
+                    wirelessSheet = .pair
+                } label: {
+                    Label("Pair new device…", systemImage: "link.badge.plus")
+                }
+                Button {
+                    wirelessSheet = .connect
+                } label: {
+                    Label("Connect to device…", systemImage: "wifi")
                 }
             }
             Divider()
