@@ -1403,9 +1403,11 @@ private enum RtEventKind: String, CaseIterable, Identifiable {
 
 // MARK: - Timeline pane
 
-/// One scrollable timeline column with its own filter, search and sort order, fed
-/// from the shared event buffer. Used once on its own or twice side-by-side (the
-/// VSCode-style split), so each pane can watch a different slice at the same time.
+/// One scrollable timeline column with its own filter and search, fed from the
+/// shared event buffer. Used once on its own or twice side-by-side (the
+/// VSCode-style split), so each pane can watch a different slice at the same
+/// time. The sort order is a per-feature preference (`@AppStorage`), so split
+/// panes flip together and the choice survives relaunches.
 private struct TimelinePane: View {
     let items: [RtItem]
     let targetEmpty: Bool
@@ -1431,6 +1433,10 @@ private struct TimelinePane: View {
     @State private var methodFilter: String?
     @State private var statusFilter: HTTPStatusClass?
     @State private var showFilterSheet = false
+    /// Newest at the top (the Reactotron app's order) unless the toolbar's
+    /// reverse button flips the feed to chronological. Persisted per feature —
+    /// split panes share the key, so they stay in sync.
+    @AppStorage("reactotronNewestFirst") private var newestFirst = true
 
     var body: some View {
         // Filter once per render — the count badge, export button, and timeline
@@ -1439,10 +1445,7 @@ private struct TimelinePane: View {
         return VStack(spacing: 0) {
             paneToolbar(visible: visible)
             Divider()
-            // Newest first: the fixed timeline order (matches the Reactotron
-            // app). Lazily reversed — materializing a 2000-item copy per
-            // render was measurable during streaming bursts.
-            timeline(ordered: visible.reversed())
+            timeline(visible: visible)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -1476,6 +1479,16 @@ private struct TimelinePane: View {
                     .font(.app(.caption))
                     .foregroundStyle(.textMuted)
             }
+
+            Button {
+                newestFirst.toggle()
+            } label: {
+                Image(systemName: "arrow.up.arrow.down")
+            }
+            .buttonStyle(IconButtonStyle())
+            .help(newestFirst
+                ? "Newest at top — click to show newest at bottom"
+                : "Newest at bottom — click to show newest at top")
 
             Button {
                 onExport(visible)
@@ -1617,16 +1630,28 @@ private struct TimelinePane: View {
         }
     }
 
-    private func timeline(ordered: ReversedCollection<[RtItem]>) -> some View {
-        // Newest events land at the top — LogTailViewV2 follows that edge, pauses
-        // when the user scrolls off, and overlays the jump-to-top/bottom buttons.
+    private func timeline(visible: [RtItem]) -> some View {
+        // LogTailViewV2 follows the newest edge, pauses when the user scrolls
+        // off, and overlays the jump-to-top/bottom buttons. Newest-first is
+        // lazily reversed — materializing a 2000-item copy per render was
+        // measurable during streaming bursts.
         GeometryReader { pane in
-            LogTailViewV2(
-                entries: ordered, newestEdge: .top,
-                contentWidth: max(pane.size.width, minContentWidth)
-            ) { item in
-                RtRow(item: item)
-                Divider()
+            if newestFirst {
+                LogTailViewV2(
+                    entries: visible.reversed(), newestEdge: .top,
+                    contentWidth: max(pane.size.width, minContentWidth)
+                ) { item in
+                    RtRow(item: item)
+                    Divider()
+                }
+            } else {
+                LogTailViewV2(
+                    entries: visible, newestEdge: .bottom,
+                    contentWidth: max(pane.size.width, minContentWidth)
+                ) { item in
+                    RtRow(item: item)
+                    Divider()
+                }
             }
         }
         .background(.background)

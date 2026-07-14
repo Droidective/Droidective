@@ -179,7 +179,13 @@ public actor MirrorTransport {
         process.standardError = errorPipe
         errorPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
-            guard !data.isEmpty else { return }
+            guard !data.isEmpty else {
+                // EOF (the server exited). Without clearing the handler the
+                // callback refires in a tight loop forever — a full core spent
+                // on a dead pipe (SystemProcessRunner does the same).
+                handle.readabilityHandler = nil
+                return
+            }
             let text = String(decoding: data, as: UTF8.self)
             Task { await self?.appendServerLog(text) }
         }

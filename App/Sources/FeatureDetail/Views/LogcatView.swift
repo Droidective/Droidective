@@ -27,6 +27,9 @@ struct LogcatView: View {
     @State private var edges = LogScrollEdges()
     /// Set by the jump buttons to ask the pane to snap to an edge.
     @State private var jump: LogJumpRequest?
+    /// Reversed feed: newest lines at the top instead of the terminal-style
+    /// newest-at-bottom. Persisted per feature.
+    @AppStorage("logcatNewestFirst") private var newestFirst = false
 
     private static let levels: [(value: String, label: String)] = [
         ("All", "All levels"), ("V", "Verbose"), ("D", "Debug"),
@@ -105,6 +108,16 @@ struct LogcatView: View {
                 }
 
             Spacer()
+
+            Button {
+                newestFirst.toggle()
+            } label: {
+                Image(systemName: "arrow.up.arrow.down")
+            }
+            .buttonStyle(IconButtonStyle())
+            .help(newestFirst
+                ? "Newest at top — click to show newest at bottom"
+                : "Newest at bottom — click to show newest at top")
 
             Button {
                 paused.toggle()
@@ -226,6 +239,7 @@ struct LogcatView: View {
         SelectableLogView(
             lines: visible,
             search: search,
+            newestFirst: newestFirst,
             edges: $edges,
             jump: jump,
             onFilterTag: { tagFilter = $0 }
@@ -234,7 +248,7 @@ struct LogcatView: View {
             LogJumpControls(
                 edges: edges,
                 enabled: !visible.isEmpty,
-                newestEdge: .bottom,
+                newestEdge: newestFirst ? .top : .bottom,
                 onJumpToTop: { requestJump(to: .top) },
                 onJumpToBottom: { requestJump(to: .bottom) }
             )
