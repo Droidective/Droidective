@@ -125,6 +125,7 @@ final class JSConsoleSession {
     static let maxEntries = 2000
     private static let portKey = "jsConsoleMetroPort"
     private static let timestampsKey = "jsConsoleShowTimestamps"
+    private static let autoConnectKey = "jsConsoleAutoConnect"
 
     /// The capped feed plus its filtered (level + text) projection, maintained
     /// incrementally (ADBKit's `FilteredLogBuffer`): a flush filters only the new
@@ -151,6 +152,14 @@ final class JSConsoleSession {
     var searchText = "" { didSet { refilter() } }
     var hiddenLevels: Set<JSLevel> = [] { didSet { refilter() } }
     var showTimestamps: Bool { didSet { UserDefaults.standard.set(showTimestamps, forKey: Self.timestampsKey) } }
+    /// Whether the console may grab a discovered target it was never pointed
+    /// at. Off by default: attaching is not free — on RN ≤0.84 it kicks any
+    /// other debugger off the app, and attach-time serialization of heavy
+    /// console buffers can crash fragile Hermes builds — so an unattended
+    /// connect right as an app launches surprises people. Off still resumes
+    /// the *user's own* pick across drops (same device id or app id); it just
+    /// never self-selects a new app.
+    var autoConnect: Bool { didSet { UserDefaults.standard.set(autoConnect, forKey: Self.autoConnectKey) } }
 
     /// ⌘F find-in-console: highlights matches across the (filtered) feed and
     /// navigates between them — separate from the Filter field, which hides rows.
@@ -221,6 +230,7 @@ final class JSConsoleSession {
         let savedPort = UserDefaults.standard.integer(forKey: Self.portKey)
         port = (1 ... 65535).contains(savedPort) ? savedPort : 8081
         showTimestamps = UserDefaults.standard.bool(forKey: Self.timestampsKey)
+        autoConnect = UserDefaults.standard.bool(forKey: Self.autoConnectKey)
     }
 
     /// Reset the connection back-references so the next connect re-welcomes.
@@ -276,7 +286,8 @@ final class JSConsoleSession {
                     if let candidate = MetroInspector.autoConnectCandidate(
                         from: found,
                         preferredDeviceId: preferredLogicalDeviceId,
-                        preferredAppId: preferredAppId
+                        preferredAppId: preferredAppId,
+                        allowLoneTarget: autoConnect
                     ) {
                         await connect(to: candidate)
                     } else if phase != .connecting {
@@ -875,6 +886,14 @@ struct JSConsoleView: View {
             statusBadge
             targetPicker
             portField
+            Toggle("Auto-connect", isOn: $session.autoConnect)
+                .toggleStyle(.checkbox)
+                .font(.app(.caption))
+                .help(
+                    "Connect to a discovered app automatically. Off, the console only connects "
+                        + "when you pick a target (and keeps resuming that pick after drops) — "
+                        + "attaching takes the app over from other debuggers on older React Native."
+                )
             Spacer(minLength: 8)
             if session.isConnected {
                 Button { session.reloadJS() } label: {
@@ -1152,7 +1171,8 @@ struct JSConsoleView: View {
         return """
         Open a dev build running Hermes with Metro on port \(session.port). \
         The app must be connected to Metro — for a USB device, tap “adb reverse” so it can reach the dev server. \
-        Targets appear automatically.
+        Targets appear in the picker above — choose one to connect\
+        \(session.autoConnect ? "" : ", or turn on Auto-connect").
         """
     }
 

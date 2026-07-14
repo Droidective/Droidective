@@ -138,6 +138,26 @@ import Testing
         ) == nil)
     }
 
+    @Test func withoutLoneFallbackOnlyThePreviousAppIsResumed() {
+        // Auto-connect off: the user's own pick is still resumed across drops
+        // (device id, then app id) — but a target they never chose is not.
+        let lone = [target(id: "a", appId: "com.acme.new", deviceId: "dev-1")]
+        #expect(MetroInspector.autoConnectCandidate(
+            from: lone, preferredDeviceId: nil, preferredAppId: nil, allowLoneTarget: false
+        ) == nil)
+        #expect(MetroInspector.autoConnectCandidate(
+            from: lone, preferredDeviceId: "dev-gone", preferredAppId: "com.acme.other",
+            allowLoneTarget: false
+        ) == nil)
+        #expect(MetroInspector.autoConnectCandidate(
+            from: lone, preferredDeviceId: "dev-1", preferredAppId: nil, allowLoneTarget: false
+        )?.id == "a")
+        #expect(MetroInspector.autoConnectCandidate(
+            from: lone, preferredDeviceId: "dev-gone", preferredAppId: "com.acme.new",
+            allowLoneTarget: false
+        )?.id == "a")
+    }
+
     @Test func hermesTargetsShadowNonHermesOnes() {
         // A lone Hermes target wins even when a non-Hermes entry matches the
         // preferred app id — the console can only talk to Hermes anyway.
