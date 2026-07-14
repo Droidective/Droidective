@@ -122,16 +122,10 @@ public struct MetroInspector: Sendable {
     /// sleeping, a Metro restart), so a vanished id must not strand reconnection
     /// — so next the same application id when it's unambiguous, and finally a
     /// lone target. Several unfamiliar targets: stay hands-off; the user picks.
-    ///
-    /// `allowLoneTarget: false` restricts the pick to the *previously chosen*
-    /// app (the preferred ids): with auto-connect off, the console resumes the
-    /// user's explicit choice across drops but never grabs a target it was
-    /// never pointed at.
     public static func autoConnectCandidate(
         from targets: [CDPTarget],
         preferredDeviceId: String?,
-        preferredAppId: String?,
-        allowLoneTarget: Bool = true
+        preferredAppId: String?
     ) -> CDPTarget? {
         let hermes = targets.filter(\.isHermes)
         let pool = hermes.isEmpty ? targets : hermes
@@ -142,7 +136,6 @@ public struct MetroInspector: Sendable {
             let sameApp = pool.filter { $0.appId == appId }
             if sameApp.count == 1 { return sameApp.first }
         }
-        guard allowLoneTarget else { return nil }
         return pool.count == 1 ? pool.first : nil
     }
 
