@@ -1,3 +1,34 @@
+## Droidective v3.2.0
+
+Wireless debugging moves into the device dropdown: pair and connect a device
+over Wi-Fi from anywhere in the app, with a guided flow for each path.
+
+### Connect over Wi-Fi
+
+- **Pair & connect from the device dropdown** — the device menu gains a
+  "Wireless debugging" section with *Pair new device…* and *Connect to
+  device…*, opening a guided sheet with three paths:
+  - **Pair new device** — numbered steps that mirror the phone's Android 11+
+    pairing dialog: where to find it, one field for the `ip:port` it shows plus
+    the 6-digit code, then a connect step that explains the connection port
+    differs from the pairing port (the host carries over after pairing).
+  - **Already paired** — a single `ip:port` field for a device that was paired
+    before or is already in tcpip mode.
+  - **Via USB cable** — one click switches a plugged-in device to Wi-Fi
+    debugging and connects; the device list updates live.
+- **Paste-friendly addresses** — every address field takes the exact
+  "IP address & Port" string the phone displays (IPv6 and stray whitespace
+  included); buttons stay disabled until the input is valid.
+- **Clear outcomes** — adb's own reason is shown inline on failure (wrong
+  code, unreachable host, an adb too old to pair), and a successful
+  connection selects the new device and confirms in a notification.
+
+### Fixes
+
+- The tab strip's Home button no longer sits flush against its divider.
+
+---
+
 ## Droidective v3.1.0
 
 Custom commands get a full rework, the Quick Actions panel becomes yours to
