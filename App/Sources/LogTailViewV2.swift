@@ -16,7 +16,8 @@ private final class TailMeasure {
 /// Logcat's NSTextView pane mirrors its behavior through the same controls).
 ///
 /// - `entries` are in display order (top → bottom); `newestEdge` says which end
-///   new lines land on. The order is fixed per feed — there is no user toggle.
+///   new lines land on. A feed with a reverse-order control flips both together
+///   (reversed entries + the other edge) — every mechanic below is edge-agnostic.
 /// - While the viewport is parked at the newest edge it follows new lines; the
 ///   instant the user scrolls away it pauses (their reading wins) and new lines
 ///   keep rendering without shifting what they're looking at; returning to the
@@ -58,11 +59,12 @@ struct LogTailViewV2<Data: RandomAccessCollection, Row: View>: View
     var focusID: Data.Element.ID? = nil
     /// When set, the feed lays out at this fixed width and rides inside a
     /// horizontal scroll view — rows wider than the viewport are reached by
-    /// scrolling the pane, not by truncating. The horizontal offset lives on
-    /// the *outer* scroll view, so tail-follow writes to `.scrollPosition`
-    /// (vertical, on the inner one) can't reset it. Pass
-    /// `max(viewportWidth, widestRow)` so the feed always fills the pane.
-    /// `.top` feeds only — the `.bottom` flip would mirror the horizontal bar.
+    /// scrolling the pane, not by truncating. Tail-follow writes go through
+    /// `.scrollPosition` with a nil anchor, so they never touch the horizontal
+    /// offset. Pass `max(viewportWidth, widestRow)` so the feed always fills
+    /// the pane. On `.bottom` feeds the flip would render the horizontal
+    /// indicator mirrored at the pane's top edge, so it's hidden there —
+    /// two-finger panning still scrolls horizontally.
     var contentWidth: CGFloat? = nil
     @ViewBuilder var row: (Data.Element) -> Row
 
@@ -99,6 +101,14 @@ struct LogTailViewV2<Data: RandomAccessCollection, Row: View>: View
 
     /// -1 flips `.bottom` feeds so a newest-first layout reads newest-at-bottom.
     private var flip: CGFloat { newestEdge == .bottom ? -1 : 1 }
+
+    /// The `.bottom` flip mirrors the whole scroll view, which would draw the
+    /// horizontal indicator upside down at the pane's top edge — hide it in
+    /// that mode (the vertical indicator mirrors consistently with the flipped
+    /// content, so it stays).
+    private var horizontalIndicatorVisibility: ScrollIndicatorVisibility {
+        newestEdge == .bottom && contentWidth != nil ? .hidden : .automatic
+    }
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -149,6 +159,7 @@ struct LogTailViewV2<Data: RandomAccessCollection, Row: View>: View
             // nil scrolls minimally, which still pins the newest (topmost) row
             // vertically and never touches the horizontal offset.
             .scrollPosition(id: $leadingID, anchor: contentWidth == nil ? .top : nil)
+            .scrollIndicators(horizontalIndicatorVisibility, axes: .horizontal)
             .scaleEffect(x: 1, y: flip, anchor: .center)    // identity for .top feeds
             .onAppear { leadingID = newestID }
             .onChange(of: leadingID) { _, id in

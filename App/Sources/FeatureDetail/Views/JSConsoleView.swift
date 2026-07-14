@@ -124,14 +124,15 @@ struct JSEntry: Identifiable {
 final class JSConsoleSession {
     static let maxEntries = 2000
     private static let portKey = "jsConsoleMetroPort"
-    private static let timestampsKey = "jsConsoleShowTimestamps"
+    private static let newestFirstKey = "jsConsoleNewestFirst"
 
     /// The capped feed plus its filtered (level + text) projection, maintained
     /// incrementally (ADBKit's `FilteredLogBuffer`): a flush filters only the new
     /// batch against searchable text cached per entry, and a full recompute
     /// happens only when the filter itself changes — so a console burst costs
     /// O(batch) per flush, not O(buffer × object size). Chronological (oldest
-    /// first), which is the feed's display order — newest at the bottom.
+    /// first); the feed renders it as-is (newest at the bottom) or reversed
+    /// when `newestFirst` is on.
     // The 128 MB byte budget (Reactotron's figure) matters as much as the
     // count cap: 2000 entries each holding a multi-megabyte logged string
     // would otherwise retain gigabytes.
@@ -150,7 +151,16 @@ final class JSConsoleSession {
     var port: Int { didSet { UserDefaults.standard.set(port, forKey: Self.portKey) } }
     var searchText = "" { didSet { refilter() } }
     var hiddenLevels: Set<JSLevel> = [] { didSet { refilter() } }
-    var showTimestamps: Bool { didSet { UserDefaults.standard.set(showTimestamps, forKey: Self.timestampsKey) } }
+    /// Reversed feed: newest at the top instead of Chrome's newest-at-bottom.
+    /// Persisted per feature; the ⌘F match order follows the display order, so
+    /// flipping rebuilds the matches and restarts from the first visible one.
+    var newestFirst: Bool {
+        didSet {
+            UserDefaults.standard.set(newestFirst, forKey: Self.newestFirstKey)
+            findIndex = 0
+            rebuildFindMatches()
+        }
+    }
 
     /// ⌘F find-in-console: highlights matches across the (filtered) feed and
     /// navigates between them — separate from the Filter field, which hides rows.
@@ -209,7 +219,7 @@ final class JSConsoleSession {
         self.adb = adb
         let savedPort = UserDefaults.standard.integer(forKey: Self.portKey)
         port = (1 ... 65535).contains(savedPort) ? savedPort : 8081
-        showTimestamps = UserDefaults.standard.bool(forKey: Self.timestampsKey)
+        newestFirst = UserDefaults.standard.bool(forKey: Self.newestFirstKey)
     }
 
     /// Reset the connection back-references so the next connect re-welcomes.
@@ -658,9 +668,12 @@ final class JSConsoleSession {
             return
         }
         findMatchIDs = PerfLog.measure(PerfLog.console, "find scan over \(buffer.filtered.count) entries") {
-            buffer.filtered
+            let ids = buffer.filtered
                 .filter { query.matches($0.searchableText) }
                 .map(\.id)
+            // Match order follows the display order, so ⏎/⇧⏎ walk down/up the
+            // feed regardless of which end is newest.
+            return newestFirst ? ids.reversed() : ids
         }
     }
 
@@ -969,7 +982,11 @@ struct JSConsoleView: View {
                 .buttonStyle(IconButtonStyle())
                 .help("Find & highlight in console (⌘F)")
                 .keyboardShortcut("f", modifiers: .command)
-            Toggle("Time", isOn: $session.showTimestamps).toggleStyle(.checkbox).font(.app(.caption))
+            Button { session.newestFirst.toggle() } label: { Image(systemName: "arrow.up.arrow.down") }
+                .buttonStyle(IconButtonStyle())
+                .help(session.newestFirst
+                    ? "Newest at top — click to show newest at bottom"
+                    : "Newest at bottom — click to show newest at top")
             Button { session.clear() } label: { Image(systemName: "trash") }
                 .buttonStyle(IconButtonStyle())
                 .help("Clear the console")
@@ -1058,22 +1075,29 @@ struct JSConsoleView: View {
         .environment(\.colorScheme, .dark)
     }
 
-    /// Chrome-style: newest at the bottom. LogTailViewV2 tails that edge, pauses
-    /// when the user scrolls off (new lines keep rendering without moving their
-    /// reading), overlays the jump-to-top/bottom buttons, and drives the ⌘F
-    /// match into view via `focusID`.
+    /// Chrome-style newest-at-bottom by default, flipped when the toolbar's
+    /// reverse button turns `newestFirst` on. LogTailViewV2 tails the newest
+    /// edge, pauses when the user scrolls off (new lines keep rendering without
+    /// moving their reading), overlays the jump-to-top/bottom buttons, and
+    /// drives the ⌘F match into view via `focusID`.
+    @ViewBuilder
     private func scrollingLog(_ visible: [JSEntry]) -> some View {
         // No connection gate on the jump buttons: the buffer outlives the
         // connection, and scrolling those logs is exactly what a disconnected
         // session is for.
-        LogTailViewV2(entries: visible, newestEdge: .bottom,
-                      focusID: session.currentFindID) { jsRow($0) }
+        if session.newestFirst {
+            LogTailViewV2(entries: visible.reversed(), newestEdge: .top,
+                          focusID: session.currentFindID) { jsRow($0) }
+        } else {
+            LogTailViewV2(entries: visible, newestEdge: .bottom,
+                          focusID: session.currentFindID) { jsRow($0) }
+        }
     }
 
     @ViewBuilder
     private func jsRow(_ entry: JSEntry) -> some View {
         let band = levelBand(entry)
-        JSEntryRow(entry: entry, session: session, showTimestamp: session.showTimestamps)
+        JSEntryRow(entry: entry, session: session)
             .padding(.horizontal, 12)
             .padding(.vertical, 5)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1170,7 +1194,6 @@ struct JSConsoleView: View {
 private struct JSEntryRow: View {
     let entry: JSEntry
     let session: JSConsoleSession
-    let showTimestamp: Bool
 
     private var query: String { session.findText.trimmingCharacters(in: .whitespaces) }
     private var isCurrentFind: Bool { session.findVisible && session.currentFindID == entry.id }
@@ -1180,12 +1203,10 @@ private struct JSEntryRow: View {
             glyph
             content
                 .frame(maxWidth: .infinity, alignment: .leading)
-            if showTimestamp {
-                Text(entry.at, format: .dateTime.hour().minute().second())
-                    .font(.app(.caption2).monospacedDigit())
-                    .foregroundStyle(JSConsoleTheme.muted)
-                    .padding(.top, 1)
-            }
+            Text(entry.at, format: .dateTime.hour().minute().second())
+                .font(.app(.caption2).monospacedDigit())
+                .foregroundStyle(JSConsoleTheme.muted)
+                .padding(.top, 1)
         }
         .contextMenu {
             Button("Copy") { copyToPasteboard(jsEntryPlainText(entry.kind)) }
