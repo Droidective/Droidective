@@ -7,13 +7,20 @@ import SwiftUI
 /// selection with native drag autoscroll, ⌘C, and Select All over the whole
 /// buffer. Appends are incremental and the ring buffer's head-trim deletes
 /// characters instead of rebuilding, so a full 5000-line buffer streams
-/// smoothly.
+/// smoothly. With `newestFirst` on, the same surgical edits run mirrored —
+/// new lines prepend at the top and ring trims delete from the bottom — so
+/// the reversed feed streams just as smoothly.
 struct SelectableLogView: NSViewRepresentable {
+    /// Chronological (oldest first) regardless of display order — the
+    /// coordinator reverses at the rendering boundary.
     let lines: [LogLine]
     let search: String
+    /// Display order: false reads oldest-top/newest-bottom (terminal style),
+    /// true flips the feed so new lines land at the top.
+    let newestFirst: Bool
     /// Which ends the viewport touches and whether it can scroll at all — the
     /// caller feeds this to the shared `LogJumpControls`. While parked at the
-    /// bottom the view follows new lines; scrolling away pauses that.
+    /// newest edge the view follows new lines; scrolling away pauses that.
     @Binding var edges: LogScrollEdges
     /// Bump the token to snap the view to the requested edge.
     let jump: LogJumpRequest?
@@ -53,7 +60,7 @@ struct SelectableLogView: NSViewRepresentable {
 
     func updateNSView(_ nsView: NSScrollView, context: Context) {
         context.coordinator.onFilterTag = onFilterTag
-        context.coordinator.update(lines: lines, search: search)
+        context.coordinator.update(lines: lines, search: search, newestFirst: newestFirst)
         context.coordinator.handleJump(jump)
     }
 
@@ -67,12 +74,14 @@ struct SelectableLogView: NSViewRepresentable {
         private weak var textView: LogTextView?
         private weak var scrollView: NSScrollView?
 
-        /// What the text storage currently shows, line by line. `lineLengths`
-        /// holds each line's UTF-16 length (newline included) so a head-trim
-        /// knows exactly how many characters to delete.
+        /// What the text storage currently shows, line by line, in *display*
+        /// order (reversed from the stream when `renderedNewestFirst` is on).
+        /// `lineLengths` holds each line's UTF-16 length (newline included) so
+        /// a trim knows exactly how many characters to delete.
         private var renderedLines: [LogLine] = []
         private var lineLengths: [Int] = []
         private var renderedSearch = ""
+        private var renderedNewestFirst = false
         private var lastJumpToken: Int?
 
         init(edges: Binding<LogScrollEdges>) {
@@ -123,9 +132,12 @@ struct SelectableLogView: NSViewRepresentable {
             )
         }
 
-        /// Following new lines is the bottom-edge state; `update` consults it
-        /// before appending to decide whether to keep the view pinned there.
-        private var isAtBottom: Bool { measuredEdges.atBottom }
+        /// Whether the viewport touches the edge new lines land on — `update`
+        /// consults it before editing to decide whether to keep the view
+        /// pinned there (the follow behavior).
+        private func isAtNewestEdge(newestFirst: Bool) -> Bool {
+            newestFirst ? measuredEdges.atTop : measuredEdges.atBottom
+        }
 
         func handleJump(_ request: LogJumpRequest?) {
             guard let request, request.token != lastJumpToken else { return }
@@ -139,36 +151,57 @@ struct SelectableLogView: NSViewRepresentable {
         // MARK: Content diffing
 
         /// The stream only ever drops lines at the head (ring trim) and
-        /// appends at the tail, so those paths are surgical edits; anything
-        /// else (filter change, clear, search change) rebuilds.
-        func update(lines: [LogLine], search: String) {
+        /// appends at the tail, so those paths are surgical edits — mirrored
+        /// (prepend + tail-trim) when the display order is newest-first;
+        /// anything else (filter change, clear, search change, an order flip)
+        /// rebuilds.
+        func update(lines: [LogLine], search: String, newestFirst: Bool) {
             guard let storage = textView?.textStorage else { return }
-            let wasTailing = renderedLines.isEmpty || isAtBottom
+            // Judged against the *rendered* orientation, so flipping the order
+            // while parked on the newest line keeps following it at the other
+            // edge.
+            let wasTailing = renderedLines.isEmpty || isAtNewestEdge(newestFirst: renderedNewestFirst)
 
             defer {
-                if wasTailing { scrollToBottom() }
-                // Appends below the viewport don't fire a scroll notification,
+                if wasTailing { newestFirst ? scrollToTop() : scrollToBottom() }
+                // Edits outside the viewport don't fire a scroll notification,
                 // so the edge state must also sync here or the jump buttons
                 // never update while parked in scrollback.
                 syncEdges()
             }
 
-            if search != renderedSearch {
+            if search != renderedSearch || newestFirst != renderedNewestFirst {
                 renderedSearch = search
+                renderedNewestFirst = newestFirst
                 rebuild(lines, in: storage)
                 return
             }
-            switch LogStreamDiff.plan(rendered: renderedLines.map(\.id), incoming: lines.map(\.id)) {
+            // The plan speaks stream order; rendered lines are display order.
+            let renderedStreamIDs = newestFirst
+                ? renderedLines.reversed().map(\.id)
+                : renderedLines.map(\.id)
+            switch LogStreamDiff.plan(rendered: renderedStreamIDs, incoming: lines.map(\.id)) {
             case .unchanged:
                 return
             case .rebuild:
                 rebuild(lines, in: storage)
             case .edit(let dropHead, let appendFrom):
-                if dropHead > 0 {
-                    trimHead(dropHead, in: storage, keepScrollPlace: !wasTailing)
-                }
-                if lines.count > appendFrom {
-                    append(Array(lines[appendFrom...]), to: storage)
+                if newestFirst {
+                    // Mirrored: the stream's head-trim is the *bottom* of the
+                    // display, its tail-append the *top*.
+                    if dropHead > 0 {
+                        trimTail(dropHead, in: storage)
+                    }
+                    if lines.count > appendFrom {
+                        prepend(Array(lines[appendFrom...]), to: storage, keepScrollPlace: !wasTailing)
+                    }
+                } else {
+                    if dropHead > 0 {
+                        trimHead(dropHead, in: storage, keepScrollPlace: !wasTailing)
+                    }
+                    if lines.count > appendFrom {
+                        append(Array(lines[appendFrom...]), to: storage)
+                    }
                 }
             }
         }
@@ -193,8 +226,9 @@ struct SelectableLogView: NSViewRepresentable {
         }
 
         /// The rendered height of the leading `length` characters — what a
-        /// head-trim is about to delete. Everything above the viewport is
-        /// already laid out, so this is a lookup, not a fresh layout pass.
+        /// head-trim is about to delete, or what a prepend just inserted. For
+        /// a trim everything above the viewport is already laid out, so this
+        /// is a lookup; for a prepend it lays out just the fresh batch.
         private func height(ofFirstCharacters length: Int) -> CGFloat {
             guard length > 0, let textView, let layoutManager = textView.layoutManager,
                   let container = textView.textContainer else { return 0 }
@@ -204,11 +238,21 @@ struct SelectableLogView: NSViewRepresentable {
             return layoutManager.boundingRect(forGlyphRange: glyphs, in: container).height
         }
 
+        /// Deletes the last `count` rendered lines — the stream's ring trim in
+        /// newest-first display. Nothing above the deletion moves, so unlike
+        /// `trimHead` the scrollback needs no offset compensation.
+        private func trimTail(_ count: Int, in storage: NSTextStorage) {
+            let tailLength = lineLengths.suffix(count).reduce(0, +)
+            storage.deleteCharacters(in: NSRange(location: storage.length - tailLength, length: tailLength))
+            renderedLines.removeLast(count)
+            lineLengths.removeLast(count)
+        }
+
         private func rebuild(_ lines: [LogLine], in storage: NSTextStorage) {
             renderedLines = []
             lineLengths = []
             storage.setAttributedString(NSAttributedString())
-            append(lines, to: storage)
+            append(renderedNewestFirst ? Array(lines.reversed()) : lines, to: storage)
         }
 
         private func append(_ lines: [LogLine], to storage: NSTextStorage) {
@@ -221,6 +265,34 @@ struct SelectableLogView: NSViewRepresentable {
             }
             renderedLines.append(contentsOf: lines)
             storage.append(batch)
+        }
+
+        /// Inserts a chronological batch above the current content — the
+        /// newest-first twin of `append` (fresh lines land at the top, newest
+        /// leading). While the user is parked in scrollback the inserted
+        /// height is added to the scroll offset so the lines being read hold
+        /// still — the mirror of `trimHead`'s compensation.
+        private func prepend(_ lines: [LogLine], to storage: NSTextStorage, keepScrollPlace: Bool) {
+            guard !lines.isEmpty else { return }
+            let displayLines = Array(lines.reversed())
+            let batch = NSMutableAttributedString()
+            var batchLengths: [Int] = []
+            for line in displayLines {
+                let attributed = Self.attributedLine(line, search: renderedSearch)
+                batchLengths.append(attributed.length)
+                batch.append(attributed)
+            }
+            storage.insert(batch, at: 0)
+            renderedLines.insert(contentsOf: displayLines, at: 0)
+            lineLengths.insert(contentsOf: batchLengths, at: 0)
+            guard keepScrollPlace, let scrollView else { return }
+            let insertedHeight = height(ofFirstCharacters: batch.length)
+            guard insertedHeight > 0 else { return }
+            let clip = scrollView.contentView
+            var origin = clip.bounds.origin
+            origin.y += insertedHeight
+            clip.scroll(to: origin)
+            scrollView.reflectScrolledClipView(clip)
         }
 
         private func scrollToBottom() {
