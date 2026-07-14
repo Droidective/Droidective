@@ -36,7 +36,7 @@ struct TabStripView: View {
             HStack(spacing: 0) {
                 if group == 0 {
                     homeButton
-                        .padding(.leading, 6)
+                        .padding(.horizontal, 6)
                     Divider().frame(height: 20)
                 }
                 if overflowing {
