@@ -29,6 +29,7 @@ struct PaletteWindowView: View {
             enabled: state.layout.effectiveEnabledIDs,
             favorites: state.layout.favorites
         )
+        .map(state.presented)
     }
 
     private var visibleMatches: [FeatureDef] { Array(matches.prefix(8)) }

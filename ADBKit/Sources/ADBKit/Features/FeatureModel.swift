@@ -204,8 +204,10 @@ public struct FieldDef: Sendable {
 
 public struct FeatureDef: Sendable, Identifiable {
     public let id: String
-    public let title: String
-    public let subtitle: String?
+    /// Mutable only so `FeatureRegistry.presented(_:for:)` can rename the
+    /// emulators screen per role — everything else treats defs as immutable.
+    public var title: String
+    public var subtitle: String?
     public let keywords: [String]
     public let category: FeatureCategory
     /// SF Symbol name (keeps ADBKit free of UI frameworks).

@@ -547,7 +547,7 @@ struct RootView: View {
         case "home": return "Home"
         case "catalog": return "Feature Catalog"
         case "about": return "About & Feedback"
-        case let id?: return FeatureRegistry.byID[id]?.title ?? ""
+        case let id?: return FeatureRegistry.byID[id].map { state.presented($0).title } ?? ""
         }
     }
 }

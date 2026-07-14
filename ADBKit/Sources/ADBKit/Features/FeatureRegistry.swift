@@ -670,6 +670,36 @@ public enum FeatureRegistry {
         (featuresByRole[role] ?? []).filter { byID[$0] != nil }
     }
 
+    /// The device platforms a role works with. The device bar, the virtual-
+    /// device launch lists, and the Emulators screen show only these; `nil`
+    /// ("all features") shows both. The iOS Developer role is simulator-only,
+    /// every other role is Android-only.
+    public static func visiblePlatforms(for role: UserRole?) -> Set<DevicePlatform> {
+        switch role {
+        case .iosDeveloper: return [.iosSimulator]
+        case nil: return [.android, .iosSimulator]
+        default: return [.android]
+        }
+    }
+
+    /// The def as `role` presents it: the emulators screen renames itself to
+    /// the platform(s) the role can see ("Simulators" for iOS Developer,
+    /// "Emulators" for the Android-only roles, the combined title with no
+    /// role). Only display strings change — id, kind, icon, and behavior
+    /// don't, so ids stay a stable contract.
+    public static func presented(_ def: FeatureDef, for role: UserRole?) -> FeatureDef {
+        guard def.id == "emulators", let role else { return def }
+        var adapted = def
+        if role == .iosDeveloper {
+            adapted.title = "Simulators"
+            adapted.subtitle = "Boot and shut down iOS Simulators"
+        } else {
+            adapted.title = "Emulators"
+            adapted.subtitle = "Launch and stop Android emulators"
+        }
+        return adapted
+    }
+
     /// The grouped-sidebar category order implied by a role: each category in
     /// the order its first curated feature appears. `seedRole` applies this so
     /// the sections follow the same workflow order as the features within them,

@@ -338,12 +338,29 @@ struct QuickActionsView: View {
         .padding(.vertical, 16)
     }
 
+    /// Copy for the Emulators screen, trimmed to the platform(s) the current
+    /// role can see (matching the screen's rows, which come from the
+    /// role-gated `availableAvds`/`availableSimulators`).
+    private var virtualDevicesBootPlaceholder: String {
+        let platforms = FeatureRegistry.visiblePlatforms(for: state.selectedRole)
+        if !platforms.contains(.android) { return "Boot a simulator…" }
+        if !platforms.contains(.iosSimulator) { return "Boot an emulator…" }
+        return "Boot an emulator or simulator…"
+    }
+
+    private var virtualDevicesPlural: String {
+        let platforms = FeatureRegistry.visiblePlatforms(for: state.selectedRole)
+        if !platforms.contains(.android) { return "simulators" }
+        if !platforms.contains(.iosSimulator) { return "emulators" }
+        return "emulators or simulators"
+    }
+
     private var searchPlaceholder: String {
         switch screen {
         case .root: return "Run a quick action…"
         case .apps: return "Search installed apps…"
         case .appActions(_, let display): return display
-        case .emulators: return "Boot an emulator or simulator…"
+        case .emulators: return virtualDevicesBootPlaceholder
         case .pickDevice: return "Pick a device for this action…"
         case .pickBundle: return "Pick an app for this command…"
         case .apk(let urls):
@@ -466,8 +483,8 @@ struct QuickActionsView: View {
         case .apps where panelTargetSerial == nil: return "Connect a device to manage its apps"
         case .apps where installedApps == nil: return "Loading apps…"
         case .apps: return "No matching apps"
-        case .emulators where emulatorsLoading: return "Looking for emulators and simulators…"
-        case .emulators: return "No emulators or simulators found"
+        case .emulators where emulatorsLoading: return "Looking for \(virtualDevicesPlural)…"
+        case .emulators: return "No \(virtualDevicesPlural) found"
         case .pickDevice: return "No ready devices"
         case .pickBundle where state.bundles.isEmpty && panelTargetSerial == nil:
             return "Connect a device to list its apps, or save a bundle in the app"
@@ -641,13 +658,15 @@ struct QuickActionsView: View {
                 pushes: true, action: .push(.apps)
             ))
         }
-        if enabled.contains("emulators"), matchesNative(title: "Emulators", keywords: [
-            "emulator", "simulator", "avd", "boot", "launch", "virtual",
-        ]) {
+        if enabled.contains("emulators"),
+           let emulators = FeatureRegistry.byID["emulators"].map(state.presented),
+           matchesNative(title: emulators.title, keywords: [
+               "emulator", "simulator", "avd", "boot", "launch", "virtual",
+           ]) {
             rows.append(QuickRow(
                 id: "screen:emulators", icon: "play.display",
-                title: "Emulators",
-                subtitle: "Boot an Android emulator or iOS Simulator",
+                title: emulators.title,
+                subtitle: emulators.subtitle,
                 pushes: true, action: .push(.emulators)
             ))
         }
