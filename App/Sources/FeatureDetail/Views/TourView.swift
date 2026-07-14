@@ -134,7 +134,11 @@ struct TourView: View {
             rest = rest.dropFirst()
         }
         if !rest.isEmpty {
-            caps.append(rest == "␣" ? "space" : String(rest))
+            // KeyboardShortcuts describes space with an open-box glyph —
+            // spell it out (and match by name too, in case a library update
+            // changes the glyph).
+            let isSpace = ["␣", "⎵"].contains(String(rest)) || rest.lowercased() == "space"
+            caps.append(isSpace ? "space" : String(rest))
         }
         return caps
     }
@@ -292,12 +296,27 @@ private struct KeyCapView: View {
     let label: String
     let pressed: Bool
 
+    /// Key names printed under the modifier symbols, like the legends on a
+    /// real Mac keyboard — ⇧ alone reads as an up arrow to anyone who doesn't
+    /// know the glyph.
+    private static let modifierNames: [String: String] = [
+        "⌃": "control", "⌥": "option", "⇧": "shift", "⌘": "command",
+    ]
+    private var name: String? { Self.modifierNames[label] }
+
     /// Named keys ("space") get a wide cap; symbols stay square.
     private var isWide: Bool { label.count > 1 }
 
     var body: some View {
-        Text(label)
-            .font(.app(size: isWide ? 26 : 38, weight: .medium))
+        VStack(spacing: 3) {
+            Text(label)
+                .font(.app(size: isWide ? 26 : (name == nil ? 38 : 32), weight: .medium))
+            if let name {
+                Text(name)
+                    .font(.app(size: 13, weight: .medium))
+                    .opacity(0.75)
+            }
+        }
             .foregroundStyle(pressed ? AnyShapeStyle(.brandAccent) : AnyShapeStyle(.textMain))
             .frame(width: isWide ? 210 : 84, height: 84)
             .background(
