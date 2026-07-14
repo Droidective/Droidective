@@ -68,7 +68,7 @@ opening it — verify those by hand.
 ## Build / test / run
 
 ```
-make test          # ADBKit unit tests (cd ADBKit && swift test) — 749 tests, keep green
+make test          # ADBKit unit tests (cd ADBKit && swift test) — 771 tests, keep green
 make build         # xcodegen generate + xcodebuild Debug
 make run           # build + open the .app
 ```
@@ -145,8 +145,10 @@ Node 22 in CI; scroll reveals and the hero palette demo must keep their
   `MetroInspector` (host-localhost `GET /json/list` + a pure `parseTargets`),
   `CDPProtocol` (pure CDP framing + `Runtime.evaluate`/`getProperties`/
   `consoleAPICalled` decoders), and `JSConsoleClient` (an actor over
-  `URLSessionWebSocketTask` — id↔continuation correlation, heartbeat,
-  reconnect-friendly event stream). No adb path (Metro runs on the Mac); the
+  `URLSessionWebSocketTask` — id↔continuation correlation, a CDP keepalive
+  that survives the proxy's ping/terminate heartbeat, takeover-aware closes,
+  reconnect-friendly event stream; `ConsoleReplayGate` drops the re-replayed
+  console history on reconnects). No adb path (Metro runs on the Mac); the
   device only needs `adb reverse tcp:<metroPort>` to reach the dev server.
   `ScreenTools` holds the
   `ScreenRecordOptions` struct. **Bundled binaries** (scrcpy-server + a static
@@ -451,7 +453,7 @@ jadx/apktool, recompile, and sign — with keystore creation) plus Frida setup, 
 custom accent color, launching emulators from the device bar, per-feature
 connect-a-device empty states, a live-preview hotkey recorder, and a Settings
 split into Appearance/Privacy; managed tools download from GitHub releases into
-Application Support and are sized/removable in Settings); 749 tests green;
+Application Support and are sized/removable in Settings); 771 tests green;
 builds clean with zero warnings (enforced as errors in CI). Verified live against a
 physical device and an Android emulator. Release builds are Developer ID-signed +
 notarized and bundle scrcpy/ffmpeg (see `RELEASING.md`). Open gaps: the Apps

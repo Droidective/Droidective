@@ -140,6 +140,77 @@ import Testing
     }
 
     @Test(.timeLimit(.minutes(1)))
+    func keepaliveSendsSilentNoOpEvaluatesOnTheWire() async throws {
+        // RN's inspector proxy terminates a debugger socket that delivers
+        // neither a pong nor a data message inside its heartbeat window, and
+        // client pings don't count — the keepalive must be real CDP traffic.
+        let server = CDPTestServer()
+        let port = try await server.start()
+        defer { Task { await server.stop() } }
+
+        let client = JSConsoleClient()
+        let url = try #require(URL(string: "ws://127.0.0.1:\(port)"))
+        _ = try await client.connect(to: url, keepaliveInterval: .milliseconds(50))
+        try await Task.sleep(for: .milliseconds(400))
+
+        let keepalives = await server.receivedPayloads.filter {
+            $0["method"]?.stringValue == "Runtime.evaluate"
+                && $0["params"]?["silent"]?.boolValue == true
+        }
+        #expect(keepalives.count >= 2)
+        for frame in keepalives {
+            #expect(frame["params"]?["expression"]?.stringValue == "void 0")
+            #expect(frame["params"]?["returnByValue"]?.boolValue == true)
+        }
+
+        // Real requests still correlate with their own replies while the
+        // keepalive replies are silently discarded.
+        let outcome = try await client.evaluate("2 + 2")
+        guard case let .value(object) = outcome else {
+            Issue.record("expected a value alongside keepalive traffic, got \(outcome)")
+            return
+        }
+        #expect(object.description == "4")
+        await client.disconnect()
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func newDebuggerCloseSurfacesATakeoverSoTheSessionStandsDown() async throws {
+        // dev-middleware closes the previous debugger with this reason when
+        // another one (React Native DevTools) attaches; auto-reconnecting
+        // would kick that debugger back off, so the event must say takeover.
+        let server = CDPTestServer()
+        let port = try await server.start()
+        defer { Task { await server.stop() } }
+
+        let client = JSConsoleClient()
+        let url = try #require(URL(string: "ws://127.0.0.1:\(port)"))
+        let stream = try await client.connect(to: url)
+        await server.closeGracefully(
+            reason: "[NEW_DEBUGGER_OPENED] New debugger opened for the same app instance"
+        )
+        var takeover: Bool?
+        for await event in stream {
+            if case let .closed(_, isTakeover) = event { takeover = isTakeover }
+        }
+        #expect(takeover == true)
+        await client.disconnect()
+    }
+
+    @Test func takeoverCloseReasonsAreRecognizedAcrossProxyVersions() {
+        // Current dev-middleware (RN 0.76+).
+        #expect(JSConsoleClient.isDebuggerTakeover(
+            "[NEW_DEBUGGER_OPENED] New debugger opened for the same app instance"
+        ))
+        // The legacy Metro inspector proxy.
+        #expect(JSConsoleClient.isDebuggerTakeover("Another debugger is already connected"))
+        // Everything else keeps auto-reconnect.
+        #expect(!JSConsoleClient.isDebuggerTakeover("[CONNECTION_LOST] Connection lost to device"))
+        #expect(!JSConsoleClient.isDebuggerTakeover("[PAGE_NOT_FOUND] Debugger page not found"))
+        #expect(!JSConsoleClient.isDebuggerTakeover(""))
+    }
+
+    @Test(.timeLimit(.minutes(1)))
     func closingTheSocketSurfacesClosedAndEndsTheStream() async throws {
         let server = CDPTestServer()
         let port = try await server.start()
@@ -178,6 +249,8 @@ private actor CDPTestServer {
     /// Every CDP method received, in arrival order — lets tests assert what
     /// actually went over the wire.
     private(set) var receivedMethods: [String] = []
+    /// The full frames, for arg-vector-style assertions on request params.
+    private(set) var receivedPayloads: [JSONValue] = []
 
     func setMuted(_ muted: Bool) { self.muted = muted }
 
@@ -211,6 +284,19 @@ private actor CDPTestServer {
         connection = nil
         listener?.cancel()
         listener = nil
+    }
+
+    /// Send a proper WebSocket close frame with a reason — what dev-middleware
+    /// does when a new debugger takes over an app's connection.
+    func closeGracefully(reason: String) {
+        guard let box = connection else { return }
+        let metadata = NWProtocolWebSocket.Metadata(opcode: .close)
+        metadata.closeCode = .protocolCode(.normalClosure)
+        let context = NWConnection.ContentContext(identifier: "close", metadata: [metadata])
+        box.connection.send(
+            content: Data(reason.utf8), contentContext: context, isComplete: true,
+            completion: .contentProcessed { _ in }
+        )
     }
 
     func pushConsoleLog(_ message: String) {
@@ -261,6 +347,7 @@ private actor CDPTestServer {
               let id = root["id"]?.intValue,
               let method = root["method"]?.stringValue else { return }
         receivedMethods.append(method)
+        receivedPayloads.append(root)
         guard !muted else { return }
         send(.object(["id": .number(Double(id)), "result": replyResult(for: method)]))
     }

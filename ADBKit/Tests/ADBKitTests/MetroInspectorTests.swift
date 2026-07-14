@@ -72,6 +72,85 @@ import Testing
         #expect(MetroInspector.parseTargets(Data("{}".utf8)).isEmpty)
     }
 
+    // MARK: - Auto-connect candidate (the reconnect policy)
+
+    private func target(
+        id: String, vm: String? = "Hermes", appId: String? = nil, deviceId: String? = nil
+    ) -> CDPTarget {
+        CDPTarget(
+            id: id, title: "RN", appId: appId, detail: "", deviceName: "Pixel",
+            vm: vm, webSocketDebuggerUrl: "ws://127.0.0.1:8081/debug?page=\(id)",
+            logicalDeviceId: deviceId
+        )
+    }
+
+    @Test func candidatePrefersThePreviousLogicalDevice() {
+        let targets = [
+            target(id: "a", appId: "com.acme.one", deviceId: "dev-1"),
+            target(id: "b", appId: "com.acme.two", deviceId: "dev-2"),
+        ]
+        let pick = MetroInspector.autoConnectCandidate(
+            from: targets, preferredDeviceId: "dev-2", preferredAppId: "com.acme.one"
+        )
+        #expect(pick?.id == "b")
+    }
+
+    @Test func staleDeviceIdFallsBackToTheSameAppId() {
+        // The proxy assigns a new logical device id when the app re-registers
+        // (relaunch, phone sleep, Metro restart); the app id must still match
+        // or the console never reconnects on its own again.
+        let targets = [
+            target(id: "a", appId: "com.acme.one", deviceId: "dev-9"),
+            target(id: "b", appId: "com.acme.two", deviceId: "dev-8"),
+        ]
+        let pick = MetroInspector.autoConnectCandidate(
+            from: targets, preferredDeviceId: "dev-gone", preferredAppId: "com.acme.two"
+        )
+        #expect(pick?.id == "b")
+    }
+
+    @Test func ambiguousAppIdStaysHandsOff() {
+        let targets = [
+            target(id: "a", appId: "com.acme.app", deviceId: "dev-1"),
+            target(id: "b", appId: "com.acme.app", deviceId: "dev-2"),
+        ]
+        let pick = MetroInspector.autoConnectCandidate(
+            from: targets, preferredDeviceId: "dev-gone", preferredAppId: "com.acme.app"
+        )
+        #expect(pick == nil)
+    }
+
+    @Test func staleDeviceIdStillReconnectsToALoneTarget() {
+        let targets = [target(id: "a", appId: "com.acme.app", deviceId: "dev-new")]
+        let pick = MetroInspector.autoConnectCandidate(
+            from: targets, preferredDeviceId: "dev-gone", preferredAppId: nil
+        )
+        #expect(pick?.id == "a")
+    }
+
+    @Test func severalUnfamiliarTargetsAreNotAutoPicked() {
+        let targets = [
+            target(id: "a", appId: "com.one", deviceId: "dev-1"),
+            target(id: "b", appId: "com.two", deviceId: "dev-2"),
+        ]
+        #expect(MetroInspector.autoConnectCandidate(
+            from: targets, preferredDeviceId: nil, preferredAppId: nil
+        ) == nil)
+    }
+
+    @Test func hermesTargetsShadowNonHermesOnes() {
+        // A lone Hermes target wins even when a non-Hermes entry matches the
+        // preferred app id — the console can only talk to Hermes anyway.
+        let targets = [
+            target(id: "a", vm: "JavaScriptCore", appId: "com.acme.app", deviceId: "dev-1"),
+            target(id: "b", vm: "Hermes", appId: "com.acme.app", deviceId: "dev-2"),
+        ]
+        let pick = MetroInspector.autoConnectCandidate(
+            from: targets, preferredDeviceId: nil, preferredAppId: "com.acme.app"
+        )
+        #expect(pick?.id == "b")
+    }
+
     @Test func acceptsOnlyLoopbackWebSocketURLs() throws {
         for ok in [
             "ws://127.0.0.1:8081/inspector/debug?device=0&page=1",

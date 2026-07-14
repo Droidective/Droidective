@@ -185,9 +185,20 @@ final class JSConsoleSession {
     /// when the post-connect replay burst has settled so the welcome can land.
     @ObservationIgnored private var receivedCount = 0
     private var preferredLogicalDeviceId: String?
-    /// The logical device we last posted a "connected" notice for, so an
+    /// The application id we last connected to — the reconnect key that
+    /// survives the proxy handing the app a fresh logical device id (app
+    /// relaunch, phone sleep, Metro restart).
+    private var preferredAppId: String?
+    /// Set when the server closed us because another debugger (React Native
+    /// DevTools, usually) attached to the same app. Auto-reconnecting would
+    /// kick that debugger right back off, so discovery stands down until the
+    /// user picks a target (or the session restarts / the port changes).
+    private var autoReconnectSuspended = false
+    /// Drops the re-replayed console history on reconnects to the same app so
+    /// the persistent feed doesn't duplicate.
+    @ObservationIgnored private var replayGate = ConsoleReplayGate()
+    /// Whether the "connected" notice was posted for the current app — an
     /// auto-reconnect to the same app doesn't repeat the welcome.
-    private var welcomedDeviceId: String?
     private var hasWelcomed = false
     private var serials: [String] = []
     /// port → serials we installed a `reverse tcp:<port>` binding on, so closing
@@ -215,7 +226,6 @@ final class JSConsoleSession {
     /// Reset the connection back-references so the next connect re-welcomes.
     private func resetWelcome() {
         hasWelcomed = false
-        welcomedDeviceId = nil
     }
 
     // MARK: Lifecycle
@@ -247,6 +257,7 @@ final class JSConsoleSession {
         self.serials = serials
         activateGeneration += 1
         let generation = activateGeneration
+        autoReconnectSuspended = false
         if !isConnected { phase = .searching }
         while !Task.isCancelled {
             let scannedPort = port
@@ -254,8 +265,19 @@ final class JSConsoleSession {
             // Drop a pass whose port changed mid-fetch — its results are stale.
             if !Task.isCancelled, scannedPort == port {
                 targets = found
-                if connectedTarget == nil {
-                    if let candidate = pickCandidate(from: found) {
+                // A takeover stand-down holds only while the contested app is
+                // still listed; once it's gone there's no debugger to kick off
+                // and discovery should self-heal again.
+                if autoReconnectSuspended, found.isEmpty {
+                    autoReconnectSuspended = false
+                    phase = .searching
+                }
+                if connectedTarget == nil, !autoReconnectSuspended {
+                    if let candidate = MetroInspector.autoConnectCandidate(
+                        from: found,
+                        preferredDeviceId: preferredLogicalDeviceId,
+                        preferredAppId: preferredAppId
+                    ) {
                         await connect(to: candidate)
                     } else if phase != .connecting {
                         phase = found.isEmpty ? .searching : .targetsAvailable
@@ -278,18 +300,6 @@ final class JSConsoleSession {
 
     func updateSerials(_ serials: [String]) { self.serials = serials }
 
-    /// Choose a target to (re)connect to: the previously-connected logical
-    /// device if it's back (the stable key across reloads), else a lone target.
-    /// Stays hands-off when several apps are debuggable and none was chosen.
-    private func pickCandidate(from targets: [CDPTarget]) -> CDPTarget? {
-        let hermes = targets.filter(\.isHermes)
-        let pool = hermes.isEmpty ? targets : hermes
-        if let id = preferredLogicalDeviceId {
-            return pool.first { $0.logicalDeviceId == id }
-        }
-        return pool.count == 1 ? pool.first : nil
-    }
-
     func connect(to target: CDPTarget) async {
         guard let url = URL(string: target.webSocketDebuggerUrl),
               MetroInspector.isLocalDebuggerURL(url) else {
@@ -301,7 +311,13 @@ final class JSConsoleSession {
         connectGeneration += 1
         let generation = connectGeneration
         phase = .connecting
+        autoReconnectSuspended = false
+        // Reconnecting to the app whose history the feed already holds? Then
+        // the post-connect replay is a duplicate and the gate should drop it.
+        let resumingSameApp = target.logicalDeviceId == preferredLogicalDeviceId
+            || (target.appId != nil && target.appId == preferredAppId)
         preferredLogicalDeviceId = target.logicalDeviceId
+        preferredAppId = target.appId
         consumeTask?.cancel()
         consumeTask = nil
         welcomeTask?.cancel()
@@ -312,6 +328,7 @@ final class JSConsoleSession {
             connectedTarget = target
             phase = .connected
             receivedCount = 0
+            replayGate.connectionOpened(resumingSameApp: resumingSameApp)
             consumeTask = Task { [weak self] in
                 for await event in stream {
                     if Task.isCancelled { break }
@@ -321,10 +338,9 @@ final class JSConsoleSession {
             // A "joined" banner like Chrome's "Welcome to React Native DevTools",
             // once per app — deferred until the replayed history settles so it lands
             // at the connection moment, not pinned to the top of the feed.
-            if !hasWelcomed || welcomedDeviceId != target.logicalDeviceId {
+            if !hasWelcomed || !resumingSameApp {
                 scheduleWelcome(
                     label: "Welcome to Droidective JS Console — connected to \(target.menuLabel) (Hermes).",
-                    deviceId: target.logicalDeviceId,
                     generation: generation
                 )
             }
@@ -339,24 +355,39 @@ final class JSConsoleSession {
     private func handle(_ event: JSConsoleClient.Event) {
         switch event {
         case let .console(call):
+            // Gate before the clear check: a *replayed* console.clear would
+            // otherwise wipe the feed the gate is preserving.
+            guard replayGate.admit(call.timestamp) else { return }
             if call.type == "clear" { clearFeedEntries(); return }
             enqueue(.log(level: JSLevel(consoleType: call.type), args: call.args, stack: call.stackTrace))
-        case let .exception(details):
+        case let .exception(details, timestamp):
+            guard replayGate.admit(timestamp) else { return }
             enqueue(.evalError(details))
         case .contextCreated:
             break
         case .contextDestroyed:
             // A JS reload replaced the context — mark it inline (logs keep flowing).
             enqueue(.notice("App reloaded — JS context replaced."))
-        case .closed:
-            // The discovery loop reconnects (by logical-device id) within ~2s; the
-            // status badge shows "Searching…" meanwhile. No feed notice, so a
-            // flapping connection doesn't spam. Drop any pending welcome — the
-            // reconnect schedules a fresh one (it stays un-welcomed until shown).
+        case let .closed(_, takeover):
+            // The discovery loop reconnects (device id, then app id) within
+            // ~2s; the status badge shows "Searching…" meanwhile. No feed
+            // notice, so a flapping connection doesn't spam. Drop any pending
+            // welcome — the reconnect schedules a fresh one. The exception:
+            // another debugger took the app over — reconnecting would kick it
+            // straight back off, so stand down and say so instead.
             welcomeTask?.cancel()
             welcomeTask = nil
             connectedTarget = nil
-            phase = .searching
+            if takeover {
+                autoReconnectSuspended = true
+                phase = .targetsAvailable
+                append(.notice(
+                    "Another debugger (React Native DevTools?) took over this app. "
+                        + "Pick the target above to reconnect here."
+                ))
+            } else {
+                phase = .searching
+            }
         }
     }
 
@@ -488,6 +519,8 @@ final class JSConsoleSession {
         flushTask = nil
         connectedTarget = nil
         preferredLogicalDeviceId = nil
+        preferredAppId = nil
+        autoReconnectSuspended = false
         resetWelcome()
         targets = []
         phase = .searching
@@ -722,15 +755,14 @@ final class JSConsoleSession {
     /// Show the "connected" banner at the connection moment — after Hermes has
     /// replayed its buffered history and before live logs — by waiting for the
     /// replay burst to go quiet, mirroring Chrome's inline "Welcome to React Native
-    /// DevTools". Once per app (logical device).
-    private func scheduleWelcome(label: String, deviceId: String?, generation: Int) {
+    /// DevTools". Once per app.
+    private func scheduleWelcome(label: String, generation: Int) {
         welcomeTask?.cancel()
         welcomeTask = Task { @MainActor [weak self] in
             guard let self else { return }
             await self.waitForReplayToSettle()
             guard !Task.isCancelled, generation == self.connectGeneration, self.connectedTarget != nil else { return }
             self.hasWelcomed = true
-            self.welcomedDeviceId = deviceId
             self.append(.notice(label))
         }
     }
