@@ -96,7 +96,7 @@ export function Screenshots() {
         {galleryShots.map((shot) => (
           <figure key={shot.title} className="m-0">
             <div className="overflow-hidden rounded-[14px] border border-border-2 shadow-[0_30px_70px_-28px_rgba(0,0,0,0.7)]">
-              <img src={shot.image} alt={shot.alt} width={1600} height={1012} loading="lazy" className="block h-auto w-full" />
+              <img src={shot.image} alt={shot.alt} width={1600} height={1000} loading="lazy" className="block aspect-[16/10] w-full object-cover object-top" />
             </div>
             <figcaption className="mt-3.5 text-sm leading-normal text-muted">
               <b className="block text-[15px] font-semibold text-text">{shot.title}</b>
