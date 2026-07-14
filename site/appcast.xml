@@ -6,9 +6,9 @@
     <description>Most recent Droidective updates.</description>
     <language>en</language>
     <item>
-      <title>Droidective 3.1.0</title>
-      <sparkle:version>396</sparkle:version>
-      <sparkle:shortVersionString>3.1.0</sparkle:shortVersionString>
+      <title>Droidective 3.2.0</title>
+      <sparkle:version>409</sparkle:version>
+      <sparkle:shortVersionString>3.2.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <description><![CDATA[
 <style>
@@ -24,99 +24,45 @@ pre { background: color-mix(in srgb, currentColor 8%, transparent); padding: .6e
 pre code { background: none; padding: 0; }
 a { color: #2f9e44; }
 </style>
-<p>Custom commands get a full rework, the Quick Actions panel becomes yours to
-curate, and dismissed updates stop disappearing.</p>
-<h3>Custom Commands</h3>
+<p>Wireless debugging moves into the device dropdown: pair and connect a device
+over Wi-Fi from anywhere in the app, with a guided flow for each path.</p>
+<h3>Connect over Wi-Fi</h3>
 <ul>
 <li>
-<strong>One box, full command lines</strong> — type commands exactly as you'd run them in
-a terminal (<code>adb shell am force-stop {bundleId}</code>); the separate adb/Terminal
-mode tabs are gone. Lines starting with <code>adb</code> still run through
-Droidective's own adb — tokenized safely, device <code>-s</code> injected — and
-everything else runs through your login shell.</li>
+<strong>Pair &amp; connect from the device dropdown</strong> — the device menu gains a
+"Wireless debugging" section with <em>Pair new device…</em> and <em>Connect to
+device…</em>, opening a guided sheet with three paths:
+<ul>
 <li>
-<strong>Multi-line commands</strong> — the editor is a proper multi-line box; each line
-runs in order through your shell. Save with ⌘⏎.</li>
+<strong>Pair new device</strong> — numbered steps that mirror the phone's Android 11+
+pairing dialog: where to find it, one field for the <code>ip:port</code> it shows plus
+the 6-digit code, then a connect step that explains the connection port
+differs from the pairing port (the host carries over after pairing).</li>
 <li>
-<strong>Pick the terminal</strong> — a command that shows output "in a terminal" can open
-Droidective's Terminal (default) or your Mac's default terminal app, with
-the selected device exported as <code>ANDROID_SERIAL</code> either way.</li>
+<strong>Already paired</strong> — a single <code>ip:port</code> field for a device that was paired
+before or is already in tcpip mode.</li>
 <li>
-<strong>Redesigned editor</strong> — labeled fields, one-click <code>{bundleId}</code> / <code>{serial}</code>
-chips, and a live cue showing where the line will run.</li>
+<strong>Via USB cable</strong> — one click switches a plugged-in device to Wi-Fi
+debugging and connects; the device list updates live.</li>
 </ul>
-<h3>Quick Actions</h3>
-<ul>
+</li>
 <li>
-<strong>Pick an app in place</strong> — running a <code>{bundleId}</code> command with no app
-selected opens a picker (saved bundles first, then the device's installed
-apps) instead of failing.</li>
+<strong>Paste-friendly addresses</strong> — every address field takes the exact
+"IP address &amp; Port" string the phone displays (IPv6 and stray whitespace
+included); buttons stay disabled until the input is valid.</li>
 <li>
-<strong>Clear device guards</strong> — a device-targeting command with nothing connected
-says so up front, and the multi-device picker covers custom commands too.</li>
-<li>
-<strong>Pin custom commands</strong> — ⌘P or right-click; pinned tiles lead the grid
-alongside pinned features.</li>
-<li>
-<strong>Choose what shows</strong> — right-click any action tile to hide it from the
-panel; manage the full list under Settings ▸ General ▸ Quick Actions.</li>
-</ul>
-<h3>App management</h3>
-<ul>
-<li>
-<strong>Restart, everywhere apps are managed</strong> — a one-click force-stop +
-relaunch in the Apps explorer, the Manage App screen, and the Quick
-Actions panel; the JS Console's Restart app rides the same path.</li>
-<li>
-<strong>Launching works on more devices</strong> — apps open via their resolved
-launcher activity (<code>am start</code>) instead of relying on <code>monkey</code>, which is a
-do-nothing stub on some OEM/custom Android builds. When a launch does
-fail, the message now says whether the app is missing or just has no
-launcher activity.</li>
-</ul>
-<h3>Updates</h3>
-<ul>
-<li>
-<strong>Checks twice a day</strong> instead of daily.</li>
-<li>
-<strong>Dismissed updates come back</strong> — closing or skipping the update alert now
-resurfaces it as a notification on every launch until you install, with a
-Check for Updates button. Turning off automatic update checks in Settings
-silences the reminder too.</li>
-</ul>
-<h3>Welcome tour</h3>
-<ul>
-<li>The tour now ends in two Quick Actions steps: pick the global hotkey, then
-a finale that draws your hotkey as animated keycaps — pressing it for real
-opens the panel, finishes the tour, and fires a confetti celebration.</li>
-</ul>
-<h3>Terminal &amp; tabs</h3>
-<ul>
-<li>The Terminal's tab list defaults to the Chrome-style top strip (the left
-rail is one click away).</li>
-<li>Tab strips gain right-click <strong>Close Other Tabs</strong> (anything with unsaved
-work still asks first).</li>
-</ul>
-<h3>Removed</h3>
-<ul>
-<li>The app no longer installs tools via Homebrew. The setup Doctor and the
-device bar now link to the official install source (Android Studio or the
-platform-tools download) instead of running <code>brew</code> for you — already
-installed tools keep being found wherever they live.</li>
+<strong>Clear outcomes</strong> — adb's own reason is shown inline on failure (wrong
+code, unreachable host, an adb too old to pair), and a successful
+connection selects the new device and confirms in a notification.</li>
 </ul>
 <h3>Fixes</h3>
 <ul>
-<li>The auto-hide sidebar no longer draws a stray horizontal line across its
-middle when revealed.</li>
-<li>The window title follows the active tab instead of sticking on
-"About &amp; Feedback".</li>
-<li>One Settings… item in the app menu on macOS 26 (it was duplicated).</li>
-<li>JS Console: clicking "adb reverse" right after typing a new Metro port now
-reverses the new port — no ⏎ needed first.</li>
+<li>The tab strip's Home button no longer sits flush against its divider.</li>
 </ul>
+<hr>
 ]]></description>
-      <pubDate>Mon, 13 Jul 2026 12:12:36 +0000</pubDate>
-      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.1.0/Droidective-v3.1.0.dmg" sparkle:edSignature="vLEkjrq5NBOuo5RJADAWOHHXaxRG7XTKwLwAXRLJmwlws62Qbttod9MNr28psTtlbtPulQdvzZxrHPZMqCs7Ag==" length="52001339" type="application/octet-stream" />
+      <pubDate>Tue, 14 Jul 2026 09:23:49 +0000</pubDate>
+      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.2.0/Droidective-v3.2.0.dmg" sparkle:edSignature="00GFj1DXzXpJjcldDx+7l0XSnHZdODPsSFAIin/tfuNdTC/cqL0b5FWZmPWoIVYrM+8/C0YiJ8Q28L1RbkmxDA==" length="52369326" type="application/octet-stream" />
     </item>
   </channel>
 </rss>
