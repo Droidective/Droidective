@@ -13,7 +13,17 @@ extension AppState {
     /// via search (`disabledMatches`) and hotkeys.
     var enabledFeatures: [FeatureDef] {
         let enabled = layout.effectiveEnabledIDs
-        return FeatureRegistry.all.filter { enabled.contains($0.id) && !$0.isAbsorbedByHub }
+        return FeatureRegistry.all
+            .filter { enabled.contains($0.id) && !$0.isAbsorbedByHub }
+            .map(presented)
+    }
+
+    /// A def as the current role displays it (the emulators screen renames
+    /// itself to the platforms the role can see). Every surface that shows a
+    /// feature's title/subtitle must read through this — directly or via the
+    /// accessors here that already map through it.
+    func presented(_ def: FeatureDef) -> FeatureDef {
+        FeatureRegistry.presented(def, for: selectedRole)
     }
 
     /// Pinned features in the user's order — the sidebar's Pinned section,
@@ -120,6 +130,7 @@ extension AppState {
     /// order — the contents of one catalog section.
     func catalogFeatures(in category: FeatureCategory) -> [FeatureDef] {
         ordered(FeatureRegistry.all.filter { $0.category == category && !$0.isAbsorbedByHub })
+            .map(presented)
     }
 
     /// Enabled, non-pinned features in grouped display order, flattened — the
@@ -153,6 +164,7 @@ extension AppState {
         return FeatureRegistry.all.filter {
             !shown.contains($0.id) && !$0.isAbsorbedByHub && $0.matches(searchText)
         }
+        .map(presented)
     }
 
     /// Catalog features not currently on the sidebar — drives the "+N more
@@ -330,10 +342,11 @@ extension AppState {
         let native = ["apps", "emulators", "install-app"]
             .filter { layout.effectiveEnabledIDs.contains($0) }
             .compactMap { FeatureRegistry.byID[$0] }
-        return native + PaletteSearch.quickActions(
+        return (native + PaletteSearch.quickActions(
             query: "", implemented: FeatureEngine.implementedIDs,
             enabled: layout.effectiveEnabledIDs, favorites: layout.favorites
-        )
+        ))
+        .map(presented)
     }
 
     func persistLayout() {
@@ -353,9 +366,9 @@ extension AppState {
     /// always-on quick actions).
     var menuBarFeatures: [FeatureDef] {
         if let chosen = layout.menuBarItems, !chosen.isEmpty {
-            return chosen.compactMap { FeatureRegistry.byID[$0] }
+            return chosen.compactMap { FeatureRegistry.byID[$0] }.map(presented)
         }
-        let favorites = layout.favorites.compactMap { FeatureRegistry.byID[$0] }
+        let favorites = layout.favorites.compactMap { FeatureRegistry.byID[$0] }.map(presented)
         if !favorites.isEmpty { return favorites }
         return enabledFeatures.filter {
             $0.kind == .instantAction && $0.id != "screenshot" && $0.id != "scrcpy"

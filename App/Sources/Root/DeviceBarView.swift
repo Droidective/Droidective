@@ -178,7 +178,7 @@ struct DeviceBarView: View {
             Button {
                 state.requestFeature("emulators")
             } label: {
-                Label("Manage emulators & simulators…", systemImage: "square.stack.3d.up")
+                Label(manageVirtualDevicesLabel, systemImage: "square.stack.3d.up")
             }
             Button {
                 state.refreshDevices()
@@ -235,6 +235,14 @@ struct DeviceBarView: View {
         if device.isReady { return .brandAccent }
         if device.state == "unauthorized" { return .orange }
         return .red
+    }
+
+    /// "Manage emulators & simulators…" trimmed to the platform(s) the
+    /// current role can see, matching the screen it opens.
+    private var manageVirtualDevicesLabel: String {
+        let title = FeatureRegistry.byID["emulators"]
+            .map { state.presented($0).title } ?? "Emulators & Simulators"
+        return "Manage \(title.lowercased())…"
     }
 
     /// A booted iOS Simulator gets the Apple mark so the platform in charge

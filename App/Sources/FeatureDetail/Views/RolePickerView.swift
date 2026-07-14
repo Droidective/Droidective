@@ -123,7 +123,10 @@ private struct RoleCard: View {
     private var curated: [String] { FeatureRegistry.featuresByRole[role] ?? [] }
 
     private var previewFeatures: [FeatureDef] {
+        // Presented for the card's role, so the iOS card previews
+        // "Simulators" while the Android-first cards preview "Emulators".
         curated.prefix(2).compactMap { FeatureRegistry.byID[$0] }
+            .map { FeatureRegistry.presented($0, for: role) }
     }
 
     var body: some View {

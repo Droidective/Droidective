@@ -2,8 +2,22 @@ import Foundation
 
 extension FeatureRegistry {
     /// Short "what it does and how" notes, surfaced as ⓘ help in the UI.
-    public static func howTo(for featureID: String) -> String? {
-        notes[featureID]
+    /// `role` trims the emulators note to the platform(s) the role can see
+    /// (see `presented(_:for:)`); every other note is role-independent.
+    public static func howTo(for featureID: String, role: UserRole? = nil) -> String? {
+        if featureID == "emulators" {
+            switch role {
+            case .iosDeveloper:
+                return "Your Xcode iOS Simulators in one place: boot or shut them down. "
+                    + "Booted ones join the device bar. Simulators need Xcode."
+            case .some:
+                return "Your Android Studio AVDs in one place: launch normally, cold boot, or "
+                    + "wipe data first. Running ones join the device bar. AVDs need the SDK emulator."
+            case nil:
+                break
+            }
+        }
+        return notes[featureID]
     }
 
     private static let notes: [String: String] = [

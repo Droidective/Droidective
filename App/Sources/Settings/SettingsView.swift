@@ -619,6 +619,7 @@ struct HotkeysSettingsView: View {
             !shown.contains($0.id)
                 && KeyboardShortcuts.getShortcut(for: HotkeyManager.featureName($0.id)) != nil
         }
+        .map(state.presented)
     }
 
     var body: some View {

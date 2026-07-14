@@ -31,7 +31,7 @@ struct FeatureDetailView: View {
         VStack(spacing: 0) {
             detail(for: feature)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            if showFeatureNotes, let note = FeatureRegistry.howTo(for: feature.id) {
+            if showFeatureNotes, let note = FeatureRegistry.howTo(for: feature.id, role: state.selectedRole) {
                 FeatureDescription(note: note)
             }
         }

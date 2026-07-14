@@ -522,6 +522,12 @@ final class AppState {
     }
 
     private func devicesChanged(_ devices: [Device]) {
+        // The role scopes which platforms exist for this user: iOS Developer
+        // sees only simulators, the Android-first roles only adb devices, and
+        // "all features" both. Filter here — the single merge point — so the
+        // bar, pickers, and run targets all agree.
+        let platforms = FeatureRegistry.visiblePlatforms(for: selectedRole)
+        let devices = devices.filter { platforms.contains($0.platform) }
         self.devices = devices
         let ready = devices.filter(\.isReady)
         // "Run on all" only makes sense with more than one device.
@@ -1369,6 +1375,14 @@ final class AppState {
             layout.seedEverything()
         }
         roleChosenThisSession = true
+        // Re-apply the role's platform visibility: drop devices the new role
+        // can't see and refresh the device-bar launch lists (a hidden
+        // platform's list empties, which removes its menu section).
+        devicesChanged(androidDevices + simulatorDevices)
+        Task {
+            await refreshAvds()
+            await refreshSimulators()
+        }
         // Start the freshly-chosen role on a single Home tab, no split. The
         // reset drops every open tab without routing through performClose, so
         // stop each one's background work explicitly — otherwise kept-alive

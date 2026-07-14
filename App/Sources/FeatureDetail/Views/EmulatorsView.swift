@@ -15,13 +15,15 @@ struct EmulatorsView: View {
     @State private var wipeTarget: Avd?
     @State private var showAllSimulators = false
 
-    /// iOS-first presentation for the iOS Developer role: simulators section
-    /// on top and never truncated. Every other role leads with the Android
-    /// emulators and keeps the (long) simulator list cut to its head behind
-    /// "Show all".
-    private var simulatorsLead: Bool {
-        state.selectedRole == .iosDeveloper
+    /// The role decides which platforms this screen shows at all: iOS
+    /// Developer sees only the simulators section (titled "Simulators"),
+    /// the Android-first roles only the AVDs ("Emulators"), and "all
+    /// features" both. The load skips the hidden platform entirely.
+    private var visiblePlatforms: Set<DevicePlatform> {
+        FeatureRegistry.visiblePlatforms(for: state.selectedRole)
     }
+    private var showsAndroid: Bool { visiblePlatforms.contains(.android) }
+    private var showsSimulators: Bool { visiblePlatforms.contains(.iosSimulator) }
 
     private static let collapsedSimulatorCount = 5
 
@@ -40,24 +42,29 @@ struct EmulatorsView: View {
                 list
             }
         }
-        // Re-resolves running state as devices come and go.
-        .task(id: "\(state.devices.map(\.serial).joined())|\(reloadToken)") {
+        // Re-resolves running state as devices come and go, or when a role
+        // change re-scopes which platforms the screen shows.
+        .task(id: "\(state.devices.map(\.serial).joined())|\(reloadToken)|\(state.selectedRole?.rawValue ?? "all")") {
             await load()
         }
     }
 
     private var emptyStateAdvice: String {
         var advice: [String] = []
-        advice.append(
-            emulatorMissing
-                ? "Install the Android Emulator from Android Studio → SDK Manager → SDK Tools."
-                : "Create a virtual device in Android Studio → Device Manager, then refresh."
-        )
-        advice.append(
-            simctlMissing
-                ? "Install Xcode for iOS Simulators."
-                : "Add iOS Simulators from Xcode → Window → Devices and Simulators."
-        )
+        if showsAndroid {
+            advice.append(
+                emulatorMissing
+                    ? "Install the Android Emulator from Android Studio → SDK Manager → SDK Tools."
+                    : "Create a virtual device in Android Studio → Device Manager, then refresh."
+            )
+        }
+        if showsSimulators {
+            advice.append(
+                simctlMissing
+                    ? "Install Xcode for iOS Simulators."
+                    : "Add iOS Simulators from Xcode → Window → Devices and Simulators."
+            )
+        }
         return advice.joined(separator: "\n")
     }
 
@@ -79,13 +86,8 @@ struct EmulatorsView: View {
             Divider()
 
             List {
-                if simulatorsLead {
-                    simulatorsSection
-                    emulatorsSection
-                } else {
-                    emulatorsSection
-                    simulatorsSection
-                }
+                emulatorsSection
+                simulatorsSection
             }
         }
         .confirmationDialog(
@@ -115,11 +117,13 @@ struct EmulatorsView: View {
     private var simulatorsSection: some View {
         if let simulators, !simulators.isEmpty {
             let ordered = SimulatorListParser.prioritized(simulators)
-            let expanded = simulatorsLead || showAllSimulators
+            // A simulator-only role gets the full list; alongside the (short)
+            // AVD list the (long) simulator list is cut behind "Show all".
+            let expanded = !showsAndroid || showAllSimulators
             let visible = expanded ? ordered : Array(ordered.prefix(Self.collapsedSimulatorCount))
             Section("iOS Simulators") {
                 ForEach(visible) { simulatorRow($0) }
-                if ordered.count > Self.collapsedSimulatorCount, !simulatorsLead {
+                if ordered.count > Self.collapsedSimulatorCount, showsAndroid {
                     Button {
                         showAllSimulators.toggle()
                     } label: {
@@ -230,7 +234,7 @@ struct EmulatorsView: View {
     private func load() async {
         emulatorMissing = !(await state.env.engine.emulators.emulatorInstalled())
         let loadedAvds: [Avd]
-        if emulatorMissing {
+        if emulatorMissing || !showsAndroid {
             loadedAvds = []
         } else {
             loadedAvds = await CommandLog.userInitiated {
@@ -238,7 +242,7 @@ struct EmulatorsView: View {
             }
         }
         simctlMissing = !state.env.engine.simctl.available
-        let loadedSimulators = simctlMissing
+        let loadedSimulators = simctlMissing || !showsSimulators
             ? []
             : await CommandLog.userInitiated { await state.env.engine.simulators.listAll() }
                 .filter(\.isAvailable)

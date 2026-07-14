@@ -8,7 +8,8 @@ extension AppState {
     /// Refresh `availableAvds` from `emulator -list-avds`, tagging which are
     /// already running. A no-op (clears the list) when the SDK emulator is absent.
     func refreshAvds() async {
-        guard await env.engine.emulators.emulatorInstalled() else {
+        guard FeatureRegistry.visiblePlatforms(for: selectedRole).contains(.android),
+              await env.engine.emulators.emulatorInstalled() else {
             availableAvds = []
             return
         }
@@ -27,6 +28,10 @@ extension AppState {
     /// device-bar menu (Xcode installs ~30 sims; the Emulators screen lists
     /// them all). Empty without Xcode.
     func refreshSimulators() async {
+        guard FeatureRegistry.visiblePlatforms(for: selectedRole).contains(.iosSimulator) else {
+            availableSimulators = []
+            return
+        }
         availableSimulators = SimulatorListParser.quickPicks(await env.simulatorMonitor.list())
     }
 

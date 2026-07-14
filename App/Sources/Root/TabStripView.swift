@@ -141,7 +141,7 @@ struct TabStripView: View {
 
     private func chip(_ id: String) -> some View {
         TabChip(
-            title: Self.title(id),
+            title: Self.title(id, role: state.selectedRole),
             icon: Self.icon(id),
             isActive: id == activeID,
             isRecording: state.tabIsRecording(id),
@@ -245,14 +245,17 @@ struct TabStripView: View {
         .help("New tab (⌘T)")
     }
 
-    /// Title shown on a tab chip — the registry title, or the standalone
-    /// Home / Manage Features / About screens which aren't registry features.
-    static func title(_ id: String) -> String {
+    /// Title shown on a tab chip — the role-presented registry title, or the
+    /// standalone Home / Manage Features / About screens which aren't
+    /// registry features.
+    static func title(_ id: String, role: UserRole?) -> String {
         switch id {
         case "home": return "Home"
         case "catalog": return "Manage Features"
         case "about": return "About"
-        default: return FeatureRegistry.byID[id]?.title ?? id
+        default:
+            return FeatureRegistry.byID[id]
+                .map { FeatureRegistry.presented($0, for: role).title } ?? id
         }
     }
 
