@@ -1,5 +1,17 @@
 import Foundation
 
+/// A parsed "ip:port" endpoint as shown on the phone's Wireless debugging
+/// screen. `host` is ready for adb (IPv6 stays/gets bracketed).
+public struct WirelessEndpoint: Equatable, Sendable {
+    public let host: String
+    public let port: String?
+
+    public init(host: String, port: String?) {
+        self.host = host
+        self.port = port
+    }
+}
+
 /// Wireless adb: USB→tcpip bootstrap, Android 11+ pairing, and connect.
 ///
 /// The Android 11 pairing port (under "Pair device with pairing code")
@@ -61,6 +73,45 @@ public struct ConnectionService: Sendable {
         }
         let reason = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
         return FeatureResult(ok: false, message: reason.isEmpty ? "Connection failed." : reason)
+    }
+
+    /// Parse a pasted endpoint — the "IP address & Port" string the phone
+    /// displays — tolerating stray whitespace, a bare host, and IPv6 (bracketed
+    /// or not). Returns nil when the text isn't a plausible endpoint (empty,
+    /// inner spaces, or a non-numeric port).
+    public static func parseEndpoint(_ text: String) -> WirelessEndpoint? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !trimmed.contains(where: \.isWhitespace) else { return nil }
+
+        func validated(host: String, port: String?) -> WirelessEndpoint? {
+            guard !host.isEmpty else { return nil }
+            if let port {
+                guard (1...5).contains(port.count), port.allSatisfy(\.isNumber) else { return nil }
+            }
+            return WirelessEndpoint(host: host, port: port)
+        }
+
+        // Bracketed IPv6: "[fe80::1]:37123" or "[fe80::1]".
+        if trimmed.hasPrefix("[") {
+            guard let close = trimmed.firstIndex(of: "]") else { return nil }
+            let host = String(trimmed[...close])
+            let rest = trimmed[trimmed.index(after: close)...]
+            if rest.isEmpty { return validated(host: host, port: nil) }
+            guard rest.hasPrefix(":") else { return nil }
+            return validated(host: host, port: String(rest.dropFirst()))
+        }
+
+        let colons = trimmed.filter { $0 == ":" }.count
+        switch colons {
+        case 0:
+            return validated(host: trimmed, port: nil)
+        case 1:
+            let parts = trimmed.split(separator: ":", omittingEmptySubsequences: false)
+            return validated(host: String(parts[0]), port: String(parts[1]))
+        default:
+            // Bare IPv6 with no port — bracket it for adb.
+            return validated(host: "[\(trimmed)]", port: nil)
+        }
     }
 
     public func disconnect(target: String?) async throws(AdbError) -> FeatureResult {
