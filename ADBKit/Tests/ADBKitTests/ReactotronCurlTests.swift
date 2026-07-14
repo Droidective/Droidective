@@ -64,7 +64,7 @@ import Testing
 
     @Test func objectBodyIsSerializedToJSON() {
         // Reactotron usually records the body as a JSON object, not a pre-encoded
-        // string — the rawJSON path must serialize it and attach it.
+        // string — it must be serialized back to JSON and attached.
         let request = JSONValue.object(["data": .object(["a": .number(1)])])
         let curl = ReactotronCurl.command(method: "POST", url: "https://x.test", request: request)
         #expect(curl.contains("-X POST"))

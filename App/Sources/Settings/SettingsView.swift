@@ -378,6 +378,7 @@ struct AppearanceSettingsView: View {
 struct PrivacySettingsView: View {
     @Environment(AppState.self) private var state
     @AppStorage(ScreenCaptureService.captureFolderDefaultsKey) private var captureFolderPath = ""
+    @AppStorage(reactotronAllowLANKey) private var reactotronAllowLAN = true
     @State private var showCommandLog = false
     @State private var confirmClearLog = false
 
@@ -399,6 +400,16 @@ struct PrivacySettingsView: View {
                     set: { Telemetry.shared.setAnalytics($0) }
                 ))
                 Text("Crash reports help fix bugs; analytics shows which tools get used. Both are anonymous — no device data, file paths, or command contents are ever sent.")
+                    .font(.app(.footnote))
+                    .foregroundStyle(.textMuted)
+            }
+
+            Section("Network") {
+                Toggle("Accept Reactotron connections from your network", isOn: $reactotronAllowLAN)
+                    .onChange(of: reactotronAllowLAN) {
+                        Task { await state.reactotronSession.networkScopeChanged() }
+                    }
+                Text("On (like the official Reactotron app), devices on your Wi-Fi can reach the :9090 server — needed when the app loads its bundle over the network. Off, only localhost connects (USB via adb reverse, emulators, iOS Simulators). Changing this restarts the server; reload your app to reconnect.")
                     .font(.app(.footnote))
                     .foregroundStyle(.textMuted)
             }

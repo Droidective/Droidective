@@ -523,6 +523,10 @@ final class AppState {
 
     private func devicesChanged(_ devices: [Device]) {
         self.devices = devices
+        // The Reactotron session outlives its view ("keep connection alive"),
+        // so tunnel recovery for (re)appearing devices must hook in here, not
+        // in the view.
+        reactotronSession.deviceListChanged()
         let ready = devices.filter(\.isReady)
         // "Run on all" only makes sense with more than one device.
         if ready.count <= 1, runOnAll {

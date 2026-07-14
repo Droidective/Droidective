@@ -29,6 +29,64 @@ public enum ReactotronCommandType: String, Sendable {
     case overlay
 }
 
+public extension JSONValue {
+    /// Undo the Reactotron client's sentinel encoding — the mirror of
+    /// `reactotron-core-server`'s `repair-serialization.ts`, which runs on every
+    /// inbound payload. The client serializes JSON-hostile values as
+    /// `"~~~ … ~~~"` marker strings; the named falsy markers map back to their
+    /// real values (case-insensitively, like the original), and any other
+    /// marker (functions, circular refs, Infinity) drops its tildes and stays a
+    /// string. Untouched subtrees are returned as-is, so a clean payload costs
+    /// one walk and no rebuilding.
+    func repairingSentinels() -> JSONValue {
+        repaired() ?? self
+    }
+
+    /// Nil means "nothing to repair in this subtree" — the caller keeps the
+    /// original value instead of rebuilding an identical copy.
+    private func repaired() -> JSONValue? {
+        switch self {
+        case .null, .bool, .number:
+            return nil
+        case let .string(text):
+            return Self.repairedSentinel(text)
+        case let .array(items):
+            var copy: [JSONValue]?
+            for (index, item) in items.enumerated() {
+                guard let fixed = item.repaired() else { continue }
+                if copy == nil { copy = items }
+                copy?[index] = fixed
+            }
+            return copy.map(JSONValue.array)
+        case let .object(dict):
+            var copy: [String: JSONValue]?
+            for (key, value) in dict {
+                guard let fixed = value.repaired() else { continue }
+                if copy == nil { copy = dict }
+                copy?[key] = fixed
+            }
+            return copy.map(JSONValue.object)
+        }
+    }
+
+    private static func repairedSentinel(_ text: String) -> JSONValue? {
+        // Markers are short ("~~~ name() ~~~"); the length guard keeps the
+        // lowercasing off megabyte log strings. > 9 matches the original's
+        // repair threshold.
+        guard text.count > 9, text.count < 2048,
+              text.hasPrefix("~~~ "), text.hasSuffix(" ~~~") else { return nil }
+        switch text.lowercased() {
+        case "~~~ null ~~~": return .null
+        // JSON has no undefined; null is the closest honest value.
+        case "~~~ undefined ~~~": return .null
+        case "~~~ false ~~~": return .bool(false)
+        case "~~~ zero ~~~": return .number(0)
+        case "~~~ empty string ~~~": return .string("")
+        default: return .string(String(text.dropFirst(4).dropLast(4)))
+        }
+    }
+}
+
 /// A raw command frame received from a Reactotron client. The envelope is fixed;
 /// `payload` stays type-erased because its shape depends on `type`. `payload` is
 /// optional because some commands (e.g. `clear`) carry none.
@@ -56,11 +114,13 @@ public struct ReactotronCommand: Sendable, Equatable, Codable {
     /// Lenient decode: the reactotron client serializes some values as
     /// `"~~~ … ~~~"` string markers (functions, and even booleans — `important`
     /// arrives as `"~~~ false ~~~"`). Extracting fields from a `JSONValue`
-    /// instead of strict typed keys means a marker never fails the whole frame.
+    /// instead of strict typed keys means a marker never fails the whole frame,
+    /// and the payload markers are repaired into real values on the way in —
+    /// the same pass the official reactotron server runs on every message.
     public init(from decoder: Decoder) throws {
         let root = try JSONValue(from: decoder)
         type = root["type"]?.stringValue ?? ""
-        payload = root["payload"]
+        payload = root["payload"]?.repairingSentinels()
         important = ReactotronCommand.lenientBool(root["important"])
         date = root["date"]?.stringValue
         deltaTime = root["deltaTime"]?.doubleValue

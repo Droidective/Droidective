@@ -56,30 +56,28 @@ public extension JSONValue {
 
     subscript(key: String) -> JSONValue? { objectValue?[key] }
 
-    /// Compact JSON for the timeline (sorted keys, unescaped slashes). Reactotron
-    /// serializes functions and some special values as `"~~~ … ~~~"` string
-    /// markers; unwrap them so the display reads like Reactotron's desktop —
-    /// e.g. `register()`, `null`, `false` instead of quoted marker strings.
+    /// Compact JSON for the timeline (sorted keys, unescaped slashes).
+    /// Reactotron's `"~~~ … ~~~"` markers are already repaired into real values
+    /// at decode time (`repairingSentinels()`), so no display-side fixup here.
     var jsonString: String {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         guard let data = try? encoder.encode(self),
               let text = String(data: data, encoding: .utf8) else { return "" }
-        return text.replacing(/"~~~ (.+?) ~~~"/) { match in String(match.1) }
+        return text
     }
 
-    /// Pretty-printed (indented) JSON for the expandable object preview, with the
-    /// same `~~~ … ~~~` marker repair as `jsonString`.
+    /// Pretty-printed (indented) JSON for the expandable object preview.
     var prettyJSON: String {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         guard let data = try? encoder.encode(self),
               let text = String(data: data, encoding: .utf8) else { return "" }
-        return text.replacing(/"~~~ (.+?) ~~~"/) { match in String(match.1) }
+        return text
     }
 
-    /// A bounded compact-JSON preview: reads like `jsonString` (sorted keys,
-    /// `~~~ … ~~~` markers unwrapped) but STOPS serializing once `maxLength`
+    /// A bounded compact-JSON preview: reads like `jsonString` (sorted keys)
+    /// but STOPS serializing once `maxLength`
     /// characters are produced, so previewing a row costs O(maxLength) no
     /// matter how big the payload is — `jsonString` walks the whole value,
     /// which stalls the parse thread on a multi-megabyte `console.log`. The
@@ -108,16 +106,9 @@ public extension JSONValue {
             emit(number.truncatingRemainder(dividingBy: 1) == 0 && abs(number) < 9e15
                 ? String(Int(number)) : String(number))
         case let .string(text):
-            // The prefix/suffix guard keeps the anchored regex off megabyte
-            // strings — markers are short serialized functions/values.
-            if text.count < 2048, text.hasPrefix("~~~ "), text.hasSuffix(" ~~~"),
-               let marker = text.wholeMatch(of: /~~~ (.+) ~~~/) {
-                emit(String(marker.1))
-            } else {
-                emit("\"")
-                emit(Self.escapeForPreview(text, maxLength: remaining))
-                emit("\"")
-            }
+            emit("\"")
+            emit(Self.escapeForPreview(text, maxLength: remaining))
+            emit("\"")
         case let .array(items):
             emit("[")
             for (index, item) in items.enumerated() {
