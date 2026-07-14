@@ -246,7 +246,10 @@ struct DeviceInfoView: View {
 
         return Group {
             if matches.isEmpty {
+                // Without the infinity frame the enclosing VStack centers as a
+                // block, floating the filter field to mid-window.
                 ContentUnavailableView.search(text: search)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List(matches, id: \.key) { prop in
                     HStack(alignment: .firstTextBaseline) {

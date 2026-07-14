@@ -121,16 +121,17 @@ struct LogTailViewV2<Data: RandomAccessCollection, Row: View>: View
                     // The fixed feed width (widest row) when horizontal
                     // scrolling is on; a nil width is a no-op.
                     .frame(width: contentWidth, alignment: .leading)
-                    // Short `.bottom` feeds: stretch the content to the
-                    // viewport and pin the rows at the content's *end* — the
-                    // flip renders that at the visual top, so a handful of
-                    // lines reads top-down instead of sitting at the bottom
-                    // of a screen of empty space. A no-op once the content
-                    // overflows (and for `.top` feeds, which are unstretched),
-                    // so the layout never switches structure.
+                    // Short feeds: stretch the content to the viewport so a
+                    // handful of lines reads from the visual top instead of
+                    // floating in empty space (a two-axis scroll view centers
+                    // undersized content vertically). `.bottom` pins the rows
+                    // at the content's *end* — the flip renders that at the
+                    // visual top; `.top` pins them at the start. A no-op once
+                    // the content overflows, so the layout never switches
+                    // structure.
                     .frame(
-                        minHeight: newestEdge == .bottom && fillHeight > 0 ? fillHeight : nil,
-                        alignment: .bottom
+                        minHeight: fillHeight > 0 ? fillHeight : nil,
+                        alignment: newestEdge == .bottom ? .bottom : .top
                     )
                     .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named("logtail")) }) { frame in
                         measure.geometry.contentLeadingOffset = frame.minY
