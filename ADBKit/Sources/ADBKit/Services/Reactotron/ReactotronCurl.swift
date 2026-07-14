@@ -23,7 +23,7 @@ public enum ReactotronCurl {
         parts.append(shellQuote(url))
         if let headers = request?["headers"]?.objectValue {
             for (key, value) in headers.sorted(by: { $0.key < $1.key }) {
-                let rendered = value.stringValue ?? rawJSON(value)
+                let rendered = value.stringValue ?? value.jsonString
                 parts.append("-H \(shellQuote("\(key): \(rendered)"))")
             }
         }
@@ -38,19 +38,10 @@ public enum ReactotronCurl {
     /// body-less (and therefore a GET, not a POST inferred by `curl`).
     private static func requestBody(_ request: JSONValue?) -> String? {
         guard let data = request?["data"], !data.isNull else { return nil }
-        let rendered = data.stringValue ?? rawJSON(data)
+        let rendered = data.stringValue ?? data.jsonString
         switch rendered {
         case "", "{}", "[]", "null": return nil
         default: return rendered
         }
-    }
-
-    /// Raw (non-marker-repaired) JSON, since a curl body must stay valid JSON —
-    /// unlike `JSONValue.jsonString`, which rewrites Reactotron's `~~~ … ~~~`
-    /// display markers.
-    private static func rawJSON(_ value: JSONValue) -> String {
-        guard let data = try? JSONEncoder().encode(value),
-              let text = String(data: data, encoding: .utf8) else { return "" }
-        return text
     }
 }

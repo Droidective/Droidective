@@ -40,6 +40,19 @@ public actor ReactotronServer {
         .clientClosed(goingAway: code == .protocolCode(.goingAway))
     }
 
+    /// A readable transport-error description. An app that is killed, crashes,
+    /// or loses its adb tunnel drops the TCP stream with no close frame, which
+    /// Network.framework reports as raw POSIX jargon ("No message available on
+    /// STREAM") — say what actually happened instead. The raw error still goes
+    /// to the unified log at the call sites.
+    public static func describeTransportError(_ error: NWError) -> String {
+        if case let .posix(code) = error, code == .ENODATA || code == .ECONNRESET {
+            return "the connection dropped without a goodbye — the app was killed, "
+                + "crashed, or the device disconnected"
+        }
+        return "\(error)"
+    }
+
     /// Events surfaced to the UI as the server runs. `frameBytes` is the wire
     /// size of the frame a command was decoded from, so the timeline can keep
     /// its retained payloads within a byte budget.
@@ -65,13 +78,35 @@ public actor ReactotronServer {
     private static let log = Logger(subsystem: "com.rohindh.droidective", category: "reactotron-server")
 
     private let port: UInt16
+    private let loopbackOnly: Bool
+    private let pingInterval: Duration
     private var listener: NWListener?
     private var connections: [Int: ConnectionBox] = [:]
+    /// The Reactotron clientId of each handshaken connection — an app reload
+    /// reconnects with the same clientId, which is how the stale socket is
+    /// recognized and dropped.
+    private var clientIds: [Int: String] = [:]
     private var nextConnectionId = 1
     private var continuation: AsyncStream<Event>.Continuation?
+    private var pingTask: Task<Void, Never>?
 
-    public init(port: UInt16 = 9090) {
+    /// - Parameters:
+    ///   - loopbackOnly: When true the server is reachable only through
+    ///     localhost (`adb reverse`, emulators, iOS Simulators). When false it
+    ///     accepts connections from the local network too — what the official
+    ///     Reactotron desktop app does, and what a device whose Metro bundle
+    ///     was served over Wi-Fi/LAN needs (its client dials the Mac's LAN IP).
+    ///   - pingInterval: Cadence of the WebSocket-level keepalive pings
+    ///     (mirrors reactotron-core-server's 30s ping), so a half-dead socket
+    ///     surfaces as a transport error instead of lingering "connected".
+    public init(
+        port: UInt16 = 9090,
+        loopbackOnly: Bool = true,
+        pingInterval: Duration = .seconds(30)
+    ) {
         self.port = port
+        self.loopbackOnly = loopbackOnly
+        self.pingInterval = pingInterval
     }
 
     /// The port the listener actually bound to (useful when constructed with
@@ -89,11 +124,12 @@ public actor ReactotronServer {
         }
 
         let parameters = NWParameters.tcp
-        // Bind to loopback only. The device reaches the server through
-        // `adb reverse tcp:9090` (forwarded over loopback), so this is
-        // transparent — and it keeps the debug server off the LAN, where it
-        // would otherwise accept unauthenticated connections from anyone.
-        parameters.requiredInterfaceType = .loopback
+        if loopbackOnly {
+            // Loopback covers `adb reverse` tunnels, Android emulators
+            // (10.0.2.2 lands on the host's loopback), and iOS Simulators —
+            // while keeping the unauthenticated debug server off the LAN.
+            parameters.requiredInterfaceType = .loopback
+        }
         let webSocket = NWProtocolWebSocket.Options()
         webSocket.autoReplyPing = true
         parameters.defaultProtocolStack.applicationProtocols.insert(webSocket, at: 0)
@@ -135,10 +171,13 @@ public actor ReactotronServer {
 
     /// Tear down the listener and all client sockets. Safe to call repeatedly.
     public func stop() {
+        pingTask?.cancel()
+        pingTask = nil
         for box in connections.values {
             box.connection.cancel()
         }
         connections.removeAll()
+        clientIds.removeAll()
         listener?.cancel()
         listener = nil
         continuation?.finish()
@@ -150,6 +189,34 @@ public actor ReactotronServer {
     private func listenerBecameReady() {
         guard let port = listener?.port?.rawValue else { return }
         continuation?.yield(.listening(port: port))
+        startPinging()
+    }
+
+    /// WebSocket-level keepalive, like reactotron-core-server's 30s ping. The
+    /// client's socket stack answers pongs automatically; the point is that a
+    /// write to a half-dead socket (device off Wi-Fi, adb gone) fails and
+    /// surfaces through the connection's state handler as a real disconnect
+    /// instead of a forever-green dot.
+    private func startPinging() {
+        pingTask?.cancel()
+        pingTask = Task { [weak self, pingInterval] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: pingInterval)
+                guard !Task.isCancelled else { break }
+                await self?.pingAll()
+            }
+        }
+    }
+
+    private func pingAll() {
+        for box in connections.values {
+            let metadata = NWProtocolWebSocket.Metadata(opcode: .ping)
+            let context = NWConnection.ContentContext(identifier: "ping", metadata: [metadata])
+            box.connection.send(
+                content: Data(), contentContext: context, isComplete: true,
+                completion: .contentProcessed { _ in }
+            )
+        }
     }
 
     private func failListener(_ error: NWError) {
@@ -172,7 +239,10 @@ public actor ReactotronServer {
             switch state {
             case let .failed(error):
                 Self.log.error("connection #\(id) failed: \(error, privacy: .public)")
-                Task { await self?.dropConnection(id, reason: .transportError("\(error)")) }
+                Task {
+                    await self?.dropConnection(
+                        id, reason: .transportError(Self.describeTransportError(error)))
+                }
             case .cancelled:
                 Self.log.notice("connection #\(id) cancelled")
                 Task { await self?.dropConnection(id, reason: nil) }
@@ -189,6 +259,7 @@ public actor ReactotronServer {
     /// which is the most specific one — the close frame beats its aftermath.
     private func dropConnection(_ id: Int, reason: DisconnectReason?) {
         guard let box = connections.removeValue(forKey: id) else { return }
+        clientIds[id] = nil
         box.connection.cancel()
         continuation?.yield(.disconnected(connectionId: id, reason: reason))
     }
@@ -218,7 +289,10 @@ public actor ReactotronServer {
             }
             if let error {
                 log.error("connection #\(id) receive failed: \(error, privacy: .public)")
-                Task { await server.dropConnection(id, reason: .transportError("\(error)")) }
+                Task {
+                    await server.dropConnection(
+                        id, reason: .transportError(describeTransportError(error)))
+                }
                 return
             }
             receiveLoop(box, id: id, server: server)
@@ -246,16 +320,40 @@ public actor ReactotronServer {
 
     // MARK: - Handshake
 
-    /// On `client.intro`: assign a clientId if the client has none, then send the
-    /// (empty) subscription list to complete the handshake — exactly what
-    /// `reactotron-core-server` does.
+    /// On `client.intro`: assign a clientId if the client has none, drop any
+    /// stale connection that shares the clientId (an app reload reconnects
+    /// before its old socket dies), then send the (empty) subscription list to
+    /// complete the handshake — exactly what `reactotron-core-server` does.
     private func completeHandshake(connectionId id: Int, intro: ReactotronCommand) {
         guard let box = connections[id] else { return }
-        let clientId = intro.payload?["clientId"]?.stringValue
+        var clientId = intro.payload?["clientId"]?.stringValue
         if clientId == nil || clientId?.isEmpty == true {
-            send(type: "setClientId", payload: .string(UUID().uuidString), to: box)
+            let generated = UUID().uuidString
+            send(type: "setClientId", payload: .string(generated), to: box)
+            clientId = generated
+        }
+        if let clientId {
+            dropStaleTwins(of: clientId, keeping: id)
+            clientIds[id] = clientId
         }
         send(type: "state.values.subscribe", payload: .object(["paths": .array([])]), to: box)
+    }
+
+    /// Forget other connections carrying the same clientId — reported with a
+    /// nil reason (no timeline notice: a reload replacing itself isn't news,
+    /// matching the official server, which suppresses the disconnect). The
+    /// stale socket is closed after a short grace, again like the original.
+    private func dropStaleTwins(of clientId: String, keeping id: Int) {
+        for (staleId, staleClientId) in clientIds
+            where staleClientId == clientId && staleId != id {
+            clientIds[staleId] = nil
+            guard let stale = connections.removeValue(forKey: staleId) else { continue }
+            continuation?.yield(.disconnected(connectionId: staleId, reason: nil))
+            Task {
+                try? await Task.sleep(for: .milliseconds(500))
+                stale.connection.cancel()
+            }
+        }
     }
 
     // MARK: - Server → client

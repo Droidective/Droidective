@@ -56,6 +56,14 @@ struct LogTailViewV2<Data: RandomAccessCollection, Row: View>: View
     /// yank the view back off the match); returning to the edge resumes. Callers
     /// that don't need it leave it nil.
     var focusID: Data.Element.ID? = nil
+    /// When set, the feed lays out at this fixed width and rides inside a
+    /// horizontal scroll view — rows wider than the viewport are reached by
+    /// scrolling the pane, not by truncating. The horizontal offset lives on
+    /// the *outer* scroll view, so tail-follow writes to `.scrollPosition`
+    /// (vertical, on the inner one) can't reset it. Pass
+    /// `max(viewportWidth, widestRow)` so the feed always fills the pane.
+    /// `.top` feeds only — the `.bottom` flip would mirror the horizontal bar.
+    var contentWidth: CGFloat? = nil
     @ViewBuilder var row: (Data.Element) -> Row
 
     /// The row pinned at the scroll's leading (offset-0) edge. Drives
@@ -94,9 +102,15 @@ struct LogTailViewV2<Data: RandomAccessCollection, Row: View>: View
 
     var body: some View {
         ScrollViewReader { proxy in
-            ScrollView {
+            // One scroll view for both axes — nested scroll views don't
+            // forward cross-axis wheel/trackpad events on macOS, which left a
+            // wrapping horizontal scroller unreachable by scrolling.
+            ScrollView(contentWidth == nil ? .vertical : [.vertical, .horizontal]) {
                 LazyVStack(alignment: .leading, spacing: 0) { orderedRows }
                     .scrollTargetLayout()
+                    // The fixed feed width (widest row) when horizontal
+                    // scrolling is on; a nil width is a no-op.
+                    .frame(width: contentWidth, alignment: .leading)
                     // Short `.bottom` feeds: stretch the content to the
                     // viewport and pin the rows at the content's *end* — the
                     // flip renders that at the visual top, so a handful of
@@ -129,7 +143,12 @@ struct LogTailViewV2<Data: RandomAccessCollection, Row: View>: View
             .environment(\.logTailScrollToHeader) { id in
                 proxy.scrollTo(id, anchor: newestEdge == .bottom ? .bottom : .top)
             }
-            .scrollPosition(id: $leadingID, anchor: .top)   // .top = first row = newest
+            // .top = first row = newest. In two-axis mode the anchor must be
+            // nil: .top is UnitPoint(x: 0.5, y: 0), and 2D anchoring re-centers
+            // the wide anchored row horizontally on every tail-follow write —
+            // nil scrolls minimally, which still pins the newest (topmost) row
+            // vertically and never touches the horizontal offset.
+            .scrollPosition(id: $leadingID, anchor: contentWidth == nil ? .top : nil)
             .scaleEffect(x: 1, y: flip, anchor: .center)    // identity for .top feeds
             .onAppear { leadingID = newestID }
             .onChange(of: leadingID) { _, id in

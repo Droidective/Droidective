@@ -9,10 +9,14 @@ public actor ReactotronService {
     private let port: UInt16
     private let server: ReactotronServer
 
-    public init(client: AdbClient, port: UInt16 = 9090) {
+    /// `loopbackOnly` mirrors `ReactotronServer`: false (the official
+    /// Reactotron app's behavior) also accepts clients from the local network —
+    /// required when the app's Metro bundle was served over Wi-Fi/LAN, because
+    /// the client dials the bundle's host, not localhost.
+    public init(client: AdbClient, port: UInt16 = 9090, loopbackOnly: Bool = true) {
         self.client = client
         self.port = port
-        self.server = ReactotronServer(port: port)
+        self.server = ReactotronServer(port: port, loopbackOnly: loopbackOnly)
     }
 
     /// Start the WebSocket server. Call `reverse(serials:)` to open the adb

@@ -1,6 +1,19 @@
 import ADBKit
+import AppKit
 import os
 import SwiftUI
+
+/// Whether the Reactotron server accepts clients from the local network (the
+/// official desktop app's behavior — needed when the app's Metro bundle was
+/// served over Wi-Fi/LAN, because the client dials the bundle's host, not
+/// localhost). Defaults to on; Settings ▸ Privacy owns the toggle.
+let reactotronAllowLANKey = "reactotronAllowLAN"
+
+/// Missing key means the default: LAN allowed, like the official app.
+func reactotronAllowsLAN() -> Bool {
+    UserDefaults.standard.object(forKey: reactotronAllowLANKey) == nil
+        || UserDefaults.standard.bool(forKey: reactotronAllowLANKey)
+}
 
 /// The live Reactotron session — server, adb-reverse tunnels, and the whole
 /// timeline/state buffer. Owned by `AppState` (like `jsConsoleSession`) so it
@@ -42,13 +55,26 @@ final class ReactotronSession {
     fileprivate var awaitingStateTree = false
     fileprivate var replNames: [String] = []
     fileprivate var replResultText: String?
+    /// Per-serial `adb reverse` failures (serial → adb's reason), so a tunnel
+    /// that never opened is a visible banner, not a silent "waiting" state.
+    fileprivate var tunnelIssues: [String: String] = [:]
+    /// High-water mark of `RtItem.headerWidth` — the width the timeline lays
+    /// out at so no row truncates; the pane scrolls horizontally to reach it.
+    /// Monotonic while streaming (a trim never shrinks it — that would jolt
+    /// the scroll under the user); recomputed only on clears.
+    fileprivate var maxRowWidth: CGFloat = 0
 
     private let client: AdbClient
     /// Back-reference for toasts and save dialogs; set right after init.
     weak var app: AppState?
     private var service: ReactotronService?
     private var consumeTask: Task<Void, Never>?
-    private var reversedSerials: [String] = []
+    /// Every serial a reverse tunnel was opened on this session — what stop()
+    /// removes.
+    private var reversedSerials: Set<String> = []
+    /// The ready-Android serials last seen, so `deviceListChanged` reverses
+    /// only serials that (re)appeared — not every device on every flicker.
+    private var knownReadySerials: Set<String> = []
 
     /// True once the server is up — stays true after leaving the view when the
     /// user chose to keep the connection alive.
@@ -67,6 +93,15 @@ final class ReactotronSession {
         return items.filter { $0.connectionId == selectedClient }
     }
 
+    /// The serials worth an `adb reverse`: ready *Android* devices. iOS
+    /// Simulators share the Mac's loopback and need no tunnel — and feeding
+    /// their UDIDs to adb just produces "device not found" noise.
+    var readyAndroidSerials: [String] {
+        (app?.devices ?? [])
+            .filter { $0.isReady && $0.platform == .android }
+            .map(\.serial)
+    }
+
     // MARK: - Lifecycle
 
     /// Start the server, or — if it's already running because the connection was
@@ -77,7 +112,13 @@ final class ReactotronSession {
             return
         }
         reset()
-        let reactotron = ReactotronService(client: client)
+        await startServer(serials: serials)
+    }
+
+    /// Bring up the socket layer (server + tunnels) without touching buffered
+    /// state — shared by a fresh start and the Settings network-scope restart.
+    private func startServer(serials: [String]) async {
+        let reactotron = ReactotronService(client: client, loopbackOnly: !reactotronAllowsLAN())
         service = reactotron
         guard let stream = try? await reactotron.start() else {
             connection = .failed("Couldn't start the Reactotron server.")
@@ -96,13 +137,55 @@ final class ReactotronSession {
 
     func applyReverse(serials: [String]) async {
         guard let service else { return }
-        // In the unified log next to the server's connection-drop lines: a
-        // reverse re-apply that coincides with a drop is the tell that adb
-        // rebinding the tunnel killed the live socket.
+        // In the unified log next to the server's connection-drop lines, for
+        // field diagnosis of tunnel/connection interactions.
         Logger(subsystem: "com.rohindh.droidective", category: "reactotron-session")
-            .notice("re-applying adb reverse for \(serials.count) device(s)")
-        reversedSerials = serials
-        await service.reverse(serials: serials)
+            .notice("applying adb reverse for \(serials.count) device(s)")
+        reversedSerials.formUnion(serials)
+        knownReadySerials.formUnion(serials)
+        recordTunnelResults(await service.reverse(serials: serials))
+    }
+
+    /// Called from AppState on every device-list update, so tunnels recover
+    /// even while this view is closed (a kept-alive session): replugging a
+    /// device silently drops its reverse tunnels, so a serial that (re)appears
+    /// gets a fresh `adb reverse`. Only *new* serials are reversed — a device
+    /// flickering through states or a simulator booting doesn't re-bind the
+    /// tunnels of already-connected devices.
+    func deviceListChanged() {
+        let current = Set(readyAndroidSerials)
+        tunnelIssues = tunnelIssues.filter { current.contains($0.key) }
+        guard isRunning else {
+            knownReadySerials = current
+            return
+        }
+        let added = current.subtracting(knownReadySerials)
+        knownReadySerials = current
+        guard !added.isEmpty else { return }
+        Task { await applyReverse(serials: Array(added)) }
+    }
+
+    /// The Settings LAN toggle flipped: restart the socket layer with the new
+    /// scope, keeping the buffered timeline. Connected apps are dropped and
+    /// won't reconnect until reloaded — the Reactotron client has no retry.
+    func networkScopeChanged() async {
+        guard isRunning else { return }
+        consumeTask?.cancel()
+        consumeTask = nil
+        let stopping = service
+        service = nil
+        await stopping?.stop(serials: Array(reversedSerials))
+        reversedSerials.removeAll()
+        clients.removeAll()
+        selectedClient = nil
+        commands.removeAll()
+        await startServer(serials: readyAndroidSerials)
+    }
+
+    private func recordTunnelResults(_ results: [ReactotronService.ReverseResult]) {
+        for result in results {
+            tunnelIssues[result.serial] = result.ok ? nil : result.detail
+        }
     }
 
     /// Tear down the server and tunnels and clear all buffered state.
@@ -110,7 +193,7 @@ final class ReactotronSession {
         consumeTask?.cancel()
         consumeTask = nil
         let stopping = service
-        let serials = reversedSerials
+        let serials = Array(reversedSerials)
         service = nil
         await stopping?.stop(serials: serials)
         reset()
@@ -140,6 +223,7 @@ final class ReactotronSession {
         Self.discardInBackground((items, snapshots, storeState, subscriptionValues))
         items.removeAll()
         itemsBytes = 0
+        maxRowWidth = 0
         commands.removeAll()
         subscriptionPaths.removeAll()
         subscriptionValues.removeAll()
@@ -153,6 +237,9 @@ final class ReactotronSession {
         selectedClient = nil
         connectedApp = nil
         connection = .idle
+        tunnelIssues.removeAll()
+        reversedSerials.removeAll()
+        knownReadySerials.removeAll()
     }
 
     // MARK: - Outbound
@@ -192,9 +279,17 @@ final class ReactotronSession {
         sendSubscriptions()
     }
 
-    private func sendSubscriptions() {
+    /// Send the current watch paths — to one connection (a client that just
+    /// completed its handshake) or to the usual target selection.
+    private func sendSubscriptions(to connectionId: Int? = nil) {
         let payload = JSONValue.object(["paths": .array(subscriptionPaths.map(JSONValue.string))])
-        Task { await sendToTarget(type: "state.values.subscribe", payload: payload) }
+        Task {
+            if let connectionId {
+                await service?.send(type: "state.values.subscribe", payload: payload, toConnection: connectionId)
+            } else {
+                await sendToTarget(type: "state.values.subscribe", payload: payload)
+            }
+        }
     }
 
     func dispatch(_ text: String) {
@@ -265,19 +360,25 @@ final class ReactotronSession {
 
     func reverseNow(serials: [String]) {
         guard !serials.isEmpty else {
-            app?.showToast(Toast(message: "No device connected to reverse", ok: false))
+            app?.showToast(Toast(message: "No Android device connected to reverse", ok: false))
             return
         }
         Task {
-            let results = await service?.reverse(serials: serials) ?? []
+            guard let service else { return }
+            reversedSerials.formUnion(serials)
+            knownReadySerials.formUnion(serials)
+            let results = await service.reverse(serials: serials)
+            recordTunnelResults(results)
+            let okCount = results.count(where: \.ok)
             if let failure = results.first(where: { !$0.ok }) {
                 app?.showToast(Toast(
-                    message: "reverse failed: \(failure.detail.isEmpty ? "unknown error" : failure.detail)",
+                    message: "reverse failed on \(failure.serial): "
+                        + (failure.detail.isEmpty ? "unknown error" : failure.detail),
                     ok: false
                 ))
             } else {
                 app?.showToast(Toast(
-                    message: "adb reverse tcp:9090 → \(results.count)/\(results.count) device(s) OK",
+                    message: "adb reverse tcp:9090 → \(okCount)/\(results.count) device(s) OK",
                     ok: true
                 ))
             }
@@ -293,6 +394,7 @@ final class ReactotronSession {
         let cleared = items
         items = []
         itemsBytes = 0
+        maxRowWidth = 0
         Self.discardInBackground(cleared)
     }
 
@@ -333,7 +435,10 @@ final class ReactotronSession {
             clients.removeAll { $0.id == connectionId }
             clients.append(ClientInfo(id: connectionId, name: name, platform: platform))
             refreshConnectionState()
-            if !subscriptionPaths.isEmpty { sendSubscriptions() }
+            // Straight to the new client, not the picker's current target —
+            // otherwise an app (re)connecting while another is selected never
+            // learns the watch paths.
+            if !subscriptionPaths.isEmpty { sendSubscriptions(to: connectionId) }
             enqueue(RtItem(
                 event: parsed, command: intro, connectionId: connectionId,
                 important: false, frameBytes: frameBytes
@@ -349,6 +454,7 @@ final class ReactotronSession {
                 let previous = items
                 items = previous.filter { $0.connectionId != connectionId }
                 itemsBytes = items.reduce(0) { $0 + $1.frameBytes }
+                maxRowWidth = items.lazy.map(\.headerWidth).max() ?? 0
                 Self.discardInBackground(previous)
                 return
             case let .customCommandRegister(id, name, title, description, args):
@@ -452,8 +558,8 @@ final class ReactotronSession {
             let text = "\(name) closed the connection (app reloaded or exited)."
             return (headline: text, detail: text)
         case let .transportError(detail):
-            return (headline: "\(name) dropped: \(detail)",
-                    detail: "\(name) dropped: \(detail)")
+            return (headline: "\(name) disconnected: \(detail)",
+                    detail: "\(name) disconnected: \(detail)")
         case nil:
             return nil
         }
@@ -507,7 +613,10 @@ final class ReactotronSession {
     /// frees the dropped items off the main actor.
     private func appendBatch(_ batch: [RtItem]) {
         items.append(contentsOf: batch)
-        for item in batch { itemsBytes += item.frameBytes }
+        for item in batch {
+            itemsBytes += item.frameBytes
+            if item.headerWidth > maxRowWidth { maxRowWidth = item.headerWidth }
+        }
         peakItemsBytes = max(peakItemsBytes, itemsBytes)
         peakItemCount = max(peakItemCount, items.count)
         let drop = ReactotronTimeline.dropCount(
@@ -586,9 +695,10 @@ struct ReactotronView: View {
 
     private var session: ReactotronSession { state.reactotronSession }
 
-    /// Reverse on every ready device, not just the selected one — the server is
-    /// host-wide, so any connected device should be able to reach it.
-    private var readySerials: [String] { state.devices.filter(\.isReady).map(\.serial) }
+    /// Reverse on every ready Android device, not just the selected one — the
+    /// server is host-wide, so any connected device should be able to reach it.
+    /// (iOS Simulators need no tunnel; they share the Mac's loopback.)
+    private var readySerials: [String] { session.readyAndroidSerials }
 
     /// The app name the Restart button should target: the selected client's,
     /// else the lone connected client's. Nil (several clients, none selected —
@@ -606,15 +716,18 @@ struct ReactotronView: View {
                 serverErrorBanner
                 Divider()
             }
+            if !session.tunnelIssues.isEmpty {
+                tunnelWarningBanner
+                Divider()
+            }
             content
         }
         // The session is owned by AppState, so it persists across feature
         // switches. `start` is idempotent — if the connection was kept alive it
         // just re-applies the reverse and the existing timeline stays intact.
+        // Devices appearing later are handled by AppState → deviceListChanged,
+        // which also covers the view being closed (kept-alive sessions).
         .task { await session.start(serials: readySerials) }
-        .onChange(of: readySerials) { _, serials in
-            Task { await session.applyReverse(serials: serials) }
-        }
         // A device dropping off is announced with an alert instead of the old
         // full-pane overlay, which painted over the still-visible timeline.
         .onChange(of: state.targetSerials.isEmpty) { wasEmpty, isEmpty in
@@ -745,6 +858,35 @@ struct ReactotronView: View {
         .background(Color.red.opacity(0.08))
     }
 
+    /// `adb reverse` failed on some device — without the tunnel, apps that
+    /// dial localhost (USB) can never reach the server, and the old behavior
+    /// (silently staying on "waiting for your app") read as Droidective broken.
+    private var tunnelWarningBanner: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.app(size: 12))
+                .foregroundStyle(.orange)
+            Text(tunnelWarningText)
+                .font(.app(.caption))
+                .lineLimit(2)
+                .textSelection(.enabled)
+            Spacer(minLength: 8)
+            Button("Retry") { session.reverseNow(serials: readySerials) }
+                .controlSize(.small)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(Color.orange.opacity(0.08))
+    }
+
+    private var tunnelWarningText: String {
+        let issues = session.tunnelIssues
+            .sorted { $0.key < $1.key }
+            .map { "\($0.key) (\($0.value.isEmpty ? "unknown error" : $0.value))" }
+            .joined(separator: ", ")
+        return "adb reverse tcp:9090 failed on \(issues) — apps on this device can't reach the server over USB."
+    }
+
     // MARK: - Toolbar (timeline)
 
     /// Pane-independent controls: split toggle plus the global export/clear. Each
@@ -822,6 +964,7 @@ struct ReactotronView: View {
             targetEmpty: state.targetSerials.isEmpty,
             connection: session.connection,
             showOnboarding: showOnboarding,
+            minContentWidth: session.maxRowWidth,
             trailing: trailing,
             onExport: { session.export($0) },
             onRetry: { Task { await session.start(serials: readySerials) } }
@@ -1132,7 +1275,16 @@ private struct RtItem: Identifiable, Sendable {
     /// an allocation-free `contains` instead of rebuilding `event.presentation`
     /// and re-lowercasing on every filter pass.
     let searchText: String
+    /// The natural single-line width of this row's header, measured once at
+    /// creation. The pane lays its feed out at the widest row (`maxRowWidth`
+    /// high-water in the session) and scrolls horizontally, so no row ever
+    /// truncates.
+    let headerWidth: CGFloat
 
+    /// Rows are only ever created on the main actor (the session's inbound
+    /// path) — stated explicitly so the NSFont measurement caches below are
+    /// concurrency-safe under Swift 6.
+    @MainActor
     init(event: ReactotronEvent, command: ReactotronCommand, connectionId: Int, important: Bool, frameBytes: Int) {
         self.event = event
         self.command = command
@@ -1144,6 +1296,44 @@ private struct RtItem: Identifiable, Sendable {
         // store a multi-megabyte lowercased copy per row — search matches the
         // header text, and the full payload lives in the expandable row.
         searchText = "\(presentation.badge) \(presentation.primary)".prefix(2000).lowercased()
+        headerWidth = Self.measureHeaderWidth(badge: presentation.badge, primary: presentation.primary)
+    }
+
+    /// NSFont twins of the header's `Font.app` tokens, resolved once — a font
+    /// setting changed mid-session only affects rows created afterwards, which
+    /// the row's `layoutPriority` truncation-guard absorbs.
+    @MainActor private static let badgeFont = nsAppFont(size: 10, weight: .bold)
+    @MainActor private static let primaryFont = nsAppFont(size: 12, weight: .medium)
+    /// "HH:mm:ss" is fixed-width (monospaced digits) — measure once.
+    @MainActor private static let timeWidth = ("88:88:88" as NSString)
+        .size(withAttributes: [.font: NSFont.monospacedSystemFont(
+            ofSize: 11 * AppFontPrefs.sizeScale, weight: .regular)]).width
+
+    /// Mirrors `Font.app(size:weight:)` for measurement: the user's family at
+    /// the scaled size, falling back to the system font.
+    @MainActor
+    private static func nsAppFont(size: CGFloat, weight: NSFont.Weight) -> NSFont {
+        let scaled = size * AppFontPrefs.sizeScale
+        if let family = AppFontPrefs.family,
+           let font = NSFontManager.shared.font(
+               withFamily: family, traits: [],
+               weight: weight == .bold ? 9 : 6, size: scaled
+           ) {
+            return font
+        }
+        return NSFont.systemFont(ofSize: scaled, weight: weight)
+    }
+
+    /// chevron(16) + gaps + time + badge + primary + row padding, plus slack
+    /// for the hover copy button and measurement drift. Primary is bounded —
+    /// beyond ~2000 chars a row can't usefully be read inline anyway, and an
+    /// unbounded measurement of a megabyte log line would stall the parse path.
+    @MainActor
+    private static func measureHeaderWidth(badge: String, primary: String) -> CGFloat {
+        let badgeWidth = (badge as NSString).size(withAttributes: [.font: badgeFont]).width
+        let primaryWidth = (String(primary.prefix(2000)) as NSString)
+            .size(withAttributes: [.font: primaryFont]).width
+        return 16 + 8 + timeWidth + 8 + badgeWidth + 8 + primaryWidth + 28 + 60
     }
 }
 
@@ -1221,6 +1411,11 @@ private struct TimelinePane: View {
     let targetEmpty: Bool
     let connection: RtConnection
     let showOnboarding: Bool
+    /// The widest row's natural width (session high-water) — the feed lays out
+    /// at `max(pane width, this)` and scrolls horizontally, so long rows are
+    /// reached by scrolling instead of truncating, at any pane width (single,
+    /// timeline split, workspace-split tab).
+    let minContentWidth: CGFloat
     /// Extra trailing toolbar content — the global timeline controls when the
     /// pane is the only one on screen (no dedicated strip above it).
     let trailing: AnyView?
@@ -1425,9 +1620,14 @@ private struct TimelinePane: View {
     private func timeline(ordered: ReversedCollection<[RtItem]>) -> some View {
         // Newest events land at the top — LogTailViewV2 follows that edge, pauses
         // when the user scrolls off, and overlays the jump-to-top/bottom buttons.
-        LogTailViewV2(entries: ordered, newestEdge: .top) { item in
-            RtRow(item: item)
-            Divider()
+        GeometryReader { pane in
+            LogTailViewV2(
+                entries: ordered, newestEdge: .top,
+                contentWidth: max(pane.size.width, minContentWidth)
+            ) { item in
+                RtRow(item: item)
+                Divider()
+            }
         }
         .background(.background)
         .overlay { emptyOverlay }
@@ -1498,6 +1698,11 @@ private struct RtRow: View {
     /// expansion; the action/log text itself stays OUT of the tap target so
     /// it's selectable — a whole-row gesture swallowed drag-to-select, making
     /// action and debug names uncopyable.
+    ///
+    /// The text never truncates: the whole feed lays out at the widest row's
+    /// width (`RtItem.headerWidth` high-water) and the pane scrolls
+    /// horizontally as one unit — a narrow window, the timeline's split panes,
+    /// and a workspace-split tab all share this row.
     private func header(_ presentation: RtPresentation) -> some View {
         HStack(spacing: 8) {
             HStack(spacing: 8) {
@@ -1512,8 +1717,12 @@ private struct RtRow: View {
                 Text(presentation.badge)
                     .font(.app(size: 10, weight: .bold))
                     .foregroundStyle(presentation.badgeColor)
-                    .fixedSize()
             }
+            // Incompressible: without this, HStack treats the wrappable time
+            // Text as flexible and squeezes the whole cluster against the
+            // greedy blank filler — the timestamp wrapped one character per
+            // line and blew the row up to several times its height.
+            .fixedSize()
             .padding(.vertical, 10)
             .contentShape(Rectangle())
             .onTapGesture { if canExpand { expanded.toggle() } }
@@ -1523,15 +1732,15 @@ private struct RtRow: View {
                     .font(.app(size: 12, weight: .medium))
                     .foregroundStyle(presentation.primaryColor)
                     .lineLimit(1)
-                    .truncationMode(.middle)
+                    // Wins the space race against the greedy blank filler —
+                    // without this, HStack offers each flexible child an equal
+                    // share and the text truncated at ~half the row even with
+                    // free space beside it.
+                    .layoutPriority(1)
                     .textSelection(.enabled)
             }
 
-            Rectangle()
-                .fill(.clear)
-                .frame(maxWidth: .infinity, minHeight: 28)
-                .contentShape(Rectangle())
-                .onTapGesture { if canExpand { expanded.toggle() } }
+            blankExpandTarget
 
             if hovering || copiedLine {
                 Button {
@@ -1550,6 +1759,16 @@ private struct RtRow: View {
         .padding(.horizontal, 14)
         .frame(minHeight: 36)
         .onHover { hovering = $0 }
+    }
+
+    /// The clear filler whose click toggles expansion — the row's whitespace,
+    /// kept separate from the selectable text so drag-to-select still works.
+    private var blankExpandTarget: some View {
+        Rectangle()
+            .fill(.clear)
+            .frame(maxWidth: .infinity, minHeight: 28)
+            .contentShape(Rectangle())
+            .onTapGesture { if canExpand { expanded.toggle() } }
     }
 
     @ViewBuilder
@@ -2053,9 +2272,7 @@ private struct JSONNode: Identifiable {
         switch value {
         case let .object(dict): return "{ \(dict.count) }"
         case let .array(items): return "[ \(items.count) ]"
-        case let .string(text):
-            if let marker = text.wholeMatch(of: /~~~ (.+) ~~~/) { return String(marker.1) }
-            return "\"\(text)\""
+        case let .string(text): return "\"\(text)\""
         case let .number(number):
             return number.truncatingRemainder(dividingBy: 1) == 0 && abs(number) < 9e15
                 ? String(Int(number)) : String(number)
@@ -2066,7 +2283,7 @@ private struct JSONNode: Identifiable {
 
     var valueColor: Color {
         switch value {
-        case let .string(text): return text.hasPrefix("~~~ ") ? .rtSpecial : .primary
+        case .string: return .primary
         case .number: return .rtNumber
         case .bool: return .rtNumber
         case .null: return .rtSpecial
@@ -2124,6 +2341,7 @@ private struct CommandCard: View {
 private struct ReactotronOnboarding: View {
     let connection: RtConnection
     let onRetry: () -> Void
+    @AppStorage(reactotronAllowLANKey) private var allowLAN = true
 
     private static let snippet = """
     // App entry (e.g. index.js)
@@ -2185,6 +2403,15 @@ private struct ReactotronOnboarding: View {
             Text("Needs `reactotron-react-native` installed in the app and a dev build.")
                 .font(.app(.caption))
                 .foregroundStyle(.tertiary)
+            if !allowLAN {
+                // The one setup this scope can't serve: a device that loaded
+                // its bundle over Wi-Fi dials the Mac's LAN IP, not localhost.
+                Text("Running Metro over Wi-Fi? Enable “Accept Reactotron connections from your network” in Settings ▸ Privacy.")
+                    .font(.app(.caption))
+                    .foregroundStyle(.tertiary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 460)
+            }
 
             alreadyRunningHint
         }

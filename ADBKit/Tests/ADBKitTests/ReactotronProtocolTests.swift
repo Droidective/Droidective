@@ -99,12 +99,14 @@ import Testing
     }
 
     @Test func compactPreviewMatchesCompactJSONForSmallValues() {
+        // Sentinel markers are repaired at decode time, so by the time a value
+        // is previewed a function marker is already the plain string.
         let value = JSONValue.object([
             "b": .array([.number(1), .bool(true), .null]),
             "a": .string("hi \"there\"\n"),
-            "fn": .string("~~~ register() ~~~"),
+            "fn": .string("register()"),
         ])
-        #expect(value.compactPreview(maxLength: 500) == #"{"a":"hi \"there\"\n","b":[1,true,null],"fn":register()}"#)
+        #expect(value.compactPreview(maxLength: 500) == #"{"a":"hi \"there\"\n","b":[1,true,null],"fn":"register()"}"#)
     }
 
     @Test func compactPreviewStopsAtTheBudgetOnHugeValues() {
@@ -301,7 +303,8 @@ import Testing
     @Test func decodesEnvelopeWithReactotronMarkers() throws {
         // reactotron serializes booleans/functions as "~~~ … ~~~" markers, so the
         // envelope's `important` arrives as a String, not a Bool. The frame must
-        // still decode and parse.
+        // still decode, and payload markers are repaired on the way in — the
+        // function marker loses its tildes.
         let command = try ReactotronCommand.decode(
             #"{"type":"state.action.complete","important":"~~~ false ~~~","date":"2026-06-26","payload":{"name":"PING","action":{"type":"PING","cb":"~~~ fn() ~~~"},"ms":0.4}}"#
         )
@@ -312,7 +315,67 @@ import Testing
         }
         #expect(name == "PING")
         #expect(ms == 0.4)
-        #expect(action?["cb"]?.stringValue == "~~~ fn() ~~~")
+        #expect(action?["cb"]?.stringValue == "fn()")
+    }
+
+    // MARK: - Sentinel repair
+
+    @Test func repairsNamedSentinelsIntoRealValues() throws {
+        // The mirror of reactotron-core-server's repair-serialization: the
+        // client encodes JSON-hostile values as markers; decode restores them.
+        let command = try ReactotronCommand.decode(
+            #"""
+            {"type":"log","important":false,"date":"d","deltaTime":1,"payload":{
+                "isNull":"~~~ null ~~~",
+                "isUndefined":"~~~ undefined ~~~",
+                "isFalse":"~~~ false ~~~",
+                "isZero":"~~~ zero ~~~",
+                "isEmpty":"~~~ empty string ~~~"
+            }}
+            """#
+        )
+        let payload = try #require(command.payload)
+        #expect(payload["isNull"]?.isNull == true)
+        #expect(payload["isUndefined"]?.isNull == true)
+        #expect(payload["isFalse"]?.boolValue == false)
+        #expect(payload["isZero"]?.doubleValue == 0)
+        #expect(payload["isEmpty"]?.stringValue == "")
+    }
+
+    @Test func repairsSentinelsCaseInsensitivelyAndInNestedShapes() throws {
+        // The official repair matches markers case-insensitively, and payloads
+        // nest them arbitrarily deep (state trees, api bodies).
+        let command = try ReactotronCommand.decode(
+            #"{"type":"log","important":false,"date":"d","deltaTime":1,"payload":{"list":[{"flag":"~~~ FALSE ~~~"},"~~~ Empty String ~~~"],"fn":"~~~ register() ~~~"}}"#
+        )
+        let payload = try #require(command.payload)
+        #expect(payload["list"]?.arrayValue?[0]["flag"]?.boolValue == false)
+        #expect(payload["list"]?.arrayValue?[1].stringValue == "")
+        // Unknown markers (functions, circular refs) drop their tildes but
+        // stay strings.
+        #expect(payload["fn"]?.stringValue == "register()")
+    }
+
+    @Test func repairLeavesOrdinaryStringsAndShortMarkersAlone() {
+        // Below the length threshold (9), and plain text with tildes inside —
+        // neither is a marker.
+        let value = JSONValue.object([
+            "short": .string("~~~ a ~~~"),
+            "plain": .string("approx ~~~ tilde art ~~~ inline"),
+            "text": .string("hello"),
+        ])
+        let repaired = value.repairingSentinels()
+        #expect(repaired["short"]?.stringValue == "~~~ a ~~~")
+        #expect(repaired["plain"]?.stringValue == "approx ~~~ tilde art ~~~ inline")
+        #expect(repaired["text"]?.stringValue == "hello")
+    }
+
+    @Test func repairReturnsUntouchedSubtreesAsIs() {
+        let clean = JSONValue.object([
+            "a": .array([.number(1), .string("x")]),
+            "b": .object(["c": .bool(true)]),
+        ])
+        #expect(clean.repairingSentinels() == clean)
     }
 
     @Test func unknownTypeFallsThrough() throws {

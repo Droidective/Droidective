@@ -56,6 +56,74 @@ import Testing
         #expect(pushed.contains("ping"))
     }
 
+    /// An app reload reconnects with the same clientId while its old socket is
+    /// still open. The stale connection must be dropped silently (nil reason —
+    /// no timeline notice) and a client with a *different* clientId must be
+    /// left alone.
+    @Test(.timeLimit(.minutes(1)))
+    func reloadWithSameClientIdReplacesTheStaleConnection() async throws {
+        let server = ReactotronServer(port: 0)
+        let stream = try await server.start()
+        defer { Task { await server.stop() } }
+        var iterator = stream.makeAsyncIterator()
+        let port = try await waitForListening(&iterator)
+        let url = try #require(URL(string: "ws://127.0.0.1:\(port)"))
+
+        func connect(clientId: String) async throws -> URLSessionWebSocketTask {
+            let task = URLSession.shared.webSocketTask(with: url)
+            task.resume()
+            try await task.send(.string(
+                #"{"type":"client.intro","payload":{"name":"App","clientId":"\#(clientId)"},"important":false,"date":"d","deltaTime":0}"#
+            ))
+            return task
+        }
+
+        let first = try await connect(clientId: "same-app")
+        guard case let .connected(firstId, _, _) = try await nextEvent(&iterator) else {
+            Issue.record("expected first .connected"); return
+        }
+
+        // Reload: a second socket, same clientId. The stale one goes first —
+        // silently — then the new one completes its handshake.
+        let second = try await connect(clientId: "same-app")
+        defer { second.cancel(with: .goingAway, reason: nil) }
+        guard case let .disconnected(droppedId, reason) = try await nextEvent(&iterator) else {
+            Issue.record("expected .disconnected for the stale twin"); return
+        }
+        #expect(droppedId == firstId)
+        #expect(reason == nil)
+        guard case let .connected(secondId, _, _) = try await nextEvent(&iterator) else {
+            Issue.record("expected second .connected"); return
+        }
+        #expect(secondId != firstId)
+
+        // A different app coexists — no dedupe, both stay live.
+        let third = try await connect(clientId: "other-app")
+        defer { third.cancel(with: .goingAway, reason: nil) }
+        guard case .connected = try await nextEvent(&iterator) else {
+            Issue.record("expected third .connected"); return
+        }
+        try await second.send(.string(
+            #"{"type":"log","payload":{"level":"debug","message":"still alive"},"important":false,"date":"d","deltaTime":1}"#
+        ))
+        guard case let .command(commandConnection, decoded, _) = try await nextEvent(&iterator) else {
+            Issue.record("expected .command from the surviving client"); return
+        }
+        #expect(commandConnection == secondId)
+        #expect(decoded.commandType == .log)
+
+        // The stale socket really is closed (after the 500ms grace): its next
+        // receive fails instead of hanging on a half-open connection.
+        // (It got no server frames beyond the handshake subscribe.)
+        _ = try? await receiveText(first) // state.values.subscribe
+        do {
+            _ = try await receiveText(first)
+            Issue.record("stale socket should have been closed")
+        } catch {
+            // expected: the server cancelled the connection
+        }
+    }
+
     private func waitForListening(_ iterator: inout Iterator) async throws -> UInt16 {
         while let event = await iterator.next() {
             if case let .listening(port) = event { return port }
