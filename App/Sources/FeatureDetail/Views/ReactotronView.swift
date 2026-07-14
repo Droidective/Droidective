@@ -1,4 +1,5 @@
 import ADBKit
+import AppKit
 import os
 import SwiftUI
 
@@ -57,6 +58,11 @@ final class ReactotronSession {
     /// Per-serial `adb reverse` failures (serial → adb's reason), so a tunnel
     /// that never opened is a visible banner, not a silent "waiting" state.
     fileprivate var tunnelIssues: [String: String] = [:]
+    /// High-water mark of `RtItem.headerWidth` — the width the timeline lays
+    /// out at so no row truncates; the pane scrolls horizontally to reach it.
+    /// Monotonic while streaming (a trim never shrinks it — that would jolt
+    /// the scroll under the user); recomputed only on clears.
+    fileprivate var maxRowWidth: CGFloat = 0
 
     private let client: AdbClient
     /// Back-reference for toasts and save dialogs; set right after init.
@@ -217,6 +223,7 @@ final class ReactotronSession {
         Self.discardInBackground((items, snapshots, storeState, subscriptionValues))
         items.removeAll()
         itemsBytes = 0
+        maxRowWidth = 0
         commands.removeAll()
         subscriptionPaths.removeAll()
         subscriptionValues.removeAll()
@@ -387,6 +394,7 @@ final class ReactotronSession {
         let cleared = items
         items = []
         itemsBytes = 0
+        maxRowWidth = 0
         Self.discardInBackground(cleared)
     }
 
@@ -446,6 +454,7 @@ final class ReactotronSession {
                 let previous = items
                 items = previous.filter { $0.connectionId != connectionId }
                 itemsBytes = items.reduce(0) { $0 + $1.frameBytes }
+                maxRowWidth = items.lazy.map(\.headerWidth).max() ?? 0
                 Self.discardInBackground(previous)
                 return
             case let .customCommandRegister(id, name, title, description, args):
@@ -604,7 +613,10 @@ final class ReactotronSession {
     /// frees the dropped items off the main actor.
     private func appendBatch(_ batch: [RtItem]) {
         items.append(contentsOf: batch)
-        for item in batch { itemsBytes += item.frameBytes }
+        for item in batch {
+            itemsBytes += item.frameBytes
+            if item.headerWidth > maxRowWidth { maxRowWidth = item.headerWidth }
+        }
         peakItemsBytes = max(peakItemsBytes, itemsBytes)
         peakItemCount = max(peakItemCount, items.count)
         let drop = ReactotronTimeline.dropCount(
@@ -952,6 +964,7 @@ struct ReactotronView: View {
             targetEmpty: state.targetSerials.isEmpty,
             connection: session.connection,
             showOnboarding: showOnboarding,
+            minContentWidth: session.maxRowWidth,
             trailing: trailing,
             onExport: { session.export($0) },
             onRetry: { Task { await session.start(serials: readySerials) } }
@@ -1262,7 +1275,16 @@ private struct RtItem: Identifiable, Sendable {
     /// an allocation-free `contains` instead of rebuilding `event.presentation`
     /// and re-lowercasing on every filter pass.
     let searchText: String
+    /// The natural single-line width of this row's header, measured once at
+    /// creation. The pane lays its feed out at the widest row (`maxRowWidth`
+    /// high-water in the session) and scrolls horizontally, so no row ever
+    /// truncates.
+    let headerWidth: CGFloat
 
+    /// Rows are only ever created on the main actor (the session's inbound
+    /// path) — stated explicitly so the NSFont measurement caches below are
+    /// concurrency-safe under Swift 6.
+    @MainActor
     init(event: ReactotronEvent, command: ReactotronCommand, connectionId: Int, important: Bool, frameBytes: Int) {
         self.event = event
         self.command = command
@@ -1274,6 +1296,44 @@ private struct RtItem: Identifiable, Sendable {
         // store a multi-megabyte lowercased copy per row — search matches the
         // header text, and the full payload lives in the expandable row.
         searchText = "\(presentation.badge) \(presentation.primary)".prefix(2000).lowercased()
+        headerWidth = Self.measureHeaderWidth(badge: presentation.badge, primary: presentation.primary)
+    }
+
+    /// NSFont twins of the header's `Font.app` tokens, resolved once — a font
+    /// setting changed mid-session only affects rows created afterwards, which
+    /// the row's `layoutPriority` truncation-guard absorbs.
+    @MainActor private static let badgeFont = nsAppFont(size: 10, weight: .bold)
+    @MainActor private static let primaryFont = nsAppFont(size: 12, weight: .medium)
+    /// "HH:mm:ss" is fixed-width (monospaced digits) — measure once.
+    @MainActor private static let timeWidth = ("88:88:88" as NSString)
+        .size(withAttributes: [.font: NSFont.monospacedSystemFont(
+            ofSize: 11 * AppFontPrefs.sizeScale, weight: .regular)]).width
+
+    /// Mirrors `Font.app(size:weight:)` for measurement: the user's family at
+    /// the scaled size, falling back to the system font.
+    @MainActor
+    private static func nsAppFont(size: CGFloat, weight: NSFont.Weight) -> NSFont {
+        let scaled = size * AppFontPrefs.sizeScale
+        if let family = AppFontPrefs.family,
+           let font = NSFontManager.shared.font(
+               withFamily: family, traits: [],
+               weight: weight == .bold ? 9 : 6, size: scaled
+           ) {
+            return font
+        }
+        return NSFont.systemFont(ofSize: scaled, weight: weight)
+    }
+
+    /// chevron(16) + gaps + time + badge + primary + row padding, plus slack
+    /// for the hover copy button and measurement drift. Primary is bounded —
+    /// beyond ~2000 chars a row can't usefully be read inline anyway, and an
+    /// unbounded measurement of a megabyte log line would stall the parse path.
+    @MainActor
+    private static func measureHeaderWidth(badge: String, primary: String) -> CGFloat {
+        let badgeWidth = (badge as NSString).size(withAttributes: [.font: badgeFont]).width
+        let primaryWidth = (String(primary.prefix(2000)) as NSString)
+            .size(withAttributes: [.font: primaryFont]).width
+        return 16 + 8 + timeWidth + 8 + badgeWidth + 8 + primaryWidth + 28 + 60
     }
 }
 
@@ -1351,6 +1411,11 @@ private struct TimelinePane: View {
     let targetEmpty: Bool
     let connection: RtConnection
     let showOnboarding: Bool
+    /// The widest row's natural width (session high-water) — the feed lays out
+    /// at `max(pane width, this)` and scrolls horizontally, so long rows are
+    /// reached by scrolling instead of truncating, at any pane width (single,
+    /// timeline split, workspace-split tab).
+    let minContentWidth: CGFloat
     /// Extra trailing toolbar content — the global timeline controls when the
     /// pane is the only one on screen (no dedicated strip above it).
     let trailing: AnyView?
@@ -1555,9 +1620,14 @@ private struct TimelinePane: View {
     private func timeline(ordered: ReversedCollection<[RtItem]>) -> some View {
         // Newest events land at the top — LogTailViewV2 follows that edge, pauses
         // when the user scrolls off, and overlays the jump-to-top/bottom buttons.
-        LogTailViewV2(entries: ordered, newestEdge: .top) { item in
-            RtRow(item: item)
-            Divider()
+        GeometryReader { pane in
+            LogTailViewV2(
+                entries: ordered, newestEdge: .top,
+                contentWidth: max(pane.size.width, minContentWidth)
+            ) { item in
+                RtRow(item: item)
+                Divider()
+            }
         }
         .background(.background)
         .overlay { emptyOverlay }
@@ -1628,6 +1698,11 @@ private struct RtRow: View {
     /// expansion; the action/log text itself stays OUT of the tap target so
     /// it's selectable — a whole-row gesture swallowed drag-to-select, making
     /// action and debug names uncopyable.
+    ///
+    /// The text never truncates: the whole feed lays out at the widest row's
+    /// width (`RtItem.headerWidth` high-water) and the pane scrolls
+    /// horizontally as one unit — a narrow window, the timeline's split panes,
+    /// and a workspace-split tab all share this row.
     private func header(_ presentation: RtPresentation) -> some View {
         HStack(spacing: 8) {
             HStack(spacing: 8) {
@@ -1642,8 +1717,12 @@ private struct RtRow: View {
                 Text(presentation.badge)
                     .font(.app(size: 10, weight: .bold))
                     .foregroundStyle(presentation.badgeColor)
-                    .fixedSize()
             }
+            // Incompressible: without this, HStack treats the wrappable time
+            // Text as flexible and squeezes the whole cluster against the
+            // greedy blank filler — the timestamp wrapped one character per
+            // line and blew the row up to several times its height.
+            .fixedSize()
             .padding(.vertical, 10)
             .contentShape(Rectangle())
             .onTapGesture { if canExpand { expanded.toggle() } }
@@ -1653,15 +1732,15 @@ private struct RtRow: View {
                     .font(.app(size: 12, weight: .medium))
                     .foregroundStyle(presentation.primaryColor)
                     .lineLimit(1)
-                    .truncationMode(.middle)
+                    // Wins the space race against the greedy blank filler —
+                    // without this, HStack offers each flexible child an equal
+                    // share and the text truncated at ~half the row even with
+                    // free space beside it.
+                    .layoutPriority(1)
                     .textSelection(.enabled)
             }
 
-            Rectangle()
-                .fill(.clear)
-                .frame(maxWidth: .infinity, minHeight: 28)
-                .contentShape(Rectangle())
-                .onTapGesture { if canExpand { expanded.toggle() } }
+            blankExpandTarget
 
             if hovering || copiedLine {
                 Button {
@@ -1680,6 +1759,16 @@ private struct RtRow: View {
         .padding(.horizontal, 14)
         .frame(minHeight: 36)
         .onHover { hovering = $0 }
+    }
+
+    /// The clear filler whose click toggles expansion — the row's whitespace,
+    /// kept separate from the selectable text so drag-to-select still works.
+    private var blankExpandTarget: some View {
+        Rectangle()
+            .fill(.clear)
+            .frame(maxWidth: .infinity, minHeight: 28)
+            .contentShape(Rectangle())
+            .onTapGesture { if canExpand { expanded.toggle() } }
     }
 
     @ViewBuilder
