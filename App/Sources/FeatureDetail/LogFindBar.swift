@@ -11,6 +11,12 @@ struct LogFindBar: View {
     let onNext: () -> Void
     let onPrevious: () -> Void
     let onClose: () -> Void
+    /// Bump to re-focus the field — ⌘F pressed while the bar is already open.
+    var focusToken = 0
+    /// Attach the ⌘G/⇧⌘G shortcuts only while the owning tab is the active
+    /// one — keep-alive hidden tabs stay mounted, and a hidden bar's
+    /// shortcuts steal the keys from the visible one.
+    var shortcutsActive = true
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -38,13 +44,13 @@ struct LogFindBar: View {
             }
             .buttonStyle(IconButtonStyle())
             .help("Previous match (⇧⌘G)")
-            .keyboardShortcut("g", modifiers: [.command, .shift])
+            .keyboardShortcut(shortcutsActive ? KeyboardShortcut("g", modifiers: [.command, .shift]) : nil)
             Button(action: onNext) {
                 Image(systemName: "chevron.down")
             }
             .buttonStyle(IconButtonStyle())
             .help("Next match (⌘G)")
-            .keyboardShortcut("g", modifiers: .command)
+            .keyboardShortcut(shortcutsActive ? KeyboardShortcut("g", modifiers: .command) : nil)
             Button(action: onClose) {
                 Image(systemName: "xmark")
             }
@@ -56,5 +62,10 @@ struct LogFindBar: View {
         .padding(.vertical, 5)
         .background(.yellow.opacity(0.08))
         .onAppear { focused = true }
+        // Deferred: a synchronous @FocusState write doesn't take while
+        // another field (e.g. the sidebar search) still holds focus.
+        .onChange(of: focusToken) { _, _ in
+            Task { @MainActor in focused = true }
+        }
     }
 }

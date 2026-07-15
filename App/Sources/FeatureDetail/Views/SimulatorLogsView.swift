@@ -39,6 +39,7 @@ struct SimulatorLogsView: View {
     @State private var findInput = ""
     @State private var find = ""
     @State private var currentFindID: UUID?
+    @State private var findFocusToken = 0
     /// The row parked at the viewport's bottom edge. Written to pin the tail;
     /// read back to detect the user returning to it.
     @State private var scrolledID: UUID?
@@ -176,12 +177,16 @@ struct SimulatorLogsView: View {
 
             Button {
                 findVisible = true
+                findFocusToken += 1
             } label: {
                 Image(systemName: "text.magnifyingglass")
             }
             .buttonStyle(IconButtonStyle())
             .help("Find & highlight in the log without hiding lines (⌘F)")
-            .keyboardShortcut("f", modifiers: .command)
+            // Active-tab only — a hidden keep-alive tab winning ⌘F opens an
+            // invisible find bar and the focus request falls through to the
+            // sidebar search.
+            .keyboardShortcut(isActiveTab ? KeyboardShortcut("f", modifiers: .command) : nil)
 
             Button {
                 paused.toggle()
@@ -287,13 +292,17 @@ struct SimulatorLogsView: View {
 
     // MARK: - Find bar
 
+    private var isActiveTab: Bool { state.activeTabID == "ios-logs" }
+
     private func findBar(matches: [UUID]) -> some View {
         LogFindBar(
             text: $findInput,
             countLabel: findCountLabel(matches: matches),
             onNext: { stepFind(in: matches, forward: true) },
             onPrevious: { stepFind(in: matches, forward: false) },
-            onClose: closeFind
+            onClose: closeFind,
+            focusToken: findFocusToken,
+            shortcutsActive: isActiveTab
         )
         .task(id: findInput) {
             if !find.isEmpty || !findInput.isEmpty {

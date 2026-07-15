@@ -1011,10 +1011,21 @@ struct JSConsoleView: View {
             }
             Spacer(minLength: 8)
             levelFilter
-            Button { session.openFind() } label: { Image(systemName: "text.magnifyingglass") }
+            Button {
+                session.openFind()
+                // Re-focus when the bar is already open — the onChange
+                // focuser only fires on the closed→open transition. Deferred:
+                // a synchronous @FocusState write doesn't take while another
+                // field (e.g. the sidebar search) still holds focus.
+                Task { @MainActor in findFocused = true }
+            } label: { Image(systemName: "text.magnifyingglass") }
                 .buttonStyle(IconButtonStyle())
                 .help("Find & highlight in console (⌘F)")
-                .keyboardShortcut("f", modifiers: .command)
+                // Active-tab only — a hidden keep-alive tab winning ⌘F sends
+                // the focus request into an invisible view and it falls
+                // through to the sidebar search.
+                .keyboardShortcut(state.activeTabID == "js-console"
+                    ? KeyboardShortcut("f", modifiers: .command) : nil)
             Button { session.newestFirst.toggle() } label: { Image(systemName: "arrow.up.arrow.down") }
                 .buttonStyle(IconButtonStyle())
                 .help(session.newestFirst
