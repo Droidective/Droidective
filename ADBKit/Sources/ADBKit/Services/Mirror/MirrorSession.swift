@@ -69,10 +69,13 @@ public actor MirrorSession {
     /// for the display layer until `stop()` or an error.
     public func start() -> AsyncThrowingStream<DisplaySample, Error> {
         // Bounded so a headless recording session (which never drains the display
-        // stream) doesn't buffer frames without limit; under load the renderer
-        // just drops stale frames rather than lagging.
+        // stream) doesn't buffer frames without limit. The bound is generous on
+        // purpose: these are *compressed* H.264 frames, so dropping one severs
+        // the reference chain and smears every frame until the next key frame —
+        // a brief main-thread stall must ride it out, not corrupt the picture.
+        // ~2s at 60fps, a few MB worst case.
         let (stream, continuation) = AsyncThrowingStream.makeStream(
-            of: DisplaySample.self, bufferingPolicy: .bufferingNewest(3))
+            of: DisplaySample.self, bufferingPolicy: .bufferingNewest(120))
         displayContinuation = continuation
         let (clipboard, clipboardSink) = AsyncStream.makeStream(of: String.self)
         clipboardStream = clipboard

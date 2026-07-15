@@ -63,6 +63,16 @@ public actor MirrorTransport {
 
     private static let queue = DispatchQueue(label: "com.rohindh.droidective.mirror-transport")
 
+    /// TCP options for the stream sockets: Nagle off. The control socket sends
+    /// tiny writes (a touch event is ~32 bytes) and the video socket reads a
+    /// low-latency stream — batching either behind delayed ACKs adds tens of
+    /// milliseconds of input and display lag for no win on a loopback tunnel.
+    static func socketParameters() -> NWParameters {
+        let tcp = NWProtocolTCP.Options()
+        tcp.noDelay = true
+        return NWParameters(tls: nil, tcp: tcp)
+    }
+
     private let adb: AdbClient
     private let config: Configuration
 
@@ -255,7 +265,7 @@ public actor MirrorTransport {
             // deadline. Throwing CancellationError also tells the caller this
             // was a teardown, not a device failure.
             try Task.checkCancellation()
-            let connection = NWConnection(host: host, port: nwPort, using: .tcp)
+            let connection = NWConnection(host: host, port: nwPort, using: Self.socketParameters())
             do {
                 try await Self.waitUntilReady(connection)
                 let firstChunk = try await Self.firstReceive(connection)
@@ -323,7 +333,7 @@ public actor MirrorTransport {
         var lastError = ""
         while clock.now < deadline {
             try Task.checkCancellation() // see connect() — a cancelled bring-up must exit, not spin
-            let connection = NWConnection(host: host, port: nwPort, using: .tcp)
+            let connection = NWConnection(host: host, port: nwPort, using: Self.socketParameters())
             do {
                 try await Self.waitUntilReady(connection)
                 return ConnectionBox(connection: connection)

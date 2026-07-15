@@ -61,6 +61,23 @@ enum H264Format {
             sampleTimingEntryCount: 1, sampleTimingArray: &timing,
             sampleSizeEntryCount: 1, sampleSizeArray: &sampleSize,
             sampleBufferOut: &sampleBuffer)
-        return status == noErr ? sampleBuffer : nil
+        guard status == noErr, let sampleBuffer else { return nil }
+        // Live stream: render each frame the moment it's decoded. The PTS is
+        // the device's clock, which no display timebase tracks — left to pace
+        // itself, the layer buffers against a mismatched clock and the mirror
+        // runs visibly behind the device. The PTS stays on the buffer for the
+        // recorder, which muxes by it and ignores this display-only hint.
+        markDisplayImmediately(sampleBuffer)
+        return sampleBuffer
+    }
+
+    private static func markDisplayImmediately(_ sampleBuffer: CMSampleBuffer) {
+        guard let attachments = CMSampleBufferGetSampleAttachmentsArray(
+            sampleBuffer, createIfNecessary: true) as? [CFMutableDictionary],
+            let first = attachments.first else { return }
+        CFDictionarySetValue(
+            first,
+            Unmanaged.passUnretained(kCMSampleAttachmentKey_DisplayImmediately).toOpaque(),
+            Unmanaged.passUnretained(kCFBooleanTrue).toOpaque())
     }
 }

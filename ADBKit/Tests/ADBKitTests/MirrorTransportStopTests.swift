@@ -1,6 +1,17 @@
 import Foundation
+import Network
 import Testing
 @testable import ADBKit
+
+@Suite struct MirrorTransportSocketTests {
+    /// The control socket sends ~32-byte touch events; Nagle batching them
+    /// behind delayed ACKs adds tens of milliseconds of input and display lag.
+    @Test func streamSocketsDisableNagle() {
+        let parameters = MirrorTransport.socketParameters()
+        let tcp = parameters.defaultProtocolStack.transportProtocol as? NWProtocolTCP.Options
+        #expect(tcp?.noDelay == true)
+    }
+}
 
 /// `stop()` is terminal even against a `start()` still in flight. Actors are
 /// reentrant, so `stop()` can run at any of `start()`'s suspension points —
