@@ -504,6 +504,16 @@ public enum FeatureRegistry {
             category: .logs, icon: "scroll", kind: .view
         ),
         FeatureDef(
+            id: "ios-logs", title: "iOS Logs",
+            subtitle: "Live simulator log stream (unified log)",
+            keywords: [
+                "ios", "simulator", "logs", "oslog", "unified log", "log stream",
+                "console", "syslog", "nslog",
+            ],
+            category: .logs, icon: "apple.logo", kind: .view,
+            platforms: [.iosSimulator]
+        ),
+        FeatureDef(
             id: "crash-catcher", title: "Crash Catcher",
             subtitle: "Filtered crashes + copy-last-crash for Slack/Jira",
             keywords: ["crash", "fatal", "exception", "androidruntime", "reactnativejs"],
@@ -627,7 +637,7 @@ public enum FeatureRegistry {
         // in the React Native hub (its absorbing hub), reachable via search.
         // The always-on tools tail matches the other roles.
         .iosDeveloper: [
-            "emulators", "simulate", "demo-mode",
+            "emulators", "ios-logs", "simulate", "demo-mode",
             "screenshot", "video-editor",
             "terminal", "custom-commands",
         ],

@@ -115,7 +115,7 @@ public struct FeatureEngine: Sendable {
         "terminal",
         "send-text", "get-ip", "reverse-port",
         "open-dev-menu", "reload-js", "screenshot",
-        "scrcpy", "deep-link", "app-management", "logcat",
+        "scrcpy", "deep-link", "app-management", "logcat", "ios-logs",
         "demo-mode", "dark-mode", "animation-scale", "fake-battery",
         "layout-overrides", "locale", "network-toggles", "http-proxy",
         "permissions", "app-info", "current-activity", "foreground-package",

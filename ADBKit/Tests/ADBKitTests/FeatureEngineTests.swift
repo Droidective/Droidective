@@ -535,9 +535,9 @@ import Testing
 }
 
 @Suite struct FeatureRegistryTests {
-    @Test func hasAll56Features() {
-        #expect(FeatureRegistry.all.count == 56)
-        #expect(FeatureRegistry.byID.count == 56)
+    @Test func hasAll57Features() {
+        #expect(FeatureRegistry.all.count == 57)
+        #expect(FeatureRegistry.byID.count == 57)
     }
 
     @Test func everyFeatureSupportsAtLeastOnePlatform() {
@@ -546,14 +546,17 @@ import Testing
         }
     }
 
-    @Test func iosOnlyFeaturesAreHubMembers() {
-        // An iOS-only feature standing alone in the (Android-first) catalog
-        // would read as broken to Android users; they join a hub that adapts
-        // to the selected platform instead.
-        for feature in FeatureRegistry.all where !feature.platforms.contains(.android) {
+    @Test func iosOnlyActionsAreHubMembers() {
+        // An iOS-only *action* standing alone in the (Android-first) catalog
+        // would read as a dead button to Android users; actions join a hub
+        // that adapts to the selected platform instead. Full-screen views
+        // (ios-logs) may stand alone — they render their own switch-device
+        // state when an Android device is selected.
+        for feature in FeatureRegistry.all
+        where !feature.platforms.contains(.android) && feature.kind != .view {
             #expect(
                 FeatureRegistry.absorbedFeatureIDs.contains(feature.id),
-                "\(feature.id) is iOS-only but not folded into a hub"
+                "\(feature.id) is an iOS-only action but not folded into a hub"
             )
         }
     }
