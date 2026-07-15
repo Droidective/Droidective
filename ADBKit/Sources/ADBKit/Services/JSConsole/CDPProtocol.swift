@@ -41,6 +41,19 @@ public enum CDP {
         ["objectGroup": .string(group)]
     }
 
+    /// Minimal `Runtime.evaluate` params for the connection keepalive: a no-op
+    /// expression, `silent` so it can never surface an exception event, and
+    /// `returnByValue` so the runtime never creates (or retains) a remote
+    /// object handle for the result.
+    public static func keepaliveParams() -> [String: JSONValue] {
+        [
+            "expression": .string("void 0"),
+            "silent": .bool(true),
+            "returnByValue": .bool(true),
+            "generatePreview": .bool(false),
+        ]
+    }
+
     public static func callFunctionOnParams(objectId: String, functionDeclaration: String) -> [String: JSONValue] {
         [
             "objectId": .string(objectId),

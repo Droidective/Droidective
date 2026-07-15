@@ -26,20 +26,25 @@ public actor JSConsoleClient {
     /// Events streamed to the session as they arrive.
     public enum Event: Sendable {
         case console(ConsoleAPICall)
-        case exception(ExceptionDetails)
+        case exception(ExceptionDetails, timestamp: Double?)
         case contextCreated(id: Int)
         case contextDestroyed
-        case closed(reason: String)
+        /// `takeover`: the server closed us because another debugger attached
+        /// to the same app — reconnecting automatically would steal it back.
+        case closed(reason: String, takeover: Bool)
     }
 
     private var task: URLSessionWebSocketTask?
     private var receiveTask: Task<Void, Never>?
-    private var heartbeatTask: Task<Void, Never>?
+    private var keepaliveTask: Task<Void, Never>?
     private var continuation: AsyncStream<Event>.Continuation?
     private var pending: [Int: CheckedContinuation<JSONValue?, Error>] = [:]
     private var earlyResults: [Int: Result<JSONValue?, Error>] = [:]
+    /// Request ids whose replies are discarded on arrival (keepalives) instead
+    /// of being stashed in `earlyResults` forever.
+    private var ignoredIds: Set<Int> = []
     private var nextId = 1
-    /// Bumped by every teardown. The receive loop, heartbeat, and in-flight
+    /// Bumped by every teardown. The receive loop, keepalive, and in-flight
     /// sends belong to the generation they started under; a stale one returns
     /// instead of touching a successor connection's state — without this, the
     /// old receive loop's close error (its socket is cancelled mid-`receive`
@@ -73,7 +78,8 @@ public actor JSConsoleClient {
     /// wait would wedge the caller's reconnect loop.
     public func connect(
         to url: URL,
-        handshakeTimeout: Duration = .seconds(10)
+        handshakeTimeout: Duration = .seconds(10),
+        keepaliveInterval: Duration = .seconds(10)
     ) async throws -> AsyncStream<Event> {
         teardown(reason: "reconnecting", notify: true)
         let task = URLSession.shared.webSocketTask(with: Self.debuggerRequest(for: url))
@@ -88,7 +94,7 @@ public actor JSConsoleClient {
         self.continuation = continuation
         task.resume()
         startReceiveLoop(generation: generation)
-        startHeartbeat(generation: generation)
+        startKeepalive(generation: generation, interval: keepaliveInterval)
         let watchdog = Task { [weak self] in
             try? await Task.sleep(for: handshakeTimeout)
             guard !Task.isCancelled else { return }
@@ -204,6 +210,7 @@ public actor JSConsoleClient {
     }
 
     private func resolve(id: Int, _ result: Result<JSONValue?, Error>) {
+        if ignoredIds.remove(id) != nil { return }
         if let continuation = pending.removeValue(forKey: id) {
             continuation.resume(with: result)
         } else {
@@ -233,7 +240,8 @@ public actor JSConsoleClient {
                 handle(message)
             } catch {
                 if generation == self.generation {
-                    handleClosed("\(error.localizedDescription)")
+                    let close = Self.closeDescription(for: task, fallback: error.localizedDescription)
+                    handleClosed(close.reason, takeover: close.takeover)
                 }
                 return
             }
@@ -267,7 +275,10 @@ public actor JSConsoleClient {
             continuation?.yield(.console(ConsoleAPICall(params: params)))
         case "Runtime.exceptionThrown":
             if let details = params["exceptionDetails"] {
-                continuation?.yield(.exception(ExceptionDetails(json: details)))
+                continuation?.yield(.exception(
+                    ExceptionDetails(json: details),
+                    timestamp: params["timestamp"]?.doubleValue
+                ))
             }
         case "Runtime.executionContextCreated":
             if let id = params["context"]?["id"]?.intValue {
@@ -280,36 +291,82 @@ public actor JSConsoleClient {
         }
     }
 
-    private func handleClosed(_ reason: String) {
+    private func handleClosed(_ reason: String, takeover: Bool = false) {
         guard continuation != nil else { return }
         generation += 1
         cancelTasks()
         task?.cancel(with: .goingAway, reason: nil)
         task = nil
         failPending(ClientError.transport(reason))
-        continuation?.yield(.closed(reason: reason))
+        continuation?.yield(.closed(reason: reason, takeover: takeover))
         continuation?.finish()
         continuation = nil
     }
 
-    // MARK: - Heartbeat
+    /// A human close description plus whether another debugger took the target
+    /// over. The server's close reason (when it sent a close frame at all —
+    /// the proxy's heartbeat kill is an abrupt `terminate()` with none) beats
+    /// the transport error's generic wording.
+    private nonisolated static func closeDescription(
+        for task: URLSessionWebSocketTask, fallback: String
+    ) -> (reason: String, takeover: Bool) {
+        let reasonText = task.closeReason.map { String(decoding: $0, as: UTF8.self) } ?? ""
+        return (reasonText.isEmpty ? fallback : reasonText, isDebuggerTakeover(reasonText))
+    }
 
-    /// The Metro inspector proxy pings on an interval and drops a peer that
-    /// doesn't pong; `URLSessionWebSocketTask` doesn't reliably reply on its own,
-    /// so send our own ping under that window to hold the connection open.
-    private func startHeartbeat(generation: Int) {
-        heartbeatTask = Task { [weak self] in
+    /// Whether a server close reason means another debugger attached to our
+    /// target — dev-middleware's "[NEW_DEBUGGER_OPENED] New debugger opened for
+    /// the same app instance" (RN 0.76+) or the legacy proxy's "Another
+    /// debugger is already connected". Auto-reconnecting after one of these
+    /// would kick that debugger straight back off, so the session must not.
+    public nonisolated static func isDebuggerTakeover(_ closeReason: String) -> Bool {
+        let lowered = closeReason.lowercased()
+        return lowered.contains("new_debugger") || lowered.contains("another debugger")
+    }
+
+    // MARK: - Keepalive
+
+    /// React Native's inspector proxy pings each debugger socket and abruptly
+    /// `terminate()`s any that delivers neither a pong nor a data message
+    /// within its window (60s of 5s pings on current dev-middleware; older
+    /// releases were tighter). Pong replies are CFNetwork's business and a
+    /// client-initiated WebSocket ping doesn't refresh the proxy's timer at
+    /// all — the only liveness signal fully under our control is a real CDP
+    /// message, so send a tiny silent no-op evaluate well inside the window.
+    /// Pacing is by the timer, not the reply (which is discarded via
+    /// `ignoredIds`), so a wedged JS thread can't stall the keepalive and let
+    /// the proxy kill a healthy socket.
+    private func startKeepalive(generation: Int, interval: Duration) {
+        keepaliveTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(15))
+                try? await Task.sleep(for: interval)
                 if Task.isCancelled { return }
-                await self?.ping(generation: generation)
+                guard await self?.sendKeepalive(generation: generation) == true else { return }
             }
         }
     }
 
-    private func ping(generation: Int) {
+    private func sendKeepalive(generation: Int) -> Bool {
+        guard generation == self.generation, let task else { return false }
+        let id = nextId
+        nextId += 1
+        ignoredIds.insert(id)
+        let envelope = CDP.request(id: id, method: "Runtime.evaluate", params: CDP.keepaliveParams())
+        guard let data = try? JSONEncoder().encode(envelope) else { return false }
+        task.send(.string(String(decoding: data, as: UTF8.self))) { [weak self] error in
+            guard error != nil else { return }
+            Task { await self?.keepaliveFailed(generation: generation) }
+        }
+        NetworkTrafficMeter.shared.recordSent(data.count)
+        return true
+    }
+
+    /// The keepalive couldn't even be written to the socket — the transport is
+    /// gone. Close now so reconnection starts immediately instead of waiting
+    /// out the peer's timeout.
+    private func keepaliveFailed(generation: Int) {
         guard generation == self.generation else { return }
-        task?.sendPing { _ in }
+        handleClosed("The connection stopped accepting messages.")
     }
 
     // MARK: - Teardown
@@ -317,8 +374,8 @@ public actor JSConsoleClient {
     private func cancelTasks() {
         receiveTask?.cancel()
         receiveTask = nil
-        heartbeatTask?.cancel()
-        heartbeatTask = nil
+        keepaliveTask?.cancel()
+        keepaliveTask = nil
     }
 
     /// Close the current connection. `notify` yields a final `.closed` so a
@@ -331,7 +388,7 @@ public actor JSConsoleClient {
         task?.cancel(with: .goingAway, reason: nil)
         task = nil
         failPending(ClientError.notConnected)
-        if notify { continuation?.yield(.closed(reason: reason)) }
+        if notify { continuation?.yield(.closed(reason: reason, takeover: false)) }
         continuation?.finish()
         continuation = nil
     }
@@ -340,6 +397,7 @@ public actor JSConsoleClient {
         let waiting = pending.values
         pending.removeAll()
         earlyResults.removeAll()
+        ignoredIds.removeAll()
         for continuation in waiting {
             continuation.resume(throwing: error)
         }

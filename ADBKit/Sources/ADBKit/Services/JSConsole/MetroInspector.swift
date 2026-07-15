@@ -115,6 +115,30 @@ public struct MetroInspector: Sendable {
         return String(decoding: data, as: UTF8.self).contains("packager-status:running")
     }
 
+    /// Which target the console should (re)connect to without being asked.
+    /// Hermes targets are preferred. Then, in order: the previously-connected
+    /// logical device (stable across JS reloads) — but the proxy assigns a NEW
+    /// logical device id whenever the app re-registers (app relaunch, the phone
+    /// sleeping, a Metro restart), so a vanished id must not strand reconnection
+    /// — so next the same application id when it's unambiguous, and finally a
+    /// lone target. Several unfamiliar targets: stay hands-off; the user picks.
+    public static func autoConnectCandidate(
+        from targets: [CDPTarget],
+        preferredDeviceId: String?,
+        preferredAppId: String?
+    ) -> CDPTarget? {
+        let hermes = targets.filter(\.isHermes)
+        let pool = hermes.isEmpty ? targets : hermes
+        if let id = preferredDeviceId, let match = pool.first(where: { $0.logicalDeviceId == id }) {
+            return match
+        }
+        if let appId = preferredAppId {
+            let sameApp = pool.filter { $0.appId == appId }
+            if sameApp.count == 1 { return sameApp.first }
+        }
+        return pool.count == 1 ? pool.first : nil
+    }
+
     private func get(_ path: String) async throws(MetroError) -> Data {
         guard let url = URL(string: "http://\(host):\(port)\(path)") else {
             throw .badResponse
