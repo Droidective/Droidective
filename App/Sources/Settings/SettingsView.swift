@@ -164,7 +164,11 @@ struct GeneralSettingsView: View {
                     get: { SparkleUpdater.shared.automaticallyChecksForUpdates },
                     set: { SparkleUpdater.shared.automaticallyChecksForUpdates = $0 }
                 ))
-                Text("Updates are delivered via Sparkle from GitHub Releases.")
+                Toggle("Receive beta updates", isOn: Binding(
+                    get: { SparkleUpdater.shared.receivesBetaUpdates },
+                    set: { SparkleUpdater.shared.receivesBetaUpdates = $0 }
+                ))
+                Text("Updates are delivered via Sparkle from GitHub Releases. Beta builds arrive ahead of stable releases and may be rougher; switching beta off keeps the installed build until the next stable release.")
                     .font(.app(.footnote))
                     .foregroundStyle(.textMuted)
             }

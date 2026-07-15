@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
 # Sign a built DMG with Sparkle's EdDSA key and (re)write the appcast feed.
-# Produces a single-item appcast whose enclosure points at the GitHub release
-# asset and whose <description> carries the release notes inline as HTML — so
-# Sparkle renders the notes in its update window instead of loading the GitHub
-# release web page (which dragged in the whole site chrome).
+# Produces an appcast whose enclosure points at the GitHub release asset and
+# whose <description> carries the release notes inline as HTML — so Sparkle
+# renders the notes in its update window instead of loading the GitHub release
+# web page (which dragged in the whole site chrome).
+#
+# Channels: a pre-release version (anything with a hyphen, e.g. 3.3.0-beta.1)
+# is tagged <sparkle:channel>beta</sparkle:channel> — only clients that opted
+# in (Settings ▸ General ▸ Updates) see it — and the existing stable item is
+# preserved alongside it, so stable-only clients keep updating. A stable
+# version writes a single untagged item, ending any beta cycle: betas are
+# dropped, and beta clients move to the stable via its higher build number.
 #
 # Usage:
 #   update-appcast.sh <dmg> <short-version> <build-version> <download-url> <notes-md> [appcast-out]
@@ -59,6 +66,24 @@ else
   enclosure_attrs="$("$SIGN_UPDATE" "$DMG")"
 fi
 
+# A hyphen marks a pre-release (3.3.0-beta.1) — it ships on the beta channel.
+channel_tag=""
+preserved_items=""
+if [[ "$SHORT_VERSION" == *-* ]]; then
+  channel_tag="
+      <sparkle:channel>beta</sparkle:channel>"
+  # Keep the current stable item (any item without a <sparkle:channel>) so
+  # stable-only clients still see their latest release. A previous beta item
+  # is intentionally not kept — this beta supersedes it.
+  if [[ -f "$APPCAST" ]]; then
+    command -v xmllint >/dev/null || {
+      echo "error: xmllint required to carry the stable item into a beta appcast" >&2
+      exit 1
+    }
+    preserved_items="$(xmllint --xpath '//item[not(*[local-name()="channel"])]' "$APPCAST" 2>/dev/null || true)"
+  fi
+fi
+
 pub_date="$(LC_ALL=C date -u '+%a, %d %b %Y %H:%M:%S +0000')"
 mkdir -p "$(dirname "$APPCAST")"
 
@@ -71,7 +96,7 @@ cat >"$APPCAST" <<XML
     <description>Most recent Droidective updates.</description>
     <language>en</language>
     <item>
-      <title>Droidective ${SHORT_VERSION}</title>
+      <title>Droidective ${SHORT_VERSION}</title>${channel_tag}
       <sparkle:version>${BUILD_VERSION}</sparkle:version>
       <sparkle:shortVersionString>${SHORT_VERSION}</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
@@ -94,6 +119,7 @@ ${notes_html}
       <pubDate>${pub_date}</pubDate>
       <enclosure url="${DOWNLOAD_URL}" ${enclosure_attrs} type="application/octet-stream" />
     </item>
+    ${preserved_items}
   </channel>
 </rss>
 XML

@@ -164,11 +164,15 @@ jobs:
         run: awk '/^## /{c++} c==1{print} c==2{exit}' RELEASE_NOTES.md > release-body.md
       # A stable-named copy backs the site's download button via the permanent
       # /releases/latest/download/Droidective.dmg URL — always the newest
-      # release, no appcast fetch, no Pages/browser cache staleness.
+      # release, no appcast fetch, no Pages/browser cache staleness. Safe on a
+      # beta too: /releases/latest only ever resolves to a non-prerelease.
       - name: Add a stable-named copy for the latest-download link
         run: |
           cp "DerivedData/Build/Products/Release/Droidective-${GITHUB_REF_NAME}.dmg" \
              "DerivedData/Build/Products/Release/Droidective.dmg"
+      # A hyphen in the tag (v3.3.0-beta.1) marks a beta: the GitHub release is
+      # a prerelease, the appcast item rides the Sparkle beta channel, and the
+      # Homebrew cask is left alone.
       - name: Publish release with build
         uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b  # v3.0.1
         with:
@@ -177,6 +181,7 @@ jobs:
             DerivedData/Build/Products/Release/Droidective.dmg
           body_path: release-body.md
           fail_on_unmatched_files: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
       - name: Sign update and publish appcast to main
         env:
           SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
@@ -200,6 +205,7 @@ jobs:
         run: |
           [[ -n "${HOMEBREW_TAP_TOKEN:-}" ]] || { echo "no HOMEBREW_TAP_TOKEN — skipping cask update"; exit 0; }
           VERSION="${GITHUB_REF_NAME#v}"
+          [[ "$VERSION" == *-* ]] && { echo "beta release — skipping cask update"; exit 0; }
           DMG="DerivedData/Build/Products/Release/Droidective-${GITHUB_REF_NAME}.dmg"
           URL="https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/Droidective-${GITHUB_REF_NAME}.dmg"
           git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/Rohindh-R/homebrew-tap.git" tap
