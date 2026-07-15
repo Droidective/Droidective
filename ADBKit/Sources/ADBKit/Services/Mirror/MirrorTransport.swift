@@ -219,6 +219,13 @@ public actor MirrorTransport {
         let deadline = clock.now.advanced(by: .seconds(10))
         var lastError = ""
         while clock.now < deadline {
+            // A cancelled bring-up must exit, not spin: `try?` below swallows
+            // the cancellation that Task.sleep throws, and waitUntilReady's
+            // onCancel makes every attempt fail instantly — without this check
+            // the loop burns CPU creating and cancelling connections until the
+            // deadline. Throwing CancellationError also tells the caller this
+            // was a teardown, not a device failure.
+            try Task.checkCancellation()
             let connection = NWConnection(host: host, port: nwPort, using: .tcp)
             do {
                 try await Self.waitUntilReady(connection)
@@ -286,6 +293,7 @@ public actor MirrorTransport {
         let deadline = clock.now.advanced(by: .seconds(5))
         var lastError = ""
         while clock.now < deadline {
+            try Task.checkCancellation() // see connect() — a cancelled bring-up must exit, not spin
             let connection = NWConnection(host: host, port: nwPort, using: .tcp)
             do {
                 try await Self.waitUntilReady(connection)

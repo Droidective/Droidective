@@ -56,22 +56,30 @@ final class MirrorViewModel {
     /// encoder emits them rarely.)
     private var screenRecorder: ScreenRecorder?
     private var sendControl: (@Sendable (ScrcpyControlMessage) -> Void)?
-    /// Whether to request device audio. Cleared after one failed start so the
-    /// mirror reconnects video-only on devices that can't capture audio (most
+    /// Whether to request device audio. Off by default (the toggle in the
+    /// control bar opts in). Cleared after one failed start so the mirror
+    /// reconnects video-only on devices that can't capture audio (most
     /// emulators) — scrcpy aborts the whole session, video included, when its
     /// audio encoder can't start. See `MirrorAudioFallback`.
-    private var requestAudio = true
+    private var requestAudio: Bool
     /// Set once video frames begin flowing; gates the video-only fallback so a
     /// session that streamed and later stopped isn't silently restarted.
     private var didStream = false
+    /// Terminal: set by `stop()` and never cleared. Guards `start()` and the
+    /// audio fallback so a view model the view has already let go of can't
+    /// restart itself — that resurrected headless sessions nothing could ever
+    /// stop, each burning ~a core until quit (Sentry DROIDECTIVE-MAC-2K).
+    private var stopped = false
 
-    init(adb: AdbClient, locator: ToolLocator, serial: String) {
+    init(adb: AdbClient, locator: ToolLocator, serial: String, includeAudio: Bool) {
         self.adb = adb
         self.locator = locator
         self.serial = serial
+        requestAudio = includeAudio
     }
 
     func start() async {
+        guard !stopped else { return }
         status = .connecting
         didStream = false
         // Prefer the bundled server (self-contained); fall back to an installed
@@ -169,16 +177,33 @@ final class MirrorViewModel {
     /// surface the terminal state.
     private func sessionEnded(failure: String?) async {
         if MirrorAudioFallback.shouldRetryWithoutAudio(
-            audioRequested: requestAudio, everStreamed: didStream) {
+            audioRequested: requestAudio, everStreamed: didStream, stopped: stopped) {
             requestAudio = false
-            await stop()
+            await teardown()
             await start()
             return
         }
+        guard !stopped else { return }
         status = failure.map(Status.failed) ?? .stopped
     }
 
+    /// Terminal stop — the owner is done with this view model. After this,
+    /// `start()` and the audio-fallback restart are permanently inert.
     func stop() async {
+        stopped = true
+        await teardown()
+    }
+
+    /// Restart the session with device audio on or off. No-op mid-recording
+    /// (the teardown would abort the recorder) — the toggle is disabled then.
+    func setAudio(_ include: Bool) async {
+        guard !stopped, !isRecording, requestAudio != include else { return }
+        requestAudio = include
+        await teardown()
+        await start()
+    }
+
+    private func teardown() async {
         displayTask?.cancel()
         displayTask = nil
         clipboardTask?.cancel()
