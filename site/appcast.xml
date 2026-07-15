@@ -6,10 +6,9 @@
     <description>Most recent Droidective updates.</description>
     <language>en</language>
     <item>
-      <title>Droidective 3.3.0-beta.2</title>
-      <sparkle:channel>beta</sparkle:channel>
-      <sparkle:version>438</sparkle:version>
-      <sparkle:shortVersionString>3.3.0-beta.2</sparkle:shortVersionString>
+      <title>Droidective 3.3.0</title>
+      <sparkle:version>444</sparkle:version>
+      <sparkle:shortVersionString>3.3.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <description><![CDATA[
 <style>
@@ -25,106 +24,84 @@ pre { background: color-mix(in srgb, currentColor 8%, transparent); padding: .6e
 pre code { background: none; padding: 0; }
 a { color: #2f9e44; }
 </style>
-<p>This beta fixes the runaway-CPU reports traced to the screen mirror and cuts
-the mirror's display and input latency.</p>
+<p>A JS console that stays connected, a screen mirror that no longer eats CPU
+after you leave it, logcat search split into separate Filter and Find, and a
+first iOS feature: streaming a simulator's native logs.</p>
+<h3>Logcat: Filter vs Find</h3>
+<ul>
+<li>
+<strong>Filter and Find are now separate</strong> — the toolbar field <em>filters</em> (shows
+only matching lines, as before); a new find bar (⌘F) <em>finds</em>: it highlights
+matches and steps through them with ⌘G/⇧⌘G and a "2 of 7" counter without
+hiding anything.</li>
+<li>
+<strong>One app selector</strong> — the App menu inside logcat now does everything the
+bar's bundle pill did (pick a saved bundle, add from the device's installed
+apps, grab the app on screen, manage), and the bundle pill no longer
+doubles up above it.</li>
+</ul>
+<h3>iOS Logs (new)</h3>
+<ul>
+<li>
+<strong>Stream a simulator's unified log</strong> — the new iOS Logs feature tails a
+booted iOS Simulator's native logs (<code>log stream</code>) in the same pane logcat
+uses: level picker, text filter, the ⌘F find bar, export, and right-click
+to filter by process.</li>
+</ul>
+<h3>JS Console stays connected</h3>
+<ul>
+<li>
+<strong>No more idle disconnects</strong> — a silent keepalive satisfies React Native's
+inspector-proxy heartbeat, which a plain WebSocket ping doesn't.</li>
+<li>
+<strong>Reconnects survive app relaunches, phone sleep, and Metro restarts</strong> —
+auto-reconnect no longer strands itself on a stale device id.</li>
+<li>
+<strong>Plays nice with React Native DevTools</strong> — when another debugger takes
+over (RN ≤ 0.84 allows one), the console stands down with a notice instead
+of fighting for the session; on RN 0.85+ both attach side by side.</li>
+<li>
+<strong>No duplicate logs on reconnect</strong> — Hermes' replayed console history is
+deduplicated, so the feed no longer doubles after each reconnect.</li>
+</ul>
 <h3>Screen mirror</h3>
 <ul>
 <li>
 <strong>Fixed: runaway CPU after using the mirror</strong> — switching away from the
-mirror tab while it was still connecting could silently restart the session
-in the background, where nothing could ever stop it. Each leaked session
-kept streaming and decoding (about a core each, and they stacked) until the
-app quit — the reported 500%+ CPU after using the mirror traces to this.</li>
+mirror while it was still connecting could leak a session that kept
+streaming and decoding until the app quit (the reported 500%+ CPU). Leaked
+sessions and stray adb tunnels are gone.</li>
 <li>
-<strong>Fixed: stray adb processes and tunnels</strong> — a stop racing a starting
-session could strand an idle adb client, its port forward, and the
-device-side server. Teardown now also cleans up whatever the racing start
-created.</li>
-<li>
-<strong>Lower latency</strong> — frames render the moment they're decoded instead of
-being paced against a mismatched clock, touch input is no longer batched by
-the TCP stack, and frames can't queue behind a busy UI — the slow-motion
-catch-up for the first seconds after opening the mirror is gone, along with
-picture smearing when the app was under load.</li>
+<strong>Lower latency</strong> — frames render as they decode, touch input isn't
+batched by the TCP stack, and the slow-motion catch-up after opening the
+mirror is gone.</li>
 <li>
 <strong>Device audio is now opt-in</strong> — the mirror starts video-only; the Audio
-switch in the control bar streams device audio too (restarts the mirror,
-Android 11+). The choice persists.</li>
+switch streams device audio too (Android 11+). The choice persists.</li>
 </ul>
-<h3>Reactotron</h3>
+<h3>Improvements</h3>
 <ul>
 <li>
-<strong>Copy as cURL keeps query params and form fields</strong> — copied requests now
-reproduce the original URL and body.</li>
-<li>Timeline frames stay in wire order, and large frames no longer truncate.</li>
-</ul>
-<h3>Also in this beta</h3>
-<ul>
+<strong>Device dropdown refreshes itself</strong> — opening it re-scans for devices;
+the separate refresh button appears only when nothing is connected.</li>
+<li>
+<strong>Smooth resizing</strong> — dragging the sidebar edge and the split-pane divider
+no longer jitters.</li>
+<li>
+<strong>Newest-first logs</strong> — Logcat, JS Console, and Reactotron can flip to
+newest-at-top.</li>
+<li>
+<strong>Beta update channel</strong> — Settings ▸ General ▸ Updates gains an opt-in
+beta channel; opting out never downgrades.</li>
+<li>Reactotron's Copy as cURL keeps query params and form fields, timeline
+frames stay in wire order, and large frames no longer truncate.</li>
 <li>Pulling an app's APK grabs every split APK, not just base.apk.</li>
+<li>Device platforms, features, and the Emulators screen scope to your role.</li>
 </ul>
-<hr>
 ]]></description>
-      <pubDate>Wed, 15 Jul 2026 09:59:28 +0000</pubDate>
-      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.3.0-beta.2/Droidective-v3.3.0-beta.2.dmg" sparkle:edSignature="8bEriHPL76ne486tIeEBYyz1JwQJVAdatLe0lgtsyKfmnvV82yKNFQM0z1ujIctmDDGWdmuKn+P15ecuzO9eAw==" length="52366174" type="application/octet-stream" />
+      <pubDate>Wed, 15 Jul 2026 11:47:03 +0000</pubDate>
+      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.3.0/Droidective-v3.3.0.dmg" sparkle:edSignature="P/fqogk1wEYyrotfhjbExOavloN7M9dtUwZzkdEOehT5G0/lSCB83GbEbXx5ycTGGSIDEmjefZq7fzAoQPnXCA==" length="52446696" type="application/octet-stream" />
     </item>
-    <item>
-      <title>Droidective 3.2.0</title>
-      <sparkle:version>409</sparkle:version>
-      <sparkle:shortVersionString>3.2.0</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[
-<style>
-:root { color-scheme: light dark; }
-body { font: 13px/1.55 -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; }
-h2 { font-size: 1.3em; margin: .2em 0 .4em; }
-h3 { font-size: 1.05em; margin: 1.1em 0 .3em; }
-p { margin: .5em 0; }
-ul { margin: .4em 0; padding-left: 1.4em; }
-li { margin: .3em 0; }
-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9em; background: color-mix(in srgb, currentColor 12%, transparent); padding: .1em .35em; border-radius: 4px; }
-pre { background: color-mix(in srgb, currentColor 8%, transparent); padding: .6em .8em; border-radius: 6px; overflow-x: auto; }
-pre code { background: none; padding: 0; }
-a { color: #2f9e44; }
-</style>
-<p>Wireless debugging moves into the device dropdown: pair and connect a device
-over Wi-Fi from anywhere in the app, with a guided flow for each path.</p>
-<h3>Connect over Wi-Fi</h3>
-<ul>
-<li>
-<strong>Pair &amp; connect from the device dropdown</strong> — the device menu gains a
-"Wireless debugging" section with <em>Pair new device…</em> and <em>Connect to
-device…</em>, opening a guided sheet with three paths:
-<ul>
-<li>
-<strong>Pair new device</strong> — numbered steps that mirror the phone's Android 11+
-pairing dialog: where to find it, one field for the <code>ip:port</code> it shows plus
-the 6-digit code, then a connect step that explains the connection port
-differs from the pairing port (the host carries over after pairing).</li>
-<li>
-<strong>Already paired</strong> — a single <code>ip:port</code> field for a device that was paired
-before or is already in tcpip mode.</li>
-<li>
-<strong>Via USB cable</strong> — one click switches a plugged-in device to Wi-Fi
-debugging and connects; the device list updates live.</li>
-</ul>
-</li>
-<li>
-<strong>Paste-friendly addresses</strong> — every address field takes the exact
-"IP address &amp; Port" string the phone displays (IPv6 and stray whitespace
-included); buttons stay disabled until the input is valid.</li>
-<li>
-<strong>Clear outcomes</strong> — adb's own reason is shown inline on failure (wrong
-code, unreachable host, an adb too old to pair), and a successful
-connection selects the new device and confirms in a notification.</li>
-</ul>
-<h3>Fixes</h3>
-<ul>
-<li>The tab strip's Home button no longer sits flush against its divider.</li>
-</ul>
-<hr>
-]]></description>
-      <pubDate>Tue, 14 Jul 2026 09:23:49 +0000</pubDate>
-      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.2.0/Droidective-v3.2.0.dmg" sparkle:edSignature="00GFj1DXzXpJjcldDx+7l0XSnHZdODPsSFAIin/tfuNdTC/cqL0b5FWZmPWoIVYrM+8/C0YiJ8Q28L1RbkmxDA==" length="52369326" type="application/octet-stream"/>
-    </item>
+    
   </channel>
 </rss>
