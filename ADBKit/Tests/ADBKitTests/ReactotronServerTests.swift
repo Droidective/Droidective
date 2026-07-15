@@ -124,6 +124,42 @@ import Testing
         }
     }
 
+    /// A burst of frames must reach the event stream in wire order — the
+    /// server pipes each connection's frames through one ordered consumer, so
+    /// timeline rows can't leapfrog each other under load.
+    @Test(.timeLimit(.minutes(1)))
+    func burstOfFramesArrivesInWireOrder() async throws {
+        let server = ReactotronServer(port: 0)
+        let stream = try await server.start()
+        defer { Task { await server.stop() } }
+        var iterator = stream.makeAsyncIterator()
+        let port = try await waitForListening(&iterator)
+
+        let url = try #require(URL(string: "ws://127.0.0.1:\(port)"))
+        let task = URLSession.shared.webSocketTask(with: url)
+        task.resume()
+        defer { task.cancel(with: .goingAway, reason: nil) }
+        try await task.send(.string(
+            #"{"type":"client.intro","payload":{"name":"BurstApp"},"important":false,"date":"d","deltaTime":0}"#
+        ))
+        guard case .connected = try await nextEvent(&iterator) else {
+            Issue.record("expected .connected"); return
+        }
+
+        let count = 100
+        for index in 0..<count {
+            try await task.send(.string(
+                #"{"type":"log","payload":{"level":"debug","message":"\#(index)"},"important":false,"date":"d","deltaTime":1}"#
+            ))
+        }
+        for index in 0..<count {
+            guard case let .command(_, command, _) = try await nextEvent(&iterator) else {
+                Issue.record("expected .command #\(index)"); return
+            }
+            #expect(command.payload?["message"]?.stringValue == "\(index)")
+        }
+    }
+
     private func waitForListening(_ iterator: inout Iterator) async throws -> UInt16 {
         while let event = await iterator.next() {
             if case let .listening(port) = event { return port }

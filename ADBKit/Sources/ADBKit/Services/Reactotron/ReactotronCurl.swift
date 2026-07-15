@@ -35,7 +35,9 @@ public enum ReactotronCurl {
         }
         if let form {
             for (name, value) in form {
-                parts.append("-F \(shellQuote("\(name)=\(value)"))")
+                // --form-string, not -F: a value starting with "@" or "<"
+                // would otherwise be read as a local file/stdin reference.
+                parts.append("--form-string \(shellQuote("\(name)=\(value)"))")
             }
         }
         if let body {

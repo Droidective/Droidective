@@ -168,11 +168,23 @@ import Testing
         ])
         let curl = ReactotronCurl.command(method: "POST", url: "https://x.test/upload", request: request)
         #expect(curl.contains("-X POST"))
-        #expect(curl.contains("-F 'field=value'"))
-        #expect(curl.contains(#"-F 'photo={"name":"a.jpg","uri":"file:///a.jpg"}'"#))
+        #expect(curl.contains("--form-string 'field=value'"))
+        #expect(curl.contains(#"--form-string 'photo={"name":"a.jpg","uri":"file:///a.jpg"}'"#))
         #expect(curl.contains("-H 'accept: application/json'"))
         #expect(!curl.contains("content-type"))
         #expect(!curl.contains("--data"))
+    }
+
+    @Test func formValueStartingWithAtSignStaysLiteral() {
+        // -F would read "@token" as a local-file reference; --form-string
+        // must carry it verbatim.
+        let request = JSONValue.object([
+            "data": .object(["_parts": .array([
+                .array([.string("handle"), .string("@rohindh")]),
+            ])]),
+        ])
+        let curl = ReactotronCurl.command(method: "POST", url: "https://x.test", request: request)
+        #expect(curl.contains("--form-string 'handle=@rohindh'"))
     }
 
     @Test func plainObjectBodyIsNotMistakenForFormData() {
