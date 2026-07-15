@@ -1,3 +1,73 @@
+## Droidective v3.3.0
+
+A JS console that stays connected, a screen mirror that no longer eats CPU
+after you leave it, logcat search split into separate Filter and Find, and a
+first iOS feature: streaming a simulator's native logs.
+
+### Logcat: Filter vs Find
+
+- **Filter and Find are now separate** — the toolbar field *filters* (shows
+  only matching lines, as before); a new find bar (⌘F) *finds*: it highlights
+  matches and steps through them with ⌘G/⇧⌘G and a "2 of 7" counter without
+  hiding anything.
+- **One app selector** — the App menu inside logcat now does everything the
+  bar's bundle pill did (pick a saved bundle, add from the device's installed
+  apps, grab the app on screen, manage), and the bundle pill no longer
+  doubles up above it.
+
+### iOS Logs (new)
+
+- **Stream a simulator's unified log** — the new iOS Logs feature tails a
+  booted iOS Simulator's native logs (`log stream`) in the same pane logcat
+  uses: level picker, text filter, the ⌘F find bar, export, and right-click
+  to filter by process.
+
+### JS Console stays connected
+
+- **No more idle disconnects** — a silent keepalive satisfies React Native's
+  inspector-proxy heartbeat, which a plain WebSocket ping doesn't.
+- **Reconnects survive app relaunches, phone sleep, and Metro restarts** —
+  auto-reconnect no longer strands itself on a stale device id.
+- **Plays nice with React Native DevTools** — when another debugger takes
+  over (RN ≤ 0.84 allows one), the console stands down with a notice instead
+  of fighting for the session; on RN 0.85+ both attach side by side.
+- **No duplicate logs on reconnect** — Hermes' replayed console history is
+  deduplicated, so the feed no longer doubles after each reconnect.
+
+### Screen mirror
+
+- **Fixed: runaway CPU after using the mirror** — switching away from the
+  mirror while it was still connecting could leak a session that kept
+  streaming and decoding until the app quit (the reported 500%+ CPU). Leaked
+  sessions and stray adb tunnels are gone.
+- **Lower latency** — frames render as they decode, touch input isn't
+  batched by the TCP stack, and the slow-motion catch-up after opening the
+  mirror is gone.
+- **Device audio is now opt-in** — the mirror starts video-only; the Audio
+  switch streams device audio too (Android 11+). The choice persists.
+
+### Improvements
+
+- **Device dropdown refreshes itself** — opening it re-scans for devices;
+  the separate refresh button appears only when nothing is connected.
+- **Smooth resizing** — dragging the sidebar edge and the split-pane divider
+  no longer jitters.
+- **Newest-first logs** — Logcat, JS Console, and Reactotron can flip to
+  newest-at-top.
+- **Beta update channel** — Settings ▸ General ▸ Updates gains an opt-in
+  beta channel; opting out never downgrades.
+- Reactotron's Copy as cURL keeps query params and form fields, timeline
+  frames stay in wire order, and large frames no longer truncate.
+- Pulling an app's APK grabs every split APK, not just base.apk.
+- Device platforms, features, and the Emulators screen scope to your role.
+
+### Install
+
+Download `Droidective-v3.3.0.dmg` below, or `brew install --cask
+rohindh-r/tap/droidective`. Existing installs update in place via Sparkle.
+
+---
+
 ## Droidective v3.3.0-beta.2
 
 This beta fixes the runaway-CPU reports traced to the screen mirror and cuts

@@ -21,7 +21,7 @@ export const RELEASES_URL = `${GITHUB_URL}/releases`
 // stable-named Droidective.dmg (see ci.yml), so this always serves the
 // newest version — no appcast fetch, nothing cached to go stale.
 export const DOWNLOAD_URL = `${GITHUB_URL}/releases/latest/download/Droidective.dmg`
-export const APP_VERSION = "v3.2.0"
+export const APP_VERSION = "v3.3.0"
 
 export interface PaletteCommand {
   icon: LucideIcon
@@ -96,7 +96,7 @@ export const showcases: Showcase[] = [
   {
     eyebrow: "the palette",
     title: "One keystroke to everything",
-    body: "Hit ⌘T from any screen and fuzzy-search all 56 tools. The device bar follows you, so every command targets the device you mean.",
+    body: "Hit ⌘T from any screen and fuzzy-search all 57 tools. The device bar follows you, so every command targets the device you mean.",
     ticks: [
       { lead: "Pin favorites", rest: " and bind global hotkeys" },
       { lead: "Target one device", rest: " or fan out to all of them" },
@@ -197,11 +197,12 @@ export const galleryShots = [
   { image: "/assets/screenshot-device.webp", alt: "Droidective device info showing RAM, storage, battery health and CPU for the connected device", title: "Device info", caption: "RAM, storage, battery health, CPU, and every getprop — searchable." },
   { image: "/assets/screenshot-hotkeys.webp", alt: "Droidective hotkeys settings — record a global shortcut to show the app, and a per-feature shortcut for any tool", title: "Global hotkeys", caption: "Bind a global shortcut to summon the app, and one per feature." },
   { image: "/assets/screenshot-tabs.webp", alt: "Droidective home screen with a multi-tab strip across the top — File Explorer, Device Info, Connection, Performance Monitor, Apps, and Terminal behind a permanent Home icon", title: "Tabbed home", caption: "Your most-used tools front and center, each a tab away." },
-  { image: "/assets/screenshot-catalog.webp", alt: "Droidective feature catalog listing all 56 tools with on/off toggles", title: "Feature catalog", caption: "Toggle, reorder, and pin any of the 56 tools." },
+  { image: "/assets/screenshot-catalog.webp", alt: "Droidective feature catalog listing all 57 tools with on/off toggles", title: "Feature catalog", caption: "Toggle, reorder, and pin any of the 57 tools." },
 ]
 
 export const releases: { version: string; date: string; latest?: boolean; html: string }[] = [
-  { version: "v3.2.0", date: "Jul 2026", latest: true, html: "<b>Pair &amp; connect over Wi-Fi from the device dropdown</b> — the device menu gains a Wireless debugging section opening a guided sheet with three paths: Android 11+ pairing with a code (numbered steps that mirror the phone's pairing dialog, with the connection-vs-pairing port difference explained), a direct <code>ip:port</code> connect for already-paired devices, and a one-click USB→Wi-Fi switch. Address fields take the exact string the phone shows — paste and go — and a successful connection selects the new device automatically." },
+  { version: "v3.3.0", date: "Jul 2026", latest: true, html: "<b>A JS console that stays connected</b> — a keepalive satisfies React Native's inspector-proxy heartbeat, reconnects survive app relaunches, phone sleep, and Metro restarts, and logs no longer duplicate after each reconnect. The <b>screen mirror's runaway CPU is fixed</b> (leaked background sessions), its latency drops, and device audio becomes opt-in. <b>Logcat splits Filter and Find</b>: the field hides non-matching lines while <kbd>⌘F</kbd> highlights and steps through matches with a counter — and the new <b>iOS Logs</b> feature streams a booted simulator's native logs in the same pane. The device dropdown refreshes itself on open, and sidebar &amp; split-pane resizing is smooth." },
+  { version: "v3.2.0", date: "Jul 2026", html: "<b>Pair &amp; connect over Wi-Fi from the device dropdown</b> — the device menu gains a Wireless debugging section opening a guided sheet with three paths: Android 11+ pairing with a code (numbered steps that mirror the phone's pairing dialog, with the connection-vs-pairing port difference explained), a direct <code>ip:port</code> connect for already-paired devices, and a one-click USB→Wi-Fi switch. Address fields take the exact string the phone shows — paste and go — and a successful connection selects the new device automatically." },
   { version: "v3.1.0", date: "Jul 2026", html: "<b>Custom commands, reworked</b> — one box for full command lines exactly as you'd type them in a terminal (multi-line supported), <kbd>adb</kbd> lines detected automatically, and each command can open Droidective's Terminal or your Mac's default terminal. The <b>Quick Actions panel is now yours to curate</b>: pin custom commands with <kbd>⌘P</kbd>, hide actions you don't use, and a <code>{bundleId}</code> command with no app selected asks you to pick one instead of erroring. Updates check twice a day and a dismissed update returns as a notification until installed. Apps gain a one-click <b>Restart</b> everywhere they're managed, launching works on devices with a broken <code>monkey</code>, the app no longer installs tools via Homebrew (it links to the official sources), and the welcome tour ends by pressing your new Quick Actions hotkey — confetti included." },
   { version: "v3.0.1", date: "Jul 2026", html: "<b>Bug-fix release</b> — Uninstall and Monkey Test now confirm before running, Logcat streams as soon as a device authorizes, and the APK tools (Studio, Inspector, Sign, Decompile) and Reactotron open without an Android device selected. Frida and Change Locale give honest status messages, Screen Record and Performance recordings survive a mid-capture disconnect, and anonymous analytics no longer include the device model or OS version. Bundled developer tools now install pinned, known-good versions." },
   { version: "v3.0.0", date: "Jul 2026", html: "<b>Terminal split panes</b> — <kbd>⌘D</kbd> splits the shell side by side, <kbd>⇧⌘D</kbd> stacks it, and new tabs and panes open in the focused shell's working directory — no shell config needed — with the tab list dockable as a left rail or a Chrome-style top strip. The <b>onboarding tour is rebuilt</b> around recordings of the real app, the <b>React Native and Connection hubs are redesigned</b> (described action cards, a Metro port field, your device's live Wi-Fi network and IP), <b>custom commands run in your login shell</b> — aliases work, optionally in a Terminal tab — and the JS Console gains <b>Reload JS and Restart app</b>." },

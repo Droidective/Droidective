@@ -29,7 +29,7 @@ needs a new UI layer.
 
 ## Features
 
-A searchable palette (`⌘T`) of 56 tools, organised by category and
+A searchable palette (`⌘T`) of 57 tools, organised by category and
 gathered into focused hubs (React Native, Simulate, Connection, APK Studio) so
 the sidebar stays short. Every action is on by default; hide the ones you don't want from
 the in-app catalog.
@@ -61,10 +61,13 @@ the in-app catalog.
   and sign — including creating a keystore) and **Frida** setup (arch-matched
   frida-server / frida-gadget). jadx, apktool, and a Java runtime download on
   demand and are managed in Settings.
-- **Logs & diagnostics** — live logcat (level/app/tag/text filters,
-  follow-to-bottom, export), crash catcher with Slack/Jira formatting, one-click
-  bug-report zip, and a **performance monitor** (per-core CPU, RAM, FPS, network,
-  and per-process usage charted live, recorded, and exported to JSON/CSV).
+- **Logs & diagnostics** — live logcat (level/app/tag/text filters, a ⌘F find
+  bar that highlights and steps through matches without hiding lines,
+  follow-to-bottom, export), **iOS Logs** (the same pane streaming a booted
+  iOS Simulator's unified log), crash catcher with Slack/Jira formatting,
+  one-click bug-report zip, and a **performance monitor** (per-core CPU, RAM,
+  FPS, network, and per-process usage charted live, recorded, and exported to
+  JSON/CSV).
 - **Tool UX** — a multi-tab **Terminal** (real PTY login shells with the
   selected device exported as `ANDROID_SERIAL`), custom command macros with
   `{bundleId}`/`{serial}` placeholders (typed as full command lines — even
@@ -128,7 +131,7 @@ through Sparkle (and `brew upgrade` defers to that).
 ADBKit/   Swift package — all logic, zero UI dependencies (swift test)
   Exec/         adb process execution, tool location, scoped command log
   Devices/      discovery (2s polling), getprop, hardware/usage overview
-  Features/     declarative 56-feature registry + runners + how-to notes
+  Features/     declarative 57-feature registry + runners + how-to notes
   Services/     logcat streaming, overrides, file/apps explorers, capture,
                 screen record, crash, bug report, wireless, emulators,
                 performance + network monitors, APK inspect/sign/decompile,
