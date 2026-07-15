@@ -11,6 +11,12 @@ struct RootView: View {
     /// Left-pane fraction (0…1) of the editor split; the layout clamps it so
     /// neither pane collapses.
     @AppStorage("tabSplitFraction") private var splitFraction = 0.5
+    /// In-flight drag values for the two seams. Layout reads these over the
+    /// persisted @AppStorage values so a drag never writes UserDefaults per
+    /// tick — each write re-evaluates the App scene (and the window minimum
+    /// width derived from `sidebarWidth`) mid-drag, which stuttered the drag.
+    @State private var sidebarDragWidth: Double?
+    @State private var splitDragFraction: Double?
     @AppStorage("hasSeenTour") private var hasSeenTour = false
     @AppStorage("hasChosenRole") private var hasChosenRole = false
     @AppStorage("launchCount") private var launchCount = 0
@@ -409,9 +415,9 @@ struct RootView: View {
         HStack(spacing: 0) {
             if state.sidebarVisible && !sidebarAutoHide {
                 SidebarPaletteView()
-                    .frame(width: min(max(sidebarWidth, 300), 460))
+                    .frame(width: sidebarDragWidth ?? min(max(sidebarWidth, 300), 460))
                     .transition(.move(edge: .leading).combined(with: .opacity))
-                ResizeHandle(value: $sidebarWidth, range: 300...460)
+                ResizeHandle(value: $sidebarWidth, live: $sidebarDragWidth, range: 300...460)
             }
             VStack(spacing: 0) {
                 // Device bar on top (shared across panes); each pane's own tab
@@ -493,6 +499,11 @@ struct RootView: View {
                 withAnimation(.easeInOut(duration: 0.18)) { state.sidebarVisible = true }
             }
         }
+        // The stationary ancestor space both seam drags measure in — a drag
+        // measured in the handle's own space feeds back on itself as the
+        // handle moves (jitter), and being inside the zoom scaleEffect keeps
+        // deltas in logical coordinates at any ⌘= zoom level.
+        .coordinateSpace(name: ResizeHandle.dragSpace)
     }
 
     private var overlaySidebarWidth: CGFloat {
@@ -515,8 +526,11 @@ struct RootView: View {
                     .frame(width: state.isSplit ? leftW : geo.size.width, alignment: .topLeading)
                     .clipped()
                 if state.isSplit {
-                    SplitDivider(fraction: $splitFraction, totalWidth: geo.size.width)
-                        .frame(width: 8)
+                    SplitDivider(
+                        fraction: $splitFraction, live: $splitDragFraction,
+                        totalWidth: geo.size.width
+                    )
+                    .frame(width: 8)
                     EditorPane(index: 1)
                         .frame(width: rightW, alignment: .topLeading)
                         .clipped()
@@ -533,7 +547,8 @@ struct RootView: View {
         // small window, or a high font zoom shrinking the logical width — shrinks
         // both panes evenly instead of overflowing the right one off-screen.
         let minPane = min(320, available / 2)
-        return min(max(available * splitFraction, minPane), available - minPane)
+        let fraction = splitDragFraction ?? splitFraction
+        return min(max(available * fraction, minPane), available - minPane)
     }
 
     /// Window title for the focused pane's active tab. The chrome screens
@@ -729,6 +744,7 @@ struct TabDragCancelCatch: DropDelegate {
 /// neither pane collapses.
 private struct SplitDivider: View {
     @Binding var fraction: Double
+    @Binding var live: Double?
     let totalWidth: CGFloat
     @State private var startFraction: Double?
 
@@ -738,14 +754,18 @@ private struct SplitDivider: View {
             .contentShape(Rectangle())
             .onHover { $0 ? NSCursor.resizeLeftRight.set() : NSCursor.arrow.set() }
             .gesture(
-                DragGesture()
+                DragGesture(coordinateSpace: .named(ResizeHandle.dragSpace))
                     .onChanged { gesture in
                         let base = startFraction ?? fraction
                         if startFraction == nil { startFraction = fraction }
                         let delta = totalWidth > 0 ? gesture.translation.width / totalWidth : 0
-                        fraction = min(0.8, max(0.2, base + delta))
+                        live = min(0.8, max(0.2, base + delta))
                     }
-                    .onEnded { _ in startFraction = nil }
+                    .onEnded { _ in
+                        if let live { fraction = live }
+                        live = nil
+                        startFraction = nil
+                    }
             )
     }
 }
@@ -827,11 +847,20 @@ private struct WindowAccessor: NSViewRepresentable {
     func updateNSView(_ nsView: WindowReaderView, context: Context) {}
 }
 
-/// A draggable divider that resizes an adjacent pane. `value` is the pane's
-/// size (bound to a persisted @AppStorage). `inverted` is for panes that grow
-/// when dragging toward the start (e.g. a bottom bar dragged upward).
+/// A draggable divider that resizes an adjacent pane. Drag ticks write `live`
+/// (transient @State the layout reads over `value`); the final size is
+/// committed to `value` — the persisted @AppStorage — once on release.
+/// `inverted` is for panes that grow when dragging toward the start (e.g. a
+/// bottom bar dragged upward). The host must attach
+/// `.coordinateSpace(name: ResizeHandle.dragSpace)` on a stationary ancestor.
 struct ResizeHandle: View {
+    /// Named coordinate space every seam drag measures in. Measuring in the
+    /// handle's own space feeds the handle's movement back into the
+    /// translation, which oscillates the drag.
+    static let dragSpace = "resizeDragSpace"
+
     @Binding var value: Double
+    @Binding var live: Double?
     let range: ClosedRange<Double>
     var axis: Axis = .horizontal
     var inverted = false
@@ -855,15 +884,19 @@ struct ResizeHandle: View {
                         }
                     }
                     .gesture(
-                        DragGesture()
+                        DragGesture(coordinateSpace: .named(Self.dragSpace))
                             .onChanged { gesture in
                                 let base = startValue ?? value
                                 if startValue == nil { startValue = value }
                                 let delta = axis == .horizontal ? gesture.translation.width : gesture.translation.height
                                 let next = base + (inverted ? -delta : delta)
-                                value = min(max(next, range.lowerBound), range.upperBound)
+                                live = min(max(next, range.lowerBound), range.upperBound)
                             }
-                            .onEnded { _ in startValue = nil }
+                            .onEnded { _ in
+                                if let live { value = live }
+                                live = nil
+                                startValue = nil
+                            }
                     )
             }
     }
