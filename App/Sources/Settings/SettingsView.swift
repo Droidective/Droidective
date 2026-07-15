@@ -51,6 +51,7 @@ struct GeneralSettingsView: View {
     @AppStorage("showMenuBarExtra") private var showMenuBar = true
     @AppStorage(keepRunningInBackgroundKey) private var keepRunningInBackground = true
     @AppStorage(quickPanelResumeMinutesKey) private var quickPanelResumeMinutes = 5
+    @AppStorage(quickPanelCloseAfterRunKey) private var closePanelAfterRun = false
     @State private var openAtLoginOn = false
     @State private var showMenuItems = false
     @State private var showQuickActionToggles = false
@@ -136,6 +137,10 @@ struct GeneralSettingsView: View {
                     Text("For 1 hour").tag(60)
                 }
                 Text("Reopening the panel within this window returns to the screen and device you had — after that it starts fresh. Open the panel with its global hotkey (record one in the Hotkeys tab) or from the menu bar icon.")
+                    .font(.app(.footnote))
+                    .foregroundStyle(.textMuted)
+                Toggle("Close the panel after running an action", isOn: $closePanelAfterRun)
+                Text("A successful action dismisses the panel right after its result shows; a failed one keeps it open so you can read the error.")
                     .font(.app(.footnote))
                     .foregroundStyle(.textMuted)
                 DisclosureGroup(isExpanded: $showQuickActionToggles) {

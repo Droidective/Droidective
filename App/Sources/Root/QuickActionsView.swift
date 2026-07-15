@@ -180,6 +180,9 @@ struct QuickActionsView: View {
     @State private var emulatorsLoading = false
     /// Outcome of the last action run from the panel, shown in the footer.
     @State private var lastRun: QuickRunOutcome?
+    /// Settings ▸ General ▸ Quick Actions: dismiss the panel once an action
+    /// completes successfully (failures always stay open).
+    @AppStorage(quickPanelCloseAfterRunKey) private var closeAfterRun = false
     @FocusState private var searchFocused: Bool
 
     @MainActor init(onClose: @escaping () -> Void) {
@@ -377,7 +380,7 @@ struct QuickActionsView: View {
             QuickActionFormView(
                 feature: feature,
                 targetsProvider: { explicitTargets(for: $0) },
-                onFinish: finish
+                onFinish: { finish($0) }
             )
         } else if isRoot {
             Divider()
@@ -1417,7 +1420,8 @@ struct QuickActionsView: View {
             state.requestDevice(serial)
             syncMemory()
             if !stack.isEmpty { pop() }
-            finish(QuickRunOutcome(message: "Now targeting \(label)", ok: true))
+            // Retargeting isn't an action — never auto-close on it.
+            finish(QuickRunOutcome(message: "Now targeting \(label)", ok: true), allowsAutoClose: false)
         case .chooseDevice(let serial, _):
             pickedSerial = serial
             approvedAllSerials = nil
@@ -1644,8 +1648,19 @@ struct QuickActionsView: View {
 
     /// Show the outcome in the footer. The panel stays up — chain more
     /// actions, use the result's Reveal/Copy, and leave with Esc.
-    private func finish(_ outcome: QuickRunOutcome) {
+    /// Every action path lands here with its final outcome. With the
+    /// Settings ▸ Quick Actions auto-close on, a successful run dismisses the
+    /// panel after a beat — long enough for the footer result to register —
+    /// while a failure always stays open so the error is readable.
+    /// `allowsAutoClose: false` is for outcomes that aren't really actions
+    /// (switching the target device).
+    private func finish(_ outcome: QuickRunOutcome, allowsAutoClose: Bool = true) {
         runningRowID = nil
         lastRun = outcome
+        guard closeAfterRun, allowsAutoClose, outcome.ok else { return }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(450))
+            onClose()
+        }
     }
 }
