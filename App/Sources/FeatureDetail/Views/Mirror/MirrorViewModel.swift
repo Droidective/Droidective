@@ -95,10 +95,10 @@ final class MirrorViewModel {
             return
         }
         self.server = server
-        // Interactive mirror: control on, audio when the device can supply it.
-        // Cap the size for smooth, low-latency display. Recording started
-        // mid-stream forces a fresh key frame via RESET_VIDEO (see
-        // MirrorSession.startRecording).
+        // Interactive mirror: control on, audio only when opted in (the
+        // control-bar toggle). Cap the size for smooth, low-latency display.
+        // Recording never taps this stream — it runs its own scrcpy session
+        // (see `screenRecorder`) so it starts on a fresh key frame.
         let params = ScrcpyServerParams(
             scid: UInt32.random(in: 1 ... 0x7fff_ffff),
             audio: requestAudio, control: true, maxSize: 1280)
