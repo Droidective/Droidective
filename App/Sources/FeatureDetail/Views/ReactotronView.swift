@@ -679,6 +679,8 @@ final class ReactotronSession {
 /// follow-to-bottom. A second tab drives the client's custom commands.
 struct ReactotronView: View {
     @Environment(AppState.self) private var state
+    /// Bumped by ⌘F; the primary timeline pane focuses its search on change.
+    @State private var findFocusToken = 0
     @Environment(\.tabIsActive) private var tabIsActive
 
     // View-local UI only — drafts and the active tab/split. Everything that must
@@ -923,14 +925,30 @@ struct ReactotronView: View {
 
     @ViewBuilder
     private var timelineBody: some View {
-        if split {
-            HStack(spacing: 0) {
-                pane(showOnboarding: true)
-                Divider()
-                pane(showOnboarding: false)
+        Group {
+            if split {
+                HStack(spacing: 0) {
+                    pane(showOnboarding: true, findToken: findFocusToken)
+                    Divider()
+                    pane(showOnboarding: false)
+                }
+            } else {
+                pane(
+                    showOnboarding: true, trailing: AnyView(paneGlobalControls),
+                    findToken: findFocusToken
+                )
             }
-        } else {
-            pane(showOnboarding: true, trailing: AnyView(paneGlobalControls))
+        }
+        // ⌘F focuses the (first) timeline's search — Reactotron's only text
+        // filter, so that's what "find" means here. A zero-opacity button
+        // carries the shortcut, registered only while this is the focused
+        // pane's tab (hidden keep-alive tabs must not steal ⌘F).
+        .background {
+            Button("") { findFocusToken += 1 }
+                .keyboardShortcut(state.activeTabID == "reactotron"
+                    ? KeyboardShortcut("f", modifiers: .command) : nil)
+                .opacity(0)
+                .accessibilityHidden(true)
         }
     }
 
@@ -958,7 +976,9 @@ struct ReactotronView: View {
         }
     }
 
-    private func pane(showOnboarding: Bool, trailing: AnyView? = nil) -> some View {
+    private func pane(
+        showOnboarding: Bool, trailing: AnyView? = nil, findToken: Int = 0
+    ) -> some View {
         TimelinePane(
             items: session.displayedItems,
             targetEmpty: state.targetSerials.isEmpty,
@@ -966,6 +986,7 @@ struct ReactotronView: View {
             showOnboarding: showOnboarding,
             minContentWidth: session.maxRowWidth,
             trailing: trailing,
+            findToken: findToken,
             onExport: { session.export($0) },
             onRetry: { Task { await session.start(serials: readySerials) } }
         )
@@ -1421,6 +1442,9 @@ private struct TimelinePane: View {
     /// Extra trailing toolbar content — the global timeline controls when the
     /// pane is the only one on screen (no dedicated strip above it).
     let trailing: AnyView?
+    /// Bumped by the tab-level ⌘F to focus this pane's search (the primary
+    /// pane in a split; the second pane always gets the never-firing 0).
+    var findToken = 0
     let onExport: ([RtItem]) -> Void
     let onRetry: () -> Void
 
@@ -1469,7 +1493,7 @@ private struct TimelinePane: View {
             .help("Filter the timeline by event type")
             .sheet(isPresented: $showFilterSheet) { filterSheet }
 
-            SearchField(prompt: "Search…", text: $search)
+            SearchField(prompt: "Search…", text: $search, focusToken: findToken)
                 .frame(maxWidth: 200)
 
             Spacer()

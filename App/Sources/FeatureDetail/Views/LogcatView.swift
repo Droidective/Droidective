@@ -26,6 +26,7 @@ struct LogcatView: View {
     @State private var findInput = ""
     @State private var find = ""
     @State private var currentFindID: UUID?
+    @State private var findFocusToken = 0
     @State private var waitingForPackage: String?
     @State private var streamingPid: Int?
     /// One-shot: the App filter is seeded from the device bar's chosen bundle
@@ -129,12 +130,17 @@ struct LogcatView: View {
 
             Button {
                 findVisible = true
+                findFocusToken += 1
             } label: {
                 Image(systemName: "text.magnifyingglass")
             }
             .buttonStyle(IconButtonStyle())
             .help("Find & highlight in the log without hiding lines (⌘F)")
-            .keyboardShortcut("f", modifiers: .command)
+            // Registered only while this is the focused pane's tab —
+            // keep-alive hidden tabs stay mounted, and a hidden tab winning
+            // ⌘F opens an invisible find bar whose focus request lands on the
+            // sidebar search.
+            .keyboardShortcut(isActiveTab ? KeyboardShortcut("f", modifiers: .command) : nil)
 
             Button {
                 newestFirst.toggle()
@@ -178,13 +184,17 @@ struct LogcatView: View {
 
     // MARK: - Find bar
 
+    private var isActiveTab: Bool { state.activeTabID == "logcat" }
+
     private func findBar(matches: [UUID]) -> some View {
         LogFindBar(
             text: $findInput,
             countLabel: findCountLabel(matches: matches),
             onNext: { currentFindID = LogLineFilter.advance(from: currentFindID, in: matches, forward: true) },
             onPrevious: { currentFindID = LogLineFilter.advance(from: currentFindID, in: matches, forward: false) },
-            onClose: closeFind
+            onClose: closeFind,
+            focusToken: findFocusToken,
+            shortcutsActive: isActiveTab
         )
         .task(id: findInput) {
             if !find.isEmpty || !findInput.isEmpty {

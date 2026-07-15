@@ -6,6 +6,9 @@ import SwiftUI
 struct SearchField: View {
     let prompt: String
     @Binding var text: String
+    /// Bump to focus the field programmatically (e.g. a ⌘F routed to the
+    /// pane that owns this search). The default never fires.
+    var focusToken = 0
     @FocusState private var focused: Bool
     @Environment(\.controlActiveState) private var controlActive
 
@@ -39,5 +42,10 @@ struct SearchField: View {
         }
         .contentShape(Rectangle())
         .onTapGesture { focused = true }
+        // Deferred: a synchronous @FocusState write doesn't take while
+        // another field elsewhere still holds focus.
+        .onChange(of: focusToken) { _, _ in
+            Task { @MainActor in focused = true }
+        }
     }
 }
