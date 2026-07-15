@@ -216,6 +216,33 @@ offer the update automatically.
 > won't auto-update *to* the first Sparkle-enabled build — download that one
 > manually. Every release after it updates in place.
 
+## Beta releases
+
+A tag with a pre-release suffix rides the beta channel — only installs with
+Settings ▸ General ▸ Updates ▸ "Receive beta updates" switched on see it:
+
+```sh
+git tag vX.Y.Z-beta.1
+git push origin vX.Y.Z-beta.1
+```
+
+Same pipeline, three differences:
+
+- the GitHub release is marked **prerelease**, so the site's
+  `/releases/latest/download/Droidective.dmg` button keeps serving the latest
+  stable;
+- the appcast item carries `<sparkle:channel>beta</sparkle:channel>`, and
+  `update-appcast.sh` keeps the current stable item alongside it (a newer beta
+  replaces the previous beta item);
+- the Homebrew cask is not touched.
+
+Put the beta's notes as the top `## ` section of `RELEASE_NOTES.md` — the notes
+extraction always takes the first section. Shipping the stable `vX.Y.Z`
+afterwards writes a stable-only appcast (the beta cycle ends) and beta installs
+move to it automatically: the run-number `CFBundleVersion` keeps increasing, so
+the stable is an upgrade for them. Opting out of beta never downgrades anyone —
+the install just waits for the next stable.
+
 ## Release checklist
 
 Copy this into the release PR and tick each item.

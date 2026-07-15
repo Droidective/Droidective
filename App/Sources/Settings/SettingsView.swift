@@ -54,6 +54,9 @@ struct GeneralSettingsView: View {
     @State private var openAtLoginOn = false
     @State private var showMenuItems = false
     @State private var showQuickActionToggles = false
+    #if !APPSTORE
+    @ObservedObject private var updater = SparkleUpdater.shared
+    #endif
 
     /// True when the login item is registered (enabled, or pending the user's
     /// approval in System Settings).
@@ -160,11 +163,9 @@ struct GeneralSettingsView: View {
 
             #if !APPSTORE
             Section("Updates") {
-                Toggle("Automatically check for updates", isOn: Binding(
-                    get: { SparkleUpdater.shared.automaticallyChecksForUpdates },
-                    set: { SparkleUpdater.shared.automaticallyChecksForUpdates = $0 }
-                ))
-                Text("Updates are delivered via Sparkle from GitHub Releases.")
+                Toggle("Automatically check for updates", isOn: $updater.automaticallyChecksForUpdates)
+                Toggle("Receive beta updates", isOn: $updater.receivesBetaUpdates)
+                Text("Updates are delivered via Sparkle from GitHub Releases. Beta builds arrive ahead of stable releases and may be rougher; switching beta off keeps the installed build until the next stable release.")
                     .font(.app(.footnote))
                     .foregroundStyle(.textMuted)
             }

@@ -36,9 +36,31 @@ final class UpdaterViewModel: NSObject, ObservableObject {
         controller?.updater.checkForUpdates()
     }
 
+    /// Settings toggles bind to these computed properties, whose truth lives
+    /// outside SwiftUI (Sparkle / UserDefaults) — the explicit
+    /// `objectWillChange` is what re-renders the observing view, otherwise the
+    /// toggle snaps back visually while the underlying value did change.
     var automaticallyChecksForUpdates: Bool {
         get { controller?.updater.automaticallyChecksForUpdates ?? false }
-        set { controller?.updater.automaticallyChecksForUpdates = newValue }
+        set {
+            objectWillChange.send()
+            controller?.updater.automaticallyChecksForUpdates = newValue
+        }
+    }
+
+    /// Opt-in to the beta update channel (appcast items tagged
+    /// `<sparkle:channel>beta</sparkle:channel>`). Stored in UserDefaults and
+    /// read by `allowedChannels(for:)` on every appcast load, so flipping it
+    /// applies to the next check — which opting in triggers right away (in the
+    /// background: silent unless a beta is actually available), instead of
+    /// leaving the user to wait out the twice-daily schedule.
+    var receivesBetaUpdates: Bool {
+        get { UserDefaults.standard.bool(forKey: receiveBetaUpdatesKey) }
+        set {
+            objectWillChange.send()
+            UserDefaults.standard.set(newValue, forKey: receiveBetaUpdatesKey)
+            if newValue { controller?.updater.checkForUpdatesInBackground() }
+        }
     }
 
     /// True once `generate_keys`' output has replaced the project.yml placeholder.
@@ -48,7 +70,19 @@ final class UpdaterViewModel: NSObject, ObservableObject {
     }
 }
 
+/// UserDefaults key for the beta update channel opt-in (Settings ▸ General ▸
+/// Updates). Off by default: everyone stays on stable-only.
+let receiveBetaUpdatesKey = "receiveBetaUpdates"
+
 extension UpdaterViewModel: SPUUpdaterDelegate {
+    /// Sparkle includes appcast items whose `<sparkle:channel>` is in this set;
+    /// untagged (stable) items are always included. Turning beta off later
+    /// never downgrades — the installed build simply waits for the next stable
+    /// release with a higher build number.
+    nonisolated func allowedChannels(for updater: SPUUpdater) -> Set<String> {
+        UserDefaults.standard.bool(forKey: receiveBetaUpdatesKey) ? ["beta"] : []
+    }
+
     /// Sparkle reports how the user resolved the update alert. Closing or
     /// skipping records the version for the once-per-launch reminder — no
     /// notification fires now, the user just declined the alert. Installing
