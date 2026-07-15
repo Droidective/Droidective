@@ -1,3 +1,50 @@
+## Droidective v3.3.1
+
+iOS Logs is rebuilt around how the simulator's unified log actually behaves,
+and ⌘F now always lands where you expect it.
+
+### iOS Logs, rebuilt
+
+- **Scoped to your apps by default** — the unified log unfiltered is the whole
+  simulator OS (thousands of lines a second). The stream now covers only
+  installed apps' processes; *Everything* is one click away when you need
+  system logs.
+- **Scrollback that holds still** — scrolling up freezes the feed; new lines
+  wait behind a "N new" pill (with a waiting count in the status bar) and
+  fold in when you click it or scroll back to the tail. No more unscrollable
+  firehose.
+- **Xcode-style entries** — the message leads, with a toggleable metadata
+  line (time · process (pid) · subsystem · category), a severity color bar,
+  and tinted error/fault rows.
+- **Error & fault counters** — live tallies in the status bar; click to flip
+  the feed to errors only and back.
+- **Sharper filtering** — a multi-select level menu (Info and Debug also
+  widen what the simulator emits), a process menu built from the stream
+  itself (or right-click a line), free-text filter, and ⌘F find.
+
+### ⌘F lands where you expect
+
+- **No more focus jumping to the sidebar** — ⌘F used to be claimable by a
+  hidden tab, sending focus to the sidebar search. It now always targets the
+  screen you're on: the find bar in Logcat, iOS Logs, and the JS Console —
+  and in Reactotron it focuses the timeline search, its only text filter.
+  The sidebar search only takes focus from ⌘T or a click.
+
+### Settings
+
+- **Check for Updates in Settings** — the Updates section shows the installed
+  version with a Check for Updates button, alongside the update toggles.
+- **Quick Actions can close after a run** — a new option dismisses the panel
+  once an action succeeds (failures keep it open so the error stays
+  readable).
+
+### Install
+
+Download `Droidective-v3.3.1.dmg` below, or `brew install --cask
+rohindh-r/tap/droidective`. Existing installs update in place via Sparkle.
+
+---
+
 ## Droidective v3.3.0
 
 A JS console that stays connected, a screen mirror that no longer eats CPU
