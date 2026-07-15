@@ -9,6 +9,12 @@ let keepRunningInBackgroundKey = "keepRunningInBackground"
 /// its session for resume; 0 disables resume. Defaults to 5.
 let quickPanelResumeMinutesKey = "quickPanelResumeMinutes"
 
+/// UserDefaults key for Settings ▸ General ▸ Quick Actions ▸ "Close the panel
+/// after running an action". Off by default: the panel stays up showing the
+/// result. A failed action always keeps the panel open so the error is
+/// readable.
+let quickPanelCloseAfterRunKey = "quickPanelCloseAfterRun"
+
 /// Routes APKs opened from Finder (double-click / "Open With") into the install
 /// inbox, which surfaces the device picker once the UI is ready.
 final class AppDelegate: NSObject, NSApplicationDelegate {
