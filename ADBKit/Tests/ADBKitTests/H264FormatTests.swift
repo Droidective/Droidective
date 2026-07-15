@@ -52,4 +52,34 @@ import Testing
         #expect(sample != nil)
         #expect(sample.map { CMSampleBufferIsValid($0) } == true)
     }
+
+    /// Live-stream frames must render on arrival: the PTS is the device's
+    /// clock, which no display timebase tracks, so without this attachment the
+    /// layer paces frames against a mismatched clock and the mirror lags.
+    @Test func sampleBufferIsMarkedDisplayImmediately() {
+        let bytes = ScrcpyStreamDecoderTests.hexBytes(ScrcpyStreamDecoderTests.fixtureHex)
+        var decoder = ScrcpyStreamDecoder(tunnelForward: true)
+        let events = decoder.consume(Data(bytes))
+        let config = events.compactMap { event -> Data? in
+            if case let .packet(header, payload) = event, header.isConfig { return payload }
+            return nil
+        }.first
+        guard let config,
+              let sets = H264NAL.parameterSets(fromAnnexB: config),
+              let format = H264Format.formatDescription(sps: sets.sps, pps: sets.pps),
+              let sample = H264Format.sampleBuffer(
+                  avcc: H264NAL.avcc(fromAnnexB: config), formatDescription: format,
+                  pts: CMTime(value: 123_456, timescale: 1_000_000))
+        else {
+            Issue.record("missing sample buffer")
+            return
+        }
+        let attachments = CMSampleBufferGetSampleAttachmentsArray(
+            sample, createIfNecessary: false) as? [[CFString: Any]]
+        let immediate = attachments?.first?[kCMSampleAttachmentKey_DisplayImmediately] as? Bool
+        #expect(immediate == true)
+        // The recorder muxes by PTS — the display hint must not disturb it.
+        #expect(CMSampleBufferGetPresentationTimeStamp(sample)
+            == CMTime(value: 123_456, timescale: 1_000_000))
+    }
 }

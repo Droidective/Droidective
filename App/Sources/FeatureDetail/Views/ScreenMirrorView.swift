@@ -1,6 +1,11 @@
 import ADBKit
 import SwiftUI
 
+/// Whether the mirror streams device audio. Off by default — audio costs an
+/// extra socket + Core Audio graph and most mirroring is silent triage; the
+/// control-bar toggle opts in (and persists).
+let mirrorIncludeAudioKey = "mirrorIncludeAudio"
+
 /// In-app screen mirror: a native scrcpy client renders the device live, in
 /// window. The toolbar takes a screenshot (→ annotate in place) or records
 /// (→ video editor on stop) without interrupting the live, controllable mirror.
@@ -9,6 +14,7 @@ struct ScreenMirrorView: View {
     @Environment(\.tabFeatureID) private var tabFeatureID
     @Environment(\.tabIsActive) private var tabIsActive
     @Environment(\.openWindow) private var openWindow
+    @AppStorage(mirrorIncludeAudioKey) private var includeAudio = false
     @State private var model: MirrorViewModel?
     /// The in-flight (re)connect, so a newer one can cancel and supersede it.
     @State private var connectTask: Task<Void, Never>?
@@ -69,6 +75,13 @@ struct ScreenMirrorView: View {
                 model = nil
                 Task { await leaving?.stop() }
             }
+        }
+        .onChange(of: includeAudio) { _, include in
+            // Restart the live session with the new audio choice. setAudio
+            // no-ops mid-recording (the toggle is disabled then) and on a
+            // stopped model; with no model, the choice applies on next connect.
+            guard let model else { return }
+            Task { await model.setAudio(include) }
         }
         .onChange(of: model?.recordingError) { _, message in
             guard let message else { return }
@@ -159,7 +172,8 @@ struct ScreenMirrorView: View {
         let viewModel = MirrorViewModel(
             adb: state.env.engine.client,
             locator: state.env.engine.locator,
-            serial: serial)
+            serial: serial,
+            includeAudio: includeAudio)
         model = viewModel
         await viewModel.start()
     }
@@ -175,6 +189,7 @@ struct ScreenMirrorView: View {
 
 private struct MirrorStage: View {
     @Bindable var model: MirrorViewModel
+    @AppStorage(mirrorIncludeAudioKey) private var includeAudio = false
     /// Reconnect the current device in place (the stopped/failed cards' button).
     let onReconnect: () -> Void
     /// Move the mirror to its own window; nil when already hosted in one.
@@ -214,50 +229,63 @@ private struct MirrorStage: View {
     /// Controls below the mirror: device nav keys, then screenshot + record.
     private var controlBar: some View {
         HStack(spacing: 16) {
-            navButton("chevron.backward", help: "Back") { model.tapKey(4) }
-            navButton("circle", help: "Home") { model.tapKey(3) }
-            navButton("square", help: "Recent apps") { model.tapKey(187) }
+            Group {
+                navButton("chevron.backward", help: "Back") { model.tapKey(4) }
+                navButton("circle", help: "Home") { model.tapKey(3) }
+                navButton("square", help: "Recent apps") { model.tapKey(187) }
 
-            Divider().frame(height: 22)
-
-            navButton("camera", help: "Screenshot — edit in place") {
-                Task { await model.takeScreenshot() }
-            }
-
-            if model.isRecording {
-                navButton(
-                    model.isPaused ? "play.fill" : "pause.fill",
-                    help: model.isPaused ? "Resume recording" : "Pause recording"
-                ) {
-                    Task { model.isPaused ? await model.resumeRecording() : await model.pauseRecording() }
-                }
-                navButton("stop.circle.fill", tint: .red, help: "Stop recording") {
-                    Task { await model.stopRecording() }
-                }
-            } else {
-                navButton("record.circle", help: "Record — keep mirroring") {
-                    Task { await model.startRecording() }
-                }
-            }
-
-            Divider().frame(height: 22)
-
-            // Device volume (one step per tap) + one-shot mute/unmute.
-            navButton("speaker.wave.1.fill", help: "Volume down") { model.tapKey(25) }
-            navButton("speaker.wave.3.fill", help: "Volume up") { model.tapKey(24) }
-            navButton("speaker.slash.fill", help: "Mute / unmute") { model.tapKey(164) }
-
-            // Pop out to a window — hidden while recording, which must stay
-            // with this session (the window would connect a fresh one).
-            if let onPopOut, !model.isRecording {
                 Divider().frame(height: 22)
-                navButton("macwindow.on.rectangle", help: "Open in a separate window") { onPopOut() }
+
+                navButton("camera", help: "Screenshot — edit in place") {
+                    Task { await model.takeScreenshot() }
+                }
+
+                if model.isRecording {
+                    navButton(
+                        model.isPaused ? "play.fill" : "pause.fill",
+                        help: model.isPaused ? "Resume recording" : "Pause recording"
+                    ) {
+                        Task { model.isPaused ? await model.resumeRecording() : await model.pauseRecording() }
+                    }
+                    navButton("stop.circle.fill", tint: .red, help: "Stop recording") {
+                        Task { await model.stopRecording() }
+                    }
+                } else {
+                    navButton("record.circle", help: "Record — keep mirroring") {
+                        Task { await model.startRecording() }
+                    }
+                }
+
+                Divider().frame(height: 22)
+
+                // Device volume (one step per tap) + one-shot mute/unmute.
+                navButton("speaker.wave.1.fill", help: "Volume down") { model.tapKey(25) }
+                navButton("speaker.wave.3.fill", help: "Volume up") { model.tapKey(24) }
+                navButton("speaker.slash.fill", help: "Mute / unmute") { model.tapKey(164) }
+
+                // Pop out to a window — hidden while recording, which must stay
+                // with this session (the window would connect a fresh one).
+                if let onPopOut, !model.isRecording {
+                    Divider().frame(height: 22)
+                    navButton("macwindow.on.rectangle", help: "Open in a separate window") { onPopOut() }
+                }
             }
+            .disabled(model.status != .streaming)
+
+            Divider().frame(height: 22)
+
+            // Outside the streaming gate: the audio choice also applies to the
+            // next connect, so it stays flippable from the failed/stopped cards.
+            // Disabled mid-recording — the restart would abort the recorder.
+            Toggle("Audio", isOn: $includeAudio)
+                .toggleStyle(.switch)
+                .controlSize(.mini)
+                .help("Stream device audio — flipping this restarts the mirror")
+                .disabled(model.isRecording)
         }
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity)
         .background(.bar)
-        .disabled(model.status != .streaming)
     }
 
     private func navButton(

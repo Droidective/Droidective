@@ -56,22 +56,30 @@ final class MirrorViewModel {
     /// encoder emits them rarely.)
     private var screenRecorder: ScreenRecorder?
     private var sendControl: (@Sendable (ScrcpyControlMessage) -> Void)?
-    /// Whether to request device audio. Cleared after one failed start so the
-    /// mirror reconnects video-only on devices that can't capture audio (most
+    /// Whether to request device audio. Off by default (the toggle in the
+    /// control bar opts in). Cleared after one failed start so the mirror
+    /// reconnects video-only on devices that can't capture audio (most
     /// emulators) — scrcpy aborts the whole session, video included, when its
     /// audio encoder can't start. See `MirrorAudioFallback`.
-    private var requestAudio = true
+    private var requestAudio: Bool
     /// Set once video frames begin flowing; gates the video-only fallback so a
     /// session that streamed and later stopped isn't silently restarted.
     private var didStream = false
+    /// Terminal: set by `stop()` and never cleared. Guards `start()` and the
+    /// audio fallback so a view model the view has already let go of can't
+    /// restart itself — that resurrected headless sessions nothing could ever
+    /// stop, each burning ~a core until quit (Sentry DROIDECTIVE-MAC-2K).
+    private var stopped = false
 
-    init(adb: AdbClient, locator: ToolLocator, serial: String) {
+    init(adb: AdbClient, locator: ToolLocator, serial: String, includeAudio: Bool) {
         self.adb = adb
         self.locator = locator
         self.serial = serial
+        requestAudio = includeAudio
     }
 
     func start() async {
+        guard !stopped else { return }
         status = .connecting
         didStream = false
         // Prefer the bundled server (self-contained); fall back to an installed
@@ -87,10 +95,10 @@ final class MirrorViewModel {
             return
         }
         self.server = server
-        // Interactive mirror: control on, audio when the device can supply it.
-        // Cap the size for smooth, low-latency display. Recording started
-        // mid-stream forces a fresh key frame via RESET_VIDEO (see
-        // MirrorSession.startRecording).
+        // Interactive mirror: control on, audio only when opted in (the
+        // control-bar toggle). Cap the size for smooth, low-latency display.
+        // Recording never taps this stream — it runs its own scrcpy session
+        // (see `screenRecorder`) so it starts on a fresh key frame.
         let params = ScrcpyServerParams(
             scid: UInt32.random(in: 1 ... 0x7fff_ffff),
             audio: requestAudio, control: true, maxSize: 1280)
@@ -133,24 +141,24 @@ final class MirrorViewModel {
             }
         }
 
-        displayTask = Task { @MainActor [weak self] in
+        // Detached: frames render at decode speed, never gated on the main run
+        // loop. A busy UI during bring-up otherwise builds a stream backlog the
+        // mirror then replays 10–20 s behind the device before catching up.
+        // Only first-frame/rotation state changes hop to the main actor.
+        displayTask = Task.detached(priority: .userInitiated) { [weak self, renderer] in
             do {
+                var lastSize = CGSize.zero
+                var first = true
                 for try await sample in stream {
-                    guard let self else { break }
-                    self.renderer.enqueue(sample.sampleBuffer, width: sample.width, height: sample.height)
+                    renderer.enqueue(sample.sampleBuffer, width: sample.width, height: sample.height)
                     // Track the live frame size so taps map correctly and the aspect
                     // rect stays right across rotation, not only at the first frame.
-                    if sample.width > 0, sample.height > 0 {
-                        let size = CGSize(width: sample.width, height: sample.height)
-                        if self.videoSize != size { self.videoSize = size }
-                    }
-                    if self.status == .connecting {
-                        self.status = .streaming
-                        self.didStream = true
-                        // The transport (incl. the control socket) is connected
-                        // once frames flow — fetch the control sender now, not
-                        // right after start() when it isn't wired yet.
-                        self.sendControl = await self.session?.controlSender()
+                    let size = CGSize(width: sample.width, height: sample.height)
+                    if first || size != lastSize {
+                        first = false
+                        lastSize = size
+                        guard let self else { break }
+                        await self.frameArrived(size: size)
                     }
                 }
                 await self?.sessionEnded(failure: nil)
@@ -162,6 +170,20 @@ final class MirrorViewModel {
         }
     }
 
+    /// First frame or a rotation: update the tap-mapping size, flip the status,
+    /// and fetch the control sender — the transport (incl. the control socket)
+    /// is connected once frames flow, not right after start().
+    private func frameArrived(size: CGSize) async {
+        if size.width > 0, size.height > 0, videoSize != size {
+            videoSize = size
+        }
+        if status == .connecting {
+            status = .streaming
+            didStream = true
+            sendControl = await session?.controlSender()
+        }
+    }
+
     /// The display stream ended (the device closed it, or it errored — not a
     /// user-initiated stop, which cancels the task). If audio was requested and
     /// no frame ever streamed, scrcpy likely aborted the session because the
@@ -169,16 +191,33 @@ final class MirrorViewModel {
     /// surface the terminal state.
     private func sessionEnded(failure: String?) async {
         if MirrorAudioFallback.shouldRetryWithoutAudio(
-            audioRequested: requestAudio, everStreamed: didStream) {
+            audioRequested: requestAudio, everStreamed: didStream, stopped: stopped) {
             requestAudio = false
-            await stop()
+            await teardown()
             await start()
             return
         }
+        guard !stopped else { return }
         status = failure.map(Status.failed) ?? .stopped
     }
 
+    /// Terminal stop — the owner is done with this view model. After this,
+    /// `start()` and the audio-fallback restart are permanently inert.
     func stop() async {
+        stopped = true
+        await teardown()
+    }
+
+    /// Restart the session with device audio on or off. No-op mid-recording
+    /// (the teardown would abort the recorder) — the toggle is disabled then.
+    func setAudio(_ include: Bool) async {
+        guard !stopped, !isRecording, requestAudio != include else { return }
+        requestAudio = include
+        await teardown()
+        await start()
+    }
+
+    private func teardown() async {
         displayTask?.cancel()
         displayTask = nil
         clipboardTask?.cancel()

@@ -63,6 +63,16 @@ public actor MirrorTransport {
 
     private static let queue = DispatchQueue(label: "com.rohindh.droidective.mirror-transport")
 
+    /// TCP options for the stream sockets: Nagle off. The control socket sends
+    /// tiny writes (a touch event is ~32 bytes) and the video socket reads a
+    /// low-latency stream — batching either behind delayed ACKs adds tens of
+    /// milliseconds of input and display lag for no win on a loopback tunnel.
+    static func socketParameters() -> NWParameters {
+        let tcp = NWProtocolTCP.Options()
+        tcp.noDelay = true
+        return NWParameters(tls: nil, tcp: tcp)
+    }
+
     private let adb: AdbClient
     private let config: Configuration
 
@@ -75,6 +85,13 @@ public actor MirrorTransport {
     private var controlIncomingContinuation: AsyncStream<Data>.Continuation?
     private var forwardedPort: UInt16?
     private var serverLog = ""
+    /// Terminal latch: actors are reentrant, so `stop()` can run at any of
+    /// `start()`'s suspension points — including *before* the fields it cleans
+    /// (`serverProcess`, `forwardedPort`) are set. Without the latch, `start()`
+    /// then resumes and finishes building a session whose stop already
+    /// happened, stranding an adb child, a forward, and a device-side server
+    /// in accept-wait that nothing will ever clean up.
+    private var stopped = false
 
     public init(adb: AdbClient, config: Configuration) {
         self.adb = adb
@@ -84,12 +101,18 @@ public actor MirrorTransport {
     /// Push the server, open the tunnel, start the server, connect the video
     /// socket, and return its byte stream. Throws if any step fails.
     public func start() async throws -> AsyncThrowingStream<Data, Error> {
+        try await abortIfStopped()
         let adbPath = try await resolveAdbPath()
+        try await abortIfStopped()
         try await pushServer()
+        try await abortIfStopped()
         let port = try await openForward()
+        try await abortIfStopped()
         try startServer(adbPath: adbPath)
+        try await abortIfStopped()
         let (box, firstChunk) = try await connect(port: port)
         connectionBox = box
+        try await abortIfStopped()
         // The server accepts sockets in a fixed order on the same port:
         // 1 = video, 2 = audio (if enabled), 3 = control (if enabled). Connect
         // them in that order before streaming so they map correctly.
@@ -103,12 +126,28 @@ public actor MirrorTransport {
             controlBox = controlConnection
             startControlReceive(controlConnection)
         }
+        try await abortIfStopped()
         return makeByteStream(box, firstChunk: firstChunk)
     }
 
+    /// A `stop()` that interleaved mid-`start()` found nothing to clean —
+    /// re-run the teardown against whatever this call has created since, and
+    /// bail out as a cancellation (a stop is a teardown, not a device failure).
+    private func abortIfStopped() async throws {
+        guard stopped else { return }
+        await teardown()
+        throw CancellationError()
+    }
+
     /// Tear everything down: cancel the socket, kill the server, remove the
-    /// tunnel. Safe to call repeatedly.
+    /// tunnel. Safe to call repeatedly, and terminal: a `start()` still in
+    /// flight aborts (and re-cleans) at its next checkpoint.
     public func stop() async {
+        stopped = true
+        await teardown()
+    }
+
+    private func teardown() async {
         connectionBox?.connection.cancel()
         connectionBox = nil
         audioBox?.connection.cancel()
@@ -219,7 +258,14 @@ public actor MirrorTransport {
         let deadline = clock.now.advanced(by: .seconds(10))
         var lastError = ""
         while clock.now < deadline {
-            let connection = NWConnection(host: host, port: nwPort, using: .tcp)
+            // A cancelled bring-up must exit, not spin: `try?` below swallows
+            // the cancellation that Task.sleep throws, and waitUntilReady's
+            // onCancel makes every attempt fail instantly — without this check
+            // the loop burns CPU creating and cancelling connections until the
+            // deadline. Throwing CancellationError also tells the caller this
+            // was a teardown, not a device failure.
+            try Task.checkCancellation()
+            let connection = NWConnection(host: host, port: nwPort, using: Self.socketParameters())
             do {
                 try await Self.waitUntilReady(connection)
                 let firstChunk = try await Self.firstReceive(connection)
@@ -286,7 +332,8 @@ public actor MirrorTransport {
         let deadline = clock.now.advanced(by: .seconds(5))
         var lastError = ""
         while clock.now < deadline {
-            let connection = NWConnection(host: host, port: nwPort, using: .tcp)
+            try Task.checkCancellation() // see connect() — a cancelled bring-up must exit, not spin
+            let connection = NWConnection(host: host, port: nwPort, using: Self.socketParameters())
             do {
                 try await Self.waitUntilReady(connection)
                 return ConnectionBox(connection: connection)
