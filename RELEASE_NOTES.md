@@ -1,3 +1,40 @@
+## Droidective v3.3.0-beta.2
+
+This beta fixes the runaway-CPU reports traced to the screen mirror and cuts
+the mirror's display and input latency.
+
+### Screen mirror
+
+- **Fixed: runaway CPU after using the mirror** — switching away from the
+  mirror tab while it was still connecting could silently restart the session
+  in the background, where nothing could ever stop it. Each leaked session
+  kept streaming and decoding (about a core each, and they stacked) until the
+  app quit — the reported 500%+ CPU after using the mirror traces to this.
+- **Fixed: stray adb processes and tunnels** — a stop racing a starting
+  session could strand an idle adb client, its port forward, and the
+  device-side server. Teardown now also cleans up whatever the racing start
+  created.
+- **Lower latency** — frames render the moment they're decoded instead of
+  being paced against a mismatched clock, touch input is no longer batched by
+  the TCP stack, and frames can't queue behind a busy UI — the slow-motion
+  catch-up for the first seconds after opening the mirror is gone, along with
+  picture smearing when the app was under load.
+- **Device audio is now opt-in** — the mirror starts video-only; the Audio
+  switch in the control bar streams device audio too (restarts the mirror,
+  Android 11+). The choice persists.
+
+### Reactotron
+
+- **Copy as cURL keeps query params and form fields** — copied requests now
+  reproduce the original URL and body.
+- Timeline frames stay in wire order, and large frames no longer truncate.
+
+### Also in this beta
+
+- Pulling an app's APK grabs every split APK, not just base.apk.
+
+---
+
 ## Droidective v3.3.0-beta.1
 
 The first beta-channel release. The headline is a JS console that stays
