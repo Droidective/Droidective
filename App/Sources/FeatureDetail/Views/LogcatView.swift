@@ -1,9 +1,11 @@
 import ADBKit
 import SwiftUI
 
-/// Live logcat stream with level/app/text filters, pause, and a capped ring
-/// buffer. The whole stream lifecycle hangs off `.task(id:)` — changing any
-/// filter (or device) cancels the old stream and starts a fresh one.
+/// Live logcat stream with level/app/text filters, a ⌘F Find bar, pause, and
+/// a capped ring buffer. Filter hides non-matching lines; Find highlights
+/// matches and steps between them without hiding anything. The whole stream
+/// lifecycle hangs off `.task(id:)` — changing any filter (or device) cancels
+/// the old stream and starts a fresh one.
 struct LogcatView: View {
     static let maxLines = 5000
 
@@ -18,6 +20,12 @@ struct LogcatView: View {
     /// pays for one rebuild per pause, not one per keystroke.
     @State private var searchInput = ""
     @State private var search = ""
+    /// The Find bar (⌘F): `findInput` debounces into `find` the same way the
+    /// filter does; `currentFindID` is the match being stepped to.
+    @State private var findVisible = false
+    @State private var findInput = ""
+    @State private var find = ""
+    @State private var currentFindID: UUID?
     @State private var waitingForPackage: String?
     @State private var streamingPid: Int?
     /// One-shot: the App filter is seeded from the device bar's chosen bundle
@@ -27,6 +35,11 @@ struct LogcatView: View {
     @State private var edges = LogScrollEdges()
     /// Set by the jump buttons to ask the pane to snap to an edge.
     @State private var jump: LogJumpRequest?
+    /// The App menu's add flows — the same sheets the device bar's bundle
+    /// pill offers elsewhere (the pill is hidden on logcat; this menu is the
+    /// one place to pick the app here).
+    @State private var showInstalledApps = false
+    @State private var showBundleManager = false
     /// Reversed feed: newest lines at the top instead of the terminal-style
     /// newest-at-bottom. Persisted per feature.
     @AppStorage("logcatNewestFirst") private var newestFirst = false
@@ -44,6 +57,7 @@ struct LogcatView: View {
         // Filter once per render — the status count and the list share it,
         // instead of each re-scanning the full buffer while searching.
         let visible = visibleLines
+        let findMatches = LogLineFilter.findMatches(in: visible, query: find, newestFirst: newestFirst)
         return VStack(spacing: 0) {
             // With no device there's nothing to filter, pause, export, or clear —
             // hide the toolbar and status strip and let the empty state below
@@ -51,6 +65,10 @@ struct LogcatView: View {
             if !state.targetSerials.isEmpty {
                 toolbar
                 Divider()
+                if findVisible {
+                    findBar(matches: findMatches)
+                    Divider()
+                }
                 statusBar(visible: visible)
                 Divider()
             }
@@ -66,6 +84,12 @@ struct LogcatView: View {
         }
         .onChange(of: state.selectedBundleId) { _, _ in
             packageFilter = state.selectedBundle?.packageId
+        }
+        .sheet(isPresented: $showInstalledApps) {
+            InstalledAppsPickerView()
+        }
+        .sheet(isPresented: $showBundleManager) {
+            BundleManagerView()
         }
     }
 
@@ -85,20 +109,14 @@ struct LogcatView: View {
             .font(.app(.callout))
 
             LabeledContent("App") {
-                Picker("App", selection: $packageFilter) {
-                    Text("All apps").tag(String?.none)
-                    ForEach(state.bundles) { bundle in
-                        Text(bundle.nickname).tag(Optional(bundle.packageId))
-                    }
-                }
-                .labelsHidden()
-                .frame(width: 140)
+                appMenu
             }
             .font(.app(.callout))
 
-            TextField("Search lines…", text: $searchInput)
+            TextField("Filter lines…", text: $searchInput)
                 .brandField()
                 .frame(maxWidth: 220)
+                .help("Show only the lines containing this text")
                 .task(id: searchInput) {
                     if !search.isEmpty || !searchInput.isEmpty {
                         try? await Task.sleep(for: .milliseconds(200))
@@ -108,6 +126,15 @@ struct LogcatView: View {
                 }
 
             Spacer()
+
+            Button {
+                findVisible = true
+            } label: {
+                Image(systemName: "text.magnifyingglass")
+            }
+            .buttonStyle(IconButtonStyle())
+            .help("Find & highlight in the log without hiding lines (⌘F)")
+            .keyboardShortcut("f", modifiers: .command)
 
             Button {
                 newestFirst.toggle()
@@ -147,6 +174,98 @@ struct LogcatView: View {
         .controlSize(.small)
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
+    }
+
+    // MARK: - Find bar
+
+    private func findBar(matches: [UUID]) -> some View {
+        LogFindBar(
+            text: $findInput,
+            countLabel: findCountLabel(matches: matches),
+            onNext: { currentFindID = LogLineFilter.advance(from: currentFindID, in: matches, forward: true) },
+            onPrevious: { currentFindID = LogLineFilter.advance(from: currentFindID, in: matches, forward: false) },
+            onClose: closeFind
+        )
+        .task(id: findInput) {
+            if !find.isEmpty || !findInput.isEmpty {
+                try? await Task.sleep(for: .milliseconds(200))
+            }
+            guard !Task.isCancelled else { return }
+            find = findInput
+        }
+        // A new query starts stepping fresh — the old current match likely
+        // isn't a match anymore.
+        .onChange(of: find) { _, _ in currentFindID = nil }
+    }
+
+    private func findCountLabel(matches: [UUID]) -> String? {
+        guard !find.isEmpty else { return nil }
+        guard !matches.isEmpty else { return "No matches" }
+        if let current = currentFindID, let index = matches.firstIndex(of: current) {
+            return "\(index + 1) of \(matches.count)"
+        }
+        return "\(matches.count) \(matches.count == 1 ? "match" : "matches")"
+    }
+
+    private func closeFind() {
+        findVisible = false
+        findInput = ""
+        find = ""
+        currentFindID = nil
+    }
+
+    /// The app filter with the bundle pill's full powers (pick a saved
+    /// bundle, add from the device's installed apps, grab the on-screen app,
+    /// manage) — the device bar hides its bundle pill on logcat so there is
+    /// exactly one app selector. The add flows select the bundle globally;
+    /// `.onChange(of: state.selectedBundleId)` folds that back into the
+    /// stream filter.
+    private var appMenu: some View {
+        Menu {
+            Button {
+                packageFilter = nil
+            } label: {
+                if packageFilter == nil {
+                    Label("All apps", systemImage: "checkmark")
+                } else {
+                    Text("All apps")
+                }
+            }
+            ForEach(state.bundles) { bundle in
+                Button {
+                    packageFilter = bundle.packageId
+                } label: {
+                    if packageFilter == bundle.packageId {
+                        Label(bundle.nickname, systemImage: "checkmark")
+                    } else {
+                        Text(bundle.nickname)
+                    }
+                }
+            }
+            Divider()
+            Button {
+                showInstalledApps = true
+            } label: {
+                Label("Add from installed apps", systemImage: "plus.app")
+            }
+            .disabled(state.targetSerials.isEmpty)
+            Button {
+                state.adoptForegroundApp()
+            } label: {
+                Label("Use app on device screen", systemImage: "scope")
+            }
+            .disabled(state.targetSerials.isEmpty)
+            Button {
+                showBundleManager = true
+            } label: {
+                Label("Add manually / manage…", systemImage: "slider.horizontal.3")
+            }
+        } label: {
+            Text(packageFilter.map(bundleName) ?? "All apps")
+                .lineLimit(1)
+        }
+        .frame(width: 150)
+        .help("Stream one app's logs — pick a saved bundle or add a new one")
     }
 
     /// One line of truth about what the stream is actually doing.
@@ -219,16 +338,7 @@ struct LogcatView: View {
     // MARK: - Log list
 
     private var visibleLines: [LogLine] {
-        // Lowercase the query once and match the per-line cached `searchKey` —
-        // this runs on every streamed batch, and a locale-aware scan over a
-        // full 5000-line buffer was the hottest part of searching while
-        // streaming.
-        let query = search.lowercased()
-        return lines.filter { line in
-            if let tagFilter, line.tag != tagFilter { return false }
-            if !query.isEmpty && !line.searchKey.contains(query) { return false }
-            return true
-        }
+        LogLineFilter.visible(lines, tag: tagFilter, filter: search)
     }
 
     private func logList(visible: [LogLine]) -> some View {
@@ -238,7 +348,8 @@ struct LogcatView: View {
         // moment the user scrolls up; the shared jump controls overlay it.
         SelectableLogView(
             lines: visible,
-            search: search,
+            find: find,
+            currentFindID: currentFindID,
             newestFirst: newestFirst,
             edges: $edges,
             jump: jump,

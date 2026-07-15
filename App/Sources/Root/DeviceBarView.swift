@@ -38,6 +38,18 @@ struct DeviceBarView: View {
                     .foregroundStyle(deviceStatusColor)
                     .help(deviceStatusHelp)
                 deviceControl
+                if state.devices.isEmpty {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.6)) { refreshSpin += 360 }
+                        state.refreshDevices()
+                    } label: {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .rotationEffect(.degrees(refreshSpin))
+                    }
+                    .buttonStyle(IconButtonStyle())
+                    .help("Refresh devices")
+                    .accessibilityLabel("Refresh devices")
+                }
                 if let device = selectedDevice, device.isWireless {
                     disconnectControl(device)
                 }
@@ -83,17 +95,6 @@ struct DeviceBarView: View {
                     .onChange(of: state.runOnAll) { state.persistSelection() }
                     .help("Run this feature on every connected device")
                 }
-
-                Button {
-                    withAnimation(.easeInOut(duration: 0.6)) { refreshSpin += 360 }
-                    state.refreshDevices()
-                } label: {
-                    Image(systemName: "arrow.triangle.2.circlepath")
-                        .rotationEffect(.degrees(refreshSpin))
-                }
-                .buttonStyle(IconButtonStyle())
-                .help("Refresh devices")
-                .accessibilityLabel("Refresh devices")
 
                 NotificationBell()
             }
@@ -180,11 +181,12 @@ struct DeviceBarView: View {
             } label: {
                 Label(manageVirtualDevicesLabel, systemImage: "square.stack.3d.up")
             }
-            Button {
-                state.refreshDevices()
-            } label: {
-                Label("Refresh devices", systemImage: "arrow.triangle.2.circlepath")
-            }
+            // Menu content is built fresh each time the dropdown opens, so this
+            // fires per open — an automatic refresh in place of a manual item.
+            // Attached to the one always-present item (never the whole content:
+            // a Group modifier replicates onto every child and would fan out N
+            // refreshes per open).
+            .onAppear { state.refreshDevices() }
         } label: {
             devicePill
         }
@@ -287,15 +289,15 @@ struct DeviceBarView: View {
     }
 
     /// True when the selected feature works with an app bundle. Custom
-    /// commands (commands may require one), logcat (its app filter is
-    /// driven by saved bundles), and the React Native hub (deep links are
-    /// saved per bundle; process death kills the selected bundle) are included.
+    /// commands (commands may require one), and the React Native hub (deep
+    /// links are saved per bundle; process death kills the selected bundle)
+    /// are included. Logcat is deliberately NOT: it has its own App menu with
+    /// the same add/manage powers, and showing both pickers confused users.
     private var bundlePickerVisible: Bool {
         guard let id = state.activeTabID,
               let feature = FeatureRegistry.byID[id] else { return false }
         return feature.needsBundle
             || feature.id == "custom-commands"
-            || feature.id == "logcat"
             || feature.id == "performance"
             || feature.id == "react-native"
     }

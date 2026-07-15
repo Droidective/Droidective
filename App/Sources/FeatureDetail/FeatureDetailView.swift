@@ -70,6 +70,8 @@ struct FeatureDetailView: View {
                 DeepLinksView()
             case "logcat":
                 LogcatView()
+            case "ios-logs":
+                SimulatorLogsView()
             case "permissions":
                 PermissionsView()
             case "app-info":

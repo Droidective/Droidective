@@ -38,7 +38,7 @@ opening it — verify those by hand.
 
 1. **Define it** — add a `FeatureDef` to `FeatureRegistry.all` (unique `id`,
    title, keywords, category, `kind`; set `platforms` if it works on iOS
-   Simulators — the default is Android-only). **[test: `hasAll56Features` —
+   Simulators — the default is Android-only). **[test: `hasAll57Features` —
    bump the count; `byID` traps on a duplicate id]**
 2. **How-it-works note** — add to `FeatureNotes`. **[test: `everyFeatureHasAHowToNote`]**
 3. **If it's an action** (`.instantAction`/`.formAction`/`.toggleAction`):
@@ -68,7 +68,7 @@ opening it — verify those by hand.
 ## Build / test / run
 
 ```
-make test          # ADBKit unit tests (cd ADBKit && swift test) — 771 tests, keep green
+make test          # ADBKit unit tests (cd ADBKit && swift test) — 812 tests, keep green
 make build         # xcodegen generate + xcodebuild Debug
 make run           # build + open the .app
 ```
@@ -112,7 +112,7 @@ Node 22 in CI; scroll reveals and the hero palette demo must keep their
   twins — booted iOS Simulators surface as `Device`s with
   `platform: .iosSimulator`, merged into the bar in `AppState`), `DeviceProps` (getprop), `DeviceOverview` (RAM/storage/
   battery/CPU/app counts), `DeviceDetails` (picker enrichment).
-- `Features/`: `FeatureRegistry` (56 `FeatureDef`s, declarative; `absorbedByHub`
+- `Features/`: `FeatureRegistry` (57 `FeatureDef`s, declarative; `absorbedByHub`
   maps a hub screen to the features it gathers, flattened to
   `absorbedFeatureIDs`; `catalogFeatureIDs` is the registry minus those),
   `FeatureModel`,
@@ -179,10 +179,10 @@ Node 22 in CI; scroll reveals and the hero palette demo must keep their
   Recompile · Sign tabs (the views take an optional injected APK so they embed in
   the studio and still work standalone via hotkey).
 
-## The 56 features
+## The 57 features
 
 Most `.view` features are full-screen bespoke panels (file-explorer, apps,
-emulators, device-info, logcat, crash-catcher, sandbox-browser, performance,
+emulators, device-info, logcat, ios-logs — the simulator unified-log twin (`SimulatorLogStreamer` over `simctl spawn <udid> log stream --style ndjson`, iOS-only, standalone), crash-catcher, sandbox-browser, performance,
 network-speed, wifi, root-status, screen-record, scrcpy, reactotron, js-console,
 terminal — multi-tab PTY login shells via SwiftTerm, with the device selected at
 open exported as ANDROID_SERIAL; tabs split into panes (⌘D/⇧⌘D — the pure
@@ -207,7 +207,7 @@ Apps hub. They stay hotkey-able (every feature registers a shortcut; the Hotkeys
 tab lists bound members under "Hidden features"). This is a pure display filter —
 no persisted migration — so it also covers a hub that grows later. The rest are generic instant-/form-/toggle-actions
 driven by the registry. The catalog and Home's "All N features" count use
-`catalogFeatureIDs` (34). **Every feature is enabled by default**
+`catalogFeatureIDs` (35). **Every feature is enabled by default**
 (`defaultEnabledIDs == catalogFeatureIDs`); the catalog (Manage features) is for
 turning OFF the ones you don't want, not opting in — there's no Restore button.
 `LayoutState.adoptAllEnabled()` is a one-time migration that turns everything on
@@ -217,7 +217,9 @@ says which toolchain a feature works against (default Android-only). Booted iOS
 Simulators sit in the same device bar; cross-platform ids (screenshot,
 dark-mode, demo-mode, fake-battery, deep-link) dispatch to simctl runners via
 `FeatureEngine.dispatchIOS`, `push-notification` is iOS-only (absorbed by the
-Simulate hub, which adapts its sections per platform), and everything else
+Simulate hub, which adapts its sections per platform; iOS-only *actions* must
+be hub members — `iosOnlyActionsAreHubMembers` — while iOS-only *views* like
+`ios-logs` may stand alone), and everything else
 shows a "works with Android devices" state with a switch-device button when a
 simulator is selected. New cross-platform features add a `dispatchIOS` case +
 an arg-vector test; `everyIOSCapableActionResolvesToASimctlRunner` catches a
@@ -453,7 +455,7 @@ jadx/apktool, recompile, and sign — with keystore creation) plus Frida setup, 
 custom accent color, launching emulators from the device bar, per-feature
 connect-a-device empty states, a live-preview hotkey recorder, and a Settings
 split into Appearance/Privacy; managed tools download from GitHub releases into
-Application Support and are sized/removable in Settings); 771 tests green;
+Application Support and are sized/removable in Settings); 812 tests green;
 builds clean with zero warnings (enforced as errors in CI). Verified live against a
 physical device and an Android emulator. Release builds are Developer ID-signed +
 notarized and bundle scrcpy/ffmpeg (see `RELEASING.md`). Open gaps: the Apps

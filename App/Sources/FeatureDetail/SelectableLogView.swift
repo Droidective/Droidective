@@ -14,7 +14,12 @@ struct SelectableLogView: NSViewRepresentable {
     /// Chronological (oldest first) regardless of display order — the
     /// coordinator reverses at the rendering boundary.
     let lines: [LogLine]
-    let search: String
+    /// The Find bar's query: every occurrence gets a highlight, no line is
+    /// hidden (hiding is the caller's Filter, applied to `lines` upstream).
+    let find: String
+    /// The Find match being stepped to — its whole line gets a stronger
+    /// highlight and the view scrolls to it when it changes.
+    let currentFindID: UUID?
     /// Display order: false reads oldest-top/newest-bottom (terminal style),
     /// true flips the feed so new lines land at the top.
     let newestFirst: Bool
@@ -60,7 +65,8 @@ struct SelectableLogView: NSViewRepresentable {
 
     func updateNSView(_ nsView: NSScrollView, context: Context) {
         context.coordinator.onFilterTag = onFilterTag
-        context.coordinator.update(lines: lines, search: search, newestFirst: newestFirst)
+        context.coordinator.update(lines: lines, find: find, newestFirst: newestFirst)
+        context.coordinator.showFindCurrent(currentFindID)
         context.coordinator.handleJump(jump)
     }
 
@@ -80,9 +86,13 @@ struct SelectableLogView: NSViewRepresentable {
         /// a trim knows exactly how many characters to delete.
         private var renderedLines: [LogLine] = []
         private var lineLengths: [Int] = []
-        private var renderedSearch = ""
+        private var renderedFind = ""
         private var renderedNewestFirst = false
         private var lastJumpToken: Int?
+        /// The Find match line currently painted (via temporary attributes) —
+        /// scroll-to fires only when this changes, so streamed batches don't
+        /// keep yanking the viewport back to the match.
+        private var shownFindID: UUID?
 
         init(edges: Binding<LogScrollEdges>) {
             self.edges = edges
@@ -155,7 +165,7 @@ struct SelectableLogView: NSViewRepresentable {
         /// (prepend + tail-trim) when the display order is newest-first;
         /// anything else (filter change, clear, search change, an order flip)
         /// rebuilds.
-        func update(lines: [LogLine], search: String, newestFirst: Bool) {
+        func update(lines: [LogLine], find: String, newestFirst: Bool) {
             guard let storage = textView?.textStorage else { return }
             // Judged against the *rendered* orientation, so flipping the order
             // while parked on the newest line keeps following it at the other
@@ -170,8 +180,8 @@ struct SelectableLogView: NSViewRepresentable {
                 syncEdges()
             }
 
-            if search != renderedSearch || newestFirst != renderedNewestFirst {
-                renderedSearch = search
+            if find != renderedFind || newestFirst != renderedNewestFirst {
+                renderedFind = find
                 renderedNewestFirst = newestFirst
                 rebuild(lines, in: storage)
                 return
@@ -259,7 +269,7 @@ struct SelectableLogView: NSViewRepresentable {
             guard !lines.isEmpty else { return }
             let batch = NSMutableAttributedString()
             for line in lines {
-                let attributed = Self.attributedLine(line, search: renderedSearch)
+                let attributed = Self.attributedLine(line, find: renderedFind)
                 lineLengths.append(attributed.length)
                 batch.append(attributed)
             }
@@ -278,7 +288,7 @@ struct SelectableLogView: NSViewRepresentable {
             let batch = NSMutableAttributedString()
             var batchLengths: [Int] = []
             for line in displayLines {
-                let attributed = Self.attributedLine(line, search: renderedSearch)
+                let attributed = Self.attributedLine(line, find: renderedFind)
                 batchLengths.append(attributed.length)
                 batch.append(attributed)
             }
@@ -337,20 +347,20 @@ struct SelectableLogView: NSViewRepresentable {
                 : "\(line.time)  \(line.pid)  \(line.level)/\(line.tag): \(line.message)"
         }
 
-        /// One rendered line (newline included), with the search matches
-        /// highlighted the way the old row list did.
-        static func attributedLine(_ line: LogLine, search: String) -> NSAttributedString {
+        /// One rendered line (newline included), with every Find match
+        /// highlighted.
+        static func attributedLine(_ line: LogLine, find: String) -> NSAttributedString {
             let text = display(line) + "\n"
             let attributed = NSMutableAttributedString(string: text, attributes: [
                 .font: font,
                 .foregroundColor: color(for: line.level),
             ])
-            guard !search.isEmpty else { return attributed }
+            guard !find.isEmpty else { return attributed }
             let haystack = text as NSString
             var location = 0
             while location < haystack.length {
                 let range = haystack.range(
-                    of: search, options: .caseInsensitive,
+                    of: find, options: .caseInsensitive,
                     range: NSRange(location: location, length: haystack.length - location)
                 )
                 guard range.location != NSNotFound else { break }
@@ -361,6 +371,34 @@ struct SelectableLogView: NSViewRepresentable {
                 location = range.location + range.length
             }
             return attributed
+        }
+
+        // MARK: Find current-match emphasis
+
+        /// Paints the current Find match's line and scrolls to it. Uses the
+        /// layout manager's *temporary* attributes — display-only, so stepping
+        /// matches never rebuilds the full text storage — and recomputes the
+        /// range on every update because trims/appends shift character
+        /// offsets underneath it.
+        func showFindCurrent(_ id: UUID?) {
+            guard id != nil || shownFindID != nil else { return }
+            guard let textView, let layoutManager = textView.layoutManager,
+                  let storage = textView.textStorage else { return }
+            layoutManager.removeTemporaryAttribute(
+                .backgroundColor, forCharacterRange: NSRange(location: 0, length: storage.length)
+            )
+            defer { shownFindID = id }
+            guard let id, let index = renderedLines.firstIndex(where: { $0.id == id }) else { return }
+            let location = lineLengths.prefix(index).reduce(0, +)
+            // Exclude the trailing newline so the highlight hugs the text.
+            let range = NSRange(location: location, length: max(0, lineLengths[index] - 1))
+            layoutManager.addTemporaryAttribute(
+                .backgroundColor, value: NSColor.systemOrange.withAlphaComponent(0.32),
+                forCharacterRange: range
+            )
+            if shownFindID != id {
+                textView.scrollRangeToVisible(range)
+            }
         }
     }
 }
