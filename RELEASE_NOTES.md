@@ -1,3 +1,44 @@
+## Droidective v3.3.0-beta.1
+
+The first beta-channel release. The headline is a JS console that stays
+connected: four root causes of the repeated disconnects are fixed, verified
+against React Native 0.82 through 0.86.
+
+### JS Console stays connected
+
+- **No more idle disconnects** — React Native's inspector proxy kills a
+  debugger socket that stays quiet through its heartbeat window, and a
+  WebSocket ping doesn't count. The console now sends a tiny silent no-op
+  evaluate as a keepalive, paced so even a wedged JS thread can't stall it.
+- **Reconnects survive app relaunches, phone sleep, and Metro restarts** —
+  the proxy hands the app a fresh device id whenever it re-registers; the
+  console now falls back to the app's id, so auto-reconnect no longer strands
+  itself on a stale id.
+- **Plays nice with React Native DevTools** — when another debugger takes the
+  app over (RN ≤ 0.84 allows only one), the console stands down with a notice
+  instead of stealing the session back in a loop. On RN 0.85+ both attach
+  side by side.
+- **No duplicate logs on reconnect** — Hermes replays its console history on
+  every attach; a replay gate drops the already-shown portion, so the feed no
+  longer doubles after each reconnect.
+- **Newest-first, when you want it** — Logcat, JS Console, and Reactotron
+  gain a reverse-order button.
+
+### Beta update channel
+
+- **Receive beta updates** — Settings ▸ General ▸ Updates gains an opt-in
+  beta channel (how you're reading this). Opting in checks immediately;
+  opting out never downgrades — the app simply waits for the next stable.
+
+### Also in this beta
+
+- Device platforms, features, and the Emulators screen scope to your role.
+- Reactotron connection gaps and truncated timeline rows are fixed.
+- The Settings update toggles now render their state correctly.
+- Gallery tiles align to a uniform 16:10 crop.
+
+---
+
 ## Droidective v3.2.0
 
 Wireless debugging moves into the device dropdown: pair and connect a device
