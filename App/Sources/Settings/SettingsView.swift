@@ -56,6 +56,15 @@ struct GeneralSettingsView: View {
     @State private var showQuickActionToggles = false
     #if !APPSTORE
     @ObservedObject private var updater = SparkleUpdater.shared
+
+    /// "Version 3.3.0 (123)" — what a manual check compares against, so it
+    /// sits beside the Check for Updates button.
+    private var installedVersionLabel: String {
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "—"
+        let build = info?["CFBundleVersion"] as? String ?? "0"
+        return "Version \(version) (\(build))"
+    }
     #endif
 
     /// True when the login item is registered (enabled, or pending the user's
@@ -165,6 +174,12 @@ struct GeneralSettingsView: View {
             Section("Updates") {
                 Toggle("Automatically check for updates", isOn: $updater.automaticallyChecksForUpdates)
                 Toggle("Receive beta updates", isOn: $updater.receivesBetaUpdates)
+                LabeledContent(installedVersionLabel) {
+                    Button("Check for Updates…") { updater.checkForUpdates() }
+                        // Greyed out while a check is already in flight — same
+                        // gate as the menu command and the About row.
+                        .disabled(!updater.canCheckForUpdates)
+                }
                 Text("Updates are delivered via Sparkle from GitHub Releases. Beta builds arrive ahead of stable releases and may be rougher; switching beta off keeps the installed build until the next stable release.")
                     .font(.app(.footnote))
                     .foregroundStyle(.textMuted)
