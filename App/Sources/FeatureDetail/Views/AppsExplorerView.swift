@@ -514,7 +514,7 @@ private struct AppDetailPane: View {
                     ) {
                         try await state.env.engine.inspection.pullApk(serial: serial, packageId: packageId, to: dest)
                     }
-                    state.showToast(Toast(message: "APK saved", ok: true, revealPath: saved.path))
+                    state.showToast(Toast(message: AppInfoView.pulledApkToast(saved), ok: true, revealPath: dest.path))
                 } catch {
                     state.showToast(Toast(message: error.localizedDescription, ok: false))
                 }

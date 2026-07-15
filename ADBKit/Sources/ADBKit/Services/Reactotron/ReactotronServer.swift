@@ -82,6 +82,10 @@ public actor ReactotronServer {
     private let pingInterval: Duration
     private var listener: NWListener?
     private var connections: [Int: ConnectionBox] = [:]
+    /// Per-connection frame feeds — the ordered pipeline each socket's raw
+    /// frames ride to the actor (see `accept`). Finished when the connection
+    /// drops so its consumer drains what already arrived, then ends.
+    private var frameFeeds: [Int: AsyncStream<Data>.Continuation] = [:]
     /// The Reactotron clientId of each handshaken connection — an app reload
     /// reconnects with the same clientId, which is how the stale socket is
     /// recognized and dropped.
@@ -132,6 +136,11 @@ public actor ReactotronServer {
         }
         let webSocket = NWProtocolWebSocket.Options()
         webSocket.autoReplyPing = true
+        // Explicit, generous cap instead of the framework default: Android's
+        // RN WebSocket (OkHttp) queues up to 16 MiB outbound, so a single
+        // api.response/image frame can approach that — a too-small receive
+        // limit would fail the whole connection, not just the frame.
+        webSocket.maximumMessageSize = 64 * 1024 * 1024
         parameters.defaultProtocolStack.applicationProtocols.insert(webSocket, at: 0)
 
         let listener: NWListener
@@ -177,6 +186,8 @@ public actor ReactotronServer {
             box.connection.cancel()
         }
         connections.removeAll()
+        for feed in frameFeeds.values { feed.finish() }
+        frameFeeds.removeAll()
         clientIds.removeAll()
         listener?.cancel()
         listener = nil
@@ -235,6 +246,20 @@ public actor ReactotronServer {
         nextConnectionId += 1
         connections[id] = box
 
+        // Frames reach the actor through one stream and one consumer per
+        // connection, not a Task per frame: independent tasks have no FIFO
+        // guarantee on actor entry, so a burst could land timeline rows out
+        // of wire order. The socket callbacks run on a serial queue, so the
+        // yields — and therefore the events — keep the order the app sent.
+        let (frames, feed) = AsyncStream.makeStream(
+            of: Data.self, bufferingPolicy: .unbounded)
+        frameFeeds[id] = feed
+        Task { [weak self] in
+            for await data in frames {
+                await self?.handleFrame(connectionId: id, data: data)
+            }
+        }
+
         box.connection.stateUpdateHandler = { [weak self] state in
             switch state {
             case let .failed(error):
@@ -251,7 +276,7 @@ public actor ReactotronServer {
             }
         }
         box.connection.start(queue: Self.queue)
-        Self.receiveLoop(box, id: id, server: self)
+        Self.receiveLoop(box, id: id, server: self, feed: feed)
     }
 
     /// Drops the connection and reports why. Racing drop paths (close frame,
@@ -260,14 +285,20 @@ public actor ReactotronServer {
     private func dropConnection(_ id: Int, reason: DisconnectReason?) {
         guard let box = connections.removeValue(forKey: id) else { return }
         clientIds[id] = nil
+        // Finish (not cancel) the frame pipeline: frames that arrived before
+        // the close still drain into the timeline, then the consumer ends.
+        frameFeeds.removeValue(forKey: id)?.finish()
         box.connection.cancel()
         continuation?.yield(.disconnected(connectionId: id, reason: reason))
     }
 
     /// Recursive receive loop, off the actor (like `MirrorTransport.receiveLoop`).
-    /// Each WebSocket text frame is one Reactotron command; hop onto the actor to
-    /// decode and deliver it, then continue receiving.
-    private nonisolated static func receiveLoop(_ box: ConnectionBox, id: Int, server: ReactotronServer) {
+    /// Each WebSocket text frame is one Reactotron command; yield it into the
+    /// connection's ordered frame feed (see `accept`), then continue receiving.
+    private nonisolated static func receiveLoop(
+        _ box: ConnectionBox, id: Int, server: ReactotronServer,
+        feed: AsyncStream<Data>.Continuation
+    ) {
         box.connection.receiveMessage { content, context, _, error in
             if let context,
                let metadata = context.protocolMetadata(definition: NWProtocolWebSocket.definition)
@@ -276,7 +307,7 @@ public actor ReactotronServer {
                 case .text:
                     if let content {
                         NetworkTrafficMeter.shared.recordReceived(content.count)
-                        Task { await server.handleFrame(connectionId: id, data: content) }
+                        feed.yield(content)
                     }
                 case .close:
                     log.notice("connection #\(id): client sent WS close, code=\(String(describing: metadata.closeCode), privacy: .public)")
@@ -295,7 +326,7 @@ public actor ReactotronServer {
                 }
                 return
             }
-            receiveLoop(box, id: id, server: server)
+            receiveLoop(box, id: id, server: server, feed: feed)
         }
     }
 
@@ -347,6 +378,7 @@ public actor ReactotronServer {
         for (staleId, staleClientId) in clientIds
             where staleClientId == clientId && staleId != id {
             clientIds[staleId] = nil
+            frameFeeds.removeValue(forKey: staleId)?.finish()
             guard let stale = connections.removeValue(forKey: staleId) else { continue }
             continuation?.yield(.disconnected(connectionId: staleId, reason: nil))
             Task {

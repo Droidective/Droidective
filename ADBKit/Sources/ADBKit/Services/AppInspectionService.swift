@@ -126,37 +126,65 @@ public struct AppInspectionService: Sendable {
         var info = Self.parseAppInfo(dump.stdout, packageId: packageId)
         guard info.installed else { return info }
 
-        if let apkPath = try await firstApkPath(serial: serial, packageId: packageId) {
-            info.apkPath = apkPath
-            let stat = try await client.run(on: serial, ["shell", "stat", "-c", "%s", shellQuote(apkPath)])
-            info.apkSizeBytes = Int(stat.stdout.trimmingCharacters(in: .whitespacesAndNewlines))
+        let paths = try await apkPaths(serial: serial, packageId: packageId)
+        if let basePath = paths.first {
+            info.apkPath = basePath
+            let stat = try await client.run(
+                on: serial, ["shell", "stat", "-c", "%s"] + paths.map(shellQuote))
+            // Sum every split — base.apk alone understates an App Bundle
+            // install, often by most of its size.
+            let total = stat.stdout.split(whereSeparator: \.isNewline)
+                .compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
+                .reduce(0, +)
+            info.apkSizeBytes = total > 0 ? total : nil
         }
         return info
     }
 
-    func firstApkPath(serial: String, packageId: String) async throws(AdbError) -> String? {
+    /// Every APK the package installs, base first — App Bundle installs list
+    /// `base.apk` plus `split_config.*` companions.
+    func apkPaths(serial: String, packageId: String) async throws(AdbError) -> [String] {
         let output = try await client.run(on: serial, ["shell", "pm", "path", shellQuote(packageId)])
-        return output.stdout.split(whereSeparator: \.isNewline)
-            .map { $0.replacingOccurrences(of: "package:", with: "").trimmingCharacters(in: .whitespacesAndNewlines) }
-            .first { !$0.isEmpty }
+        var paths = ApkInspectionService.parsePmPath(output.stdout)
+        if let baseIndex = paths.firstIndex(where: { $0.hasSuffix("/base.apk") }), baseIndex != 0 {
+            paths.swapAt(0, baseIndex)
+        }
+        return paths
     }
 
-    public func pullApk(serial: String, packageId: String, to destination: URL? = nil) async throws -> URL {
-        guard let apkPath = try await firstApkPath(serial: serial, packageId: packageId) else {
-            throw PullError.apkNotFound
-        }
-        let dest: URL
+    /// Pull everything the package installs. A single-APK app lands exactly at
+    /// `destination`; a split install writes base.apk there and each split
+    /// alongside it as `<name>.<split>.apk` — pulling base.apk alone produces
+    /// a file that *looks* complete but can't be reinstalled
+    /// (`INSTALL_FAILED_MISSING_SPLIT`). Returns the written files, base first.
+    public func pullApk(serial: String, packageId: String, to destination: URL? = nil) async throws -> [URL] {
+        let paths = try await apkPaths(serial: serial, packageId: packageId)
+        guard !paths.isEmpty else { throw PullError.apkNotFound }
+        let base: URL
         if let destination {
-            dest = destination
+            base = destination
         } else {
             let dir = try ScreenCaptureService.ensureCaptureDir()
-            dest = dir.appendingPathComponent("\(packageId)_\(ScreenCaptureService.stamp()).apk")
+            base = dir.appendingPathComponent("\(packageId)_\(ScreenCaptureService.stamp()).apk")
         }
-        let result = try await client.run(on: serial, ["pull", apkPath, dest.path], timeout: .seconds(120))
-        guard result.succeeded else {
-            throw PullError.failed(friendlyAdbError(result, fallback: "Failed to pull APK"))
+        var saved: [URL] = []
+        for path in paths {
+            let dest = saved.isEmpty ? base : Self.splitDestination(base: base, splitPath: path)
+            let result = try await client.run(on: serial, ["pull", path, dest.path], timeout: .seconds(120))
+            guard result.succeeded else {
+                throw PullError.failed(friendlyAdbError(result, fallback: "Failed to pull APK"))
+            }
+            saved.append(dest)
         }
-        return dest
+        return saved
+    }
+
+    /// Where a split lands next to the chosen base file:
+    /// `com.foo.apk` + `…/split_config.en.apk` → `com.foo.split_config.en.apk`.
+    static func splitDestination(base: URL, splitPath: String) -> URL {
+        let splitName = URL(fileURLWithPath: splitPath).lastPathComponent
+        let stem = base.deletingPathExtension().lastPathComponent
+        return base.deletingLastPathComponent().appendingPathComponent("\(stem).\(splitName)")
     }
 
     public enum PullError: Error, LocalizedError {
