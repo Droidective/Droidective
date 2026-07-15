@@ -268,6 +268,12 @@ platforms annotation without a runner.
   UTI on the drag pasteboard, which kills the drag *silently*.
 - **Empty states under a toolbar must `.frame(maxWidth/maxHeight: .infinity)`** —
   otherwise the whole VStack centers and the toolbar floats mid-window.
+- **`scrollPosition(id:)` read-back can't drive a follow/freeze decision under
+  streaming load** — it fires late and points at stale rows for the view's own
+  programmatic pins, so "did the user scroll up?" inferred from it flickers.
+  `SimulatorLogsView` freezes on the real gesture instead (a local
+  `.scrollWheel` NSEvent monitor) and uses the read-back only to detect the
+  user returning to the tail.
 - **`HSplitView` ignores SwiftUI safe-area insets** (it's NSSplitView-backed) —
   content renders under the device bar. Use a plain HStack split.
 - **The Command Log records only wrapped calls.** A view-feature that runs adb
