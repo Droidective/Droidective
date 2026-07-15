@@ -710,6 +710,7 @@ final class AppState {
 
     func refreshDevices() {
         Task { await env.monitor.invalidate() }
+        Task { await env.simulatorMonitor.invalidate() }
     }
 
     /// Drop a wireless adb connection (one device, or all when `target` is nil).
