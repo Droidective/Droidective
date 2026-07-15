@@ -36,9 +36,16 @@ final class UpdaterViewModel: NSObject, ObservableObject {
         controller?.updater.checkForUpdates()
     }
 
+    /// Settings toggles bind to these computed properties, whose truth lives
+    /// outside SwiftUI (Sparkle / UserDefaults) — the explicit
+    /// `objectWillChange` is what re-renders the observing view, otherwise the
+    /// toggle snaps back visually while the underlying value did change.
     var automaticallyChecksForUpdates: Bool {
         get { controller?.updater.automaticallyChecksForUpdates ?? false }
-        set { controller?.updater.automaticallyChecksForUpdates = newValue }
+        set {
+            objectWillChange.send()
+            controller?.updater.automaticallyChecksForUpdates = newValue
+        }
     }
 
     /// Opt-in to the beta update channel (appcast items tagged
@@ -50,6 +57,7 @@ final class UpdaterViewModel: NSObject, ObservableObject {
     var receivesBetaUpdates: Bool {
         get { UserDefaults.standard.bool(forKey: receiveBetaUpdatesKey) }
         set {
+            objectWillChange.send()
             UserDefaults.standard.set(newValue, forKey: receiveBetaUpdatesKey)
             if newValue { controller?.updater.checkForUpdatesInBackground() }
         }
