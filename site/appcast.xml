@@ -6,9 +6,9 @@
     <description>Most recent Droidective updates.</description>
     <language>en</language>
     <item>
-      <title>Droidective 3.3.0</title>
-      <sparkle:version>444</sparkle:version>
-      <sparkle:shortVersionString>3.3.0</sparkle:shortVersionString>
+      <title>Droidective 3.3.1</title>
+      <sparkle:version>456</sparkle:version>
+      <sparkle:shortVersionString>3.3.1</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <description><![CDATA[
 <style>
@@ -24,83 +24,54 @@ pre { background: color-mix(in srgb, currentColor 8%, transparent); padding: .6e
 pre code { background: none; padding: 0; }
 a { color: #2f9e44; }
 </style>
-<p>A JS console that stays connected, a screen mirror that no longer eats CPU
-after you leave it, logcat search split into separate Filter and Find, and a
-first iOS feature: streaming a simulator's native logs.</p>
-<h3>Logcat: Filter vs Find</h3>
+<p>iOS Logs is rebuilt around how the simulator's unified log actually behaves,
+and ⌘F now always lands where you expect it.</p>
+<h3>iOS Logs, rebuilt</h3>
 <ul>
 <li>
-<strong>Filter and Find are now separate</strong> — the toolbar field <em>filters</em> (shows
-only matching lines, as before); a new find bar (⌘F) <em>finds</em>: it highlights
-matches and steps through them with ⌘G/⇧⌘G and a "2 of 7" counter without
-hiding anything.</li>
+<strong>Scoped to your apps by default</strong> — the unified log unfiltered is the whole
+simulator OS (thousands of lines a second). The stream now covers only
+installed apps' processes; <em>Everything</em> is one click away when you need
+system logs.</li>
 <li>
-<strong>One app selector</strong> — the App menu inside logcat now does everything the
-bar's bundle pill did (pick a saved bundle, add from the device's installed
-apps, grab the app on screen, manage), and the bundle pill no longer
-doubles up above it.</li>
+<strong>Scrollback that holds still</strong> — scrolling up freezes the feed; new lines
+wait behind a "N new" pill (with a waiting count in the status bar) and
+fold in when you click it or scroll back to the tail. No more unscrollable
+firehose.</li>
+<li>
+<strong>Xcode-style entries</strong> — the message leads, with a toggleable metadata
+line (time · process (pid) · subsystem · category), a severity color bar,
+and tinted error/fault rows.</li>
+<li>
+<strong>Error &amp; fault counters</strong> — live tallies in the status bar; click to flip
+the feed to errors only and back.</li>
+<li>
+<strong>Sharper filtering</strong> — a multi-select level menu (Info and Debug also
+widen what the simulator emits), a process menu built from the stream
+itself (or right-click a line), free-text filter, and ⌘F find.</li>
 </ul>
-<h3>iOS Logs (new)</h3>
+<h3>⌘F lands where you expect</h3>
 <ul>
 <li>
-<strong>Stream a simulator's unified log</strong> — the new iOS Logs feature tails a
-booted iOS Simulator's native logs (<code>log stream</code>) in the same pane logcat
-uses: level picker, text filter, the ⌘F find bar, export, and right-click
-to filter by process.</li>
+<strong>No more focus jumping to the sidebar</strong> — ⌘F used to be claimable by a
+hidden tab, sending focus to the sidebar search. It now always targets the
+screen you're on: the find bar in Logcat, iOS Logs, and the JS Console —
+and in Reactotron it focuses the timeline search, its only text filter.
+The sidebar search only takes focus from ⌘T or a click.</li>
 </ul>
-<h3>JS Console stays connected</h3>
+<h3>Settings</h3>
 <ul>
 <li>
-<strong>No more idle disconnects</strong> — a silent keepalive satisfies React Native's
-inspector-proxy heartbeat, which a plain WebSocket ping doesn't.</li>
+<strong>Check for Updates in Settings</strong> — the Updates section shows the installed
+version with a Check for Updates button, alongside the update toggles.</li>
 <li>
-<strong>Reconnects survive app relaunches, phone sleep, and Metro restarts</strong> —
-auto-reconnect no longer strands itself on a stale device id.</li>
-<li>
-<strong>Plays nice with React Native DevTools</strong> — when another debugger takes
-over (RN ≤ 0.84 allows one), the console stands down with a notice instead
-of fighting for the session; on RN 0.85+ both attach side by side.</li>
-<li>
-<strong>No duplicate logs on reconnect</strong> — Hermes' replayed console history is
-deduplicated, so the feed no longer doubles after each reconnect.</li>
-</ul>
-<h3>Screen mirror</h3>
-<ul>
-<li>
-<strong>Fixed: runaway CPU after using the mirror</strong> — switching away from the
-mirror while it was still connecting could leak a session that kept
-streaming and decoding until the app quit (the reported 500%+ CPU). Leaked
-sessions and stray adb tunnels are gone.</li>
-<li>
-<strong>Lower latency</strong> — frames render as they decode, touch input isn't
-batched by the TCP stack, and the slow-motion catch-up after opening the
-mirror is gone.</li>
-<li>
-<strong>Device audio is now opt-in</strong> — the mirror starts video-only; the Audio
-switch streams device audio too (Android 11+). The choice persists.</li>
-</ul>
-<h3>Improvements</h3>
-<ul>
-<li>
-<strong>Device dropdown refreshes itself</strong> — opening it re-scans for devices;
-the separate refresh button appears only when nothing is connected.</li>
-<li>
-<strong>Smooth resizing</strong> — dragging the sidebar edge and the split-pane divider
-no longer jitters.</li>
-<li>
-<strong>Newest-first logs</strong> — Logcat, JS Console, and Reactotron can flip to
-newest-at-top.</li>
-<li>
-<strong>Beta update channel</strong> — Settings ▸ General ▸ Updates gains an opt-in
-beta channel; opting out never downgrades.</li>
-<li>Reactotron's Copy as cURL keeps query params and form fields, timeline
-frames stay in wire order, and large frames no longer truncate.</li>
-<li>Pulling an app's APK grabs every split APK, not just base.apk.</li>
-<li>Device platforms, features, and the Emulators screen scope to your role.</li>
+<strong>Quick Actions can close after a run</strong> — a new option dismisses the panel
+once an action succeeds (failures keep it open so the error stays
+readable).</li>
 </ul>
 ]]></description>
-      <pubDate>Wed, 15 Jul 2026 11:47:03 +0000</pubDate>
-      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.3.0/Droidective-v3.3.0.dmg" sparkle:edSignature="P/fqogk1wEYyrotfhjbExOavloN7M9dtUwZzkdEOehT5G0/lSCB83GbEbXx5ycTGGSIDEmjefZq7fzAoQPnXCA==" length="52446696" type="application/octet-stream" />
+      <pubDate>Wed, 15 Jul 2026 14:25:08 +0000</pubDate>
+      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.3.1/Droidective-v3.3.1.dmg" sparkle:edSignature="ttMz6WMZzizyLFaeF6POK/lKY8rPtQnilRLrklkWXM7G20jdemL8vdqLPeRNrEDlykjgTSd3hqSDJajcuiv/Bg==" length="52822002" type="application/octet-stream" />
     </item>
     
   </channel>
