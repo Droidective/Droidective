@@ -1,9 +1,101 @@
 import Foundation
 
-/// Pure parsing for the iOS Simulator's unified log, testable without Xcode.
-/// The stream runs `log stream --style ndjson` inside the simulator (via
-/// `simctl spawn`), one JSON event per line — far more robust to parse than
-/// the human-readable styles.
+/// Unified-log levels, ordered least to most severe. `notice` is what Apple
+/// calls "Default" — the level `os_log`/`Logger` emit when none is given.
+public enum SimLogLevel: String, Sendable, CaseIterable, Comparable {
+    case debug
+    case info
+    case notice
+    case error
+    case fault
+
+    public var label: String {
+        switch self {
+        case .debug: return "Debug"
+        case .info: return "Info"
+        case .notice: return "Notice"
+        case .error: return "Error"
+        case .fault: return "Fault"
+        }
+    }
+
+    private var rank: Int {
+        switch self {
+        case .debug: return 0
+        case .info: return 1
+        case .notice: return 2
+        case .error: return 3
+        case .fault: return 4
+        }
+    }
+
+    public static func < (lhs: SimLogLevel, rhs: SimLogLevel) -> Bool {
+        lhs.rank < rhs.rank
+    }
+}
+
+/// One unified-log event, structured the way iOS developers reason about
+/// their logs: process, subsystem:category, level, message.
+public struct SimLogLine: Sendable, Identifiable, Equatable {
+    public let id: UUID
+    /// Clock-only "10:11:12.123".
+    public let time: String
+    public let process: String
+    public let pid: String
+    public let level: SimLogLevel
+    public let subsystem: String
+    public let category: String
+    public let message: String
+    /// Every filterable field lowercased once at ingest, so the free-text
+    /// filter is a plain substring check per line.
+    public let searchKey: String
+
+    public init(
+        time: String, process: String, pid: String, level: SimLogLevel,
+        subsystem: String, category: String, message: String
+    ) {
+        self.id = UUID()
+        self.time = time
+        self.process = process
+        self.pid = pid
+        self.level = level
+        self.subsystem = subsystem
+        self.category = category
+        self.message = message
+        searchKey = "\(process) \(subsystem) \(category) \(message)".lowercased()
+    }
+
+    /// The line as exported to a file.
+    public var exportText: String {
+        let origin = subsystem.isEmpty ? "" : " [\(subsystem):\(category)]"
+        return "\(time) \(process)(\(pid)) \(level.label)\(origin): \(message)"
+    }
+
+    public static func == (lhs: SimLogLine, rhs: SimLogLine) -> Bool {
+        lhs.id == rhs.id
+    }
+}
+
+/// What the stream asks the simulator to emit. The unified log unfiltered is
+/// the whole OS — every daemon, thousands of lines a second — so scoping is
+/// what keeps the feed usable.
+public enum SimulatorLogScope: String, Sendable, CaseIterable {
+    /// Only installed apps' processes (their binaries live under the data
+    /// container's Bundle/Application path) — the Xcode-console-like default.
+    case apps
+    /// The whole simulator OS, daemons included.
+    case everything
+
+    public var label: String {
+        switch self {
+        case .apps: return "My apps"
+        case .everything: return "Everything"
+        }
+    }
+}
+
+/// Pure parsing and argument building for `log stream --style ndjson` run
+/// inside a simulator via `simctl spawn` — testable without Xcode.
 public enum SimulatorLogParser {
     private struct Event: Decodable {
         let eventMessage: String?
@@ -12,66 +104,106 @@ public enum SimulatorLogParser {
         let processID: Int?
         let processImagePath: String?
         let subsystem: String?
+        let category: String?
     }
 
-    /// One ndjson event → a display line, mapped into logcat's `LogLine` so
-    /// the log pane, filters, and Find bar are shared between the platforms.
-    /// Non-JSON lines (the "Filtering the log data…" preamble) and events
-    /// without a message return nil.
-    public static func parse(_ raw: String) -> LogLine? {
+    /// Installed apps' executables live under this path inside the data
+    /// container; the OS's own daemons don't — the "My apps" predicate.
+    static let appsPredicate = #"processImagePath CONTAINS "/Containers/Bundle/Application/""#
+
+    /// One ndjson event → a structured line. Non-JSON lines (the "Filtering
+    /// the log data…" preamble) and events without a message return nil.
+    public static func parse(_ raw: String) -> SimLogLine? {
         guard let event = try? JSONDecoder().decode(Event.self, from: Data(raw.utf8)),
               let message = event.eventMessage, !message.isEmpty
         else { return nil }
-        let time = clockTime(event.timestamp)
-        let pid = event.processID.map(String.init) ?? ""
-        let level = levelLetter(event.messageType)
-        let process = (event.processImagePath as NSString?)?.lastPathComponent ?? ""
-        let body: String
-        if let subsystem = event.subsystem, !subsystem.isEmpty {
-            body = "[\(subsystem)] \(message)"
-        } else {
-            body = message
-        }
-        return LogLine(
-            raw: "\(time)  \(pid)  \(level)/\(process): \(body)",
-            time: time, pid: pid, level: level, tag: process, message: body
+        return SimLogLine(
+            time: clockTime(event.timestamp),
+            process: (event.processImagePath as NSString?)?.lastPathComponent ?? "",
+            pid: event.processID.map(String.init) ?? "",
+            level: level(event.messageType),
+            subsystem: event.subsystem ?? "",
+            category: event.category ?? "",
+            message: message
         )
     }
 
-    /// "2026-07-15 10:11:12.123456+0530" → "10:11:12.123", matching logcat's
-    /// clock-only threadtime timestamps.
+    /// "2026-07-15 10:11:12.123456+0530" → "10:11:12.123".
     private static func clockTime(_ timestamp: String?) -> String {
         guard let clock = timestamp?.split(separator: " ").dropFirst().first else { return "" }
         return String(clock.prefix(12))
     }
 
-    /// Unified-log message types folded onto logcat's level letters so the
-    /// shared pane colors them the same way. "Default" reads as info.
-    private static func levelLetter(_ type: String?) -> String {
+    private static func level(_ type: String?) -> SimLogLevel {
         switch type {
-        case "Fault": return "F"
-        case "Error": return "E"
-        case "Debug": return "D"
-        default: return "I"
+        case "Fault": return .fault
+        case "Error": return .error
+        case "Debug": return .debug
+        case "Info": return .info
+        default: return .notice
         }
     }
 
-    /// Arguments for `xcrun`. `level` widens what the simulator emits —
-    /// nil/"default" is the OS default; "info" and "debug" include the
+    /// Arguments for `xcrun`. `emit` widens what the simulator produces —
+    /// nil is the OS default (notice and up); `info`/`debug` include the
     /// chattier levels.
-    public static func buildArgs(udid: String, level: String?) -> [String] {
+    public static func buildArgs(
+        udid: String, scope: SimulatorLogScope, emit: String?
+    ) -> [String] {
         var args = ["simctl", "spawn", udid, "log", "stream", "--style", "ndjson"]
-        if let level {
-            args += ["--level", level]
+        if let emit {
+            args += ["--level", emit]
+        }
+        if scope == .apps {
+            args += ["--predicate", appsPredicate]
         }
         return args
     }
 }
 
-/// Live unified-log streaming for a booted iOS Simulator — `LogcatStreamer`'s
-/// simctl twin: spawns `xcrun simctl spawn <udid> log stream`, parses ndjson
-/// events, and yields debounced batches. One session per streamer; restarting
-/// stops the previous process.
+/// Pure display filtering behind the iOS Logs view, so it's tested without
+/// a simulator.
+public enum SimulatorLogFilter {
+    /// Lines surviving the level set, the process pick, and the free-text
+    /// filter, in stream order.
+    public static func visible(
+        _ lines: [SimLogLine], levels: Set<SimLogLevel>, process: String?, filter: String
+    ) -> [SimLogLine] {
+        let query = filter.lowercased()
+        return lines.filter { line in
+            if !levels.contains(line.level) { return false }
+            if let process, line.process != process { return false }
+            if !query.isEmpty && !line.searchKey.contains(query) { return false }
+            return true
+        }
+    }
+
+    /// IDs of the lines matching the Find query, in display (stream) order.
+    public static func findMatches(in lines: [SimLogLine], query: String) -> [UUID] {
+        let needle = query.lowercased()
+        guard !needle.isEmpty else { return [] }
+        return lines.filter { $0.searchKey.contains(needle) }.map(\.id)
+    }
+
+    /// Processes seen in the buffer with their line counts, busiest first —
+    /// feeds the Process menu, so it's self-populating from the stream.
+    public static func processCounts(_ lines: [SimLogLine]) -> [(name: String, count: Int)] {
+        var counts: [String: Int] = [:]
+        for line in lines where !line.process.isEmpty {
+            counts[line.process, default: 0] += 1
+        }
+        return counts
+            .map { (name: $0.key, count: $0.value) }
+            .sorted { $0.count == $1.count ? $0.name < $1.name : $0.count > $1.count }
+    }
+}
+
+/// Live unified-log streaming for a booted iOS Simulator: spawns
+/// `xcrun simctl spawn <udid> log stream`, parses ndjson events, and yields
+/// debounced batches. One session per streamer; restarting stops the
+/// previous process. Sessions are epoch-stamped so a stale reader from a
+/// previous session (whose EOF arrives after a restart) can't tear down the
+/// new one.
 public actor SimulatorLogStreamer {
     static let flushInterval: Duration = .milliseconds(120)
     static let maxBatch = 500
@@ -79,8 +211,8 @@ public actor SimulatorLogStreamer {
     private let xcrunPath: String
     private var process: Process?
     private var readHandle: FileHandle?
-    private var continuation: AsyncStream<[LogLine]>.Continuation?
-    private var batch: [LogLine] = []
+    private var continuation: AsyncStream<[SimLogLine]>.Continuation?
+    private var batch: [SimLogLine] = []
     private var readerTask: Task<Void, Never>?
     private var flusherTask: Task<Void, Never>?
     /// Session stamp; bumped on every start/stop so stale tasks no-op.
@@ -92,10 +224,9 @@ public actor SimulatorLogStreamer {
 
     /// Start (or restart) streaming. The stream finishes when the process
     /// exits or `stop()` is called.
-    ///
-    /// Sessions are epoch-stamped: a stale reader from a previous session
-    /// (whose EOF arrives after a restart) must not tear down the new one.
-    public func start(udid: String, level: String?) throws(SimctlError) -> AsyncStream<[LogLine]> {
+    public func start(
+        udid: String, scope: SimulatorLogScope, emit: String?
+    ) throws(SimctlError) -> AsyncStream<[SimLogLine]> {
         stop()
         guard FileManager.default.isExecutableFile(atPath: xcrunPath) else {
             throw .xcrunNotFound
@@ -103,14 +234,14 @@ public actor SimulatorLogStreamer {
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: xcrunPath)
-        process.arguments = SimulatorLogParser.buildArgs(udid: udid, level: level)
+        process.arguments = SimulatorLogParser.buildArgs(udid: udid, scope: scope, emit: emit)
         process.standardInput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         let pipe = Pipe()
         process.standardOutput = pipe
 
         let (stream, continuation) = AsyncStream.makeStream(
-            of: [LogLine].self, bufferingPolicy: .bufferingNewest(64)
+            of: [SimLogLine].self, bufferingPolicy: .bufferingNewest(64)
         )
         epoch += 1
         let sessionEpoch = epoch
@@ -167,7 +298,7 @@ public actor SimulatorLogStreamer {
         continuation = nil
     }
 
-    private func append(_ line: LogLine, epoch: UInt64) {
+    private func append(_ line: SimLogLine, epoch: UInt64) {
         guard epoch == self.epoch else { return }
         batch.append(line)
         if batch.count >= Self.maxBatch {
