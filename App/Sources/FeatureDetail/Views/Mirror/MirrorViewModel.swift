@@ -141,24 +141,24 @@ final class MirrorViewModel {
             }
         }
 
-        displayTask = Task { @MainActor [weak self] in
+        // Detached: frames render at decode speed, never gated on the main run
+        // loop. A busy UI during bring-up otherwise builds a stream backlog the
+        // mirror then replays 10–20 s behind the device before catching up.
+        // Only first-frame/rotation state changes hop to the main actor.
+        displayTask = Task.detached(priority: .userInitiated) { [weak self, renderer] in
             do {
+                var lastSize = CGSize.zero
+                var first = true
                 for try await sample in stream {
-                    guard let self else { break }
-                    self.renderer.enqueue(sample.sampleBuffer, width: sample.width, height: sample.height)
+                    renderer.enqueue(sample.sampleBuffer, width: sample.width, height: sample.height)
                     // Track the live frame size so taps map correctly and the aspect
                     // rect stays right across rotation, not only at the first frame.
-                    if sample.width > 0, sample.height > 0 {
-                        let size = CGSize(width: sample.width, height: sample.height)
-                        if self.videoSize != size { self.videoSize = size }
-                    }
-                    if self.status == .connecting {
-                        self.status = .streaming
-                        self.didStream = true
-                        // The transport (incl. the control socket) is connected
-                        // once frames flow — fetch the control sender now, not
-                        // right after start() when it isn't wired yet.
-                        self.sendControl = await self.session?.controlSender()
+                    let size = CGSize(width: sample.width, height: sample.height)
+                    if first || size != lastSize {
+                        first = false
+                        lastSize = size
+                        guard let self else { break }
+                        await self.frameArrived(size: size)
                     }
                 }
                 await self?.sessionEnded(failure: nil)
@@ -167,6 +167,20 @@ final class MirrorViewModel {
             } catch {
                 await self?.sessionEnded(failure: error.localizedDescription)
             }
+        }
+    }
+
+    /// First frame or a rotation: update the tap-mapping size, flip the status,
+    /// and fetch the control sender — the transport (incl. the control socket)
+    /// is connected once frames flow, not right after start().
+    private func frameArrived(size: CGSize) async {
+        if size.width > 0, size.height > 0, videoSize != size {
+            videoSize = size
+        }
+        if status == .connecting {
+            status = .streaming
+            didStream = true
+            sendControl = await session?.controlSender()
         }
     }
 

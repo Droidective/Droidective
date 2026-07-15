@@ -3,32 +3,42 @@ import AVFoundation
 import SwiftUI
 
 /// Owns the `AVSampleBufferDisplayLayer` the session feeds compressed frames to.
-/// Lives on the main actor since it drives a layer.
-@MainActor final class MirrorRenderer {
-    let displayLayer = AVSampleBufferDisplayLayer()
+/// Frames are enqueued from the stream-consumer task, OFF the main actor — a
+/// frame must never wait on a busy UI run loop, or a startup stall builds a
+/// backlog the mirror then replays seconds behind the device.
+/// `AVQueuedSampleBufferRendering.enqueue` is callable from any thread; the
+/// single consumer task serializes it, and the lock covers our bookkeeping.
+/// The layer itself is created and laid out on the main actor.
+final class MirrorRenderer: @unchecked Sendable {
+    let displayLayer: AVSampleBufferDisplayLayer
 
     private var renderer: AVSampleBufferVideoRenderer { displayLayer.sampleBufferRenderer }
+    private let lock = NSLock()
     private var lastDimensions: (width: Int, height: Int)?
 
-    init() {
+    @MainActor init() {
+        displayLayer = AVSampleBufferDisplayLayer()
         displayLayer.videoGravity = .resizeAspect
     }
 
     func enqueue(_ sampleBuffer: CMSampleBuffer, width: Int, height: Int) {
+        lock.lock()
         // A resolution change (device rotation) needs a flush, or the renderer can
         // stall on the old format instead of re-priming on the incoming key frame.
-        if let last = lastDimensions, last != (width, height) {
-            renderer.flush()
-        }
+        let sizeChanged = lastDimensions.map { $0 != (width, height) } ?? false
         lastDimensions = (width, height)
+        lock.unlock()
+        if sizeChanged { renderer.flush() }
         // A failed renderer won't recover until flushed; the next key frame re-primes it.
         if renderer.status == .failed { renderer.flush() }
         renderer.enqueue(sampleBuffer)
     }
 
     func clear() {
-        renderer.flush()
+        lock.lock()
         lastDimensions = nil
+        lock.unlock()
+        renderer.flush()
     }
 }
 
