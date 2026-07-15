@@ -275,9 +275,9 @@ final class JSConsoleSession {
             // Drop a pass whose port changed mid-fetch — its results are stale.
             if !Task.isCancelled, scannedPort == port {
                 targets = found
-                // A takeover stand-down holds only while the contested app is
-                // still listed; once it's gone there's no debugger to kick off
-                // and discovery should self-heal again.
+                // A takeover stand-down holds while any target is still
+                // listed; once the list is empty there's no debugger left to
+                // kick off and discovery should self-heal again.
                 if autoReconnectSuspended, found.isEmpty {
                     autoReconnectSuspended = false
                     phase = .searching
@@ -324,7 +324,8 @@ final class JSConsoleSession {
         autoReconnectSuspended = false
         // Reconnecting to the app whose history the feed already holds? Then
         // the post-connect replay is a duplicate and the gate should drop it.
-        let resumingSameApp = target.logicalDeviceId == preferredLogicalDeviceId
+        let resumingSameApp = (target.logicalDeviceId != nil
+            && target.logicalDeviceId == preferredLogicalDeviceId)
             || (target.appId != nil && target.appId == preferredAppId)
         preferredLogicalDeviceId = target.logicalDeviceId
         preferredAppId = target.appId
