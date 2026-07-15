@@ -89,12 +89,21 @@ struct AppInfoView: View {
                     ) {
                         try await state.env.engine.inspection.pullApk(serial: serial, packageId: packageId, to: dest)
                     }
-                    state.showToast(Toast(message: "APK saved", ok: true, revealPath: saved.path))
+                    state.showToast(Toast(message: Self.pulledApkToast(saved), ok: true, revealPath: dest.path))
                 } catch {
                     state.showToast(Toast(message: error.localizedDescription, ok: false))
                 }
             }
             pulling = false
         }
+    }
+
+    /// "APK saved" for a single-file app; spells out the split count for an
+    /// App Bundle install so the extra files next to the chosen one aren't a
+    /// surprise. Shared with the Apps explorer's pull.
+    static func pulledApkToast(_ saved: [URL]) -> String {
+        let splits = saved.count - 1
+        guard splits > 0 else { return "APK saved" }
+        return "APK + \(splits) split\(splits == 1 ? "" : "s") saved"
     }
 }

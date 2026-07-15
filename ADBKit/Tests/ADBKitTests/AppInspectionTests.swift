@@ -27,6 +27,86 @@ import Testing
         ])
     }
 
+    @Test func pullApkPullsEverySplitBaseFirst() async throws {
+        let runner = MockProcessRunner()
+        // pm path lists a split *before* base — the pull must still put
+        // base.apk at the user's chosen destination.
+        runner.script(argsPrefix: ["-s", "S1", "shell", "pm", "path"], stdout: """
+        package:/data/app/~~a==/com.x-1/split_config.arm64_v8a.apk
+        package:/data/app/~~a==/com.x-1/base.apk
+        package:/data/app/~~a==/com.x-1/split_config.en.apk
+        """)
+        runner.script(argsPrefix: ["-s", "S1", "pull"], stdout: "1 file pulled")
+        let service = AppInspectionService(client: await makeTestClient(runner: runner))
+        let dest = URL(fileURLWithPath: "/tmp/out/com.x.apk")
+
+        let saved = try await service.pullApk(serial: "S1", packageId: "com.x", to: dest)
+
+        #expect(saved.map(\.path) == [
+            "/tmp/out/com.x.apk",
+            "/tmp/out/com.x.split_config.arm64_v8a.apk",
+            "/tmp/out/com.x.split_config.en.apk",
+        ])
+        let pulls = runner.invocations.filter { $0.arguments.contains("pull") }.map(\.arguments)
+        #expect(pulls == [
+            ["-s", "S1", "pull", "/data/app/~~a==/com.x-1/base.apk", "/tmp/out/com.x.apk"],
+            ["-s", "S1", "pull", "/data/app/~~a==/com.x-1/split_config.arm64_v8a.apk",
+             "/tmp/out/com.x.split_config.arm64_v8a.apk"],
+            ["-s", "S1", "pull", "/data/app/~~a==/com.x-1/split_config.en.apk",
+             "/tmp/out/com.x.split_config.en.apk"],
+        ])
+    }
+
+    @Test func pullApkSingleApkLandsExactlyAtTheChosenDestination() async throws {
+        let runner = MockProcessRunner()
+        runner.script(
+            argsPrefix: ["-s", "S1", "shell", "pm", "path"],
+            stdout: "package:/data/app/com.x-1/base.apk\n")
+        runner.script(argsPrefix: ["-s", "S1", "pull"], stdout: "1 file pulled")
+        let service = AppInspectionService(client: await makeTestClient(runner: runner))
+        let dest = URL(fileURLWithPath: "/tmp/out/renamed.apk")
+
+        let saved = try await service.pullApk(serial: "S1", packageId: "com.x", to: dest)
+
+        #expect(saved.map(\.path) == ["/tmp/out/renamed.apk"])
+        // The package reaches the device shell, so it must be quoted.
+        #expect(runner.invocations.first?.arguments == ["-s", "S1", "shell", "pm", "path", "'com.x'"])
+    }
+
+    @Test func pullApkWithNoInstalledPathsThrowsApkNotFound() async throws {
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["-s", "S1", "shell", "pm", "path"], stdout: "")
+        let service = AppInspectionService(client: await makeTestClient(runner: runner))
+        await #expect(throws: AppInspectionService.PullError.self) {
+            _ = try await service.pullApk(
+                serial: "S1", packageId: "com.gone", to: URL(fileURLWithPath: "/tmp/x.apk"))
+        }
+    }
+
+    @Test func appInfoApkSizeSumsEverySplit() async throws {
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["-s", "S1", "shell", "dumpsys"], stdout: """
+        Package [com.x] (abc):
+            versionName=1.0
+            versionCode=7
+        """)
+        runner.script(argsPrefix: ["-s", "S1", "shell", "pm", "path"], stdout: """
+        package:/a/base.apk
+        package:/a/split_config.en.apk
+        """)
+        runner.script(argsPrefix: ["-s", "S1", "shell", "stat"], stdout: "100\n40\n")
+        let service = AppInspectionService(client: await makeTestClient(runner: runner))
+
+        let info = try await service.getAppInfo(serial: "S1", packageId: "com.x")
+
+        #expect(info.apkPath == "/a/base.apk")
+        #expect(info.apkSizeBytes == 140)
+        let stat = runner.invocations.first { $0.arguments.contains("stat") }
+        #expect(stat?.arguments == [
+            "-s", "S1", "shell", "stat", "-c", "%s", "'/a/base.apk'", "'/a/split_config.en.apk'",
+        ])
+    }
+
     @Test func sandboxPullPassesRawArgvBecauseExecOutDoesNotUseAShell() async throws {
         let runner = MockProcessRunner()
         runner.script(argsPrefix: ["-s"], stdout: "file bytes")
