@@ -134,8 +134,11 @@ struct LogcatView: View {
         .measuringWidth(into: $toolbarWidth)
     }
 
+    // Plain label + picker pairs: LabeledContent is a form-row control that
+    // soaks up toolbar width as a label↔content gap.
     private var levelPicker: some View {
-        LabeledContent("Level") {
+        HStack(spacing: 6) {
+            Text("Level")
             Picker("Level", selection: $level) {
                 ForEach(Self.levels, id: \.value) { item in
                     Text(item.label).tag(item.value)
@@ -148,7 +151,8 @@ struct LogcatView: View {
     }
 
     private var appPicker: some View {
-        LabeledContent("App") {
+        HStack(spacing: 6) {
+            Text("App")
             appMenu
         }
         .font(.app(.callout))

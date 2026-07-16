@@ -92,7 +92,10 @@ struct CrashView: View {
                 ? "Watching — checking for new crashes every 5 s. Click to stop."
                 : "Watch for new crashes (checks every 5 s) and get notified the moment one lands")
 
-            LabeledContent("Kind") {
+            // A plain label + picker pair: LabeledContent is a form-row
+            // control that soaks up toolbar width as a label↔content gap.
+            HStack(spacing: 6) {
+                Text("Kind")
                 Picker("Kind", selection: $kindFilter) {
                     Text("All").tag(CrashReport.Kind?.none)
                     ForEach(presentKinds, id: \.self) { kind in
@@ -105,7 +108,8 @@ struct CrashView: View {
             .font(.app(.callout))
 
             if processes.count > 1 {
-                LabeledContent("Process") {
+                HStack(spacing: 6) {
+                    Text("Process")
                     Picker("Process", selection: $processFilter) {
                         Text("All").tag(String?.none)
                         ForEach(processes, id: \.self) { process in
