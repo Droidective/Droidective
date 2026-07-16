@@ -400,6 +400,7 @@ struct PrivacySettingsView: View {
     @Environment(AppState.self) private var state
     @AppStorage(ScreenCaptureService.captureFolderDefaultsKey) private var captureFolderPath = ""
     @AppStorage(reactotronAllowLANKey) private var reactotronAllowLAN = true
+    @AppStorage(reactotronPersistFiltersKey) private var reactotronPersistFilters = false
     @State private var showCommandLog = false
     @State private var confirmClearLog = false
 
@@ -431,6 +432,11 @@ struct PrivacySettingsView: View {
                         Task { await state.reactotronSession.networkScopeChanged() }
                     }
                 Text("On (like the official Reactotron app), devices on your Wi-Fi can reach the :9090 server — needed when the app loads its bundle over the network. Off, only localhost connects (USB via adb reverse, emulators, iOS Simulators). Changing this restarts the server; reload your app to reconnect.")
+                    .font(.app(.footnote))
+                    .foregroundStyle(.textMuted)
+
+                Toggle("Retain Reactotron filters on app exit", isOn: $reactotronPersistFilters)
+                Text("Keeps the timeline's event-type, method, and status filter the next time you open Reactotron. Off by default — each launch starts unfiltered.")
                     .font(.app(.footnote))
                     .foregroundStyle(.textMuted)
             }

@@ -15,6 +15,41 @@ func reactotronAllowsLAN() -> Bool {
         || UserDefaults.standard.bool(forKey: reactotronAllowLANKey)
 }
 
+/// Whether a pane's timeline filter (event kinds + API method/status) is
+/// saved and restored across app restarts. Off by default — a fresh launch
+/// starts unfiltered, matching the app's existing session-scoped behavior.
+/// Settings ▸ Privacy owns the toggle.
+let reactotronPersistFiltersKey = "reactotronPersistFiltersOnExit"
+
+/// One pane's persisted filter selection, keyed by pane identity so a split
+/// timeline's two independently-filterable panes don't clobber each other.
+private struct PersistedReactotronFilter: Codable {
+    var hiddenKinds: Set<String> = []
+    var methodFilter: String?
+    var statusFilter: Int?
+}
+
+private func reactotronFilterDefaultsKey(_ paneID: String) -> String {
+    "reactotronFilter_\(paneID)"
+}
+
+/// Returns nil when persistence is off or nothing was saved yet, so callers
+/// can fall back to the unfiltered default.
+private func loadPersistedReactotronFilter(paneID: String) -> PersistedReactotronFilter? {
+    guard UserDefaults.standard.bool(forKey: reactotronPersistFiltersKey),
+          let data = UserDefaults.standard.data(forKey: reactotronFilterDefaultsKey(paneID))
+    else { return nil }
+    return try? JSONDecoder().decode(PersistedReactotronFilter.self, from: data)
+}
+
+/// No-ops when persistence is off, so leaving the toggle off never writes.
+private func savePersistedReactotronFilter(_ filter: PersistedReactotronFilter, paneID: String) {
+    guard UserDefaults.standard.bool(forKey: reactotronPersistFiltersKey),
+          let data = try? JSONEncoder().encode(filter)
+    else { return }
+    UserDefaults.standard.set(data, forKey: reactotronFilterDefaultsKey(paneID))
+}
+
 /// The live Reactotron session — server, adb-reverse tunnels, and the whole
 /// timeline/state buffer. Owned by `AppState` (like `jsConsoleSession`) so it
 /// survives leaving the feature: the user can keep events streaming in the
@@ -928,13 +963,13 @@ struct ReactotronView: View {
         Group {
             if split {
                 HStack(spacing: 0) {
-                    pane(showOnboarding: true, findToken: findFocusToken)
+                    pane(paneID: "left", showOnboarding: true, findToken: findFocusToken)
                     Divider()
-                    pane(showOnboarding: false)
+                    pane(paneID: "right", showOnboarding: false)
                 }
             } else {
                 pane(
-                    showOnboarding: true, trailing: AnyView(paneGlobalControls),
+                    paneID: "primary", showOnboarding: true, trailing: AnyView(paneGlobalControls),
                     findToken: findFocusToken
                 )
             }
@@ -977,7 +1012,7 @@ struct ReactotronView: View {
     }
 
     private func pane(
-        showOnboarding: Bool, trailing: AnyView? = nil, findToken: Int = 0
+        paneID: String, showOnboarding: Bool, trailing: AnyView? = nil, findToken: Int = 0
     ) -> some View {
         TimelinePane(
             items: session.displayedItems,
@@ -987,6 +1022,7 @@ struct ReactotronView: View {
             minContentWidth: session.maxRowWidth,
             trailing: trailing,
             findToken: findToken,
+            paneID: paneID,
             onExport: { session.export($0) },
             onRetry: { Task { await session.start(serials: readySerials) } }
         )
@@ -1445,12 +1481,17 @@ private struct TimelinePane: View {
     /// Bumped by the tab-level ⌘F to focus this pane's search (the primary
     /// pane in a split; the second pane always gets the never-firing 0).
     var findToken = 0
+    /// This pane's identity ("primary", or "left"/"right" when split) — the
+    /// key under which its filter is saved, so the two split panes keep
+    /// independent persisted filters instead of clobbering each other.
+    let paneID: String
     let onExport: ([RtItem]) -> Void
     let onRetry: () -> Void
 
     @State private var search = ""
     /// Event kinds toggled off in the filter popover — empty means everything
-    /// shows, matching Reactotron's hide-what-you-untick model.
+    /// shows, matching Reactotron's hide-what-you-untick model. Restored from
+    /// disk on appear when Settings ▸ Privacy's "retain filters" toggle is on.
     @State private var hiddenKinds: Set<RtEventKind> = []
     /// API-only refinements, set from the filter popover and cleared when the
     /// API kind is hidden: HTTP method and status class (2xx…5xx/Failed).
@@ -1472,6 +1513,28 @@ private struct TimelinePane: View {
             timeline(visible: visible)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear { restorePersistedFilter() }
+        .onChange(of: hiddenKinds) { persistFilter() }
+        .onChange(of: methodFilter) { persistFilter() }
+        .onChange(of: statusFilter) { persistFilter() }
+    }
+
+    private func restorePersistedFilter() {
+        guard let saved = loadPersistedReactotronFilter(paneID: paneID) else { return }
+        hiddenKinds = Set(saved.hiddenKinds.compactMap(RtEventKind.init(rawValue:)))
+        methodFilter = saved.methodFilter
+        statusFilter = saved.statusFilter.flatMap(HTTPStatusClass.init(rawValue:))
+    }
+
+    private func persistFilter() {
+        savePersistedReactotronFilter(
+            PersistedReactotronFilter(
+                hiddenKinds: Set(hiddenKinds.map(\.rawValue)),
+                methodFilter: methodFilter,
+                statusFilter: statusFilter?.rawValue
+            ),
+            paneID: paneID
+        )
     }
 
     /// Whether any popover filter narrows the timeline (drives the filled
