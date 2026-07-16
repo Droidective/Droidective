@@ -314,10 +314,15 @@ struct LogcatView: View {
                 Label("Add manually / manage…", systemImage: "slider.horizontal.3")
             }
         } label: {
+            // The cap lives on the label: Menu is flexible and would center
+            // its pill inside any frame put on the Menu itself, which reads
+            // as a gap after the "App" label. Text hugs short names and
+            // truncates long ones.
             Text(packageFilter.map(bundleName) ?? "All apps")
                 .lineLimit(1)
+                .frame(maxWidth: 160)
         }
-        .frame(width: 150)
+        .fixedSize()
         .help("Stream one app's logs — pick a saved bundle or add a new one")
     }
 

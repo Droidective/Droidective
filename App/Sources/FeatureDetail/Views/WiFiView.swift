@@ -90,7 +90,9 @@ struct WiFiView: View {
                     Text("Open").tag("open")
                 }
                 .labelsHidden()
-                .frame(width: 110)
+                // fixedSize, not a fixed frame: the pop-up centers inside a
+                // wider frame, which reads as a gap after the SSID field.
+                .fixedSize()
             }
             SecureField("Password (blank for open)", text: $newPassword).brandField()
             HStack {
