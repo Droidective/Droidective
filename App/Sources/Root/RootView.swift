@@ -481,7 +481,8 @@ struct RootView: View {
                 if state.isSplit {
                     SplitDivider(
                         fraction: $splitFraction, live: $splitDragFraction,
-                        totalWidth: geo.size.width
+                        totalWidth: geo.size.width,
+                        onOvershoot: hideSidebarForSplitRoom
                     )
                     .frame(width: 8)
                     EditorPane(index: 1)
@@ -493,15 +494,16 @@ struct RootView: View {
         }
     }
 
+    /// SplitDivider's overshoot hook — hides whichever sidebar variant shows.
+    private func hideSidebarForSplitRoom() {
+        state.hideSidebarForSplitRoom()
+    }
+
     private func splitLeftWidth(_ totalW: CGFloat) -> CGFloat {
-        let dividerW: CGFloat = 8
-        let available = max(0, totalW - dividerW)
-        // Never claim more than half the width per pane, so a tight pane area — a
-        // small window, or a high font zoom shrinking the logical width — shrinks
-        // both panes evenly instead of overflowing the right one off-screen.
-        let minPane = min(320, available / 2)
-        let fraction = splitDragFraction ?? splitFraction
-        return min(max(available * fraction, minPane), available - minPane)
+        // Clamp rules live in PaneSplit (ADBKit, tested): fraction bounded to
+        // 30…70%, plus an absolute floor so a tight window shrinks both panes
+        // evenly instead of overflowing the right one off-screen.
+        CGFloat(PaneSplit.leftWidth(total: totalW, fraction: splitDragFraction ?? splitFraction))
     }
 
     /// Window title for the focused pane's active tab. The chrome screens
@@ -694,13 +696,17 @@ struct TabDragCancelCatch: DropDelegate {
 }
 
 /// The draggable seam between the two split panes. Stores a fraction (0…1) of
-/// the total width so the split survives window resizes; the host clamps it so
-/// neither pane collapses.
+/// the total width so the split survives window resizes; `PaneSplit` bounds it
+/// to 30…70% so neither pane collapses. Dragging *past* the floor — asking for
+/// a pane the clamp refuses — hides the sidebar instead, freeing real width
+/// (`onOvershoot`, once per drag).
 private struct SplitDivider: View {
     @Binding var fraction: Double
     @Binding var live: Double?
     let totalWidth: CGFloat
+    let onOvershoot: () -> Void
     @State private var startFraction: Double?
+    @State private var overshootFired = false
 
     var body: some View {
         Color.clear
@@ -713,12 +719,18 @@ private struct SplitDivider: View {
                         let base = startFraction ?? fraction
                         if startFraction == nil { startFraction = fraction }
                         let delta = totalWidth > 0 ? gesture.translation.width / totalWidth : 0
-                        live = min(0.8, max(0.2, base + delta))
+                        let raw = base + delta
+                        live = PaneSplit.clampedFraction(raw)
+                        if PaneSplit.overshoots(raw), !overshootFired {
+                            overshootFired = true
+                            onOvershoot()
+                        }
                     }
                     .onEnded { _ in
                         if let live { fraction = live }
                         live = nil
                         startFraction = nil
+                        overshootFired = false
                     }
             )
     }

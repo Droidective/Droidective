@@ -810,6 +810,9 @@ struct JSConsoleView: View {
     @Environment(AppState.self) private var state
     @State private var input = ""
     @State private var portText = ""
+    /// Measured connection-bar width — below ~640pt (a narrow split pane)
+    /// the bar reflows to two rows instead of squeezing its labels.
+    @State private var connectionBarWidth: CGFloat = 0
     @State private var inputHeight: CGFloat = 26
     @State private var showLevels = false
     @FocusState private var findFocused: Bool
@@ -883,43 +886,82 @@ struct JSConsoleView: View {
 
     // MARK: Connection bar
 
+    /// One row when it fits; in a narrow split pane the fixed-size status and
+    /// target picker squeezed the port label into a mid-word wrap and the
+    /// buttons into truncated stubs — below the threshold the bar reflows to
+    /// two rows instead. Width is measured (flexible fields make ViewThatFits
+    /// unreliable).
     private var connectionBar: some View {
         @Bindable var session = state.jsConsoleSession
-        return HStack(spacing: 10) {
-            statusBadge
-            targetPicker
-            portField
-            Spacer(minLength: 8)
-            if session.isConnected {
-                Button { session.reloadJS() } label: {
-                    Label("Reload JS", systemImage: "arrow.clockwise")
+        return Group {
+            if connectionBarWidth > 0, connectionBarWidth < 640 {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 10) {
+                        statusBadge
+                        Spacer(minLength: 8)
+                        portField
+                    }
+                    HStack(spacing: 10) {
+                        targetPicker
+                        Spacer(minLength: 8)
+                        // At the 30% pane floor even the two-row bar can't
+                        // afford button titles — icons + tooltips keep every
+                        // action visible and clickable instead of ellipsized.
+                        if connectionBarWidth < 500 {
+                            connectionActions.labelStyle(.iconOnly)
+                        } else {
+                            connectionActions
+                        }
+                    }
                 }
-                .help("Reload the JS bundle — what ⌘R in React Native DevTools does")
-            }
-            if !state.targetSerials.isEmpty {
-                Button { session.restartApp() } label: {
-                    Label("Restart app", systemImage: "restart.circle")
+            } else {
+                HStack(spacing: 10) {
+                    statusBadge
+                    targetPicker
+                    portField
+                    Spacer(minLength: 8)
+                    connectionActions
                 }
-                .help(session.isConnected
-                    ? "Force-stop and relaunch the connected app on the device"
-                    : "Pick an app to force-stop and relaunch")
-            }
-            if !state.targetSerials.isEmpty, !session.isConnected {
-                Button {
-                    commitTypedPort()
-                    Task { await session.reverseMetro() }
-                } label: {
-                    Label("adb reverse", systemImage: "arrow.left.arrow.right")
-                }
-                .help("Route the device's tcp:\(session.port) to Metro on your Mac (USB devices)")
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+        .background(GeometryReader { geo in
+            Color.clear.onChange(of: geo.size.width, initial: true) { _, width in
+                connectionBarWidth = width
+            }
+        })
         .sheet(isPresented: $session.restartPickerVisible) {
             RestartAppPickerSheet(serial: state.targetSerials.first) { package in
                 session.restartPicked(package)
             }
+        }
+    }
+
+    @ViewBuilder private var connectionActions: some View {
+        let session = state.jsConsoleSession
+        if session.isConnected {
+            Button { session.reloadJS() } label: {
+                Label("Reload JS", systemImage: "arrow.clockwise")
+            }
+            .help("Reload the JS bundle — what ⌘R in React Native DevTools does")
+        }
+        if !state.targetSerials.isEmpty {
+            Button { session.restartApp() } label: {
+                Label("Restart app", systemImage: "restart.circle")
+            }
+            .help(session.isConnected
+                ? "Force-stop and relaunch the connected app on the device"
+                : "Pick an app to force-stop and relaunch")
+        }
+        if !state.targetSerials.isEmpty, !session.isConnected {
+            Button {
+                commitTypedPort()
+                Task { await session.reverseMetro() }
+            } label: {
+                Label("adb reverse", systemImage: "arrow.left.arrow.right")
+            }
+            .help("Route the device's tcp:\(session.port) to Metro on your Mac (USB devices)")
         }
     }
 
@@ -977,6 +1019,7 @@ struct JSConsoleView: View {
     private var portField: some View {
         HStack(spacing: 4) {
             Text("Port").font(.app(.caption)).foregroundStyle(.secondary)
+                .fixedSize()
             TextField("8081", text: $portText)
                 .frame(width: 52)
                 .multilineTextAlignment(.center)

@@ -20,6 +20,9 @@ struct LogcatView: View {
     /// pays for one rebuild per pause, not one per keystroke.
     @State private var searchInput = ""
     @State private var search = ""
+    /// Measured toolbar width — below ~560pt (a narrow split pane) the
+    /// toolbar reflows to two rows instead of clipping.
+    @State private var toolbarWidth: CGFloat = 0
     /// The Find bar (⌘F): `findInput` debounces into `find` the same way the
     /// filter does; `currentFindID` is the match being stepped to.
     @State private var findVisible = false
@@ -96,90 +99,128 @@ struct LogcatView: View {
 
     // MARK: - Toolbar
 
+    /// One row when it fits; in a narrow split pane the pickers and the
+    /// filter/actions split into two rows instead of clipping at the pane
+    /// edge. Width is measured (not ViewThatFits — the flexible filter field
+    /// reports a tiny ideal width, which would always "fit").
     private var toolbar: some View {
-        HStack(spacing: 12) {
-            LabeledContent("Level") {
-                Picker("Level", selection: $level) {
-                    ForEach(Self.levels, id: \.value) { item in
-                        Text(item.label).tag(item.value)
+        Group {
+            if toolbarWidth > 0, toolbarWidth < 560 {
+                VStack(alignment: .leading, spacing: 7) {
+                    HStack(spacing: 12) {
+                        levelPicker
+                        appPicker
+                        Spacer(minLength: 0)
+                    }
+                    HStack(spacing: 12) {
+                        filterField
+                        Spacer(minLength: 0)
+                        actionButtons
                     }
                 }
-                .labelsHidden()
-                .frame(width: 110)
-            }
-            .font(.app(.callout))
-
-            LabeledContent("App") {
-                appMenu
-            }
-            .font(.app(.callout))
-
-            TextField("Filter lines…", text: $searchInput)
-                .brandField()
-                .frame(maxWidth: 220)
-                .help("Show only the lines containing this text")
-                .task(id: searchInput) {
-                    if !search.isEmpty || !searchInput.isEmpty {
-                        try? await Task.sleep(for: .milliseconds(200))
-                    }
-                    guard !Task.isCancelled else { return }
-                    search = searchInput
+            } else {
+                HStack(spacing: 12) {
+                    levelPicker
+                    appPicker
+                    filterField
+                    Spacer()
+                    actionButtons
                 }
-
-            Spacer()
-
-            Button {
-                findVisible = true
-                findFocusToken += 1
-            } label: {
-                Image(systemName: "text.magnifyingglass")
             }
-            .buttonStyle(IconButtonStyle())
-            .help("Find & highlight in the log without hiding lines (⌘F)")
-            // Registered only while this is the focused pane's tab —
-            // keep-alive hidden tabs stay mounted, and a hidden tab winning
-            // ⌘F opens an invisible find bar whose focus request lands on the
-            // sidebar search.
-            .keyboardShortcut(isActiveTab ? KeyboardShortcut("f", modifiers: .command) : nil)
-
-            Button {
-                newestFirst.toggle()
-            } label: {
-                Image(systemName: "arrow.up.arrow.down")
-            }
-            .buttonStyle(IconButtonStyle())
-            .help(newestFirst
-                ? "Newest at top — click to show newest at bottom"
-                : "Newest at bottom — click to show newest at top")
-
-            Button {
-                paused.toggle()
-            } label: {
-                Image(systemName: paused ? "play.fill" : "pause.fill")
-            }
-            .buttonStyle(IconButtonStyle())
-            .help(paused ? "Resume (new lines are dropped while paused)" : "Pause")
-
-            Button {
-                export()
-            } label: {
-                Image(systemName: "square.and.arrow.up")
-            }
-            .buttonStyle(IconButtonStyle())
-            .help("Export buffer to ~/Downloads/Droidective")
-            .disabled(lines.isEmpty)
-
-            Button {
-                lines.removeAll()
-            } label: {
-                Image(systemName: "trash")
-            }
-            .buttonStyle(IconButtonStyle())
-            .help("Clear")
         }
         .controlSize(.small)
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
+        .background(GeometryReader { geo in
+            Color.clear.onChange(of: geo.size.width, initial: true) { _, width in
+                toolbarWidth = width
+            }
+        })
+    }
+
+    private var levelPicker: some View {
+        LabeledContent("Level") {
+            Picker("Level", selection: $level) {
+                ForEach(Self.levels, id: \.value) { item in
+                    Text(item.label).tag(item.value)
+                }
+            }
+            .labelsHidden()
+            .frame(width: 110)
+        }
+        .font(.app(.callout))
+    }
+
+    private var appPicker: some View {
+        LabeledContent("App") {
+            appMenu
+        }
+        .font(.app(.callout))
+    }
+
+    private var filterField: some View {
+        TextField("Filter lines…", text: $searchInput)
+            .brandField()
+            .frame(maxWidth: 220)
+            .help("Show only the lines containing this text")
+            .task(id: searchInput) {
+                if !search.isEmpty || !searchInput.isEmpty {
+                    try? await Task.sleep(for: .milliseconds(200))
+                }
+                guard !Task.isCancelled else { return }
+                search = searchInput
+            }
+    }
+
+    @ViewBuilder private var actionButtons: some View {
+        Button {
+            findVisible = true
+            findFocusToken += 1
+        } label: {
+            Image(systemName: "text.magnifyingglass")
+        }
+        .buttonStyle(IconButtonStyle())
+        .help("Find & highlight in the log without hiding lines (⌘F)")
+        // Registered only while this is the focused pane's tab —
+        // keep-alive hidden tabs stay mounted, and a hidden tab winning
+        // ⌘F opens an invisible find bar whose focus request lands on the
+        // sidebar search.
+        .keyboardShortcut(isActiveTab ? KeyboardShortcut("f", modifiers: .command) : nil)
+
+        Button {
+            newestFirst.toggle()
+        } label: {
+            Image(systemName: "arrow.up.arrow.down")
+        }
+        .buttonStyle(IconButtonStyle())
+        .help(newestFirst
+            ? "Newest at top — click to show newest at bottom"
+            : "Newest at bottom — click to show newest at top")
+
+        Button {
+            paused.toggle()
+        } label: {
+            Image(systemName: paused ? "play.fill" : "pause.fill")
+        }
+        .buttonStyle(IconButtonStyle())
+        .help(paused ? "Resume (new lines are dropped while paused)" : "Pause")
+
+        Button {
+            export()
+        } label: {
+            Image(systemName: "square.and.arrow.up")
+        }
+        .buttonStyle(IconButtonStyle())
+        .help("Export buffer to ~/Downloads/Droidective")
+        .disabled(lines.isEmpty)
+
+        Button {
+            lines.removeAll()
+        } label: {
+            Image(systemName: "trash")
+        }
+        .buttonStyle(IconButtonStyle())
+        .help("Clear")
     }
 
     // MARK: - Find bar

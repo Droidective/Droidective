@@ -687,6 +687,9 @@ struct ReactotronView: View {
     // survive leaving the feature lives on `session`.
     @State private var split = false
     @State private var tab: RtTab = .timeline
+    /// Measured top-bar width — below ~620pt (a narrow split pane) the bar
+    /// reflows to two rows with icon-only actions.
+    @State private var topTabsWidth: CGFloat = 0
     @State private var newPath = ""
     @State private var dispatchText = ""
     @State private var replCode = ""
@@ -775,66 +778,96 @@ struct ReactotronView: View {
 
     // MARK: - Tabs
 
+    /// One row when it fits; in a narrow split pane the segmented view picker
+    /// (~280pt minimum) plus the status and action buttons overflowed the
+    /// pane and clipped at its edge — below the threshold the bar reflows to
+    /// two rows and the actions drop to icons + tooltips.
     private var topTabs: some View {
-        HStack(spacing: 8) {
-            // Connection state as a dot plus the connected app's name — the
-            // detailed "Listening on :9090…" guidance lives in the timeline's
-            // empty state, so a dedicated status bar would just repeat it.
-            HStack(spacing: 5) {
-                Circle()
-                    .fill(session.connection.color)
-                    .frame(width: 7, height: 7)
-                if let app = session.connectedApp {
-                    Text(app)
-                        .font(.app(.caption).weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .frame(maxWidth: 160, alignment: .leading)
-                        .fixedSize(horizontal: true, vertical: false)
-                }
-            }
-            .help(session.connection.text(app: session.connectedApp))
-
-            Picker("View", selection: $tab) {
-                Text("Timeline").tag(RtTab.timeline)
-                Text(session.commands.isEmpty ? "Commands" : "Commands (\(session.commands.count))").tag(RtTab.commands)
-                Text("State").tag(RtTab.state)
-                Text("REPL").tag(RtTab.repl)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(maxWidth: 320)
-
-            Spacer()
-
-            if session.clients.count > 1 {
-                Picker("App", selection: Binding(
-                    get: { session.selectedClient },
-                    set: { session.selectedClient = $0 }
-                )) {
-                    Text("All apps").tag(Int?.none)
-                    ForEach(session.clients) { client in
-                        Text(client.label).tag(Int?.some(client.id))
+        Group {
+            if topTabsWidth > 0, topTabsWidth < 620 {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 8) {
+                        connectionDot
+                        Spacer(minLength: 8)
+                        topTabActions.labelStyle(.iconOnly)
                     }
+                    viewPicker
                 }
-                .pickerStyle(.menu)
-                .labelsHidden()
-                .controlSize(.small)
-                .fixedSize()
+            } else {
+                HStack(spacing: 8) {
+                    connectionDot
+                    viewPicker.frame(maxWidth: 320)
+                    Spacer()
+                    topTabActions
+                }
             }
-            RestartAppMenu(clientName: restartClientName)
-                .controlSize(.small)
-                .help("Force-stop and relaunch the connected app so it reconnects")
-            Button {
-                session.reverseNow(serials: readySerials)
-            } label: {
-                Label("Reverse :9090", systemImage: "arrow.uturn.backward.circle")
-            }
-            .controlSize(.small)
-            .help("Run adb reverse tcp:9090 tcp:9090 on connected devices")
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
+        .background(GeometryReader { geo in
+            Color.clear.onChange(of: geo.size.width, initial: true) { _, width in
+                topTabsWidth = width
+            }
+        })
+    }
+
+    /// Connection state as a dot plus the connected app's name — the
+    /// detailed "Listening on :9090…" guidance lives in the timeline's
+    /// empty state, so a dedicated status bar would just repeat it.
+    private var connectionDot: some View {
+        HStack(spacing: 5) {
+            Circle()
+                .fill(session.connection.color)
+                .frame(width: 7, height: 7)
+            if let app = session.connectedApp {
+                Text(app)
+                    .font(.app(.caption).weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .frame(maxWidth: 160, alignment: .leading)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+        }
+        .help(session.connection.text(app: session.connectedApp))
+    }
+
+    private var viewPicker: some View {
+        Picker("View", selection: $tab) {
+            Text("Timeline").tag(RtTab.timeline)
+            Text(session.commands.isEmpty ? "Commands" : "Commands (\(session.commands.count))").tag(RtTab.commands)
+            Text("State").tag(RtTab.state)
+            Text("REPL").tag(RtTab.repl)
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+    }
+
+    @ViewBuilder private var topTabActions: some View {
+        if session.clients.count > 1 {
+            Picker("App", selection: Binding(
+                get: { session.selectedClient },
+                set: { session.selectedClient = $0 }
+            )) {
+                Text("All apps").tag(Int?.none)
+                ForEach(session.clients) { client in
+                    Text(client.label).tag(Int?.some(client.id))
+                }
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .controlSize(.small)
+            .fixedSize()
+        }
+        RestartAppMenu(clientName: restartClientName)
+            .controlSize(.small)
+            .help("Force-stop and relaunch the connected app so it reconnects")
+        Button {
+            session.reverseNow(serials: readySerials)
+        } label: {
+            Label("Reverse :9090", systemImage: "arrow.uturn.backward.circle")
+        }
+        .controlSize(.small)
+        .help("Run adb reverse tcp:9090 tcp:9090 on connected devices")
     }
 
     /// The server failing (port taken, socket error) used to be a red dot with a
@@ -901,6 +934,7 @@ struct ReactotronView: View {
             Text("\(session.displayedItems.count) events")
                 .font(.app(.caption))
                 .foregroundStyle(.tertiary)
+                .fixedSize()
 
             Button {
                 split.toggle()
@@ -958,6 +992,9 @@ struct ReactotronView: View {
             Text("\(session.displayedItems.count) events")
                 .font(.app(.caption))
                 .foregroundStyle(.tertiary)
+                // Never wrap "events" mid-word in a narrow pane — the search
+                // field compresses instead.
+                .fixedSize()
             Button {
                 split.toggle()
             } label: {
