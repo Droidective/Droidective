@@ -66,9 +66,13 @@ targets:
         SUFeedURL: https://droidective.com/appcast.xml
         SUPublicEDKey: "ma0kTe35r55/PKmemQOEBX7n6SuZPZjOBo973SdJqJ8="
         SUEnableAutomaticChecks: true
-        # Twice a day (seconds) — morning and evening — instead of Sparkle's
-        # daily default.
-        SUScheduledCheckInterval: 43200
+        # Silent background downloads by default — the pill offers "Relaunch
+        # to update"; quitting installs it anyway. Settings ▸ Updates can turn
+        # this off (checks keep running, updates then wait for a go-ahead).
+        SUAutomaticallyUpdate: true
+        # Hourly (Sparkle's minimum), plus an explicit check on every launch —
+        # see UpdaterViewModel.init.
+        SUScheduledCheckInterval: 3600
         UTImportedTypeDeclarations:
           - UTTypeIdentifier: com.android.package-archive
             UTTypeDescription: Android Package

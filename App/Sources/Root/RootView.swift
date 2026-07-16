@@ -114,6 +114,9 @@ struct RootView: View {
                     StarPromptView(onStar: { state.openRepository() })
                 }
             }
+            #if !APPSTORE
+            .modifier(WhatsNewPresenter())
+            #endif
             .onAppear { performLaunchSetup() }
             .onChange(of: state.presentRolePicker) { _, showing in rolePickerVisibilityChanged(showing) }
             .onChange(of: colorScheme) { _, _ in updateDockIcon() }
@@ -171,32 +174,20 @@ struct RootView: View {
             QuickActionsPanel.showAPKOptions(apks, state: state)
         }
         #if !APPSTORE
-        // An update the user closed or skipped resurfaces here — once per
-        // launch, never at dismiss time — until it's installed. The
-        // notification's button runs Check for Updates (which also re-offers
-        // skipped versions; a user-initiated check ignores skips). The static
-        // guard keeps it to one reminder per process: in background mode this
-        // setup re-runs every time the main window reopens. Turning
-        // Settings ▸ Automatically check for updates off silences the
-        // reminder too — the user opted out of update prompts; the stored
-        // version is kept, so re-enabling the toggle resumes it.
-        if !RootView.updateReminderShown,
-           SparkleUpdater.shared.automaticallyChecksForUpdates,
-           let version = UserDefaults.standard.string(forKey: pendingUpdateVersionKey) {
-            RootView.updateReminderShown = true
-            let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
-            if version.compare(current, options: .numeric) == .orderedDescending {
-                state.showToast(Toast(
-                    message: "Droidective \(version) is available.",
-                    ok: true,
-                    level: .info,
-                    action: .checkForUpdates,
-                    important: true
-                ))
-            } else {
-                // Installed (or overtaken by a newer build) — stop reminding.
-                UserDefaults.standard.removeObject(forKey: pendingUpdateVersionKey)
-            }
+        // Update toasts ("available" / "ready — relaunch" / "up to date")
+        // originate in the updater; route them through the app's toast +
+        // notification-history pipeline.
+        SparkleUpdater.shared.notify = { [weak state] toast in state?.showToast(toast) }
+        // First launch of a version the updater installed: announce it with
+        // a "What's New" notification whose button opens the changelog
+        // modal. `take` consumes the stash, so reopening the window (this
+        // setup re-runs in background mode) can't re-announce; the changelog
+        // stays reachable from the notification history all session.
+        if let pending = UpdaterViewModel.takeWhatsNewForLaunch() {
+            state.whatsNew = pending
+            state.showToast(Toast(
+                message: "Updated to Droidective \(pending.version).",
+                ok: true, level: .success, action: .showWhatsNew, important: true))
         }
         #endif
         migrateDefaultsIfNeeded()
@@ -245,8 +236,6 @@ struct RootView: View {
     /// reference; identifiers don't survive a close.)
     fileprivate static let mainWindowFrameAutosaveName = "droidective-main"
     private static var closeTabMonitorInstalled = false
-    /// One update reminder per process, not per main-window reopen.
-    private static var updateReminderShown = false
 
     /// ⌘W closes the active tab, not the window. A local key-down monitor
     /// intercepts ⌘W for the main window before AppKit's default Close-Window

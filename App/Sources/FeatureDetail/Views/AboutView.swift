@@ -92,7 +92,7 @@ struct AboutView: View {
             linkRow(
                 icon: "arrow.triangle.2.circlepath",
                 title: "Check for updates",
-                detail: "Droidective checks automatically — you can also check right now.",
+                detail: "Droidective checks on launch and hourly, and installs when you relaunch — you can also check right now.",
                 button: "Check Now"
             ) { SparkleUpdater.shared.checkForUpdates() }
             #endif

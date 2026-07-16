@@ -241,6 +241,12 @@ struct SidebarPaletteView: View {
             }
             }
 
+            #if !APPSTORE
+            // Bottom-left update affordance: "Update available" / "Relaunch
+            // to update". Hidden while there's nothing to act on.
+            UpdatePillView()
+                .padding(.bottom, 4)
+            #endif
             Divider()
             bottomBar
         }
