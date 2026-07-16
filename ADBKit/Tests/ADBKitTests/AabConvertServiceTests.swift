@@ -37,18 +37,22 @@ import Testing
         defer { try? FileManager.default.removeItem(at: outDir) }
 
         let secret = "sup3r-s3cret"
+        let keySecret = "k3y-s3cret"
         _ = try await service.convert(
             aabPath: "/in/a.aab", outputDirectory: outDir,
-            credentials: KeystoreCredentials(keystorePath: "/keys/r.jks", storePassword: secret, keyAlias: "r"))
+            credentials: KeystoreCredentials(
+                keystorePath: "/keys/r.jks", storePassword: secret, keyAlias: "r",
+                keyPassword: keySecret))
 
         let build = try #require(runner.invocations.first)
-        #expect(!build.arguments.contains { $0.contains(secret) })
+        #expect(!build.arguments.contains { $0.contains(secret) || $0.contains(keySecret) })
         #expect(build.arguments.contains("--ks=/keys/r.jks"))
-        let passArg = try #require(build.arguments.first { $0.hasPrefix("--ks-pass=file:") })
-        // The referenced temp file held the secret 0600 during the run and is
-        // deleted afterwards.
-        let passPath = String(passArg.dropFirst("--ks-pass=file:".count))
-        #expect(!FileManager.default.fileExists(atPath: passPath))
+        // Both referenced temp files held their secret 0600 during the run
+        // and are deleted afterwards.
+        for prefix in ["--ks-pass=file:", "--key-pass=file:"] {
+            let passArg = try #require(build.arguments.first { $0.hasPrefix(prefix) })
+            #expect(!FileManager.default.fileExists(atPath: String(passArg.dropFirst(prefix.count))))
+        }
     }
 
     @Test func extractPullsOnlyUniversalApkFlattened() {
@@ -131,6 +135,34 @@ import Testing
         }
     }
 
+    @Test func convertSurfacesExtractFailureWhenUniversalApkIsMissing() async throws {
+        // unzip exiting 0 without producing universal.apk (a split-only or
+        // unexpected archive) must throw, not report a bogus success.
+        let runner = FileProducingRunner()
+        runner.producesUniversalApk = false
+        let (service, cleanup) = try await Self.makeService(runner: runner, bundletoolInstalled: true, javaSeeded: true)
+        defer { cleanup() }
+
+        await #expect(throws: AabConvertService.ConvertError.extractFailed("")) {
+            _ = try await service.convert(
+                aabPath: "/in/a.aab",
+                outputDirectory: FileManager.default.temporaryDirectory.appendingPathComponent("never-\(UUID().uuidString)"))
+        }
+    }
+
+    @Test func convertReportsATimedOutBundletoolAsSuch() async throws {
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["-jar"], exitCode: nil, timedOut: true)
+        let (service, cleanup) = try await Self.makeService(runner: runner, bundletoolInstalled: true, javaSeeded: true)
+        defer { cleanup() }
+
+        await #expect(throws: AabConvertService.ConvertError.buildFailed("bundletool timed out after 10 minutes.")) {
+            _ = try await service.convert(
+                aabPath: "/in/a.aab",
+                outputDirectory: FileManager.default.temporaryDirectory.appendingPathComponent("never-\(UUID().uuidString)"))
+        }
+    }
+
     @Test func convertThrowsToolMissingBeforeRunningAnything() async throws {
         let runner = MockProcessRunner()
         let (noJava, cleanup1) = try await Self.makeService(runner: runner, bundletoolInstalled: true, javaSeeded: false)
@@ -176,6 +208,10 @@ import Testing
 private final class FileProducingRunner: ProcessRunning, @unchecked Sendable {
     struct Invocation { let executable: String; let arguments: [String] }
 
+    /// Off: unzip "succeeds" without writing universal.apk (a split-only or
+    /// unexpected archive), for the extract-failure branch.
+    var producesUniversalApk = true
+
     private let lock = NSLock()
     private var recorded: [Invocation] = []
 
@@ -197,7 +233,8 @@ private final class FileProducingRunner: ProcessRunning, @unchecked Sendable {
         if let output = arguments.first(where: { $0.hasPrefix("--output=") }) {
             FileManager.default.createFile(atPath: String(output.dropFirst("--output=".count)), contents: Data("apks".utf8))
         }
-        if executable == "/usr/bin/unzip", let dashD = arguments.firstIndex(of: "-d"), arguments.count > dashD + 1 {
+        if producesUniversalApk, executable == "/usr/bin/unzip",
+           let dashD = arguments.firstIndex(of: "-d"), arguments.count > dashD + 1 {
             let dest = URL(fileURLWithPath: arguments[dashD + 1]).appendingPathComponent("universal.apk")
             FileManager.default.createFile(atPath: dest.path, contents: Data("universal".utf8))
         }

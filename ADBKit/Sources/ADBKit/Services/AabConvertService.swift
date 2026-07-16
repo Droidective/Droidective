@@ -72,15 +72,17 @@ public struct AabConvertService: Sendable {
 
         var storePassFile: String?
         var keyPassFile: String?
+        // Registered before the writes: if the second secret's write throws,
+        // the first is already on disk and must still be swept.
+        defer {
+            for file in [storePassFile, keyPassFile].compactMap(\.self) {
+                try? fm.removeItem(atPath: file)
+            }
+        }
         if let credentials {
             storePassFile = try writeSecret(credentials.storePassword)
             if let keyPassword = credentials.keyPassword, !keyPassword.isEmpty {
                 keyPassFile = try writeSecret(keyPassword)
-            }
-        }
-        defer {
-            for file in [storePassFile, keyPassFile].compactMap(\.self) {
-                try? fm.removeItem(atPath: file)
             }
         }
 
@@ -135,8 +137,9 @@ public struct AabConvertService: Sendable {
         return arguments
     }
 
-    /// Write a secret to a temp file created 0600 from the start (no window
-    /// where it exists world-readable) and return its path. Callers delete it.
+    /// Write a secret to a temp file created with 0600 permissions and return
+    /// its path. The per-user temp dir (0700) covers any instant between
+    /// creation and the attribute landing. Callers delete it.
     private func writeSecret(_ secret: String) throws -> String {
         let path = FileManager.default.temporaryDirectory.appendingPathComponent("aab-sign-\(UUID().uuidString)")
         guard FileManager.default.createFile(

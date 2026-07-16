@@ -386,7 +386,10 @@ struct AabConvertView: View {
     }
 
     private func convert() async {
-        guard let aabURL else { return }
+        // `!converting` closes the double-click window: the second tap's Task
+        // runs after this one has already flipped the flag (MainActor order),
+        // so it can't start a second bundletool run.
+        guard let aabURL, !converting else { return }
         converting = true
         convertError = nil
         defer { converting = false }

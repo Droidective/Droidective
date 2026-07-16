@@ -81,4 +81,14 @@ import Testing
         let expanded = SnippetPlaceholders.expand("{clipboard}!", values: [:])
         #expect(expanded == "{clipboard}!")
     }
+
+    @Test func substitutedValuesAreNeverRescanned() {
+        // A clipboard that itself contains a placeholder token must be
+        // inserted verbatim — sequential replaces expanded it (or not)
+        // depending on dictionary iteration order.
+        let expanded = SnippetPlaceholders.expand(
+            "{clipboard} → {ip}",
+            values: ["clipboard": "{ip}", "ip": "1.2.3.4"])
+        #expect(expanded == "{ip} → 1.2.3.4")
+    }
 }
