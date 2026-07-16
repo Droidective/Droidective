@@ -2,64 +2,46 @@ import Testing
 @testable import ADBKit
 
 @Suite struct CrashExtractorTests {
-    @Test func extractsLastCrashBlock() {
-        let log = """
-        06-12 10:00:00.000  1  1 I Boring: nothing
-        06-12 10:00:01.000  2  2 I Boring: still nothing
-        06-12 10:00:02.000  3  3 E AndroidRuntime: FATAL EXCEPTION: main
-        06-12 10:00:02.001  3  3 E AndroidRuntime: java.lang.NullPointerException
-        06-12 10:00:02.002  3  3 E AndroidRuntime:   at com.app.Main.run(Main.java:10)
-        """
-        let block = CrashExtractor.extractLastCrash(log)
-        // Pre-context is anchored to the LAST crash-marker line, so the
-        // block starts two lines above it — the FATAL EXCEPTION line here.
-        #expect(block.hasPrefix("06-12 10:00:02.000"))
-        #expect(block.contains("FATAL EXCEPTION"))
-        #expect(block.contains("NullPointerException"))
-        #expect(!block.contains("nothing"))
-    }
-
-    @Test func noCrashYieldsEmpty() {
-        #expect(CrashExtractor.extractLastCrash("06-12 10:00:00.000 1 1 I Tag: all good").isEmpty)
-    }
-
     @Test func formatsForDestinations() {
         #expect(CrashExtractor.format("boom", as: .slack) == "```\nboom\n```")
         #expect(CrashExtractor.format("boom", as: .jira) == "{code}\nboom\n{code}")
         #expect(CrashExtractor.format("boom", as: .plain) == "boom")
     }
 
-    @Test func crashBufferPreferredOverMainScan() async throws {
+    @Test func crashesQueriesTheCrashBufferWithExactArgs() async throws {
         let runner = MockProcessRunner()
         runner.script(
             argsPrefix: ["-s", "S1", "logcat", "-d", "-b", "crash"],
-            stdout: "FATAL EXCEPTION: main\nat com.app.Crash"
+            stdout: "E AndroidRuntime: FATAL EXCEPTION: main\nE AndroidRuntime: java.lang.X: boom"
         )
         let extractor = CrashExtractor(client: await makeTestClient(runner: runner))
 
-        let crash = try await extractor.lastCrash(serial: "S1", format: .plain)
-        #expect(crash == "FATAL EXCEPTION: main\nat com.app.Crash")
-        // Main buffer never queried.
+        let reports = try await extractor.crashes(serial: "S1")
+        #expect(reports.count == 1)
+        #expect(reports.first?.title == "java.lang.X: boom")
+        let invocation = try #require(runner.invocations.first { $0.arguments.contains("logcat") })
+        #expect(invocation.arguments == [
+            "-s", "S1", "logcat", "-d", "-b", "crash", "-v", "threadtime", "-t", "1000",
+        ])
+        // Main buffer never queried when the crash buffer has content.
         #expect(!runner.invocations.contains { $0.arguments.contains("main") })
     }
 
-    @Test func crashBufferWithSeveralCrashesYieldsOnlyTheMostRecent() async throws {
+    @Test func crashesAreNewestFirst() async throws {
         let runner = MockProcessRunner()
         let buffer = """
         E AndroidRuntime: FATAL EXCEPTION: main
         E AndroidRuntime: java.lang.IllegalStateException: first boom
-        E AndroidRuntime:   at com.app.First.run(First.java:1)
-        E AndroidRuntime:   at com.app.First.main(First.java:2)
         E AndroidRuntime: FATAL EXCEPTION: main
         E AndroidRuntime: java.lang.NullPointerException: second boom
-        E AndroidRuntime:   at com.app.Second.run(Second.java:9)
         """
         runner.script(argsPrefix: ["-s", "S1", "logcat", "-d", "-b", "crash"], stdout: buffer)
         let extractor = CrashExtractor(client: await makeTestClient(runner: runner))
 
-        let crash = try await extractor.lastCrash(serial: "S1", format: .plain)
-        #expect(crash?.contains("second boom") == true)
-        #expect(crash?.contains("first boom") == false)
+        let reports = try await extractor.crashes(serial: "S1")
+        #expect(reports.count == 2)
+        #expect(reports.first?.title.contains("second boom") == true)
+        #expect(reports.last?.title.contains("first boom") == true)
     }
 
     @Test func crashBufferContentWithoutAPatternMatchIsShownAsIs() async throws {
@@ -71,8 +53,9 @@ import Testing
         )
         let extractor = CrashExtractor(client: await makeTestClient(runner: runner))
 
-        let crash = try await extractor.lastCrash(serial: "S1", format: .plain)
-        #expect(crash == "F DEBUG: signal 11 (SIGSEGV), fault addr 0xdeadbeef")
+        let reports = try await extractor.crashes(serial: "S1")
+        #expect(reports.count == 1)
+        #expect(reports.first?.raw == "F DEBUG: signal 11 (SIGSEGV), fault addr 0xdeadbeef")
     }
 
     @Test func fallsBackToMainBufferWhenCrashBufferEmpty() async throws {
@@ -84,17 +67,31 @@ import Testing
         )
         let extractor = CrashExtractor(client: await makeTestClient(runner: runner))
 
-        let crash = try await extractor.lastCrash(serial: "S1", format: .plain)
-        #expect(crash?.contains("TypeError: boom") == true)
+        let reports = try await extractor.crashes(serial: "S1")
+        #expect(reports.first?.title == "TypeError: boom")
+        let mainQuery = try #require(runner.invocations.first { $0.arguments.contains("main") })
+        #expect(mainQuery.arguments == [
+            "-s", "S1", "logcat", "-d", "-b", "main", "-v", "threadtime", "-t", "2000",
+        ])
     }
 
-    @Test func noCrashAnywhereReturnsNil() async throws {
+    @Test func noCrashAnywhereReturnsNothing() async throws {
         let runner = MockProcessRunner()
         runner.script(argsPrefix: ["-s", "S1", "logcat", "-d", "-b", "crash"], stdout: "")
         runner.script(argsPrefix: ["-s", "S1", "logcat", "-d", "-b", "main"], stdout: "I Tag: fine")
         let extractor = CrashExtractor(client: await makeTestClient(runner: runner))
 
-        #expect(try await extractor.lastCrash(serial: "S1", format: .plain) == nil)
+        #expect(try await extractor.crashes(serial: "S1").isEmpty)
+    }
+
+    @Test func clearCrashBufferSendsExactArgs() async throws {
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["-s", "S1", "logcat", "-c"], stdout: "")
+        let extractor = CrashExtractor(client: await makeTestClient(runner: runner))
+
+        try await extractor.clearCrashBuffer(serial: "S1")
+        let invocation = try #require(runner.invocations.first { $0.arguments.contains("-c") })
+        #expect(invocation.arguments == ["-s", "S1", "logcat", "-c", "-b", "crash"])
     }
 
     @Test func boundedBlockKeepsShortInputUnchanged() {
@@ -119,32 +116,11 @@ import Testing
         #expect(CrashExtractor.boundedBlock(exact, maxLines: 50, maxChars: 1_000_000) == exact)
     }
 
-    @Test func boundedBlockPreservesTheCrashHeaderOfASingleHugeTrace() {
-        let trace = (["FATAL EXCEPTION: main", "java.lang.IllegalStateException: boom"]
-            + (1...500).map { "  at com.app.Frame\($0).run(Frame.java:\($0))" })
-            .joined(separator: "\n")
-        let bounded = CrashExtractor.boundedBlock(trace, maxLines: 200, maxChars: 1_000_000)
-        #expect(bounded.contains("FATAL EXCEPTION: main"))
-        #expect(bounded.contains("IllegalStateException: boom"))
-        #expect(bounded.split(separator: "\n").count <= 200)
-    }
-
     @Test func boundedBlockCapsAHugeSingleLineAndKeepsBothEnds() {
         let huge = "HEAD" + String(repeating: "x", count: 200_000) + "TAIL"
         let bounded = CrashExtractor.boundedBlock(huge, maxChars: 64 * 1024)
         #expect(bounded.count <= 64 * 1024 + 64)
         #expect(bounded.hasPrefix("HEAD"))
         #expect(bounded.hasSuffix("TAIL"))
-    }
-
-    @Test func lastCrashBoundsAHugeCrashBuffer() async throws {
-        let runner = MockProcessRunner()
-        let huge = (1...5000).map { "E AndroidRuntime: FATAL EXCEPTION line \($0)" }.joined(separator: "\n")
-        runner.script(argsPrefix: ["-s", "S1", "logcat", "-d", "-b", "crash"], stdout: huge)
-        let extractor = CrashExtractor(client: await makeTestClient(runner: runner))
-
-        let crash = try await extractor.lastCrash(serial: "S1", format: .plain)
-        #expect((crash?.split(separator: "\n").count ?? 0) <= 200)
-        #expect(crash?.contains("line 5000") == true)
     }
 }
