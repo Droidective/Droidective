@@ -2,7 +2,7 @@
 
 *Droidective bundles the whole RN-on-Android debugging stack into one free macOS app — including a built-in Reactotron server and a JS console over the Hermes debugger.*
 
-![The React Native hub — reload JS, dev menu, process death, Metro port and dev-server host](/blog-media/screenshot-react.png)
+![The React Native hub — reload JS, dev menu, process death, Metro port and dev-server host](/blog-media/screenshot-react.webp)
 *The RN essentials in one hub — no more remembering which adb incantation reloads the bundle.*
 
 React Native debugging on Android is a tab-juggling act: Metro in one terminal, `adb reverse` in another, Reactotron as a separate Electron app, logcat somewhere behind them, and the dev menu a physical shake away. Each piece is fine; the pile is not.
@@ -39,14 +39,14 @@ Under the hood it speaks the Chrome DevTools Protocol directly to Hermes; the de
 
 RN debugging is still Android debugging, so the whole toolbox is one ⌘T away:
 
-![Live logcat with per-app filtering](/blog-media/screenshot-logcat.png)
+![Live logcat with per-app filtering](/blog-media/screenshot-logcat.webp)
 *Native crash? Logcat with per-app scoping and a crash catcher that formats the stack for Slack.*
 
 * **Logcat** filtered to your app, following it across restarts — for everything that happens below the JS layer.
 * **Crash Catcher** — copy the last native crash, formatted for a ticket.
 * **Performance Monitor** — live FPS and jank next to per-core CPU and RAM, recordable and exportable:
 
-![The performance monitor charting live](/blog-media/screenshot-performance.png)
+![The performance monitor charting live](/blog-media/screenshot-performance.webp)
 *Catch the dropped frames while you scroll the list that's janking.*
 
 * **Network Speed** — live device throughput when you're testing on bad networks.

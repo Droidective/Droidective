@@ -5,6 +5,7 @@ import { ArrowRight, Clock } from "lucide-react"
 import { BlogCard } from "@/components/site/BlogCard"
 import { BlogHeader } from "@/components/site/BlogHeader"
 import { Footer } from "@/components/site/Footer"
+import { LazyVideo } from "@/components/site/LazyVideo"
 import { Reveal } from "@/components/site/Reveal"
 import { track } from "@/lib/analytics"
 import { posts } from "@/lib/blogPosts"
@@ -51,14 +52,10 @@ export function BlogIndexPage() {
                 <div className="relative aspect-[16/10] overflow-hidden border-b border-border bg-ink-800 min-[820px]:aspect-auto min-[820px]:border-r min-[820px]:border-b-0">
                   {featured.hero &&
                     (featured.hero.isVideo ? (
-                      <video
+                      <LazyVideo
                         className="size-full object-cover object-top"
                         src={featured.hero.src}
-                        autoPlay
-                        loop
-                        muted
-                        playsInline
-                        aria-label={featured.hero.alt}
+                        label={featured.hero.alt}
                       />
                     ) : (
                       <img

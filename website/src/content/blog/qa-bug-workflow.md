@@ -33,7 +33,7 @@ Every override is reset-tracked, so the test device doesn't spend the afternoon 
 
 ## Step 3: Get the logs without a developer
 
-![Live logcat with level, app, tag and text filters](/blog-media/screenshot-logcat.png)
+![Live logcat with level, app, tag and text filters](/blog-media/screenshot-logcat.webp)
 *Logcat filtered to the app under test — no grep required.*
 
 * **Logcat** streams live, filtered by app, level, or text — and follows the app across restarts, which is exactly when the interesting bugs happen.
@@ -45,13 +45,13 @@ Every override is reset-tracked, so the test device doesn't spend the afternoon 
 * **Monkey Test** fires thousands of random taps, swipes, and system events at the app to shake out crashes (it confirms before unleashing chaos).
 * **Performance Monitor** charts live FPS and jank while you scroll — "the list feels janky" becomes a recorded session with numbers, exportable to CSV:
 
-![The performance monitor charting live](/blog-media/screenshot-performance.png)
+![The performance monitor charting live](/blog-media/screenshot-performance.webp)
 *"Feels slow" → a chart the developer can't argue with.*
 
 * **Install App** installs a dragged-in APK — on one device or *every connected device at once*, which is the fastest way to roll a release candidate onto the test rack.
 * **Apps** explorer: force-stop, clear data (the classic "fresh install" state), and check versions and permissions per app:
 
-![The apps explorer with per-app controls](/blog-media/screenshot-apps.png)
+![The apps explorer with per-app controls](/blog-media/screenshot-apps.webp)
 *Clear data, force-stop, verify the version — the pre-test ritual, GUI'd.*
 
 * **Device Info** answers "which device was this on?" with RAM, storage, battery health, OS and build details in one searchable screen.

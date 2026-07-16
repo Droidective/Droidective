@@ -94,7 +94,7 @@ export function Nav() {
     <nav className="sticky top-0 z-100 border-b border-border bg-ink-850/72 backdrop-blur-lg backdrop-saturate-150">
       <div className="mx-auto flex h-[62px] max-w-[1120px] items-center gap-4.5 px-6">
         <a href="#top" className="flex items-center gap-2.75 text-base font-bold tracking-[-0.01em]">
-          <img src="/assets/icon.png" alt="Droidective icon" className="size-7.5 rounded-lg" />
+          <img src="/assets/icon-64.png" alt="Droidective icon" width={30} height={30} className="size-7.5 rounded-lg" />
           Droidective
         </a>
         <div className="ml-auto flex items-center gap-6.5">
