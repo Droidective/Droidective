@@ -51,6 +51,11 @@ struct CrashView: View {
                 await fetch(userInitiated: false)
             }
         }
+        .onChange(of: "\(kindFilter?.rawValue ?? "")|\(processFilter ?? "")|\(search)") {
+            // Keep something selected when a filter change hides the
+            // current selection.
+            if selectedReport == nil { selectedID = filteredReports.first?.id }
+        }
         .confirmationDialog(
             "Clear the device's crash buffer?", isPresented: $confirmClear
         ) {
@@ -185,7 +190,10 @@ struct CrashView: View {
             VStack(spacing: 0) {
                 detailHeader(report)
                 Divider()
-                ScrollView([.vertical, .horizontal]) {
+                // Vertical-only: long lines wrap. A two-axis ScrollView
+                // proposes nil in both directions, so short content floats
+                // centered instead of pinning to the top-left.
+                ScrollView {
                     Text(Self.highlighted(showRaw ? report.raw : report.body))
                         .font(.app(size: 11, design: .monospaced))
                         .textSelection(.enabled)

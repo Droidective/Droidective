@@ -19,10 +19,14 @@ public enum CrashFormat: String, Sendable, CaseIterable {
 /// into individual `CrashReport`s via `CrashParser`, and formats a crash for
 /// pasting into Slack, Jira, or plain text.
 public struct CrashExtractor: Sendable {
-    /// Cap the logcat dump we pull. The crash/main buffers can hold very large
-    /// lines (RN apps log big payloads), and the default 10 MB ceiling is far
-    /// more than the UI can render; 512 KB is plenty to find recent crashes.
-    static let maxLogcatBytes = 512 * 1024
+    /// Cap the logcat dump we pull. `AdbClient` keeps the HEAD of the output
+    /// when it hits this cap, and the buffer is chronological — so a cap the
+    /// buffer can outgrow silently drops the NEWEST crashes (seen live with a
+    /// 512 KB cap against a ~540 KB crash buffer). Devices allow up to 16 MB
+    /// per log buffer (Developer options ▸ Logger buffer sizes), so cap there:
+    /// it bounds a runaway stream without ever truncating a real buffer. The
+    /// rendered crashes stay small regardless via `boundedBlock`.
+    static let maxLogcatBytes = 16 * 1024 * 1024
 
     let client: AdbClient
 
