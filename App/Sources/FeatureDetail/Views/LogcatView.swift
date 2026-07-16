@@ -145,7 +145,9 @@ struct LogcatView: View {
                 }
             }
             .labelsHidden()
-            .frame(width: 110)
+            // No fixed width: the pop-up centers inside a wider frame,
+            // which reads as a gap after the label.
+            .fixedSize()
         }
         .font(.app(.callout))
     }

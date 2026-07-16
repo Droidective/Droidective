@@ -103,7 +103,9 @@ struct CrashView: View {
                     }
                 }
                 .labelsHidden()
-                .frame(width: 130)
+                // No fixed width: the pop-up centers inside a wider frame,
+                // which reads as a gap after the label.
+                .fixedSize()
             }
             .font(.app(.callout))
 
