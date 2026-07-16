@@ -79,6 +79,20 @@ public struct ConnectionService: Sendable {
     /// displays — tolerating stray whitespace, a bare host, and IPv6 (bracketed
     /// or not). Returns nil when the text isn't a plausible endpoint (empty,
     /// inner spaces, or a non-numeric port).
+    /// adb's default connect port — what `adb connect <host>` assumes.
+    public static let defaultConnectPort = "5555"
+
+    /// `parseEndpoint` for *connect* inputs: a bare host gets adb's default
+    /// port 5555 ("10.158.128.7" → "10.158.128.7:5555"), so the returned
+    /// endpoint always carries a port. Never use this for pairing — the
+    /// Android 11+ pairing port is random per session, so a default would
+    /// silently target the wrong port.
+    public static func parseConnectEndpoint(_ text: String) -> WirelessEndpoint? {
+        guard let endpoint = parseEndpoint(text) else { return nil }
+        guard endpoint.port == nil else { return endpoint }
+        return WirelessEndpoint(host: endpoint.host, port: defaultConnectPort)
+    }
+
     public static func parseEndpoint(_ text: String) -> WirelessEndpoint? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !trimmed.contains(where: \.isWhitespace) else { return nil }

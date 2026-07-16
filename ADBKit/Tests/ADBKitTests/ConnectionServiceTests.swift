@@ -41,6 +41,33 @@ import Testing
                 == WirelessEndpoint(host: "[fe80::aa:1]", port: nil))
     }
 
+    @Test func connectParseDefaultsBareHostToPort5555() {
+        #expect(
+            ConnectionService.parseConnectEndpoint("10.158.128.7")
+                == WirelessEndpoint(host: "10.158.128.7", port: "5555"))
+        #expect(
+            ConnectionService.parseConnectEndpoint("pixel.local")
+                == WirelessEndpoint(host: "pixel.local", port: "5555"))
+        #expect(
+            ConnectionService.parseConnectEndpoint("fe80::aa:1")
+                == WirelessEndpoint(host: "[fe80::aa:1]", port: "5555"))
+    }
+
+    @Test func connectParseKeepsAnExplicitPort() {
+        #expect(
+            ConnectionService.parseConnectEndpoint("192.168.1.42:40913")
+                == WirelessEndpoint(host: "192.168.1.42", port: "40913"))
+        #expect(
+            ConnectionService.parseConnectEndpoint("[fe80::1]:37123")
+                == WirelessEndpoint(host: "[fe80::1]", port: "37123"))
+    }
+
+    @Test func connectParseStillRejectsGarbage() {
+        #expect(ConnectionService.parseConnectEndpoint("") == nil)
+        #expect(ConnectionService.parseConnectEndpoint("192.168.1.42:") == nil)
+        #expect(ConnectionService.parseConnectEndpoint("192.168.1.42 :5555") == nil)
+    }
+
     @Test func rejectsGarbage() {
         #expect(ConnectionService.parseEndpoint("") == nil)
         #expect(ConnectionService.parseEndpoint("   ") == nil)
