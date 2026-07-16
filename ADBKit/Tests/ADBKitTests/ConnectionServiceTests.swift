@@ -51,6 +51,9 @@ import Testing
         #expect(
             ConnectionService.parseConnectEndpoint("fe80::aa:1")
                 == WirelessEndpoint(host: "[fe80::aa:1]", port: "5555"))
+        #expect(
+            ConnectionService.parseConnectEndpoint("[fe80::1]")
+                == WirelessEndpoint(host: "[fe80::1]", port: "5555"))
     }
 
     @Test func connectParseKeepsAnExplicitPort() {
@@ -79,6 +82,22 @@ import Testing
         #expect(ConnectionService.parseEndpoint("[not-an-address]:5555") == nil)
         #expect(ConnectionService.parseEndpoint("-bad-.local:5555") == nil)
         #expect(ConnectionService.parseEndpoint("a..b:5555") == nil)
+    }
+
+    @Test func rejectsOutOfRangePorts() {
+        #expect(ConnectionService.parseEndpoint("192.168.1.42:0") == nil)
+        #expect(ConnectionService.parseEndpoint("192.168.1.42:65536") == nil)
+        #expect(ConnectionService.parseEndpoint("192.168.1.42:99999") == nil)
+        #expect(ConnectionService.parseConnectEndpoint("192.168.1.42:0") == nil)
+        #expect(
+            ConnectionService.parseEndpoint("192.168.1.42:65535")
+                == WirelessEndpoint(host: "192.168.1.42", port: "65535"))
+    }
+
+    @Test func rejectsURLPastes() {
+        #expect(ConnectionService.parseEndpoint("http://1.2.3.4:5555") == nil)
+        #expect(ConnectionService.parseEndpoint("http://x") == nil)
+        #expect(ConnectionService.parseConnectEndpoint("http://1.2.3.4:5555") == nil)
     }
 
     @Test func acceptsZonedIPv6() {

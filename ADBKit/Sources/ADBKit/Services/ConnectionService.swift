@@ -92,8 +92,9 @@ public struct ConnectionService: Sendable {
     /// Parse a pasted endpoint — the "IP address & Port" string the phone
     /// displays — tolerating stray whitespace, a bare host, and IPv6 (bracketed
     /// or not). Returns nil when the text isn't a plausible endpoint: empty,
-    /// inner spaces, a non-numeric port, or an implausible host (a truncated
-    /// IPv4 like "1.1.1", a non-parsing IPv6, a malformed hostname).
+    /// inner spaces, a non-numeric or out-of-range port, or an implausible
+    /// host (a truncated IPv4 like "1.1.1", a non-parsing IPv6, a malformed
+    /// hostname).
     public static func parseEndpoint(_ text: String) -> WirelessEndpoint? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !trimmed.contains(where: \.isWhitespace) else { return nil }
@@ -101,7 +102,10 @@ public struct ConnectionService: Sendable {
         func validated(host: String, port: String?) -> WirelessEndpoint? {
             guard isValidHost(host) else { return nil }
             if let port {
-                guard (1...5).contains(port.count), port.allSatisfy(\.isNumber) else { return nil }
+                // `Int(_:)` rejects the non-ASCII digits `isNumber` lets through.
+                guard (1...5).contains(port.count), port.allSatisfy(\.isNumber),
+                      let value = Int(port), (1...65535).contains(value)
+                else { return nil }
             }
             return WirelessEndpoint(host: host, port: port)
         }

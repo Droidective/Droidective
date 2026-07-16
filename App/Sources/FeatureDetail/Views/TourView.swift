@@ -258,7 +258,6 @@ struct TourView: View {
         .padding(.horizontal, 20)
         .padding(.vertical, 14)
     }
-
 }
 
 /// The try-it page's stage: the user's own hotkey drawn as oversized keycaps
