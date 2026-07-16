@@ -68,6 +68,25 @@ import Testing
         #expect(ConnectionService.parseConnectEndpoint("192.168.1.42 :5555") == nil)
     }
 
+    @Test func rejectsImplausibleHosts() {
+        #expect(ConnectionService.parseEndpoint("1.1.1") == nil)
+        #expect(ConnectionService.parseEndpoint("1.1.1.") == nil)
+        #expect(ConnectionService.parseEndpoint("1.1.1.1.1") == nil)
+        #expect(ConnectionService.parseEndpoint("256.1.1.1:5555") == nil)
+        #expect(ConnectionService.parseEndpoint("192.168.1:5555") == nil)
+        #expect(ConnectionService.parseEndpoint("1234.1.1.1") == nil)
+        #expect(ConnectionService.parseConnectEndpoint("1.1.1") == nil)
+        #expect(ConnectionService.parseEndpoint("[not-an-address]:5555") == nil)
+        #expect(ConnectionService.parseEndpoint("-bad-.local:5555") == nil)
+        #expect(ConnectionService.parseEndpoint("a..b:5555") == nil)
+    }
+
+    @Test func acceptsZonedIPv6() {
+        #expect(
+            ConnectionService.parseEndpoint("[fe80::1%en0]:5555")
+                == WirelessEndpoint(host: "[fe80::1%en0]", port: "5555"))
+    }
+
     @Test func rejectsGarbage() {
         #expect(ConnectionService.parseEndpoint("") == nil)
         #expect(ConnectionService.parseEndpoint("   ") == nil)

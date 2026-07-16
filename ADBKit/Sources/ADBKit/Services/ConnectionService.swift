@@ -75,10 +75,6 @@ public struct ConnectionService: Sendable {
         return FeatureResult(ok: false, message: reason.isEmpty ? "Connection failed." : reason)
     }
 
-    /// Parse a pasted endpoint — the "IP address & Port" string the phone
-    /// displays — tolerating stray whitespace, a bare host, and IPv6 (bracketed
-    /// or not). Returns nil when the text isn't a plausible endpoint (empty,
-    /// inner spaces, or a non-numeric port).
     /// adb's default connect port — what `adb connect <host>` assumes.
     public static let defaultConnectPort = "5555"
 
@@ -93,12 +89,17 @@ public struct ConnectionService: Sendable {
         return WirelessEndpoint(host: endpoint.host, port: defaultConnectPort)
     }
 
+    /// Parse a pasted endpoint — the "IP address & Port" string the phone
+    /// displays — tolerating stray whitespace, a bare host, and IPv6 (bracketed
+    /// or not). Returns nil when the text isn't a plausible endpoint: empty,
+    /// inner spaces, a non-numeric port, or an implausible host (a truncated
+    /// IPv4 like "1.1.1", a non-parsing IPv6, a malformed hostname).
     public static func parseEndpoint(_ text: String) -> WirelessEndpoint? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !trimmed.contains(where: \.isWhitespace) else { return nil }
 
         func validated(host: String, port: String?) -> WirelessEndpoint? {
-            guard !host.isEmpty else { return nil }
+            guard isValidHost(host) else { return nil }
             if let port {
                 guard (1...5).contains(port.count), port.allSatisfy(\.isNumber) else { return nil }
             }
@@ -125,6 +126,46 @@ public struct ConnectionService: Sendable {
         default:
             // Bare IPv6 with no port — bracket it for adb.
             return validated(host: "[\(trimmed)]", port: nil)
+        }
+    }
+
+    /// A plausible adb host: a complete IPv4 address, a bracketed IPv6
+    /// literal, or a DNS hostname. Digits-and-dots input that isn't valid
+    /// IPv4 ("1.1.1", "256.1.1.1") is a truncated IP, not a hostname —
+    /// rejected so the sheet's buttons don't enable on it.
+    private static func isValidHost(_ host: String) -> Bool {
+        if host.hasPrefix("[") {
+            guard host.hasSuffix("]") else { return false }
+            return isIPv6(String(host.dropFirst().dropLast()))
+        }
+        if host.allSatisfy({ $0.isNumber || $0 == "." }) { return isIPv4(host) }
+        return isHostname(host)
+    }
+
+    private static func isIPv4(_ text: String) -> Bool {
+        let octets = text.split(separator: ".", omittingEmptySubsequences: false)
+        guard octets.count == 4 else { return false }
+        // `Int(_:)` also rejects non-ASCII digits that `isNumber` lets through.
+        return octets.allSatisfy { octet in
+            (1...3).contains(octet.count) && (Int(octet).map { $0 <= 255 } ?? false)
+        }
+    }
+
+    private static func isIPv6(_ text: String) -> Bool {
+        // A zone index ("fe80::1%en0") rides after the address proper.
+        let address = String(text.prefix { $0 != "%" })
+        guard !address.isEmpty else { return false }
+        var parsed = in6_addr()
+        return inet_pton(AF_INET6, address, &parsed) == 1
+    }
+
+    private static func isHostname(_ text: String) -> Bool {
+        guard text.count <= 253 else { return false }
+        let labels = text.split(separator: ".", omittingEmptySubsequences: false)
+        return labels.allSatisfy { label in
+            (1...63).contains(label.count)
+                && label.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" }
+                && label.first != "-" && label.last != "-"
         }
     }
 
