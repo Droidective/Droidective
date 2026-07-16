@@ -13,7 +13,7 @@ export function Blog() {
         Role-by-role workflows for debugging Android &amp; React Native on a Mac — written in-house, no terminal
         required.
       </SectionHead>
-      <div className="grid grid-cols-3 gap-5 max-[820px]:grid-cols-2 max-[560px]:grid-cols-1">
+      <div className="grid grid-cols-3 gap-5 max-[940px]:grid-cols-2 max-[620px]:grid-cols-1">
         {latest.map((post, i) => (
           <Reveal key={post.slug} delay={Math.min(i, 2) * 80}>
             <BlogCard post={post} surface="home-teaser" />

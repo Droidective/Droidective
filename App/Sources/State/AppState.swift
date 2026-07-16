@@ -165,7 +165,7 @@ final class AppState {
     /// Drives the first-launch / replayable welcome tour sheet.
     var presentTour = false
     /// True while the tour's final "try Quick Actions" page is on screen —
-    /// opening the panel is the tour's only exit (see TourView).
+    /// pressing the hotkey there finishes the tour with confetti (see TourView).
     var awaitingQuickActionsTry = false
     /// Bumped to fire a confetti burst over the main window (see
     /// `ConfettiCelebration` in RootView).
@@ -181,6 +181,15 @@ final class AppState {
         UserDefaults.standard.set(true, forKey: "hasSeenTour")
         presentTour = false
         confettiTrigger += 1
+    }
+
+    /// Ends the tour without the Quick Actions try — Skip, Finish, or an Esc
+    /// dismissal. Marks it seen so it never re-presents; no confetti (that's
+    /// the reward for pressing the hotkey for real).
+    func endTour() {
+        awaitingQuickActionsTry = false
+        UserDefaults.standard.set(true, forKey: "hasSeenTour")
+        presentTour = false
     }
     /// Drives the first-launch role picker (a full-window takeover) and the
     /// "Change role" flow. Picking a role seeds a curated feature set.

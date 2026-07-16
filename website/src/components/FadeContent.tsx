@@ -81,7 +81,10 @@ const FadeContent: React.FC<FadeContentProps> = ({
       autoAlpha: 1,
       filter: 'blur(0px)',
       duration: getSeconds(duration),
-      ease: ease
+      ease: ease,
+      // Release the compositor layer once revealed — a permanent will-change
+      // on every section adds up to real GPU memory on mobile.
+      clearProps: disappearAfter > 0 ? '' : 'willChange,filter'
     });
 
     const st = ScrollTrigger.create({

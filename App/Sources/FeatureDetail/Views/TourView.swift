@@ -7,11 +7,11 @@ import SwiftUI
 /// the sidebar, tabs & split panes, roles, settings & hotkeys, then the two
 /// Quick Actions steps: *pick the hotkey* (recorder inline; Next stays
 /// disabled until one is set) and *try it*, whose stage is the user's own
-/// hotkey drawn as keycaps pressing themselves. The try page is the only
-/// exit and it can't be skipped: pressing the hotkey for real — building the
-/// muscle memory, no button shortcut — opens Quick Actions, completes the
-/// tour, marks it seen, and fires the confetti celebration
-/// (`AppState.noteQuickActionsOpened`).
+/// hotkey drawn as keycaps pressing themselves. Pressing the hotkey for real
+/// on the try page opens Quick Actions, completes the tour, and fires the
+/// confetti celebration (`AppState.noteQuickActionsOpened`) — but nothing is
+/// mandatory: Skip, the try page's Finish button, and Esc all end the tour
+/// too (`AppState.endTour`, seen-marked, just without confetti).
 struct TourView: View {
     @Environment(AppState.self) private var state
     @State private var index = 0
@@ -59,9 +59,6 @@ struct TourView: View {
             controls
         }
         .frame(width: 780, height: 700)
-        // Non-skippable: no Esc / click-away dismissal — the tour ends by
-        // trying Quick Actions on the last page.
-        .interactiveDismissDisabled()
         .onAppear { quickActionsShortcut = KeyboardShortcuts.getShortcut(for: .quickActions) }
         .onChange(of: HotkeyRecording.shared.active) {
             quickActionsShortcut = KeyboardShortcuts.getShortcut(for: .quickActions)
@@ -71,7 +68,9 @@ struct TourView: View {
         .onChange(of: index, initial: true) { _, new in
             state.awaitingQuickActionsTry = new == Self.pages.count - 1
         }
-        .onDisappear { state.awaitingQuickActionsTry = false }
+        // Any dismissal counts as seen — an Esc'd tour must not re-present on
+        // the next launch. Idempotent after a hotkey-press finish.
+        .onDisappear { state.endTour() }
     }
 
     private var content: some View {
@@ -182,7 +181,7 @@ struct TourView: View {
     /// The last step's walkthrough: pressing the hotkey to open the panel is
     /// the tour's finish line (confetti included), so spell out exactly how —
     /// plus the menu-bar fallback, because a hotkey another app already owns
-    /// silently never fires and this page has no other way out.
+    /// silently never fires.
     private var tryGuide: some View {
         VStack(alignment: .leading, spacing: 6) {
             guideRow(1, "Press \(shortcutHint) — it works anywhere, even with this window closed.")
@@ -214,9 +213,8 @@ struct TourView: View {
 
     private var controls: some View {
         HStack {
-            // Skip only fast-forwards to the last page — the try-it step
-            // itself has no skip; opening the panel is the tour's one exit.
-            Button("Skip") { skip() }
+            // Skip ends the tour outright; the last page trades it for Finish.
+            Button("Skip") { state.endTour() }
                 .buttonStyle(.plain)
                 .foregroundStyle(.textMuted)
                 // A quiet, secondary action — suppress the accent-colored
@@ -242,30 +240,23 @@ struct TourView: View {
                     // On the try page this returns to the pick-hotkey page.
                     Button("Back") { withAnimation { index -= 1 } }
                 }
-                if !isLast {
+                if isLast {
+                    // Pressing the hotkey is the celebrated finish (confetti
+                    // via `noteQuickActionsOpened`), but it's an invitation,
+                    // not a gate — Finish ends the tour without it.
+                    Button("Finish") { state.endTour() }
+                        .keyboardShortcut(.defaultAction)
+                } else {
                     // The try page needs a hotkey to press, so the pick page
                     // holds the gate.
                     Button("Next") { withAnimation { index += 1 } }
                         .keyboardShortcut(.defaultAction)
                         .disabled(isHotkeyPage && quickActionsShortcut == nil)
                 }
-                // The try page adds no forward control on purpose: the finish
-                // line is *pressing the hotkey* — the muscle memory the panel
-                // lives on. The open completes the tour
-                // (`noteQuickActionsOpened`) and pops confetti.
             }
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 14)
-    }
-
-    /// Skipping mid-tour jumps to the tour's payoff: the try-it finale, via
-    /// the pick-hotkey page when none is recorded yet (the finale needs a
-    /// hotkey to press).
-    private func skip() {
-        withAnimation {
-            index = quickActionsShortcut == nil ? Self.pages.count - 2 : Self.pages.count - 1
-        }
     }
 }
 

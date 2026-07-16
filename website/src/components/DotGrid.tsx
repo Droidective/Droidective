@@ -132,7 +132,8 @@ const DotGrid: React.FC<DotGridProps> = ({
   useEffect(() => {
     if (!circlePath) return;
 
-    let rafId: number;
+    let rafId = 0;
+    let running = false;
     const proxSq = proximity * proximity;
 
     const draw = () => {
@@ -171,8 +172,28 @@ const DotGrid: React.FC<DotGridProps> = ({
       rafId = requestAnimationFrame(draw);
     };
 
-    draw();
-    return () => cancelAnimationFrame(rafId);
+    // Redraw only while the grid is on screen — an unconditional loop kept
+    // burning a full-canvas repaint every frame for the whole session.
+    const start = () => {
+      if (running) return;
+      running = true;
+      rafId = requestAnimationFrame(draw);
+    };
+    const stop = () => {
+      running = false;
+      cancelAnimationFrame(rafId);
+    };
+
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry?.isIntersecting) start();
+      else stop();
+    });
+    if (wrapperRef.current) observer.observe(wrapperRef.current);
+
+    return () => {
+      observer.disconnect();
+      stop();
+    };
   }, [proximity, baseColor, activeRgb, baseRgb, circlePath]);
 
   useEffect(() => {

@@ -1,14 +1,10 @@
+import { LazyVideo } from "@/components/site/LazyVideo"
 import { Reveal } from "@/components/site/Reveal"
 import { SectionHead } from "@/components/site/SectionHead"
-import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion"
 import { galleryShots, showcases } from "@/lib/content"
 import { cn } from "@/lib/utils"
 
 export function Screenshots() {
-  // Under reduced motion the videos sit on their posters with controls
-  // instead of autoplaying.
-  const reducedMotion = usePrefersReducedMotion()
-
   return (
     <section id="screenshots" className="mx-auto max-w-[1120px] px-6 py-26 max-[620px]:py-18">
       <SectionHead center eyebrow="see it in action" title="Real screens. Real device.">
@@ -16,21 +12,13 @@ export function Screenshots() {
       </SectionHead>
 
       <Reveal className="mx-auto mb-21 max-w-245 overflow-hidden rounded-2xl border border-border-2 bg-ink-700 shadow-[0_40px_100px_-30px_rgba(0,0,0,0.7)]">
-        <video
-          className="block h-auto w-full"
-          autoPlay={!reducedMotion}
-          controls={reducedMotion}
-          muted
-          loop
-          playsInline
-          preload="metadata"
+        <LazyVideo
+          src="/assets/demo.mp4"
           poster="/assets/demo-poster.webp"
           width={1280}
           height={810}
-          aria-label="Droidective in action — pressing ⌘T to jump between live Logcat, Device Info, the File Explorer, and the React Native hub on a connected Android emulator"
-        >
-          <source src="/assets/demo.mp4" type="video/mp4" />
-        </video>
+          label="Droidective in action — pressing ⌘T to jump between live Logcat, Device Info, the File Explorer, and the React Native hub on a connected Android emulator"
+        />
       </Reveal>
 
       <div className="flex flex-col gap-22">
@@ -61,21 +49,13 @@ export function Screenshots() {
                 )}
               >
                 {showcase.video ? (
-                  <video
-                    className="block h-auto w-full"
-                    autoPlay={!reducedMotion}
-                    controls={reducedMotion}
-                    muted
-                    loop
-                    playsInline
-                    preload="metadata"
+                  <LazyVideo
+                    src={showcase.video}
                     poster={showcase.image}
                     width={1600}
                     height={1012}
-                    aria-label={showcase.alt}
-                  >
-                    <source src={showcase.video} type="video/mp4" />
-                  </video>
+                    label={showcase.alt}
+                  />
                 ) : (
                   <img
                     src={showcase.image}
@@ -83,6 +63,7 @@ export function Screenshots() {
                     width={1600}
                     height={1012}
                     loading="lazy"
+                    decoding="async"
                     className="block h-auto w-full"
                   />
                 )}
@@ -96,7 +77,7 @@ export function Screenshots() {
         {galleryShots.map((shot) => (
           <figure key={shot.title} className="m-0">
             <div className="overflow-hidden rounded-[14px] border border-border-2 shadow-[0_30px_70px_-28px_rgba(0,0,0,0.7)]">
-              <img src={shot.image} alt={shot.alt} width={1600} height={1000} loading="lazy" className="block aspect-[16/10] w-full object-cover object-top" />
+              <img src={shot.image} alt={shot.alt} width={1600} height={1000} loading="lazy" decoding="async" className="block aspect-[16/10] w-full object-cover object-top" />
             </div>
             <figcaption className="mt-3.5 text-sm leading-normal text-muted">
               <b className="block text-[15px] font-semibold text-text">{shot.title}</b>
