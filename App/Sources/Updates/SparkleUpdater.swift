@@ -148,6 +148,10 @@ final class UpdaterViewModel: NSObject, ObservableObject {
             return
         }
         userRequestedInstall = true
+        // Also a manual check: if the re-check finds nothing (the release
+        // was pulled), the user who clicked "Update Now" hears that instead
+        // of silence.
+        manualCheck = true
         updater?.checkForUpdates()
     }
 
@@ -157,16 +161,23 @@ final class UpdaterViewModel: NSObject, ObservableObject {
     /// as asking the app to quit and something cancelled it (a close
     /// confirmation), the retained retry block asks again.
     func relaunchNow() {
-        phase = .installing
         // A retained retry means a quit was already requested and declined —
-        // ask again rather than re-entering the install.
+        // ask again rather than re-entering the install. The one-shot install
+        // handlers are consumed on use so a second click (or a stale
+        // "Relaunch" from the notification history) can't invoke Sparkle's
+        // install block twice; with nothing held there's nothing to do, and
+        // flipping to "Installing…" anyway would pin the pill on a lie.
         if let retryTerminate {
+            phase = .installing
             retryTerminate()
         } else if let immediateInstall {
+            phase = .installing
+            self.immediateInstall = nil
             immediateInstall()
         } else if let heldReply {
-            heldReply(.install)
+            phase = .installing
             self.heldReply = nil
+            heldReply(.install)
         }
     }
 
@@ -290,10 +301,10 @@ final class UpdaterViewModel: NSObject, ObservableObject {
         // slot on a toast nobody can see — the next find announces it.
         guard notify != nil else { return false }
         let defaults = UserDefaults.standard
-        guard manualCheck
-            || UpdatePolicy.shouldNotify(
-                version: info.version,
-                lastNotified: defaults.string(forKey: Self.lastNotifiedVersionKey))
+        guard UpdatePolicy.shouldNotify(
+            version: info.version,
+            lastNotified: defaults.string(forKey: Self.lastNotifiedVersionKey),
+            manualCheck: manualCheck)
         else { return false }
         defaults.set(info.version, forKey: Self.lastNotifiedVersionKey)
         return true
@@ -317,8 +328,9 @@ final class UpdaterViewModel: NSObject, ObservableObject {
     private static func migrateLegacyPrefs() {
         let defaults = UserDefaults.standard
         guard !defaults.bool(forKey: migrationKey) else { return }
-        if let checks = defaults.object(forKey: "SUEnableAutomaticChecks") as? Bool, !checks {
-            defaults.set(false, forKey: "SUAutomaticallyUpdate")
+        let oldChecks = defaults.object(forKey: "SUEnableAutomaticChecks") as? Bool
+        if let autoDownload = UpdatePolicy.migratedAutoDownload(oldAutomaticChecks: oldChecks) {
+            defaults.set(autoDownload, forKey: "SUAutomaticallyUpdate")
         }
         defaults.removeObject(forKey: "pendingUpdateVersion")
         defaults.set(true, forKey: migrationKey)
@@ -409,6 +421,9 @@ extension UpdaterViewModel: SPUUserDriver {
                 ok: true, level: .info, important: false))
         }
         manualCheck = false
+        // Consent must not outlive the check it was given for — left set, a
+        // later *background* find would silently install and relaunch.
+        userRequestedInstall = false
         acknowledgement()
     }
 
@@ -457,8 +472,11 @@ extension UpdaterViewModel: SPUUserDriver {
         // Sessions end here on abort or hand-off. Sticky phases (available /
         // ready-to-relaunch / up-to-date) survive; only in-flight progress
         // resets so a silently aborted background download doesn't leave a
-        // stuck "Downloading…" pill.
+        // stuck "Downloading…" pill. Per-check consent dies with its session
+        // — it must not leak into the next hourly find.
         retryTerminate = nil
+        manualCheck = false
+        userRequestedInstall = false
         switch phase {
         case .checking, .downloading:
             phase = .idle

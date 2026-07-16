@@ -38,6 +38,16 @@ import Testing
         }
     }
 
+    @Test func explicitInstallConsentOutranksHowTheCheckStarted() {
+        // "Update now" re-enters through a check Sparkle may report as
+        // non-user-initiated — the recorded consent still means install.
+        #expect(
+            UpdatePolicy.replyForUpdateFound(
+                stage: .notDownloaded, userInitiated: false, userRequestedInstall: true,
+                autoDownloadEnabled: false, informational: false)
+                == .startInstall)
+    }
+
     @Test func plainManualCheckDownloadsOnlyWhenAutoDownloadIsOn() {
         // With auto-download on, a manual check pulls the update right away
         // (the scheduler would have anyway)…
@@ -70,7 +80,8 @@ import Testing
 
     @Test func informationalUpdatesAreNeverInstalled() {
         // Info-only items (a pulled release's fallback) may only be linked
-        // to, even when the user explicitly asked to update.
+        // to, even when the user explicitly asked to update — and even one
+        // Sparkle reports as already staged must not hold for a relaunch.
         for userInitiated in [true, false] {
             #expect(
                 UpdatePolicy.replyForUpdateFound(
@@ -79,6 +90,25 @@ import Testing
                     informational: true)
                     == .recordAvailable)
         }
+        #expect(
+            UpdatePolicy.replyForUpdateFound(
+                stage: .installing, userInitiated: false, userRequestedInstall: false,
+                autoDownloadEnabled: true, informational: true)
+                == .recordAvailable)
+    }
+
+    @Test func earlierDownloadChangesNothingWithoutConsent() {
+        // A resumed .downloaded item follows the same rules as a fresh find.
+        #expect(
+            UpdatePolicy.replyForUpdateFound(
+                stage: .downloaded, userInitiated: false, userRequestedInstall: false,
+                autoDownloadEnabled: false, informational: false)
+                == .recordAvailable)
+        #expect(
+            UpdatePolicy.replyForUpdateFound(
+                stage: .downloaded, userInitiated: true, userRequestedInstall: false,
+                autoDownloadEnabled: true, informational: false)
+                == .startInstall)
     }
 
     // MARK: ready-to-relaunch
@@ -124,11 +154,43 @@ import Testing
             UpdatePolicy.whatsNewAction(stashedVersion: "3.10.0", currentVersion: "3.9.0") == .keep)
     }
 
+    @Test func comparesPlainBuildNumbersTheProductionCallerFeedsIt() {
+        // The app keys the stash by CFBundleVersion — a bare integer, not a
+        // dotted version. "99" < "100" is the row a lexicographic compare
+        // would invert.
+        #expect(UpdatePolicy.whatsNewAction(stashedVersion: "456", currentVersion: "456") == .show)
+        #expect(UpdatePolicy.whatsNewAction(stashedVersion: "456", currentVersion: "455") == .keep)
+        #expect(UpdatePolicy.whatsNewAction(stashedVersion: "455", currentVersion: "456") == .clear)
+        #expect(UpdatePolicy.whatsNewAction(stashedVersion: "100", currentVersion: "99") == .keep)
+    }
+
     // MARK: shouldNotify
 
     @Test func notifiesOncePerVersion() {
         #expect(UpdatePolicy.shouldNotify(version: "3.4.0", lastNotified: nil))
         #expect(UpdatePolicy.shouldNotify(version: "3.4.0", lastNotified: "3.3.0"))
         #expect(!UpdatePolicy.shouldNotify(version: "3.4.0", lastNotified: "3.4.0"))
+    }
+
+    @Test func manualCheckAlwaysNotifiesEvenAboutAKnownVersion() {
+        // "Check for Updates…" is answering the user — the once-per-version
+        // gate applies only to the hourly background re-check.
+        #expect(
+            UpdatePolicy.shouldNotify(version: "3.4.0", lastNotified: "3.4.0", manualCheck: true))
+        #expect(
+            !UpdatePolicy.shouldNotify(version: "3.4.0", lastNotified: "3.4.0", manualCheck: false))
+    }
+
+    // MARK: legacy migration
+
+    @Test func oldCheckOptOutBecomesADownloadOptOut() {
+        // A user who had turned off "check automatically" must not wake up
+        // to silent installs — the old opt-out maps to the download toggle.
+        #expect(UpdatePolicy.migratedAutoDownload(oldAutomaticChecks: false) == false)
+    }
+
+    @Test func defaultAndOptedInUsersKeepTheNewDefault() {
+        #expect(UpdatePolicy.migratedAutoDownload(oldAutomaticChecks: nil) == nil)
+        #expect(UpdatePolicy.migratedAutoDownload(oldAutomaticChecks: true) == nil)
     }
 }

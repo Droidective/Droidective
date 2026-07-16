@@ -82,7 +82,12 @@ private struct ReleaseNotesHTMLView: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> WKWebView {
-        let view = WKWebView()
+        // Release notes are static HTML — scripts stay off (the coordinator's
+        // `evaluateJavaScript` scroll pin is unaffected; that switch only
+        // governs content-loaded scripts).
+        let configuration = WKWebViewConfiguration()
+        configuration.defaultWebpagePreferences.allowsContentJavaScript = false
+        let view = WKWebView(frame: .zero, configuration: configuration)
         view.navigationDelegate = context.coordinator
         // The appcast notes declare `color-scheme: light dark`, so the page
         // canvas follows the app's appearance on its own.

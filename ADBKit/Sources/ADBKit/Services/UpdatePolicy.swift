@@ -105,8 +105,21 @@ public enum UpdatePolicy {
     }
 
     /// Notify (toast / notification history) at most once per discovered
-    /// version, however often the hourly re-check keeps finding it.
-    public static func shouldNotify(version: String, lastNotified: String?) -> Bool {
-        version != lastNotified
+    /// version, however often the hourly re-check keeps finding it. A manual
+    /// "Check for Updates…" is answering the user — it always notifies, even
+    /// about a version the background check already announced.
+    public static func shouldNotify(
+        version: String, lastNotified: String?, manualCheck: Bool = false
+    ) -> Bool {
+        manualCheck || version != lastNotified
+    }
+
+    /// The one-time migration of the old "Automatically check for updates"
+    /// opt-out into the new download/install toggle (checks now always run).
+    /// Returns the value to write for "automatically download & install", or
+    /// nil to leave the new toggle at its default.
+    public static func migratedAutoDownload(oldAutomaticChecks: Bool?) -> Bool? {
+        guard let oldAutomaticChecks, !oldAutomaticChecks else { return nil }
+        return false
     }
 }
