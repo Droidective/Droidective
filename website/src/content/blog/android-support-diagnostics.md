@@ -2,7 +2,7 @@
 
 *Droidective gives support and triage teams a point-and-click window into any Android device — screen mirroring, health checks, and one-file diagnostics.*
 
-![Device info showing RAM, storage, battery health and CPU](/blog-media/screenshot-device.png)
+![Device info showing RAM, storage, battery health and CPU](/blog-media/screenshot-device.webp)
 *Every triage call starts with "what device is this?" — here's the whole answer, searchable.*
 
 Support tickets for Android apps have a familiar arc: the customer describes something vague, an engineer gets pulled in to "just grab the logs," and twenty minutes of Slack later someone finally types the right adb command. The bottleneck isn't skill — it's that the diagnostic tools live in a terminal that most support folks reasonably don't use.
@@ -21,7 +21,7 @@ Quick checks live alongside it:
 
 ## Get it connected
 
-![The connection hub — live Wi-Fi network and IP, wireless ADB, pairing](/blog-media/screenshot-connection.png)
+![The connection hub — live Wi-Fi network and IP, wireless ADB, pairing](/blog-media/screenshot-connection.webp)
 *The device's live Wi-Fi network and IP, one-click reverse port, and wireless debugging.*
 
 The **Connection** hub shows the device's live Wi-Fi network and IP and sets up **Wireless ADB** — including Android 11+ pairing — so a device across the desk doesn't need to stay tethered. **Wi-Fi** shows connection details and toggles, and **Network Speed** charts live throughput when the complaint is "it's slow" and you suspect the network, not the app.
@@ -32,14 +32,14 @@ The **Connection** hub shows the device's live Wi-Fi network and IP and sets up 
 
 ## Check the app
 
-![The apps explorer with a selected app's info and controls](/blog-media/screenshot-apps.png)
+![The apps explorer with a selected app's info and controls](/blog-media/screenshot-apps.webp)
 *Version, permissions, force-stop, clear cache — the classic support moves.*
 
 The **Apps** explorer lists everything installed. Select the app in question and you can verify the version (half of all tickets end here), check its permissions (the other half), force-stop it, or clear its cache — without knowing that the incantation is `pm clear`.
 
 ## Collect diagnostics engineering will thank you for
 
-![Live logcat with filters](/blog-media/screenshot-logcat.png)
+![Live logcat with filters](/blog-media/screenshot-logcat.webp)
 *Logs, filtered to the app — collected by support, not by an interrupted engineer.*
 
 * **Logcat** streams the device log live, filtered by app or severity — and exports the buffer to a file.
@@ -48,7 +48,7 @@ The **Apps** explorer lists everything installed. Select the app in question and
 
 ## The keystroke on top
 
-![The ⌘T command palette](/blog-media/screenshot-palette.png)
+![The ⌘T command palette](/blog-media/screenshot-palette.webp)
 *Don't memorize where tools live — ⌘T and type "battery", "logs", or "wifi".*
 
 Everything is behind a searchable **⌘T** palette, and Droidective's first-launch role picker has a **Support / Triage** preset that curates the sidebar to exactly this workflow — diagnostics first, developer arcana hidden (but a search away).

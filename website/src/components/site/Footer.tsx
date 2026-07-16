@@ -6,12 +6,16 @@ export function Footer() {
       <div className="mx-auto max-w-[1120px]">
         <div className="flex flex-wrap items-center justify-between gap-5.5">
           <a href="#top" className="flex items-center gap-2.75 font-bold text-text">
-            <img src="/assets/icon.png" alt="" width={26} height={26} className="rounded-md" />
+            <img src="/assets/icon-64.png" alt="" width={26} height={26} loading="lazy" decoding="async" className="rounded-md" />
             Droidective
           </a>
           <div className="flex flex-wrap gap-5.5">
             {footerLinks.map((link) => (
-              <a key={link.label} href={link.href} className="transition-colors duration-150 hover:text-green">
+              <a
+                key={link.label}
+                href={link.href}
+                className="-my-2 py-2 transition-colors duration-150 hover:text-green"
+              >
                 {link.label}
               </a>
             ))}

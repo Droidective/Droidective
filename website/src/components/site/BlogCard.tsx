@@ -1,5 +1,6 @@
 import { Clock } from "lucide-react"
 
+import { LazyVideo } from "@/components/site/LazyVideo"
 import type { BlogPost } from "@/lib/blogPosts"
 
 /** A thumbnail card for the blog index grid. */
@@ -15,14 +16,10 @@ export function BlogCard({ post, surface = "index-grid" }: { post: BlogPost; sur
         {post.hero && (
           <div className="relative aspect-[16/10] overflow-hidden border-b border-border bg-ink-800">
             {post.hero.isVideo ? (
-              <video
+              <LazyVideo
                 className="size-full object-cover object-top"
                 src={post.hero.src}
-                autoPlay
-                loop
-                muted
-                playsInline
-                aria-label={post.hero.alt}
+                label={post.hero.alt}
               />
             ) : (
               <img

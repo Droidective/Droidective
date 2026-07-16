@@ -1,4 +1,7 @@
+import { useRef } from "react"
+
 import { Download, Star } from "lucide-react"
+import { useInView } from "motion/react"
 
 import ShinyText from "@/components/ShinyText"
 import { Reveal } from "@/components/site/Reveal"
@@ -8,13 +11,17 @@ import { DOWNLOAD_URL, GITHUB_URL } from "@/lib/content"
 
 export function FinalCta() {
   const reducedMotion = usePrefersReducedMotion()
+  // ShinyText animates every frame for as long as it is mounted, so swap in
+  // the plain heading whenever the section is off screen.
+  const headingRef = useRef<HTMLHeadingElement>(null)
+  const inView = useInView(headingRef)
 
   return (
     <section className="mx-auto max-w-[1120px] px-6 pb-26 max-[620px]:pb-18">
       <Reveal>
         <div className="relative overflow-hidden rounded-3xl border border-border-2 bg-[radial-gradient(600px_280px_at_50%_-10%,rgba(155,224,33,0.1),transparent_70%),var(--color-ink-800)] px-8 py-19 text-center">
-          <h2 className="mb-3.5 text-[clamp(28px,4vw,40px)] font-extrabold tracking-[-0.03em]">
-            {reducedMotion ? (
+          <h2 ref={headingRef} className="mb-3.5 text-[clamp(28px,4vw,40px)] font-extrabold tracking-[-0.03em]">
+            {reducedMotion || !inView ? (
               "Debug Android without the terminal."
             ) : (
               <ShinyText

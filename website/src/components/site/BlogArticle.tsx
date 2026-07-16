@@ -1,3 +1,4 @@
+import { LazyVideo } from "@/components/site/LazyVideo"
 import { Inline, type Block } from "@/lib/markdown"
 
 /** Renders a parsed blog body. Column width is tuned for long-form reading. */
@@ -47,14 +48,10 @@ export function BlogArticle({ blocks }: { blocks: Block[] }) {
             return (
               <figure key={idx} className="my-9">
                 {block.isVideo ? (
-                  <video
+                  <LazyVideo
                     className="w-full rounded-xl border border-border-2 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.6)]"
                     src={block.src}
-                    autoPlay
-                    loop
-                    muted
-                    playsInline
-                    aria-label={block.alt}
+                    label={block.alt}
                   />
                 ) : (
                   <img
@@ -62,6 +59,7 @@ export function BlogArticle({ blocks }: { blocks: Block[] }) {
                     src={block.src}
                     alt={block.alt}
                     loading="lazy"
+                    decoding="async"
                   />
                 )}
                 {block.caption && (
