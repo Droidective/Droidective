@@ -82,17 +82,15 @@ struct CrashView: View {
             .disabled(loading || state.targetSerials.isEmpty)
             .help("Fetch crashes from the device")
 
-            Button {
-                watching.toggle()
-            } label: {
-                Image(systemName: watching ? "eye.fill" : "eye")
-                    .foregroundStyle(watching ? Color.accentColor : .primary)
+            Toggle(isOn: $watching) {
+                Label(watching ? "Watching" : "Watch",
+                      systemImage: watching ? "eye.fill" : "eye")
             }
-            .buttonStyle(IconButtonStyle())
+            .toggleStyle(.button)
             .disabled(state.targetSerials.isEmpty)
             .help(watching
-                ? "Watching — checking for new crashes every 5 s"
-                : "Watch for new crashes (checks every 5 s)")
+                ? "Watching — checking for new crashes every 5 s. Click to stop."
+                : "Watch for new crashes (checks every 5 s) and get notified the moment one lands")
 
             LabeledContent("Kind") {
                 Picker("Kind", selection: $kindFilter) {
