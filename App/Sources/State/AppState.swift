@@ -258,6 +258,19 @@ final class AppState {
         }
     }
 
+    /// The split divider was dragged past the 30% pane floor — the user wants
+    /// more width than the panes can give, so cede the sidebar's. ⌘B (or the
+    /// left-edge hover in auto-hide mode) brings it back.
+    func hideSidebarForSplitRoom() {
+        if UserDefaults.standard.bool(forKey: sidebarAutoHideDefaultsKey) {
+            guard sidebarOverlayShown else { return }
+            withAnimation(.easeIn(duration: 0.18)) { sidebarOverlayShown = false }
+        } else {
+            guard sidebarVisible else { return }
+            withAnimation(.easeInOut(duration: 0.18)) { sidebarVisible = false }
+        }
+    }
+
     /// The device bar's sidebar button: switches between the fixed sidebar
     /// and Dock-style auto-hide. Returning to fixed always shows the sidebar —
     /// a mode flip that leaves everything hidden would read as a dead button.

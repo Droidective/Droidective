@@ -227,47 +227,42 @@ private struct MirrorStage: View {
     }
 
     /// Controls below the mirror: device nav keys, then screenshot + record.
+    /// The bar adapts to the pane instead of overflowing into the pane clip
+    /// (which hid its trailing buttons in a narrow split): full layout, then
+    /// tighter spacing, then a compact bar that folds volume / audio / pop-out
+    /// into an overflow menu.
     private var controlBar: some View {
-        HStack(spacing: 16) {
+        ViewThatFits(in: .horizontal) {
+            fullBar(spacing: 16, buttonWidth: 44)
+            fullBar(spacing: 6, buttonWidth: 34)
+            compactBar
+        }
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity)
+        .background(.bar)
+    }
+
+    private func fullBar(spacing: CGFloat, buttonWidth: CGFloat) -> some View {
+        HStack(spacing: spacing) {
             Group {
-                navButton("chevron.backward", help: "Back") { model.tapKey(4) }
-                navButton("circle", help: "Home") { model.tapKey(3) }
-                navButton("square", help: "Recent apps") { model.tapKey(187) }
+                navCluster(buttonWidth: buttonWidth)
 
                 Divider().frame(height: 22)
 
-                navButton("camera", help: "Screenshot — edit in place") {
-                    Task { await model.takeScreenshot() }
-                }
-
-                if model.isRecording {
-                    navButton(
-                        model.isPaused ? "play.fill" : "pause.fill",
-                        help: model.isPaused ? "Resume recording" : "Pause recording"
-                    ) {
-                        Task { model.isPaused ? await model.resumeRecording() : await model.pauseRecording() }
-                    }
-                    navButton("stop.circle.fill", tint: .red, help: "Stop recording") {
-                        Task { await model.stopRecording() }
-                    }
-                } else {
-                    navButton("record.circle", help: "Record — keep mirroring") {
-                        Task { await model.startRecording() }
-                    }
-                }
+                captureCluster(buttonWidth: buttonWidth)
 
                 Divider().frame(height: 22)
 
                 // Device volume (one step per tap) + one-shot mute/unmute.
-                navButton("speaker.wave.1.fill", help: "Volume down") { model.tapKey(25) }
-                navButton("speaker.wave.3.fill", help: "Volume up") { model.tapKey(24) }
-                navButton("speaker.slash.fill", help: "Mute / unmute") { model.tapKey(164) }
+                navButton("speaker.wave.1.fill", width: buttonWidth, help: "Volume down") { model.tapKey(25) }
+                navButton("speaker.wave.3.fill", width: buttonWidth, help: "Volume up") { model.tapKey(24) }
+                navButton("speaker.slash.fill", width: buttonWidth, help: "Mute / unmute") { model.tapKey(164) }
 
                 // Pop out to a window — hidden while recording, which must stay
                 // with this session (the window would connect a fresh one).
                 if let onPopOut, !model.isRecording {
                     Divider().frame(height: 22)
-                    navButton("macwindow.on.rectangle", help: "Open in a separate window") { onPopOut() }
+                    navButton("macwindow.on.rectangle", width: buttonWidth, help: "Open in a separate window") { onPopOut() }
                 }
             }
             .disabled(model.status != .streaming)
@@ -283,19 +278,89 @@ private struct MirrorStage: View {
                 .help("Stream device audio — flipping this restarts the mirror")
                 .disabled(model.isRecording)
         }
-        .padding(.vertical, 10)
-        .frame(maxWidth: .infinity)
-        .background(.bar)
+        .fixedSize()
+    }
+
+    /// The narrow-pane bar: nav / screenshot / record stay one-tap buttons,
+    /// the rest moves into an overflow menu with the same per-item gating.
+    private var compactBar: some View {
+        HStack(spacing: 6) {
+            Group {
+                navCluster(buttonWidth: 34)
+                Divider().frame(height: 22)
+                captureCluster(buttonWidth: 34)
+            }
+            .disabled(model.status != .streaming)
+
+            Divider().frame(height: 22)
+
+            Menu {
+                Section("Volume") {
+                    // Same order as the full bar: down, up, mute.
+                    Button("Volume down") { model.tapKey(25) }
+                    Button("Volume up") { model.tapKey(24) }
+                    Button("Mute / unmute") { model.tapKey(164) }
+                }
+                .disabled(model.status != .streaming)
+                Divider()
+                Toggle("Stream audio (restarts mirror)", isOn: $includeAudio)
+                    .disabled(model.isRecording)
+                if let onPopOut, !model.isRecording {
+                    Divider()
+                    Button("Open in a separate window") { onPopOut() }
+                        .disabled(model.status != .streaming)
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .font(.app(.title3))
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help("Volume, audio, and window options")
+        }
+        .fixedSize()
+    }
+
+    private func navCluster(buttonWidth: CGFloat) -> some View {
+        Group {
+            navButton("chevron.backward", width: buttonWidth, help: "Back") { model.tapKey(4) }
+            navButton("circle", width: buttonWidth, help: "Home") { model.tapKey(3) }
+            navButton("square", width: buttonWidth, help: "Recent apps") { model.tapKey(187) }
+        }
+    }
+
+    @ViewBuilder private func captureCluster(buttonWidth: CGFloat) -> some View {
+        navButton("camera", width: buttonWidth, help: "Screenshot — edit in place") {
+            Task { await model.takeScreenshot() }
+        }
+
+        if model.isRecording {
+            navButton(
+                model.isPaused ? "play.fill" : "pause.fill",
+                width: buttonWidth,
+                help: model.isPaused ? "Resume recording" : "Pause recording"
+            ) {
+                Task { model.isPaused ? await model.resumeRecording() : await model.pauseRecording() }
+            }
+            navButton("stop.circle.fill", tint: .red, width: buttonWidth, help: "Stop recording") {
+                Task { await model.stopRecording() }
+            }
+        } else {
+            navButton("record.circle", width: buttonWidth, help: "Record — keep mirroring") {
+                Task { await model.startRecording() }
+            }
+        }
     }
 
     private func navButton(
-        _ systemImage: String, tint: Color? = nil, help: String, action: @escaping () -> Void
+        _ systemImage: String, tint: Color? = nil, width: CGFloat = 44, help: String,
+        action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(.app(.title3))
                 .foregroundStyle(tint ?? .primary)
-                .frame(width: 44, height: 30)
+                .frame(width: width, height: 30)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

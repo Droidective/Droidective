@@ -211,10 +211,15 @@ struct DecompileBrowserView: View {
             }
             .padding(8)
             Divider()
-            HStack(spacing: 0) {
-                sidebar(root).frame(width: 320)
-                Divider()
-                editorPane
+            GeometryReader { geo in
+                // A narrow split pane starved the code editor behind the old
+                // fixed 320pt tree — the tree now cedes width proportionally
+                // (floor 230pt, cap 320) so both columns stay usable.
+                HStack(spacing: 0) {
+                    sidebar(root).frame(width: max(230, min(320, geo.size.width * 0.38)))
+                    Divider()
+                    editorPane
+                }
             }
         }
         .background(.bgRoot)

@@ -57,71 +57,108 @@ struct AppsExplorerView: View {
     // insets, so the search/filter row and the detail's top rows rendered
     // underneath the device bar.
     private var content: some View {
-        HStack(spacing: 0) {
-            VStack(spacing: 0) {
-                HStack(spacing: 8) {
-                    TextField("Search name, version, or bundle…", text: $search)
-                        .brandField()
-                    Picker("", selection: $scope) {
-                        ForEach(Scope.allCases, id: \.self) { scope in
-                            Text(scope.rawValue).tag(scope)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 160)
-                    Button {
-                        Task { await loadApps(showLoading: false) }
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                    .help("Refresh")
-                }
-                .padding(8)
+        GeometryReader { geo in
+            // In a narrow split pane the old fixed 320pt list starved the
+            // detail — the list now cedes width proportionally (never below
+            // 230pt, never above 320) so both columns stay usable.
+            let listWidth = max(230, min(320, geo.size.width * 0.4))
+            HStack(spacing: 0) {
+                listColumn(width: listWidth)
+
                 Divider()
 
-                if let apps {
-                    if visibleApps.isEmpty {
-                        ContentUnavailableView.search(text: search)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    } else {
-                        List(visibleApps) { app in
-                            appRow(app)
-                        }
-                        .frame(minWidth: 260)
-                    }
-                    HStack {
-                        Text("\(visibleApps.count) of \(apps.count) apps")
-                            .font(.app(.caption))
-                            .foregroundStyle(.tertiary)
-                        Spacer()
-                    }
-                    .padding(6)
-                } else {
-                    ProgressView("Reading apps…")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
+                detailColumn
             }
-            .frame(width: 320)
+        }
+    }
 
+    private func listColumn(width: CGFloat) -> some View {
+        VStack(spacing: 0) {
+            // Below ~300pt the search field + segmented scope + refresh no
+            // longer share a row — the scope picker drops to its own line.
+            if width < 300 {
+                VStack(spacing: 8) {
+                    HStack(spacing: 8) {
+                        searchField
+                        refreshButton
+                    }
+                    scopePicker
+                }
+                .padding(8)
+            } else {
+                HStack(spacing: 8) {
+                    searchField
+                    scopePicker.frame(width: 160)
+                    refreshButton
+                }
+                .padding(8)
+            }
             Divider()
 
-            if let selectedPackage {
-                AppDetailPane(
-                    packageId: selectedPackage,
-                    lifecycle: states[selectedPackage],
-                    canUninstall: canUninstall(selectedPackage),
-                    onNotRemovable: { notRemovable.insert($0) },
-                    onChanged: { Task { await loadApps(showLoading: false) } }
-                )
-                .frame(maxWidth: .infinity)
+            if let apps {
+                if visibleApps.isEmpty {
+                    ContentUnavailableView.search(text: search)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    List(visibleApps) { app in
+                        appRow(app)
+                    }
+                }
+                HStack {
+                    Text("\(visibleApps.count) of \(apps.count) apps")
+                        .font(.app(.caption))
+                        .foregroundStyle(.tertiary)
+                    Spacer()
+                }
+                .padding(6)
             } else {
-                ContentUnavailableView(
-                    "Select an app",
-                    systemImage: "square.grid.3x3",
-                    description: Text("Pick an app to see its info and permissions.")
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ProgressView("Reading apps…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+        }
+        .frame(width: width)
+    }
+
+    private var searchField: some View {
+        TextField("Search name, version, or bundle…", text: $search)
+            .brandField()
+    }
+
+    private var scopePicker: some View {
+        Picker("", selection: $scope) {
+            ForEach(Scope.allCases, id: \.self) { scope in
+                Text(scope.rawValue).tag(scope)
+            }
+        }
+        .pickerStyle(.segmented)
+    }
+
+    private var refreshButton: some View {
+        Button {
+            Task { await loadApps(showLoading: false) }
+        } label: {
+            Image(systemName: "arrow.clockwise")
+        }
+        .help("Refresh")
+    }
+
+    @ViewBuilder private var detailColumn: some View {
+        if let selectedPackage {
+            AppDetailPane(
+                packageId: selectedPackage,
+                lifecycle: states[selectedPackage],
+                canUninstall: canUninstall(selectedPackage),
+                onNotRemovable: { notRemovable.insert($0) },
+                onChanged: { Task { await loadApps(showLoading: false) } }
+            )
+            .frame(maxWidth: .infinity)
+        } else {
+            ContentUnavailableView(
+                "Select an app",
+                systemImage: "square.grid.3x3",
+                description: Text("Pick an app to see its info and permissions.")
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 

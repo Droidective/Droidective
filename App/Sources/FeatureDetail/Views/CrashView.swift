@@ -27,6 +27,9 @@ struct CrashView: View {
                     Label(loading ? "Checking…" : "Fetch last crash", systemImage: "arrow.clockwise")
                 }
                 .disabled(loading || state.targetSerials.isEmpty)
+                // Keep the label whole in a narrow pane — the format picker
+                // compresses instead.
+                .fixedSize()
 
                 if let crash {
                     Button {
@@ -36,6 +39,7 @@ struct CrashView: View {
                     } label: {
                         Label("Copy", systemImage: "doc.on.clipboard")
                     }
+                    .fixedSize()
                 }
                 Spacer()
             }
