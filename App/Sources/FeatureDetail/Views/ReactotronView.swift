@@ -804,11 +804,7 @@ struct ReactotronView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(GeometryReader { geo in
-            Color.clear.onChange(of: geo.size.width, initial: true) { _, width in
-                topTabsWidth = width
-            }
-        })
+        .measuringWidth(into: $topTabsWidth)
     }
 
     /// Connection state as a dot plus the connected app's name — the

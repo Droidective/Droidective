@@ -296,8 +296,9 @@ private struct MirrorStage: View {
 
             Menu {
                 Section("Volume") {
-                    Button("Volume up") { model.tapKey(24) }
+                    // Same order as the full bar: down, up, mute.
                     Button("Volume down") { model.tapKey(25) }
+                    Button("Volume up") { model.tapKey(24) }
                     Button("Mute / unmute") { model.tapKey(164) }
                 }
                 .disabled(model.status != .streaming)

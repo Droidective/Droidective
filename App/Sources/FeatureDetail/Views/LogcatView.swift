@@ -131,11 +131,7 @@ struct LogcatView: View {
         .controlSize(.small)
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
-        .background(GeometryReader { geo in
-            Color.clear.onChange(of: geo.size.width, initial: true) { _, width in
-                toolbarWidth = width
-            }
-        })
+        .measuringWidth(into: $toolbarWidth)
     }
 
     private var levelPicker: some View {

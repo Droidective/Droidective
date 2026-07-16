@@ -12,11 +12,23 @@ import Testing
     }
 
     @Test func overshootFiresOnlyPastTheBounds() {
-        #expect(!PaneSplit.overshoots(0.5))
-        #expect(!PaneSplit.overshoots(0.3))
-        #expect(!PaneSplit.overshoots(0.7))
-        #expect(PaneSplit.overshoots(0.29))
-        #expect(PaneSplit.overshoots(0.71))
+        // Wide window: the 30% fraction floor governs.
+        #expect(!PaneSplit.overshoots(0.5, total: 1608))
+        #expect(!PaneSplit.overshoots(0.3, total: 1608))
+        #expect(!PaneSplit.overshoots(0.7, total: 1608))
+        #expect(PaneSplit.overshoots(0.29, total: 1608))
+        #expect(PaneSplit.overshoots(0.71, total: 1608))
+        #expect(!PaneSplit.overshoots(0.1, total: 0))
+    }
+
+    @Test func overshootTracksTheEffectiveFloorOnANarrowWindow() {
+        // 908 total → 900 available; the 320pt floor sits at ~35.6%, so the
+        // divider freezes there — the hide must fire at that fraction, not
+        // after a dead zone down to 30%.
+        #expect(PaneSplit.overshoots(0.34, total: 908))
+        #expect(!PaneSplit.overshoots(0.36, total: 908))
+        #expect(PaneSplit.overshoots(0.66, total: 908))
+        #expect(!PaneSplit.overshoots(0.64, total: 908))
     }
 
     @Test func leftWidthHonoursTheFractionOnAWideWindow() {
@@ -36,6 +48,14 @@ import Testing
         // wins on both sides.
         #expect(PaneSplit.leftWidth(total: 908, fraction: 0.3) == 320)
         #expect(PaneSplit.leftWidth(total: 908, fraction: 0.7) == 580)
+    }
+
+    @Test func nanFractionClampsInsteadOfPropagating() {
+        // Safety rests on min/max returning one of their *arguments* (never
+        // synthesizing) and on the current argument order — a NaN reaching a
+        // SwiftUI frame width is a crash, so pin it.
+        #expect(PaneSplit.clampedFraction(.nan) == 0.3)
+        #expect(PaneSplit.leftWidth(total: 1608, fraction: .nan) == 480)
     }
 
     @Test func tinyWindowSplitsEvenlyInsteadOfOverflowing() {

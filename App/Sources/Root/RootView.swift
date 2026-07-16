@@ -17,6 +17,10 @@ struct RootView: View {
     /// width derived from `sidebarWidth`) mid-drag, which stuttered the drag.
     @State private var sidebarDragWidth: Double?
     @State private var splitDragFraction: Double?
+    /// An overshoot drag asked for sidebar room while the fixed sidebar was
+    /// up — honored when the drag ends, so the pane area never grows under
+    /// an active drag (which would slide the divider away from the cursor).
+    @State private var pendingSidebarHide = false
     @AppStorage("hasSeenTour") private var hasSeenTour = false
     @AppStorage("hasChosenRole") private var hasChosenRole = false
     @AppStorage("launchCount") private var launchCount = 0
@@ -473,7 +477,7 @@ struct RootView: View {
     private var panesArea: some View {
         GeometryReader { geo in
             let leftW = splitLeftWidth(geo.size.width)
-            let rightW = max(0, geo.size.width - leftW - 8)
+            let rightW = max(0, geo.size.width - leftW - PaneSplit.dividerWidth)
             HStack(spacing: 0) {
                 EditorPane(index: 0)
                     .frame(width: state.isSplit ? leftW : geo.size.width, alignment: .topLeading)
@@ -484,19 +488,37 @@ struct RootView: View {
                         totalWidth: geo.size.width,
                         onOvershoot: hideSidebarForSplitRoom
                     )
-                    .frame(width: 8)
+                    .frame(width: PaneSplit.dividerWidth)
                     EditorPane(index: 1)
                         .frame(width: rightW, alignment: .topLeading)
                         .clipped()
                 }
             }
             .navigationTitle(activeTitle)
+            // The deferred fixed-sidebar hide: fires when the drag ends
+            // (splitDragFraction → nil); a fresh drag re-arms cleanly.
+            .onChange(of: splitDragFraction == nil) { _, dragEnded in
+                if dragEnded, pendingSidebarHide {
+                    pendingSidebarHide = false
+                    state.hideSidebarForSplitRoom()
+                } else if !dragEnded {
+                    pendingSidebarHide = false
+                }
+            }
         }
     }
 
-    /// SplitDivider's overshoot hook — hides whichever sidebar variant shows.
+    /// SplitDivider's overshoot hook. The overlay sidebar takes no layout
+    /// width, so it hides immediately. The fixed sidebar DOES take width —
+    /// removing it mid-drag would grow the pane area under the pointer and
+    /// slide the divider away from the cursor, so its hide waits for the
+    /// drag to end.
     private func hideSidebarForSplitRoom() {
-        state.hideSidebarForSplitRoom()
+        if sidebarAutoHide {
+            state.hideSidebarForSplitRoom()
+        } else {
+            pendingSidebarHide = true
+        }
     }
 
     private func splitLeftWidth(_ totalW: CGFloat) -> CGFloat {
@@ -716,12 +738,20 @@ private struct SplitDivider: View {
             .gesture(
                 DragGesture(coordinateSpace: .named(ResizeHandle.dragSpace))
                     .onChanged { gesture in
+                        if startFraction == nil {
+                            // A gesture can end without onEnded (focus loss,
+                            // Cmd-Tab mid-drag) — heal what it left behind:
+                            // commit the stale live fraction and re-arm the
+                            // overshoot for this fresh drag.
+                            if let stale = live { fraction = stale }
+                            overshootFired = false
+                            startFraction = fraction
+                        }
                         let base = startFraction ?? fraction
-                        if startFraction == nil { startFraction = fraction }
                         let delta = totalWidth > 0 ? gesture.translation.width / totalWidth : 0
                         let raw = base + delta
                         live = PaneSplit.clampedFraction(raw)
-                        if PaneSplit.overshoots(raw), !overshootFired {
+                        if PaneSplit.overshoots(raw, total: totalWidth), !overshootFired {
                             overshootFired = true
                             onOvershoot()
                         }

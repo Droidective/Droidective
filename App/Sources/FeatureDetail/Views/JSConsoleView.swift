@@ -926,11 +926,7 @@ struct JSConsoleView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(GeometryReader { geo in
-            Color.clear.onChange(of: geo.size.width, initial: true) { _, width in
-                connectionBarWidth = width
-            }
-        })
+        .measuringWidth(into: $connectionBarWidth)
         .sheet(isPresented: $session.restartPickerVisible) {
             RestartAppPickerSheet(serial: state.targetSerials.first) { package in
                 session.restartPicked(package)
