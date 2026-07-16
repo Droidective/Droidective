@@ -631,7 +631,13 @@ private struct EditorPane: View {
     @State private var contentTargeted = false
 
     var body: some View {
-        VStack(spacing: 0) {
+        // Leading alignment, not the VStack default of center: a hidden tab
+        // whose content can't compress (a wide toolbar, the catalog grid)
+        // widens this VStack past the pane, and a centered tab strip then
+        // shifts right until the pane's clip eats its trailing scroll arrow.
+        // Pinning leading keeps the strip flush at x=0 so both ‹ › arrows stay
+        // inside the clipped pane regardless of how many tabs are open.
+        VStack(alignment: .leading, spacing: 0) {
             TabStripView(group: index)
             TabHostView(group: index)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

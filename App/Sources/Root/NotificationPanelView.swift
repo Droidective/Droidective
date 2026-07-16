@@ -139,6 +139,12 @@ struct NotificationBell: View {
                         Text(state.unreadNotifications > 99 ? "99+" : "\(state.unreadNotifications)")
                             .font(.app(size: 9, weight: .bold))
                             .foregroundStyle(.white)
+                            // The badge is an overlay sized to the bell (~16pt),
+                            // so a tight layout pass would propose the count too
+                            // little width and it truncated to "…"; hug the
+                            // content so the number always renders in full.
+                            .lineLimit(1)
+                            .fixedSize()
                             .padding(.horizontal, 3)
                             .frame(minWidth: 9)
                             .padding(.vertical, 1)
