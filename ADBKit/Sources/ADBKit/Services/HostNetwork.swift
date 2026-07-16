@@ -37,9 +37,12 @@ public enum HostNetwork {
                 address, socklen_t(address.pointee.sa_len),
                 &host, socklen_t(host.count), nil, 0, NI_NUMERICHOST
             ) == 0 else { continue }
+            // `String(cString: [CChar])` is deprecated — truncate at the NUL
+            // terminator and decode the bytes instead.
+            let hostBytes = host.prefix { $0 != 0 }.map(UInt8.init(bitPattern:))
             candidates.append(Candidate(
                 interface: String(cString: entry.pointee.ifa_name),
-                address: String(cString: host)))
+                address: String(decoding: hostBytes, as: UTF8.self)))
         }
         return pickPrimary(from: candidates)
     }
