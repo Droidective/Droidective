@@ -65,7 +65,7 @@ extension AppState {
     @discardableResult
     func installAPKs(_ urls: [URL], onSerials serials: [String]) async -> (report: String, ok: Bool) {
         guard !urls.isEmpty, !serials.isEmpty else { return ("", false) }
-        InstallNotifier.requestAuthorizationOnce()
+        SystemNotifier.requestAuthorizationOnce()
         var report: [String] = []
         var allOK = true
         await CommandLog.userInitiated {
@@ -88,7 +88,10 @@ extension AppState {
             }
         }
         let summary = report.joined(separator: "\n")
-        InstallNotifier.postIfBackgrounded(body: summary, ok: allOK)
+        SystemNotifier.postIfBackgrounded(
+            title: allOK ? "Install finished" : "Install failed",
+            body: summary.isEmpty ? (allOK ? "APK installed." : "The install didn't complete.") : summary,
+            sound: !allOK)
         return (summary, allOK)
     }
 
@@ -127,9 +130,11 @@ extension AppState {
     private static func installToast(
         name: String, ok: Int, total: Int, failures: [(serial: String, result: FeatureResult)]
     ) -> Toast {
+        // notifiesWhenBackgrounded is off: the batch posts one summary
+        // notification instead of one per APK.
         if failures.isEmpty {
             let message = total == 1 ? "Installed \(name)" : "Installed \(name) on \(total) devices"
-            return Toast(message: message, ok: true)
+            return Toast(message: message, ok: true, notifiesWhenBackgrounded: false)
         }
         let message = total == 1
             ? "Couldn't install \(name) — \(failures[0].result.message)"
@@ -140,6 +145,8 @@ extension AppState {
                 return total == 1 ? body : "\(failure.serial): \(body)"
             }
             .joined(separator: "\n\n")
-        return Toast(message: message, ok: false, copyText: detail.isEmpty ? nil : detail)
+        return Toast(
+            message: message, ok: false, copyText: detail.isEmpty ? nil : detail,
+            notifiesWhenBackgrounded: false)
     }
 }

@@ -36,6 +36,10 @@ struct Toast: Identifiable, Equatable {
     /// always are; a success only when it produced an artifact (a reveal
     /// path) — routine confirmations like "Copied" are dropped.
     let important: Bool
+    /// Whether this mirrors to a macOS notification when the app is
+    /// backgrounded. Defaults to `important`; install per-APK toasts opt out
+    /// because the batch posts one summary instead.
+    let notifiesWhenBackgrounded: Bool
 
     init(
         message: String,
@@ -44,7 +48,8 @@ struct Toast: Identifiable, Equatable {
         copyText: String? = nil,
         revealPath: String? = nil,
         action: NotificationAction? = nil,
-        important: Bool? = nil
+        important: Bool? = nil,
+        notifiesWhenBackgrounded: Bool? = nil
     ) {
         self.message = message
         self.ok = ok
@@ -53,8 +58,10 @@ struct Toast: Identifiable, Equatable {
         self.copyText = copyText
         self.revealPath = revealPath
         self.action = action
-        self.important = important
+        let resolvedImportant = important
             ?? (resolved == .error || resolved == .warning || revealPath != nil)
+        self.important = resolvedImportant
+        self.notifiesWhenBackgrounded = notifiesWhenBackgrounded ?? resolvedImportant
     }
 }
 
@@ -298,6 +305,10 @@ final class AppState {
 
     /// Wrap a slow operation so the UI shows what's happening (spinner).
     func withOperation<T: Sendable>(_ label: String, _ work: () async throws -> T) async rethrows -> T {
+        // A long task is starting — the in-context moment to ask for
+        // notification permission, so its completion can reach a user who
+        // switched away (see SystemNotifier).
+        SystemNotifier.requestAuthorizationOnce()
         runningOperation = OperationStatus(label: label)
         defer { runningOperation = nil }
         return try await work()
@@ -314,6 +325,7 @@ final class AppState {
         guard let expectedBytes, expectedBytes > 0 else {
             return try await withOperation(label, work)
         }
+        SystemNotifier.requestAuthorizationOnce()
         runningOperation = OperationStatus(label: label, fraction: 0)
         let poller = Task { [weak self] in
             while true {
@@ -1253,6 +1265,9 @@ final class AppState {
 
     func showToast(_ toast: Toast) {
         toasts.append(toast)
+        if toast.notifiesWhenBackgrounded {
+            SystemNotifier.postToastIfBackgrounded(toast)
+        }
         if toast.important {
             notifications.insert(
                 AppNotification(
