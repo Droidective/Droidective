@@ -7,9 +7,9 @@ import Foundation
 ///
 /// Everything runs as `java -jar …` against the toolchain-resolved runtime and
 /// the downloaded bundletool. All paths are argument-vector elements — no shell.
-/// bundletool signs the universal APK with `~/.android/debug.keystore` when one
-/// exists, which is what device installs need; release signing stays in APK
-/// Studio's Sign tab.
+/// With `credentials` bundletool signs the universal APK with that keystore;
+/// without, it falls back to `~/.android/debug.keystore` when one exists, which
+/// is what device installs need.
 public struct AabConvertService: Sendable {
     public enum ConvertError: Error, LocalizedError, Equatable {
         case toolMissing(String)

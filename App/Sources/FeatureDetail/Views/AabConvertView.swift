@@ -29,11 +29,9 @@ struct AabConvertView: View {
     @State private var stage = ConvertStage()
     @State private var converted: AabConvertService.ConvertedApk?
     @State private var convertError: String?
-    @State private var keystoreExpanded = false
-    @State private var keystoreURL: URL?
-    @State private var storePassword = ""
-    @State private var keyAlias = ""
-    @State private var keyPassword = ""
+    @State private var keyModel = SigningKeyModel()
+    @State private var editingSigning = false
+    @State private var signingSnapshot: SigningKeyModel.Snapshot?
 
     private var targets: [Device] {
         state.devices.filter { state.targetSerials.contains($0.serial) }
@@ -212,7 +210,7 @@ struct AabConvertView: View {
                 }
                 Button("Convert to APK") { Task { await convert() } }
                     .buttonStyle(.borderedProminent)
-                    .disabled(needsStorePassword)
+                    .disabled(!keyModel.isComplete)
             }
             Text(signingCaption)
                 .font(.app(.caption))
@@ -227,67 +225,51 @@ struct AabConvertView: View {
         }
     }
 
-    /// Optional release-keystore fields, collapsed by default — without them
-    /// bundletool signs with the debug keystore, which is all a device install
-    /// needs. A picked keystore requires its password before Convert enables.
+    /// One line saying how the APK will be signed (debug keystore by default —
+    /// all a device install needs) with a Change… button into the full key
+    /// picker: debug key, an existing keystore, or a keystore created in place.
     private var signingSection: some View {
-        DisclosureGroup(isExpanded: $keystoreExpanded) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    Text(keystoreURL?.lastPathComponent ?? "No keystore selected")
-                        .font(.app(.callout))
-                        .foregroundStyle(keystoreURL == nil ? AnyShapeStyle(.textMuted) : AnyShapeStyle(.primary))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    Button("Choose…") { chooseKeystore() }
-                    if keystoreURL != nil {
-                        Button("Remove") {
-                            keystoreURL = nil
-                            storePassword = ""
-                            keyAlias = ""
-                            keyPassword = ""
-                        }
-                    }
-                    Spacer()
-                }
-                if keystoreURL != nil {
-                    SecureField("Keystore password (required)", text: $storePassword)
-                        .textFieldStyle(.roundedBorder)
-                    TextField("Key alias — optional, for multi-key keystores", text: $keyAlias)
-                        .textFieldStyle(.roundedBorder)
-                    SecureField("Key password — optional, defaults to the keystore password", text: $keyPassword)
-                        .textFieldStyle(.roundedBorder)
-                }
+        HStack(spacing: 8) {
+            Label {
+                Text("Signing: ").foregroundStyle(.textMuted)
+                    + Text(keyModel.summary)
+            } icon: {
+                Image(systemName: "signature").foregroundStyle(.textMuted)
             }
-            .padding(.top, 8)
-        } label: {
-            Label("Sign with a release keystore — optional", systemImage: "signature")
-                .font(.app(.callout))
+            .font(.app(.callout))
+            .lineLimit(1)
+            .truncationMode(.middle)
+            Button("Change…") {
+                signingSnapshot = keyModel.snapshot()
+                editingSigning = true
+            }
+            .controlSize(.small)
         }
-        .frame(maxWidth: 420)
         .padding(.top, 4)
+        .sheet(isPresented: $editingSigning) { signingSheet }
     }
 
-    private var needsStorePassword: Bool {
-        keystoreURL != nil && storePassword.isEmpty
+    /// The shared signing-key picker in a cancel-safe sheet: Cancel restores
+    /// the fields as they were when it opened; Done is gated on a complete
+    /// choice, so the staged card can always convert.
+    private var signingSheet: some View {
+        SigningKeySheet(
+            model: keyModel,
+            onCancel: {
+                if let signingSnapshot { keyModel.restore(signingSnapshot) }
+                editingSigning = false
+            },
+            onDone: { editingSigning = false }
+        )
     }
 
     private var signingCaption: String {
-        if needsStorePassword {
-            return "Enter the keystore password to convert."
+        switch keyModel.mode {
+        case .existing:
+            return "Builds a universal APK signed with \(keyModel.keystoreURL?.lastPathComponent ?? "your keystore")."
+        case .debug, .create:
+            return "Builds a universal APK with bundletool — installable on any device."
         }
-        if let keystoreURL {
-            return "Builds a universal APK signed with \(keystoreURL.lastPathComponent)."
-        }
-        return "Builds a universal APK with bundletool — installable on any device."
-    }
-
-    private func chooseKeystore() {
-        let panel = NSOpenPanel()
-        panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = false
-        panel.message = "Choose a keystore (.jks / .keystore)"
-        if panel.runModal() == .OK, let url = panel.url { keystoreURL = url }
     }
 
     private var convertingStatus: some View {
@@ -410,12 +392,9 @@ struct AabConvertView: View {
         defer { converting = false }
         let stage = stage
         stage.text = "Building APKs with bundletool…"
-        let credentials = keystoreURL.map {
-            KeystoreCredentials(
-                keystorePath: $0.path, storePassword: storePassword,
-                keyAlias: keyAlias.isEmpty ? nil : keyAlias,
-                keyPassword: keyPassword.isEmpty ? nil : keyPassword)
-        }
+        // Debug mode passes nil — bundletool falls back to
+        // ~/.android/debug.keystore by itself.
+        let credentials = keyModel.releaseCredentials
         do {
             let outDir = try ScreenCaptureService.ensureCaptureDir()
             let result = try await state.withOperation("Converting \(aabURL.lastPathComponent) to APK…") {
