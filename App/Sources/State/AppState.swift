@@ -11,11 +11,18 @@ let sidebarAutoHideDefaultsKey = "sidebarAutoHide"
 /// A tappable follow-up a toast / notification row can carry, rendered as a
 /// button (see `AppState.performNotificationAction`).
 enum NotificationAction: Equatable, Sendable {
-    case checkForUpdates
+    /// Download and install an announced update (relaunches when done).
+    case updateNow
+    /// Relaunch into an update that's already downloaded and staged.
+    case relaunchToUpdate
+    /// Open the changelog modal for the update that just installed.
+    case showWhatsNew
 
     var buttonTitle: String {
         switch self {
-        case .checkForUpdates: return "Check for Updates"
+        case .updateNow: return "Update Now"
+        case .relaunchToUpdate: return "Relaunch"
+        case .showWhatsNew: return "What's New"
         }
     }
 }
@@ -151,6 +158,14 @@ final class AppState {
     /// History of important notifications (errors, warnings, key wins), newest
     /// first. Routine success toasts are not kept.
     var notifications: [AppNotification] = []
+    #if !APPSTORE
+    /// The changelog of the update that installed at this launch (consumed
+    /// from the stash by RootView's launch setup). Held for the session so
+    /// the "What's New" notification button can open it any time.
+    var whatsNew: UpdaterViewModel.WhatsNew?
+    /// Presents the changelog sheet (see `WhatsNewPresenter` on RootView).
+    var presentWhatsNew = false
+    #endif
     /// Whether the notifications side panel is open.
     var showNotifications = false
     /// Important notifications arrived since the panel was last opened.
@@ -162,7 +177,7 @@ final class AppState {
     /// Drives the first-launch / replayable welcome tour sheet.
     var presentTour = false
     /// True while the tour's final "try Quick Actions" page is on screen —
-    /// opening the panel is the tour's only exit (see TourView).
+    /// pressing the hotkey there finishes the tour with confetti (see TourView).
     var awaitingQuickActionsTry = false
     /// Bumped to fire a confetti burst over the main window (see
     /// `ConfettiCelebration` in RootView).
@@ -178,6 +193,15 @@ final class AppState {
         UserDefaults.standard.set(true, forKey: "hasSeenTour")
         presentTour = false
         confettiTrigger += 1
+    }
+
+    /// Ends the tour without the Quick Actions try — Skip, Finish, or an Esc
+    /// dismissal. Marks it seen so it never re-presents; no confetti (that's
+    /// the reward for pressing the hotkey for real).
+    func endTour() {
+        awaitingQuickActionsTry = false
+        UserDefaults.standard.set(true, forKey: "hasSeenTour")
+        presentTour = false
     }
     /// Drives the first-launch role picker (a full-window takeover) and the
     /// "Change role" flow. Picking a role seeds a curated feature set.
@@ -1312,15 +1336,22 @@ final class AppState {
     /// Perform a notification's follow-up (the button on its toast / panel
     /// row).
     func performNotificationAction(_ action: NotificationAction) {
+        #if !APPSTORE
         switch action {
-        case .checkForUpdates:
-            #if !APPSTORE
-            // Activate first — Sparkle's update window is useless behind an
-            // accessory app's hidden windows.
-            NSApp.activate(ignoringOtherApps: true)
-            SparkleUpdater.shared.checkForUpdates()
-            #endif
+        // No window needed for these — the download is silent and the
+        // relaunch takes the app down anyway.
+        case .updateNow: SparkleUpdater.shared.installAvailableUpdate()
+        case .relaunchToUpdate: SparkleUpdater.shared.relaunchNow()
+        case .showWhatsNew:
+            // The changelog sheet hangs off the main window — make sure one
+            // is up (the notification history is reachable in background
+            // mode too).
+            activateMainWindow()
+            presentWhatsNew = true
         }
+        #else
+        _ = action
+        #endif
     }
 
     // MARK: - Role

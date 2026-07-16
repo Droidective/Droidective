@@ -7,6 +7,9 @@ import SwiftUI
 /// pre-filled with diagnostics, release notes, and author info.
 struct AboutView: View {
     @Environment(AppState.self) private var state
+    #if !APPSTORE
+    @ObservedObject private var updater = SparkleUpdater.shared
+    #endif
 
     private var versionLine: String {
         let info = Bundle.main.infoDictionary
@@ -91,9 +94,12 @@ struct AboutView: View {
             linkRow(
                 icon: "arrow.triangle.2.circlepath",
                 title: "Check for updates",
-                detail: "Droidective checks automatically — you can also check right now.",
+                detail: "Droidective checks on launch and hourly, and installs when you relaunch — you can also check right now.",
                 button: "Check Now"
-            ) { SparkleUpdater.shared.checkForUpdates() }
+            ) { updater.checkForUpdates() }
+                // Same gate as the menu command and Settings — greyed out
+                // while a check or an update session is in flight.
+                .disabled(!updater.canCheckForUpdates)
             #endif
             linkRow(
                 icon: "shippingbox",

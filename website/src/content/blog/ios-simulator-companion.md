@@ -2,7 +2,7 @@
 
 *Droidective started as an Android debugging app — then booted iOS Simulators showed up in the same device bar. Here's the simctl workflow it replaces.*
 
-![Droidective with an iPhone 16 Pro simulator selected in the device bar and the Simulate hub open — Battery, Dark mode, and an APNS Push notification form](/blog-media/screenshot-ios-simulate.png)
+![Droidective with an iPhone 16 Pro simulator selected in the device bar and the Simulate hub open — Battery, Dark mode, and an APNS Push notification form](/blog-media/screenshot-ios-simulate.webp)
 *A booted iOS Simulator in the device bar, and the Simulate hub adapted to it — fake battery, dark mode, and a test push.*
 
 `xcrun simctl` is a genuinely great CLI — and almost nobody remembers its syntax. Sending a test push means hand-writing an APNS JSON payload and finding the right `simctl push` arguments. A clean status bar for App Store screenshots means the `status_bar override` subcommand with half a dozen flags. Toggling dark mode is `simctl ui booted appearance dark`, which you will look up every single time.
@@ -15,7 +15,7 @@ The **Emulators & Simulators** screen lists your simulators next to your Android
 
 ## The Simulate hub
 
-![The Simulate hub on iOS — Battery level slider, Dark mode toggle, and the Push notification APNS form](/blog-media/screenshot-ios-simulate.png)
+![The Simulate hub on iOS — Battery level slider, Dark mode toggle, and the Push notification APNS form](/blog-media/screenshot-ios-simulate.webp)
 *The hub detects the simulator and shows the iOS-relevant controls.*
 
 One screen for faking device state, adapted to the platform you've selected:
@@ -34,7 +34,7 @@ One screen for faking device state, adapted to the platform you've selected:
 
 ## The keystroke workflow
 
-![The ⌘T command palette](/blog-media/screenshot-palette.png)
+![The ⌘T command palette](/blog-media/screenshot-palette.webp)
 *⌘T fuzzy-searches every tool; the device bar decides where it runs.*
 
 Everything is behind the **⌘T** palette, and every feature can get a global hotkey — so "toggle dark mode on the simulator" becomes a keystroke you press from inside Xcode. The **Quick Actions panel** goes further: a global-hotkey panel that floats over whatever app you're in, without stealing focus:
@@ -44,7 +44,7 @@ Everything is behind the **⌘T** palette, and every feature can get a global ho
 
 For everything the buttons don't cover, the built-in **Terminal** gives you multi-tab login shells with split panes — your `xcrun simctl` muscle memory still works, one tab away:
 
-![The built-in terminal with split panes](/blog-media/screenshot-terminal.png)
+![The built-in terminal with split panes](/blog-media/screenshot-terminal.webp)
 *A real shell when you want one — with your saved one-liners in Custom Commands.*
 
 ## And if you also ship Android…

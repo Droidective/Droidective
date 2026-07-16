@@ -5,26 +5,37 @@ import DotGrid from "@/components/DotGrid"
 import { PaletteDemo } from "@/components/site/PaletteDemo"
 import { Reveal } from "@/components/site/Reveal"
 import { Button } from "@/components/ui/button"
+import { useFinePointer } from "@/hooks/useFinePointer"
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion"
 import { APP_VERSION, DOWNLOAD_URL, GITHUB_URL } from "@/lib/content"
 
 export function Hero() {
   const reducedMotion = usePrefersReducedMotion()
+  // The dot field reacts to the mouse; on touch devices it would just burn
+  // battery in a rAF loop, so those get the same field painted in CSS.
+  const finePointer = useFinePointer()
+  const staticHeading = reducedMotion || !finePointer
 
   return (
     <header id="top" className="relative overflow-hidden pt-19 pb-16">
       {/* Interactive dot field, masked so it fades toward the content */}
-      <div className="absolute inset-0" aria-hidden>
-        <DotGrid
-          dotSize={2.5}
-          gap={26}
-          baseColor="#1b1f1e"
-          activeColor="#9be021"
-          proximity={110}
-          shockRadius={220}
-          shockStrength={4}
-          className="opacity-70 [mask-image:radial-gradient(900px_600px_at_70%_0%,black,transparent_75%)]"
-        />
+      <div
+        className="absolute inset-0 opacity-70 [mask-image:radial-gradient(900px_600px_at_70%_0%,black,transparent_75%)]"
+        aria-hidden
+      >
+        {finePointer && !reducedMotion ? (
+          <DotGrid
+            dotSize={2.5}
+            gap={26}
+            baseColor="#1b1f1e"
+            activeColor="#9be021"
+            proximity={110}
+            shockRadius={220}
+            shockStrength={4}
+          />
+        ) : (
+          <div className="h-full w-full bg-[radial-gradient(circle,#1b1f1e_1.25px,transparent_1.25px)] bg-[size:28.5px_28.5px]" />
+        )}
       </div>
       {/* Green glow behind the palette */}
       <div
@@ -34,12 +45,12 @@ export function Hero() {
 
       <div className="relative mx-auto grid max-w-[1120px] items-center gap-14 px-6 max-[940px]:grid-cols-1 max-[940px]:gap-11 min-[940px]:grid-cols-[0.92fr_1.08fr]">
         <div>
-          <span className="mb-6 inline-flex items-center gap-2.25 rounded-full border border-border bg-white/3 px-3.25 py-1.5 font-mono text-[12.5px] text-muted">
-            <span className="size-1.75 rounded-full bg-green shadow-[0_0_10px_var(--color-green)]" />
+          <span className="mb-6 inline-flex items-center gap-2.25 rounded-full border border-border bg-white/3 px-3.25 py-1.5 font-mono text-[12.5px] text-muted max-[620px]:items-start max-[620px]:rounded-xl">
+            <span className="size-1.75 shrink-0 rounded-full bg-green shadow-[0_0_10px_var(--color-green)] max-[620px]:mt-1.5" />
             Free &amp; open source · Signed &amp; notarized · macOS 14+ · Apple Silicon &amp; Intel
           </span>
           <h1 className="mb-5.5 max-w-[14ch] text-[clamp(38px,5.4vw,62px)] leading-[1.02] font-extrabold tracking-[-0.035em] max-[940px]:max-w-[18ch]">
-            {reducedMotion ? (
+            {staticHeading ? (
               <>
                 Every adb tool, <span className="text-green">one keystroke</span> away.
               </>

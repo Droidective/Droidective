@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion"
 import { paletteCommands, paletteQueries } from "@/lib/content"
@@ -19,12 +19,25 @@ function matches(query: string, keys: string, name: string): boolean {
 export function PaletteDemo() {
   const reducedMotion = usePrefersReducedMotion()
   const [query, setQuery] = useState("")
+  const [inView, setInView] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  // The typing loop re-renders the whole list every 45–95ms; only run it
+  // while the palette is actually on screen.
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const observer = new IntersectionObserver(([entry]) => setInView(entry?.isIntersecting ?? false))
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
 
   useEffect(() => {
     if (reducedMotion) {
       setQuery("logcat")
       return
     }
+    if (!inView) return
     let cancelled = false
     let timer: ReturnType<typeof setTimeout>
     const sleep = (ms: number) =>
@@ -55,13 +68,14 @@ export function PaletteDemo() {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [reducedMotion])
+  }, [reducedMotion, inView])
 
   const visible = paletteCommands.filter((c) => matches(query, c.keys, c.name))
   const activeName = visible[0]?.name
 
   return (
     <div
+      ref={ref}
       aria-hidden
       className="overflow-hidden rounded-[18px] border border-border-2 bg-linear-to-b from-ink-700 to-ink-800 shadow-[0_40px_110px_-30px_rgba(0,0,0,0.8),0_0_0_1px_rgba(155,224,33,0.06),inset_0_1px_0_rgba(231,234,229,0.04)]"
     >

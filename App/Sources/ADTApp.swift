@@ -472,6 +472,12 @@ struct MenuBarView: View {
         }
         Divider()
 
+        #if !APPSTORE
+        // Background mode has no sidebar pill — surface a pending update
+        // here so menu-bar-only users still see it. Hidden when idle.
+        UpdateMenuItems()
+        #endif
+
         // Always-on quick actions — no window needed.
         Button("Quick Actions…") {
             QuickActionsPanel.toggle(state: state)

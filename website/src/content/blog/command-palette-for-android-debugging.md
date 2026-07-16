@@ -13,14 +13,14 @@ This post is the grand tour. If you want the version tailored to your job, I've 
 
 ## One keystroke to everything
 
-![The ⌘T command palette filtering all features for a query](/blog-media/screenshot-palette.png)
+![The ⌘T command palette filtering all features for a query](/blog-media/screenshot-palette.webp)
 *⌘T from any screen fuzzy-searches all 56 tools.*
 
 The palette is the spine of the app. Every tool — from a one-shot action like *Copy Device IP* to a full screen like the *File Explorer* — is searchable by name and by the words you'd actually think of ("fps" finds the Performance Monitor, "force stop" finds Apps). Pin your favorites, bind a global hotkey to any feature, and stop looking up flags.
 
 A persistent **device bar** follows you everywhere. Plug in two phones and an emulator, and every command targets the device you've selected — or fans out to all of them at once for things like installing an APK.
 
-![The Home screen with a multi-tab strip across the top](/blog-media/screenshot-tabs.png)
+![The Home screen with a multi-tab strip across the top](/blog-media/screenshot-tabs.webp)
 *Your most-used tools live in tabs, each one keystroke away.*
 
 ## A workspace, not a single window
@@ -37,14 +37,14 @@ And when you don't want to leave whatever you're working in, there's the **Quick
 
 ## Logs and diagnostics that don't fight you
 
-![Live logcat streaming color-coded lines with level, app, tag and text filters](/blog-media/screenshot-logcat.png)
+![Live logcat streaming color-coded lines with level, app, tag and text filters](/blog-media/screenshot-logcat.webp)
 *Logcat with the filters you actually reach for.*
 
 **Logcat** streams live with filters by level, app, tag, or text — and it can follow an app across restarts, so a crash-reboot loop doesn't lose you the trail. The **Crash Catcher** watches for crashes and formats the last one ready to paste into Slack or Jira. **Bug Report** zips a screenshot, logs, device info, and the app version into one attachable file.
 
 ## Performance you can see
 
-![The performance monitor charting per-core CPU, RAM and network throughput live](/blog-media/screenshot-performance.png)
+![The performance monitor charting per-core CPU, RAM and network throughput live](/blog-media/screenshot-performance.webp)
 *Per-core CPU, RAM, FPS & jank, and network throughput — charted live.*
 
 The **Performance Monitor** graphs per-core CPU, system RAM, app FPS and jank, and per-process usage as they happen. Record a session and export it to JSON or CSV. A separate **Network Speed** tool charts live upload/download throughput straight from the device.
@@ -57,7 +57,7 @@ Screenshots open in a full annotation editor: pen, shapes, arrows, text, blur or
 
 ## Made for React Native too
 
-![The React Native hub — reload JS, dev menu, Metro port forwarding, dev-server host](/blog-media/screenshot-react.png)
+![The React Native hub — reload JS, dev menu, Metro port forwarding, dev-server host](/blog-media/screenshot-react.webp)
 *The RN essentials in one hub.*
 
 There's a dedicated React Native hub — reload the JS bundle, open the dev menu, reverse the Metro port, simulate process death, save deep links per app. And two features I'm particularly proud of:
@@ -70,18 +70,18 @@ There's a dedicated React Native hub — reload the JS bundle, open the dev menu
 
 ## Files, apps, and the device itself
 
-![The file explorer browsing device storage](/blog-media/screenshot-files.png)
+![The file explorer browsing device storage](/blog-media/screenshot-files.webp)
 *Browse, push, and pull with a real progress bar.*
 
 * **File Explorer** — browse shared storage (or the whole filesystem on rooted devices), copy, move, delete, push and pull.
 * **Apps Explorer** — every installed and system app with info, runtime permissions, force-stop, clear data, pull APK, and a sandbox browser for debug builds.
 
-![The apps explorer with a selected app's info, permissions, and controls](/blog-media/screenshot-apps.png)
+![The apps explorer with a selected app's info, permissions, and controls](/blog-media/screenshot-apps.webp)
 *Per-app management without a single `pm` command.*
 
 * **Device Info** — RAM, storage, battery health, CPU, and every `getprop`, searchable.
 
-![Device info showing RAM, storage, battery health and CPU](/blog-media/screenshot-device.png)
+![Device info showing RAM, storage, battery health and CPU](/blog-media/screenshot-device.webp)
 *Everything `getprop` knows, without `adb shell` spelunking.*
 
 ## Simulate any state
@@ -90,21 +90,21 @@ Fake the battery level, force dark mode, switch the locale, scale fonts and disp
 
 ## For the power users
 
-![The built-in terminal split into panes, running adb against a device](/blog-media/screenshot-terminal.png)
+![The built-in terminal split into panes, running adb against a device](/blog-media/screenshot-terminal.webp)
 *When you do want a shell, it's built in — and already pointed at your device.*
 
 A real **Terminal** lives inside the app: multi-tab PTY login shells with the selected device exported as `ANDROID_SERIAL`, split panes (⌘D), and a find bar. **Custom Commands** let you save your own adb one-liners, shell scripts, and presets — they run through your login shell, so your aliases work.
 
 There's also a full **APK toolchain**: inspect a manifest, decompile with jadx or apktool, recompile, and sign — plus one-click Frida setup for instrumentation work.
 
-![Global hotkey settings — a shortcut to summon the app and one per feature](/blog-media/screenshot-hotkeys.png)
+![Global hotkey settings — a shortcut to summon the app and one per feature](/blog-media/screenshot-hotkeys.webp)
 *Bind a global shortcut to summon the app, and one per feature.*
 
 ## Pick your role, get your tools
 
 On first launch, Droidective asks what you do — Android developer, React Native developer, iOS developer (yes, booted iOS Simulators sit right in the device bar), QA, support, or security — and curates the sidebar around your actual workflow. Everything else stays a ⌘T away, and the full 56-tool catalog is there to toggle, reorder, and pin.
 
-![The feature catalog listing all 56 tools with toggles](/blog-media/screenshot-catalog.png)
+![The feature catalog listing all 56 tools with toggles](/blog-media/screenshot-catalog.webp)
 *All 56 tools — turn off the ones you don't want.*
 
 ## Free, open source, and honest about your data

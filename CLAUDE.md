@@ -314,10 +314,11 @@ platforms annotation without a runner.
   mistaken for a window close). The app stays resident for the menu bar, the
   per-feature hotkeys, and `QuickActionsPanel` — a **non-activating**
   `FloatingPanelController` panel (global hotkey in Settings ▸ Hotkeys; the
-  welcome tour ends on two mandatory pages — record the hotkey (Next gated
+  welcome tour ends on two Quick Actions pages — record the hotkey (Next gated
   until one is set, ⇧⌘Space recommended), then a try-it finale whose keycap
-  animation waits for the real press: opening the panel is the tour's only
-  exit and fires the confetti, `AppState.noteQuickActionsOpened`) that is
+  animation invites the real press: opening the panel fires the confetti,
+  `AppState.noteQuickActionsOpened`, but Skip/Finish/Esc also end the tour,
+  `AppState.endTour`) that is
   a small push-navigation mini app. The root is a *grid* of everything
   runnable in place — saved custom commands (pinnable, stored on the
   command), every *enabled* implemented

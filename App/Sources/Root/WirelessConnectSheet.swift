@@ -128,7 +128,7 @@ struct WirelessConnectSheet: View {
                     HubField("IP address & port", prompt: "192.168.1.42:40913", text: $pairConnectEndpoint)
                     Button("Connect") { runConnect(pairConnectEndpoint) }
                         .buttonStyle(.borderedProminent)
-                        .disabled(busy || completeEndpoint(pairConnectEndpoint) == nil)
+                        .disabled(busy || ConnectionService.parseConnectEndpoint(pairConnectEndpoint) == nil)
                 }
             }
         }
@@ -146,7 +146,7 @@ struct WirelessConnectSheet: View {
                 HubField("IP address & port", prompt: "192.168.1.42:5555", text: $connectEndpoint)
                 Button("Connect") { runConnect(connectEndpoint) }
                     .buttonStyle(.borderedProminent)
-                    .disabled(busy || completeEndpoint(connectEndpoint) == nil)
+                    .disabled(busy || ConnectionService.parseConnectEndpoint(connectEndpoint) == nil)
             }
         }
     }
@@ -213,8 +213,8 @@ struct WirelessConnectSheet: View {
         return (endpoint.host, endpoint.port ?? "", code)
     }
 
-    /// An endpoint that parses *and* carries a port — both adb commands here
-    /// need one.
+    /// The pairing endpoint must parse *and* carry an explicit port — the
+    /// pairing port is random per session, so nothing sensible to default to.
     private func completeEndpoint(_ text: String) -> WirelessEndpoint? {
         guard let endpoint = ConnectionService.parseEndpoint(text), endpoint.port != nil else { return nil }
         return endpoint
@@ -231,8 +231,10 @@ struct WirelessConnectSheet: View {
         }
     }
 
+    /// Connect fields take a bare IP too — it defaults to adb's port 5555.
     private func runConnect(_ endpointText: String) {
-        guard let endpoint = completeEndpoint(endpointText), let port = endpoint.port else { return }
+        guard let endpoint = ConnectionService.parseConnectEndpoint(endpointText),
+              let port = endpoint.port else { return }
         let connection = state.env.engine.connection
         run({ try await connection.connect(host: endpoint.host, port: port) }) { result in
             finishConnected(result, address: "\(endpoint.host):\(port)")
