@@ -429,6 +429,16 @@ public enum FeatureRegistry {
             needsDevice: false
         ),
         FeatureDef(
+            id: "aab-convert", title: "AAB to APK",
+            subtitle: "Convert an Android App Bundle into an installable APK",
+            keywords: [
+                "aab", "bundle", "app bundle", "android app bundle", "bundletool",
+                "convert", "universal", "universal apk", "apks", "build-apks", "apk",
+            ],
+            category: .appManagement, icon: "shippingbox", kind: .view,
+            needsDevice: false
+        ),
+        FeatureDef(
             id: "frida-console", title: "Frida",
             subtitle: "Set up frida-server or frida-gadget for instrumentation",
             keywords: [
@@ -615,7 +625,7 @@ public enum FeatureRegistry {
         // (files, memory, current activity) → interaction/capture → infra.
         .androidDeveloper: [
             "logcat", "crash-catcher", "performance",
-            "device-info", "apps", "install-app", "apk-studio",
+            "device-info", "apps", "install-app", "apk-studio", "aab-convert",
             "file-explorer", "sandbox-browser", "meminfo",
             "current-activity", "foreground-package",
             "scrcpy", "screenshot", "send-text", "monkey",
@@ -627,7 +637,7 @@ public enum FeatureRegistry {
         .reactNativeDeveloper: [
             "react-native", "reactotron", "js-console",
             "logcat", "crash-catcher", "performance", "network-speed",
-            "apps", "install-app", "apk-studio",
+            "apps", "install-app", "apk-studio", "aab-convert",
             "device-info", "scrcpy", "screenshot", "send-text",
             "emulators", "connection",
             "terminal", "custom-commands",
@@ -665,7 +675,7 @@ public enum FeatureRegistry {
         // interception, then utilities. `simulate` is here for its HTTP-proxy
         // member (route the device through Burp/mitmproxy).
         .securityTester: [
-            "apk-studio", "apps", "device-info", "root-status",
+            "apk-studio", "aab-convert", "apps", "device-info", "root-status",
             "frida-console", "logcat", "crash-catcher",
             "sandbox-browser", "file-explorer",
             "simulate", "connection", "install-app",

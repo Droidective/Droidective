@@ -34,6 +34,26 @@ import Testing
         FileManager.default.temporaryDirectory.appendingPathComponent("toolstore-\(UUID().uuidString)")
     }
 
+    @Test func seedInstallsABundledCopyAndResolvesIt() async throws {
+        let jar = FileManager.default.temporaryDirectory.appendingPathComponent("bundletool-all.jar")
+        try Data("BUNDLED-JAR".utf8).write(to: jar)
+        defer { try? FileManager.default.removeItem(at: jar) }
+        let store = ManagedToolStore(rootDirectory: tempRoot())
+
+        try await store.seed(.bundletool, version: "1.18.3", from: jar)
+
+        #expect(await store.installedVersion(.bundletool) == "1.18.3")
+        #expect(await store.resolve(.bundletool)?.hasSuffix("bundletool-all.jar") == true)
+        // Idempotent: seeding the same version again is a no-op, not a crash.
+        try await store.seed(.bundletool, version: "1.18.3", from: jar)
+        // A newer bundled copy (an app update) upgrades in place …
+        try await store.seed(.bundletool, version: "1.19.0", from: jar)
+        #expect(await store.installedVersion(.bundletool) == "1.19.0")
+        // … but an older one never downgrades a newer install.
+        try await store.seed(.bundletool, version: "1.18.3", from: jar)
+        #expect(await store.installedVersion(.bundletool) == "1.19.0")
+    }
+
     @Test func installsApktoolJarAndResolvesIt() async throws {
         let bytes = Data("FAKE-JAR".utf8)
         let http = MockHTTP(releaseJSON: releaseJSON(tag: "v2.11.0", assetName: "apktool_2.11.0.jar"), assetBytes: bytes)

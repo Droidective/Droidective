@@ -253,6 +253,7 @@ struct TabStripView: View {
         case "home": return "Home"
         case "catalog": return "Manage Features"
         case "about": return "About"
+        case "apk-open": return "Install APK"
         default:
             return FeatureRegistry.byID[id]
                 .map { FeatureRegistry.presented($0, for: role).title } ?? id
@@ -264,6 +265,7 @@ struct TabStripView: View {
         case "home": return "house"
         case "catalog": return "square.grid.2x2"
         case "about": return "info.circle"
+        case "apk-open": return "arrow.down.app"
         default: return FeatureRegistry.byID[id]?.icon ?? "square"
         }
     }

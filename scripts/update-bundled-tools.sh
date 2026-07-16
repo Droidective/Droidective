@@ -15,6 +15,8 @@
 set -euo pipefail
 
 SCRCPY_VERSION="${1:-4.1}"
+BUNDLETOOL_VERSION="${2:-1.18.3}"
+UBER_APK_SIGNER_VERSION="${3:-1.3.0}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RES="$ROOT/App/Resources"
 TMP="$(mktemp -d)"
@@ -27,6 +29,8 @@ trap 'rm -rf "$TMP"' EXIT
 # here in the same commit that bumps the version.
 SCRCPY_SERVER_SHA256="deacb991ed2509715160ffdc7907e47b4160eb30d1566217e9047fd5b8850cae"
 FFMPEG_SHA256="eaf91238e104dd0e262bc6510e25061855cc99a6955a721b0ac99660d58c473d"
+BUNDLETOOL_SHA256="a099cfa1543f55593bc2ed16a70a7c67fe54b1747bb7301f37fdfd6d91028e29"
+UBER_APK_SIGNER_SHA256="e1299fd6fcf4da527dd53735b56127e8ea922a321128123b9c32d619bba1d835"
 
 verify_sha256() {
   local file="$1" expected="$2" name="$3"
@@ -57,11 +61,26 @@ chmod +x "$RES/ffmpeg"
 
 ffmpeg_version="$("$RES/ffmpeg" -version | head -1 | cut -d' ' -f3)"
 
+echo "==> bundletool $BUNDLETOOL_VERSION"
+curl -fsSL -o "$TMP/bundletool-all.jar" \
+  "https://github.com/google/bundletool/releases/download/${BUNDLETOOL_VERSION}/bundletool-all-${BUNDLETOOL_VERSION}.jar"
+verify_sha256 "$TMP/bundletool-all.jar" "$BUNDLETOOL_SHA256" "bundletool"
+mv "$TMP/bundletool-all.jar" "$RES/bundletool-all.jar"
+
+echo "==> uber-apk-signer $UBER_APK_SIGNER_VERSION"
+curl -fsSL -o "$TMP/uber-apk-signer.jar" \
+  "https://github.com/patrickfav/uber-apk-signer/releases/download/v${UBER_APK_SIGNER_VERSION}/uber-apk-signer-${UBER_APK_SIGNER_VERSION}.jar"
+verify_sha256 "$TMP/uber-apk-signer.jar" "$UBER_APK_SIGNER_SHA256" "uber-apk-signer"
+mv "$TMP/uber-apk-signer.jar" "$RES/uber-apk-signer.jar"
+
 echo
 echo "Bundled (sha256):"
-printf '  scrcpy-server  %s\n' "$(shasum -a 256 "$RES/scrcpy-server" | cut -d' ' -f1)"
-printf '  ffmpeg         %s\n' "$(shasum -a 256 "$RES/ffmpeg" | cut -d' ' -f1)"
+printf '  scrcpy-server    %s\n' "$(shasum -a 256 "$RES/scrcpy-server" | cut -d' ' -f1)"
+printf '  ffmpeg           %s\n' "$(shasum -a 256 "$RES/ffmpeg" | cut -d' ' -f1)"
+printf '  bundletool       %s\n' "$(shasum -a 256 "$RES/bundletool-all.jar" | cut -d' ' -f1)"
+printf '  uber-apk-signer  %s\n' "$(shasum -a 256 "$RES/uber-apk-signer.jar" | cut -d' ' -f1)"
 echo
-echo "Versions: scrcpy=$SCRCPY_VERSION  ffmpeg=$ffmpeg_version"
-echo "Next: set BundledTools.scrcpyVersion=\"$SCRCPY_VERSION\" if it changed,"
-echo "update the ffmpeg version in THIRD_PARTY_NOTICES.md, then 'make build' and commit."
+echo "Versions: scrcpy=$SCRCPY_VERSION  ffmpeg=$ffmpeg_version  bundletool=$BUNDLETOOL_VERSION  uber-apk-signer=$UBER_APK_SIGNER_VERSION"
+echo "Next: set BundledTools.scrcpyVersion / .bundletoolVersion / .uberApkSignerVersion"
+echo "(and the matching pins in ManagedToolSpec.catalog) if they changed, update"
+echo "THIRD_PARTY_NOTICES.md, then 'make build' and commit."

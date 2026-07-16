@@ -39,6 +39,32 @@ own MIT license is unaffected. The obligation is to make ffmpeg's corresponding
 source and license available to recipients, which the upstream links above
 satisfy; the unmodified binary is redistributed under GPLv3.
 
+## bundletool
+
+`App/Resources/bundletool-all.jar` is [bundletool](https://github.com/google/bundletool)
+(v1.18.3), Google's command-line tool for Android App Bundles, bundled and run
+via `java -jar` on the Mac so the AAB to APK feature converts `.aab` files to
+universal APKs with no first-use download (a copy is seeded into
+Application Support's managed tools, where Settings ▸ Tools can upgrade it).
+
+- Project: bundletool — Copyright Google LLC
+- License: Apache License 2.0 — https://github.com/google/bundletool/blob/master/LICENSE
+- The pinned SHA-256 in `scripts/update-bundled-tools.sh` is the source of
+  truth for the exact bundled jar; the jar is redistributed unmodified under
+  the terms of the Apache License 2.0.
+
+## uber-apk-signer
+
+`App/Resources/uber-apk-signer.jar` is [uber-apk-signer](https://github.com/patrickfav/uber-apk-signer)
+(v1.3.0), bundled and seeded into Application Support's managed tools so APK
+signing helpers work with no first-use download.
+
+- Project: uber-apk-signer — Copyright Patrick Favre-Bulle
+- License: Apache License 2.0 — https://github.com/patrickfav/uber-apk-signer/blob/main/LICENSE
+- The pinned SHA-256 in `scripts/update-bundled-tools.sh` is the source of
+  truth for the exact bundled jar; the jar is redistributed unmodified under
+  the terms of the Apache License 2.0.
+
 ## CodeMirror
 
 `App/Resources/codemirror-editor.html` bundles a built, offline copy of

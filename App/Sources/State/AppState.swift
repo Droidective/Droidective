@@ -79,6 +79,11 @@ final class AppState {
     /// cache is wiped alongside it — see `AppDelegate.applicationWillTerminate`).
     let apkStudio = ApkStudioSession()
 
+    /// The Finder-opened-APK screen's files (the `apk-open` workspace tab —
+    /// deliberately not a registry feature; it exists only when a file
+    /// arrives). In-memory like the studio session.
+    let apkOpen = ApkOpenSession()
+
     /// Everything connected, both platforms: adb devices first, then booted
     /// iOS Simulators. Rebuilt whenever either monitor publishes.
     var devices: [Device] = []
@@ -261,10 +266,9 @@ final class AppState {
     var bundles: [AppBundle] = []
     var selectedBundleId: String?
     var adbStatus: ToolStatus?
-    /// APKs opened from Finder (double-click / Open With), handed to the Install
-    /// App feature to stage for an explicit install. The view consumes (clears)
-    /// it once shown.
-    var pendingInstallAPKs: [URL] = []
+    /// An `.aab` opened from Finder (double-click / Open With), staged for the
+    /// AAB to APK feature. The view consumes (clears) it once shown.
+    var pendingConvertAAB: URL?
     /// Set by RootView so hotkeys/menu bar can reopen a closed main window.
     var openMainWindow: (() -> Void)?
     /// The real app delegate (the adaptor instance, wired in `ADTApp.body`) —
@@ -286,6 +290,11 @@ final class AppState {
     /// The long-running operation in flight (pull, record, copy…) — the
     /// progress strip under the device bar reflects it.
     var runningOperation: OperationStatus?
+
+    /// APK installs in flight or recently finished (one entry per APK ×
+    /// device). The install screens render these live; the progress strip
+    /// mirrors the running ones via `installOperation` (AppState+Install).
+    var installJobs: [InstallJob] = []
 
     /// Wrap a slow operation so the UI shows what's happening (spinner).
     func withOperation<T: Sendable>(_ label: String, _ work: () async throws -> T) async rethrows -> T {
@@ -984,9 +993,9 @@ final class AppState {
     }
 
     /// Ids that can back a tab: every registry feature plus the standalone
-    /// Home / About / Catalog screens.
+    /// Home / About / Catalog screens and the Finder-opened-APK screen.
     private static func isValidTabID(_ id: String) -> Bool {
-        FeatureRegistry.byID[id] != nil || ["home", "about", "catalog"].contains(id)
+        FeatureRegistry.byID[id] != nil || ["home", "about", "catalog", "apk-open"].contains(id)
     }
 
     private var isForeground = true
@@ -1240,72 +1249,6 @@ final class AppState {
             copyText: result.copyText,
             revealPath: result.revealPath
         ))
-    }
-
-    /// Route APKs opened from Finder to the Install App feature: surface the main
-    /// window, stage the files there, and select the feature so the user confirms
-    /// the target device and installs.
-    func openAPKs(_ urls: [URL]) {
-        guard !urls.isEmpty else { return }
-        pendingInstallAPKs = urls
-        activateMainWindow()
-        // Route through the leave guard like every other feature switch: opening
-        // an APK from Finder mid-recording (or with unsaved edits) must raise the
-        // confirmation, not silently abandon that work. The staged APKs wait in
-        // `pendingInstallAPKs` and are consumed once Install App actually appears.
-        requestFeature("install-app")
-    }
-
-    /// Install one or more APKs on the given device serials, one toast per APK
-    /// (failures keep the full adb output in the toast's copyText). Returns a
-    /// short multi-line summary for inline display plus whether every install
-    /// landed. Shared by the Install App screen's drop zone, the file picker,
-    /// and APKs opened from Finder.
-    @discardableResult
-    func installAPKs(_ urls: [URL], onSerials serials: [String]) async -> (report: String, ok: Bool) {
-        guard !urls.isEmpty, !serials.isEmpty else { return ("", false) }
-        var report: [String] = []
-        var allOK = true
-        await CommandLog.userInitiated {
-            for url in urls {
-                let name = url.lastPathComponent
-                var ok = 0
-                var failures: [(serial: String, result: FeatureResult)] = []
-                for serial in serials {
-                    let result = (try? await env.engine.appInstall.install(apkPath: url.path, serial: serial))
-                        ?? FeatureResult(ok: false, message: "adb not found")
-                    if result.ok { ok += 1 } else { failures.append((serial, result)) }
-                }
-                if !failures.isEmpty { allOK = false }
-                showToast(Self.installToast(name: name, ok: ok, total: serials.count, failures: failures))
-                report.append(ok == serials.count
-                    ? "Installed \(name)"
-                    : "Installed \(name) on \(ok) of \(serials.count) devices")
-            }
-        }
-        return (report.joined(separator: "\n"), allOK)
-    }
-
-    /// A short install headline for the toast; on failure the full adb output is
-    /// kept in `copyText` so the notifications panel carries the detail without
-    /// dumping it into the transient toast.
-    private static func installToast(
-        name: String, ok: Int, total: Int, failures: [(serial: String, result: FeatureResult)]
-    ) -> Toast {
-        if failures.isEmpty {
-            let message = total == 1 ? "Installed \(name)" : "Installed \(name) on \(total) devices"
-            return Toast(message: message, ok: true)
-        }
-        let message = total == 1
-            ? "Couldn't install \(name) — \(failures[0].result.message)"
-            : "Installed \(name) on \(ok)/\(total) devices — \(failures.count) failed"
-        let detail = failures
-            .map { failure in
-                let body = failure.result.copyText ?? failure.result.message
-                return total == 1 ? body : "\(failure.serial): \(body)"
-            }
-            .joined(separator: "\n\n")
-        return Toast(message: message, ok: false, copyText: detail.isEmpty ? nil : detail)
     }
 
     func showToast(_ toast: Toast) {

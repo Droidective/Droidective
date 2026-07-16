@@ -43,4 +43,5 @@ public struct ApkToolchain: Sendable {
     public func jadx() async -> String? { await store.resolve(.jadx) }
     public func apktool() async -> String? { await store.resolve(.apktool) }
     public func uberApkSigner() async -> String? { await store.resolve(.uberApkSigner) }
+    public func bundletool() async -> String? { await store.resolve(.bundletool) }
 }

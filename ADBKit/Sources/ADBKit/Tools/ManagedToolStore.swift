@@ -127,6 +127,10 @@ public actor ManagedToolStore {
             case .digestMismatch: "The download failed its checksum — it may be corrupt or tampered with."
             case .extractionFailed(let reason): "Couldn't unpack the download: \(reason)"
             case .runnableNotFound(let tool): "Unpacked \(tool.rawValue) but couldn't find its program."
+            case .http(403):
+                // Anonymous GitHub API calls are capped per IP (60/hour); the
+                // release lookup 403s once it's hit. Transient — say so.
+                "GitHub's anonymous request limit was reached — try again in a few minutes."
             case .http(let code): "Download failed (HTTP \(code))."
             }
         }
@@ -236,6 +240,21 @@ public actor ManagedToolStore {
         }
         try markCurrent(tool, tag: release.tagName)
         return runnablePath
+    }
+
+    /// Install a copy shipped inside the app bundle (a "factory seed") unless
+    /// an equal-or-newer version is already installed. Features get the tool
+    /// with no first-use download, while Settings ▸ Tools keeps version
+    /// tracking and in-place upgrades over it. Idempotent.
+    public func seed(_ tool: ManagedTool, version: String, from source: URL) throws {
+        if let installed = installedVersion(tool),
+           !ManagedToolReleases.isNewer(version, than: installed) { return }
+        guard let spec = ManagedToolSpec.catalog[tool] else { throw StoreError.unsupported(tool) }
+        let versionDir = toolRoot(tool).appendingPathComponent(sanitize(version), isDirectory: true)
+        try recreateDirectory(versionDir)
+        try fileManager.copyItem(at: source, to: versionDir.appendingPathComponent(source.lastPathComponent))
+        guard runnable(in: versionDir, spec: spec) != nil else { throw StoreError.runnableNotFound(tool) }
+        try markCurrent(tool, tag: version)
     }
 
     // MARK: - Internals

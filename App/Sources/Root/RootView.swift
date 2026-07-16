@@ -158,17 +158,21 @@ struct RootView: View {
                     .tint(.brandAccent)
             }
         }
-        // A double-clicked APK opens the Quick Actions panel on its options
-        // screen (install in place / APK Studio / the Install App screen)
-        // instead of taking over the main window. Anything else handed to
+        // A double-clicked APK opens the in-window opened-APK screen (install
+        // with live status / APK Studio); a double-clicked AAB opens the AAB
+        // to APK converter with the bundle staged. Anything else handed to
         // "Open With → Droidective" gets a toast instead of silence.
+        // Factory-seed the bundled tools into the managed store (idempotent)
+        // so the AAB converter works offline with no first-use download.
+        Task { await BundledTools.seed(into: state.env.engine.managedTools) }
         InstallInbox.shared.onReceive = { urls in
             let apks = urls.filter { $0.pathExtension.lowercased() == "apk" }
-            for other in urls where other.pathExtension.lowercased() != "apk" {
-                state.showToast(Toast(message: "Not an APK: \(other.lastPathComponent)", ok: false))
+            let aabs = urls.filter { $0.pathExtension.lowercased() == "aab" }
+            for other in urls where !["apk", "aab"].contains(other.pathExtension.lowercased()) {
+                state.showToast(Toast(message: "Not an APK or AAB: \(other.lastPathComponent)", ok: false))
             }
-            guard !apks.isEmpty else { return }
-            QuickActionsPanel.showAPKOptions(apks, state: state)
+            if !apks.isEmpty { state.openAPKs(apks) }
+            if !aabs.isEmpty { state.openAABs(aabs) }
         }
         #if !APPSTORE
         // An update the user closed or skipped resurfaces here — once per
@@ -427,7 +431,7 @@ struct RootView: View {
                 // progress strip) out from under a live feature in the other.
                 if state.workspace.groups.contains(where: { $0.activeTab != "catalog" }) {
                     DeviceBarView()
-                    if let operation = state.runningOperation {
+                    if let operation = state.runningOperation ?? state.installOperation {
                         OperationProgressStrip(operation: operation)
                     }
                 }
@@ -562,6 +566,7 @@ struct RootView: View {
         case "home": return "Home"
         case "catalog": return "Feature Catalog"
         case "about": return "About & Feedback"
+        case "apk-open": return "Install APK"
         case let id?: return FeatureRegistry.byID[id].map { state.presented($0).title } ?? ""
         }
     }

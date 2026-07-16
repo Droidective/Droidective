@@ -89,6 +89,14 @@ import Testing
         #expect(ManagedToolReleases.selectAsset(rel, spec: server, arch: "mips") == nil)
     }
 
+    @Test func bundletoolPicksTheAllJarNotSources() throws {
+        let spec = ManagedToolSpec.catalog[.bundletool]!
+        let rel = try release(tag: "1.18.3", assetNames: [
+            "bundletool-1.18.3-sources.jar", "bundletool-all-1.18.3.jar",
+        ])
+        #expect(ManagedToolReleases.selectAsset(rel, spec: spec, arch: "")?.name == "bundletool-all-1.18.3.jar")
+    }
+
     // MARK: version comparison
 
     @Test func isNewerComparesNumericComponents() {
@@ -97,6 +105,14 @@ import Testing
         #expect(!ManagedToolReleases.isNewer("v1.5.0", than: "v1.5.0"))   // equal → not newer
         #expect(ManagedToolReleases.isNewer("jdk-21.0.4+7", than: "jdk-21.0.3+9"))
         #expect(!ManagedToolReleases.isNewer("jdk-21.0.3+9", than: "jdk-21.0.4+7"))
+    }
+
+    // MARK: error messages
+
+    @Test func rateLimited403ExplainsItselfInsteadOfABareCode() {
+        let message = ManagedToolStore.StoreError.http(403).errorDescription ?? ""
+        #expect(message.contains("limit"))
+        #expect(ManagedToolStore.StoreError.http(500).errorDescription == "Download failed (HTTP 500).")
     }
 
     // MARK: catalog invariants
