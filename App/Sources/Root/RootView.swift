@@ -352,13 +352,38 @@ struct RootView: View {
     /// across 1.0×.
     private var zoomedContent: some View {
         GeometryReader { geo in
+            let logicalWidth = geo.size.width / state.fontScale
             split
                 .frame(
-                    width: geo.size.width / state.fontScale,
+                    width: logicalWidth,
                     height: geo.size.height / state.fontScale,
                     alignment: .topLeading
                 )
                 .scaleEffect(state.fontScale, anchor: .topLeading)
+                .onChange(of: logicalWidth, initial: true) { _, width in
+                    updateCompactSidebar(logicalWidth: width)
+                }
+        }
+    }
+
+    /// Whether the sidebar is in overlay/hover mode right now — either the user
+    /// turned on auto-hide (Settings ▸ Appearance / the device-bar button), or
+    /// the window is narrow enough that we auto-collapse it (`compactWidth`) so
+    /// the detail pane stays usable. Both go through the same overlay paths.
+    private var effectiveAutoHide: Bool { sidebarAutoHide || state.compactWidth }
+
+    /// Collapse the sidebar into the hover overlay once the window is tight
+    /// enough that a pinned sidebar would leave the detail pane under ~470pt,
+    /// and pin it again when there's room. A ~50pt hysteresis band keeps it from
+    /// flickering as the user drags across the threshold. Only drives
+    /// `compactWidth`; the user's stored auto-hide preference is left untouched.
+    private func updateCompactSidebar(logicalWidth: CGFloat) {
+        let sidebar = min(max(sidebarWidth, 300), 460)
+        let collapseBelow = sidebar + 478
+        if !state.compactWidth, logicalWidth < collapseBelow {
+            withAnimation(.easeInOut(duration: 0.18)) { state.compactWidth = true }
+        } else if state.compactWidth, logicalWidth > collapseBelow + 52 {
+            withAnimation(.easeInOut(duration: 0.18)) { state.compactWidth = false }
         }
     }
 
@@ -366,7 +391,7 @@ struct RootView: View {
     /// full-height VS Code-style sidebar with a single continuous divider.
     private var split: some View {
         HStack(spacing: 0) {
-            if state.sidebarVisible && !sidebarAutoHide {
+            if state.sidebarVisible && !effectiveAutoHide {
                 SidebarPaletteView()
                     .frame(width: sidebarDragWidth ?? min(max(sidebarWidth, 300), 460))
                     .transition(.move(edge: .leading).combined(with: .opacity))
@@ -419,7 +444,7 @@ struct RootView: View {
         // continuous-hover tracker on the whole split decides both — a thin
         // transparent hot-strip never received hover events reliably.
         .onContinuousHover { phase in
-            guard sidebarAutoHide, case .active(let point) = phase else { return }
+            guard effectiveAutoHide, case .active(let point) = phase else { return }
             if point.x <= 8, !state.sidebarOverlayShown {
                 withAnimation(.easeOut(duration: 0.18)) { state.sidebarOverlayShown = true }
             } else if state.sidebarOverlayShown, point.x > overlaySidebarWidth + 8 {
@@ -427,7 +452,7 @@ struct RootView: View {
             }
         }
         .overlay(alignment: .leading) {
-            if sidebarAutoHide && state.sidebarOverlayShown {
+            if effectiveAutoHide && state.sidebarOverlayShown {
                 SidebarPaletteView()
                     .frame(width: overlaySidebarWidth)
                     .background(.bgSurface)
@@ -451,6 +476,12 @@ struct RootView: View {
             if !autoHide, !state.sidebarVisible {
                 withAnimation(.easeInOut(duration: 0.18)) { state.sidebarVisible = true }
             }
+        }
+        // Entering compact collapses the sidebar into the peek overlay; leaving
+        // it drops the overlay so the pinned sidebar (still `sidebarVisible`)
+        // slides back in. Same reset as the manual mode flip above.
+        .onChange(of: state.compactWidth) { _, _ in
+            state.sidebarOverlayShown = false
         }
         // The stationary ancestor space both seam drags measure in — a drag
         // measured in the handle's own space feeds back on itself as the

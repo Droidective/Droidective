@@ -250,6 +250,13 @@ final class AppState {
     /// visibility, driven by the left-edge hover zone and ⌘B.
     var sidebarOverlayShown = false
 
+    /// True while the window is narrow enough that a pinned sidebar would crush
+    /// the detail pane. RootView then puts the sidebar into the same
+    /// overlay-on-hover mode as the manual auto-hide — without touching the
+    /// user's stored `sidebarAutoHide` preference, so widening the window
+    /// restores whatever mode they chose. Transient; never persisted.
+    var compactWidth = false
+
     func toggleSidebar() {
         if UserDefaults.standard.bool(forKey: sidebarAutoHideDefaultsKey) {
             withAnimation(.easeInOut(duration: 0.18)) { sidebarOverlayShown.toggle() }
