@@ -28,6 +28,7 @@ struct ManagedToolsSettingsView: View {
         Item(tool: .jadx, name: "jadx", purpose: "Decompile APKs to Java"),
         Item(tool: .apktool, name: "apktool", purpose: "Disassemble & rebuild APKs"),
         Item(tool: .uberApkSigner, name: "uber-apk-signer", purpose: "Batch APK signing"),
+        Item(tool: .bundletool, name: "bundletool", purpose: "Convert AABs to universal APKs"),
         Item(tool: .temurinJre, name: "Temurin JRE", purpose: "Java runtime for the tools above"),
     ]
 

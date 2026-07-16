@@ -94,6 +94,38 @@ import Testing
         #expect(loaded.quickPanelHiddenIds == nil)
     }
 
+    @Test func presetsWrittenBeforeSnippetsDecodeWithEmptySnippets() async throws {
+        // A presets.json from a build predating Send Text snippets must still
+        // decode — a missing key must not set the user's presets aside as
+        // corrupt.
+        let dir = try tempDir()
+        let legacy = #"{"reversePorts": [9090], "proxies": ["10.0.0.5:8888"]}"#
+        try Data(legacy.utf8).write(to: dir.appendingPathComponent("presets.json"))
+        let store = JSONStore(filename: "presets.json", default: Presets(), directory: dir)
+        let loaded = await store.load()
+        #expect(loaded.reversePorts == [9090])
+        #expect(loaded.proxies == ["10.0.0.5:8888"])
+        #expect(loaded.sendTextSnippets.isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: dir.appendingPathComponent("presets.json.corrupt").path))
+    }
+
+    @Test func presetsRoundTripSnippets() async throws {
+        let dir = try tempDir()
+        let store = JSONStore(filename: "presets.json", default: Presets(), directory: dir)
+        try await store.update {
+            $0.addSnippet(named: "Login email", text: "user@example.com")
+            $0.addSnippet(named: "Metro host", text: "{ip}:8081")
+            $0.recordSnippetUse(named: "Metro host")
+        }
+
+        let fresh = JSONStore(filename: "presets.json", default: Presets(), directory: dir)
+        let loaded = await fresh.load()
+        #expect(loaded.sendTextSnippets == [
+            SendTextSnippet(name: "Login email", text: "user@example.com", uses: 0),
+            SendTextSnippet(name: "Metro host", text: "{ip}:8081", uses: 1),
+        ])
+    }
+
     @Test func decodesReferenceAppPrefsShape() async throws {
         let dir = try tempDir()
         let referenceShape = #"{"selectedSerial": "X", "runOnAll": false, "selectedBundleId": null}"#

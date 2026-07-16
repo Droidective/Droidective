@@ -1,5 +1,6 @@
 import ADBKit
 import Foundation
+import os
 
 /// Single source of truth for the third-party binaries shipped inside the app
 /// bundle, so Droidective is self-contained (no separate scrcpy/ffmpeg
@@ -34,4 +35,37 @@ enum BundledTools {
     static func ffmpegPath() -> String? {
         Bundle.main.url(forResource: ffmpegResource, withExtension: nil)?.path
     }
+
+    /// Jar releases bundled under versionless names (so upgrades don't touch
+    /// project.yml). Keep each in lockstep with the jar in `App/Resources` and
+    /// its pin in `ManagedToolSpec.catalog`.
+    static let bundletoolVersion = "1.18.3"
+    static let uberApkSignerVersion = "v1.3.0"
+
+    /// Copy the bundled tools into the managed-tool store ("factory seed") so
+    /// the AAB converter and APK signing work offline out of the box;
+    /// Settings ▸ Tools keeps version-tracking and upgrading over the seeded
+    /// copies. Idempotent and never downgrades — safe to call at every launch
+    /// and before every gate check.
+    static func seed(into store: ManagedToolStore) async {
+        await seed(.bundletool, resource: "bundletool-all", version: bundletoolVersion, into: store)
+        await seed(.uberApkSigner, resource: "uber-apk-signer", version: uberApkSignerVersion, into: store)
+    }
+
+    private static func seed(
+        _ tool: ManagedTool, resource: String, version: String, into store: ManagedToolStore
+    ) async {
+        guard let jar = Bundle.main.url(forResource: resource, withExtension: "jar") else {
+            log.error("\(resource).jar missing from the app bundle — \(tool.rawValue) falls back to its download gate")
+            return
+        }
+        do {
+            try await store.seed(tool, version: version, from: jar)
+        } catch {
+            // Not fatal: the download gates and Settings ▸ Tools still work.
+            log.error("seeding \(tool.rawValue) failed: \(error.localizedDescription)")
+        }
+    }
+
+    private static let log = Logger(subsystem: "com.rohindh.droidective", category: "bundled-tools")
 }

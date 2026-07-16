@@ -1,4 +1,5 @@
 import ADBKit
+import AppKit
 import SwiftUI
 
 /// Generic form generated from a feature's `[FieldDef]`. Field values are
@@ -11,6 +12,13 @@ struct FormActionView: View {
     @State private var boolValues: [String: Bool] = [:]
     @State private var sliderValues: [String: Double] = [:]
     @State private var presets = Presets()
+    /// Send Text: the Mac's LAN IP — the `{ip}` placeholder value, and (for
+    /// the React Native role) a quick insert in the snippets menu, since
+    /// Metro's "Debug server host" is `<mac-ip>:8081`.
+    @State private var macIP: String?
+    @State private var creatingSnippet = false
+    @State private var newSnippetName = ""
+    @State private var newSnippetText = ""
     @State private var confirmingRun = false
     @FocusState private var focusedField: String?
     /// Send Text: wipe the field after a successful send, for firing a sequence
@@ -87,6 +95,9 @@ struct FormActionView: View {
         }
         .task {
             presets = await state.env.stores.presets.load()
+            if isSendText {
+                macIP = HostNetwork.primaryIPv4()
+            }
         }
     }
 
@@ -169,24 +180,17 @@ struct FormActionView: View {
     private func control(for field: FieldDef) -> some View {
         switch field.control {
         case .text, .number, .bundle:
-            TextField("", text: binding(for: field), prompt: field.placeholder.map(Text.init))
-                .brandField()
-                .focused($focusedField, equals: field.name)
-                .overlay(alignment: .trailing) {
-                    if isSendText, field.name == "text", !(textValues[field.name] ?? "").isEmpty {
-                        Button {
-                            textValues[field.name] = ""
-                            focusedField = field.name
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.textMuted)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .padding(.trailing, 6)
-                        .help("Clear the text")
+            if isSendText, field.name == "text" {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 4) {
+                        plainTextField(for: field)
+                        snippetsMenu(for: field)
                     }
+                    snippetTags(for: field)
                 }
+            } else {
+                plainTextField(for: field)
+            }
         case .preset:
             presetField(for: field)
         case .select:
@@ -205,6 +209,191 @@ struct FormActionView: View {
             VStack(alignment: .leading) {
                 Text("\(field.label): \(sliderValues[field.name] ?? defaultSlider(field), specifier: "%.2f")")
                 Slider(value: sliderBinding(for: field), in: range, step: field.step ?? 1)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func plainTextField(for field: FieldDef) -> some View {
+        TextField("", text: binding(for: field), prompt: field.placeholder.map(Text.init))
+            .brandField()
+            .focused($focusedField, equals: field.name)
+            .overlay(alignment: .trailing) {
+                if isSendText, field.name == "text", !(textValues[field.name] ?? "").isEmpty {
+                    Button {
+                        textValues[field.name] = ""
+                        focusedField = field.name
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.textMuted)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.trailing, 6)
+                    .help("Clear the text")
+                }
+            }
+    }
+
+    // MARK: - Send Text snippets
+
+    /// The full snippet list plus management: every saved snippet by name,
+    /// the Mac's IP as a quick insert for the React Native role, New
+    /// Snippet…, and removal. The top-5 tags below the field cover the
+    /// everyday inserts; this menu is the complete library.
+    private func snippetsMenu(for field: FieldDef) -> some View {
+        Menu {
+            if state.selectedRole == .reactNativeDeveloper, let macIP {
+                Section("This Mac") {
+                    Button("IP address — \(macIP)") { textValues[field.name] = macIP }
+                }
+            }
+            if !presets.sendTextSnippets.isEmpty {
+                Section("Snippets") {
+                    ForEach(presets.sendTextSnippets) { snippet in
+                        Button(snippet.name) { insert(snippet, into: field) }
+                    }
+                }
+            }
+            Section {
+                Button("New Snippet…") { beginCreatingSnippet(for: field) }
+                if !presets.sendTextSnippets.isEmpty {
+                    Menu("Remove Snippet") {
+                        ForEach(presets.sendTextSnippets) { snippet in
+                            Button(snippet.name) {
+                                presets.removeSnippet(named: snippet.name)
+                                persistPresets()
+                            }
+                        }
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "bookmark")
+                .foregroundStyle(.textMuted)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Snippets — insert a saved text")
+    }
+
+    /// The most-used snippets as one-click tags under the field, capped at 5,
+    /// ending with the ＋ chip that creates a new snippet in a popover.
+    private func snippetTags(for field: FieldDef) -> some View {
+        SnippetTagFlow(spacing: 6) {
+            ForEach(presets.topSnippets(limit: 5)) { snippet in
+                Button {
+                    insert(snippet, into: field)
+                } label: {
+                    Text(snippet.name)
+                        .font(.app(.caption))
+                        .lineLimit(1)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(.quaternary, in: Capsule())
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .help(snippet.text)
+            }
+            Button {
+                beginCreatingSnippet(for: field)
+            } label: {
+                Label("New", systemImage: "plus")
+                    .font(.app(.caption))
+                    .labelStyle(.titleAndIcon)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .overlay(Capsule().strokeBorder(.borderSubtle))
+                    .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.textMuted)
+            .help("Save a snippet — supports {clipboard} and {ip}")
+            .popover(isPresented: $creatingSnippet, arrowEdge: .bottom) {
+                newSnippetPopover(for: field)
+            }
+        }
+    }
+
+    private func newSnippetPopover(for field: FieldDef) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("New snippet")
+                .font(.app(.headline))
+            TextField("Name", text: $newSnippetName, prompt: Text("Name — shown on the tag"))
+                .textFieldStyle(.roundedBorder)
+                .onChange(of: newSnippetName) { _, value in
+                    if value.count > SendTextSnippet.nameLimit {
+                        newSnippetName = String(value.prefix(SendTextSnippet.nameLimit))
+                    }
+                }
+            TextField("Text", text: $newSnippetText, prompt: Text("Text to insert…"), axis: .vertical)
+                .textFieldStyle(.roundedBorder)
+                .lineLimit(1...4)
+                .onSubmit { saveNewSnippet() }
+            Text("{clipboard} and {ip} fill in with the live value when inserted.")
+                .font(.app(.caption))
+                .foregroundStyle(.textMuted)
+            HStack {
+                Text("\(newSnippetName.count)/\(SendTextSnippet.nameLimit)")
+                    .font(.app(.caption2).monospacedDigit())
+                    .foregroundStyle(.tertiary)
+                Spacer()
+                Button("Cancel") { creatingSnippet = false }
+                    .keyboardShortcut(.cancelAction)
+                Button("Save") { saveNewSnippet() }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!canSaveNewSnippet)
+            }
+        }
+        .padding(14)
+        .frame(width: 300)
+    }
+
+    private var canSaveNewSnippet: Bool {
+        let name = newSnippetName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !name.isEmpty && !newSnippetText.isEmpty
+            && !presets.sendTextSnippets.contains { $0.name == name }
+    }
+
+    /// Prefill the text with what's already typed — "save what I just sent"
+    /// stays one click.
+    private func beginCreatingSnippet(for field: FieldDef) {
+        newSnippetName = ""
+        newSnippetText = textValues[field.name] ?? ""
+        creatingSnippet = true
+    }
+
+    private func saveNewSnippet() {
+        guard canSaveNewSnippet else { return }
+        presets.addSnippet(named: newSnippetName, text: newSnippetText)
+        persistPresets()
+        creatingSnippet = false
+    }
+
+    /// Insert a snippet: placeholders expand to their live values and the use
+    /// count behind the top-5 tags bumps.
+    private func insert(_ snippet: SendTextSnippet, into field: FieldDef) {
+        textValues[field.name] = SnippetPlaceholders.expand(snippet.text, values: placeholderValues())
+        presets.recordSnippetUse(named: snippet.name)
+        persistPresets()
+    }
+
+    private func placeholderValues() -> [String: String] {
+        var values: [String: String] = [:]
+        if let clipboard = NSPasteboard.general.string(forType: .string) { values["clipboard"] = clipboard }
+        if let macIP { values["ip"] = macIP }
+        return values
+    }
+
+    private func persistPresets() {
+        let updated = presets
+        Task {
+            do {
+                try await state.env.stores.presets.save(updated)
+            } catch {
+                state.showToast(Toast(message: "Couldn't save the snippet: \(error.localizedDescription)", ok: false))
             }
         }
     }
@@ -291,4 +480,43 @@ struct FormActionView: View {
         )
     }
 
+}
+
+/// Wraps the snippet tags onto new lines when they overflow the field width
+/// (same shape as ApkInspectorView's FlowChips).
+private struct SnippetTagFlow: Layout {
+    var spacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0
+        for view in subviews {
+            let size = view.sizeThatFits(.unspecified)
+            if x + size.width > maxWidth, x > 0 {
+                x = 0
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+        }
+        return CGSize(width: maxWidth == .infinity ? x : maxWidth, height: y + rowHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) {
+        var x = bounds.minX
+        var y = bounds.minY
+        var rowHeight: CGFloat = 0
+        for view in subviews {
+            let size = view.sizeThatFits(.unspecified)
+            if x + size.width > bounds.maxX, x > bounds.minX {
+                x = bounds.minX
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            view.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+        }
+    }
 }

@@ -22,30 +22,6 @@ enum QuickActionsPanel {
         present(state: state)
     }
 
-    /// APKs double-clicked in Finder land here (via `InstallInbox`): the panel
-    /// opens straight on the APK options screen — install in place, or take
-    /// the file into APK Studio / the Install App screen.
-    static func showAPKOptions(_ urls: [URL], state: AppState) {
-        guard !urls.isEmpty else { return }
-        // Same expiry rule as toggle — a stale session's device pick (worst
-        // case a stale "All devices") must not govern this install.
-        resetSessionIfExpired()
-        let memory = QuickPanelMemory.shared
-        memory.stack = [.apk(urls)]
-        memory.closedAt = nil
-        let controller = FloatingPanelController.quickActions
-        // Rebuild if already up — the view seeds its screen stack at init.
-        if controller.isVisible { controller.close() }
-        // The app activation that delivered the APK can shuffle key windows
-        // for a beat; don't let that churn dismiss the panel it opens.
-        controller.holdsThroughResign = true
-        present(state: state)
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(1500))
-            controller.holdsThroughResign = false
-        }
-    }
-
     /// Clear the resumable session once it's older than the Settings ▸ Quick
     /// Actions window (0 = never resume).
     private static func resetSessionIfExpired() {
@@ -94,9 +70,6 @@ enum QuickScreen: Equatable {
     /// Interstitial before a {bundleId} custom command when no bundle is
     /// selected: saved bundles plus the target device's installed apps.
     case pickBundle
-    /// Options for APKs opened from Finder: install in place, or hand them to
-    /// APK Studio / the Install App screen in the main window.
-    case apk([URL])
 }
 
 /// The panel's session state, kept outside the view so closing (click-away,
@@ -366,8 +339,6 @@ struct QuickActionsView: View {
         case .emulators: return virtualDevicesBootPlaceholder
         case .pickDevice: return "Pick a device for this action…"
         case .pickBundle: return "Pick an app for this command…"
-        case .apk(let urls):
-            return urls.count == 1 ? urls[0].lastPathComponent : "\(urls.count) APKs"
         case .form: return ""
         }
     }
@@ -509,11 +480,6 @@ struct QuickActionsView: View {
             /// Install APK from the grid: ask for files first.
             case installAPK
             /// Install these specific files (the Finder-opened APK screen).
-            case installFiles([URL])
-            /// Load an APK into APK Studio on `tab` and open the main window.
-            case openStudio(tab: ApkStudioTab, url: URL)
-            /// Stage the files in the main window's Install App screen.
-            case stageInstallScreen([URL])
             case appVerb(AppControlService.AppAction, packageId: String)
             case launchAvd(Avd)
             case bootSimulator(Simulator)
@@ -549,7 +515,6 @@ struct QuickActionsView: View {
         case .emulators: return Array(emulatorRows.prefix(8))
         case .pickDevice: return pickDeviceRows
         case .pickBundle: return pickBundleRows
-        case .apk(let urls): return apkRows(urls)
         case .form: return []
         }
     }
@@ -810,48 +775,6 @@ struct QuickActionsView: View {
         readyDevices.filter {
             query.isEmpty || state.deviceTitle($0).localizedCaseInsensitiveContains(query)
         }
-    }
-
-    /// What you can do with Finder-opened APKs: install right here, or hand
-    /// them to APK Studio (inspect/decompile/sign) or the Install App screen.
-    /// The studio takes one APK — with several, it gets the first.
-    private func apkRows(_ urls: [URL]) -> [QuickRow] {
-        guard let first = urls.first else { return [] }
-        let name = urls.count == 1 ? first.lastPathComponent : "\(urls.count) APKs"
-        var rows = [QuickRow(
-            id: "apk:install", icon: "arrow.down.app",
-            title: "Install", subtitle: "Install \(name) on a device",
-            action: .installFiles(urls)
-        )]
-        let studioTabs: [(String, ApkStudioTab)] = [
-            ("apk-inspector", .inspect),
-            ("apk-decompile", .decompile),
-            ("apk-sign", .sign),
-        ]
-        // Loading this APK replaces whatever APK Studio already has open —
-        // if a different session is loaded, ask for the confirming second ⏎
-        // like the destructive app verbs do.
-        let clobbersStudio = state.apkStudio.apk.map { $0 != first } ?? false
-        rows += studioTabs.compactMap { featureID, tab in
-            guard let feature = FeatureRegistry.byID[featureID] else { return nil }
-            return QuickRow(
-                id: "apk:\(featureID)", icon: feature.icon,
-                title: feature.title,
-                subtitle: clobbersStudio
-                    ? "Replaces the APK loaded in APK Studio"
-                    : "\(first.lastPathComponent) in APK Studio",
-                destructive: clobbersStudio,
-                action: .openStudio(tab: tab, url: first)
-            )
-        }
-        rows.append(QuickRow(
-            id: "apk:install-screen", icon: "square.grid.3x3",
-            title: "Open in App",
-            subtitle: "Stage \(name) with the full device picker",
-            action: .stageInstallScreen(urls)
-        ))
-        guard !query.isEmpty else { return rows }
-        return rows.filter { $0.title.localizedCaseInsensitiveContains(query) }
     }
 
     /// The interstitial's rows — one per ready device, no persistent-selection
@@ -1365,7 +1288,7 @@ struct QuickActionsView: View {
         case .runCommand(let command):
             let scoped = command.kind == .adb || command.command.contains("{serial}")
             return (scoped, scoped)
-        case .installAPK, .installFiles:
+        case .installAPK:
             return (true, true)
         default:
             return (false, false)
@@ -1389,20 +1312,6 @@ struct QuickActionsView: View {
             state.requestFeature(feature.id)
         case .installAPK:
             pickAndInstallAPKs()
-        case .installFiles(let urls):
-            install(urls)
-        case .openStudio(let tab, let url):
-            // Load the studio session before opening — the studio view renders
-            // whatever `apkStudio.apk` holds, on the chosen tab.
-            state.apkStudio.apk = url
-            state.apkStudio.signInput = nil
-            state.apkStudio.tab = tab
-            onClose()
-            state.activateMainWindow()
-            state.requestFeature("apk-studio")
-        case .stageInstallScreen(let urls):
-            onClose()
-            state.openAPKs(urls)
         case .appVerb(let verb, let packageId):
             run(verb, packageId: packageId)
         case .launchAvd(let avd):
@@ -1625,7 +1534,9 @@ struct QuickActionsView: View {
     }
 
     /// Install APKs on the panel's target device(s) — one device, or the
-    /// serials an "All devices" pick approved.
+    /// serials an "All devices" pick approved. The install runs in the
+    /// background (closing the panel doesn't cancel it); a toast — and a macOS
+    /// notification when the app isn't frontmost — reports the result.
     private func install(_ urls: [URL]) {
         let serials = PanelTargeting.fanOut(
             picked: pickedSerial, selected: state.selectedSerial,
@@ -1635,15 +1546,13 @@ struct QuickActionsView: View {
             lastRun = QuickRunOutcome(message: "No device connected.", ok: false)
             return
         }
-        runningRowID = "native:install"
-        lastRun = nil
-        Task {
-            let outcome = await state.installAPKs(urls, onSerials: serials)
-            finish(QuickRunOutcome(
-                message: outcome.report.components(separatedBy: "\n").first ?? "Install finished",
-                ok: outcome.ok
-            ))
-        }
+        state.startInstall(urls, onSerials: serials)
+        let name = urls.count == 1 ? urls[0].lastPathComponent : "\(urls.count) APKs"
+        let target = serials.count == 1 ? "" : " on \(serials.count) devices"
+        finish(QuickRunOutcome(
+            message: "Installing \(name)\(target)… — you'll be notified when it finishes",
+            ok: true
+        ))
     }
 
     /// Show the outcome in the footer. The panel stays up — chain more

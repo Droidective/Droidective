@@ -7,7 +7,6 @@ import SwiftUI
 /// pre-filled with diagnostics, release notes, and author info.
 struct AboutView: View {
     @Environment(AppState.self) private var state
-    @Environment(\.colorScheme) private var colorScheme
     #if !APPSTORE
     @ObservedObject private var updater = SparkleUpdater.shared
     #endif
@@ -39,7 +38,7 @@ struct AboutView: View {
 
     private var header: some View {
         HStack(spacing: 16) {
-            Image(colorScheme == .dark ? "AppLogoDark" : "AppLogoLight")
+            Image("AppLogoLight")
                 .resizable()
                 .frame(width: 60, height: 60)
             VStack(alignment: .leading, spacing: 4) {

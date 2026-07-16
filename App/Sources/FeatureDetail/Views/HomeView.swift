@@ -9,7 +9,6 @@ import SwiftUI
 /// app, and the no-device onboarding when nothing is connected.
 struct HomeView: View {
     @Environment(AppState.self) private var state
-    @Environment(\.colorScheme) private var colorScheme
     @State private var showMore = false
     @State private var query = ""
 
@@ -171,7 +170,7 @@ struct HomeView: View {
     }
 
     private var logo: some View {
-        Image(colorScheme == .dark ? "AppLogoDark" : "AppLogoLight")
+        Image("AppLogoLight")
             .resizable()
             .frame(width: 60, height: 60)
     }

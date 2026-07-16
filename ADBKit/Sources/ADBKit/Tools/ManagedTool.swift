@@ -10,6 +10,7 @@ public enum ManagedTool: String, Sendable, CaseIterable, Codable {
     case fridaServer = "frida-server"
     case fridaGadget = "frida-gadget"
     case temurinJre = "temurin-jre"
+    case bundletool
 }
 
 /// How a downloaded release asset turns into a runnable artifact.
@@ -83,6 +84,9 @@ public struct ManagedToolSpec: Sendable, Equatable {
             tool: .temurinJre, owner: "adoptium", repo: "temurin21-binaries",
             pinnedTag: "jdk-21.0.11+10", kind: .tarGz,
             assetPattern: #"^OpenJDK21U-jre_{arch}_mac_hotspot_.*\.tar\.gz$"#, runnableName: "java"),
+        .bundletool: ManagedToolSpec(
+            tool: .bundletool, owner: "google", repo: "bundletool", pinnedTag: "1.18.3",
+            kind: .jar, assetPattern: #"^bundletool-all-.*\.jar$"#),
     ]
 }
 

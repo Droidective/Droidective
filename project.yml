@@ -40,6 +40,10 @@ targets:
         buildPhase: resources
       - path: App/Resources/ffmpeg
         buildPhase: resources
+      - path: App/Resources/bundletool-all.jar
+        buildPhase: resources
+      - path: App/Resources/uber-apk-signer.jar
+        buildPhase: resources
     dependencies:
       - package: ADBKit
         product: ADBKit
@@ -81,6 +85,13 @@ targets:
             UTTypeTagSpecification:
               public.filename-extension:
                 - apk
+          - UTTypeIdentifier: com.android.app-bundle
+            UTTypeDescription: Android App Bundle
+            UTTypeConformsTo:
+              - public.data
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - aab
         # The app's private drag types (DragTypes.swift). macOS only writes a
         # custom UTI to the drag pasteboard when the app declares it, so an
         # undeclared type makes every .onDrag with it die silently — no drop
@@ -100,6 +111,11 @@ targets:
             LSHandlerRank: Owner
             LSItemContentTypes:
               - com.android.package-archive
+          - CFBundleTypeName: Android App Bundle
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Owner
+            LSItemContentTypes:
+              - com.android.app-bundle
     settings:
       base:
         PRODUCT_NAME: Droidective

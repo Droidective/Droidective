@@ -17,6 +17,8 @@ struct FeatureDetailView: View {
             AboutView()
         } else if featureID == "catalog" {
             CatalogView()
+        } else if featureID == "apk-open" {
+            ApkOpenView()
         } else if let featureID, let feature = FeatureRegistry.byID[featureID] {
             featureBody(for: feature)
         } else {
@@ -118,6 +120,8 @@ struct FeatureDetailView: View {
                 ApkSignView()
             case "apk-decompile":
                 DecompileBrowserView()
+            case "aab-convert":
+                AabConvertView()
             case "frida-console":
                 FridaConsoleView()
             case "emulators":

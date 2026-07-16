@@ -119,7 +119,6 @@ struct RootView: View {
             #endif
             .onAppear { performLaunchSetup() }
             .onChange(of: state.presentRolePicker) { _, showing in rolePickerVisibilityChanged(showing) }
-            .onChange(of: colorScheme) { _, _ in updateDockIcon() }
             .onChange(of: state.activeTabID) { _, id in Telemetry.shared.featureBecameActive(id) }
             .onChange(of: state.openFeatureIDs) { _, ids in Telemetry.shared.openFeaturesChanged(ids) }
             .confirmationDialog(
@@ -161,17 +160,21 @@ struct RootView: View {
                     .tint(.brandAccent)
             }
         }
-        // A double-clicked APK opens the Quick Actions panel on its options
-        // screen (install in place / APK Studio / the Install App screen)
-        // instead of taking over the main window. Anything else handed to
+        // A double-clicked APK opens the in-window opened-APK screen (install
+        // with live status / APK Studio); a double-clicked AAB opens the AAB
+        // to APK converter with the bundle staged. Anything else handed to
         // "Open With → Droidective" gets a toast instead of silence.
+        // Factory-seed the bundled tools into the managed store (idempotent)
+        // so the AAB converter works offline with no first-use download.
+        Task { await BundledTools.seed(into: state.env.engine.managedTools) }
         InstallInbox.shared.onReceive = { urls in
             let apks = urls.filter { $0.pathExtension.lowercased() == "apk" }
-            for other in urls where other.pathExtension.lowercased() != "apk" {
-                state.showToast(Toast(message: "Not an APK: \(other.lastPathComponent)", ok: false))
+            let aabs = urls.filter { $0.pathExtension.lowercased() == "aab" }
+            for other in urls where !["apk", "aab"].contains(other.pathExtension.lowercased()) {
+                state.showToast(Toast(message: "Not an APK or AAB: \(other.lastPathComponent)", ok: false))
             }
-            guard !apks.isEmpty else { return }
-            QuickActionsPanel.showAPKOptions(apks, state: state)
+            if !apks.isEmpty { state.openAPKs(apks) }
+            if !aabs.isEmpty { state.openAABs(aabs) }
         }
         #if !APPSTORE
         // Update toasts ("available" / "ready — relaunch" / "up to date")
@@ -195,7 +198,6 @@ struct RootView: View {
         // Enumerate installed font families now so the Settings ▸ Appearance
         // font picker opens instantly.
         FontCatalog.preload()
-        updateDockIcon()
         // Watch the app's own CPU/RAM and report sustained spikes to telemetry
         // with the features open at the time (consent-gated in Telemetry).
         PerformanceMonitor.shared.start { [state] in
@@ -327,44 +329,6 @@ struct RootView: View {
         }
     }
 
-    /// macOS has no native light/dark app icon, so swap the Dock icon at
-    /// runtime to match the active theme. The decode happens off the main
-    /// thread: `NSImage(named:)` is lazy, so assigning it directly made the
-    /// first `NSDockTile display` decode and colorspace-convert the full
-    /// asset on the main thread — a 2s+ hang at launch, concurrent with
-    /// window restore (Sentry DROIDECTIVE-MAC-T). Only the cheap assignment
-    /// of the pre-rasterized bitmap stays on the main actor.
-    private func updateDockIcon() {
-        let dark = NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        let name = dark ? "AppLogoDark" : "AppLogoLight"
-        Task.detached(priority: .userInitiated) {
-            guard let icon = RootView.rasterizedDockIcon(named: name) else { return }
-            await MainActor.run {
-                // A theme flip can race two of these tasks; drop a stale result.
-                let nowDark = NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-                guard name == (nowDark ? "AppLogoDark" : "AppLogoLight") else { return }
-                NSApp.applicationIconImage = NSImage(cgImage: icon, size: .zero)
-            }
-        }
-    }
-
-    /// Decodes the named logo asset into a plain 8-bit sRGB bitmap, forcing
-    /// the PNG decode and any colorspace conversion to happen here (off the
-    /// main thread) instead of inside the Dock tile's first render.
-    private nonisolated static func rasterizedDockIcon(named name: String) -> CGImage? {
-        guard let image = NSImage(named: name),
-              let source = image.cgImage(forProposedRect: nil, context: nil, hints: nil),
-              let sRGB = CGColorSpace(name: CGColorSpace.sRGB),
-              let context = CGContext(
-                  data: nil, width: source.width, height: source.height,
-                  bitsPerComponent: 8, bytesPerRow: 0, space: sRGB,
-                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-              )
-        else { return nil }
-        context.draw(source, in: CGRect(x: 0, y: 0, width: source.width, height: source.height))
-        return context.makeImage()
-    }
-
     /// One-time switch to the v2 defaults — dark appearance and how-it-works
     /// notes hidden — for users who installed before they changed. Runs once;
     /// any later manual change in Settings sticks.
@@ -416,7 +380,7 @@ struct RootView: View {
                 // progress strip) out from under a live feature in the other.
                 if state.workspace.groups.contains(where: { $0.activeTab != "catalog" }) {
                     DeviceBarView()
-                    if let operation = state.runningOperation {
+                    if let operation = state.runningOperation ?? state.installOperation {
                         OperationProgressStrip(operation: operation)
                     }
                 }
@@ -551,6 +515,7 @@ struct RootView: View {
         case "home": return "Home"
         case "catalog": return "Feature Catalog"
         case "about": return "About & Feedback"
+        case "apk-open": return "Install APK"
         case let id?: return FeatureRegistry.byID[id].map { state.presented($0).title } ?? ""
         }
     }

@@ -1,5 +1,6 @@
 import ADBKit
 import SwiftUI
+import UserNotifications
 
 /// UserDefaults key for Settings ▸ General ▸ "Keep running in the background".
 /// Read with `object(forKey:)` nil-coalesced to true, so it defaults to on.
@@ -17,7 +18,7 @@ let quickPanelCloseAfterRunKey = "quickPanelCloseAfterRun"
 
 /// Routes APKs opened from Finder (double-click / "Open With") into the install
 /// inbox, which surfaces the device picker once the UI is ready.
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     /// Wired in `ADTApp.body` (the adaptor instance is the real delegate), so
     /// quit and window-close can tear down kept-alive sessions.
     weak var appState: AppState?
@@ -41,6 +42,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task.detached(priority: .utility) {
             CacheTrash.sweep(around: AppPaths.decompiledCacheDir)
         }
+        // Clicking a "install finished" notification (posted while
+        // backgrounded) should land in the app, not just bounce the Dock.
+        UNUserNotificationCenter.current().delegate = self
         // Selector-based (not the block API): `Notification` isn't Sendable,
         // so a @Sendable block can't hand it to the main actor. The selector
         // route delivers it straight into a @MainActor method — safe because
@@ -99,6 +103,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             appState.activateMainWindow()
             return false
         }
+    }
+
+    /// Clicking an install notification reopens the main window — while
+    /// backgrounded the app is an accessory, so plain activation would land
+    /// on nothing.
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let appState = appState
+        Task { @MainActor in appState?.activateMainWindow() }
+        completionHandler()
     }
 
     /// Block quit when losable work is in flight (an active recording / unsaved
@@ -233,6 +250,11 @@ struct ADTApp: App {
                     appState.setForeground(phase == .active)
                 }
         }
+        // File opens (double-clicked .apk/.aab) are handled by
+        // `AppDelegate.application(_:open:)`; without this, every open event
+        // also makes the WindowGroup spawn a duplicate main window — which
+        // scene restoration then multiplies across launches.
+        .handlesExternalEvents(matching: [])
         .windowStyle(.automatic)
         .commands {
             ScreenshotEditCommandsMenu()

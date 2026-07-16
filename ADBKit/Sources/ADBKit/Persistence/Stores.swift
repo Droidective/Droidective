@@ -314,13 +314,85 @@ public struct LayoutState: Codable, Sendable, Equatable {
     }
 }
 
+/// A saved Send Text snippet: a short display name (what the tag chips and
+/// menu show) over the text that gets inserted. `uses` ranks the top-5
+/// quick-insert tags under the text field; the text may hold
+/// `{clipboard}`/`{ip}` placeholders expanded by `SnippetPlaceholders` at
+/// insert time.
+public struct SendTextSnippet: Codable, Sendable, Equatable, Identifiable {
+    /// Names longer than this are clamped — chips and menu rows stay short.
+    public static let nameLimit = 24
+
+    public var name: String
+    public var text: String
+    public var uses: Int
+
+    public var id: String { name }
+
+    public init(name: String, text: String, uses: Int = 0) {
+        self.name = String(name.prefix(Self.nameLimit))
+        self.text = text
+        self.uses = uses
+    }
+}
+
 public struct Presets: Codable, Sendable, Equatable {
     public var reversePorts: [Int]
     public var proxies: [String]
+    /// Saved Send Text snippets, inserted from the field's snippets menu and
+    /// the most-used tags beneath it.
+    public var sendTextSnippets: [SendTextSnippet]
 
-    public init(reversePorts: [Int] = [8081, 8097], proxies: [String] = []) {
+    public init(
+        reversePorts: [Int] = [8081, 8097], proxies: [String] = [],
+        sendTextSnippets: [SendTextSnippet] = []
+    ) {
         self.reversePorts = reversePorts
         self.proxies = proxies
+        self.sendTextSnippets = sendTextSnippets
+    }
+
+    /// Files written before a field existed must still decode (a missing key
+    /// would otherwise set the whole file aside as `.corrupt`).
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        reversePorts = try container.decodeIfPresent([Int].self, forKey: .reversePorts) ?? [8081, 8097]
+        proxies = try container.decodeIfPresent([String].self, forKey: .proxies) ?? []
+        sendTextSnippets = try container.decodeIfPresent([SendTextSnippet].self, forKey: .sendTextSnippets) ?? []
+    }
+
+    /// Adds a snippet with a trimmed, length-clamped name; false (and no
+    /// change) when the name or text is empty or the name is already taken.
+    @discardableResult
+    public mutating func addSnippet(named name: String, text: String) -> Bool {
+        let trimmedName = String(
+            name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(SendTextSnippet.nameLimit))
+        guard !trimmedName.isEmpty, !text.isEmpty,
+              !sendTextSnippets.contains(where: { $0.name == trimmedName })
+        else { return false }
+        sendTextSnippets.append(SendTextSnippet(name: trimmedName, text: text))
+        return true
+    }
+
+    public mutating func removeSnippet(named name: String) {
+        sendTextSnippets.removeAll { $0.name == name }
+    }
+
+    /// Bumps the use count that ranks the quick-insert tags.
+    public mutating func recordSnippetUse(named name: String) {
+        guard let index = sendTextSnippets.firstIndex(where: { $0.name == name }) else { return }
+        sendTextSnippets[index].uses += 1
+    }
+
+    /// The most-used snippets, ties kept in the order they were saved.
+    public func topSnippets(limit: Int) -> [SendTextSnippet] {
+        sendTextSnippets.enumerated()
+            .sorted { lhs, rhs in
+                if lhs.element.uses != rhs.element.uses { return lhs.element.uses > rhs.element.uses }
+                return lhs.offset < rhs.offset
+            }
+            .prefix(limit)
+            .map(\.element)
     }
 }
 
