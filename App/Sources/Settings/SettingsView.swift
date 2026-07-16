@@ -66,6 +66,21 @@ struct GeneralSettingsView: View {
         let build = info?["CFBundleVersion"] as? String ?? "0"
         return "Version \(version) (\(build))"
     }
+
+    /// Inline status beside the update button — the only place "you're up to
+    /// date" appears, and it's manual-check-only by construction (background
+    /// checks never enter `.checking`/`.upToDate`).
+    private var updateStatus: String? {
+        switch updater.phase {
+        case .idle: return nil
+        case .checking: return "Checking…"
+        case .upToDate: return "You're up to date."
+        case .available(let info): return "Version \(info.version) is available."
+        case .downloading: return "Downloading…"
+        case .readyToRelaunch(let info): return "Version \(info.version) is ready."
+        case .installing: return "Installing…"
+        }
+    }
     #endif
 
     /// True when the login item is registered (enabled, or pending the user's
@@ -177,13 +192,30 @@ struct GeneralSettingsView: View {
 
             #if !APPSTORE
             Section("Updates") {
-                Toggle("Automatically check for updates", isOn: $updater.automaticallyChecksForUpdates)
+                Toggle("Download and install updates automatically", isOn: $updater.automaticallyDownloadsUpdates)
+                Text("Droidective checks on launch and every hour either way. On: updates download silently and install when you relaunch (or quit). Off: you get a notification and updates wait for your go-ahead.")
+                    .font(.app(.footnote))
+                    .foregroundStyle(.textMuted)
                 Toggle("Receive beta updates", isOn: $updater.receivesBetaUpdates)
                 LabeledContent(installedVersionLabel) {
-                    Button("Check for Updates…") { updater.checkForUpdates() }
-                        // Greyed out while a check is already in flight — same
-                        // gate as the menu command and the About row.
-                        .disabled(!updater.canCheckForUpdates)
+                    HStack(spacing: 8) {
+                        if let status = updateStatus {
+                            Text(status)
+                                .font(.app(.footnote))
+                                .foregroundStyle(.textMuted)
+                        }
+                        switch updater.phase {
+                        case .readyToRelaunch:
+                            Button("Relaunch to Update") { updater.relaunchNow() }
+                        case .available:
+                            Button("Update Now") { updater.installAvailableUpdate() }
+                        case .idle, .checking, .upToDate, .downloading, .installing:
+                            Button("Check for Updates…") { updater.checkForUpdates() }
+                                // Greyed out while a check or download is in
+                                // flight — same gate as the menu command.
+                                .disabled(!updater.canCheckForUpdates)
+                        }
+                    }
                 }
                 Text("Updates are delivered via Sparkle from GitHub Releases. Beta builds arrive ahead of stable releases and may be rougher; switching beta off keeps the installed build until the next stable release.")
                     .font(.app(.footnote))
