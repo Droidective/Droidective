@@ -11,6 +11,10 @@ struct CrashView: View {
     @State private var selectedID: CrashReport.ID?
     @State private var loading = false
     @State private var fetched = false
+    /// The last fetch errored (adb missing, device dropped mid-read). Cleared
+    /// by the next successful fetch; drives the error empty state so a failed
+    /// read never masquerades as "still checking" or "no crashes".
+    @State private var fetchFailed = false
     @State private var watching = false
     @State private var kindFilter: CrashReport.Kind?
     @State private var processFilter: String?
@@ -18,11 +22,17 @@ struct CrashView: View {
     @State private var search = ""
     @State private var showRaw = false
     @State private var confirmClear = false
-    /// Hide crashes at or before this timestamp — set by Clear buffer, which
-    /// empties the crash buffer but can't touch the main-buffer fallback the
-    /// same crashes would resurface from.
-    @State private var clearedBefore: String?
+    /// Hide crashes at or before this timestamp on this serial — set by Clear
+    /// buffer, which empties the crash buffer but can't touch the main-buffer
+    /// fallback the same crashes would resurface from. Scoped to the serial it
+    /// was set on so a device switch never hides another device's crashes.
+    /// Logcat timestamps carry no year, so the lexicographic compare mis-hides
+    /// only across a Dec→Jan rollover, and only until the view reopens.
+    @State private var clearedBefore: (serial: String, mark: String)?
     @State private var refreshToken = 0
+    /// Measured pane width — below ~700pt (a narrow split pane) the toolbar
+    /// reflows to two rows and the crash list narrows proportionally.
+    @State private var paneWidth: CGFloat = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -40,6 +50,7 @@ struct CrashView: View {
                 }
             }
         }
+        .measuringWidth(into: $paneWidth)
         .task(id: "\(state.targetSerials.first ?? "")|\(refreshToken)") {
             await fetch(userInitiated: refreshToken > 0)
         }
@@ -71,106 +82,157 @@ struct CrashView: View {
 
     // MARK: - Toolbar
 
+    /// One row when it fits; in a narrow split pane the fetch/filter controls
+    /// and the search/actions split into two rows instead of clipping at the
+    /// pane edge (the measured-reflow pattern — see `MeasuredWidth.swift`).
     private var toolbar: some View {
-        HStack(spacing: 12) {
-            Button {
-                refreshToken += 1
-            } label: {
-                Image(systemName: "arrow.clockwise")
-            }
-            .buttonStyle(IconButtonStyle())
-            .disabled(loading || state.targetSerials.isEmpty)
-            .help("Fetch crashes from the device")
-
-            Toggle(isOn: $watching) {
-                Label(watching ? "Watching" : "Watch",
-                      systemImage: watching ? "eye.fill" : "eye")
-            }
-            .toggleStyle(.button)
-            .disabled(state.targetSerials.isEmpty)
-            .help(watching
-                ? "Watching — checking for new crashes every 5 s. Click to stop."
-                : "Watch for new crashes (checks every 5 s) and get notified the moment one lands")
-
-            // A plain label + picker pair: LabeledContent is a form-row
-            // control that soaks up toolbar width as a label↔content gap.
-            HStack(spacing: 6) {
-                Text("Kind")
-                Picker("Kind", selection: $kindFilter) {
-                    Text("All").tag(CrashReport.Kind?.none)
-                    ForEach(presentKinds, id: \.self) { kind in
-                        Text(kind.label).tag(CrashReport.Kind?.some(kind))
+        Group {
+            if paneWidth > 0, paneWidth < 700 {
+                VStack(alignment: .leading, spacing: 7) {
+                    HStack(spacing: 12) {
+                        refreshButton
+                        watchToggle
+                        kindPicker
+                        processPicker
+                        Spacer(minLength: 0)
+                    }
+                    HStack(spacing: 12) {
+                        filterField
+                        Spacer(minLength: 0)
+                        selectionActions
+                        clearButton
                     }
                 }
-                .labelsHidden()
-                // No fixed width: the pop-up centers inside a wider frame,
-                // which reads as a gap after the label.
-                .fixedSize()
-            }
-            .font(.app(.callout))
-
-            if processes.count > 1 {
-                HStack(spacing: 6) {
-                    Text("Process")
-                    Picker("Process", selection: $processFilter) {
-                        Text("All").tag(String?.none)
-                        ForEach(processes, id: \.self) { process in
-                            Text(process).tag(String?.some(process))
-                        }
-                    }
-                    .labelsHidden()
-                    .frame(maxWidth: 200)
+            } else {
+                HStack(spacing: 12) {
+                    refreshButton
+                    watchToggle
+                    kindPicker
+                    processPicker
+                    filterField
+                    Spacer()
+                    selectionActions
+                    clearButton
                 }
-                .font(.app(.callout))
             }
-
-            TextField("Filter crashes…", text: $searchInput)
-                .brandField()
-                .frame(maxWidth: 180)
-                .help("Show only crashes containing this text")
-                .task(id: searchInput) {
-                    if !search.isEmpty || !searchInput.isEmpty {
-                        try? await Task.sleep(for: .milliseconds(200))
-                    }
-                    guard !Task.isCancelled else { return }
-                    search = searchInput
-                }
-
-            Spacer()
-
-            if let report = selectedReport {
-                Menu {
-                    ForEach(CrashFormat.allCases, id: \.self) { format in
-                        Button(copyLabel(for: format)) { copy(report, as: format) }
-                    }
-                } label: {
-                    Label("Copy", systemImage: "doc.on.clipboard")
-                }
-                .fixedSize()
-                .help("Copy this crash for pasting into Slack, Jira, or anywhere")
-
-                Button {
-                    save(report)
-                } label: {
-                    Image(systemName: "square.and.arrow.down")
-                }
-                .buttonStyle(IconButtonStyle())
-                .help("Save this crash to a file")
-            }
-
-            Button {
-                confirmClear = true
-            } label: {
-                Image(systemName: "trash")
-            }
-            .buttonStyle(IconButtonStyle())
-            .disabled(state.targetSerials.isEmpty)
-            .help("Clear the device's crash buffer")
         }
         .padding(8)
     }
 
+    private var refreshButton: some View {
+        Button {
+            refreshToken += 1
+        } label: {
+            Image(systemName: "arrow.clockwise")
+        }
+        .buttonStyle(IconButtonStyle())
+        .disabled(loading || state.targetSerials.isEmpty)
+        .help("Fetch crashes from the device")
+    }
+
+    private var watchToggle: some View {
+        Toggle(isOn: $watching) {
+            Label(watching ? "Watching" : "Watch",
+                  systemImage: watching ? "eye.fill" : "eye")
+        }
+        .toggleStyle(.button)
+        .disabled(state.targetSerials.isEmpty)
+        .help(watching
+            ? "Watching — checking for new crashes every 5 s. Click to stop."
+            : "Watch for new crashes — checks every 5 s and raises a toast when one lands")
+    }
+
+    // A plain label + picker pair: LabeledContent is a form-row control that
+    // soaks up toolbar width as a label↔content gap.
+    private var kindPicker: some View {
+        HStack(spacing: 6) {
+            Text("Kind")
+            Picker("Kind", selection: $kindFilter) {
+                Text("All").tag(CrashReport.Kind?.none)
+                ForEach(presentKinds, id: \.self) { kind in
+                    Text(kind.label).tag(CrashReport.Kind?.some(kind))
+                }
+            }
+            .labelsHidden()
+            // No fixed width: the pop-up centers inside a wider frame,
+            // which reads as a gap after the label.
+            .fixedSize()
+        }
+        .font(.app(.callout))
+    }
+
+    @ViewBuilder private var processPicker: some View {
+        if processes.count > 1 {
+            HStack(spacing: 6) {
+                Text("Process")
+                Picker("Process", selection: $processFilter) {
+                    Text("All").tag(String?.none)
+                    ForEach(processes, id: \.self) { process in
+                        Text(process).tag(String?.some(process))
+                    }
+                }
+                .labelsHidden()
+                .frame(maxWidth: 200)
+            }
+            .font(.app(.callout))
+        }
+    }
+
+    private var filterField: some View {
+        TextField("Filter crashes…", text: $searchInput)
+            .brandField()
+            .frame(maxWidth: 180)
+            .help("Show only crashes containing this text")
+            .task(id: searchInput) {
+                if !search.isEmpty || !searchInput.isEmpty {
+                    try? await Task.sleep(for: .milliseconds(200))
+                }
+                guard !Task.isCancelled else { return }
+                search = searchInput
+            }
+    }
+
+    @ViewBuilder private var selectionActions: some View {
+        if let report = selectedReport {
+            Menu {
+                ForEach(CrashFormat.allCases, id: \.self) { format in
+                    Button(copyLabel(for: format)) { copy(report, as: format) }
+                }
+            } label: {
+                Label("Copy", systemImage: "doc.on.clipboard")
+            }
+            .fixedSize()
+            .help("Copy this crash for pasting into Slack, Jira, or anywhere")
+
+            Button {
+                save(report)
+            } label: {
+                Image(systemName: "square.and.arrow.down")
+            }
+            .buttonStyle(IconButtonStyle())
+            .help("Save this crash to a file")
+        }
+    }
+
+    private var clearButton: some View {
+        Button {
+            confirmClear = true
+        } label: {
+            Image(systemName: "trash")
+        }
+        .buttonStyle(IconButtonStyle())
+        .disabled(state.targetSerials.isEmpty)
+        .help("Clear the device's crash buffer")
+    }
+
     // MARK: - List
+
+    /// 300pt when the pane affords it; proportional in a narrow split pane so
+    /// the detail keeps a usable share instead of being crushed to a sliver.
+    private var listWidth: CGFloat {
+        guard paneWidth > 0 else { return 300 }
+        return min(300, max(180, paneWidth * 0.38))
+    }
 
     private var crashList: some View {
         List(selection: $selectedID) {
@@ -179,10 +241,20 @@ struct CrashView: View {
                     .tag(report.id)
             }
         }
-        .frame(width: 300)
+        .frame(width: listWidth)
         .overlay {
             if filteredReports.isEmpty {
-                ContentUnavailableView.search(text: search)
+                if search.isEmpty {
+                    // Hidden by the Kind/Process pickers, not a search — the
+                    // search-styled "No results for ''" would read as broken.
+                    ContentUnavailableView(
+                        "No matching crashes",
+                        systemImage: "line.3.horizontal.decrease.circle",
+                        description: Text("Adjust the Kind or Process filter.")
+                    )
+                } else {
+                    ContentUnavailableView.search(text: search)
+                }
             }
         }
     }
@@ -198,11 +270,11 @@ struct CrashView: View {
                 // proposes nil in both directions, so short content floats
                 // centered instead of pinning to the top-left.
                 ScrollView {
-                    Text(Self.highlighted(showRaw ? report.raw : report.body))
-                        .font(.app(size: 11, design: .monospaced))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(8)
+                    // Equatable: the highlight pass over a 200-line trace is
+                    // skipped when watch polls / hovers re-render the view
+                    // with the same text.
+                    CrashTraceText(text: showRaw ? report.raw : report.body)
+                        .equatable()
                 }
             }
             .frame(maxWidth: .infinity)
@@ -246,13 +318,29 @@ struct CrashView: View {
         .padding(.vertical, 6)
     }
 
-    private var emptyState: some View {
-        ContentUnavailableView {
-            Label(fetched ? "No crashes detected" : "Checking…", systemImage: "checkmark.shield")
-        } description: {
-            Text(fetched
-                ? "The crash buffer is clean. Turn on Watch to be told when something crashes."
-                : "Reading the device's crash buffer…")
+    @ViewBuilder private var emptyState: some View {
+        Group {
+            if fetchFailed {
+                ContentUnavailableView {
+                    Label("Couldn't read crashes", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text("Reading the device's crash buffer failed. Check the connection, then refresh.")
+                } actions: {
+                    Button("Try Again") { refreshToken += 1 }
+                }
+            } else if fetched {
+                ContentUnavailableView {
+                    Label("No crashes detected", systemImage: "checkmark.shield")
+                } description: {
+                    Text("The crash buffer is clean. Turn on Watch to be told when something crashes.")
+                }
+            } else {
+                ContentUnavailableView {
+                    Label("Checking…", systemImage: "checkmark.shield")
+                } description: {
+                    Text("Reading the device's crash buffer…")
+                }
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -260,8 +348,16 @@ struct CrashView: View {
     // MARK: - Data
 
     private var visibleReports: [CrashReport] {
-        guard let clearedBefore else { return reports }
-        return reports.filter { ($0.timestamp ?? "") > clearedBefore }
+        guard let clearedBefore, clearedBefore.serial == state.targetSerials.first else {
+            return reports
+        }
+        return reports.filter { report in
+            // A report without a timestamp can't be compared against the
+            // mark — keep it visible; resurfacing a cleared crash beats
+            // silently hiding a new one.
+            guard let timestamp = report.timestamp else { return true }
+            return timestamp > clearedBefore.mark
+        }
     }
 
     private var filteredReports: [CrashReport] {
@@ -294,6 +390,7 @@ struct CrashView: View {
         guard let serial = state.targetSerials.first else {
             reports = []
             fetched = false
+            fetchFailed = false
             return
         }
         if userInitiated { loading = true }
@@ -307,18 +404,32 @@ struct CrashView: View {
             // Background polling stays out of the Command Log.
             result = try? await state.env.engine.crash.crashes(serial: serial)
         }
-        guard !Task.isCancelled, let result else { return }
+        guard !Task.isCancelled else { return }
+        guard let result else {
+            // Keep the last good list on a transient poll failure, but say so —
+            // a swallowed error read as "still checking" forever.
+            fetchFailed = true
+            if userInitiated {
+                state.showToast(Toast(message: "Couldn't read crashes from the device", ok: false))
+            }
+            return
+        }
+        fetchFailed = false
         if watching, fetched {
             let known = Set(reports.map(\.id))
             if let newest = result.first(where: { !known.contains($0.id) }) {
                 state.showToast(Toast(message: "New crash: \(newest.title)", ok: false))
             }
         }
-        reports = result
+        // Watch polls mostly return an identical list — skip the state write
+        // so the List isn't re-diffed and the trace re-rendered every 5 s.
+        if result != reports { reports = result }
         fetched = true
         if selectedID == nil || !result.contains(where: { $0.id == selectedID }) {
             selectedID = filteredReports.first?.id
         }
+        if let kind = kindFilter, !presentKinds.contains(kind) { kindFilter = nil }
+        if let process = processFilter, !processes.contains(process) { processFilter = nil }
     }
 
     private func clearBuffer() async {
@@ -330,7 +441,9 @@ struct CrashView: View {
             state.showToast(Toast(message: "Couldn't clear the crash buffer", ok: false))
             return
         }
-        clearedBefore = reports.compactMap(\.timestamp).max()
+        if let mark = reports.compactMap(\.timestamp).max() {
+            clearedBefore = (serial: serial, mark: mark)
+        }
         selectedID = nil
         state.showToast(Toast(message: "Crash buffer cleared", ok: true))
         refreshToken += 1
@@ -391,6 +504,18 @@ struct CrashView: View {
             if index < lines.count - 1 { out += AttributedString("\n") }
         }
         return out
+    }
+}
+
+private struct CrashTraceText: View, Equatable {
+    let text: String
+
+    var body: some View {
+        Text(CrashView.highlighted(text))
+            .font(.app(size: 11, design: .monospaced))
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(8)
     }
 }
 
