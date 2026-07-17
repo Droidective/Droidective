@@ -1,6 +1,7 @@
 import ADBKit
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// The signing-key choice shared by the APK signer and the AAB converter:
 /// the embedded debug key, an existing keystore, or a brand-new keystore
@@ -113,10 +114,16 @@ final class SigningKeyModel {
         createError = nil
     }
 
+    /// The only pickable keystore types. `.jks` stays in because the
+    /// "New keystore" flow (and keytool's default) writes `.jks` files.
+    static let keystoreTypes: [UTType] = ["keystore", "jks"]
+        .compactMap { UTType(filenameExtension: $0) }
+
     func chooseKeystore() {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
+        panel.allowedContentTypes = Self.keystoreTypes
         panel.message = "Choose a keystore (.jks / .keystore)"
         if panel.runModal() == .OK { keystoreURL = panel.url }
     }
@@ -124,6 +131,7 @@ final class SigningKeyModel {
     func chooseNewKeystoreLocation() {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = "\(keyAlias.isEmpty ? "release" : keyAlias).jks"
+        panel.allowedContentTypes = Self.keystoreTypes
         panel.canCreateDirectories = true
         panel.directoryURL = try? ScreenCaptureService.ensureCaptureDir()
         if panel.runModal() == .OK { newKeystoreURL = panel.url }
