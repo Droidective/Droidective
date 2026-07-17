@@ -1,3 +1,24 @@
+## Droidective v3.4.1
+
+A crash fix for AAB to APK, and a stricter keystore picker.
+
+### Fixes
+
+- **No more crash when converting an AAB** — asking for notification
+  permission (so the converter can tell you when a background install
+  finishes) crashed the app on the newest macOS, whether you allowed or
+  denied. The permission request now uses a thread-safe path.
+- **The keystore chooser only accepts keystores** — the signing file picker
+  greys out everything except `.keystore` and `.jks` files, in both the AAB
+  converter's signing sheet and APK Studio's Sign tab.
+
+### Install
+
+Download `Droidective-v3.4.1.dmg` below. Existing installs update in place
+via Sparkle.
+
+---
+
 ## Droidective v3.4.0
 
 An AAB to APK converter joins the toolset (the 58th), updates now install
