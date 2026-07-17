@@ -57,6 +57,9 @@ ffmpeg="$APP/Contents/Resources/ffmpeg"
 if [[ "$SIGN_IDENTITY" != "-" ]]; then
   for jar in "$APP/Contents/Resources"/*.jar; do
     [[ -f "$jar" ]] || continue
+    # $APP is relative — resolve the jar to an absolute path so it survives
+    # the cd into the scratch directory below.
+    jar="$(cd "$(dirname "$jar")" && pwd)/$(basename "$jar")"
     natives="$(zipinfo -1 "$jar" | grep -E '\.(dylib|jnilib)$' || true)"
     [[ -n "$natives" ]] || continue
     jartmp="$(mktemp -d)"
