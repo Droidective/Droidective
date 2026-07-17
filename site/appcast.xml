@@ -6,9 +6,9 @@
     <description>Most recent Droidective updates.</description>
     <language>en</language>
     <item>
-      <title>Droidective 3.3.1</title>
-      <sparkle:version>456</sparkle:version>
-      <sparkle:shortVersionString>3.3.1</sparkle:shortVersionString>
+      <title>Droidective 3.4.0</title>
+      <sparkle:version>500</sparkle:version>
+      <sparkle:shortVersionString>3.4.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <description><![CDATA[
 <style>
@@ -24,54 +24,106 @@ pre { background: color-mix(in srgb, currentColor 8%, transparent); padding: .6e
 pre code { background: none; padding: 0; }
 a { color: #2f9e44; }
 </style>
-<p>iOS Logs is rebuilt around how the simulator's unified log actually behaves,
-and ⌘F now always lands where you expect it.</p>
-<h3>iOS Logs, rebuilt</h3>
+<p>An AAB to APK converter joins the toolset (the 58th), updates now install
+themselves silently, the Crash Catcher becomes a real multi-crash browser,
+and wireless pairing connects on its own.</p>
+<h3>AAB to APK (new)</h3>
 <ul>
 <li>
-<strong>Scoped to your apps by default</strong> — the unified log unfiltered is the whole
-simulator OS (thousands of lines a second). The stream now covers only
-installed apps' processes; <em>Everything</em> is one click away when you need
-system logs.</li>
+<strong>Convert an Android App Bundle to an installable APK</strong> — the new tool runs
+<code>bundletool build-apks --mode=universal</code> and writes <code>&lt;name&gt;-universal.apk</code>
+to your capture folder. Optionally sign with your release keystore
+(passwords passed via temp files, never on the command line); without one,
+bundletool uses your debug keystore.</li>
 <li>
-<strong>Scrollback that holds still</strong> — scrolling up freezes the feed; new lines
-wait behind a "N new" pill (with a waiting count in the status bar) and
-fold in when you click it or scroll back to the tail. No more unscrollable
-firehose.</li>
+<strong>Works offline out of the box</strong> — bundletool and uber-apk-signer ship
+inside the app, with upgrades still managed in Settings ▸ Tools.</li>
 <li>
-<strong>Xcode-style entries</strong> — the message leads, with a toggleable metadata
-line (time · process (pid) · subsystem · category), a severity color bar,
-and tinted error/fault rows.</li>
+<strong>Double-click <code>.aab</code> or <code>.apk</code> files in Finder</strong> — bundles open in the
+converter; APKs open a workspace tab with app info, per-device install
+rows, and Open in APK Studio.</li>
 <li>
-<strong>Error &amp; fault counters</strong> — live tallies in the status bar; click to flip
-the feed to errors only and back.</li>
-<li>
-<strong>Sharper filtering</strong> — a multi-select level menu (Info and Debug also
-widen what the simulator emits), a process menu built from the stream
-itself (or right-click a line), free-text filter, and ⌘F find.</li>
+<strong>Installs run in the background</strong> — they survive navigation and window
+closes, show live progress under the device bar, and post a macOS
+notification when a batch finishes while the app is in the background.</li>
 </ul>
-<h3>⌘F lands where you expect</h3>
+<h3>Updates install themselves</h3>
 <ul>
 <li>
-<strong>No more focus jumping to the sidebar</strong> — ⌘F used to be claimable by a
-hidden tab, sending focus to the sidebar search. It now always targets the
-screen you're on: the find bar in Logcat, iOS Logs, and the JS Console —
-and in Reactotron it focuses the timeline search, its only text filter.
-The sidebar search only takes focus from ⌘T or a click.</li>
+<strong>Silent download</strong> — with automatic downloads on (the default), updates
+download and stage in the background; a "Relaunch to update" pill appears
+at the bottom of the sidebar. Click it to update now, or just quit — the
+update applies anyway.</li>
+<li>
+<strong>With auto-download off</strong> you get an "Update available" pill and a
+once-per-version notification instead; nothing downloads until you say so.</li>
+<li>
+<strong>What's New after updating</strong> — the first launch of a new version offers
+the release notes in-app.</li>
+<li>Checks run on launch and hourly; manual checks (menu, Settings, About) are
+the only place "You're up to date" appears. Background (menu-bar-only) mode
+gets its own Update rows in the menu.</li>
 </ul>
-<h3>Settings</h3>
+<h3>Crash Catcher, rebuilt</h3>
 <ul>
 <li>
-<strong>Check for Updates in Settings</strong> — the Updates section shows the installed
-version with a Check for Updates button, alongside the update toggles.</li>
+<strong>A multi-crash browser</strong> — the buffer is split into individual crashes
+(Java, native, React Native, ANR) in a list + detail layout, instead of one
+raw dump.</li>
 <li>
-<strong>Quick Actions can close after a run</strong> — a new option dismisses the panel
-once an action succeeds (failures keep it open so the error stays
-readable).</li>
+<strong>Filter by kind, process, or text</strong>, with trace highlighting (marker lines
+red, <code>Caused by:</code> orange, frames dimmed), a raw/messages toggle, copy as
+plain/Slack/Jira, and save to file.</li>
+<li>
+<strong>Watch mode</strong> polls every 5 seconds and toasts when a new crash lands;
+<strong>Clear Buffer</strong> empties the device's crash log behind a confirmation.</li>
+<li>
+<strong>No more missing crashes</strong> — the fetch cap rises from 512 KB to 16 MB; the
+old cap silently dropped the newest crashes on busy devices.</li>
+</ul>
+<h3>Send Text snippets, reworked</h3>
+<ul>
+<li>
+<strong>One "＋ New Snippet" button</strong> replaces the bookmark menu and chip; your 6
+most recently used snippets sit under the field as one-click tags.</li>
+<li>
+<strong>A searchable library</strong> below the Run button — name and preview per row,
+click to insert, right-click to remove, with search appearing once the
+library grows past 10.</li>
+</ul>
+<h3>Wireless &amp; connection</h3>
+<ul>
+<li>
+<strong>Pairing auto-connects</strong> — after a successful Android 11+ pair, the sheet
+discovers the device's connect endpoint over mDNS and connects without
+asking for the second port.</li>
+<li>
+<strong>A bare IP connects on 5555</strong> — the Connect field no longer requires an
+explicit port.</li>
+</ul>
+<h3>Layout &amp; polish</h3>
+<ul>
+<li>
+<strong>Split panes stay usable</strong> — the divider clamps to 30–70%, and every
+feature adapts to narrow panes (toolbars reflow to two rows, master
+columns scale proportionally, Mirror Screen's control bar folds into an
+overflow menu instead of clipping). Dragging past the limit hides the
+sidebar to make room.</li>
+<li>
+<strong>The welcome tour is skippable</strong> — Skip, Esc, or click-away all end it;
+the finale gains a Finish button.</li>
+<li>
+<strong>Reading pauses the feed</strong> — expanding a Reactotron item or a JS Console
+object pauses tail-follow so streaming events can't scroll it away.</li>
+<li>
+<strong>Drop-to-split works with APK tabs open</strong> — a full-pane drop target in the
+AAB/APK screens was swallowing tab drags.</li>
+<li>The light app icon is now used everywhere, and toolbar pickers hug their
+labels instead of floating in fixed-width gaps.</li>
 </ul>
 ]]></description>
-      <pubDate>Wed, 15 Jul 2026 14:25:08 +0000</pubDate>
-      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.3.1/Droidective-v3.3.1.dmg" sparkle:edSignature="ttMz6WMZzizyLFaeF6POK/lKY8rPtQnilRLrklkWXM7G20jdemL8vdqLPeRNrEDlykjgTSd3hqSDJajcuiv/Bg==" length="52822002" type="application/octet-stream" />
+      <pubDate>Fri, 17 Jul 2026 09:07:11 +0000</pubDate>
+      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.4.0/Droidective-v3.4.0.dmg" sparkle:edSignature="89y+hd/Je5GB3g3NEiW4tw86hliODft32hUcdhHDVXEJTqzIWbqt254xb4T/jVdS86S9t3RPT8V03QRgV1nbDw==" length="86489698" type="application/octet-stream" />
     </item>
     
   </channel>
