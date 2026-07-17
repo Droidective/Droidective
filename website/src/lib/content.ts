@@ -17,13 +17,10 @@ import {
 export const GITHUB_URL = "https://github.com/Droidective/Droidective"
 export const LINKEDIN_URL = "https://www.linkedin.com/in/rohindh"
 export const RELEASES_URL = `${GITHUB_URL}/releases`
-// GitHub's permanent latest-release asset URLs: every release uploads
-// stable-named DMGs (see ci.yml), so these always serve the newest version —
-// no appcast fetch, nothing cached to go stale. Droidective.dmg is the
-// Apple Silicon build (kept unsuffixed so pre-split links stay valid);
-// Intel Macs get their own build.
+// GitHub's permanent latest-release asset URL: every release uploads a
+// stable-named Droidective.dmg (see ci.yml), so this always serves the
+// newest version — no appcast fetch, nothing cached to go stale.
 export const DOWNLOAD_URL = `${GITHUB_URL}/releases/latest/download/Droidective.dmg`
-export const DOWNLOAD_URL_INTEL = `${GITHUB_URL}/releases/latest/download/Droidective-x86_64.dmg`
 export const APP_VERSION = "v3.4.0"
 
 export interface PaletteCommand {

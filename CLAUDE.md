@@ -156,12 +156,11 @@ Node 22 in CI; scroll reveals and the hero palette demo must keep their
   jars are factory-seeded into the managed-tool store at launch so
   Settings ▸ Tools can upgrade them) live in `App/Resources/`, resolved by the
   App-layer `BundledTools` (single version source);
-  `scripts/update-bundled-tools.sh` refreshes them. **Releases ship one thin
-  build per CPU (arm64 + x86_64)** with per-arch Sparkle feeds (arm64 keeps
-  the legacy `appcast.xml`) — ffmpeg is committed as per-arch slices and
-  staged by `scripts/assemble-ffmpeg.sh` (universal for local dev, thin for
-  releases), and `scripts/check-archs.sh` fails the release when any bundled
-  Mach-O misses the target CPU (that's what locked Intel Macs out in
+  `scripts/update-bundled-tools.sh` refreshes them. **Releases are universal
+  (arm64 + x86_64)** — ffmpeg is committed as per-arch slices (the fat binary
+  is over GitHub's 100 MB limit) and lipoed by `scripts/assemble-ffmpeg.sh`
+  before every build, and `scripts/check-archs.sh` fails the release when any
+  bundled Mach-O misses either CPU (that's what locked Intel Macs out in
   issue #174). Betas cut from the long-lived `beta` branch ride the Sparkle
   beta channel without merging to `main` (see RELEASING.md). The
   app needs no separate scrcpy/ffmpeg install; the Doctor only checks adb /

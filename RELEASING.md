@@ -195,26 +195,25 @@ off).
 
 CI (the `release` job) then:
 
-- builds Release **once per architecture** (`arm64`, `x86_64`) with
+- builds a **universal (arm64 + x86_64)** Release with
   `MARKETING_VERSION=X.Y.Z` and `CURRENT_PROJECT_VERSION=` the GitHub Actions
   run number (Sparkle compares this monotonically increasing
-  `CFBundleVersion`). Each thin build bundles its own ffmpeg slice
-  (`scripts/assemble-ffmpeg.sh <arch>`), bakes its own Sparkle feed URL
-  (arm64 keeps the legacy `appcast.xml`; x86_64 gets `appcast-x86_64.xml`),
-  and is arch-checked (`scripts/check-archs.sh` — every Mach-O must carry the
-  target CPU, so issue #174 can't silently return);
-- signs both apps with the Developer ID and packages
-  `Droidective-vX.Y.Z-arm64.dmg` + `Droidective-vX.Y.Z-x86_64.dmg`;
-- notarizes both DMGs with Apple and staples the tickets;
-- publishes the GitHub release with both DMGs (plus stable-named copies:
-  `Droidective.dmg` = arm64, so pre-split links keep working, and
-  `Droidective-x86_64.dmg`) and the latest release notes;
-- signs each stapled DMG with the EdDSA key and commits the regenerated
-  `site/appcast.xml` (arm64) and `site/appcast-x86_64.xml` (Intel) to `main` —
-  with those notes rendered to HTML and embedded in the item's
-  `<description>`, so Sparkle shows them in its update window rather than
-  loading the GitHub release page;
-- updates the Homebrew cask (arch-selecting: `on_arm` / `on_intel`).
+  `CFBundleVersion`). ffmpeg is committed as per-arch slices (the fat binary
+  exceeds GitHub's 100 MB file limit) and lipoed by
+  `scripts/assemble-ffmpeg.sh`; `scripts/check-archs.sh` then requires every
+  Mach-O in the bundle to carry both CPUs, so issue #174 (arm64-only
+  releases Intel Macs couldn't launch) can't silently return;
+- signs the app — with the scrcpy-server and ffmpeg bundled inside it — with
+  the Developer ID, and packages `Droidective-vX.Y.Z.dmg`;
+- notarizes the DMG with Apple and staples the ticket;
+- publishes the GitHub release with that DMG and the latest release notes;
+- signs the stapled DMG with the EdDSA key and commits the regenerated
+  `site/appcast.xml` to `main` (seeded from main's live copy first, so a beta
+  cut from the beta branch preserves the current stable item) — with those
+  notes rendered to HTML and embedded in the item's `<description>`, so
+  Sparkle shows them in its update window rather than loading the GitHub
+  release page;
+- updates the Homebrew cask.
 
 That commit to `main` re-runs the `pages` job, which deploys the site and the
 new appcast to GitHub Pages. Installed copies then pick up the new appcast and

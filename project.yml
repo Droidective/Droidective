@@ -71,10 +71,7 @@ targets:
         NSHumanReadableCopyright: "© 2026 Rohindh R"
         SentryDSN: $(SENTRY_DSN)
         PostHogKey: $(POSTHOG_KEY)
-        # Resolved from the SPARKLE_FEED_URL build setting so per-arch release
-        # builds point at their own feed (arm64 keeps the legacy appcast.xml —
-        # every installed 3.x app is arm64 and reads it).
-        SUFeedURL: $(SPARKLE_FEED_URL)
+        SUFeedURL: https://droidective.com/appcast.xml
         SUPublicEDKey: "ma0kTe35r55/PKmemQOEBX7n6SuZPZjOBo973SdJqJ8="
         SUEnableAutomaticChecks: true
         # Silent background downloads by default — the pill offers "Relaunch
@@ -129,9 +126,6 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.rohindh.droidective
         SENTRY_DSN: ""
         POSTHOG_KEY: ""
-        # The Sparkle feed baked into Info.plist (SUFeedURL). Default is the
-        # arm64/stable feed; the x86_64 release build overrides it.
-        SPARKLE_FEED_URL: https://droidective.com/appcast.xml
         MARKETING_VERSION: "3.4.0"
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "6.0"
