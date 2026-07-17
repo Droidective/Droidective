@@ -14,10 +14,16 @@ enum SystemNotifier {
     /// Ask for notification permission once per launch, at the moment it
     /// becomes relevant (a long task starting). A denial is respected
     /// silently — the in-app toasts still cover the foreground case.
+    /// Must stay on the async API: a completion closure formed here is
+    /// MainActor-isolated, UserNotifications invokes it on a background
+    /// queue, and the isolation check traps (DROIDECTIVE-MAC-3E).
     static func requestAuthorizationOnce() {
         guard !authorizationRequested else { return }
         authorizationRequested = true
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        Task {
+            _ = try? await UNUserNotificationCenter.current()
+                .requestAuthorization(options: [.alert, .sound])
+        }
     }
 
     /// True when an in-app toast can't be seen: background mode (accessory,
