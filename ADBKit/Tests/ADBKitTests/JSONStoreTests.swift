@@ -113,16 +113,16 @@ import Testing
         let dir = try tempDir()
         let store = JSONStore(filename: "presets.json", default: Presets(), directory: dir)
         try await store.update {
-            $0.addSnippet(named: "Login email", text: "user@example.com")
-            $0.addSnippet(named: "Metro host", text: "{ip}:8081")
-            $0.recordSnippetUse(named: "Metro host")
+            $0.addSnippet(named: "Login email", text: "user@example.com", at: 100)
+            $0.addSnippet(named: "Metro host", text: "{ip}:8081", at: 200)
+            $0.recordSnippetUse(named: "Metro host", at: 300)
         }
 
         let fresh = JSONStore(filename: "presets.json", default: Presets(), directory: dir)
         let loaded = await fresh.load()
         #expect(loaded.sendTextSnippets == [
-            SendTextSnippet(name: "Login email", text: "user@example.com", uses: 0),
-            SendTextSnippet(name: "Metro host", text: "{ip}:8081", uses: 1),
+            SendTextSnippet(name: "Login email", text: "user@example.com", uses: 0, lastUsedAt: 100),
+            SendTextSnippet(name: "Metro host", text: "{ip}:8081", uses: 1, lastUsedAt: 300),
         ])
     }
 
