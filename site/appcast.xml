@@ -6,9 +6,9 @@
     <description>Most recent Droidective updates.</description>
     <language>en</language>
     <item>
-      <title>Droidective 3.4.0</title>
-      <sparkle:version>500</sparkle:version>
-      <sparkle:shortVersionString>3.4.0</sparkle:shortVersionString>
+      <title>Droidective 3.4.1</title>
+      <sparkle:version>512</sparkle:version>
+      <sparkle:shortVersionString>3.4.1</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <description><![CDATA[
 <style>
@@ -24,106 +24,22 @@ pre { background: color-mix(in srgb, currentColor 8%, transparent); padding: .6e
 pre code { background: none; padding: 0; }
 a { color: #2f9e44; }
 </style>
-<p>An AAB to APK converter joins the toolset (the 58th), updates now install
-themselves silently, the Crash Catcher becomes a real multi-crash browser,
-and wireless pairing connects on its own.</p>
-<h3>AAB to APK (new)</h3>
+<p>A crash fix for AAB to APK, and a stricter keystore picker.</p>
+<h3>Fixes</h3>
 <ul>
 <li>
-<strong>Convert an Android App Bundle to an installable APK</strong> — the new tool runs
-<code>bundletool build-apks --mode=universal</code> and writes <code>&lt;name&gt;-universal.apk</code>
-to your capture folder. Optionally sign with your release keystore
-(passwords passed via temp files, never on the command line); without one,
-bundletool uses your debug keystore.</li>
+<strong>No more crash when converting an AAB</strong> — asking for notification
+permission (so the converter can tell you when a background install
+finishes) crashed the app on the newest macOS, whether you allowed or
+denied. The permission request now uses a thread-safe path.</li>
 <li>
-<strong>Works offline out of the box</strong> — bundletool and uber-apk-signer ship
-inside the app, with upgrades still managed in Settings ▸ Tools.</li>
-<li>
-<strong>Double-click <code>.aab</code> or <code>.apk</code> files in Finder</strong> — bundles open in the
-converter; APKs open a workspace tab with app info, per-device install
-rows, and Open in APK Studio.</li>
-<li>
-<strong>Installs run in the background</strong> — they survive navigation and window
-closes, show live progress under the device bar, and post a macOS
-notification when a batch finishes while the app is in the background.</li>
-</ul>
-<h3>Updates install themselves</h3>
-<ul>
-<li>
-<strong>Silent download</strong> — with automatic downloads on (the default), updates
-download and stage in the background; a "Relaunch to update" pill appears
-at the bottom of the sidebar. Click it to update now, or just quit — the
-update applies anyway.</li>
-<li>
-<strong>With auto-download off</strong> you get an "Update available" pill and a
-once-per-version notification instead; nothing downloads until you say so.</li>
-<li>
-<strong>What's New after updating</strong> — the first launch of a new version offers
-the release notes in-app.</li>
-<li>Checks run on launch and hourly; manual checks (menu, Settings, About) are
-the only place "You're up to date" appears. Background (menu-bar-only) mode
-gets its own Update rows in the menu.</li>
-</ul>
-<h3>Crash Catcher, rebuilt</h3>
-<ul>
-<li>
-<strong>A multi-crash browser</strong> — the buffer is split into individual crashes
-(Java, native, React Native, ANR) in a list + detail layout, instead of one
-raw dump.</li>
-<li>
-<strong>Filter by kind, process, or text</strong>, with trace highlighting (marker lines
-red, <code>Caused by:</code> orange, frames dimmed), a raw/messages toggle, copy as
-plain/Slack/Jira, and save to file.</li>
-<li>
-<strong>Watch mode</strong> polls every 5 seconds and toasts when a new crash lands;
-<strong>Clear Buffer</strong> empties the device's crash log behind a confirmation.</li>
-<li>
-<strong>No more missing crashes</strong> — the fetch cap rises from 512 KB to 16 MB; the
-old cap silently dropped the newest crashes on busy devices.</li>
-</ul>
-<h3>Send Text snippets, reworked</h3>
-<ul>
-<li>
-<strong>One "＋ New Snippet" button</strong> replaces the bookmark menu and chip; your 6
-most recently used snippets sit under the field as one-click tags.</li>
-<li>
-<strong>A searchable library</strong> below the Run button — name and preview per row,
-click to insert, right-click to remove, with search appearing once the
-library grows past 10.</li>
-</ul>
-<h3>Wireless &amp; connection</h3>
-<ul>
-<li>
-<strong>Pairing auto-connects</strong> — after a successful Android 11+ pair, the sheet
-discovers the device's connect endpoint over mDNS and connects without
-asking for the second port.</li>
-<li>
-<strong>A bare IP connects on 5555</strong> — the Connect field no longer requires an
-explicit port.</li>
-</ul>
-<h3>Layout &amp; polish</h3>
-<ul>
-<li>
-<strong>Split panes stay usable</strong> — the divider clamps to 30–70%, and every
-feature adapts to narrow panes (toolbars reflow to two rows, master
-columns scale proportionally, Mirror Screen's control bar folds into an
-overflow menu instead of clipping). Dragging past the limit hides the
-sidebar to make room.</li>
-<li>
-<strong>The welcome tour is skippable</strong> — Skip, Esc, or click-away all end it;
-the finale gains a Finish button.</li>
-<li>
-<strong>Reading pauses the feed</strong> — expanding a Reactotron item or a JS Console
-object pauses tail-follow so streaming events can't scroll it away.</li>
-<li>
-<strong>Drop-to-split works with APK tabs open</strong> — a full-pane drop target in the
-AAB/APK screens was swallowing tab drags.</li>
-<li>The light app icon is now used everywhere, and toolbar pickers hug their
-labels instead of floating in fixed-width gaps.</li>
+<strong>The keystore chooser only accepts keystores</strong> — the signing file picker
+greys out everything except <code>.keystore</code> and <code>.jks</code> files, in both the AAB
+converter's signing sheet and APK Studio's Sign tab.</li>
 </ul>
 ]]></description>
-      <pubDate>Fri, 17 Jul 2026 09:07:11 +0000</pubDate>
-      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.4.0/Droidective-v3.4.0.dmg" sparkle:edSignature="89y+hd/Je5GB3g3NEiW4tw86hliODft32hUcdhHDVXEJTqzIWbqt254xb4T/jVdS86S9t3RPT8V03QRgV1nbDw==" length="86489698" type="application/octet-stream" />
+      <pubDate>Fri, 17 Jul 2026 10:39:49 +0000</pubDate>
+      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.4.1/Droidective-v3.4.1.dmg" sparkle:edSignature="9nzBIJRR6AUFV54eTIyg+Q8eAxKp9Uk+0935OV2KPS1itFDLL6wPpTFzAIJOjQ8ITSHqyvTpTy8PpD5rcg1GBA==" length="86496143" type="application/octet-stream" />
     </item>
     
   </channel>
