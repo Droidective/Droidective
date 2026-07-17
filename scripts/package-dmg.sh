@@ -50,6 +50,30 @@ fi
 ffmpeg="$APP/Contents/Resources/ffmpeg"
 [[ -f "$ffmpeg" ]] && codesign "${opts[@]}" "$ffmpeg"
 
+# Notarization unpacks jar archives and rejects any unsigned Mach-O inside them
+# — bundletool-all.jar ships JNA's darwin libjnidispatch.jnilib. Extract each
+# bundled jar's macOS natives, sign them, and repack in place (seeding doesn't
+# digest-check the bundled jars, so the changed hash is fine).
+if [[ "$SIGN_IDENTITY" != "-" ]]; then
+  for jar in "$APP/Contents/Resources"/*.jar; do
+    [[ -f "$jar" ]] || continue
+    natives="$(zipinfo -1 "$jar" | grep -E '\.(dylib|jnilib)$' || true)"
+    [[ -n "$natives" ]] || continue
+    jartmp="$(mktemp -d)"
+    while IFS= read -r entry; do
+      (
+        cd "$jartmp"
+        unzip -qo "$jar" "$entry"
+        codesign "${opts[@]}" "$entry"
+        zip -q "$jar" "$entry"
+      )
+    done <<<"$natives"
+    rm -rf "$jartmp"
+    echo "signed jar natives in $(basename "$jar"):"
+    echo "$natives"
+  done
+fi
+
 codesign "${opts[@]}" "$APP"
 codesign --verify --deep --strict "$APP"
 

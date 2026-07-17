@@ -22,11 +22,24 @@ DMG="${1:?dmg path required}"
 }
 
 echo "Submitting $DMG for notarization (waiting for Apple)…"
-xcrun notarytool submit "$DMG" \
+# `submit --wait` exits 0 even when Apple rejects the build, so read the final
+# status from the JSON result and dump the notary log on anything but Accepted.
+result="$(xcrun notarytool submit "$DMG" \
   --key "$AC_API_KEY_PATH" \
   --key-id "$AC_API_KEY_ID" \
   --issuer "$AC_API_ISSUER_ID" \
-  --wait
+  --wait --output-format json)"
+echo "$result"
+status="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("status",""))' <<<"$result")"
+if [[ "$status" != "Accepted" ]]; then
+  submission_id="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("id",""))' <<<"$result")"
+  echo "Notarization status: ${status:-unknown} — notary log follows" >&2
+  xcrun notarytool log "$submission_id" \
+    --key "$AC_API_KEY_PATH" \
+    --key-id "$AC_API_KEY_ID" \
+    --issuer "$AC_API_ISSUER_ID" >&2 || true
+  exit 1
+fi
 
 echo "Stapling notarization ticket…"
 xcrun stapler staple "$DMG"
