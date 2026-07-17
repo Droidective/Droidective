@@ -1,3 +1,91 @@
+## Droidective v3.4.0
+
+An AAB to APK converter joins the toolset (the 58th), updates now install
+themselves silently, the Crash Catcher becomes a real multi-crash browser,
+and wireless pairing connects on its own.
+
+### AAB to APK (new)
+
+- **Convert an Android App Bundle to an installable APK** — the new tool runs
+  `bundletool build-apks --mode=universal` and writes `<name>-universal.apk`
+  to your capture folder. Optionally sign with your release keystore
+  (passwords passed via temp files, never on the command line); without one,
+  bundletool uses your debug keystore.
+- **Works offline out of the box** — bundletool and uber-apk-signer ship
+  inside the app, with upgrades still managed in Settings ▸ Tools.
+- **Double-click `.aab` or `.apk` files in Finder** — bundles open in the
+  converter; APKs open a workspace tab with app info, per-device install
+  rows, and Open in APK Studio.
+- **Installs run in the background** — they survive navigation and window
+  closes, show live progress under the device bar, and post a macOS
+  notification when a batch finishes while the app is in the background.
+
+### Updates install themselves
+
+- **Silent download** — with automatic downloads on (the default), updates
+  download and stage in the background; a "Relaunch to update" pill appears
+  at the bottom of the sidebar. Click it to update now, or just quit — the
+  update applies anyway.
+- **With auto-download off** you get an "Update available" pill and a
+  once-per-version notification instead; nothing downloads until you say so.
+- **What's New after updating** — the first launch of a new version offers
+  the release notes in-app.
+- Checks run on launch and hourly; manual checks (menu, Settings, About) are
+  the only place "You're up to date" appears. Background (menu-bar-only) mode
+  gets its own Update rows in the menu.
+
+### Crash Catcher, rebuilt
+
+- **A multi-crash browser** — the buffer is split into individual crashes
+  (Java, native, React Native, ANR) in a list + detail layout, instead of one
+  raw dump.
+- **Filter by kind, process, or text**, with trace highlighting (marker lines
+  red, `Caused by:` orange, frames dimmed), a raw/messages toggle, copy as
+  plain/Slack/Jira, and save to file.
+- **Watch mode** polls every 5 seconds and toasts when a new crash lands;
+  **Clear Buffer** empties the device's crash log behind a confirmation.
+- **No more missing crashes** — the fetch cap rises from 512 KB to 16 MB; the
+  old cap silently dropped the newest crashes on busy devices.
+
+### Send Text snippets, reworked
+
+- **One "＋ New Snippet" button** replaces the bookmark menu and chip; your 6
+  most recently used snippets sit under the field as one-click tags.
+- **A searchable library** below the Run button — name and preview per row,
+  click to insert, right-click to remove, with search appearing once the
+  library grows past 10.
+
+### Wireless & connection
+
+- **Pairing auto-connects** — after a successful Android 11+ pair, the sheet
+  discovers the device's connect endpoint over mDNS and connects without
+  asking for the second port.
+- **A bare IP connects on 5555** — the Connect field no longer requires an
+  explicit port.
+
+### Layout & polish
+
+- **Split panes stay usable** — the divider clamps to 30–70%, and every
+  feature adapts to narrow panes (toolbars reflow to two rows, master
+  columns scale proportionally, Mirror Screen's control bar folds into an
+  overflow menu instead of clipping). Dragging past the limit hides the
+  sidebar to make room.
+- **The welcome tour is skippable** — Skip, Esc, or click-away all end it;
+  the finale gains a Finish button.
+- **Reading pauses the feed** — expanding a Reactotron item or a JS Console
+  object pauses tail-follow so streaming events can't scroll it away.
+- **Drop-to-split works with APK tabs open** — a full-pane drop target in the
+  AAB/APK screens was swallowing tab drags.
+- The light app icon is now used everywhere, and toolbar pickers hug their
+  labels instead of floating in fixed-width gaps.
+
+### Install
+
+Download `Droidective-v3.4.0.dmg` below, or `brew install --cask
+rohindh-r/tap/droidective`. Existing installs update in place via Sparkle.
+
+---
+
 ## Droidective v3.3.1
 
 iOS Logs is rebuilt around how the simulator's unified log actually behaves,
