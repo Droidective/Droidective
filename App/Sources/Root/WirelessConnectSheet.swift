@@ -120,7 +120,7 @@ struct WirelessConnectSheet: View {
             }
 
             StepRow(number: 3, title: "Connect", done: paired) {
-                Text("Use the port on the main Wireless debugging screen — it differs from the pairing port.")
+                Text("After pairing, Droidective looks up the connect port and connects by itself. If it can't, use the port on the main Wireless debugging screen — it differs from the pairing port.")
                     .font(.app(.callout))
                     .foregroundStyle(.textMuted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -220,14 +220,47 @@ struct WirelessConnectSheet: View {
         return endpoint
     }
 
+    /// Pair, then finish the job when possible: a paired device advertises
+    /// its connect port over mDNS (`_adb-tls-connect._tcp`), so on success we
+    /// look it up and connect without asking for the port. When discovery
+    /// comes up empty (older adb, mDNS off, different subnet), fall back to
+    /// prefilling "ip:" so the user only types the port from the Wireless
+    /// debugging screen.
     private func runPair() {
         guard let input = pairInput else { return }
         let connection = state.env.engine.connection
-        run({ try await connection.pair(host: input.host, port: input.port, code: input.code) }) { _ in
-            paired = true
-            if pairConnectEndpoint.isEmpty {
-                pairConnectEndpoint = "\(input.host):"
+        busy = true
+        status = nil
+        Task {
+            await CommandLog.userInitiated {
+                do {
+                    let result = try await connection.pair(
+                        host: input.host, port: input.port, code: input.code)
+                    status = Status(ok: result.ok, message: result.message)
+                    guard result.ok else { return }
+                    paired = true
+                    if pairConnectEndpoint.isEmpty {
+                        pairConnectEndpoint = "\(input.host):"
+                    }
+                    status = Status(ok: true, message: "Paired — looking up the connect port…")
+                    guard let endpoint = await connection.discoverConnectEndpoint(host: input.host),
+                          let port = endpoint.port else {
+                        status = Status(
+                            ok: true,
+                            message: "Paired — enter the port from the Wireless debugging screen to connect.")
+                        return
+                    }
+                    pairConnectEndpoint = "\(endpoint.host):\(port)"
+                    let connected = try await connection.connect(host: endpoint.host, port: port)
+                    status = Status(ok: connected.ok, message: connected.message)
+                    if connected.ok {
+                        finishConnected(connected, address: "\(endpoint.host):\(port)")
+                    }
+                } catch {
+                    status = Status(ok: false, message: error.localizedDescription)
+                }
             }
+            busy = false
         }
     }
 
