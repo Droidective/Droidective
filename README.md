@@ -116,19 +116,12 @@ builds are signed with a Developer ID and notarized (see [`RELEASING.md`](RELEAS
 
 ## Install a release build
 
-**Homebrew (recommended):**
-
-```sh
-brew install --cask rohindh-r/tap/droidective
-```
-
-**Direct download:** each [GitHub release](../../releases) ships a
-`Droidective-<version>.dmg`. Open it and drag **Droidective** into
-**Applications**.
+Each [GitHub release](../../releases) ships a `Droidective-<version>.dmg`.
+Open it and drag **Droidective** into **Applications**.
 
 The app is signed with a Developer ID and notarized by Apple, so it opens
 normally — no Gatekeeper warning, no `xattr` workaround. It keeps itself current
-through Sparkle (and `brew upgrade` defers to that).
+through Sparkle.
 
 ## Architecture
 

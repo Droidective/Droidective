@@ -81,8 +81,8 @@ and wireless pairing connects on its own.
 
 ### Install
 
-Download `Droidective-v3.4.0.dmg` below, or `brew install --cask
-rohindh-r/tap/droidective`. Existing installs update in place via Sparkle.
+Download `Droidective-v3.4.0.dmg` below. Existing installs update in place
+via Sparkle.
 
 ---
 

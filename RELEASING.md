@@ -1,7 +1,7 @@
 # Releasing Droidective
 
-Droidective ships as a Developer ID-signed, notarized DMG via GitHub Releases
-and a Homebrew cask, and updates itself with
+Droidective ships as a Developer ID-signed, notarized DMG via GitHub Releases,
+and updates itself with
 [Sparkle](https://sparkle-project.org). The marketing site and the Sparkle
 appcast are both served from GitHub Pages at
 `https://droidective.com/`.
@@ -116,19 +116,7 @@ with `AC_API_KEY_PATH=… AC_API_KEY_ID=… AC_API_ISSUER_ID=… ./scripts/notar
 Without `.env.signing`, `make dmg` produces an ad-hoc DMG — fine for testing,
 but Gatekeeper still warns.
 
-### 5. Homebrew cask (optional)
-
-Releases publish a cask to a tap repo so users can
-`brew install --cask rohindh-r/tap/droidective`.
-
-1. Create an empty public repo **`Rohindh-R/homebrew-tap`**.
-2. Add a `HOMEBREW_TAP_TOKEN` secret — a fine-grained PAT with *contents: write*
-   on that repo.
-
-The release job renders `Casks/droidective.rb` (version + DMG sha256) and commits
-it. Without the token, the cask step is skipped.
-
-### 6. SEO / discoverability (optional but recommended)
+### 5. SEO / discoverability (optional but recommended)
 
 On-page SEO is already in `website/index.html` (title, meta description, Open
 Graph, Twitter card, JSON-LD `SoftwareApplication`) plus `site/sitemap.xml` and
@@ -145,7 +133,7 @@ Ranking for competitive terms still needs links and time:
 - Expect long-tail phrases ("all-in-one Android debugging tool for macOS") to
   land first; head terms like "adb tool" take sustained authority.
 
-### 7. Configure telemetry (optional)
+### 6. Configure telemetry (optional)
 
 Crash reporting (Sentry) and opt-in analytics (PostHog) stay disabled until you
 supply keys. They are **not** committed to source — they're injected at build
@@ -205,8 +193,7 @@ CI (the `release` job) then:
 - signs the stapled DMG with the EdDSA key and commits the regenerated
   `site/appcast.xml` to `main` — with those notes rendered to HTML and embedded
   in the item's `<description>`, so Sparkle shows them in its update window
-  rather than loading the GitHub release page;
-- updates the Homebrew cask.
+  rather than loading the GitHub release page.
 
 That commit to `main` re-runs the `pages` job, which deploys the site and the
 new appcast to GitHub Pages. Installed copies then pick up the new appcast and
@@ -233,8 +220,7 @@ Same pipeline, three differences:
   stable;
 - the appcast item carries `<sparkle:channel>beta</sparkle:channel>`, and
   `update-appcast.sh` keeps the current stable item alongside it (a newer beta
-  replaces the previous beta item);
-- the Homebrew cask is not touched.
+  replaces the previous beta item).
 
 Put the beta's notes as the top `## ` section of `RELEASE_NOTES.md` — the notes
 extraction always takes the first section. Shipping the stable `vX.Y.Z`
@@ -268,14 +254,13 @@ Copy this into the release PR and tick each item.
 ### Release (CI does the build — triggered by the tag)
 
 - [ ] Tag from `main` and push: `git tag vX.Y.Z && git push origin vX.Y.Z`.
-- [ ] The Actions `release` job succeeds: builds Release with `MARKETING_VERSION=X.Y.Z` (scrcpy-server + ffmpeg ship inside the app), signs with the Developer ID, packages `Droidective-vX.Y.Z.dmg`, notarizes + staples it, signs it with the Sparkle EdDSA key, updates the Homebrew cask, publishes the GitHub release with the DMG + latest notes, and commits the regenerated `site/appcast.xml` to `main`.
+- [ ] The Actions `release` job succeeds: builds Release with `MARKETING_VERSION=X.Y.Z` (scrcpy-server + ffmpeg ship inside the app), signs with the Developer ID, packages `Droidective-vX.Y.Z.dmg`, notarizes + staples it, signs it with the Sparkle EdDSA key, publishes the GitHub release with the DMG + latest notes, and commits the regenerated `site/appcast.xml` to `main`.
 - [ ] The follow-up `pages` run (triggered by that appcast commit) deploys the site + appcast to GitHub Pages.
 
 ### Verify (post-release)
 
 - [ ] GitHub release page shows the right version, the notes, and a downloadable DMG.
 - [ ] Fresh download launches cleanly: mount the DMG, drag to `/Applications`, open — no Gatekeeper warning. `spctl -a -vvv -t install Droidective-vX.Y.Z.dmg` reports *accepted, source=Notarized Developer ID*.
-- [ ] `brew install --cask rohindh-r/tap/droidective` installs the new version.
 - [ ] `https://droidective.com/` shows the new screenshots and copy.
 - [ ] `https://droidective.com/appcast.xml` lists the new version with a valid `sparkle:edSignature` and the release notes inline in `<description>`.
 - [ ] A prior install (v2.1.0+) offers the update via Sparkle, shows the release notes in the update window (not the GitHub web page), and applies it in place.
@@ -285,7 +270,7 @@ Copy this into the release PR and tick each item.
 
 Not a supported target. The Mac App Store mandates the App Sandbox, which forbids
 spawning external executables — and Droidective's whole job is driving `adb`,
-the bundled `ffmpeg`, the Android `emulator`, and `brew` (and pushing the
+the bundled `ffmpeg`, and the Android `emulator` (and pushing the
 scrcpy-server to the device). The emulator additionally needs a
 hypervisor entitlement the App Store doesn't grant. So Droidective is distributed
 only as a Developer ID-signed, notarized build.
