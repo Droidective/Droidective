@@ -35,30 +35,57 @@ import Testing
         #expect(presets.sendTextSnippets.map(\.name) == ["b"])
     }
 
-    @Test func recordUseBumpsOnlyTheMatch() {
+    @Test func recordUseBumpsAndStampsOnlyTheMatch() {
         var presets = Presets(sendTextSnippets: [
             SendTextSnippet(name: "a", text: "1"), SendTextSnippet(name: "b", text: "2"),
         ])
-        presets.recordSnippetUse(named: "b")
-        presets.recordSnippetUse(named: "b")
-        presets.recordSnippetUse(named: "missing")
+        presets.recordSnippetUse(named: "b", at: 100)
+        presets.recordSnippetUse(named: "b", at: 200)
+        presets.recordSnippetUse(named: "missing", at: 300)
         #expect(presets.sendTextSnippets == [
             SendTextSnippet(name: "a", text: "1", uses: 0),
-            SendTextSnippet(name: "b", text: "2", uses: 2),
+            SendTextSnippet(name: "b", text: "2", uses: 2, lastUsedAt: 200),
         ])
     }
 
-    @Test func topSnippetsRanksByUsesThenSaveOrder() {
+    @Test func addStampsANewSnippetAsJustUsed() {
+        var presets = Presets()
+        presets.addSnippet(named: "fresh", text: "x", at: 42)
+        #expect(presets.sendTextSnippets.first?.lastUsedAt == 42)
+    }
+
+    @Test func recentSnippetsRankByFreshnessThenUsesThenSaveOrder() {
         let presets = Presets(sendTextSnippets: [
             SendTextSnippet(name: "old-tie", text: "1", uses: 1),
-            SendTextSnippet(name: "hot", text: "2", uses: 5),
+            SendTextSnippet(name: "yesterday", text: "2", uses: 1, lastUsedAt: 1000),
             SendTextSnippet(name: "new-tie", text: "3", uses: 1),
-            SendTextSnippet(name: "cold", text: "4", uses: 0),
-            SendTextSnippet(name: "warm", text: "5", uses: 3),
-            SendTextSnippet(name: "mild", text: "6", uses: 2),
+            SendTextSnippet(name: "just-now", text: "4", uses: 0, lastUsedAt: 3000),
+            SendTextSnippet(name: "this-morning", text: "5", uses: 9, lastUsedAt: 2000),
+            SendTextSnippet(name: "much-used", text: "6", uses: 5),
         ])
-        // The quick-insert row shows at most the top 5.
-        #expect(presets.topSnippets(limit: 5).map(\.name) == ["hot", "warm", "mild", "old-tie", "new-tie"])
+        // Freshness first; never-used snippets (pre-lastUsedAt files) follow
+        // by use count, ties in save order.
+        #expect(presets.recentSnippets(limit: 6).map(\.name) == [
+            "just-now", "this-morning", "yesterday", "much-used", "old-tie", "new-tie",
+        ])
+        #expect(presets.recentSnippets(limit: 2).map(\.name) == ["just-now", "this-morning"])
+    }
+
+    @Test func snippetsWithoutLastUsedAtStillDecode() throws {
+        // Files written before the field existed carry no lastUsedAt key.
+        let old = Data(#"{"name":"a","text":"1","uses":3}"#.utf8)
+        let snippet = try JSONDecoder().decode(SendTextSnippet.self, from: old)
+        #expect(snippet == SendTextSnippet(name: "a", text: "1", uses: 3, lastUsedAt: nil))
+    }
+
+    @Test func matchesSearchesNameAndTextCaseInsensitively() {
+        let snippet = SendTextSnippet(name: "Metro host", text: "{ip}:8081")
+        #expect(snippet.matches("metro"))
+        #expect(snippet.matches("8081"))
+        #expect(snippet.matches("{IP}"))
+        #expect(snippet.matches("  metro "))
+        #expect(snippet.matches(""))
+        #expect(!snippet.matches("logcat"))
     }
 
     // MARK: - Placeholder expansion
