@@ -68,7 +68,7 @@ opening it — verify those by hand.
 ## Build / test / run
 
 ```
-make test          # ADBKit unit tests (cd ADBKit && swift test) — 834 tests, keep green
+make test          # ADBKit unit tests (cd ADBKit && swift test) — 910 tests, keep green
 make build         # xcodegen generate + xcodebuild Debug
 make run           # build + open the .app
 ```
@@ -424,6 +424,28 @@ compile or test time* — lean on it instead of manual vigilance.
 ## Status
 
 Feature-complete across all planned milestones plus several UX rounds (latest:
+**v3.4.0** — an **AAB to APK converter** (the 58th feature: bundletool
+universal APK with optional release-keystore signing; bundletool +
+uber-apk-signer factory-seeded from `App/Resources`; double-clicked
+`.aab`/`.apk` files open in-window — the `apk-open` workspace tab — with
+background installs that survive navigation and post notifications),
+**silent updates** (a custom `SPUUserDriver` — background download/stage, a
+"Relaunch to update" sidebar pill, a What's New sheet on first launch of a
+new version, `UpdatePolicy` pure-tested in ADBKit), the **Crash Catcher
+rebuilt as a multi-crash browser** (`CrashParser` splits Java/native/RN/ANR
+crashes; watch mode; 16 MB fetch cap), **Send Text snippets reworked** (one
+creator, recent tags, a searchable library), **wireless pairing
+auto-connect** (mDNS `adb mdns services` discovery after pairing; bare
+connect IPs default to :5555), **split panes clamped to 30–70%**
+(`PaneSplit`) with every feature adapted to narrow panes, a skippable
+welcome tour, and a drop-to-split fix (tab drags ride a topmost overlay
+target past full-pane URL drop regions). Before that,
+**v3.3.x** — **iOS Logs rebuilt** around the unified log (app-scoped stream,
+freeze-on-scroll with an "N new" pill, Xcode-style rows, error/fault
+counters), ⌘F routed to the active tab's find/filter, a **JS console that
+stays connected** (proxy-heartbeat keepalive, relaunch/sleep/Metro-restart
+reconnects), the **mirror session leak fixed** (no more runaway CPU),
+logcat Filter/Find split, and a Sparkle **beta update channel**. Before that,
 **v3.2.0** — **wireless pair & connect from the device dropdown**: a
 "Wireless debugging" menu section opens `WirelessConnectSheet`, a guided
 three-tab sheet (Android 11+ pairing-code steps, direct `ip:port` connect,
@@ -465,7 +487,7 @@ jadx/apktool, recompile, and sign — with keystore creation) plus Frida setup, 
 custom accent color, launching emulators from the device bar, per-feature
 connect-a-device empty states, a live-preview hotkey recorder, and a Settings
 split into Appearance/Privacy; managed tools download from GitHub releases into
-Application Support and are sized/removable in Settings); 834 tests green;
+Application Support and are sized/removable in Settings); 910 tests green;
 builds clean with zero warnings (enforced as errors in CI). Verified live against a
 physical device and an Android emulator. Release builds are Developer ID-signed +
 notarized and bundle scrcpy/ffmpeg (see `RELEASING.md`). Open gaps: the Apps
