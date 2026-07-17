@@ -31,6 +31,7 @@ jobs:
         run: brew install xcodegen
       - name: Build app
         run: |
+          ./scripts/assemble-ffmpeg.sh
           xcodegen generate
           xcodebuild -project Droidective.xcodeproj -scheme App -configuration Debug -derivedDataPath DerivedData build CODE_SIGNING_ALLOWED=NO
       - name: Run App tests
@@ -126,14 +127,22 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
+          ./scripts/assemble-ffmpeg.sh
           xcodegen generate
+          # Universal build: without an explicit ARCHS the Apple Silicon
+          # runner produced arm64-only binaries that Intel Macs refuse to
+          # launch (issue #174).
           xcodebuild -project Droidective.xcodeproj -scheme App -configuration Release \
             -derivedDataPath DerivedData build \
+            ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO \
             MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
             SENTRY_DSN="$SENTRY_DSN" POSTHOG_KEY="$POSTHOG_KEY" \
             CODE_SIGN_IDENTITY="$SIGN_IDENTITY" DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
             CODE_SIGN_STYLE=Manual ENABLE_HARDENED_RUNTIME=YES OTHER_CODE_SIGN_FLAGS="--timestamp" \
             DEBUG_INFORMATION_FORMAT=dwarf-with-dsym
+          # Every Mach-O in the bundle must carry both slices, or Intel
+          # support silently regresses the next time a bundled tool updates.
+          ./scripts/check-universal.sh DerivedData/Build/Products/Release/Droidective.app
           SIGN_IDENTITY="$SIGN_IDENTITY" ./scripts/package-dmg.sh "${GITHUB_REF_NAME}"
       # Upload dSYMs so Sentry can symbolicate first-party frames in crash/app-hang
       # reports. Without this, our own frames show as <unknown>. Skips cleanly if

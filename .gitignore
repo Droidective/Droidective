@@ -14,3 +14,4 @@ AuthKey_*.p8
 .claude/
 node_modules/
 website/dist/
+App/Resources/ffmpeg

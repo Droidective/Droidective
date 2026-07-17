@@ -19,6 +19,7 @@ SIGNING := CODE_SIGN_IDENTITY="$(SIGN_IDENTITY)" DEVELOPMENT_TEAM="$(DEVELOPMENT
 endif
 
 generate:
+	./scripts/assemble-ffmpeg.sh
 	xcodegen generate
 
 build: generate

@@ -156,7 +156,11 @@ Node 22 in CI; scroll reveals and the hero palette demo must keep their
   jars are factory-seeded into the managed-tool store at launch so
   Settings ▸ Tools can upgrade them) live in `App/Resources/`, resolved by the
   App-layer `BundledTools` (single version source);
-  `scripts/update-bundled-tools.sh` refreshes them. The
+  `scripts/update-bundled-tools.sh` refreshes them. **Releases are universal
+  (arm64 + x86_64)** — every bundled Mach-O must carry both slices
+  (`update-bundled-tools.sh` lipos ffmpeg; `scripts/check-universal.sh` fails
+  the release job on any single-arch Mach-O — that's what locked Intel Macs
+  out in issue #174). The
   app needs no separate scrcpy/ffmpeg install; the Doctor only checks adb /
   emulator (pointing at the install source when one is missing — the app
   never installs tools itself).

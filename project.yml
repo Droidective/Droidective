@@ -32,6 +32,10 @@ targets:
         excludes:
           - scrcpy-server
           - ffmpeg
+          # Per-arch slices — committed for scripts/assemble-ffmpeg.sh, never
+          # bundled (the assembled universal `ffmpeg` above is what ships).
+          - ffmpeg-arm64
+          - ffmpeg-x86_64
       # Extension-less binaries: force them into the resources phase so they land
       # in the .app bundle (XcodeGen otherwise can't infer the build phase).
       # scrcpy-server is pushed to the device; ffmpeg runs on the Mac for the

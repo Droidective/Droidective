@@ -6,7 +6,10 @@
 #
 # Downloads:
 #   - scrcpy-server  from the scrcpy GitHub release (default v4.1)
-#   - ffmpeg         latest static build, macOS arm64 (ffmpeg.martin-riedl.de)
+#   - ffmpeg         latest static builds, macOS arm64 + x86_64
+#                    (ffmpeg.martin-riedl.de), merged into one universal
+#                    binary — the app ships universal, so every bundled
+#                    Mach-O must carry both slices (CI enforces this).
 #
 # After running, bump the version constants in
 # App/Sources/Bundled/BundledTools.swift if they changed (the scrcpy version
@@ -28,7 +31,8 @@ trap 'rm -rf "$TMP"' EXIT
 # script, read the "got" hash from the mismatch error, and update the constant
 # here in the same commit that bumps the version.
 SCRCPY_SERVER_SHA256="deacb991ed2509715160ffdc7907e47b4160eb30d1566217e9047fd5b8850cae"
-FFMPEG_SHA256="eaf91238e104dd0e262bc6510e25061855cc99a6955a721b0ac99660d58c473d"
+FFMPEG_ARM64_SHA256="eaf91238e104dd0e262bc6510e25061855cc99a6955a721b0ac99660d58c473d"
+FFMPEG_X86_64_SHA256="1ca59dda73668c59898a0b305afd8a88817a989187f222ec62d64e775d614d23"
 BUNDLETOOL_SHA256="a099cfa1543f55593bc2ed16a70a7c67fe54b1747bb7301f37fdfd6d91028e29"
 UBER_APK_SIGNER_SHA256="e1299fd6fcf4da527dd53735b56127e8ea922a321128123b9c32d619bba1d835"
 
@@ -51,15 +55,34 @@ curl -fsSL -o "$TMP/scrcpy-server" \
 verify_sha256 "$TMP/scrcpy-server" "$SCRCPY_SERVER_SHA256" "scrcpy-server"
 mv "$TMP/scrcpy-server" "$RES/scrcpy-server"
 
-echo "==> ffmpeg (static, macOS arm64)"
-curl -fsSL -o "$TMP/ffmpeg.zip" \
+echo "==> ffmpeg (static, macOS arm64 + x86_64 → universal)"
+mkdir -p "$TMP/ffmpeg-arm64" "$TMP/ffmpeg-x86_64"
+curl -fsSL -o "$TMP/ffmpeg-arm64.zip" \
   "https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffmpeg.zip"
-unzip -o -q "$TMP/ffmpeg.zip" -d "$TMP"
-verify_sha256 "$TMP/ffmpeg" "$FFMPEG_SHA256" "ffmpeg"
-mv "$TMP/ffmpeg" "$RES/ffmpeg"
-chmod +x "$RES/ffmpeg"
+curl -fsSL -o "$TMP/ffmpeg-x86_64.zip" \
+  "https://ffmpeg.martin-riedl.de/redirect/latest/macos/amd64/release/ffmpeg.zip"
+unzip -o -q "$TMP/ffmpeg-arm64.zip" -d "$TMP/ffmpeg-arm64"
+unzip -o -q "$TMP/ffmpeg-x86_64.zip" -d "$TMP/ffmpeg-x86_64"
+verify_sha256 "$TMP/ffmpeg-arm64/ffmpeg" "$FFMPEG_ARM64_SHA256" "ffmpeg (arm64)"
+verify_sha256 "$TMP/ffmpeg-x86_64/ffmpeg" "$FFMPEG_X86_64_SHA256" "ffmpeg (x86_64)"
 
-ffmpeg_version="$("$RES/ffmpeg" -version | head -1 | cut -d' ' -f3)"
+# Both slices must be the same ffmpeg version — a mixed-version universal
+# binary would behave differently per Mac.
+arm64_version="$("$TMP/ffmpeg-arm64/ffmpeg" -version | head -1 | cut -d' ' -f3)"
+x86_64_version="$(arch -x86_64 "$TMP/ffmpeg-x86_64/ffmpeg" -version | head -1 | cut -d' ' -f3)"
+if [[ "$arm64_version" != "$x86_64_version" ]]; then
+  echo "ERROR: ffmpeg slice versions differ (arm64=$arm64_version, x86_64=$x86_64_version)" >&2
+  echo "  The mirror is mid-publish — retry in a bit." >&2
+  exit 1
+fi
+
+# Committed as per-arch slices (each under GitHub's 100 MB file limit); the
+# fat binary is gitignored and assembled before every build.
+mv "$TMP/ffmpeg-arm64/ffmpeg" "$RES/ffmpeg-arm64"
+mv "$TMP/ffmpeg-x86_64/ffmpeg" "$RES/ffmpeg-x86_64"
+"$ROOT/scripts/assemble-ffmpeg.sh"
+
+ffmpeg_version="$arm64_version"
 
 echo "==> bundletool $BUNDLETOOL_VERSION"
 curl -fsSL -o "$TMP/bundletool-all.jar" \
