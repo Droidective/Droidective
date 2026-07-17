@@ -327,11 +327,13 @@ struct FormActionView: View {
             let shown = showAllSnippets || !query.isEmpty
                 ? library
                 : Array(library.prefix(Self.collapsedLibraryLimit))
-            SnippetTagFlow(spacing: 6) {
+            VStack(spacing: 0) {
                 ForEach(shown) { snippet in
-                    snippetChip(snippet, field: field)
+                    snippetRow(snippet, field: field)
+                    if snippet.id != shown.last?.id { Divider() }
                 }
                 if query.isEmpty, library.count > Self.collapsedLibraryLimit {
+                    Divider()
                     Button {
                         showAllSnippets.toggle()
                     } label: {
@@ -339,14 +341,47 @@ struct FormActionView: View {
                             ? "Show less"
                             : "Show \(library.count - Self.collapsedLibraryLimit) more")
                             .font(.app(.caption))
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .overlay(Capsule().strokeBorder(.borderSubtle))
-                            .contentShape(Capsule())
+                            .foregroundStyle(.textMuted)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(.textMuted)
                 }
+            }
+            .background(.bgSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(.borderSubtle))
+            .frame(maxWidth: 380, alignment: .leading)
+        }
+    }
+
+    /// One library row: the name beside a muted preview of the text — click
+    /// inserts, right-click removes.
+    private func snippetRow(_ snippet: SendTextSnippet, field: FieldDef) -> some View {
+        Button {
+            insert(snippet, into: field)
+        } label: {
+            HStack(spacing: 10) {
+                Text(snippet.name)
+                    .font(.app(.callout))
+                    .lineLimit(1)
+                Spacer(minLength: 12)
+                Text(snippet.text)
+                    .font(.app(.caption, design: .monospaced))
+                    .foregroundStyle(.textMuted)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Click to insert · right-click to remove")
+        .contextMenu {
+            Button("Remove Snippet", role: .destructive) {
+                presets.removeSnippet(named: snippet.name)
+                persistPresets()
             }
         }
     }
