@@ -1447,6 +1447,7 @@ private struct JSValueView: View {
     /// the object's end (the flipped-layout jump).
     var scrollTargetID: AnyHashable?
     @Environment(\.logTailScrollToHeader) private var scrollToHeader
+    @Environment(\.logTailPauseFollow) private var pauseFollow
     @State private var expanded = false
     @State private var snapshot: SnapNode?
     @State private var failed = false
@@ -1464,6 +1465,11 @@ private struct JSValueView: View {
                 Button {
                     expanded.toggle()
                     if expanded {
+                        // Expanding means the user is reading — pause
+                        // tail-follow so streaming lines can't scroll the
+                        // object away (same affordances as Reactotron:
+                        // the jump button or scrolling back resumes).
+                        pauseFollow()
                         if snapshot == nil, !loading { load() } else { scrollHeaderToTop() }
                     }
                 } label: {
@@ -1641,6 +1647,7 @@ private struct SnapValueView: View {
     let node: SnapNode
     let session: JSConsoleSession
     var query: String = ""
+    @Environment(\.logTailPauseFollow) private var pauseFollow
     @State private var expanded = false
 
     /// Text highlighted in rows: the in-object search when active, else the ⌘F find.
@@ -1654,6 +1661,9 @@ private struct SnapValueView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Button {
                     expanded.toggle()
+                    // Reading a nested node is still reading — keep the feed
+                    // from scrolling it away.
+                    if expanded { pauseFollow() }
                 } label: {
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
                         Image(systemName: isOpen ? "chevron.down" : "chevron.right")

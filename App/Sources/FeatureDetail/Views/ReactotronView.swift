@@ -1739,6 +1739,7 @@ private struct TimelinePane: View {
 
 private struct RtRow: View {
     let item: RtItem
+    @Environment(\.logTailPauseFollow) private var pauseFollow
     @State private var expanded = false
     @State private var apiTab: ApiTab = .response
     @State private var hovering = false
@@ -1807,7 +1808,7 @@ private struct RtRow: View {
             .fixedSize()
             .padding(.vertical, 10)
             .contentShape(Rectangle())
-            .onTapGesture { if canExpand { expanded.toggle() } }
+            .onTapGesture { toggleExpanded() }
 
             if !presentation.primary.isEmpty {
                 Text(presentation.primary)
@@ -1850,7 +1851,16 @@ private struct RtRow: View {
             .fill(.clear)
             .frame(maxWidth: .infinity, minHeight: 28)
             .contentShape(Rectangle())
-            .onTapGesture { if canExpand { expanded.toggle() } }
+            .onTapGesture { toggleExpanded() }
+    }
+
+    /// Expanding an item means the user is reading it — pause tail-follow so
+    /// streaming events can't scroll it away. Collapse doesn't resume; the
+    /// jump-to-newest button (or scrolling back to the edge) does.
+    private func toggleExpanded() {
+        guard canExpand else { return }
+        expanded.toggle()
+        if expanded { pauseFollow() }
     }
 
     @ViewBuilder

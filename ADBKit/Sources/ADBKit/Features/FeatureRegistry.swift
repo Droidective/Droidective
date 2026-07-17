@@ -525,8 +525,11 @@ public enum FeatureRegistry {
         ),
         FeatureDef(
             id: "crash-catcher", title: "Crash Catcher",
-            subtitle: "Filtered crashes + copy-last-crash for Slack/Jira",
-            keywords: ["crash", "fatal", "exception", "androidruntime", "reactnativejs"],
+            subtitle: "Browse device crashes — watch, filter, copy for Slack/Jira",
+            keywords: [
+                "crash", "fatal", "exception", "androidruntime", "reactnativejs",
+                "anr", "tombstone", "signal", "sigsegv",
+            ],
             category: .logs, icon: "exclamationmark.triangle", kind: .view
         ),
         FeatureDef(

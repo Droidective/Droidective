@@ -134,21 +134,27 @@ struct LogcatView: View {
         .measuringWidth(into: $toolbarWidth)
     }
 
+    // Plain label + picker pairs: LabeledContent is a form-row control that
+    // soaks up toolbar width as a label↔content gap.
     private var levelPicker: some View {
-        LabeledContent("Level") {
+        HStack(spacing: 6) {
+            Text("Level")
             Picker("Level", selection: $level) {
                 ForEach(Self.levels, id: \.value) { item in
                     Text(item.label).tag(item.value)
                 }
             }
             .labelsHidden()
-            .frame(width: 110)
+            // No fixed width: the pop-up centers inside a wider frame,
+            // which reads as a gap after the label.
+            .fixedSize()
         }
         .font(.app(.callout))
     }
 
     private var appPicker: some View {
-        LabeledContent("App") {
+        HStack(spacing: 6) {
+            Text("App")
             appMenu
         }
         .font(.app(.callout))
@@ -308,10 +314,15 @@ struct LogcatView: View {
                 Label("Add manually / manage…", systemImage: "slider.horizontal.3")
             }
         } label: {
+            // The cap lives on the label: Menu is flexible and would center
+            // its pill inside any frame put on the Menu itself, which reads
+            // as a gap after the "App" label. Text hugs short names and
+            // truncates long ones.
             Text(packageFilter.map(bundleName) ?? "All apps")
                 .lineLimit(1)
+                .frame(maxWidth: 160)
         }
-        .frame(width: 150)
+        .fixedSize()
         .help("Stream one app's logs — pick a saved bundle or add a new one")
     }
 

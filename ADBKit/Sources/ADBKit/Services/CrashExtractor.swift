@@ -14,16 +14,19 @@ public enum CrashFormat: String, Sendable, CaseIterable {
     }
 }
 
-/// Crash extraction: pulls the most recent crash from the crash buffer
-/// (falling back to FATAL/AndroidRuntime/ReactNativeJS lines in the main
-/// buffer) and formats it for pasting into Slack, Jira, or plain text.
+/// Crash extraction: pulls the device's crash buffer (falling back to
+/// FATAL/AndroidRuntime/ReactNativeJS lines in the main buffer), splits it
+/// into individual `CrashReport`s via `CrashParser`, and formats a crash for
+/// pasting into Slack, Jira, or plain text.
 public struct CrashExtractor: Sendable {
-    public static let crashPattern = "FATAL EXCEPTION|AndroidRuntime|ReactNativeJS|FATAL SIGNAL"
-
-    /// Cap the logcat dump we pull. The crash/main buffers can hold very large
-    /// lines (RN apps log big payloads), and the default 10 MB ceiling is far
-    /// more than the UI can render; 512 KB is plenty to find the latest crash.
-    static let maxLogcatBytes = 512 * 1024
+    /// Cap the logcat dump we pull. `AdbClient` keeps the HEAD of the output
+    /// when it hits this cap, and the buffer is chronological — so a cap the
+    /// buffer can outgrow silently drops the NEWEST crashes (seen live with a
+    /// 512 KB cap against a ~540 KB crash buffer). Devices allow up to 16 MB
+    /// per log buffer (Developer options ▸ Logger buffer sizes), so cap there:
+    /// it bounds a runaway stream without ever truncating a real buffer. The
+    /// rendered crashes stay small regardless via `boundedBlock`.
+    static let maxLogcatBytes = 16 * 1024 * 1024
 
     let client: AdbClient
 
@@ -31,30 +34,14 @@ public struct CrashExtractor: Sendable {
         self.client = client
     }
 
-    public static func extractLastCrash(_ text: String) -> String {
-        let lines = text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline).map(String.init)
-        var index = -1
-        for i in stride(from: lines.count - 1, through: 0, by: -1) {
-            if lines[i].range(of: crashPattern, options: .regularExpression) != nil {
-                index = i
-                break
-            }
-        }
-        guard index >= 0 else { return "" }
-        let start = max(0, index - 2)
-        let end = min(lines.count, index + 80)
-        return lines[start..<end].joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    /// Keep the rendered crash small without dropping its diagnostic header. A
+    /// Keep a rendered crash small without dropping its diagnostic header. A
     /// fatal log line can be huge (RN payload logging) and the crash buffer
-    /// isn't otherwise trimmed, so the latest crash can balloon into a
-    /// multi-megabyte string that freezes the UI when shown as a selectable
-    /// Text. Android traces lead with the most useful lines (FATAL EXCEPTION,
-    /// the exception type and message) and trail with framework frames, while
-    /// the crash buffer itself is chronological (newest last). Keep both ends —
-    /// the head so the exception is never silently lost, the tail so the newest
-    /// crash survives — and elide the middle, under a character ceiling.
+    /// isn't otherwise trimmed, so a crash can balloon into a multi-megabyte
+    /// string that freezes the UI when shown as a selectable Text. Android
+    /// traces lead with the most useful lines (FATAL EXCEPTION, the exception
+    /// type and message) and trail with framework frames. Keep both ends —
+    /// the head so the exception is never silently lost, the tail so the
+    /// newest lines survive — and elide the middle, under a character ceiling.
     static func boundedBlock(_ block: String, maxLines: Int = 200, maxChars: Int = 64 * 1024) -> String {
         let lines = block.split(separator: "\n", omittingEmptySubsequences: false)
         var result = block
@@ -87,28 +74,28 @@ public struct CrashExtractor: Sendable {
         }
     }
 
-    /// Last crash from the device, formatted — nil when none found.
-    public func lastCrash(serial: String, format: CrashFormat) async throws(AdbError) -> String? {
+    /// Every crash on the device, newest first. Reads the crash buffer; when
+    /// that's empty (cleared, or an RN error that never crashed the process),
+    /// scans the tail of the main buffer instead.
+    public func crashes(serial: String) async throws(AdbError) -> [CrashReport] {
         let crashBuffer = try await client.run(
-            on: serial, ["logcat", "-d", "-b", "crash", "-t", "300"], maxOutputBytes: Self.maxLogcatBytes
+            on: serial, ["logcat", "-d", "-b", "crash", "-v", "threadtime", "-t", "1000"],
+            maxOutputBytes: Self.maxLogcatBytes
         )
-        var block = crashBuffer.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        var reports = CrashParser.parse(crashBuffer.stdout, source: .crashBuffer)
 
-        if block.isEmpty {
+        if reports.isEmpty {
             let mainBuffer = try await client.run(
-                on: serial, ["logcat", "-d", "-b", "main", "-t", "1000"], maxOutputBytes: Self.maxLogcatBytes
+                on: serial, ["logcat", "-d", "-b", "main", "-v", "threadtime", "-t", "2000"],
+                maxOutputBytes: Self.maxLogcatBytes
             )
-            block = Self.extractLastCrash(mainBuffer.stdout)
-        } else {
-            // The crash buffer accumulates every crash since the last clear —
-            // narrow it to the most recent one. When no line matches the crash
-            // pattern (some native traces), keep the whole buffer over nothing.
-            let latest = Self.extractLastCrash(block)
-            if !latest.isEmpty { block = latest }
+            reports = CrashParser.parse(mainBuffer.stdout, source: .mainBuffer)
         }
+        return reports.reversed()
+    }
 
-        block = Self.boundedBlock(block)
-        guard !block.isEmpty else { return nil }
-        return Self.format(block, as: format)
+    /// Empty the device's crash buffer.
+    public func clearCrashBuffer(serial: String) async throws(AdbError) {
+        _ = try await client.run(on: serial, ["logcat", "-c", "-b", "crash"])
     }
 }

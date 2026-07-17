@@ -154,6 +154,12 @@ struct LogTailViewV2<Data: RandomAccessCollection, Row: View>: View
             .environment(\.logTailScrollToHeader) { id in
                 proxy.scrollTo(id, anchor: newestEdge == .bottom ? .bottom : .top)
             }
+            // A row the user starts reading (e.g. expands) can pause tailing
+            // without moving the viewport: the anchored row stays put and new
+            // lines land past the newest edge, so the stream can't scroll the
+            // row away. Resume is the usual affordances — the jump button or
+            // scrolling back to the newest edge.
+            .environment(\.logTailPauseFollow) { setTailing(false) }
             // .top = first row = newest. In two-axis mode the anchor must be
             // nil: .top is UnitPoint(x: 0.5, y: 0), and 2D anchoring re-centers
             // the wide anchored row horizontally on every tail-follow write —
@@ -294,5 +300,19 @@ extension EnvironmentValues {
     var logTailScrollToHeader: @MainActor (AnyHashable) -> Void {
         get { self[LogTailScrollKey.self] }
         set { self[LogTailScrollKey.self] = newValue }
+    }
+}
+
+/// A row can call this to pause tail-follow in place — used when the user
+/// starts reading a row (expands it), so streaming appends can't scroll it
+/// away. Injected by `LogTailViewV2`; a no-op outside one.
+private struct LogTailPauseKey: EnvironmentKey {
+    static let defaultValue: @MainActor () -> Void = {}
+}
+
+extension EnvironmentValues {
+    var logTailPauseFollow: @MainActor () -> Void {
+        get { self[LogTailPauseKey.self] }
+        set { self[LogTailPauseKey.self] = newValue }
     }
 }
