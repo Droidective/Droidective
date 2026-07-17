@@ -74,6 +74,26 @@ import Testing
         #expect(reports[1].process == "com.app.b")
     }
 
+    @Test func nativeCrashInMainBufferKeepsItsTombstone() throws {
+        // Tombstone lines come from crash_dump's pid, not the crashing app's —
+        // the main-buffer pid check must not seal the block at the first
+        // DEBUG line.
+        let buffer = """
+        06-12 11:00:00.000  4001  4001 F libc    : Fatal signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x0 in tid 4001 (com.app.native)
+        06-12 11:00:00.100  4100  4100 F DEBUG   : *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+        06-12 11:00:00.101  4100  4100 F DEBUG   : pid: 4001, tid: 4001, name: app.native  >>> com.app.native <<<
+        06-12 11:00:00.102  4100  4100 F DEBUG   :       #00 pc 000000000004f6f0  /apex/libc.so
+        06-12 11:00:01.000  5001  5001 I OtherApp: unrelated noise
+        """
+        let reports = CrashParser.parse(buffer, source: .mainBuffer)
+        #expect(reports.count == 1)
+        let crash = try #require(reports.first)
+        #expect(crash.kind == .native)
+        #expect(crash.process == "com.app.native")
+        #expect(crash.raw.contains("#00 pc"))
+        #expect(!crash.raw.contains("unrelated noise"))
+    }
+
     @Test func reactNativeErrorParsedFromMainBuffer() throws {
         let buffer = """
         06-12 12:00:00.000  5000  5000 I ReactNativeJS: app booted

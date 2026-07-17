@@ -145,6 +145,10 @@ public enum CrashParser {
 
     private static func belongsToBlock(_ line: Line, block: Block) -> Bool {
         guard let tag = line.tag, crashTags.contains(tag) else { return false }
+        // Tombstone lines come from crash_dump's pid, not the crashing app's —
+        // a DEBUG line always continues a native block, or the pid check would
+        // seal the block after its "Fatal signal" line and drop the trace.
+        if block.kind == .native, tag == "DEBUG" { return true }
         guard let linePid = line.pid, let blockPid = block.pid else { return true }
         return linePid == blockPid
     }
