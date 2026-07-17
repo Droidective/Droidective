@@ -170,4 +170,92 @@ import Testing
         #expect(!result.ok)
         #expect(result.message == "failed to connect to 192.168.1.42:5555")
     }
+
+    @Test func discoverQueriesMdnsServicesAndMatchesTheHost() async {
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["mdns"], stdout: """
+        List of discovered mdns services
+        adb-R58M4-pair\t_adb-tls-pairing._tcp\t192.168.1.42:37123
+        adb-OTHER-conn\t_adb-tls-connect._tcp\t192.168.1.99:41000
+        adb-R58M4-conn\t_adb-tls-connect._tcp\t192.168.1.42:40913
+        """)
+        let service = await makeService(runner: runner)
+
+        let endpoint = await service.discoverConnectEndpoint(host: "192.168.1.42")
+        #expect(endpoint == WirelessEndpoint(host: "192.168.1.42", port: "40913"))
+        #expect(runner.invocations.contains { $0.arguments == ["mdns", "services"] })
+        // The pairing service and the other device's endpoint never match.
+        #expect(endpoint?.port != "37123")
+    }
+
+    @Test func discoverRetriesThenGivesUpQuietly() async {
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["mdns"], stdout: "List of discovered mdns services\n")
+        let service = await makeService(runner: runner)
+
+        let endpoint = await service.discoverConnectEndpoint(
+            host: "192.168.1.42", attempts: 3, delay: .milliseconds(1))
+        #expect(endpoint == nil)
+        #expect(runner.invocations.filter { $0.arguments == ["mdns", "services"] }.count == 3)
+    }
+
+    @Test func discoverTreatsMdnsUnsupportedAsNotFound() async {
+        // Older adb: "mdns" is an unknown command on stderr, non-zero exit.
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["mdns"], stderr: "adb: unknown command mdns", exitCode: 1)
+        let service = await makeService(runner: runner)
+
+        let endpoint = await service.discoverConnectEndpoint(
+            host: "192.168.1.42", attempts: 2, delay: .milliseconds(1))
+        #expect(endpoint == nil)
+    }
+}
+
+@Suite struct MdnsServicesParserTests {
+    @Test func parsesTabSeparatedRowsAndSkipsTheHeader() {
+        let output = """
+        List of discovered mdns services
+        adb-R58M4-pair\t_adb-tls-pairing._tcp\t192.168.1.42:37123
+        adb-R58M4-conn\t_adb-tls-connect._tcp\t192.168.1.42:40913
+        """
+        let services = ConnectionService.parseMdnsServices(output)
+        #expect(services == [
+            ConnectionService.MdnsService(
+                name: "adb-R58M4-pair", type: "_adb-tls-pairing._tcp",
+                endpoint: WirelessEndpoint(host: "192.168.1.42", port: "37123")),
+            ConnectionService.MdnsService(
+                name: "adb-R58M4-conn", type: "_adb-tls-connect._tcp",
+                endpoint: WirelessEndpoint(host: "192.168.1.42", port: "40913")),
+        ])
+    }
+
+    @Test func toleratesSpaceSeparationAndTrailingTypeDot() {
+        let services = ConnectionService.parseMdnsServices(
+            "adb-X   _adb-tls-connect._tcp.   10.0.0.7:39001")
+        #expect(services.count == 1)
+        #expect(services.first?.type == "_adb-tls-connect._tcp.")
+        #expect(services.first?.endpoint == WirelessEndpoint(host: "10.0.0.7", port: "39001"))
+    }
+
+    @Test func crlfSplitsCleanly() {
+        let services = ConnectionService.parseMdnsServices(
+            "adb-A\t_adb-tls-connect._tcp\t10.0.0.1:40000\r\nadb-B\t_adb-tls-connect._tcp\t10.0.0.2:40001")
+        #expect(services.count == 2)
+    }
+
+    @Test func skipsMalformedRows() {
+        let output = """
+        adb-A\t_adb-tls-connect._tcp\tnot-an-endpoint:99999999
+        adb-B\t_adb-tls-connect._tcp
+        just one field
+        adb-C\t_adb-tls-connect._tcp\t10.0.0.3
+        """
+        // A giant port, a missing column, and a portless endpoint all drop.
+        #expect(ConnectionService.parseMdnsServices(output).isEmpty)
+    }
+
+    @Test func emptyInputYieldsNothing() {
+        #expect(ConnectionService.parseMdnsServices("").isEmpty)
+        #expect(ConnectionService.parseMdnsServices("List of discovered mdns services\n").isEmpty)
+    }
 }
