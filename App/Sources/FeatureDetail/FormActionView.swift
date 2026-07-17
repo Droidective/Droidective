@@ -19,6 +19,8 @@ struct FormActionView: View {
     @State private var creatingSnippet = false
     @State private var newSnippetName = ""
     @State private var newSnippetText = ""
+    @State private var snippetSearch = ""
+    @State private var showAllSnippets = false
     @State private var confirmingRun = false
     @FocusState private var focusedField: String?
     /// Send Text: wipe the field after a successful send, for firing a sequence
@@ -69,6 +71,14 @@ struct FormActionView: View {
                 Toggle("Clear the text after sending", isOn: $clearAfterSend)
                     .toggleStyle(.checkbox)
                     .font(.app(.callout))
+            }
+
+            if isSendText, let textField = feature.fields.first(where: { $0.name == "text" }) {
+                VStack(alignment: .leading, spacing: 8) {
+                    newSnippetButton(for: textField)
+                    snippetLibrary(for: textField)
+                }
+                .padding(.top, 4)
             }
 
             LastResultCard(featureID: feature.id)
@@ -181,11 +191,10 @@ struct FormActionView: View {
         switch field.control {
         case .text, .number, .bundle:
             if isSendText, field.name == "text" {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 4) {
-                        plainTextField(for: field)
-                        snippetsMenu(for: field)
-                    }
+                // Quick inserts stay at the field; creating and browsing the
+                // full library live below the Run button (see formContent).
+                VStack(alignment: .leading, spacing: 8) {
+                    plainTextField(for: field)
                     snippetTags(for: field)
                 }
             } else {
@@ -237,82 +246,165 @@ struct FormActionView: View {
 
     // MARK: - Send Text snippets
 
-    /// The full snippet list plus management: every saved snippet by name,
-    /// the Mac's IP as a quick insert for the React Native role, New
-    /// Snippet…, and removal. The top-5 tags below the field cover the
-    /// everyday inserts; this menu is the complete library.
-    private func snippetsMenu(for field: FieldDef) -> some View {
-        Menu {
-            if state.selectedRole == .reactNativeDeveloper, let macIP {
-                Section("This Mac") {
-                    Button("IP address — \(macIP)") { textValues[field.name] = macIP }
-                }
-            }
-            if !presets.sendTextSnippets.isEmpty {
-                Section("Snippets") {
-                    ForEach(presets.sendTextSnippets) { snippet in
-                        Button(snippet.name) { insert(snippet, into: field) }
+    /// Tag row: at most 6 recent snippets. Library collapse: this many rows
+    /// before "Show more". Search appears once the library outgrows a glance.
+    private static let recentTagLimit = 6
+    private static let collapsedLibraryLimit = 8
+    private static let searchThreshold = 10
+
+    /// The recently used snippets as one-click tags under the field (top 6),
+    /// led by the Mac's IP for the React Native role (Metro's "Debug server
+    /// host" is `<mac-ip>:8081`).
+    @ViewBuilder
+    private func snippetTags(for field: FieldDef) -> some View {
+        let recents = presets.recentSnippets(limit: Self.recentTagLimit)
+        if !recents.isEmpty || (state.selectedRole == .reactNativeDeveloper && macIP != nil) {
+            SnippetTagFlow(spacing: 6) {
+                if state.selectedRole == .reactNativeDeveloper, let macIP {
+                    Button {
+                        textValues[field.name] = macIP
+                    } label: {
+                        Label("Mac IP", systemImage: "network")
+                            .font(.app(.caption))
+                            .lineLimit(1)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(.quaternary, in: Capsule())
+                            .contentShape(Capsule())
                     }
+                    .buttonStyle(.plain)
+                    .help("Insert this Mac's IP address — \(macIP)")
+                }
+                ForEach(recents) { snippet in
+                    snippetChip(snippet, field: field)
                 }
             }
-            Section {
-                Button("New Snippet…") { beginCreatingSnippet(for: field) }
-                if !presets.sendTextSnippets.isEmpty {
-                    Menu("Remove Snippet") {
-                        ForEach(presets.sendTextSnippets) { snippet in
-                            Button(snippet.name) {
-                                presets.removeSnippet(named: snippet.name)
-                                persistPresets()
-                            }
-                        }
-                    }
-                }
-            }
-        } label: {
-            Image(systemName: "bookmark")
-                .foregroundStyle(.textMuted)
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .help("Snippets — insert a saved text")
     }
 
-    /// The most-used snippets as one-click tags under the field, capped at 5,
-    /// ending with the ＋ chip that creates a new snippet in a popover.
-    private func snippetTags(for field: FieldDef) -> some View {
-        SnippetTagFlow(spacing: 6) {
-            ForEach(presets.topSnippets(limit: 5)) { snippet in
-                Button {
-                    insert(snippet, into: field)
-                } label: {
-                    Text(snippet.name)
-                        .font(.app(.caption))
-                        .lineLimit(1)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(.quaternary, in: Capsule())
-                        .contentShape(Capsule())
+    /// The one place a snippet gets created. Prefills with the typed text so
+    /// "save what I just sent" stays one click.
+    private func newSnippetButton(for field: FieldDef) -> some View {
+        Button {
+            beginCreatingSnippet(for: field)
+        } label: {
+            Label("New Snippet", systemImage: "plus")
+                .font(.app(.caption))
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .help("Save a snippet — supports {clipboard} and {ip}")
+        .popover(isPresented: $creatingSnippet, arrowEdge: .bottom) {
+            newSnippetPopover(for: field)
+        }
+    }
+
+    /// Everything beyond the recent tags, under the New Snippet button:
+    /// alphabetical chips, collapsed behind "Show more" when long, with a
+    /// search over every snippet's name and text once the library is big
+    /// enough to need one.
+    @ViewBuilder
+    private func snippetLibrary(for field: FieldDef) -> some View {
+        let recentIDs = Set(presets.recentSnippets(limit: Self.recentTagLimit).map(\.id))
+        let query = snippetSearch.trimmingCharacters(in: .whitespaces)
+        let library = presets.sendTextSnippets
+            .filter { query.isEmpty ? !recentIDs.contains($0.id) : $0.matches(query) }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+
+        if presets.sendTextSnippets.count > Self.searchThreshold {
+            TextField("Search snippets…", text: $snippetSearch)
+                .textFieldStyle(.roundedBorder)
+                .controlSize(.small)
+                .frame(maxWidth: 200)
+                .help("Find a snippet by its name or its text")
+        }
+
+        if !query.isEmpty && library.isEmpty {
+            Text("No snippets match “\(query)”.")
+                .font(.app(.caption))
+                .foregroundStyle(.textMuted)
+        } else if !library.isEmpty {
+            let shown = showAllSnippets || !query.isEmpty
+                ? library
+                : Array(library.prefix(Self.collapsedLibraryLimit))
+            VStack(spacing: 0) {
+                ForEach(shown) { snippet in
+                    snippetRow(snippet, field: field)
+                    if snippet.id != shown.last?.id { Divider() }
                 }
-                .buttonStyle(.plain)
-                .help(snippet.text)
+                if query.isEmpty, library.count > Self.collapsedLibraryLimit {
+                    Divider()
+                    Button {
+                        showAllSnippets.toggle()
+                    } label: {
+                        Text(showAllSnippets
+                            ? "Show less"
+                            : "Show \(library.count - Self.collapsedLibraryLimit) more")
+                            .font(.app(.caption))
+                            .foregroundStyle(.textMuted)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
             }
-            Button {
-                beginCreatingSnippet(for: field)
-            } label: {
-                Label("New", systemImage: "plus")
-                    .font(.app(.caption))
-                    .labelStyle(.titleAndIcon)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .overlay(Capsule().strokeBorder(.borderSubtle))
-                    .contentShape(Capsule())
+            .background(.bgSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(.borderSubtle))
+            .frame(maxWidth: 380, alignment: .leading)
+        }
+    }
+
+    /// One library row: the name beside a muted preview of the text — click
+    /// inserts, right-click removes.
+    private func snippetRow(_ snippet: SendTextSnippet, field: FieldDef) -> some View {
+        Button {
+            insert(snippet, into: field)
+        } label: {
+            HStack(spacing: 10) {
+                Text(snippet.name)
+                    .font(.app(.callout))
+                    .lineLimit(1)
+                Spacer(minLength: 12)
+                Text(snippet.text)
+                    .font(.app(.caption, design: .monospaced))
+                    .foregroundStyle(.textMuted)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(.textMuted)
-            .help("Save a snippet — supports {clipboard} and {ip}")
-            .popover(isPresented: $creatingSnippet, arrowEdge: .bottom) {
-                newSnippetPopover(for: field)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Click to insert · right-click to remove")
+        .contextMenu {
+            Button("Remove Snippet", role: .destructive) {
+                presets.removeSnippet(named: snippet.name)
+                persistPresets()
+            }
+        }
+    }
+
+    /// One snippet as a click-to-insert tag; right-click removes it.
+    private func snippetChip(_ snippet: SendTextSnippet, field: FieldDef) -> some View {
+        Button {
+            insert(snippet, into: field)
+        } label: {
+            Text(snippet.name)
+                .font(.app(.caption))
+                .lineLimit(1)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(.quaternary, in: Capsule())
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .help("\(snippet.text)\n\nRight-click to remove")
+        .contextMenu {
+            Button("Remove Snippet", role: .destructive) {
+                presets.removeSnippet(named: snippet.name)
+                persistPresets()
             }
         }
     }

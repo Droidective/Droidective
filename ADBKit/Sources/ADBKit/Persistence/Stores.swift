@@ -314,11 +314,11 @@ public struct LayoutState: Codable, Sendable, Equatable {
     }
 }
 
-/// A saved Send Text snippet: a short display name (what the tag chips and
-/// menu show) over the text that gets inserted. `uses` ranks the top-5
-/// quick-insert tags under the text field; the text may hold
-/// `{clipboard}`/`{ip}` placeholders expanded by `SnippetPlaceholders` at
-/// insert time.
+/// A saved Send Text snippet: a short display name (what the tag chips show)
+/// over the text that gets inserted. `lastUsedAt` (epoch seconds) ranks the
+/// recently-used tags under the text field — `uses` breaks ties and ranks
+/// never-used snippets; the text may hold `{clipboard}`/`{ip}` placeholders
+/// expanded by `SnippetPlaceholders` at insert time.
 public struct SendTextSnippet: Codable, Sendable, Equatable, Identifiable {
     /// Names longer than this are clamped — chips and menu rows stay short.
     public static let nameLimit = 24
@@ -326,13 +326,26 @@ public struct SendTextSnippet: Codable, Sendable, Equatable, Identifiable {
     public var name: String
     public var text: String
     public var uses: Int
+    /// Epoch seconds of the last insert (or creation). Optional so files
+    /// written before the field existed still decode; nil sorts last.
+    public var lastUsedAt: Double?
 
     public var id: String { name }
 
-    public init(name: String, text: String, uses: Int = 0) {
+    public init(name: String, text: String, uses: Int = 0, lastUsedAt: Double? = nil) {
         self.name = String(name.prefix(Self.nameLimit))
         self.text = text
         self.uses = uses
+        self.lastUsedAt = lastUsedAt
+    }
+
+    /// Case-insensitive match on the name (the tag's title) or the inserted
+    /// text — what the snippet search box filters by.
+    public func matches(_ query: String) -> Bool {
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return true }
+        return name.localizedCaseInsensitiveContains(trimmed)
+            || text.localizedCaseInsensitiveContains(trimmed)
     }
 }
 
@@ -363,14 +376,18 @@ public struct Presets: Codable, Sendable, Equatable {
 
     /// Adds a snippet with a trimmed, length-clamped name; false (and no
     /// change) when the name or text is empty or the name is already taken.
+    /// A new snippet is stamped as just-used so it leads the recent tags —
+    /// the thing you just saved is the thing you're about to insert.
     @discardableResult
-    public mutating func addSnippet(named name: String, text: String) -> Bool {
+    public mutating func addSnippet(
+        named name: String, text: String, at date: Double = Date().timeIntervalSince1970
+    ) -> Bool {
         let trimmedName = String(
             name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(SendTextSnippet.nameLimit))
         guard !trimmedName.isEmpty, !text.isEmpty,
               !sendTextSnippets.contains(where: { $0.name == trimmedName })
         else { return false }
-        sendTextSnippets.append(SendTextSnippet(name: trimmedName, text: text))
+        sendTextSnippets.append(SendTextSnippet(name: trimmedName, text: text, lastUsedAt: date))
         return true
     }
 
@@ -378,18 +395,29 @@ public struct Presets: Codable, Sendable, Equatable {
         sendTextSnippets.removeAll { $0.name == name }
     }
 
-    /// Bumps the use count that ranks the quick-insert tags.
-    public mutating func recordSnippetUse(named name: String) {
+    /// Bumps the use count and freshness that rank the quick-insert tags.
+    public mutating func recordSnippetUse(
+        named name: String, at date: Double = Date().timeIntervalSince1970
+    ) {
         guard let index = sendTextSnippets.firstIndex(where: { $0.name == name }) else { return }
         sendTextSnippets[index].uses += 1
+        sendTextSnippets[index].lastUsedAt = date
     }
 
-    /// The most-used snippets, ties kept in the order they were saved.
-    public func topSnippets(limit: Int) -> [SendTextSnippet] {
+    /// The most recently used snippets — the quick-insert tag row. Never-used
+    /// snippets (files from before `lastUsedAt` existed) follow, ranked by
+    /// use count, ties kept in the order they were saved.
+    public func recentSnippets(limit: Int) -> [SendTextSnippet] {
         sendTextSnippets.enumerated()
             .sorted { lhs, rhs in
-                if lhs.element.uses != rhs.element.uses { return lhs.element.uses > rhs.element.uses }
-                return lhs.offset < rhs.offset
+                switch (lhs.element.lastUsedAt, rhs.element.lastUsedAt) {
+                case (let left?, let right?) where left != right: return left > right
+                case (.some, .none): return true
+                case (.none, .some): return false
+                default:
+                    if lhs.element.uses != rhs.element.uses { return lhs.element.uses > rhs.element.uses }
+                    return lhs.offset < rhs.offset
+                }
             }
             .prefix(limit)
             .map(\.element)

@@ -75,6 +75,55 @@ public struct ConnectionService: Sendable {
         return FeatureResult(ok: false, message: reason.isEmpty ? "Connection failed." : reason)
     }
 
+    /// One row of `adb mdns services` output: instance name, service type,
+    /// and the advertised endpoint.
+    public struct MdnsService: Equatable, Sendable {
+        public let name: String
+        public let type: String
+        public let endpoint: WirelessEndpoint
+    }
+
+    /// The wireless-debugging connect endpoint a freshly paired device
+    /// advertises over mDNS (`_adb-tls-connect._tcp`), or nil when nothing
+    /// matching `host` shows up. The advertisement can lag the pairing
+    /// handshake by a beat, so this retries; every failure mode (mdns
+    /// disabled in this adb, no matching host) is a nil — the caller falls
+    /// back to asking for the port.
+    public func discoverConnectEndpoint(
+        host: String, attempts: Int = 3, delay: Duration = .seconds(1)
+    ) async -> WirelessEndpoint? {
+        for attempt in 0..<max(1, attempts) {
+            guard !Task.isCancelled else { return nil }
+            if attempt > 0 { try? await Task.sleep(for: delay) }
+            guard let result = try? await client.run(["mdns", "services"], timeout: .seconds(5))
+            else { return nil }
+            let match = Self.parseMdnsServices(result.stdout).first { service in
+                service.type.hasPrefix("_adb-tls-connect") && service.endpoint.host == host
+            }
+            if let match { return match.endpoint }
+        }
+        return nil
+    }
+
+    /// Pure parse of `adb mdns services` output:
+    ///
+    ///     List of discovered mdns services
+    ///     adb-R58M4-xyz	_adb-tls-connect._tcp	192.168.1.42:40913
+    ///
+    /// Columns are whitespace-separated; the service type always leads with
+    /// an underscore (which also skips the header line), and the endpoint
+    /// must parse with a port.
+    public static func parseMdnsServices(_ text: String) -> [MdnsService] {
+        var services: [MdnsService] = []
+        for line in text.components(separatedBy: .newlines) {
+            let fields = line.split(whereSeparator: { $0 == "\t" || $0 == " " }).map(String.init)
+            guard fields.count >= 3, fields[1].hasPrefix("_") else { continue }
+            guard let endpoint = parseEndpoint(fields[2]), endpoint.port != nil else { continue }
+            services.append(MdnsService(name: fields[0], type: fields[1], endpoint: endpoint))
+        }
+        return services
+    }
+
     /// adb's default connect port — what `adb connect <host>` assumes.
     public static let defaultConnectPort = "5555"
 
