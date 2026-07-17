@@ -659,18 +659,22 @@ private struct EditorPane: View {
             TabStripView(group: index)
             TabHostView(group: index)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .onDrop(of: [.workspaceTab], delegate: TabPaneDrop(
-                    state: state,
-                    onDrop: { id in
-                        if state.isSplit {
-                            state.moveTab(id, toGroup: index)
-                        } else {
-                            state.splitTab(id)
-                        }
-                        state.draggingTabID = nil
-                    },
-                    onTargetedChange: { contentTargeted = $0 }
-                ))
+                .onDrop(of: [.workspaceTab], delegate: paneDrop)
+                .overlay {
+                    // Drops route to the deepest region under the cursor even
+                    // when its types don't match (see CLAUDE.md) — a feature's
+                    // own full-pane dropDestination (AAB to APK, opened APK)
+                    // swallows a dragged tab, killing drop-to-split whenever
+                    // such a tab is merely open. While a tab drag is live,
+                    // shield the content with a topmost workspaceTab target;
+                    // it vanishes with the drag, so feature drops (APKs from
+                    // Finder…) are untouched otherwise.
+                    if state.draggingTabID != nil {
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .onDrop(of: [.workspaceTab], delegate: paneDrop)
+                    }
+                }
                 .overlay(alignment: .trailing) {
                     // Only promise a split the model will honor: `split()`
                     // requires >1 tab (something must stay behind), so a
@@ -680,6 +684,21 @@ private struct EditorPane: View {
                 }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var paneDrop: TabPaneDrop {
+        TabPaneDrop(
+            state: state,
+            onDrop: { id in
+                if state.isSplit {
+                    state.moveTab(id, toGroup: index)
+                } else {
+                    state.splitTab(id)
+                }
+                state.draggingTabID = nil
+            },
+            onTargetedChange: { contentTargeted = $0 }
+        )
     }
 
     /// Non-interactive right-half wash showing where the new split pane will land
