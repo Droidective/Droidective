@@ -73,6 +73,14 @@ struct FormActionView: View {
                     .font(.app(.callout))
             }
 
+            if isSendText, let textField = feature.fields.first(where: { $0.name == "text" }) {
+                VStack(alignment: .leading, spacing: 8) {
+                    newSnippetButton(for: textField)
+                    snippetLibrary(for: textField)
+                }
+                .padding(.top, 4)
+            }
+
             LastResultCard(featureID: feature.id)
         }
         .centeredCard()
@@ -183,11 +191,11 @@ struct FormActionView: View {
         switch field.control {
         case .text, .number, .bundle:
             if isSendText, field.name == "text" {
+                // Quick inserts stay at the field; creating and browsing the
+                // full library live below the Run button (see formContent).
                 VStack(alignment: .leading, spacing: 8) {
                     plainTextField(for: field)
                     snippetTags(for: field)
-                    newSnippetButton(for: field)
-                    snippetLibrary(for: field)
                 }
             } else {
                 plainTextField(for: field)
