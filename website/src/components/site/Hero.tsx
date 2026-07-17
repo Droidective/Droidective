@@ -7,7 +7,7 @@ import { Reveal } from "@/components/site/Reveal"
 import { Button } from "@/components/ui/button"
 import { useFinePointer } from "@/hooks/useFinePointer"
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion"
-import { APP_VERSION, DOWNLOAD_URL, GITHUB_URL } from "@/lib/content"
+import { APP_VERSION, DOWNLOAD_URL, DOWNLOAD_URL_INTEL, GITHUB_URL } from "@/lib/content"
 
 export function Hero() {
   const reducedMotion = usePrefersReducedMotion()
@@ -97,6 +97,12 @@ export function Hero() {
           </div>
           <p className="mt-5 font-mono text-[12.5px] text-faint">
             $ <span className="text-muted">requires Android adb · auto-updates via Sparkle · {APP_VERSION}</span>
+          </p>
+          <p className="mt-1.5 font-mono text-[12.5px] text-faint">
+            Apple Silicon ·{" "}
+            <a href={DOWNLOAD_URL_INTEL} data-dl="hero-intel" className="underline underline-offset-2 hover:text-muted">
+              Intel Mac? Download x86_64
+            </a>
           </p>
         </div>
 

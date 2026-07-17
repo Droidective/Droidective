@@ -10,10 +10,13 @@
 set -euo pipefail
 
 VERSION="${1:-dev}"
+# Optional arch suffix (arm64 / x86_64) for the per-arch release DMGs:
+# Droidective-v3.5.0-arm64.dmg. Empty keeps the legacy single-artifact name.
+ARCH_SUFFIX="${2:+-$2}"
 SIGN_IDENTITY="${SIGN_IDENTITY:--}"
 APP_DIR="DerivedData/Build/Products/Release"
 APP="$APP_DIR/Droidective.app"
-DMG="$APP_DIR/Droidective-${VERSION}.dmg"
+DMG="$APP_DIR/Droidective-${VERSION}${ARCH_SUFFIX}.dmg"
 
 if [[ ! -d "$APP" ]]; then
   echo "error: $APP not found — build the Release configuration first" >&2

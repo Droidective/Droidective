@@ -7,7 +7,7 @@ import ShinyText from "@/components/ShinyText"
 import { Reveal } from "@/components/site/Reveal"
 import { Button } from "@/components/ui/button"
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion"
-import { DOWNLOAD_URL, GITHUB_URL } from "@/lib/content"
+import { DOWNLOAD_URL, DOWNLOAD_URL_INTEL, GITHUB_URL } from "@/lib/content"
 
 export function FinalCta() {
   const reducedMotion = usePrefersReducedMotion()
@@ -57,6 +57,16 @@ export function FinalCta() {
               </a>
             </Button>
           </div>
+          <p className="mt-4 font-mono text-[12.5px] text-faint">
+            Apple Silicon ·{" "}
+            <a
+              href={DOWNLOAD_URL_INTEL}
+              data-dl="final-cta-intel"
+              className="underline underline-offset-2 hover:text-muted"
+            >
+              Intel Mac? Download x86_64
+            </a>
+          </p>
         </div>
       </Reveal>
     </section>

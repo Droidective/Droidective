@@ -22,7 +22,9 @@ TAG="${4:?tag required}"
   exit 1
 }
 
-REMOTE_PATH="site/appcast.xml"
+# The local path is repo-relative in CI (site/appcast.xml,
+# site/appcast-x86_64.xml…) — commit it to the same path.
+REMOTE_PATH="$LOCAL"
 content="$(base64 <"$LOCAL" | tr -d '\n')"
 # Current blob sha so the API does an update; empty (omitted) creates the file.
 sha="$(gh api "repos/$REPO/contents/$REMOTE_PATH?ref=$BRANCH" --jq '.sha' 2>/dev/null || true)"

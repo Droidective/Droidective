@@ -33,10 +33,15 @@ run: build
 	@sleep 0.3
 	open "DerivedData/Build/Products/Debug/Droidective.app"
 
+# One thin DMG, matching what releases ship. ARCH=arm64 (default) or x86_64.
+# Each arch bakes its own Sparkle feed, same as the release job.
+ARCH ?= arm64
+SPARKLE_FEED := $(if $(filter x86_64,$(ARCH)),https://droidective.com/appcast-x86_64.xml,https://droidective.com/appcast.xml)
 dmg: generate
-	xcodebuild -project Droidective.xcodeproj -scheme App -configuration Release -derivedDataPath DerivedData build ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO $(TELEMETRY) $(SIGNING)
-	./scripts/check-universal.sh DerivedData/Build/Products/Release/Droidective.app
-	SIGN_IDENTITY="$(SIGN_IDENTITY)" ./scripts/package-dmg.sh $(VERSION)
+	./scripts/assemble-ffmpeg.sh $(ARCH)
+	xcodebuild -project Droidective.xcodeproj -scheme App -configuration Release -derivedDataPath DerivedData build ARCHS="$(ARCH)" ONLY_ACTIVE_ARCH=NO SPARKLE_FEED_URL="$(SPARKLE_FEED)" $(TELEMETRY) $(SIGNING)
+	./scripts/check-archs.sh DerivedData/Build/Products/Release/Droidective.app $(ARCH)
+	SIGN_IDENTITY="$(SIGN_IDENTITY)" ./scripts/package-dmg.sh $(VERSION) $(ARCH)
 
 clean:
 	rm -rf DerivedData ADBKit/.build *.xcodeproj

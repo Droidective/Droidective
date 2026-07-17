@@ -195,18 +195,26 @@ off).
 
 CI (the `release` job) then:
 
-- builds Release with `MARKETING_VERSION=X.Y.Z` and `CURRENT_PROJECT_VERSION=`
-  the GitHub Actions run number (Sparkle compares this monotonically increasing
-  `CFBundleVersion`);
-- signs the app — with the scrcpy-server and ffmpeg bundled inside it — with the
-  Developer ID, and packages `Droidective-vX.Y.Z.dmg`;
-- notarizes the DMG with Apple and staples the ticket;
-- publishes the GitHub release with that DMG and the latest release notes;
-- signs the stapled DMG with the EdDSA key and commits the regenerated
-  `site/appcast.xml` to `main` — with those notes rendered to HTML and embedded
-  in the item's `<description>`, so Sparkle shows them in its update window
-  rather than loading the GitHub release page;
-- updates the Homebrew cask.
+- builds Release **once per architecture** (`arm64`, `x86_64`) with
+  `MARKETING_VERSION=X.Y.Z` and `CURRENT_PROJECT_VERSION=` the GitHub Actions
+  run number (Sparkle compares this monotonically increasing
+  `CFBundleVersion`). Each thin build bundles its own ffmpeg slice
+  (`scripts/assemble-ffmpeg.sh <arch>`), bakes its own Sparkle feed URL
+  (arm64 keeps the legacy `appcast.xml`; x86_64 gets `appcast-x86_64.xml`),
+  and is arch-checked (`scripts/check-archs.sh` — every Mach-O must carry the
+  target CPU, so issue #174 can't silently return);
+- signs both apps with the Developer ID and packages
+  `Droidective-vX.Y.Z-arm64.dmg` + `Droidective-vX.Y.Z-x86_64.dmg`;
+- notarizes both DMGs with Apple and staples the tickets;
+- publishes the GitHub release with both DMGs (plus stable-named copies:
+  `Droidective.dmg` = arm64, so pre-split links keep working, and
+  `Droidective-x86_64.dmg`) and the latest release notes;
+- signs each stapled DMG with the EdDSA key and commits the regenerated
+  `site/appcast.xml` (arm64) and `site/appcast-x86_64.xml` (Intel) to `main` —
+  with those notes rendered to HTML and embedded in the item's
+  `<description>`, so Sparkle shows them in its update window rather than
+  loading the GitHub release page;
+- updates the Homebrew cask (arch-selecting: `on_arm` / `on_intel`).
 
 That commit to `main` re-runs the `pages` job, which deploys the site and the
 new appcast to GitHub Pages. Installed copies then pick up the new appcast and
@@ -218,13 +226,24 @@ offer the update automatically.
 
 ## Beta releases
 
-A tag with a pre-release suffix rides the beta channel — only installs with
-Settings ▸ General ▸ Updates ▸ "Receive beta updates" switched on see it:
+Betas ship from the long-lived **`beta` branch**, so beta code never has to
+merge to `main` before a public stable release. The flow:
 
 ```sh
+git checkout beta
+git merge main          # start the cycle from current stable code
+# …land beta-only changes on this branch (directly or via PRs into beta)…
 git tag vX.Y.Z-beta.1
-git push origin vX.Y.Z-beta.1
+git push origin beta vX.Y.Z-beta.1
 ```
+
+The release workflow triggers on the tag and builds exactly the tagged
+commit — `main` is untouched. When the beta graduates, merge `beta` into
+`main` and cut the stable `vX.Y.Z` tag from `main` as usual; a stable cut
+from `main` at any time simply won't contain the beta-branch work.
+
+A tag with a pre-release suffix rides the beta channel — only installs with
+Settings ▸ General ▸ Updates ▸ "Receive beta updates" switched on see it.
 
 Same pipeline, three differences:
 

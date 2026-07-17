@@ -1,7 +1,9 @@
 name: CI
 on:
   push:
-    branches: [main]
+    # beta is the pre-release line: tags cut there ship on the Sparkle beta
+    # channel without the code ever merging to main (pages stays main-only).
+    branches: [main, beta]
     tags: ["v*"]
   pull_request:
   # Manual runs, mainly to redo the Pages deploy with a fresh artifact when a
@@ -119,7 +121,7 @@ jobs:
             -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
           security list-keychains -d user -s "$KEYCHAIN"
           rm -f "$RUNNER_TEMP/cert.p12"
-      - name: Build, sign, and package DMG
+      - name: Build, sign, and package per-arch DMGs
         env:
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
@@ -127,23 +129,31 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          ./scripts/assemble-ffmpeg.sh
           xcodegen generate
-          # Universal build: without an explicit ARCHS the Apple Silicon
-          # runner produced arm64-only binaries that Intel Macs refuse to
-          # launch (issue #174).
-          xcodebuild -project Droidective.xcodeproj -scheme App -configuration Release \
-            -derivedDataPath DerivedData build \
-            ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO \
-            MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
-            SENTRY_DSN="$SENTRY_DSN" POSTHOG_KEY="$POSTHOG_KEY" \
-            CODE_SIGN_IDENTITY="$SIGN_IDENTITY" DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
-            CODE_SIGN_STYLE=Manual ENABLE_HARDENED_RUNTIME=YES OTHER_CODE_SIGN_FLAGS="--timestamp" \
-            DEBUG_INFORMATION_FORMAT=dwarf-with-dsym
-          # Every Mach-O in the bundle must carry both slices, or Intel
-          # support silently regresses the next time a bundled tool updates.
-          ./scripts/check-universal.sh DerivedData/Build/Products/Release/Droidective.app
-          SIGN_IDENTITY="$SIGN_IDENTITY" ./scripts/package-dmg.sh "${GITHUB_REF_NAME}"
+          # One thin build per architecture (issue #174: releases used to be
+          # arm64-only and Intel Macs refused to launch them). Each build
+          # bundles its own ffmpeg slice and bakes its own Sparkle feed —
+          # arm64 keeps the legacy appcast.xml every installed 3.x app reads.
+          for ARCH in arm64 x86_64; do
+            FEED="https://droidective.com/appcast.xml"
+            [[ "$ARCH" == "x86_64" ]] && FEED="https://droidective.com/appcast-x86_64.xml"
+            ./scripts/assemble-ffmpeg.sh "$ARCH"
+            xcodebuild -project Droidective.xcodeproj -scheme App -configuration Release \
+              -derivedDataPath DerivedData build \
+              ARCHS="$ARCH" ONLY_ACTIVE_ARCH=NO SPARKLE_FEED_URL="$FEED" \
+              MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+              SENTRY_DSN="$SENTRY_DSN" POSTHOG_KEY="$POSTHOG_KEY" \
+              CODE_SIGN_IDENTITY="$SIGN_IDENTITY" DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+              CODE_SIGN_STYLE=Manual ENABLE_HARDENED_RUNTIME=YES OTHER_CODE_SIGN_FLAGS="--timestamp" \
+              DEBUG_INFORMATION_FORMAT=dwarf-with-dsym
+            # Every Mach-O must carry the target arch, or support for that
+            # CPU silently regresses the next time a bundled tool updates.
+            ./scripts/check-archs.sh DerivedData/Build/Products/Release/Droidective.app "$ARCH"
+            SIGN_IDENTITY="$SIGN_IDENTITY" ./scripts/package-dmg.sh "${GITHUB_REF_NAME}" "$ARCH"
+            # Stash this arch's dSYMs before the next build overwrites them.
+            mkdir -p "dsyms/$ARCH"
+            cp -R DerivedData/Build/Products/Release/*.dSYM "dsyms/$ARCH/"
+          done
       # Upload dSYMs so Sentry can symbolicate first-party frames in crash/app-hang
       # reports. Without this, our own frames show as <unknown>. Skips cleanly if
       # the SENTRY_AUTH_TOKEN secret is absent (e.g. forks).
@@ -156,7 +166,8 @@ jobs:
         run: |
           [[ -n "${SENTRY_AUTH_TOKEN:-}" ]] || { echo "no SENTRY_AUTH_TOKEN secret — skipping dSYM upload"; exit 0; }
           brew install getsentry/tools/sentry-cli
-          sentry-cli debug-files upload --wait DerivedData/Build/Products/Release
+          # Both arch builds' dSYMs — stashed per arch during the build loop.
+          sentry-cli debug-files upload --wait dsyms
       - name: Notarize and staple
         env:
           AC_API_KEY_P8: ${{ secrets.AC_API_KEY_P8 }}
@@ -164,21 +175,26 @@ jobs:
           AC_API_ISSUER_ID: ${{ secrets.AC_API_ISSUER_ID }}
         run: |
           echo "$AC_API_KEY_P8" | openssl base64 -d -A > "$RUNNER_TEMP/ac_api.p8"
-          AC_API_KEY_PATH="$RUNNER_TEMP/ac_api.p8" \
-          AC_API_KEY_ID="$AC_API_KEY_ID" \
-          AC_API_ISSUER_ID="$AC_API_ISSUER_ID" \
-            ./scripts/notarize.sh "DerivedData/Build/Products/Release/Droidective-${GITHUB_REF_NAME}.dmg"
+          for ARCH in arm64 x86_64; do
+            AC_API_KEY_PATH="$RUNNER_TEMP/ac_api.p8" \
+            AC_API_KEY_ID="$AC_API_KEY_ID" \
+            AC_API_ISSUER_ID="$AC_API_ISSUER_ID" \
+              ./scripts/notarize.sh "DerivedData/Build/Products/Release/Droidective-${GITHUB_REF_NAME}-${ARCH}.dmg"
+          done
           rm -f "$RUNNER_TEMP/ac_api.p8"
       - name: Extract notes for this release
         run: awk '/^## /{c++} c==1{print} c==2{exit}' RELEASE_NOTES.md > release-body.md
-      # A stable-named copy backs the site's download button via the permanent
-      # /releases/latest/download/Droidective.dmg URL — always the newest
-      # release, no appcast fetch, no Pages/browser cache staleness. Safe on a
-      # beta too: /releases/latest only ever resolves to a non-prerelease.
-      - name: Add a stable-named copy for the latest-download link
+      # Stable-named copies back the site's download buttons via the permanent
+      # /releases/latest/download/… URLs — always the newest release, no
+      # appcast fetch, no Pages/browser cache staleness. Droidective.dmg stays
+      # the Apple Silicon build so every pre-split link keeps working. Safe on
+      # a beta too: /releases/latest only ever resolves to a non-prerelease.
+      - name: Add stable-named copies for the latest-download links
         run: |
-          cp "DerivedData/Build/Products/Release/Droidective-${GITHUB_REF_NAME}.dmg" \
+          cp "DerivedData/Build/Products/Release/Droidective-${GITHUB_REF_NAME}-arm64.dmg" \
              "DerivedData/Build/Products/Release/Droidective.dmg"
+          cp "DerivedData/Build/Products/Release/Droidective-${GITHUB_REF_NAME}-x86_64.dmg" \
+             "DerivedData/Build/Products/Release/Droidective-x86_64.dmg"
       # A hyphen in the tag (v3.3.0-beta.1) marks a beta: the GitHub release is
       # a prerelease, the appcast item rides the Sparkle beta channel, and the
       # Homebrew cask is left alone.
@@ -197,16 +213,28 @@ jobs:
           GH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN }}
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          DMG="DerivedData/Build/Products/Release/Droidective-${GITHUB_REF_NAME}.dmg"
-          DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/Droidective-${GITHUB_REF_NAME}.dmg"
           ./scripts/fetch-sparkle-tools.sh
-          # release-body.md (the GitHub release notes, extracted above) is
-          # rendered to HTML and embedded in the appcast's <description>.
-          ./scripts/update-appcast.sh "$DMG" "$VERSION" "${{ github.run_number }}" "$DOWNLOAD_URL" release-body.md "site/appcast.xml"
-          # Commit the regenerated appcast back to main; the resulting push runs
-          # the pages job, which deploys it. (GitHub Pages only serves deploys
-          # from the source branch, so a tag-ref deploy here would never go live.)
-          ./scripts/commit-appcast.sh "site/appcast.xml" "${{ github.repository }}" main "${GITHUB_REF_NAME}"
+          # Feeds are per arch: appcast.xml is the arm64 feed (the URL every
+          # installed 3.x app already reads), appcast-x86_64.xml the Intel one.
+          # Start each from MAIN's live copy, not this checkout's — a beta tag
+          # cut from the beta branch may carry a stale appcast, and a beta
+          # item must preserve the CURRENT stable item beside it.
+          for ARCH in arm64 x86_64; do
+            FEED="site/appcast.xml"
+            [[ "$ARCH" == "x86_64" ]] && FEED="site/appcast-x86_64.xml"
+            gh api -H "Accept: application/vnd.github.raw" \
+              "repos/${{ github.repository }}/contents/${FEED}?ref=main" \
+              > "$FEED" 2>/dev/null || rm -f "$FEED"
+            DMG="DerivedData/Build/Products/Release/Droidective-${GITHUB_REF_NAME}-${ARCH}.dmg"
+            DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/Droidective-${GITHUB_REF_NAME}-${ARCH}.dmg"
+            # release-body.md (the GitHub release notes, extracted above) is
+            # rendered to HTML and embedded in the appcast's <description>.
+            ./scripts/update-appcast.sh "$DMG" "$VERSION" "${{ github.run_number }}" "$DOWNLOAD_URL" release-body.md "$FEED"
+            # Commit the regenerated appcast back to main; the resulting push
+            # runs the pages job, which deploys it. (GitHub Pages only serves
+            # deploys from the source branch.)
+            ./scripts/commit-appcast.sh "$FEED" "${{ github.repository }}" main "${GITHUB_REF_NAME}"
+          done
       - name: Update Homebrew cask
         continue-on-error: true
         env:
@@ -215,10 +243,13 @@ jobs:
           [[ -n "${HOMEBREW_TAP_TOKEN:-}" ]] || { echo "no HOMEBREW_TAP_TOKEN — skipping cask update"; exit 0; }
           VERSION="${GITHUB_REF_NAME#v}"
           [[ "$VERSION" == *-* ]] && { echo "beta release — skipping cask update"; exit 0; }
-          DMG="DerivedData/Build/Products/Release/Droidective-${GITHUB_REF_NAME}.dmg"
-          URL="https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/Droidective-${GITHUB_REF_NAME}.dmg"
+          RELEASE_DIR="DerivedData/Build/Products/Release"
+          BASE_URL="https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}"
           git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/Rohindh-R/homebrew-tap.git" tap
-          ./scripts/update-cask.sh "$VERSION" "$DMG" "$URL" "tap/Casks/droidective.rb"
+          ./scripts/update-cask.sh "$VERSION" \
+            "$RELEASE_DIR/Droidective-${GITHUB_REF_NAME}-arm64.dmg" "$BASE_URL/Droidective-${GITHUB_REF_NAME}-arm64.dmg" \
+            "$RELEASE_DIR/Droidective-${GITHUB_REF_NAME}-x86_64.dmg" "$BASE_URL/Droidective-${GITHUB_REF_NAME}-x86_64.dmg" \
+            "tap/Casks/droidective.rb"
           cd tap
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

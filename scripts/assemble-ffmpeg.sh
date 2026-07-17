@@ -1,18 +1,34 @@
 #!/usr/bin/env bash
-# Assemble the universal ffmpeg bundled into the app from the two committed
-# per-arch slices. The slices are committed (each under GitHub's 100 MB file
-# limit) and the fat binary is gitignored (152 MB — over it), so every build
-# path runs this first: Makefile `generate` and the CI build/release jobs.
-# Idempotent — skips when the output is newer than both slices.
+# Stage the bundled ffmpeg from the committed per-arch slices (each under
+# GitHub's 100 MB file limit; the fat binary isn't, so it's gitignored).
+#
+#   scripts/assemble-ffmpeg.sh [universal|arm64|x86_64]
+#
+# universal (default) lipos both slices — local dev builds, so one Debug app
+# runs anywhere. Release builds are thin per arch and pass their arch so the
+# DMG only carries the slice it can execute.
 set -euo pipefail
 
+MODE="${1:-universal}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RES="$ROOT/App/Resources"
 OUT="$RES/ffmpeg"
 
-if [[ -f "$OUT" && "$OUT" -nt "$RES/ffmpeg-arm64" && "$OUT" -nt "$RES/ffmpeg-x86_64" ]]; then
-  exit 0
-fi
-lipo -create "$RES/ffmpeg-arm64" "$RES/ffmpeg-x86_64" -output "$OUT"
+case "$MODE" in
+universal)
+  if [[ -f "$OUT" && "$OUT" -nt "$RES/ffmpeg-arm64" && "$OUT" -nt "$RES/ffmpeg-x86_64" ]] &&
+    [[ "$(lipo -archs "$OUT" 2>/dev/null)" == *arm64*x86_64* || "$(lipo -archs "$OUT" 2>/dev/null)" == *x86_64*arm64* ]]; then
+    exit 0
+  fi
+  lipo -create "$RES/ffmpeg-arm64" "$RES/ffmpeg-x86_64" -output "$OUT"
+  ;;
+arm64 | x86_64)
+  cp -f "$RES/ffmpeg-$MODE" "$OUT"
+  ;;
+*)
+  echo "usage: assemble-ffmpeg.sh [universal|arm64|x86_64]" >&2
+  exit 1
+  ;;
+esac
 chmod +x "$OUT"
-echo "Assembled universal ffmpeg: $(lipo -archs "$OUT")"
+echo "Staged ffmpeg ($MODE): $(lipo -archs "$OUT")"
