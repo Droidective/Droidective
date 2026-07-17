@@ -34,7 +34,8 @@ run: build
 	open "DerivedData/Build/Products/Debug/Droidective.app"
 
 dmg: generate
-	xcodebuild -project Droidective.xcodeproj -scheme App -configuration Release -derivedDataPath DerivedData build $(TELEMETRY) $(SIGNING)
+	xcodebuild -project Droidective.xcodeproj -scheme App -configuration Release -derivedDataPath DerivedData build ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO $(TELEMETRY) $(SIGNING)
+	./scripts/check-universal.sh DerivedData/Build/Products/Release/Droidective.app
 	SIGN_IDENTITY="$(SIGN_IDENTITY)" ./scripts/package-dmg.sh $(VERSION)
 
 clean:
