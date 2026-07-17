@@ -100,7 +100,7 @@ Opening a PR runs CI (`.github/workflows/ci.yml`):
 
 Both must be green to merge. CI does not run the app or exercise a device, so
 live verification is on you (item 6 above). The release pipeline (sign / notarize
-/ appcast / cask) runs only on `v*` tags, not on PRs — see `RELEASING.md`.
+/ appcast) runs only on `v*` tags, not on PRs — see `RELEASING.md`.
 
 ## 8. Merging
 

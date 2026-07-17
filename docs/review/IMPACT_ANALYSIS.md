@@ -61,7 +61,7 @@ moving a feature touches all of them.
 
 scrcpy-server and the static ffmpeg are bundled in `App/Resources/`, versioned by
 `BundledTools`, refreshed by `scripts/update-bundled-tools.sh`. The release path
-(sign → notarize → DMG → appcast → Homebrew cask) runs on `v*` tags.
+(sign → notarize → DMG → appcast) runs on `v*` tags.
 
 - Touching bundled binaries, signing, the appcast, or `RELEASING.md` affects
   *distribution*, not just the build. Read `RELEASING.md`; a broken appcast

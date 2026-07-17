@@ -171,8 +171,7 @@ jobs:
           cp "DerivedData/Build/Products/Release/Droidective-${GITHUB_REF_NAME}.dmg" \
              "DerivedData/Build/Products/Release/Droidective.dmg"
       # A hyphen in the tag (v3.3.0-beta.1) marks a beta: the GitHub release is
-      # a prerelease, the appcast item rides the Sparkle beta channel, and the
-      # Homebrew cask is left alone.
+      # a prerelease and the appcast item rides the Sparkle beta channel.
       - name: Publish release with build
         uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b  # v3.0.1
         with:
@@ -198,21 +197,3 @@ jobs:
           # the pages job, which deploys it. (GitHub Pages only serves deploys
           # from the source branch, so a tag-ref deploy here would never go live.)
           ./scripts/commit-appcast.sh "site/appcast.xml" "${{ github.repository }}" main "${GITHUB_REF_NAME}"
-      - name: Update Homebrew cask
-        continue-on-error: true
-        env:
-          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-        run: |
-          [[ -n "${HOMEBREW_TAP_TOKEN:-}" ]] || { echo "no HOMEBREW_TAP_TOKEN — skipping cask update"; exit 0; }
-          VERSION="${GITHUB_REF_NAME#v}"
-          [[ "$VERSION" == *-* ]] && { echo "beta release — skipping cask update"; exit 0; }
-          DMG="DerivedData/Build/Products/Release/Droidective-${GITHUB_REF_NAME}.dmg"
-          URL="https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/Droidective-${GITHUB_REF_NAME}.dmg"
-          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/Rohindh-R/homebrew-tap.git" tap
-          ./scripts/update-cask.sh "$VERSION" "$DMG" "$URL" "tap/Casks/droidective.rb"
-          cd tap
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Casks/droidective.rb
-          git diff --cached --quiet || git commit -m "droidective ${VERSION}"
-          git push
