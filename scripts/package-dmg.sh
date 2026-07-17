@@ -51,29 +51,36 @@ ffmpeg="$APP/Contents/Resources/ffmpeg"
 [[ -f "$ffmpeg" ]] && codesign "${opts[@]}" "$ffmpeg"
 
 # Notarization unpacks jar archives and rejects any unsigned Mach-O inside them
-# — bundletool-all.jar ships JNA's darwin libjnidispatch.jnilib. Extract each
-# bundled jar's macOS natives, sign them, and repack in place (seeding doesn't
-# digest-check the bundled jars, so the changed hash is fine).
+# — bundletool-all.jar ships JNA's darwin libjnidispatch.jnilib AND an
+# extensionless macos/aapt2 executable, so detect by content (`file`), not by
+# extension. Extract each bundled jar, sign every Mach-O, and repack in place
+# (jars aren't signature-verified and seeding doesn't digest-check them, so the
+# changed entries are fine).
 if [[ "$SIGN_IDENTITY" != "-" ]]; then
   for jar in "$APP/Contents/Resources"/*.jar; do
     [[ -f "$jar" ]] || continue
     # $APP is relative — resolve the jar to an absolute path so it survives
     # the cd into the scratch directory below.
     jar="$(cd "$(dirname "$jar")" && pwd)/$(basename "$jar")"
-    natives="$(zipinfo -1 "$jar" | grep -E '\.(dylib|jnilib)$' || true)"
-    [[ -n "$natives" ]] || continue
     jartmp="$(mktemp -d)"
-    while IFS= read -r entry; do
-      (
-        cd "$jartmp"
-        unzip -qo "$jar" "$entry"
-        codesign "${opts[@]}" "$entry"
-        zip -q "$jar" "$entry"
-      )
-    done <<<"$natives"
+    unzip -qo "$jar" -d "$jartmp"
+    # `file` emits one extra "path (for architecture …)" line per slice of a
+    # universal binary — strip the suffix and dedupe to real entry paths.
+    natives="$(cd "$jartmp" && find . -type f ! -name '*.class' -exec file {} + |
+      grep 'Mach-O' | cut -d: -f1 |
+      sed -e 's|^\./||' -e 's| (for architecture [^)]*)$||' | sort -u || true)"
+    if [[ -n "$natives" ]]; then
+      while IFS= read -r entry; do
+        (
+          cd "$jartmp"
+          codesign "${opts[@]}" "$entry"
+          zip -q "$jar" "$entry"
+        )
+      done <<<"$natives"
+      echo "signed jar natives in $(basename "$jar"):"
+      echo "$natives"
+    fi
     rm -rf "$jartmp"
-    echo "signed jar natives in $(basename "$jar"):"
-    echo "$natives"
   done
 fi
 
