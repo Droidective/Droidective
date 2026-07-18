@@ -33,11 +33,12 @@ struct RootView: View {
     @State private var pickerIsFirstRun = false
     @Environment(\.colorScheme) private var colorScheme
 
-    /// Translucent-window appearance (Settings ▸ Appearance ▸ Window). At
-    /// 1.0 opacity everything below renders exactly as before the feature.
+    /// Translucent-window appearance (Settings ▸ Appearance ▸ Window) — the
+    /// values the WindowAccessor closure applies at attach; live updates are
+    /// `WindowTranslucencyModifier`'s job. At 1.0 opacity everything renders
+    /// exactly as before the feature.
     @AppStorage(windowOpacityDefaultsKey) private var windowOpacity = 1.0
     @AppStorage(windowBlurDefaultsKey) private var windowBlur = 0.6
-    @AppStorage(windowGrainDefaultsKey) private var windowGrain = 0.0
 
     /// Launches before the one-time GitHub-star nudge.
     private let starPromptAfterLaunches = 10
@@ -85,26 +86,11 @@ struct RootView: View {
         // (the exitGuard alone is often unchanged), driving the leave dialog.
         let showExitDialog = state.pendingExit.map { !$0.saving } ?? false
         return zoomedContent
-            // Grain rides outside zoomedContent's scaleEffect so ⌘= zoom
-            // never magnifies the specks.
-            .overlay {
-                GrainOverlay(strength: WindowEffects.grainOpacity(root: windowOpacity, amount: windowGrain))
-            }
             .overlay(alignment: .topTrailing) { devMetricsOverlay }
             .modifier(PostTourCelebration(state: state))
+            .modifier(WindowTranslucencyModifier(state: state))
             .environment(\.colorScheme, injectedColorScheme)
-            .environment(\.windowOpacity, WindowEffects.clamped(windowOpacity))
             .preferredColorScheme(preferredScheme)
-            .onChange(of: windowOpacity) { _, value in
-                if let window = state.mainWindow {
-                    applyWindowTranslucency(window, opacity: value, blurAmount: windowBlur)
-                }
-            }
-            .onChange(of: windowBlur) { _, value in
-                if let window = state.mainWindow {
-                    applyWindowTranslucency(window, opacity: windowOpacity, blurAmount: value)
-                }
-            }
             .background(WindowAccessor { window in
                 // Track the main window by reference — the ⌘W monitor and
                 // `activateMainWindow` need to tell it apart from Settings /

@@ -61,6 +61,39 @@ private enum WindowServerBlur {
     }
 }
 
+/// Everything RootView layers onto its content for the translucent window,
+/// as ONE chain link: the grain film, the `\.windowOpacity` environment, and
+/// the live re-application of window flags + blur radius on slider changes.
+/// (Kept out of RootView's `body` chain — its expression already sits near
+/// the type-checker's time limit on CI, and four more links pushed it over.)
+struct WindowTranslucencyModifier: ViewModifier {
+    let state: AppState
+    @AppStorage(windowOpacityDefaultsKey) private var windowOpacity = 1.0
+    @AppStorage(windowBlurDefaultsKey) private var windowBlur = 0.6
+    @AppStorage(windowGrainDefaultsKey) private var windowGrain = 0.0
+
+    func body(content: Content) -> some View {
+        content
+            // Outside RootView's zoom scaleEffect, so ⌘= never magnifies
+            // the specks.
+            .overlay {
+                GrainOverlay(
+                    strength: WindowEffects.grainOpacity(root: windowOpacity, amount: windowGrain))
+            }
+            .environment(\.windowOpacity, WindowEffects.clamped(windowOpacity))
+            .onChange(of: windowOpacity) { _, value in
+                if let window = state.mainWindow {
+                    applyWindowTranslucency(window, opacity: value, blurAmount: windowBlur)
+                }
+            }
+            .onChange(of: windowBlur) { _, value in
+                if let window = state.mainWindow {
+                    applyWindowTranslucency(window, opacity: windowOpacity, blurAmount: value)
+                }
+            }
+    }
+}
+
 /// The static Metal grain film over the glass. The base fill is
 /// all-but-invisible so a device that can't run the shader shows nothing
 /// instead of a solid flash; the shader replaces each pixel with a frozen
