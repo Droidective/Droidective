@@ -142,7 +142,9 @@ struct FeatureDetailView: View {
                 ComingSoonView(feature: feature)
             }
         case .formAction:
-            if FeatureEngine.implementedIDs.contains(feature.id) {
+            if feature.id == "send-text" {
+                SendTextView(feature: feature)
+            } else if FeatureEngine.implementedIDs.contains(feature.id) {
                 FormActionView(feature: feature)
             } else {
                 ComingSoonView(feature: feature)
