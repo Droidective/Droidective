@@ -203,6 +203,17 @@ import Testing
         ])
     }
 
+    @Test func shutdownRunsSimctlShutdown() async throws {
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: [], stdout: "")
+        let service = makeService(runner)
+        let result = try await service.shutdown(udid: "UDID-1")
+        #expect(result.ok)
+        #expect(runner.invocations == [
+            .init(executable: "/usr/bin/xcrun", arguments: ["simctl", "shutdown", "UDID-1"])
+        ])
+    }
+
     @Test func bootFailureSkipsOpeningTheApp() async throws {
         let runner = MockProcessRunner()
         runner.script(argsPrefix: [], stderr: "Unable to boot device in current state: Booted", exitCode: 149)
