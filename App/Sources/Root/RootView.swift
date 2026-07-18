@@ -20,7 +20,6 @@ struct RootView: View {
     /// An overshoot drag asked for sidebar room while the fixed sidebar was
     /// up — honored when the drag ends, so the pane area never grows under
     /// an active drag (which would slide the divider away from the cursor).
-    @State private var pendingSidebarHide = false
     @AppStorage("hasSeenTour") private var hasSeenTour = false
     @AppStorage("hasChosenRole") private var hasChosenRole = false
     @AppStorage("launchCount") private var launchCount = 0
@@ -496,7 +495,11 @@ struct RootView: View {
                     SplitDivider(
                         fraction: $splitFraction, live: $splitDragFraction,
                         totalWidth: geo.size.width,
-                        onOvershoot: hideSidebarForSplitRoom
+                        // Overshoot hides the sidebar mid-drag; the divider
+                        // rebases against the grown width (see SplitDivider)
+                        // so the seam stays under the cursor instead of the
+                        // hide waiting for mouse-up like it used to.
+                        onOvershoot: state.hideSidebarForSplitRoom
                     )
                     .frame(width: PaneSplit.dividerWidth)
                     EditorPane(index: 1)
@@ -505,29 +508,6 @@ struct RootView: View {
                 }
             }
             .navigationTitle(activeTitle)
-            // The deferred fixed-sidebar hide: fires when the drag ends
-            // (splitDragFraction → nil); a fresh drag re-arms cleanly.
-            .onChange(of: splitDragFraction == nil) { _, dragEnded in
-                if dragEnded, pendingSidebarHide {
-                    pendingSidebarHide = false
-                    state.hideSidebarForSplitRoom()
-                } else if !dragEnded {
-                    pendingSidebarHide = false
-                }
-            }
-        }
-    }
-
-    /// SplitDivider's overshoot hook. The overlay sidebar takes no layout
-    /// width, so it hides immediately. The fixed sidebar DOES take width —
-    /// removing it mid-drag would grow the pane area under the pointer and
-    /// slide the divider away from the cursor, so its hide waits for the
-    /// drag to end.
-    private func hideSidebarForSplitRoom() {
-        if sidebarAutoHide {
-            state.hideSidebarForSplitRoom()
-        } else {
-            pendingSidebarHide = true
         }
     }
 
@@ -749,8 +729,10 @@ struct TabDragCancelCatch: DropDelegate {
 /// The draggable seam between the two split panes. Stores a fraction (0…1) of
 /// the total width so the split survives window resizes; `PaneSplit` bounds it
 /// to 30…70% so neither pane collapses. Dragging *past* the floor — asking for
-/// a pane the clamp refuses — hides the sidebar instead, freeing real width
-/// (`onOvershoot`, once per drag).
+/// a pane the clamp refuses — hides the sidebar mid-drag, freeing real width
+/// (`onOvershoot`, once per drag); the drag then REBASES against the grown
+/// pane area (`PaneSplit.rebasedFraction`) so the divider stays glued to the
+/// cursor instead of teleporting when the width lands.
 private struct SplitDivider: View {
     @Binding var fraction: Double
     @Binding var live: Double?
@@ -758,6 +740,11 @@ private struct SplitDivider: View {
     let onOvershoot: () -> Void
     @State private var startFraction: Double?
     @State private var overshootFired = false
+    /// The width the current drag's base fraction is expressed in, plus the
+    /// last raw fraction — what the rebase needs when the sidebar hides and
+    /// `totalWidth` changes under an active drag.
+    @State private var dragTotal: CGFloat?
+    @State private var lastRaw: Double?
 
     var body: some View {
         Color.clear
@@ -775,10 +762,19 @@ private struct SplitDivider: View {
                             if let stale = live { fraction = stale }
                             overshootFired = false
                             startFraction = fraction
+                            dragTotal = totalWidth
+                        }
+                        if let oldTotal = dragTotal, oldTotal != totalWidth,
+                           totalWidth > 0, let raw = lastRaw {
+                            let rebased = PaneSplit.rebasedFraction(
+                                raw: raw, oldTotal: oldTotal, newTotal: totalWidth)
+                            startFraction = rebased - gesture.translation.width / totalWidth
+                            dragTotal = totalWidth
                         }
                         let base = startFraction ?? fraction
                         let delta = totalWidth > 0 ? gesture.translation.width / totalWidth : 0
                         let raw = base + delta
+                        lastRaw = raw
                         live = PaneSplit.clampedFraction(raw)
                         if PaneSplit.overshoots(raw, total: totalWidth), !overshootFired {
                             overshootFired = true
@@ -789,6 +785,8 @@ private struct SplitDivider: View {
                         if let live { fraction = live }
                         live = nil
                         startFraction = nil
+                        dragTotal = nil
+                        lastRaw = nil
                         overshootFired = false
                     }
             )

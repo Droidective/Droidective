@@ -65,4 +65,17 @@ import Testing
         #expect(PaneSplit.leftWidth(total: 508, fraction: 0.7) == 250)
         #expect(PaneSplit.leftWidth(total: 0, fraction: 0.5) == 0)
     }
+
+    @Test func rebasePreservesTheDividersWindowPosition() {
+        // Pane area grows 1000 → 1300 (the 300pt sidebar hid at the leading
+        // edge): a divider at 27% of 1000 (270pt, window x = 300 + 270 = 570)
+        // must land at 570pt of 1300 to stay under the cursor.
+        let rebased = PaneSplit.rebasedFraction(raw: 0.27, oldTotal: 1000, newTotal: 1300)
+        #expect(abs(rebased * 1300 - 570) < 0.0001)
+    }
+
+    @Test func rebaseIsIdentityWhenWidthIsUnchangedAndSafeAtZero() {
+        #expect(PaneSplit.rebasedFraction(raw: 0.5, oldTotal: 900, newTotal: 900) == 0.5)
+        #expect(PaneSplit.rebasedFraction(raw: 0.4, oldTotal: 900, newTotal: 0) == 0.4)
+    }
 }

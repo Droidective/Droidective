@@ -43,4 +43,15 @@ public enum PaneSplit {
     private static func minPane(available: Double) -> Double {
         min(max(320, available * fractionRange.lowerBound), available / 2)
     }
+
+    /// Rebase a drag's raw fraction across a mid-drag width change — the
+    /// sidebar hiding to free split room grows the pane area at its LEADING
+    /// edge, so preserving the divider's window-anchored position means its
+    /// pixel offset inside the area grows by exactly the freed width. Without
+    /// this the divider teleports away from the cursor the moment the
+    /// sidebar goes.
+    public static func rebasedFraction(raw: Double, oldTotal: Double, newTotal: Double) -> Double {
+        guard newTotal > 0 else { return raw }
+        return (raw * oldTotal + (newTotal - oldTotal)) / newTotal
+    }
 }
