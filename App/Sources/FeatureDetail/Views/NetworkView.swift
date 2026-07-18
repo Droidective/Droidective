@@ -272,7 +272,7 @@ struct NetworkView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.bgSurface, in: RoundedRectangle(cornerRadius: 12))
+        .background(.bgSurface, in: RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.borderSubtle, lineWidth: 1))
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.separator.opacity(0.4)))
     }

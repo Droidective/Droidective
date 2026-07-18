@@ -39,7 +39,7 @@ struct RootStatusView: View {
                         }
                     }
                 }
-                .background(Color.bgSurface, in: RoundedRectangle(cornerRadius: 8))
+                .background(.bgSurface, in: RoundedRectangle(cornerRadius: 8))
             }
             .padding(16)
             .frame(maxWidth: 560, alignment: .leading)

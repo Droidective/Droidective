@@ -202,7 +202,7 @@ struct FileExplorerView: View {
         .controlSize(.small)
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
-        .background(Color.bgSurface)
+        .background(.bgSurface)
     }
 
     private func listView(_ entries: [FsEntry]) -> some View {
@@ -234,6 +234,7 @@ struct FileExplorerView: View {
                 proxy.scrollTo("fe-top", anchor: .top)
                 listFocused = true
             }
+            .translucentListBackground()
         }
         // ⌘C / ⌘X / ⌘V via the standard Edit menu plumbing.
         .onCopyCommand { copySelection(isCut: false) }

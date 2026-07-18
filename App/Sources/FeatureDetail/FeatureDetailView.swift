@@ -4,7 +4,6 @@ import SwiftUI
 /// Routes the selected feature to its detail pane by kind.
 struct FeatureDetailView: View {
     @Environment(AppState.self) private var state
-    @AppStorage("showFeatureNotes") private var showFeatureNotes = false
     let featureID: String?
 
     var body: some View {
@@ -20,22 +19,10 @@ struct FeatureDetailView: View {
         } else if featureID == "apk-open" {
             ApkOpenView()
         } else if let featureID, let feature = FeatureRegistry.byID[featureID] {
-            featureBody(for: feature)
-        } else {
-            HomeView()
-        }
-    }
-
-    /// Every feature shows its "how it works" description beneath its content —
-    /// pinned below the feature's own (often centered) content so it never
-    /// shifts or clips it. Toggled from Settings ▸ Appearance.
-    private func featureBody(for feature: FeatureDef) -> some View {
-        VStack(spacing: 0) {
             detail(for: feature)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            if showFeatureNotes, let note = FeatureRegistry.howTo(for: feature.id, role: state.selectedRole) {
-                FeatureDescription(note: note)
-            }
+        } else {
+            HomeView()
         }
     }
 
@@ -156,37 +143,6 @@ struct FeatureDetailView: View {
                 ComingSoonView(feature: feature)
             }
         }
-    }
-}
-
-/// The feature's "how it works" note, rendered as a description strip beneath
-/// the feature's content — replaces the old ⓘ popover.
-struct FeatureDescription: View {
-    @AppStorage("showFeatureNotes") private var showFeatureNotes = false
-    let note: String
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "info.circle")
-                .foregroundStyle(.textMuted)
-            Text(.init(note))
-                .font(.app(.callout))
-                .foregroundStyle(.textMuted)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 0)
-            Button {
-                withAnimation(.easeInOut(duration: 0.15)) { showFeatureNotes = false }
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .foregroundStyle(.tertiary)
-            }
-            .buttonStyle(.plain)
-            .help("Hide this note (toggle back in Settings ▸ Appearance)")
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .overlay(alignment: .top) { Divider() }
     }
 }
 

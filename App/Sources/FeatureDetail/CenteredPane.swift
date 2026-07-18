@@ -27,7 +27,7 @@ private struct CenteredCardModifier: ViewModifier {
                     .padding(24)
                     .background(
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(Color.bgSurface)
+                            .fill(.bgSurface)
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 14, style: .continuous)

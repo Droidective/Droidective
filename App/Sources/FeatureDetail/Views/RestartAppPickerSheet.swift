@@ -66,7 +66,7 @@ struct RestartAppPickerSheet: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
-            .background(Color.bgRoot, in: RoundedRectangle(cornerRadius: 8))
+            .background(.bgRoot, in: RoundedRectangle(cornerRadius: 8))
             .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.borderSubtle))
             .padding(.horizontal, 12)
             .padding(.bottom, 10)
@@ -75,7 +75,7 @@ struct RestartAppPickerSheet: View {
             content
         }
         .frame(width: 360, height: 440)
-        .background(Color.bgSurface)
+        .background(.bgSurface)
         .task { searchFocused = true; await load() }
     }
 

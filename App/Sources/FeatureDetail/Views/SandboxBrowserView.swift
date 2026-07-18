@@ -89,6 +89,7 @@ struct SandboxBrowserView: View {
                             row(entry)
                         }
                     }
+                    .translucentListBackground()
                 }
             } else {
                 ProgressView("Reading files…").frame(maxWidth: .infinity, maxHeight: .infinity)

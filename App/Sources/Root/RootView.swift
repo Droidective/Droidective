@@ -33,6 +33,13 @@ struct RootView: View {
     @State private var pickerIsFirstRun = false
     @Environment(\.colorScheme) private var colorScheme
 
+    /// Translucent-window appearance (Settings ▸ Appearance ▸ Window) — the
+    /// values the WindowAccessor closure applies at attach; live updates are
+    /// `WindowTranslucencyModifier`'s job. At 1.0 opacity everything renders
+    /// exactly as before the feature.
+    @AppStorage(windowOpacityDefaultsKey) private var windowOpacity = 1.0
+    @AppStorage(windowBlurDefaultsKey) private var windowBlur = 0.6
+
     /// Launches before the one-time GitHub-star nudge.
     private let starPromptAfterLaunches = 10
 
@@ -81,6 +88,7 @@ struct RootView: View {
         return zoomedContent
             .overlay(alignment: .topTrailing) { devMetricsOverlay }
             .modifier(PostTourCelebration(state: state))
+            .modifier(WindowTranslucencyModifier(state: state))
             .environment(\.colorScheme, injectedColorScheme)
             .preferredColorScheme(preferredScheme)
             .background(WindowAccessor { window in
@@ -98,6 +106,7 @@ struct RootView: View {
                 }
                 window.setFrameAutosaveName(autosaveName)
                 WindowMinSizeGuard.shared.attach(to: window)
+                applyWindowTranslucency(window, opacity: windowOpacity, blurAmount: windowBlur)
             })
             .overlay {
                 // Full-window takeover (macOS has no fullScreenCover), shown
@@ -333,14 +342,13 @@ struct RootView: View {
         }
     }
 
-    /// One-time switch to the v2 defaults — dark appearance and how-it-works
-    /// notes hidden — for users who installed before they changed. Runs once;
-    /// any later manual change in Settings sticks.
+    /// One-time switch to the v2 defaults — dark appearance — for users who
+    /// installed before it changed. Runs once; any later manual change in
+    /// Settings sticks.
     private func migrateDefaultsIfNeeded() {
         let defaults = UserDefaults.standard
         guard !defaults.bool(forKey: "didMigrateDefaultsV2") else { return }
         defaults.set("dark", forKey: "theme")
-        defaults.set(false, forKey: "showFeatureNotes")
         defaults.set(true, forKey: "didMigrateDefaultsV2")
     }
 
@@ -402,10 +410,12 @@ struct RootView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(.bgRoot)
             .animation(.spring(duration: 0.28), value: state.showNotifications)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // One root wash under the WHOLE window (sidebar included), so every
+        // surface above it stacks its contrast step on the same glass.
+        .background(.bgRoot)
         .foregroundStyle(.textMain)
         // A tab drag released over dead space (the sidebar, device bar, an empty
         // strip area — anything that isn't a pane/chip/split target) never fires

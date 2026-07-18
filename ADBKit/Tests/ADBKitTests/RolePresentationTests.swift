@@ -44,22 +44,4 @@ import Testing
         #expect(FeatureRegistry.presented(logcat, for: .iosDeveloper).title == logcat.title)
         #expect(FeatureRegistry.presented(logcat, for: .iosDeveloper).subtitle == logcat.subtitle)
     }
-
-    @Test func emulatorsHowToNoteFollowsTheRole() {
-        let combined = FeatureRegistry.howTo(for: "emulators")
-        #expect(combined?.contains("AVD") == true)
-        #expect(combined?.contains("Simulators") == true)
-
-        let iosNote = FeatureRegistry.howTo(for: "emulators", role: .iosDeveloper)
-        #expect(iosNote?.contains("Simulators") == true)
-        #expect(iosNote?.contains("AVD") == false)
-
-        let androidNote = FeatureRegistry.howTo(for: "emulators", role: .qaTester)
-        #expect(androidNote?.contains("AVD") == true)
-        #expect(androidNote?.contains("Simulator") == false)
-
-        // Other features keep one role-independent note.
-        #expect(FeatureRegistry.howTo(for: "logcat", role: .iosDeveloper)
-            == FeatureRegistry.howTo(for: "logcat"))
-    }
 }

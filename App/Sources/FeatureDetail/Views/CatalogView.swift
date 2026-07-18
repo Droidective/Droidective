@@ -23,6 +23,7 @@ struct CatalogView: View {
                 }
             }
         }
+        .translucentListBackground()
     }
 
     private func row(_ feature: FeatureDef) -> some View {

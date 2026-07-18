@@ -359,7 +359,7 @@ struct SimulatorLogsView: View {
             .scrollTargetLayout()
         }
         .scrollPosition(id: $scrolledID, anchor: .bottom)
-        .background(.background)
+        .translucentFeedBackground()
         .overlay(alignment: .bottom) {
             if !followsTail && !visible.isEmpty {
                 newLinesPill
@@ -462,7 +462,7 @@ struct SimulatorLogsView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 4)
-        .background(Color.bgSurface)
+        .background(.bgSurface)
     }
 
     private var statusText: String {

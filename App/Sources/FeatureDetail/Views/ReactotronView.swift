@@ -1311,7 +1311,7 @@ struct ReactotronView: View {
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(8)
-                        .background(Color.bgSurface, in: RoundedRectangle(cornerRadius: 6))
+                        .background(.bgSurface, in: RoundedRectangle(cornerRadius: 6))
                 }
             }
             .padding(14)
@@ -1788,7 +1788,7 @@ private struct TimelinePane: View {
                 }
             }
         }
-        .background(.background)
+        .translucentFeedBackground()
         .overlay { emptyOverlay }
     }
 
@@ -2048,7 +2048,7 @@ private struct RtRow: View {
                 }
                 .padding(8)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.bgSurface, in: RoundedRectangle(cornerRadius: 5))
+                .background(.bgSurface, in: RoundedRectangle(cornerRadius: 5))
             }
         }
     }
@@ -2080,7 +2080,7 @@ private struct RtRow: View {
             JSONTreeView(root: object)
         }
         .padding(8)
-        .background(Color.bgSurface, in: RoundedRectangle(cornerRadius: 6))
+        .background(.bgSurface, in: RoundedRectangle(cornerRadius: 6))
     }
 
     private func parseBody(_ value: JSONValue?) -> JSONValue? {
@@ -2171,7 +2171,7 @@ private struct RtImageThumbnail: View {
             .foregroundStyle(.textMuted)
             .padding(8)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.bgSurface, in: RoundedRectangle(cornerRadius: 6))
+            .background(.bgSurface, in: RoundedRectangle(cornerRadius: 6))
     }
 }
 
@@ -2498,7 +2498,7 @@ private struct CommandCard: View {
             }
         }
         .padding(12)
-        .background(Color.bgSurface, in: RoundedRectangle(cornerRadius: 8))
+        .background(.bgSurface, in: RoundedRectangle(cornerRadius: 8))
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
     }
@@ -2567,7 +2567,7 @@ private struct ReactotronOnboarding: View {
                 .font(.app(size: 11, design: .monospaced))
                 .textSelection(.enabled)
                 .padding(12)
-                .background(Color.bgSurface, in: RoundedRectangle(cornerRadius: 6))
+                .background(.bgSurface, in: RoundedRectangle(cornerRadius: 6))
             Text("Needs `reactotron-react-native` installed in the app and a dev build.")
                 .font(.app(.caption))
                 .foregroundStyle(.tertiary)
@@ -2611,7 +2611,7 @@ private struct ReactotronOnboarding: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .frame(maxWidth: 460)
-        .background(Color.bgSurface, in: RoundedRectangle(cornerRadius: 10))
+        .background(.bgSurface, in: RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.borderSubtle))
     }
 }
@@ -2767,7 +2767,7 @@ private struct StateCard<Trailing: View, Content: View>: View {
             content()
         }
         .padding(14)
-        .background(Color.bgSurface, in: RoundedRectangle(cornerRadius: 12))
+        .background(.bgSurface, in: RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.borderSubtle))
     }
 }
@@ -2783,7 +2783,7 @@ private struct CountChip: View {
             .foregroundStyle(.textMuted)
             .padding(.horizontal, 7)
             .padding(.vertical, 2)
-            .background(Color.bgRoot, in: Capsule())
+            .background(.bgRoot, in: Capsule())
             .overlay(Capsule().strokeBorder(Color.borderSubtle))
     }
 }
@@ -2813,7 +2813,7 @@ private struct EmptyHint: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 10)
         .padding(.horizontal, 12)
-        .background(Color.bgRoot, in: RoundedRectangle(cornerRadius: 8))
+        .background(.bgRoot, in: RoundedRectangle(cornerRadius: 8))
     }
 }
 
@@ -2823,7 +2823,7 @@ private extension View {
     func cardInset() -> some View {
         padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.bgRoot, in: RoundedRectangle(cornerRadius: 8))
+            .background(.bgRoot, in: RoundedRectangle(cornerRadius: 8))
             .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.borderSubtle.opacity(0.6)))
     }
 }

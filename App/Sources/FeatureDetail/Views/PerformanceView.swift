@@ -389,7 +389,7 @@ struct PerformanceView: View {
                         .font(.app(.caption2).monospacedDigit())
                         .padding(.horizontal, 6)
                         .padding(.vertical, 3)
-                        .background(Color.bgSurface, in: RoundedRectangle(cornerRadius: 5))
+                        .background(.bgSurface, in: RoundedRectangle(cornerRadius: 5))
                 }
         }
     }
@@ -490,7 +490,7 @@ struct PerformanceView: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.bgSurface, in: RoundedRectangle(cornerRadius: 10))
+        .background(.bgSurface, in: RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.borderSubtle, lineWidth: 1))
     }
 

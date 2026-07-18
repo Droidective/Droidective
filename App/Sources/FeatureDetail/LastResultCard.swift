@@ -46,7 +46,7 @@ struct LastResultCard: View {
             }
             .padding(12)
             .frame(maxWidth: 460, alignment: .leading)
-            .background(Color.bgSurface, in: RoundedRectangle(cornerRadius: 10))
+            .background(.bgSurface, in: RoundedRectangle(cornerRadius: 10))
             .overlay(
                 RoundedRectangle(cornerRadius: 10)
                     .strokeBorder(Color.borderSubtle, lineWidth: 1)

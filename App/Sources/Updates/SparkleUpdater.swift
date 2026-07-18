@@ -100,9 +100,22 @@ final class UpdaterViewModel: NSObject, ObservableObject {
     private static let log = Logger(
         subsystem: "com.rohindh.droidective", category: "updates")
 
+    /// A Debug build must never update itself. Sparkle's silent background
+    /// staging + install-on-quit replaces the bundle at the app's own path —
+    /// for a dev build that means the RELEASE app is quietly installed over
+    /// DerivedData/…/Droidective.app the moment the dev build quits,
+    /// swapping every fresh build for the latest release.
+    private static var updaterAllowed: Bool {
+        #if DEBUG
+            return false
+        #else
+            return true
+        #endif
+    }
+
     override init() {
         super.init()
-        guard Self.signingKeyConfigured else { return }
+        guard Self.updaterAllowed, Self.signingKeyConfigured else { return }
         Self.migrateLegacyPrefs()
         let updater = SPUUpdater(
             hostBundle: .main, applicationBundle: .main, userDriver: self, delegate: self)

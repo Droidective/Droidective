@@ -173,6 +173,7 @@ private struct RecompileTab: View {
             }
         }
         .formStyle(.grouped)
+        .translucentListBackground()
     }
 
     @ViewBuilder private func resultRow(_ status: String) -> some View {

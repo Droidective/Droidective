@@ -20,8 +20,8 @@ struct SettingsView: View {
             HotkeysSettingsView()
                 .tabItem { Label("Hotkeys", systemImage: "keyboard") }
         }
-        .frame(width: 560)
-        .frame(minHeight: 460)
+        .frame(width: 640)
+        .frame(minHeight: 540)
         // Esc closes the Settings window. A zero-opacity button carrying the
         // Cancel (Esc) key equivalent fires regardless of which control holds
         // focus — more reliable here than .onExitCommand.
@@ -260,9 +260,11 @@ struct GeneralSettingsView: View {
 struct AppearanceSettingsView: View {
     @AppStorage("theme") private var theme = "dark"
     @AppStorage(accentColorDefaultsKey) private var accentHex = ""
-    @AppStorage("showFeatureNotes") private var showFeatureNotes = false
     @AppStorage(appFontFamilyDefaultsKey) private var fontFamily = ""
     @AppStorage(appFontSizeScaleDefaultsKey) private var fontSizeScale = 1.0
+    @AppStorage(windowOpacityDefaultsKey) private var windowOpacity = 1.0
+    @AppStorage(windowBlurDefaultsKey) private var windowBlur = 0.6
+    @AppStorage(windowGrainDefaultsKey) private var windowGrain = 0.0
     @State private var hexDraft = ""
     @State private var hexInvalid = false
     #if DEBUG
@@ -282,6 +284,21 @@ struct AppearanceSettingsView: View {
         Binding(
             get: { Color(hex: accentHex) ?? Color("BrandAccent") },
             set: { accentHex = $0.hexString ?? "" })
+    }
+
+    /// One Window-section slider row: label, slider, live percent readout.
+    private func effectSlider(
+        _ label: String, value: Binding<Double>, in range: ClosedRange<Double>, percent: Double
+    ) -> some View {
+        HStack(spacing: 10) {
+            Text(label)
+                .frame(width: 56, alignment: .leading)
+            Slider(value: value, in: range)
+            Text("\(Int((percent * 100).rounded()))%")
+                .font(.app(.callout).monospacedDigit())
+                .foregroundStyle(.textMuted)
+                .frame(width: 44, alignment: .trailing)
+        }
     }
 
     var body: some View {
@@ -360,9 +377,19 @@ struct AppearanceSettingsView: View {
                     .foregroundStyle(.textMuted)
             }
 
-            Section("Feature notes") {
-                Toggle("Show how-it-works notes", isOn: $showFeatureNotes)
-                Text("The info text beneath each feature, above the command bar.")
+            Section("Window") {
+                effectSlider(
+                    "Opacity", value: $windowOpacity, in: WindowEffects.opacityRange,
+                    percent: WindowEffects.clamped(windowOpacity))
+                effectSlider(
+                    "Blur", value: $windowBlur, in: 0...1,
+                    percent: WindowEffects.clampedAmount(windowBlur))
+                    .disabled(!WindowEffects.isTranslucent(windowOpacity))
+                effectSlider(
+                    "Grain", value: $windowGrain, in: 0...1,
+                    percent: WindowEffects.clampedAmount(windowGrain))
+                    .disabled(!WindowEffects.isTranslucent(windowOpacity))
+                Text("Below 100% opacity the main window turns to glass — what's behind shows through every pane, softened by Blur and textured by Grain.")
                     .font(.app(.footnote))
                     .foregroundStyle(.textMuted)
             }

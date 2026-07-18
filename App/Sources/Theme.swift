@@ -1,3 +1,4 @@
+import ADBKit
 import AppKit
 import SwiftUI
 
@@ -13,11 +14,43 @@ import SwiftUI
 /// Icon usage (the matrix): static-navigation and input icons are `.textMuted`;
 /// resting-action icons inherit `.textMain`; active/selected icons, loaders, and
 /// CTAs are `.brandAccent`.
+extension EnvironmentValues {
+    /// The clamped window opacity, injected once by RootView so every pane
+    /// derives its fill alpha from the same value. 1.0 (the default in other
+    /// scenes) keeps every fill exactly as before the feature existed.
+    /// Declared here beside the styles that resolve against it — Theme.swift
+    /// also compiles standalone in the AppTests logic bundle.
+    @Entry var windowOpacity: Double = 1.0
+}
+
+/// Deepest layer — the content background (the "graphite case"). Resolves
+/// against the window opacity environment, so every `.bgRoot` fill in the
+/// main window turns to glass with the translucency slider and stays fully
+/// opaque everywhere else (panels, Settings, sheets' own scenes).
+struct RootFillStyle: ShapeStyle {
+    func resolve(in environment: EnvironmentValues) -> some ShapeStyle {
+        Color("BgRoot").opacity(WindowEffects.clamped(environment.windowOpacity))
+    }
+}
+
+/// Lifted surface — sidebar, cards, and bars sit one step above `bgRoot`.
+/// Stacked on the root wash, so under translucency it carries only the
+/// contrast step (`WindowEffects.cardAlpha`) instead of compounding solid.
+struct SurfaceFillStyle: ShapeStyle {
+    func resolve(in environment: EnvironmentValues) -> some ShapeStyle {
+        Color("BgSurface").opacity(WindowEffects.cardAlpha(root: environment.windowOpacity))
+    }
+}
+
+extension ShapeStyle where Self == RootFillStyle {
+    static var bgRoot: RootFillStyle { RootFillStyle() }
+}
+
+extension ShapeStyle where Self == SurfaceFillStyle {
+    static var bgSurface: SurfaceFillStyle { SurfaceFillStyle() }
+}
+
 extension ShapeStyle where Self == Color {
-    /// Deepest layer — the content background (the "graphite case").
-    static var bgRoot: Color { Color("BgRoot") }
-    /// Lifted surface — sidebar, cards, and bars sit one step above `bgRoot`.
-    static var bgSurface: Color { Color("BgSurface") }
     /// Thin dividers and borders.
     static var borderSubtle: Color { Color("BorderSubtle") }
     /// Primary reading text, header titles, active values, resting-action icons.
