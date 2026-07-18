@@ -508,6 +508,23 @@ struct RootView: View {
                 }
             }
             .navigationTitle(activeTitle)
+            // Both seam drags redraw the window every frame — with a heavy
+            // backdrop blur that re-blurs per frame and turns the drag
+            // syrupy, so the blur rests while either drag is live.
+            .onChange(of: splitDragFraction == nil) { _, ended in
+                if ended {
+                    WindowBlurSuspension.end(state)
+                } else {
+                    WindowBlurSuspension.begin(state)
+                }
+            }
+            .onChange(of: sidebarDragWidth == nil) { _, ended in
+                if ended {
+                    WindowBlurSuspension.end(state)
+                } else {
+                    WindowBlurSuspension.begin(state)
+                }
+            }
         }
     }
 
