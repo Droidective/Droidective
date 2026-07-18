@@ -1,5 +1,6 @@
 import ADBKit
 import AppKit
+import Combine
 import SwiftUI
 
 /// The translucent-window appearance (Settings ▸ Appearance ▸ Window): the
@@ -59,10 +60,10 @@ private enum WindowServerBlur {
 }
 
 /// Everything RootView layers onto its content for the translucent window,
-/// as ONE chain link: the grain film, the `\.windowOpacity` environment, and
-/// the live re-application of window flags + blur radius on slider changes.
-/// (Kept out of RootView's `body` chain — its expression already sits near
-/// the type-checker's time limit on CI, and four more links pushed it over.)
+/// as ONE chain link: the grain film, the `\.windowOpacity` environment, the
+/// live re-application of window flags + blur radius on slider changes, and
+/// the live-resize blur suspension. (Kept out of RootView's `body` chain —
+/// its expression already sits near the type-checker's time limit on CI.)
 struct WindowTranslucencyModifier: ViewModifier {
     let state: AppState
     @AppStorage(windowOpacityDefaultsKey) private var windowOpacity = 1.0
@@ -88,6 +89,49 @@ struct WindowTranslucencyModifier: ViewModifier {
                     applyWindowTranslucency(window, opacity: windowOpacity, blurAmount: value)
                 }
             }
+            // Window-edge live resizes redraw every frame; at a large radius
+            // the window server re-blurs the whole backdrop each time and
+            // the drag turns syrupy. Suspend the blur for the duration.
+            .onReceive(NotificationCenter.default.publisher(
+                for: NSWindow.willStartLiveResizeNotification)
+            ) { note in
+                if let window = note.object as? NSWindow, window === state.mainWindow {
+                    WindowBlurSuspension.begin(state)
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(
+                for: NSWindow.didEndLiveResizeNotification)
+            ) { note in
+                if let window = note.object as? NSWindow, window === state.mainWindow {
+                    WindowBlurSuspension.end(state)
+                }
+            }
+    }
+}
+
+/// Suspends the backdrop blur while a live resize is in flight (window edge,
+/// split divider, sidebar handle) and restores it when the last one ends —
+/// re-entrant, since a split drag can overlap a window resize. The frost
+/// vanishing during the drag is the visible trade for a fluid resize.
+@MainActor
+enum WindowBlurSuspension {
+    private static var active = 0
+
+    static func begin(_ state: AppState) {
+        active += 1
+        guard active == 1, let window = state.mainWindow else { return }
+        WindowServerBlur.apply(radius: 0, to: window)
+    }
+
+    static func end(_ state: AppState) {
+        guard active > 0 else { return }
+        active -= 1
+        guard active == 0, let window = state.mainWindow else { return }
+        let defaults = UserDefaults.standard
+        let opacity = defaults.object(forKey: windowOpacityDefaultsKey) as? Double ?? 1.0
+        let blur = defaults.object(forKey: windowBlurDefaultsKey) as? Double ?? 0.6
+        WindowServerBlur.apply(
+            radius: WindowEffects.blurRadius(amount: blur, root: opacity), to: window)
     }
 }
 

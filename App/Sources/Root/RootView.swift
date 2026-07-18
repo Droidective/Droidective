@@ -507,12 +507,26 @@ struct RootView: View {
             .navigationTitle(activeTitle)
             // The deferred fixed-sidebar hide: fires when the drag ends
             // (splitDragFraction → nil); a fresh drag re-arms cleanly.
+            // Also: both seam drags redraw the window every frame — with a
+            // heavy backdrop blur that re-blurs per frame and turns the drag
+            // syrupy — so the blur rests while either drag is live.
             .onChange(of: splitDragFraction == nil) { _, dragEnded in
-                if dragEnded, pendingSidebarHide {
+                if dragEnded {
+                    WindowBlurSuspension.end(state)
+                    if pendingSidebarHide {
+                        pendingSidebarHide = false
+                        state.hideSidebarForSplitRoom()
+                    }
+                } else {
+                    WindowBlurSuspension.begin(state)
                     pendingSidebarHide = false
-                    state.hideSidebarForSplitRoom()
-                } else if !dragEnded {
-                    pendingSidebarHide = false
+                }
+            }
+            .onChange(of: sidebarDragWidth == nil) { _, ended in
+                if ended {
+                    WindowBlurSuspension.end(state)
+                } else {
+                    WindowBlurSuspension.begin(state)
                 }
             }
         }
