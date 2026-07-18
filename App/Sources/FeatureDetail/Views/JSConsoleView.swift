@@ -1156,6 +1156,12 @@ struct JSConsoleView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(JSConsoleTheme.background)
         .environment(\.colorScheme, .dark)
+        // Terminal convention for the linkified URLs in the rows: ⌘-click
+        // opens the browser; a plain click stays inert so click-drag text
+        // selection can't accidentally navigate away.
+        .environment(\.openURL, OpenURLAction { _ in
+            NSEvent.modifierFlags.contains(.command) ? .systemAction : .handled
+        })
     }
 
     /// Chrome-style newest-at-bottom by default, flipped when the toolbar's
@@ -1897,8 +1903,9 @@ private func jsTruncationNote(hiddenCharacters: Int) -> AttributedString {
     return note
 }
 
-/// Syntax-colored `Text` for a value's tokens, with find matches highlighted.
-/// Bounded to `jsDisplayCharacterLimit` characters.
+/// Syntax-colored `Text` for a value's tokens, with find matches highlighted
+/// and http(s) URLs linkified. Bounded to `jsDisplayCharacterLimit` characters.
+@MainActor
 func coloredTokenText(_ tokens: [JSToken], query: String, current: Bool) -> Text {
     var attr = AttributedString()
     var remaining = jsDisplayCharacterLimit
@@ -1920,11 +1927,14 @@ func coloredTokenText(_ tokens: [JSToken], query: String, current: Bool) -> Text
         attr += jsTruncationNote(hiddenCharacters: hidden)
     }
     applyFindHighlight(&attr, query: query, current: current)
+    applyLinkAttributes(&attr)
     return Text(attr)
 }
 
 /// A single-color `Text` (input/notice/error lines) with find matches
-/// highlighted. Bounded to `jsDisplayCharacterLimit` characters.
+/// highlighted and http(s) URLs linkified. Bounded to
+/// `jsDisplayCharacterLimit` characters.
+@MainActor
 func highlightedText(_ string: String, query: String, base: Color, current: Bool = false) -> Text {
     var attr = AttributedString(String(string.prefix(jsDisplayCharacterLimit)))
     attr.foregroundColor = base
@@ -1934,7 +1944,36 @@ func highlightedText(_ string: String, query: String, base: Color, current: Bool
         attr += jsTruncationNote(hiddenCharacters: hidden)
     }
     applyFindHighlight(&attr, query: query, current: current)
+    applyLinkAttributes(&attr)
     return Text(attr)
+}
+
+/// Shared URL detector — `NSDataDetector` is expensive to create and, like
+/// `NSRegularExpression`, immutable and safe to reuse.
+@MainActor
+private let jsLinkDetector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
+
+/// Underline http(s) URLs and attach `.link`, so the console's ⌘-click
+/// `openURL` gate can send them to the browser. Only explicit-scheme matches
+/// count: the detector also flags bare domains, and code output like
+/// "config.io" must not become a link.
+@MainActor
+func applyLinkAttributes(_ attr: inout AttributedString) {
+    let plain = String(attr.characters)
+    guard plain.contains("://"), let detector = jsLinkDetector else { return }
+    let matches = detector.matches(in: plain, range: NSRange(plain.startIndex..., in: plain))
+    for match in matches {
+        guard let url = match.url,
+              url.scheme == "http" || url.scheme == "https",
+              let range = Range(match.range, in: plain),
+              plain[range].contains("://") else { continue }
+        let low = plain.distance(from: plain.startIndex, to: range.lowerBound)
+        let high = plain.distance(from: plain.startIndex, to: range.upperBound)
+        let lower = attr.index(attr.startIndex, offsetByCharacters: low)
+        let upper = attr.index(attr.startIndex, offsetByCharacters: high)
+        attr[lower ..< upper].link = url
+        attr[lower ..< upper].swiftUI.underlineStyle = .single
+    }
 }
 
 /// Overlay a highlight background on every case-insensitive occurrence of

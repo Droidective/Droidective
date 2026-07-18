@@ -57,15 +57,6 @@ struct LogTailViewV2<Data: RandomAccessCollection, Row: View>: View
     /// yank the view back off the match); returning to the edge resumes. Callers
     /// that don't need it leave it nil.
     var focusID: Data.Element.ID? = nil
-    /// When set, the feed lays out at this fixed width and rides inside a
-    /// horizontal scroll view — rows wider than the viewport are reached by
-    /// scrolling the pane, not by truncating. Tail-follow writes go through
-    /// `.scrollPosition` with a nil anchor, so they never touch the horizontal
-    /// offset. Pass `max(viewportWidth, widestRow)` so the feed always fills
-    /// the pane. On `.bottom` feeds the flip would render the horizontal
-    /// indicator mirrored at the pane's top edge, so it's hidden there —
-    /// two-finger panning still scrolls horizontally.
-    var contentWidth: CGFloat? = nil
     @ViewBuilder var row: (Data.Element) -> Row
 
     /// The row pinned at the scroll's leading (offset-0) edge. Drives
@@ -102,32 +93,17 @@ struct LogTailViewV2<Data: RandomAccessCollection, Row: View>: View
     /// -1 flips `.bottom` feeds so a newest-first layout reads newest-at-bottom.
     private var flip: CGFloat { newestEdge == .bottom ? -1 : 1 }
 
-    /// The `.bottom` flip mirrors the whole scroll view, which would draw the
-    /// horizontal indicator upside down at the pane's top edge — hide it in
-    /// that mode (the vertical indicator mirrors consistently with the flipped
-    /// content, so it stays).
-    private var horizontalIndicatorVisibility: ScrollIndicatorVisibility {
-        newestEdge == .bottom && contentWidth != nil ? .hidden : .automatic
-    }
-
     var body: some View {
         ScrollViewReader { proxy in
-            // One scroll view for both axes — nested scroll views don't
-            // forward cross-axis wheel/trackpad events on macOS, which left a
-            // wrapping horizontal scroller unreachable by scrolling.
-            ScrollView(contentWidth == nil ? .vertical : [.vertical, .horizontal]) {
+            ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) { orderedRows }
                     .scrollTargetLayout()
-                    // The fixed feed width (widest row) when horizontal
-                    // scrolling is on; a nil width is a no-op.
-                    .frame(width: contentWidth, alignment: .leading)
                     // Short feeds: stretch the content to the viewport so a
                     // handful of lines reads from the visual top instead of
-                    // floating in empty space (a two-axis scroll view centers
-                    // undersized content vertically). `.bottom` pins the rows
-                    // at the content's *end* — the flip renders that at the
-                    // visual top; `.top` pins them at the start. A no-op once
-                    // the content overflows, so the layout never switches
+                    // floating in empty space. `.bottom` pins the rows at the
+                    // content's *end* — the flip renders that at the visual
+                    // top; `.top` pins them at the start. A no-op once the
+                    // content overflows, so the layout never switches
                     // structure.
                     .frame(
                         minHeight: fillHeight > 0 ? fillHeight : nil,
@@ -160,13 +136,8 @@ struct LogTailViewV2<Data: RandomAccessCollection, Row: View>: View
             // row away. Resume is the usual affordances — the jump button or
             // scrolling back to the newest edge.
             .environment(\.logTailPauseFollow) { setTailing(false) }
-            // .top = first row = newest. In two-axis mode the anchor must be
-            // nil: .top is UnitPoint(x: 0.5, y: 0), and 2D anchoring re-centers
-            // the wide anchored row horizontally on every tail-follow write —
-            // nil scrolls minimally, which still pins the newest (topmost) row
-            // vertically and never touches the horizontal offset.
-            .scrollPosition(id: $leadingID, anchor: contentWidth == nil ? .top : nil)
-            .scrollIndicators(horizontalIndicatorVisibility, axes: .horizontal)
+            // .top = first row = newest in the newest-first layout.
+            .scrollPosition(id: $leadingID, anchor: .top)
             .scaleEffect(x: 1, y: flip, anchor: .center)    // identity for .top feeds
             .onAppear { leadingID = newestID }
             .onChange(of: leadingID) { _, id in

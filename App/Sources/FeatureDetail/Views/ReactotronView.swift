@@ -58,11 +58,14 @@ final class ReactotronSession {
     /// Per-serial `adb reverse` failures (serial → adb's reason), so a tunnel
     /// that never opened is a visible banner, not a silent "waiting" state.
     fileprivate var tunnelIssues: [String: String] = [:]
-    /// High-water mark of `RtItem.headerWidth` — the width the timeline lays
-    /// out at so no row truncates; the pane scrolls horizontally to reach it.
-    /// Monotonic while streaming (a trim never shrinks it — that would jolt
-    /// the scroll under the user); recomputed only on clears.
-    fileprivate var maxRowWidth: CGFloat = 0
+    /// Per-pane clear watermarks (pane index → highest `RtItem.seq` cleared):
+    /// a split pane's Clear hides everything received so far in that pane
+    /// only — the buffer is shared with the other pane, so it stays. The left
+    /// pane (0) lives on as the single pane, so its clear persists; the right
+    /// pane (1) dies with the split, so its clear resets when the split
+    /// closes (`resetRightPaneClear`) — reopening repopulates it. Both die
+    /// with the session (`reset`), like the buffer they scope.
+    fileprivate var paneClearSeqs: [Int: Int] = [:]
 
     private let client: AdbClient
     /// Back-reference for toasts and save dialogs; set right after init.
@@ -91,6 +94,38 @@ final class ReactotronSession {
     fileprivate var displayedItems: [RtItem] {
         guard let selectedClient else { return items }
         return items.filter { $0.connectionId == selectedClient }
+    }
+
+    /// What timeline pane `pane` shows: the shared buffer scoped by the pane's
+    /// clear watermark, then by the selected client.
+    fileprivate func displayedItems(forPane pane: Int) -> [RtItem] {
+        let mark = paneClearSeqs[pane] ?? 0
+        guard mark > 0 || selectedClient != nil else { return items }
+        return items.filter { item in
+            if item.seq <= mark { return false }
+            if let selectedClient, item.connectionId != selectedClient { return false }
+            return true
+        }
+    }
+
+    /// Clear one split pane: hide everything received so far from that pane
+    /// without touching the other pane. The shared buffer stays (the strip's
+    /// trash frees it for both panes), so this is a view-scoping watermark,
+    /// not a delete.
+    func clearPane(_ pane: Int) {
+        // Flush first so already-received-but-unflushed events fall under the
+        // watermark instead of reappearing right after the clear.
+        flushPending()
+        paneClearSeqs[pane] = items.last?.seq ?? 0
+    }
+
+    /// Forget the right pane's clear (called when the split closes). That
+    /// pane is gone, so a reopened split offers the full timeline again — an
+    /// accidental clear is recovered by closing and reopening the split. The
+    /// left pane lives on as the single pane, so its clear (and both panes'
+    /// persisted filters) stays put.
+    func resetRightPaneClear() {
+        paneClearSeqs[1] = nil
     }
 
     /// The serials worth an `adb reverse`: ready *Android* devices. iOS
@@ -223,7 +258,7 @@ final class ReactotronSession {
         Self.discardInBackground((items, snapshots, storeState, subscriptionValues))
         items.removeAll()
         itemsBytes = 0
-        maxRowWidth = 0
+        paneClearSeqs.removeAll()
         commands.removeAll()
         subscriptionPaths.removeAll()
         subscriptionValues.removeAll()
@@ -394,7 +429,6 @@ final class ReactotronSession {
         let cleared = items
         items = []
         itemsBytes = 0
-        maxRowWidth = 0
         Self.discardInBackground(cleared)
     }
 
@@ -454,7 +488,6 @@ final class ReactotronSession {
                 let previous = items
                 items = previous.filter { $0.connectionId != connectionId }
                 itemsBytes = items.reduce(0) { $0 + $1.frameBytes }
-                maxRowWidth = items.lazy.map(\.headerWidth).max() ?? 0
                 Self.discardInBackground(previous)
                 return
             case let .customCommandRegister(id, name, title, description, args):
@@ -613,10 +646,7 @@ final class ReactotronSession {
     /// frees the dropped items off the main actor.
     private func appendBatch(_ batch: [RtItem]) {
         items.append(contentsOf: batch)
-        for item in batch {
-            itemsBytes += item.frameBytes
-            if item.headerWidth > maxRowWidth { maxRowWidth = item.headerWidth }
-        }
+        for item in batch { itemsBytes += item.frameBytes }
         peakItemsBytes = max(peakItemsBytes, itemsBytes)
         peakItemCount = max(peakItemCount, items.count)
         let drop = ReactotronTimeline.dropCount(
@@ -683,9 +713,10 @@ struct ReactotronView: View {
     @State private var findFocusToken = 0
     @Environment(\.tabIsActive) private var tabIsActive
 
-    // View-local UI only — drafts and the active tab/split. Everything that must
-    // survive leaving the feature lives on `session`.
-    @State private var split = false
+    // View-local UI only — drafts and the active tab. Everything that must
+    // survive leaving the feature lives on `session`; the split and each pane's
+    // filters are UserDefaults-backed so they also survive relaunches.
+    @AppStorage("reactotronSplit") private var split = false
     @State private var tab: RtTab = .timeline
     /// Measured top-bar width — below ~620pt (a narrow split pane) the bar
     /// reflows to two rows with icon-only actions.
@@ -733,6 +764,14 @@ struct ReactotronView: View {
         // Devices appearing later are handled by AppState → deviceListChanged,
         // which also covers the view being closed (kept-alive sessions).
         .task { await session.start(serials: readySerials) }
+        // Closing the split resets the right pane's clear — that pane is
+        // gone, so reopening the split repopulates it with every buffered
+        // event (an accidental clear is recoverable). The left pane lives on
+        // as the single pane and keeps its slice; the persisted pane filters
+        // are untouched either way.
+        .onChange(of: split) { _, isSplit in
+            if !isSplit { session.resetRightPaneClear() }
+        }
         // A device dropping off is announced with an alert instead of the old
         // full-pane overlay, which painted over the still-visible timeline.
         .onChange(of: state.targetSerials.isEmpty) { wasEmpty, isEmpty in
@@ -945,7 +984,7 @@ struct ReactotronView: View {
             } label: {
                 Image(systemName: "trash")
             }
-            .help("Clear the timeline")
+            .help("Clear the whole timeline — both panes")
             .disabled(session.items.isEmpty)
         }
         .controlSize(.small)
@@ -955,18 +994,22 @@ struct ReactotronView: View {
 
     @ViewBuilder
     private var timelineBody: some View {
+        // Pane 0 keeps the SAME structural position whether or not the split
+        // is open — only pane 1 is conditional. Rebuilding pane 0 in a
+        // different if/else branch would reset its scroll anchor and expanded
+        // rows to the newest edge every time the split toggles (LogTailViewV2
+        // anchors by row id in view @State); this way the row the user is
+        // reading stays put through split open *and* close.
         Group {
-            if split {
-                HStack(spacing: 0) {
-                    pane(showOnboarding: true, findToken: findFocusToken)
-                    Divider()
-                    pane(showOnboarding: false)
-                }
-            } else {
+            HStack(spacing: 0) {
                 pane(
-                    showOnboarding: true, trailing: AnyView(paneGlobalControls),
+                    0, trailing: split ? nil : AnyView(paneGlobalControls),
                     findToken: findFocusToken
                 )
+                if split {
+                    Divider()
+                    pane(1)
+                }
             }
         }
         // ⌘F focuses the (first) timeline's search — Reactotron's only text
@@ -983,9 +1026,11 @@ struct ReactotronView: View {
     }
 
     /// The strip's controls restyled for the pane toolbar (single-pane mode).
+    /// The count is pane 0's view of the buffer, so it matches the list even
+    /// when the pane was cleared during an earlier split.
     private var paneGlobalControls: some View {
         HStack(spacing: 10) {
-            Text("\(session.displayedItems.count) events")
+            Text("\(session.displayedItems(forPane: 0).count) events")
                 .font(.app(.caption))
                 .foregroundStyle(.tertiary)
                 // Never wrap "events" mid-word in a narrow pane — the search
@@ -1009,19 +1054,26 @@ struct ReactotronView: View {
         }
     }
 
+    /// Pane 0 is the single/left pane, pane 1 the right split. The index keys
+    /// each pane's remembered filters and its clear watermark, so the left
+    /// pane keeps its slice when the split toggles and the right pane
+    /// remembers its own; it also carries the onboarding (only the primary
+    /// pane shows it). In split mode each pane gets its own Clear; the single
+    /// pane's trash (in the trailing controls) clears the whole timeline.
     private func pane(
-        showOnboarding: Bool, trailing: AnyView? = nil, findToken: Int = 0
+        _ index: Int, trailing: AnyView? = nil, findToken: Int = 0
     ) -> some View {
         TimelinePane(
-            items: session.displayedItems,
+            pane: index,
+            items: session.displayedItems(forPane: index),
             targetEmpty: state.targetSerials.isEmpty,
             connection: session.connection,
-            showOnboarding: showOnboarding,
-            minContentWidth: session.maxRowWidth,
+            showOnboarding: index == 0,
             trailing: trailing,
             findToken: findToken,
             onExport: { session.export($0) },
-            onRetry: { Task { await session.start(serials: readySerials) } }
+            onRetry: { Task { await session.start(serials: readySerials) } },
+            onClear: split ? { session.clearPane(index) } : nil
         )
     }
 
@@ -1329,15 +1381,17 @@ private struct RtItem: Identifiable, Sendable {
     /// an allocation-free `contains` instead of rebuilding `event.presentation`
     /// and re-lowercasing on every filter pass.
     let searchText: String
-    /// The natural single-line width of this row's header, measured once at
-    /// creation. The pane lays its feed out at the widest row (`maxRowWidth`
-    /// high-water in the session) and scrolls horizontally, so no row ever
-    /// truncates.
-    let headerWidth: CGFloat
+    /// Monotonic arrival stamp — the basis for the per-pane clear watermarks
+    /// (`ReactotronSession.paneClearSeqs`). Ring-buffer eviction and clears
+    /// never disturb it, so "everything received up to this point" stays a
+    /// single integer comparison.
+    let seq: Int
 
     /// Rows are only ever created on the main actor (the session's inbound
-    /// path) — stated explicitly so the NSFont measurement caches below are
-    /// concurrency-safe under Swift 6.
+    /// path) — stated explicitly so the `seq` counter below is concurrency-safe
+    /// under Swift 6.
+    @MainActor private static var lastSeq = 0
+
     @MainActor
     init(event: ReactotronEvent, command: ReactotronCommand, connectionId: Int, important: Bool, frameBytes: Int) {
         self.event = event
@@ -1345,49 +1399,13 @@ private struct RtItem: Identifiable, Sendable {
         self.connectionId = connectionId
         self.important = important
         self.frameBytes = frameBytes
+        Self.lastSeq += 1
+        seq = Self.lastSeq
         let presentation = event.presentation
         // Bounded so a giant log message (a console.log of a huge string) can't
         // store a multi-megabyte lowercased copy per row — search matches the
         // header text, and the full payload lives in the expandable row.
         searchText = "\(presentation.badge) \(presentation.primary)".prefix(2000).lowercased()
-        headerWidth = Self.measureHeaderWidth(badge: presentation.badge, primary: presentation.primary)
-    }
-
-    /// NSFont twins of the header's `Font.app` tokens, resolved once — a font
-    /// setting changed mid-session only affects rows created afterwards, which
-    /// the row's `layoutPriority` truncation-guard absorbs.
-    @MainActor private static let badgeFont = nsAppFont(size: 10, weight: .bold)
-    @MainActor private static let primaryFont = nsAppFont(size: 12, weight: .medium)
-    /// "HH:mm:ss" is fixed-width (monospaced digits) — measure once.
-    @MainActor private static let timeWidth = ("88:88:88" as NSString)
-        .size(withAttributes: [.font: NSFont.monospacedSystemFont(
-            ofSize: 11 * AppFontPrefs.sizeScale, weight: .regular)]).width
-
-    /// Mirrors `Font.app(size:weight:)` for measurement: the user's family at
-    /// the scaled size, falling back to the system font.
-    @MainActor
-    private static func nsAppFont(size: CGFloat, weight: NSFont.Weight) -> NSFont {
-        let scaled = size * AppFontPrefs.sizeScale
-        if let family = AppFontPrefs.family,
-           let font = NSFontManager.shared.font(
-               withFamily: family, traits: [],
-               weight: weight == .bold ? 9 : 6, size: scaled
-           ) {
-            return font
-        }
-        return NSFont.systemFont(ofSize: scaled, weight: weight)
-    }
-
-    /// chevron(16) + gaps + time + badge + primary + row padding, plus slack
-    /// for the hover copy button and measurement drift. Primary is bounded —
-    /// beyond ~2000 chars a row can't usefully be read inline anyway, and an
-    /// unbounded measurement of a megabyte log line would stall the parse path.
-    @MainActor
-    private static func measureHeaderWidth(badge: String, primary: String) -> CGFloat {
-        let badgeWidth = (badge as NSString).size(withAttributes: [.font: badgeFont]).width
-        let primaryWidth = (String(primary.prefix(2000)) as NSString)
-            .size(withAttributes: [.font: primaryFont]).width
-        return 16 + 8 + timeWidth + 8 + badgeWidth + 8 + primaryWidth + 28 + 60
     }
 }
 
@@ -1460,40 +1478,84 @@ private enum RtEventKind: String, CaseIterable, Identifiable {
 /// One scrollable timeline column with its own filter and search, fed from the
 /// shared event buffer. Used once on its own or twice side-by-side (the
 /// VSCode-style split), so each pane can watch a different slice at the same
-/// time. The sort order is a per-feature preference (`@AppStorage`), so split
-/// panes flip together and the choice survives relaunches.
+/// time. Filter, API refinements, and search are UserDefaults-backed per pane
+/// index, so each pane keeps its slice across feature switches and relaunches.
+/// The sort order is a per-feature preference (`@AppStorage`), so split panes
+/// flip together and the choice survives relaunches.
 private struct TimelinePane: View {
+    /// 0 = the single/left pane, 1 = the right split pane — keys the persisted
+    /// filters and picks the clear button's wording (the right pane's clear is
+    /// undone by closing the split; the left pane's persists).
+    let pane: Int
     let items: [RtItem]
     let targetEmpty: Bool
     let connection: RtConnection
     let showOnboarding: Bool
-    /// The widest row's natural width (session high-water) — the feed lays out
-    /// at `max(pane width, this)` and scrolls horizontally, so long rows are
-    /// reached by scrolling instead of truncating, at any pane width (single,
-    /// timeline split, workspace-split tab).
-    let minContentWidth: CGFloat
     /// Extra trailing toolbar content — the global timeline controls when the
     /// pane is the only one on screen (no dedicated strip above it).
     let trailing: AnyView?
     /// Bumped by the tab-level ⌘F to focus this pane's search (the primary
     /// pane in a split; the second pane always gets the never-firing 0).
-    var findToken = 0
+    let findToken: Int
     let onExport: ([RtItem]) -> Void
     let onRetry: () -> Void
+    /// Clears just this pane (split mode only — the single pane's trash in the
+    /// trailing controls clears the whole timeline). nil hides the button.
+    let onClear: (() -> Void)?
 
-    @State private var search = ""
-    /// Event kinds toggled off in the filter popover — empty means everything
-    /// shows, matching Reactotron's hide-what-you-untick model.
-    @State private var hiddenKinds: Set<RtEventKind> = []
+    @AppStorage private var search: String
+    /// Comma-joined `RtEventKind` raw values toggled off in the filter sheet —
+    /// the persisted form behind `hiddenKinds`; empty means everything shows,
+    /// matching Reactotron's hide-what-you-untick model.
+    @AppStorage private var hiddenKindsRaw: String
     /// API-only refinements, set from the filter popover and cleared when the
     /// API kind is hidden: HTTP method and status class (2xx…5xx/Failed).
-    @State private var methodFilter: String?
-    @State private var statusFilter: HTTPStatusClass?
+    @AppStorage private var methodFilter: String?
+    @AppStorage private var statusFilter: HTTPStatusClass?
     @State private var showFilterSheet = false
     /// Newest at the top (the Reactotron app's order) unless the toolbar's
     /// reverse button flips the feed to chronological. Persisted per feature —
     /// split panes share the key, so they stay in sync.
     @AppStorage("reactotronNewestFirst") private var newestFirst = true
+
+    init(
+        pane: Int,
+        items: [RtItem],
+        targetEmpty: Bool,
+        connection: RtConnection,
+        showOnboarding: Bool,
+        trailing: AnyView?,
+        findToken: Int = 0,
+        onExport: @escaping ([RtItem]) -> Void,
+        onRetry: @escaping () -> Void,
+        onClear: (() -> Void)? = nil
+    ) {
+        self.pane = pane
+        self.items = items
+        self.targetEmpty = targetEmpty
+        self.connection = connection
+        self.showOnboarding = showOnboarding
+        self.trailing = trailing
+        self.findToken = findToken
+        self.onExport = onExport
+        self.onRetry = onRetry
+        self.onClear = onClear
+        _search = AppStorage(wrappedValue: "", "reactotronPane\(pane)Search")
+        _hiddenKindsRaw = AppStorage(wrappedValue: "", "reactotronPane\(pane)HiddenKinds")
+        _methodFilter = AppStorage("reactotronPane\(pane)Method")
+        _statusFilter = AppStorage("reactotronPane\(pane)Status")
+    }
+
+    /// Decoded view of `hiddenKindsRaw`. Unknown raw values (a kind renamed or
+    /// removed in a later version) drop out instead of poisoning the set.
+    private var hiddenKinds: Set<RtEventKind> {
+        get {
+            Set(hiddenKindsRaw.split(separator: ",").compactMap { RtEventKind(rawValue: String($0)) })
+        }
+        nonmutating set {
+            hiddenKindsRaw = newValue.map(\.rawValue).sorted().joined(separator: ",")
+        }
+    }
 
     var body: some View {
         // Filter once per render — the count badge, export button, and timeline
@@ -1556,6 +1618,19 @@ private struct TimelinePane: View {
             .help("Export this pane's filtered timeline to JSON")
             .disabled(visible.isEmpty)
 
+            if let onClear {
+                Button {
+                    onClear()
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(IconButtonStyle())
+                .help(pane == 0
+                    ? "Clear this pane — the other pane keeps its events"
+                    : "Clear this pane — close and reopen the split to bring the events back")
+                .disabled(items.isEmpty)
+            }
+
             if let trailing {
                 trailing
             }
@@ -1566,13 +1641,20 @@ private struct TimelinePane: View {
     }
 
     /// The HTTP methods present in the buffer's API events, for the method
-    /// picker — only what the app actually sent, not a canned list.
+    /// picker — only what the app actually sent, not a canned list. A restored
+    /// filter's method is kept in the list even before such an event arrives
+    /// (a relaunch starts with an empty buffer), so the picker can always show
+    /// the active selection.
     private var seenMethods: [String] {
-        Array(Set(items.compactMap { $0.event.apiMethod })).sorted()
+        var methods = Set(items.compactMap { $0.event.apiMethod })
+        if let methodFilter { methods.insert(methodFilter) }
+        return methods.sorted()
     }
 
     private var filteredItems: [RtItem] {
         let query = search.trimmingCharacters(in: .whitespaces).lowercased()
+        // Decode the persisted set once per pass, not per item.
+        let hiddenKinds = hiddenKinds
         return items.filter { item in
             if let kind = item.event.kind, hiddenKinds.contains(kind) { return false }
             if let methodFilter, item.event.apiMethod != methodFilter { return false }
@@ -1687,25 +1769,20 @@ private struct TimelinePane: View {
         }
     }
 
+    @ViewBuilder
     private func timeline(visible: [RtItem]) -> some View {
         // LogTailViewV2 follows the newest edge, pauses when the user scrolls
         // off, and overlays the jump-to-top/bottom buttons. Newest-first is
         // lazily reversed — materializing a 2000-item copy per render was
         // measurable during streaming bursts.
-        GeometryReader { pane in
+        Group {
             if newestFirst {
-                LogTailViewV2(
-                    entries: visible.reversed(), newestEdge: .top,
-                    contentWidth: max(pane.size.width, minContentWidth)
-                ) { item in
+                LogTailViewV2(entries: visible.reversed(), newestEdge: .top) { item in
                     RtRow(item: item)
                     Divider()
                 }
             } else {
-                LogTailViewV2(
-                    entries: visible, newestEdge: .bottom,
-                    contentWidth: max(pane.size.width, minContentWidth)
-                ) { item in
+                LogTailViewV2(entries: visible, newestEdge: .bottom) { item in
                     RtRow(item: item)
                     Divider()
                 }
@@ -1777,15 +1854,15 @@ private struct RtRow: View {
         }
     }
 
-    /// The chevron cluster and the row's blank trailing space toggle
-    /// expansion; the action/log text itself stays OUT of the tap target so
-    /// it's selectable — a whole-row gesture swallowed drag-to-select, making
-    /// action and debug names uncopyable.
+    /// The whole header is one click target — anywhere on the line (chevron,
+    /// text, or whitespace) toggles the row, so the user never has to aim.
+    /// That costs drag-to-select on the header text; copying rides the hover
+    /// copy button, the right-click menu (Copy line / Copy object), and the
+    /// expanded body, which stays selectable.
     ///
-    /// The text never truncates: the whole feed lays out at the widest row's
-    /// width (`RtItem.headerWidth` high-water) and the pane scrolls
-    /// horizontally as one unit — a narrow window, the timeline's split panes,
-    /// and a workspace-split tab all share this row.
+    /// The header truncates in the middle at narrow pane widths (split panes,
+    /// a 30–50% workspace split) — the full text lives in the expanded body,
+    /// and nothing scrolls horizontally.
     private func header(_ presentation: RtPresentation) -> some View {
         HStack(spacing: 8) {
             HStack(spacing: 8) {
@@ -1802,28 +1879,25 @@ private struct RtRow: View {
                     .foregroundStyle(presentation.badgeColor)
             }
             // Incompressible: without this, HStack treats the wrappable time
-            // Text as flexible and squeezes the whole cluster against the
-            // greedy blank filler — the timestamp wrapped one character per
-            // line and blew the row up to several times its height.
+            // Text as flexible and squeezes the whole cluster — the timestamp
+            // wrapped one character per line and blew the row up to several
+            // times its height.
             .fixedSize()
-            .padding(.vertical, 10)
-            .contentShape(Rectangle())
-            .onTapGesture { toggleExpanded() }
 
             if !presentation.primary.isEmpty {
                 Text(presentation.primary)
                     .font(.app(size: 12, weight: .medium))
                     .foregroundStyle(presentation.primaryColor)
                     .lineLimit(1)
-                    // Wins the space race against the greedy blank filler —
-                    // without this, HStack offers each flexible child an equal
-                    // share and the text truncated at ~half the row even with
-                    // free space beside it.
+                    .truncationMode(.middle)
+                    // Wins the space race against the spacer — without this,
+                    // HStack offers each flexible child an equal share and the
+                    // text truncated at ~half the row even with free space
+                    // beside it.
                     .layoutPriority(1)
-                    .textSelection(.enabled)
             }
 
-            blankExpandTarget
+            Spacer(minLength: 8)
 
             if hovering || copiedLine {
                 Button {
@@ -1841,17 +1915,9 @@ private struct RtRow: View {
         }
         .padding(.horizontal, 14)
         .frame(minHeight: 36)
+        .contentShape(Rectangle())
+        .onTapGesture { toggleExpanded() }
         .onHover { hovering = $0 }
-    }
-
-    /// The clear filler whose click toggles expansion — the row's whitespace,
-    /// kept separate from the selectable text so drag-to-select still works.
-    private var blankExpandTarget: some View {
-        Rectangle()
-            .fill(.clear)
-            .frame(maxWidth: .infinity, minHeight: 28)
-            .contentShape(Rectangle())
-            .onTapGesture { toggleExpanded() }
     }
 
     /// Expanding an item means the user is reading it — pause tail-follow so
@@ -1930,13 +1996,23 @@ private struct RtRow: View {
                     ReactotronCurl.command(method: method, url: url, request: request)
                 }
             }
-            Picker("", selection: $apiTab) {
-                ForEach(ApiTab.allCases) { Text($0.label).tag($0) }
+            // Segmented tabs at their natural width where they fit; a compact
+            // menu in narrow panes (timeline split, 30–50% workspace split) so
+            // the switcher is never clipped or reachable only by scrolling.
+            ViewThatFits(in: .horizontal) {
+                apiTabPicker.pickerStyle(.segmented)
+                apiTabPicker.pickerStyle(.menu)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
             treeSection(title: nil, object: apiObject(request: request, response: response))
         }
+    }
+
+    private var apiTabPicker: some View {
+        Picker("", selection: $apiTab) {
+            ForEach(ApiTab.allCases) { Text($0.label).tag($0) }
+        }
+        .labelsHidden()
+        .fixedSize()
     }
 
     private func apiObject(request: JSONValue?, response: JSONValue?) -> JSONValue {
