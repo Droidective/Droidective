@@ -60,8 +60,11 @@ final class ReactotronSession {
     fileprivate var tunnelIssues: [String: String] = [:]
     /// Per-pane clear watermarks (pane index → highest `RtItem.seq` cleared):
     /// a split pane's Clear hides everything received so far in that pane
-    /// only — the buffer is shared with the other pane, so it stays. Dies with
-    /// the session (`reset`), like the buffer it scopes.
+    /// only — the buffer is shared with the other pane, so it stays. The left
+    /// pane (0) lives on as the single pane, so its clear persists; the right
+    /// pane (1) dies with the split, so its clear resets when the split
+    /// closes (`resetRightPaneClear`) — reopening repopulates it. Both die
+    /// with the session (`reset`), like the buffer they scope.
     fileprivate var paneClearSeqs: [Int: Int] = [:]
 
     private let client: AdbClient
@@ -114,6 +117,15 @@ final class ReactotronSession {
         // watermark instead of reappearing right after the clear.
         flushPending()
         paneClearSeqs[pane] = items.last?.seq ?? 0
+    }
+
+    /// Forget the right pane's clear (called when the split closes). That
+    /// pane is gone, so a reopened split offers the full timeline again — an
+    /// accidental clear is recovered by closing and reopening the split. The
+    /// left pane lives on as the single pane, so its clear (and both panes'
+    /// persisted filters) stays put.
+    func resetRightPaneClear() {
+        paneClearSeqs[1] = nil
     }
 
     /// The serials worth an `adb reverse`: ready *Android* devices. iOS
@@ -752,6 +764,14 @@ struct ReactotronView: View {
         // Devices appearing later are handled by AppState → deviceListChanged,
         // which also covers the view being closed (kept-alive sessions).
         .task { await session.start(serials: readySerials) }
+        // Closing the split resets the right pane's clear — that pane is
+        // gone, so reopening the split repopulates it with every buffered
+        // event (an accidental clear is recoverable). The left pane lives on
+        // as the single pane and keeps its slice; the persisted pane filters
+        // are untouched either way.
+        .onChange(of: split) { _, isSplit in
+            if !isSplit { session.resetRightPaneClear() }
+        }
         // A device dropping off is announced with an alert instead of the old
         // full-pane overlay, which painted over the still-visible timeline.
         .onChange(of: state.targetSerials.isEmpty) { wasEmpty, isEmpty in
@@ -1463,6 +1483,10 @@ private enum RtEventKind: String, CaseIterable, Identifiable {
 /// The sort order is a per-feature preference (`@AppStorage`), so split panes
 /// flip together and the choice survives relaunches.
 private struct TimelinePane: View {
+    /// 0 = the single/left pane, 1 = the right split pane — keys the persisted
+    /// filters and picks the clear button's wording (the right pane's clear is
+    /// undone by closing the split; the left pane's persists).
+    let pane: Int
     let items: [RtItem]
     let targetEmpty: Bool
     let connection: RtConnection
@@ -1506,6 +1530,7 @@ private struct TimelinePane: View {
         onRetry: @escaping () -> Void,
         onClear: (() -> Void)? = nil
     ) {
+        self.pane = pane
         self.items = items
         self.targetEmpty = targetEmpty
         self.connection = connection
@@ -1600,7 +1625,9 @@ private struct TimelinePane: View {
                     Image(systemName: "trash")
                 }
                 .buttonStyle(IconButtonStyle())
-                .help("Clear this pane — the other pane keeps its events")
+                .help(pane == 0
+                    ? "Clear this pane — the other pane keeps its events"
+                    : "Clear this pane — close and reopen the split to bring the events back")
                 .disabled(items.isEmpty)
             }
 
