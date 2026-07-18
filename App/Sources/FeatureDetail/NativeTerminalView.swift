@@ -26,14 +26,19 @@ final class DroidTerminalView: LocalProcessTerminalView {
     private var opaqueBackground: NSColor?
     private var appliedBackgroundAlpha: Double = 1.0
 
-    /// Translucent-window support: the terminal repaints its background (the
-    /// layer color and the draw-time fill) at the window's opacity so the
-    /// blur behind the window shows through the shell.
+    /// Translucent-window support. SwiftTerm paints its background TWICE —
+    /// a whole-frame fill plus a per-run fill behind every default-background
+    /// cell — so a partial alpha compounds (2a−a²) into a near-solid wash
+    /// that reads as "not translucent". Under translucency the terminal
+    /// therefore paints NO default background at all (alpha 0, both fills
+    /// become no-ops) and the pane underlay beneath it carries the one tint;
+    /// selection, ANSI cell colors, and the caret still draw their own
+    /// opaque colors on top.
     func applyBackgroundAlpha(_ alpha: Double) {
         if opaqueBackground == nil { opaqueBackground = nativeBackgroundColor }
         guard let base = opaqueBackground, alpha != appliedBackgroundAlpha else { return }
         appliedBackgroundAlpha = alpha
-        let target = alpha >= 0.999 ? base : base.withAlphaComponent(alpha)
+        let target = alpha >= 0.999 ? base : base.withAlphaComponent(0)
         nativeBackgroundColor = target
         layer?.backgroundColor = target.cgColor
         needsDisplay = true

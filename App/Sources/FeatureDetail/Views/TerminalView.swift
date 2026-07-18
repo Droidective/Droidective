@@ -850,10 +850,11 @@ struct TerminalView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // Translucent window: the shells tint themselves (see
-        // `applyBackgroundAlpha`), so the pane fill steps aside entirely
-        // instead of double-darkening the glass behind them.
-        .background(Color.black.opacity(WindowEffects.isTranslucent(windowOpacity) ? 0 : 1))
+        // Translucent window: the shells stop painting their default
+        // background entirely (see `applyBackgroundAlpha` — SwiftTerm
+        // double-fills, compounding any partial alpha), so this underlay
+        // carries the terminal's single tint at the window opacity.
+        .background(Color.black.opacity(WindowEffects.clamped(windowOpacity)))
     }
 }
 
