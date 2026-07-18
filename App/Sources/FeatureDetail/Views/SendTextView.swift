@@ -135,15 +135,16 @@ struct SendTextView: View {
         .frame(maxWidth: 460)
     }
 
-    /// The last send's outcome, right under the button that caused it — toasts
-    /// disappear, this stays (and carries the ADBKeyboard install offer).
+    /// Only a FAILED send stays visible under the button — it carries the
+    /// ADBKeyboard install offer and error text worth reading. A success
+    /// already announces itself via the toast, so it leaves no residue here.
     @ViewBuilder
     private var resultRow: some View {
-        if let entry = state.lastResults[feature.id] {
+        if let entry = state.lastResults[feature.id], !entry.result.ok {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Image(systemName: entry.result.ok ? "checkmark.circle.fill" : "xmark.circle.fill")
-                        .foregroundStyle(entry.result.ok ? .brandAccent : .red)
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.red)
                     Text(entry.result.message)
                         .font(.app(.callout))
                         .textSelection(.enabled)
@@ -170,15 +171,19 @@ struct SendTextView: View {
     private var snippetsSection: some View {
         HubSection(
             "Snippets",
-            subtitle: "Click one to insert it — {clipboard} and {ip} fill in with the live value.",
-            accessory: { newSnippetButton }
+            subtitle: "Click one to insert it — {clipboard} and {ip} fill in with the live value."
         ) {
             VStack(alignment: .leading, spacing: 10) {
-                if presets.sendTextSnippets.count > Self.searchThreshold {
-                    SearchField(prompt: "Search snippets", text: $snippetSearch)
-                        .frame(maxWidth: 240)
-                        .help("Find a snippet by its name or its text")
+                HStack(spacing: 10) {
+                    newSnippetButton
+                    Spacer(minLength: 12)
+                    if presets.sendTextSnippets.count > Self.searchThreshold {
+                        SearchField(prompt: "Search snippets", text: $snippetSearch)
+                            .frame(maxWidth: 240)
+                            .help("Find a snippet by its name or its text")
+                    }
                 }
+                .frame(maxWidth: 520)
                 snippetList
             }
         }
