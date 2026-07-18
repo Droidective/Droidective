@@ -12,12 +12,9 @@ let windowOpacityDefaultsKey = "windowOpacity"
 let windowBlurDefaultsKey = "windowBlurAmount"
 let windowGrainDefaultsKey = "windowGrainAmount"
 
-extension EnvironmentValues {
-    /// The clamped window opacity, injected once by RootView so every pane
-    /// derives its fill alpha from the same value. 1.0 (the default in other
-    /// scenes) keeps every fill exactly as before the feature existed.
-    @Entry var windowOpacity: Double = 1.0
-}
+// (`\.windowOpacity` itself is declared in Theme.swift, beside the fill
+// styles that resolve against it — Theme.swift also compiles standalone in
+// the AppTests logic bundle, which doesn't build this file.)
 
 /// Window-server flags plus the behind-window blur radius. Idempotent —
 /// called on attach and on every slider change.

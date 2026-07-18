@@ -14,6 +14,15 @@ import SwiftUI
 /// Icon usage (the matrix): static-navigation and input icons are `.textMuted`;
 /// resting-action icons inherit `.textMain`; active/selected icons, loaders, and
 /// CTAs are `.brandAccent`.
+extension EnvironmentValues {
+    /// The clamped window opacity, injected once by RootView so every pane
+    /// derives its fill alpha from the same value. 1.0 (the default in other
+    /// scenes) keeps every fill exactly as before the feature existed.
+    /// Declared here beside the styles that resolve against it — Theme.swift
+    /// also compiles standalone in the AppTests logic bundle.
+    @Entry var windowOpacity: Double = 1.0
+}
+
 /// Deepest layer — the content background (the "graphite case"). Resolves
 /// against the window opacity environment, so every `.bgRoot` fill in the
 /// main window turns to glass with the translucency slider and stays fully
