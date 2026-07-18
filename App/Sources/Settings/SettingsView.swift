@@ -20,8 +20,8 @@ struct SettingsView: View {
             HotkeysSettingsView()
                 .tabItem { Label("Hotkeys", systemImage: "keyboard") }
         }
-        .frame(width: 560)
-        .frame(minHeight: 460)
+        .frame(width: 640)
+        .frame(minHeight: 540)
         // Esc closes the Settings window. A zero-opacity button carrying the
         // Cancel (Esc) key equivalent fires regardless of which control holds
         // focus — more reliable here than .onExitCommand.
