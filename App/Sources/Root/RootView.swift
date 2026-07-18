@@ -342,14 +342,13 @@ struct RootView: View {
         }
     }
 
-    /// One-time switch to the v2 defaults — dark appearance and how-it-works
-    /// notes hidden — for users who installed before they changed. Runs once;
-    /// any later manual change in Settings sticks.
+    /// One-time switch to the v2 defaults — dark appearance — for users who
+    /// installed before it changed. Runs once; any later manual change in
+    /// Settings sticks.
     private func migrateDefaultsIfNeeded() {
         let defaults = UserDefaults.standard
         guard !defaults.bool(forKey: "didMigrateDefaultsV2") else { return }
         defaults.set("dark", forKey: "theme")
-        defaults.set(false, forKey: "showFeatureNotes")
         defaults.set(true, forKey: "didMigrateDefaultsV2")
     }
 

@@ -621,12 +621,6 @@ import Testing
         )
     }
 
-    @Test func everyFeatureHasAHowToNote() {
-        for feature in FeatureRegistry.all {
-            #expect(FeatureRegistry.howTo(for: feature.id) != nil, "missing howTo for \(feature.id)")
-        }
-    }
-
     @Test func searchMatchesKeywordsAndTitle() {
         let logcat = FeatureRegistry.byID["logcat"]!
         #expect(logcat.matches("logs"))

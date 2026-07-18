@@ -40,8 +40,7 @@ opening it — verify those by hand.
    title, keywords, category, `kind`; set `platforms` if it works on iOS
    Simulators — the default is Android-only). **[test: `hasAll58Features` —
    bump the count; `byID` traps on a duplicate id]**
-2. **How-it-works note** — add to `FeatureNotes`. **[test: `everyFeatureHasAHowToNote`]**
-3. **If it's an action** (`.instantAction`/`.formAction`/`.toggleAction`):
+2. **If it's an action** (`.instantAction`/`.formAction`/`.toggleAction`):
    - add the runner `case` to `FeatureEngine.dispatch`,
    - add the `id` to `FeatureEngine.implementedIDs`,
    - add an arg-vector test in `FeatureEngineTests` asserting the exact adb
@@ -49,7 +48,7 @@ opening it — verify those by hand.
      `everyImplementedActionResolvesToARunner` catches a missing dispatch case;
      `implementedIDsAreAllRealFeatures` catches a typo'd id; your arg-vector test
      catches wrong/omitted-quote arguments]**
-4. **If it's a view** (`.view`/`.system`):
+3. **If it's a view** (`.view`/`.system`):
    - build the SwiftUI view in `App/Sources/FeatureDetail/Views/`,
    - add the `id` → view `case` in `FeatureDetailView.detailByKind`,
    - add the `id` to `implementedIDs`,
@@ -57,18 +56,18 @@ opening it — verify those by hand.
      `CommandLog.userInitiated`. **[test: `implementedIDsAreAllRealFeatures`
      for the id] · [silent: a missing `detailByKind` case renders "Coming Soon";
      missing `userInitiated` keeps its commands out of Settings ▸ Command Log]**
-5. **If it joins a hub** — add it to `FeatureRegistry.absorbedByHub` and fold its
+4. **If it joins a hub** — add it to `FeatureRegistry.absorbedByHub` and fold its
    keywords into the hub's `keywords`. **[test: `hubsStaySearchableByTheirMembersPrimaryKeyword`]**
-6. **Logic lives in ADBKit.** adb/Process/parsing go in an ADBKit service with a
+5. **Logic lives in ADBKit.** adb/Process/parsing go in an ADBKit service with a
    pure, static, tested parser — never `Process`/`adb` in a SwiftUI view.
    **[silent — but a review red flag]**
-7. **Verify** — `cd ADBKit && swift test` green, then `make build` with zero
+6. **Verify** — `cd ADBKit && swift test` green, then `make build` with zero
    warnings (warnings are errors).
 
 ## Build / test / run
 
 ```
-make test          # ADBKit unit tests (cd ADBKit && swift test) — 910 tests, keep green
+make test          # ADBKit unit tests (cd ADBKit && swift test) — 914 tests, keep green
 make build         # xcodegen generate + xcodebuild Debug
 make run           # build + open the .app
 ```
@@ -117,8 +116,7 @@ Node 22 in CI; scroll reveals and the hero palette demo must keep their
   `absorbedFeatureIDs`; `catalogFeatureIDs` is the registry minus those),
   `FeatureModel`,
   `FeatureEngine` (runner dispatch +
-  `implementedIDs` + every sub-service), `FeatureNotes` (the ⓘ how-it-works
-  text — every feature must have one; a test enforces it), `SidebarOrdering`
+  `implementedIDs` + every sub-service), `SidebarOrdering`
   (pure `reorder`/`move`/`moveToEnd` helpers for the sidebar, unit-tested
   without UI). The grouped sidebar uses **custom `.onDrag`/`.onDrop`** (not
   `List.onMove`, which raced the row tap gestures and dropped intermittently):
@@ -282,9 +280,7 @@ platforms annotation without a runner.
 - **The Command Log records only wrapped calls.** A view-feature that runs adb
   directly (logcat, device-info, file-explorer…) must wrap its user-initiated
   calls in `CommandLog.userInitiated {}` or they never reach the Settings ▸
-  Command Log sheet. Keep background polling OUT (don't wrap it). Every
-  feature's how-it-works note renders inline beneath its content (toggleable
-  from Settings ▸ Appearance); the old bottom command bar is gone.
+  Command Log sheet. Keep background polling OUT (don't wrap it).
 - **⌘=/⌘- font zoom is a `scaleEffect` on RootView, not dynamic type.** macOS
   ignores SwiftUI `dynamicTypeSize` for rendering, so the content is laid out at
   `size/scale` and scaled up. It's bypassed entirely at 1.0× because the
@@ -487,7 +483,7 @@ jadx/apktool, recompile, and sign — with keystore creation) plus Frida setup, 
 custom accent color, launching emulators from the device bar, per-feature
 connect-a-device empty states, a live-preview hotkey recorder, and a Settings
 split into Appearance/Privacy; managed tools download from GitHub releases into
-Application Support and are sized/removable in Settings); 910 tests green;
+Application Support and are sized/removable in Settings); 914 tests green;
 builds clean with zero warnings (enforced as errors in CI). Verified live against a
 physical device and an Android emulator. Release builds are Developer ID-signed +
 notarized and bundle scrcpy/ffmpeg (see `RELEASING.md`). Open gaps: the Apps

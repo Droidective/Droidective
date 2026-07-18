@@ -260,7 +260,6 @@ struct GeneralSettingsView: View {
 struct AppearanceSettingsView: View {
     @AppStorage("theme") private var theme = "dark"
     @AppStorage(accentColorDefaultsKey) private var accentHex = ""
-    @AppStorage("showFeatureNotes") private var showFeatureNotes = false
     @AppStorage(appFontFamilyDefaultsKey) private var fontFamily = ""
     @AppStorage(appFontSizeScaleDefaultsKey) private var fontSizeScale = 1.0
     @AppStorage(windowOpacityDefaultsKey) private var windowOpacity = 1.0
@@ -391,13 +390,6 @@ struct AppearanceSettingsView: View {
                     percent: WindowEffects.clampedAmount(windowGrain))
                     .disabled(!WindowEffects.isTranslucent(windowOpacity))
                 Text("Below 100% opacity the main window turns to glass — what's behind shows through every pane, softened by Blur and textured by Grain.")
-                    .font(.app(.footnote))
-                    .foregroundStyle(.textMuted)
-            }
-
-            Section("Feature notes") {
-                Toggle("Show how-it-works notes", isOn: $showFeatureNotes)
-                Text("The info text beneath each feature, above the command bar.")
                     .font(.app(.footnote))
                     .foregroundStyle(.textMuted)
             }
