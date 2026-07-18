@@ -250,7 +250,7 @@ struct SidebarPaletteView: View {
             Divider()
             bottomBar
         }
-        .translucentSurfaceBackground()
+        .background(.bgSurface)
         // Keyboard highlight: keep the top result highlighted as the query
         // changes, and drop the highlight when the field loses focus (only the
         // active tab's pill remains).

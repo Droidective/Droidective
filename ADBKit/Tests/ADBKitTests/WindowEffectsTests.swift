@@ -28,13 +28,17 @@ import Testing
         #expect(WindowEffects.isTranslucent(0))
     }
 
-    @Test func surfacesStayAStepMoreOpaqueThanTheRootAndCapAtOne() {
-        #expect(WindowEffects.surfaceAlpha(root: 1.0) == 1.0)
-        #expect(WindowEffects.surfaceAlpha(root: 0.6) == 0.75)
-        #expect(WindowEffects.surfaceAlpha(root: 0.95) == 1.0)
-        #expect(WindowEffects.surfaceAlpha(root: 0.1) == 0.25)
+    @Test func cardsCarryTheContrastStepNotACompoundedSolid() {
+        #expect(WindowEffects.cardAlpha(root: 1.0) == 1.0)
+        // 0.15 / (1 - root): the fraction that composites to root + 0.15.
+        // Tolerance compares — the subtraction isn't exact in binary.
+        #expect(abs(WindowEffects.cardAlpha(root: 0.7) - 0.5) < 0.0001)
+        #expect(abs(WindowEffects.cardAlpha(root: 0.5) - 0.3) < 0.0001)
+        #expect(abs(WindowEffects.cardAlpha(root: 0.1) - 1.0 / 6.0) < 0.0001)
+        // Near-opaque roots pin to opaque cards instead of dividing by ~0.
+        #expect(WindowEffects.cardAlpha(root: 0.9) == 1.0)
         // Out-of-range input follows the clamp, not the raw value.
-        #expect(WindowEffects.surfaceAlpha(root: 0.02) == 0.25)
+        #expect(abs(WindowEffects.cardAlpha(root: 0.02) - 1.0 / 6.0) < 0.0001)
     }
 
     @Test func blurRadiusScalesWithTheSliderAndDiesWhenOpaque() {

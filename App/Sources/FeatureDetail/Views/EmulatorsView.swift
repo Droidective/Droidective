@@ -89,6 +89,7 @@ struct EmulatorsView: View {
                 emulatorsSection
                 simulatorsSection
             }
+            .translucentListBackground()
         }
         .confirmationDialog(
             "Wipe all data on \(wipeTarget?.displayName ?? "")? Apps, accounts, and settings on the AVD are erased.",

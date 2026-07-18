@@ -156,7 +156,7 @@ struct DeviceInfoView: View {
         .foregroundStyle(.textMuted)
         .padding(.horizontal, 8)
         .padding(.vertical, 3)
-        .background(Color.bgRoot, in: Capsule())
+        .background(.bgRoot, in: Capsule())
         .overlay(Capsule().strokeBorder(Color.borderSubtle))
         .lineLimit(1)
     }

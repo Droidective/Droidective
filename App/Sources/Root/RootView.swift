@@ -411,10 +411,12 @@ struct RootView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .translucentRootBackground()
             .animation(.spring(duration: 0.28), value: state.showNotifications)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // One root wash under the WHOLE window (sidebar included), so every
+        // surface above it stacks its contrast step on the same glass.
+        .background(.bgRoot)
         .foregroundStyle(.textMain)
         // A tab drag released over dead space (the sidebar, device bar, an empty
         // strip area — anything that isn't a pane/chip/split target) never fires
@@ -443,7 +445,7 @@ struct RootView: View {
             if sidebarAutoHide && state.sidebarOverlayShown {
                 SidebarPaletteView()
                     .frame(width: overlaySidebarWidth)
-                    .translucentSurfaceBackground()
+                    .background(.bgSurface)
                     // Not a Divider: in an overlay (ZStack context) a Divider
                     // lays out horizontally, which painted a full-width line
                     // across the sidebar's vertical middle every time the
@@ -951,7 +953,7 @@ struct OperationProgressStrip: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
-        .translucentSurfaceBackground()
+        .background(.bgSurface)
         .overlay(alignment: .bottom) { Divider() }
     }
 }

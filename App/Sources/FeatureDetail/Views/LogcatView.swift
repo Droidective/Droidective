@@ -364,7 +364,7 @@ struct LogcatView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 4)
-        .translucentSurfaceBackground()
+        .background(.bgSurface)
     }
 
     private var statusColor: Color {

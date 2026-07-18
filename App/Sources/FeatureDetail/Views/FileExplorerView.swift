@@ -202,7 +202,7 @@ struct FileExplorerView: View {
         .controlSize(.small)
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
-        .background(Color.bgSurface)
+        .background(.bgSurface)
     }
 
     private func listView(_ entries: [FsEntry]) -> some View {

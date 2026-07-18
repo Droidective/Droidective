@@ -112,28 +112,20 @@ struct GrainOverlay: View {
 }
 
 // MARK: - Alpha-aware fills
+// (`.bgRoot` / `.bgSurface` fills need no modifier — the Theme tokens
+// resolve against `\.windowOpacity` themselves.)
 
 extension View {
-    /// The master pane fill: `bgRoot` at the window opacity (opaque at 1.0).
-    func translucentRootBackground() -> some View {
-        modifier(TranslucentFill(style: .root))
-    }
-
-    /// Chrome bars (sidebar, device bar, rails, status strips): `bgSurface`
-    /// a step more opaque than the root so their content keeps contrast.
-    func translucentSurfaceBackground() -> some View {
-        modifier(TranslucentFill(style: .surface))
-    }
-
     /// Feeds that sat on the system `.background` material (logcat, iOS
     /// logs, Reactotron): the material vanishes when translucent so the
     /// root fill shows through, and returns untouched when opaque.
     func translucentFeedBackground() -> some View {
-        modifier(TranslucentFill(style: .feed))
+        modifier(TranslucentFeedBackground())
     }
 
-    /// `List`s that sat on the default opaque scroll material (files, apps,
-    /// crashes): the material hides when translucent, stock otherwise.
+    /// `List`s and grouped `Form`s that sat on the default opaque scroll
+    /// material (files, apps, crashes, catalog, emulators…): the material
+    /// hides when translucent, stock otherwise.
     func translucentListBackground() -> some View {
         modifier(TranslucentListBackground())
     }
@@ -147,20 +139,10 @@ private struct TranslucentListBackground: ViewModifier {
     }
 }
 
-private struct TranslucentFill: ViewModifier {
-    enum Style { case root, surface, feed }
-
-    let style: Style
+private struct TranslucentFeedBackground: ViewModifier {
     @Environment(\.windowOpacity) private var opacity
 
     func body(content: Content) -> some View {
-        switch style {
-        case .root:
-            content.background(Color.bgRoot.opacity(WindowEffects.clamped(opacity)))
-        case .surface:
-            content.background(Color.bgSurface.opacity(WindowEffects.surfaceAlpha(root: opacity)))
-        case .feed:
-            content.background(.background.opacity(WindowEffects.isTranslucent(opacity) ? 0 : 1))
-        }
+        content.background(.background.opacity(WindowEffects.isTranslucent(opacity) ? 0 : 1))
     }
 }

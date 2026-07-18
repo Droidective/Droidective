@@ -48,7 +48,7 @@ struct ApkStudioView: View {
             Divider()
             content(apk)
         }
-        .translucentRootBackground()
+        .background(.bgRoot)
     }
 
     private func header(_ apk: URL) -> some View {
@@ -173,6 +173,7 @@ private struct RecompileTab: View {
             }
         }
         .formStyle(.grouped)
+        .translucentListBackground()
     }
 
     @ViewBuilder private func resultRow(_ status: String) -> some View {

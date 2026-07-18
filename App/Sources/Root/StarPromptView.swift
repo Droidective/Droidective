@@ -49,7 +49,7 @@ struct StarPromptView: View {
         }
         .padding(28)
         .frame(width: 380)
-        .background(Color.bgRoot)
+        .background(.bgRoot)
         .onAppear { starPromptShown = true }
     }
 }

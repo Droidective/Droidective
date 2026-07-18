@@ -101,7 +101,7 @@ struct DeviceBarView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
-        .translucentSurfaceBackground()
+        .background(.bgSurface)
         .overlay(alignment: .bottom) {
             Divider()
         }

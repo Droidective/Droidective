@@ -65,6 +65,7 @@ struct FridaConsoleView: View {
             }
         }
         .formStyle(.grouped)
+        .translucentListBackground()
     }
 
     // MARK: - Actions

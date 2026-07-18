@@ -40,13 +40,14 @@ public enum WindowEffects {
         clamped(opacity) < 0.999
     }
 
-    /// Lifted surfaces (cards, bars, the sidebar) stay a step more opaque
-    /// than the root wash so the content on them keeps its contrast; capped
-    /// at fully opaque.
-    public static func surfaceAlpha(root opacity: Double) -> Double {
+    /// Lifted surfaces (cards, bars, the sidebar) STACK on the root wash, so
+    /// they carry only the contrast step: an alpha sized so root + surface
+    /// composites to roughly the root plus 0.15, instead of compounding to
+    /// near-solid. Opaque whenever the window is.
+    public static func cardAlpha(root opacity: Double) -> Double {
         let root = clamped(opacity)
         guard isTranslucent(root) else { return 1.0 }
-        return min(root + 0.15, 1.0)
+        return min(0.15 / max(1.0 - root, 0.15), 1.0)
     }
 
     /// The window-server blur radius for a slider amount — zero whenever the

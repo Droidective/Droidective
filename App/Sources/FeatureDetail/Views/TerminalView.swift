@@ -464,7 +464,7 @@ struct TerminalView: View {
         }
         .padding(.vertical, 6)
         .frame(width: 32)
-        .translucentSurfaceBackground()
+        .background(.bgSurface)
     }
 
     private var expandedRail: some View {
@@ -529,7 +529,7 @@ struct TerminalView: View {
             }
         }
         .frame(width: 210)
-        .translucentSurfaceBackground()
+        .background(.bgSurface)
     }
 
     private func railButton(_ symbol: String, help: String, action: @escaping () -> Void) -> some View {
@@ -684,7 +684,7 @@ struct TerminalView: View {
             .padding(.trailing, 8)
         }
         .frame(height: 38)
-        .translucentSurfaceBackground()
+        .background(.bgSurface)
     }
 
     private func tabChip(_ tab: TerminalManager.Tab, grouped: Bool) -> some View {

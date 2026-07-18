@@ -86,6 +86,7 @@ struct ApkSignView: View {
             }
         }
         .formStyle(.grouped)
+        .translucentListBackground()
     }
 
     @ViewBuilder private func resultRow(_ message: String) -> some View {
