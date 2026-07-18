@@ -21,7 +21,7 @@ extension FeatureRegistry {
     }
 
     private static let notes: [String: String] = [
-        "send-text": "Types text into whatever field is focused on the device, via `adb shell input text`. Unicode and % need the ADBKeyboard app — you'll be offered a one-click install. Save named snippets from the ＋ tag or the bookmark menu — the five you use most sit under the box, and `{clipboard}` / `{ip}` fill in with the live value when inserted.",
+        "send-text": "Types text into whatever field is focused on the device, via `adb shell input text`. Unicode and % need the ADBKeyboard app — you'll be offered a one-click install. Save the text you send often as a named snippet — the list ranks by recent use, and `{clipboard}` / `{ip}` fill in with the live value when inserted.",
         "get-ip": "Reads the device's Wi-Fi IP (wlan0) and copies it — handy for wireless ADB or pointing the device at your local services.",
         "connection": "All the connection plumbing in one place — copy the device's Wi-Fi IP, reverse a port back to your Mac (Metro), drop a wireless connection, set Private DNS, and run the Android 11+ wireless ADB pairing flow. Wi-Fi, Network Speed, and Emulators stay on their own screens.",
         "reverse-port": "Maps a device port back to your Mac (`adb reverse`), so the device reaching localhost:8081 hits YOUR machine — essential for Metro/dev servers over USB.",
