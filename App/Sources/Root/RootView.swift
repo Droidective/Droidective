@@ -36,8 +36,8 @@ struct RootView: View {
     /// Translucent-window appearance (Settings ▸ Appearance ▸ Window). At
     /// 1.0 opacity everything below renders exactly as before the feature.
     @AppStorage(windowOpacityDefaultsKey) private var windowOpacity = 1.0
-    @AppStorage(windowBlurDefaultsKey) private var windowBlur = true
-    @AppStorage(windowGrainDefaultsKey) private var windowGrain = false
+    @AppStorage(windowBlurDefaultsKey) private var windowBlur = 0.6
+    @AppStorage(windowGrainDefaultsKey) private var windowGrain = 0.0
 
     /// Launches before the one-time GitHub-star nudge.
     private let starPromptAfterLaunches = 10
@@ -88,24 +88,21 @@ struct RootView: View {
             // Grain rides outside zoomedContent's scaleEffect so ⌘= zoom
             // never magnifies the specks.
             .overlay {
-                GrainOverlay(strength: WindowEffects.grainOpacity(root: windowOpacity, enabled: windowGrain))
+                GrainOverlay(strength: WindowEffects.grainOpacity(root: windowOpacity, amount: windowGrain))
             }
             .overlay(alignment: .topTrailing) { devMetricsOverlay }
             .modifier(PostTourCelebration(state: state))
             .environment(\.colorScheme, injectedColorScheme)
             .environment(\.windowOpacity, WindowEffects.clamped(windowOpacity))
             .preferredColorScheme(preferredScheme)
-            // Behind everything: the behind-window blur (hidden while opaque
-            // or with blur off — the window is then plain see-through).
-            .background {
-                WindowBackdropView(
-                    active: WindowEffects.isTranslucent(windowOpacity) && windowBlur
-                )
-                .ignoresSafeArea()
-            }
             .onChange(of: windowOpacity) { _, value in
                 if let window = state.mainWindow {
-                    applyWindowTranslucency(window, opacity: value)
+                    applyWindowTranslucency(window, opacity: value, blurAmount: windowBlur)
+                }
+            }
+            .onChange(of: windowBlur) { _, value in
+                if let window = state.mainWindow {
+                    applyWindowTranslucency(window, opacity: windowOpacity, blurAmount: value)
                 }
             }
             .background(WindowAccessor { window in
@@ -123,7 +120,7 @@ struct RootView: View {
                 }
                 window.setFrameAutosaveName(autosaveName)
                 WindowMinSizeGuard.shared.attach(to: window)
-                applyWindowTranslucency(window, opacity: windowOpacity)
+                applyWindowTranslucency(window, opacity: windowOpacity, blurAmount: windowBlur)
             })
             .overlay {
                 // Full-window takeover (macOS has no fullScreenCover), shown

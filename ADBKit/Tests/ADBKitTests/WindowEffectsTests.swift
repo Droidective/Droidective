@@ -5,11 +5,18 @@ import Testing
 @Suite struct WindowEffectsTests {
     @Test func clampingPinsOutOfRangeAndNonFiniteValues() {
         #expect(WindowEffects.clamped(0.75) == 0.75)
-        #expect(WindowEffects.clamped(0.2) == WindowEffects.minimumOpacity)
+        #expect(WindowEffects.clamped(0.05) == WindowEffects.minimumOpacity)
         #expect(WindowEffects.clamped(-1) == WindowEffects.minimumOpacity)
         #expect(WindowEffects.clamped(1.4) == 1.0)
         #expect(WindowEffects.clamped(.nan) == 1.0)
         #expect(WindowEffects.clamped(.infinity) == 1.0)
+    }
+
+    @Test func amountClampingPinsToUnitRangeAndZerosNonFinite() {
+        #expect(WindowEffects.clampedAmount(0.4) == 0.4)
+        #expect(WindowEffects.clampedAmount(-0.1) == 0)
+        #expect(WindowEffects.clampedAmount(1.5) == 1)
+        #expect(WindowEffects.clampedAmount(.nan) == 0)
     }
 
     @Test func translucencyEngagesOnlyBelowFullOpacity() {
@@ -25,18 +32,23 @@ import Testing
         #expect(WindowEffects.surfaceAlpha(root: 1.0) == 1.0)
         #expect(WindowEffects.surfaceAlpha(root: 0.6) == 0.75)
         #expect(WindowEffects.surfaceAlpha(root: 0.95) == 1.0)
-        #expect(WindowEffects.surfaceAlpha(root: 0.5) == 0.65)
+        #expect(WindowEffects.surfaceAlpha(root: 0.1) == 0.25)
         // Out-of-range input follows the clamp, not the raw value.
-        #expect(WindowEffects.surfaceAlpha(root: 0.1) == 0.65)
+        #expect(WindowEffects.surfaceAlpha(root: 0.02) == 0.25)
     }
 
-    @Test func grainIsZeroWhenDisabledOrOpaqueAndScalesWithTranslucency() {
-        #expect(WindowEffects.grainOpacity(root: 0.6, enabled: false) == 0)
-        #expect(WindowEffects.grainOpacity(root: 1.0, enabled: true) == 0)
-        let atFloor = WindowEffects.grainOpacity(root: WindowEffects.minimumOpacity, enabled: true)
-        let nearOpaque = WindowEffects.grainOpacity(root: 0.95, enabled: true)
-        #expect(atFloor > nearOpaque)
-        #expect(nearOpaque > 0)
-        #expect(atFloor <= 0.08)
+    @Test func blurRadiusScalesWithTheSliderAndDiesWhenOpaque() {
+        #expect(WindowEffects.blurRadius(amount: 1, root: 0.5) == 40)
+        #expect(WindowEffects.blurRadius(amount: 0.5, root: 0.5) == 20)
+        #expect(WindowEffects.blurRadius(amount: 0, root: 0.5) == 0)
+        #expect(WindowEffects.blurRadius(amount: 1, root: 1.0) == 0)
+        #expect(WindowEffects.blurRadius(amount: 2, root: 0.5) == 40)
+    }
+
+    @Test func grainScalesWithTheSliderAndDiesWhenOpaque() {
+        #expect(WindowEffects.grainOpacity(root: 0.5, amount: 1) == WindowEffects.maximumGrainAlpha)
+        #expect(WindowEffects.grainOpacity(root: 0.5, amount: 0.5) == WindowEffects.maximumGrainAlpha / 2)
+        #expect(WindowEffects.grainOpacity(root: 0.5, amount: 0) == 0)
+        #expect(WindowEffects.grainOpacity(root: 1.0, amount: 1) == 0)
     }
 }

@@ -264,8 +264,8 @@ struct AppearanceSettingsView: View {
     @AppStorage(appFontFamilyDefaultsKey) private var fontFamily = ""
     @AppStorage(appFontSizeScaleDefaultsKey) private var fontSizeScale = 1.0
     @AppStorage(windowOpacityDefaultsKey) private var windowOpacity = 1.0
-    @AppStorage(windowBlurDefaultsKey) private var windowBlur = true
-    @AppStorage(windowGrainDefaultsKey) private var windowGrain = false
+    @AppStorage(windowBlurDefaultsKey) private var windowBlur = 0.6
+    @AppStorage(windowGrainDefaultsKey) private var windowGrain = 0.0
     @State private var hexDraft = ""
     @State private var hexInvalid = false
     #if DEBUG
@@ -285,6 +285,21 @@ struct AppearanceSettingsView: View {
         Binding(
             get: { Color(hex: accentHex) ?? Color("BrandAccent") },
             set: { accentHex = $0.hexString ?? "" })
+    }
+
+    /// One Window-section slider row: label, slider, live percent readout.
+    private func effectSlider(
+        _ label: String, value: Binding<Double>, in range: ClosedRange<Double>, percent: Double
+    ) -> some View {
+        HStack(spacing: 10) {
+            Text(label)
+                .frame(width: 56, alignment: .leading)
+            Slider(value: value, in: range)
+            Text("\(Int((percent * 100).rounded()))%")
+                .font(.app(.callout).monospacedDigit())
+                .foregroundStyle(.textMuted)
+                .frame(width: 44, alignment: .trailing)
+        }
     }
 
     var body: some View {
@@ -364,19 +379,18 @@ struct AppearanceSettingsView: View {
             }
 
             Section("Window") {
-                HStack(spacing: 10) {
-                    Text("Opacity")
-                    Slider(value: $windowOpacity, in: WindowEffects.opacityRange)
-                    Text("\(Int((WindowEffects.clamped(windowOpacity) * 100).rounded()))%")
-                        .font(.app(.callout).monospacedDigit())
-                        .foregroundStyle(.textMuted)
-                        .frame(width: 44, alignment: .trailing)
-                }
-                Toggle("Blur what's behind the window", isOn: $windowBlur)
+                effectSlider(
+                    "Opacity", value: $windowOpacity, in: WindowEffects.opacityRange,
+                    percent: WindowEffects.clamped(windowOpacity))
+                effectSlider(
+                    "Blur", value: $windowBlur, in: 0...1,
+                    percent: WindowEffects.clampedAmount(windowBlur))
                     .disabled(!WindowEffects.isTranslucent(windowOpacity))
-                Toggle("Film grain", isOn: $windowGrain)
+                effectSlider(
+                    "Grain", value: $windowGrain, in: 0...1,
+                    percent: WindowEffects.clampedAmount(windowGrain))
                     .disabled(!WindowEffects.isTranslucent(windowOpacity))
-                Text("Below 100% the main window turns to glass — the desktop shows through every pane, frosted while blur is on. Grain adds a subtle texture to the glass.")
+                Text("Below 100% opacity the main window turns to glass — what's behind shows through every pane, softened by Blur and textured by Grain.")
                     .font(.app(.footnote))
                     .foregroundStyle(.textMuted)
             }

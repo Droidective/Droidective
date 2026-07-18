@@ -1,15 +1,25 @@
 import Foundation
 
 /// Pure math behind the translucent-window appearance: the Settings slider
-/// range, when the effect engages, and the alpha each layer derives from the
-/// one stored opacity value. UI-free so the layering rules are unit-tested.
+/// ranges, when the effect engages, and the value each layer derives from the
+/// stored opacity / blur / grain amounts. UI-free so the layering rules are
+/// unit-tested.
 public enum WindowEffects {
-    /// Slider floor — below this the UI stops being readable over a busy
-    /// desktop, even with the blur behind it.
-    public static let minimumOpacity = 0.5
+    /// Opacity slider floor — near-invisible but never fully gone, so the
+    /// window stays findable over any desktop.
+    public static let minimumOpacity = 0.1
 
-    /// The Settings slider's span. 1.0 is fully opaque (the effect is off).
+    /// The opacity slider's span. 1.0 is fully opaque (the effect is off).
     public static let opacityRange: ClosedRange<Double> = minimumOpacity...1.0
+
+    /// What a full blur slider maps to, in window-server blur radius points.
+    /// Past ~40 the extra radius costs compositing time without looking any
+    /// softer.
+    public static let maximumBlurRadius = 40.0
+
+    /// What a full grain slider maps to, as the noise film's alpha. Beyond
+    /// this the speckle starts eating text contrast.
+    public static let maximumGrainAlpha = 0.2
 
     /// Stored values from older builds or hand-edited defaults may be out of
     /// range — everything downstream reads through this.
@@ -18,9 +28,14 @@ public enum WindowEffects {
         return min(max(opacity, minimumOpacity), 1.0)
     }
 
+    /// A 0…1 slider amount (blur, grain), pinned; non-finite reads as 0.
+    public static func clampedAmount(_ amount: Double) -> Double {
+        guard amount.isFinite else { return 0 }
+        return min(max(amount, 0), 1)
+    }
+
     /// The effect engages only below full opacity, so 1.0 keeps the exact
-    /// pre-feature rendering: opaque window, no backdrop view, no extra
-    /// compositing layers.
+    /// pre-feature rendering: opaque window, zero blur, no grain film.
     public static func isTranslucent(_ opacity: Double) -> Bool {
         clamped(opacity) < 0.999
     }
@@ -34,13 +49,17 @@ public enum WindowEffects {
         return min(root + 0.15, 1.0)
     }
 
-    /// The grain film's strength: strongest at the opacity floor, fading to
-    /// nothing as the window approaches opaque, and zero when the film is
-    /// disabled or the window is opaque.
-    public static func grainOpacity(root opacity: Double, enabled: Bool) -> Double {
-        let root = clamped(opacity)
-        guard enabled, isTranslucent(root) else { return 0 }
-        let translucency = (1.0 - root) / (1.0 - minimumOpacity)
-        return 0.03 + 0.05 * translucency
+    /// The window-server blur radius for a slider amount — zero whenever the
+    /// window is opaque (nothing shows through to blur).
+    public static func blurRadius(amount: Double, root opacity: Double) -> Int {
+        guard isTranslucent(opacity) else { return 0 }
+        return Int((clampedAmount(amount) * maximumBlurRadius).rounded())
+    }
+
+    /// The grain film's alpha for a slider amount — zero whenever the window
+    /// is opaque, so the film never sits over a solid background.
+    public static func grainOpacity(root opacity: Double, amount: Double) -> Double {
+        guard isTranslucent(opacity) else { return 0 }
+        return clampedAmount(amount) * maximumGrainAlpha
     }
 }

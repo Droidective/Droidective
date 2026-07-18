@@ -3,14 +3,14 @@ import AppKit
 import SwiftUI
 
 /// The translucent-window appearance (Settings ▸ Appearance ▸ Window): the
-/// stored preference keys, the behind-window blur backdrop, the Metal grain
-/// film, and the alpha-aware background fills every opaque pane routes
-/// through. The alpha math itself lives in `WindowEffects` (ADBKit, tested);
-/// this file is only the SwiftUI/AppKit plumbing.
+/// stored preference keys, the window-server blur, the Metal grain film, and
+/// the alpha-aware background fills every opaque pane routes through. The
+/// value math lives in `WindowEffects` (ADBKit, tested); this file is only
+/// the SwiftUI/AppKit plumbing.
 
 let windowOpacityDefaultsKey = "windowOpacity"
-let windowBlurDefaultsKey = "windowBlurEnabled"
-let windowGrainDefaultsKey = "windowGrainEnabled"
+let windowBlurDefaultsKey = "windowBlurAmount"
+let windowGrainDefaultsKey = "windowGrainAmount"
 
 extension EnvironmentValues {
     /// The clamped window opacity, injected once by RootView so every pane
@@ -19,36 +19,49 @@ extension EnvironmentValues {
     @Entry var windowOpacity: Double = 1.0
 }
 
-/// Window-server flags for see-through rendering. Idempotent — safe to call
-/// on attach and on every slider change.
+/// Window-server flags plus the behind-window blur radius. Idempotent —
+/// called on attach and on every slider change.
 @MainActor
-func applyWindowTranslucency(_ window: NSWindow, opacity: Double) {
+func applyWindowTranslucency(_ window: NSWindow, opacity: Double, blurAmount: Double) {
     let translucent = WindowEffects.isTranslucent(opacity)
     window.isOpaque = !translucent
     window.backgroundColor = translucent ? .clear : .windowBackgroundColor
+    WindowServerBlur.apply(
+        radius: WindowEffects.blurRadius(amount: blurAmount, root: opacity), to: window)
     window.invalidateShadow()
 }
 
-/// The behind-window blur: an `NSVisualEffectView` that frosts whatever is
-/// under the window. Hidden (not removed) when blur is off or the window is
-/// opaque, so toggling never restructures the hierarchy.
-struct WindowBackdropView: NSViewRepresentable {
-    let active: Bool
+/// The adjustable behind-window blur. `NSVisualEffectView` only offers fixed
+/// per-material radii, so the radius goes straight to the window server —
+/// the same `CGSSetWindowBackgroundBlurRadius` call iTerm2's blur slider has
+/// shipped on for years. Both symbols are resolved lazily; on a macOS that
+/// drops them the slider quietly does nothing instead of crashing.
+private enum WindowServerBlur {
+    private typealias Connection = @convention(c) () -> UInt32
+    private typealias SetRadius = @convention(c) (UInt32, UInt32, UInt32) -> Int32
 
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = NSVisualEffectView()
-        view.material = .underWindowBackground
-        view.blendingMode = .behindWindow
-        view.state = .active
-        return view
-    }
+    private static let connection: UInt32? = {
+        guard let sym = dlsym(dlopen(nil, RTLD_LAZY), "CGSDefaultConnectionForThread") else {
+            return nil
+        }
+        return unsafeBitCast(sym, to: Connection.self)()
+    }()
 
-    func updateNSView(_ view: NSVisualEffectView, context: Context) {
-        view.isHidden = !active
+    private static let setRadius: SetRadius? = {
+        guard let sym = dlsym(dlopen(nil, RTLD_LAZY), "CGSSetWindowBackgroundBlurRadius") else {
+            return nil
+        }
+        return unsafeBitCast(sym, to: SetRadius.self)
+    }()
+
+    @MainActor
+    static func apply(radius: Int, to window: NSWindow) {
+        guard let connection, let setRadius, window.windowNumber > 0 else { return }
+        _ = setRadius(connection, UInt32(window.windowNumber), UInt32(radius))
     }
 }
 
-/// The static Metal grain film over the frosted window. The base fill is
+/// The static Metal grain film over the glass. The base fill is
 /// all-but-invisible so a device that can't run the shader shows nothing
 /// instead of a solid flash; the shader replaces each pixel with a frozen
 /// speck at the strength `WindowEffects.grainOpacity` hands over.
