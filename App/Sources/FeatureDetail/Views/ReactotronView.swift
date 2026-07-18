@@ -683,9 +683,10 @@ struct ReactotronView: View {
     @State private var findFocusToken = 0
     @Environment(\.tabIsActive) private var tabIsActive
 
-    // View-local UI only — drafts and the active tab/split. Everything that must
-    // survive leaving the feature lives on `session`.
-    @State private var split = false
+    // View-local UI only — drafts and the active tab. Everything that must
+    // survive leaving the feature lives on `session`; the split and each pane's
+    // filters are UserDefaults-backed so they also survive relaunches.
+    @AppStorage("reactotronSplit") private var split = false
     @State private var tab: RtTab = .timeline
     /// Measured top-bar width — below ~620pt (a narrow split pane) the bar
     /// reflows to two rows with icon-only actions.
@@ -958,15 +959,12 @@ struct ReactotronView: View {
         Group {
             if split {
                 HStack(spacing: 0) {
-                    pane(showOnboarding: true, findToken: findFocusToken)
+                    pane(0, findToken: findFocusToken)
                     Divider()
-                    pane(showOnboarding: false)
+                    pane(1)
                 }
             } else {
-                pane(
-                    showOnboarding: true, trailing: AnyView(paneGlobalControls),
-                    findToken: findFocusToken
-                )
+                pane(0, trailing: AnyView(paneGlobalControls), findToken: findFocusToken)
             }
         }
         // ⌘F focuses the (first) timeline's search — Reactotron's only text
@@ -1009,14 +1007,19 @@ struct ReactotronView: View {
         }
     }
 
+    /// Pane 0 is the single/left pane, pane 1 the right split. The index keys
+    /// each pane's remembered filters, so the left pane keeps its slice when
+    /// the split toggles and the right pane remembers its own; it also carries
+    /// the onboarding (only the primary pane shows it).
     private func pane(
-        showOnboarding: Bool, trailing: AnyView? = nil, findToken: Int = 0
+        _ index: Int, trailing: AnyView? = nil, findToken: Int = 0
     ) -> some View {
         TimelinePane(
+            pane: index,
             items: session.displayedItems,
             targetEmpty: state.targetSerials.isEmpty,
             connection: session.connection,
-            showOnboarding: showOnboarding,
+            showOnboarding: index == 0,
             minContentWidth: session.maxRowWidth,
             trailing: trailing,
             findToken: findToken,
@@ -1460,8 +1463,10 @@ private enum RtEventKind: String, CaseIterable, Identifiable {
 /// One scrollable timeline column with its own filter and search, fed from the
 /// shared event buffer. Used once on its own or twice side-by-side (the
 /// VSCode-style split), so each pane can watch a different slice at the same
-/// time. The sort order is a per-feature preference (`@AppStorage`), so split
-/// panes flip together and the choice survives relaunches.
+/// time. Filter, API refinements, and search are UserDefaults-backed per pane
+/// index, so each pane keeps its slice across feature switches and relaunches.
+/// The sort order is a per-feature preference (`@AppStorage`), so split panes
+/// flip together and the choice survives relaunches.
 private struct TimelinePane: View {
     let items: [RtItem]
     let targetEmpty: Bool
@@ -1477,23 +1482,62 @@ private struct TimelinePane: View {
     let trailing: AnyView?
     /// Bumped by the tab-level ⌘F to focus this pane's search (the primary
     /// pane in a split; the second pane always gets the never-firing 0).
-    var findToken = 0
+    let findToken: Int
     let onExport: ([RtItem]) -> Void
     let onRetry: () -> Void
 
-    @State private var search = ""
-    /// Event kinds toggled off in the filter popover — empty means everything
-    /// shows, matching Reactotron's hide-what-you-untick model.
-    @State private var hiddenKinds: Set<RtEventKind> = []
+    @AppStorage private var search: String
+    /// Comma-joined `RtEventKind` raw values toggled off in the filter sheet —
+    /// the persisted form behind `hiddenKinds`; empty means everything shows,
+    /// matching Reactotron's hide-what-you-untick model.
+    @AppStorage private var hiddenKindsRaw: String
     /// API-only refinements, set from the filter popover and cleared when the
     /// API kind is hidden: HTTP method and status class (2xx…5xx/Failed).
-    @State private var methodFilter: String?
-    @State private var statusFilter: HTTPStatusClass?
+    @AppStorage private var methodFilter: String?
+    @AppStorage private var statusFilter: HTTPStatusClass?
     @State private var showFilterSheet = false
     /// Newest at the top (the Reactotron app's order) unless the toolbar's
     /// reverse button flips the feed to chronological. Persisted per feature —
     /// split panes share the key, so they stay in sync.
     @AppStorage("reactotronNewestFirst") private var newestFirst = true
+
+    init(
+        pane: Int,
+        items: [RtItem],
+        targetEmpty: Bool,
+        connection: RtConnection,
+        showOnboarding: Bool,
+        minContentWidth: CGFloat,
+        trailing: AnyView?,
+        findToken: Int = 0,
+        onExport: @escaping ([RtItem]) -> Void,
+        onRetry: @escaping () -> Void
+    ) {
+        self.items = items
+        self.targetEmpty = targetEmpty
+        self.connection = connection
+        self.showOnboarding = showOnboarding
+        self.minContentWidth = minContentWidth
+        self.trailing = trailing
+        self.findToken = findToken
+        self.onExport = onExport
+        self.onRetry = onRetry
+        _search = AppStorage(wrappedValue: "", "reactotronPane\(pane)Search")
+        _hiddenKindsRaw = AppStorage(wrappedValue: "", "reactotronPane\(pane)HiddenKinds")
+        _methodFilter = AppStorage("reactotronPane\(pane)Method")
+        _statusFilter = AppStorage("reactotronPane\(pane)Status")
+    }
+
+    /// Decoded view of `hiddenKindsRaw`. Unknown raw values (a kind renamed or
+    /// removed in a later version) drop out instead of poisoning the set.
+    private var hiddenKinds: Set<RtEventKind> {
+        get {
+            Set(hiddenKindsRaw.split(separator: ",").compactMap { RtEventKind(rawValue: String($0)) })
+        }
+        nonmutating set {
+            hiddenKindsRaw = newValue.map(\.rawValue).sorted().joined(separator: ",")
+        }
+    }
 
     var body: some View {
         // Filter once per render — the count badge, export button, and timeline
@@ -1566,13 +1610,20 @@ private struct TimelinePane: View {
     }
 
     /// The HTTP methods present in the buffer's API events, for the method
-    /// picker — only what the app actually sent, not a canned list.
+    /// picker — only what the app actually sent, not a canned list. A restored
+    /// filter's method is kept in the list even before such an event arrives
+    /// (a relaunch starts with an empty buffer), so the picker can always show
+    /// the active selection.
     private var seenMethods: [String] {
-        Array(Set(items.compactMap { $0.event.apiMethod })).sorted()
+        var methods = Set(items.compactMap { $0.event.apiMethod })
+        if let methodFilter { methods.insert(methodFilter) }
+        return methods.sorted()
     }
 
     private var filteredItems: [RtItem] {
         let query = search.trimmingCharacters(in: .whitespaces).lowercased()
+        // Decode the persisted set once per pass, not per item.
+        let hiddenKinds = hiddenKinds
         return items.filter { item in
             if let kind = item.event.kind, hiddenKinds.contains(kind) { return false }
             if let methodFilter, item.event.apiMethod != methodFilter { return false }
