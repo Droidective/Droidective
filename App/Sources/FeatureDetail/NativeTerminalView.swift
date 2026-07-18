@@ -1,3 +1,4 @@
+import ADBKit
 import AppKit
 import SwiftTerm
 import SwiftUI
@@ -19,6 +20,24 @@ enum TerminalMenuAction: Int {
 
 final class DroidTerminalView: LocalProcessTerminalView {
     private var dragWatchTimer: Timer?
+
+    /// SwiftTerm's default background, captured before the first alpha is
+    /// applied so returning to an opaque window restores the stock look.
+    private var opaqueBackground: NSColor?
+    private var appliedBackgroundAlpha: Double = 1.0
+
+    /// Translucent-window support: the terminal repaints its background (the
+    /// layer color and the draw-time fill) at the window's opacity so the
+    /// blur behind the window shows through the shell.
+    func applyBackgroundAlpha(_ alpha: Double) {
+        if opaqueBackground == nil { opaqueBackground = nativeBackgroundColor }
+        guard let base = opaqueBackground, alpha != appliedBackgroundAlpha else { return }
+        appliedBackgroundAlpha = alpha
+        let target = alpha >= 0.999 ? base : base.withAlphaComponent(alpha)
+        nativeBackgroundColor = target
+        layer?.backgroundColor = target.cgColor
+        needsDisplay = true
+    }
 
     /// Routes the terminal-management items of the right-click menu.
     var onMenuAction: ((TerminalMenuAction) -> Void)?
@@ -426,6 +445,7 @@ struct NativeTerminalView: NSViewRepresentable {
     let serial: String?
     /// Whether this session's pane is the focused one in the terminal strip.
     let isActive: Bool
+    @Environment(\.windowOpacity) private var windowOpacity
 
     /// Remembers the last activation state so focus is grabbed only on the
     /// inactive→active edge — not on every SwiftUI update, which would steal
@@ -448,6 +468,8 @@ struct NativeTerminalView: NSViewRepresentable {
 
     private func mount(in container: NSView, coordinator: Coordinator) {
         let terminal = session.view(serial: serial)
+        (terminal as? DroidTerminalView)?
+            .applyBackgroundAlpha(WindowEffects.clamped(windowOpacity))
         // Re-set on every update, not just on make: SwiftUI may reuse this
         // container for a different session, and a click must focus the shell
         // that lives here now, not the one mounted first.

@@ -333,6 +333,7 @@ struct TerminalView: View {
     /// Where the tab list lives: a Chrome-style strip along the top (default)
     /// or a left rail.
     @AppStorage("terminalTabsOnTop") private var tabsOnTop = true
+    @Environment(\.windowOpacity) private var windowOpacity
     private var terminals: TerminalManager { state.terminals }
 
     var body: some View {
@@ -463,7 +464,7 @@ struct TerminalView: View {
         }
         .padding(.vertical, 6)
         .frame(width: 32)
-        .background(.bgSurface)
+        .translucentSurfaceBackground()
     }
 
     private var expandedRail: some View {
@@ -528,7 +529,7 @@ struct TerminalView: View {
             }
         }
         .frame(width: 210)
-        .background(.bgSurface)
+        .translucentSurfaceBackground()
     }
 
     private func railButton(_ symbol: String, help: String, action: @escaping () -> Void) -> some View {
@@ -683,7 +684,7 @@ struct TerminalView: View {
             .padding(.trailing, 8)
         }
         .frame(height: 38)
-        .background(.bgSurface)
+        .translucentSurfaceBackground()
     }
 
     private func tabChip(_ tab: TerminalManager.Tab, grouped: Bool) -> some View {
@@ -849,7 +850,10 @@ struct TerminalView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black)
+        // Translucent window: the shells tint themselves (see
+        // `applyBackgroundAlpha`), so the pane fill steps aside entirely
+        // instead of double-darkening the glass behind them.
+        .background(Color.black.opacity(WindowEffects.isTranslucent(windowOpacity) ? 0 : 1))
     }
 }
 
@@ -861,11 +865,12 @@ private struct TerminalSplitNodeView: View {
     let serial: String?
     let isActiveTab: Bool
     let onClosePane: (UUID) -> Void
+    @Environment(\.windowOpacity) private var windowOpacity
 
     var body: some View {
         switch node {
         case nil:
-            Color.black
+            Color.black.opacity(WindowEffects.clamped(windowOpacity))
         case .pane(let paneID)?:
             if let session = tab.session(forPane: paneID) {
                 let isSplit = tab.splits.paneCount > 1

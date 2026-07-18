@@ -33,6 +33,12 @@ struct RootView: View {
     @State private var pickerIsFirstRun = false
     @Environment(\.colorScheme) private var colorScheme
 
+    /// Translucent-window appearance (Settings ▸ Appearance ▸ Window). At
+    /// 1.0 opacity everything below renders exactly as before the feature.
+    @AppStorage(windowOpacityDefaultsKey) private var windowOpacity = 1.0
+    @AppStorage(windowBlurDefaultsKey) private var windowBlur = true
+    @AppStorage(windowGrainDefaultsKey) private var windowGrain = false
+
     /// Launches before the one-time GitHub-star nudge.
     private let starPromptAfterLaunches = 10
 
@@ -79,10 +85,29 @@ struct RootView: View {
         // (the exitGuard alone is often unchanged), driving the leave dialog.
         let showExitDialog = state.pendingExit.map { !$0.saving } ?? false
         return zoomedContent
+            // Grain rides outside zoomedContent's scaleEffect so ⌘= zoom
+            // never magnifies the specks.
+            .overlay {
+                GrainOverlay(strength: WindowEffects.grainOpacity(root: windowOpacity, enabled: windowGrain))
+            }
             .overlay(alignment: .topTrailing) { devMetricsOverlay }
             .modifier(PostTourCelebration(state: state))
             .environment(\.colorScheme, injectedColorScheme)
+            .environment(\.windowOpacity, WindowEffects.clamped(windowOpacity))
             .preferredColorScheme(preferredScheme)
+            // Behind everything: the behind-window blur (hidden while opaque
+            // or with blur off — the window is then plain see-through).
+            .background {
+                WindowBackdropView(
+                    active: WindowEffects.isTranslucent(windowOpacity) && windowBlur
+                )
+                .ignoresSafeArea()
+            }
+            .onChange(of: windowOpacity) { _, value in
+                if let window = state.mainWindow {
+                    applyWindowTranslucency(window, opacity: value)
+                }
+            }
             .background(WindowAccessor { window in
                 // Track the main window by reference — the ⌘W monitor and
                 // `activateMainWindow` need to tell it apart from Settings /
@@ -98,6 +123,7 @@ struct RootView: View {
                 }
                 window.setFrameAutosaveName(autosaveName)
                 WindowMinSizeGuard.shared.attach(to: window)
+                applyWindowTranslucency(window, opacity: windowOpacity)
             })
             .overlay {
                 // Full-window takeover (macOS has no fullScreenCover), shown
@@ -402,7 +428,7 @@ struct RootView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(.bgRoot)
+            .translucentRootBackground()
             .animation(.spring(duration: 0.28), value: state.showNotifications)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -434,7 +460,7 @@ struct RootView: View {
             if sidebarAutoHide && state.sidebarOverlayShown {
                 SidebarPaletteView()
                     .frame(width: overlaySidebarWidth)
-                    .background(.bgSurface)
+                    .translucentSurfaceBackground()
                     // Not a Divider: in an overlay (ZStack context) a Divider
                     // lays out horizontally, which painted a full-width line
                     // across the sidebar's vertical middle every time the
@@ -942,7 +968,7 @@ struct OperationProgressStrip: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
-        .background(.bgSurface)
+        .translucentSurfaceBackground()
         .overlay(alignment: .bottom) { Divider() }
     }
 }

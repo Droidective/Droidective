@@ -222,7 +222,7 @@ struct DecompileBrowserView: View {
                 }
             }
         }
-        .background(.bgRoot)
+        .translucentRootBackground()
         .onChange(of: selection) { _, path in loadInEditor(path, line: 0) }
     }
 

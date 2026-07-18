@@ -48,7 +48,7 @@ struct ApkStudioView: View {
             Divider()
             content(apk)
         }
-        .background(.bgRoot)
+        .translucentRootBackground()
     }
 
     private func header(_ apk: URL) -> some View {

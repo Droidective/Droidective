@@ -234,6 +234,7 @@ struct FileExplorerView: View {
                 proxy.scrollTo("fe-top", anchor: .top)
                 listFocused = true
             }
+            .translucentListBackground()
         }
         // ⌘C / ⌘X / ⌘V via the standard Edit menu plumbing.
         .onCopyCommand { copySelection(isCut: false) }

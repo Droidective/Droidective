@@ -1711,7 +1711,7 @@ private struct TimelinePane: View {
                 }
             }
         }
-        .background(.background)
+        .translucentFeedBackground()
         .overlay { emptyOverlay }
     }
 

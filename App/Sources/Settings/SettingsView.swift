@@ -263,6 +263,9 @@ struct AppearanceSettingsView: View {
     @AppStorage("showFeatureNotes") private var showFeatureNotes = false
     @AppStorage(appFontFamilyDefaultsKey) private var fontFamily = ""
     @AppStorage(appFontSizeScaleDefaultsKey) private var fontSizeScale = 1.0
+    @AppStorage(windowOpacityDefaultsKey) private var windowOpacity = 1.0
+    @AppStorage(windowBlurDefaultsKey) private var windowBlur = true
+    @AppStorage(windowGrainDefaultsKey) private var windowGrain = false
     @State private var hexDraft = ""
     @State private var hexInvalid = false
     #if DEBUG
@@ -356,6 +359,24 @@ struct AppearanceSettingsView: View {
                     Text("Extra large").tag(1.25)
                 }
                 Text("Applies across the app — code and log views keep their monospaced font, and the terminal keeps its own. ⌘= / ⌘- additionally zoom the whole window.")
+                    .font(.app(.footnote))
+                    .foregroundStyle(.textMuted)
+            }
+
+            Section("Window") {
+                HStack(spacing: 10) {
+                    Text("Opacity")
+                    Slider(value: $windowOpacity, in: WindowEffects.opacityRange)
+                    Text("\(Int((WindowEffects.clamped(windowOpacity) * 100).rounded()))%")
+                        .font(.app(.callout).monospacedDigit())
+                        .foregroundStyle(.textMuted)
+                        .frame(width: 44, alignment: .trailing)
+                }
+                Toggle("Blur what's behind the window", isOn: $windowBlur)
+                    .disabled(!WindowEffects.isTranslucent(windowOpacity))
+                Toggle("Film grain", isOn: $windowGrain)
+                    .disabled(!WindowEffects.isTranslucent(windowOpacity))
+                Text("Below 100% the main window turns to glass — the desktop shows through every pane, frosted while blur is on. Grain adds a subtle texture to the glass.")
                     .font(.app(.footnote))
                     .foregroundStyle(.textMuted)
             }

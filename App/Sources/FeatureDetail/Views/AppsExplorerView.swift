@@ -103,6 +103,7 @@ struct AppsExplorerView: View {
                     List(visibleApps) { app in
                         appRow(app)
                     }
+                    .translucentListBackground()
                 }
                 HStack {
                     Text("\(visibleApps.count) of \(apps.count) apps")
