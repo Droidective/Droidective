@@ -263,11 +263,20 @@ final class AppState {
     /// left-edge hover in auto-hide mode) brings it back.
     func hideSidebarForSplitRoom() {
         if UserDefaults.standard.bool(forKey: sidebarAutoHideDefaultsKey) {
+            // The overlay sidebar takes no layout width — animating it away
+            // doesn't disturb the drag.
             guard sidebarOverlayShown else { return }
             withAnimation(.easeIn(duration: 0.18)) { sidebarOverlayShown = false }
         } else {
+            // Always called mid-drag. Animating the fixed sidebar away
+            // re-lays-out every mounted pane for ~11 frames WHILE drag events
+            // stream, and the divider rebase chases the easing width —
+            // jitter and lag. One instant jump gives the rebase a single
+            // clean width change and the drag stays fluid.
             guard sidebarVisible else { return }
-            withAnimation(.easeInOut(duration: 0.18)) { sidebarVisible = false }
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) { sidebarVisible = false }
         }
     }
 
