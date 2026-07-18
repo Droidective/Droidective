@@ -53,9 +53,15 @@ opening it — verify those by hand.
    - add the `id` → view `case` in `FeatureDetailView.detailByKind`,
    - add the `id` to `implementedIDs`,
    - if it runs adb directly, wrap each user action in
-     `CommandLog.userInitiated`. **[test: `implementedIDsAreAllRealFeatures`
-     for the id] · [silent: a missing `detailByKind` case renders "Coming Soon";
-     missing `userInitiated` keeps its commands out of Settings ▸ Command Log]**
+     `CommandLog.userInitiated`,
+   - fill backgrounds with the theme tokens (`.bgRoot`/`.bgSurface`) or the
+     translucency modifiers — an opaque full-pane fill (raw asset Color,
+     `Color.black`, default `List`/`Form` material) blocks the window-glass
+     appearance (see the translucency convention). **[test:
+     `implementedIDsAreAllRealFeatures` for the id] · [silent: a missing
+     `detailByKind` case renders "Coming Soon"; missing `userInitiated` keeps
+     its commands out of Settings ▸ Command Log; an opaque fill only shows up
+     by eye with opacity < 100%]**
 4. **If it joins a hub** — add it to `FeatureRegistry.absorbedByHub` and fold its
    keywords into the hub's `keywords`. **[test: `hubsStaySearchableByTheirMembersPrimaryKeyword`]**
 5. **Logic lives in ADBKit.** adb/Process/parsing go in an ADBKit service with a
@@ -118,7 +124,11 @@ Node 22 in CI; scroll reveals and the hero palette demo must keep their
   `FeatureEngine` (runner dispatch +
   `implementedIDs` + every sub-service), `SidebarOrdering`
   (pure `reorder`/`move`/`moveToEnd` helpers for the sidebar, unit-tested
-  without UI). The grouped sidebar uses **custom `.onDrag`/`.onDrop`** (not
+  without UI), `WindowEffects` (pure math for the translucent-window
+  appearance — opacity clamp/range, `cardAlpha`, blur radius, grain strength;
+  the App-layer plumbing is `App/Sources/Root/WindowTranslucency.swift` +
+  the dynamic `.bgRoot`/`.bgSurface` tokens in `Theme.swift` — see the
+  translucency convention below). The grouped sidebar uses **custom `.onDrag`/`.onDrop`** (not
   `List.onMove`, which raced the row tap gestures and dropped intermittently):
   a feature drag reorders within its group, a header drag moves the whole group,
   and `SidebarDrop` draws the insertion guideline between rows for features and
@@ -281,6 +291,39 @@ platforms annotation without a runner.
   directly (logcat, device-info, file-explorer…) must wrap its user-initiated
   calls in `CommandLog.userInitiated {}` or they never reach the Settings ▸
   Command Log sheet. Keep background polling OUT (don't wrap it).
+- **Window translucency is token-driven — never paint an opaque full-pane
+  fill.** Settings ▸ Appearance ▸ Window has Opacity (10–100%) / Blur / Grain
+  sliders. `.bgRoot` / `.bgSurface` are *environment-resolving ShapeStyles*
+  (Theme.swift), not Colors: they derive alpha from `\.windowOpacity`
+  (injected by RootView; the math is `WindowEffects` in ADBKit, unit-tested,
+  1.0 ⇒ exactly the old opaque rendering). Rules for new UI: fill with the
+  tokens (a raw `Color("BgRoot")` or `Color.black` full-pane fill blocks the
+  glass); `List`s / grouped `Form`s get `.translucentListBackground()`; feeds
+  sitting on the system `.background` material get
+  `.translucentFeedBackground()`; cards add NO extra washes — they stack on
+  the one root wash (RootView paints it under the whole window) at
+  `WindowEffects.cardAlpha`, the contrast-step alpha that avoids compounding
+  to solid. Terminal gotcha: SwiftTerm paints its background twice (whole
+  frame + per default-bg run), so any partial alpha compounds — under glass
+  the shell paints alpha-0 (`DroidTerminalView.applyBackgroundAlpha`) and the
+  pane underlay carries the single tint. Blur is the window server's
+  `CGSSetWindowBackgroundBlurRadius` (dlsym'd, no public radius API; no-op if
+  the symbol vanishes); grain is a Metal `colorEffect` (`Grain.metal`)
+  overlaid OUTSIDE the ⌘= zoom scale so zoom never magnifies specks.
+  `\.windowOpacity` is declared in Theme.swift because the AppTests logic
+  bundle compiles that file standalone (and links ADBKit for it). JS Console
+  keeps its Chrome-dark hue at the card step; CodeMirror webviews stay opaque.
+- **Sparkle never starts in Debug builds** (`SparkleUpdater.updaterAllowed`).
+  Silent staging + install-on-quit replaces the bundle at the app's own path —
+  a dev build sharing the release bundle id gets the RELEASE app installed
+  over `DerivedData/…/Droidective.app` the moment it quits. Symptoms of a
+  regression: days-old binary mtimes, no `Droidective.debug.dylib` in
+  MacOS/, EPERM re-copy build failures. Debug string-probes go against the
+  `.debug.dylib`, never the stub executable.
+- **RootView's `body` chain sits near the type-checker's time limit on CI's
+  Xcode** (local passes, CI fails with "unable to type-check in reasonable
+  time"). Add cross-cutting concerns as ONE `.modifier(...)` link (see
+  `WindowTranslucencyModifier`), never several inline links.
 - **⌘=/⌘- font zoom is a `scaleEffect` on RootView, not dynamic type.** macOS
   ignores SwiftUI `dynamicTypeSize` for rendering, so the content is laid out at
   `size/scale` and scaled up. It's bypassed entirely at 1.0× because the
@@ -419,7 +462,17 @@ compile or test time* — lean on it instead of manual vigilance.
 
 ## Status
 
-Feature-complete across all planned milestones plus several UX rounds (latest:
+Feature-complete across all planned milestones plus several UX rounds.
+Unreleased on `main`/in flight: the **translucent window appearance**
+(Settings ▸ Appearance ▸ Window — Opacity/Blur/Grain sliders; dynamic
+`.bgRoot`/`.bgSurface` tokens put every pane, card, bar, and the terminal on
+the glass; `WindowEffects` pure-tested in ADBKit), **Sparkle disabled in
+Debug builds** (it was silently replacing dev builds with the release on
+quit), the **feature notes system removed** (the ⓘ strip, its Settings
+toggle, and ADBKit's `FeatureNotes` are gone), a **Send Text redesign**
+(two hub sections — the send flow with its failed-result inline, one
+recency-ranked snippet list, click-to-append `{clipboard}`/`{ip}` chips,
+Return sends), and a wider Settings window (640×540). (Latest release:
 **v3.4.0** — an **AAB to APK converter** (the 58th feature: bundletool
 universal APK with optional release-keystore signing; bundletool +
 uber-apk-signer factory-seeded from `App/Resources`; double-clicked
