@@ -280,7 +280,7 @@ struct SendTextView: View {
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
-        .help("Save a snippet — supports {clipboard} and {ip}")
+        .help("Save the text you send often as a reusable snippet")
         .popover(isPresented: $creatingSnippet, arrowEdge: .bottom) {
             newSnippetPopover
         }
@@ -302,9 +302,15 @@ struct SendTextView: View {
                 .textFieldStyle(.roundedBorder)
                 .lineLimit(1...4)
                 .onSubmit { saveNewSnippet() }
-            Text("{clipboard} and {ip} fill in with the live value when inserted.")
-                .font(.app(.caption))
-                .foregroundStyle(.textMuted)
+            HStack(spacing: 6) {
+                Text("Add a live value:")
+                    .font(.app(.caption))
+                    .foregroundStyle(.textMuted)
+                placeholderChip("{clipboard}")
+                if state.selectedRole == .reactNativeDeveloper {
+                    placeholderChip("{ip}")
+                }
+            }
             HStack {
                 Text("\(newSnippetName.count)/\(SendTextSnippet.nameLimit)")
                     .font(.app(.caption2).monospacedDigit())
@@ -319,6 +325,24 @@ struct SendTextView: View {
         }
         .padding(14)
         .frame(width: 300)
+    }
+
+    /// A `{placeholder}` token as a click-to-append chip — it lands in the
+    /// snippet text and expands to the live value whenever the snippet is
+    /// inserted.
+    private func placeholderChip(_ token: String) -> some View {
+        Button {
+            newSnippetText += token
+        } label: {
+            Text(token)
+                .font(.app(.caption, design: .monospaced))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(.quaternary, in: Capsule())
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .help("Adds \(token) to the text — it fills in with the live value when the snippet is inserted")
     }
 
     private var canSaveNewSnippet: Bool {
