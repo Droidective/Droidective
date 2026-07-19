@@ -333,6 +333,7 @@ struct TerminalView: View {
     /// Where the tab list lives: a Chrome-style strip along the top (default)
     /// or a left rail.
     @AppStorage("terminalTabsOnTop") private var tabsOnTop = true
+    @Environment(\.windowOpacity) private var windowOpacity
     private var terminals: TerminalManager { state.terminals }
 
     var body: some View {
@@ -849,7 +850,11 @@ struct TerminalView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black)
+        // Translucent window: the shells stop painting their default
+        // background entirely (see `applyBackgroundAlpha` — SwiftTerm
+        // double-fills, compounding any partial alpha), so this underlay
+        // carries the terminal's single tint at the window opacity.
+        .background(Color.black.opacity(WindowEffects.clamped(windowOpacity)))
     }
 }
 
@@ -861,11 +866,12 @@ private struct TerminalSplitNodeView: View {
     let serial: String?
     let isActiveTab: Bool
     let onClosePane: (UUID) -> Void
+    @Environment(\.windowOpacity) private var windowOpacity
 
     var body: some View {
         switch node {
         case nil:
-            Color.black
+            Color.black.opacity(WindowEffects.clamped(windowOpacity))
         case .pane(let paneID)?:
             if let session = tab.session(forPane: paneID) {
                 let isSplit = tab.splits.paneCount > 1

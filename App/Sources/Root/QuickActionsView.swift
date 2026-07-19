@@ -306,6 +306,14 @@ struct QuickActionsView: View {
                     .onSubmit { if let row = highlightedRow { activate(row) } }
                     .onKeyPress(.downArrow) { moveVertical(1); return .handled }
                     .onKeyPress(.upArrow) { moveVertical(-1); return .handled }
+                    // ⌥⏎ stops the highlighted running emulator/simulator
+                    // (plain ⏎ selects it, via onSubmit below).
+                    .onKeyPress(keys: [.return], phases: .down) { press in
+                        guard press.modifiers.contains(.option),
+                              let stop = highlightedRow?.stop else { return .ignored }
+                        perform(stop)
+                        return .handled
+                    }
                     .onKeyPress(.leftArrow) { moveHorizontal(-1) }
                     .onKeyPress(.rightArrow) { moveHorizontal(1) }
             }
@@ -483,6 +491,9 @@ struct QuickActionsView: View {
             case appVerb(AppControlService.AppAction, packageId: String)
             case launchAvd(Avd)
             case bootSimulator(Simulator)
+            /// Gracefully stop a running Android emulator (`adb emu kill`).
+            case stopAvd(serial: String, name: String)
+            case shutdownSimulator(Simulator)
             /// Switch the app's selection (Switch Device screen, running
             /// emulator rows).
             case selectDevice(serial: String, label: String)
@@ -502,6 +513,9 @@ struct QuickActionsView: View {
         var destructive = false
         /// Renders a › chevron: activating navigates instead of running.
         var pushes = false
+        /// A running emulator/simulator row's secondary action: a trailing
+        /// stop button (and ⌥⏎) stops it, while ⏎ still selects the device.
+        var stop: Action?
         let action: Action
     }
 
@@ -737,6 +751,7 @@ struct QuickActionsView: View {
                     id: "avd:\(avd.name)", icon: "memorychip",
                     title: avd.displayName, subtitle: "Android emulator",
                     badge: "Running",
+                    stop: .stopAvd(serial: serial, name: avd.displayName),
                     action: .selectDevice(serial: serial, label: avd.displayName)
                 )
             }
@@ -752,6 +767,7 @@ struct QuickActionsView: View {
                     id: "sim:\(simulator.udid)", icon: "iphone",
                     title: simulator.name, subtitle: simulator.runtime,
                     badge: "Booted",
+                    stop: .shutdownSimulator(simulator),
                     action: .selectDevice(serial: simulator.udid, label: simulator.name)
                 )
             }
@@ -946,6 +962,17 @@ struct QuickActionsView: View {
                     .font(.app(.caption2))
                     .foregroundStyle(isHighlighted ? accentText.opacity(0.75) : .secondary)
             }
+            if let stop = row.stop {
+                Button {
+                    perform(stop)
+                } label: {
+                    Image(systemName: "stop.circle.fill")
+                        .foregroundStyle(isHighlighted ? AnyShapeStyle(accentText.opacity(0.9)) : AnyShapeStyle(.red))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(stopHelp(for: stop))
+            }
             if case .openInApp = row.action {
                 Image(systemName: "arrow.up.forward.app")
                     .font(.app(.caption))
@@ -1103,6 +1130,9 @@ struct QuickActionsView: View {
             if let pinned = pinState(of: highlightedRow) {
                 footerHint("⌘P", pinned ? "Unpin" : "Pin")
             }
+            if highlightedRow?.stop != nil {
+                footerHint("⌥⏎", "Stop")
+            }
             footerHint("⏎", isFormScreen ? "Run" : "Select")
             footerHint("esc", stack.isEmpty ? "Close" : "Back")
         }
@@ -1217,6 +1247,11 @@ struct QuickActionsView: View {
 
     // MARK: - Activation
 
+    private func stopHelp(for action: QuickRow.Action) -> String {
+        if case .shutdownSimulator = action { return "Shut down this simulator (⌥⏎)" }
+        return "Stop this emulator (⌥⏎)"
+    }
+
     private func activate(_ row: QuickRow) {
         guard runningRowID == nil else { return }
         // Destructive verbs take two ⏎s: the first arms, the second runs.
@@ -1320,6 +1355,12 @@ struct QuickActionsView: View {
         case .bootSimulator(let simulator):
             state.bootSimulator(simulator)
             finish(QuickRunOutcome(message: "Booting \(simulator.name)…", ok: true))
+        case .stopAvd(let serial, let name):
+            state.stopEmulator(serial: serial, name: name)
+            finish(QuickRunOutcome(message: "Stopping \(name)…", ok: true))
+        case .shutdownSimulator(let simulator):
+            state.shutdownSimulator(simulator)
+            finish(QuickRunOutcome(message: "Shutting down \(simulator.name)…", ok: true))
         case .selectDevice(let serial, let label):
             // The panel target is carried explicitly (`pickedSerial`) — the
             // device-bar switch is a courtesy and may defer behind an exit

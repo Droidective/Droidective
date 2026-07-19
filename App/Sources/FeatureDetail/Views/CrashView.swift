@@ -241,6 +241,7 @@ struct CrashView: View {
                     .tag(report.id)
             }
         }
+        .translucentListBackground()
         .frame(width: listWidth)
         .overlay {
             if filteredReports.isEmpty {

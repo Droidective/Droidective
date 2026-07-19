@@ -192,7 +192,7 @@ private struct RNActionCard: View {
             }
             .padding(12)
             .frame(maxWidth: .infinity, minHeight: 68, alignment: .topLeading)
-            .background(Color.bgRoot.opacity(0.6), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .background(.bgRoot.opacity(0.6), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .strokeBorder(

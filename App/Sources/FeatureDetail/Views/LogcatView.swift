@@ -364,7 +364,7 @@ struct LogcatView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 4)
-        .background(Color.bgSurface)
+        .background(.bgSurface)
     }
 
     private var statusColor: Color {
@@ -422,7 +422,7 @@ struct LogcatView: View {
                 onJumpToBottom: { requestJump(to: .bottom) }
             )
         }
-        .background(.background)
+        .translucentFeedBackground()
         .overlay { emptyOverlay }
     }
 

@@ -38,7 +38,7 @@ struct TourDemoCanvas<Content: View>: View {
         content
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .frame(height: height)
-            .background(Color.bgSurface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .background(.bgSurface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .strokeBorder(Color.borderSubtle, lineWidth: 1)
@@ -90,7 +90,7 @@ private struct DemoKeycap: View {
             .frame(minWidth: 34)
             .padding(.horizontal, 8)
             .padding(.vertical, 7)
-            .background(Color.bgRoot, in: RoundedRectangle(cornerRadius: 7))
+            .background(.bgRoot, in: RoundedRectangle(cornerRadius: 7))
             .overlay(
                 RoundedRectangle(cornerRadius: 7)
                     .strokeBorder(pressed ? Color.brandAccent : Color.borderSubtle, lineWidth: pressed ? 1.5 : 1)
@@ -128,7 +128,7 @@ struct SidebarTourDemo: View {
                 HStack(spacing: 0) {
                     sidebar(phase: phase)
                         .frame(width: 190)
-                        .background(Color.bgRoot.opacity(0.55))
+                        .background(.bgRoot.opacity(0.55))
                     Divider()
                     detail(phase: phase)
                 }
@@ -147,7 +147,7 @@ struct SidebarTourDemo: View {
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
-            .background(Color.bgSurface, in: RoundedRectangle(cornerRadius: 6))
+            .background(.bgSurface, in: RoundedRectangle(cornerRadius: 6))
             .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.borderSubtle))
             .padding(.bottom, 4)
 
@@ -213,7 +213,7 @@ struct TabsSplitTourDemo: View {
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .background(Color.bgRoot.opacity(0.55))
+                    .background(.bgRoot.opacity(0.55))
                     Divider()
                     if phase < 2 {
                         pane(phase == 1 ? "antenna.radiowaves.left.and.right" : "doc.text.below.ecg",
@@ -377,7 +377,7 @@ struct RolesTourDemo: View {
         .padding(.vertical, 12)
         .padding(.horizontal, 6)
         .frame(width: 118, height: 84)
-        .background(Color.bgRoot.opacity(0.55), in: RoundedRectangle(cornerRadius: 9))
+        .background(.bgRoot.opacity(0.55), in: RoundedRectangle(cornerRadius: 9))
         .overlay(
             RoundedRectangle(cornerRadius: 9)
                 .strokeBorder(selected ? Color.brandAccent : Color.borderSubtle, lineWidth: selected ? 1.5 : 1)
@@ -413,7 +413,7 @@ struct SettingsHotkeysTourDemo: View {
                     }
                     .padding(10)
                     .frame(width: 160)
-                    .background(Color.bgRoot.opacity(0.55))
+                    .background(.bgRoot.opacity(0.55))
                     Divider()
                     VStack(spacing: 14) {
                         if phase == 0 {
@@ -491,7 +491,7 @@ struct QuickActionsTourDemo: View {
             }
             .padding(.horizontal, 9)
             .padding(.vertical, 6)
-            .background(Color.bgRoot, in: RoundedRectangle(cornerRadius: 6))
+            .background(.bgRoot, in: RoundedRectangle(cornerRadius: 6))
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 7), count: 3), spacing: 7) {
                 ForEach(Self.tiles, id: \.1) { tile in
                     VStack(spacing: 5) {
@@ -500,7 +500,7 @@ struct QuickActionsTourDemo: View {
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 8)
-                    .background(Color.bgRoot.opacity(0.7), in: RoundedRectangle(cornerRadius: 7))
+                    .background(.bgRoot.opacity(0.7), in: RoundedRectangle(cornerRadius: 7))
                 }
             }
         }

@@ -1154,7 +1154,9 @@ struct JSConsoleView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(JSConsoleTheme.background)
+        // The Chrome-dark surface keeps its hue but joins the glass — the
+        // card step, not full opacity, whenever the window is translucent.
+        .background(JSConsoleFeedBackground())
         .environment(\.colorScheme, .dark)
         // Terminal convention for the linkified URLs in the rows: ⌘-click
         // opens the browser; a plain click stays inert so click-drag text
@@ -1980,5 +1982,15 @@ func applyFindHighlight(_ attr: inout AttributedString, query: String, current: 
         let upper = attr.index(attr.startIndex, offsetByCharacters: high)
         attr[lower ..< upper].backgroundColor = current ? JSConsoleTheme.findCurrent : JSConsoleTheme.findMatch
         attr[lower ..< upper].foregroundColor = .black
+    }
+}
+
+/// The console feed's fill: the Chrome-dark theme color at the card step
+/// while the window is glass, exactly the themed opaque surface otherwise.
+private struct JSConsoleFeedBackground: View {
+    @Environment(\.windowOpacity) private var windowOpacity
+
+    var body: some View {
+        JSConsoleTheme.background.opacity(WindowEffects.cardAlpha(root: windowOpacity))
     }
 }

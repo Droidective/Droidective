@@ -75,7 +75,7 @@ struct HomeView: View {
         .font(.app(.title3))
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(Color.bgSurface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(.bgSurface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(Color.borderSubtle, lineWidth: 1)
@@ -189,7 +189,7 @@ struct HomeView: View {
             .font(.app(.callout))
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
-            .background(Color.bgSurface, in: Capsule())
+            .background(.bgSurface, in: Capsule())
             .overlay(Capsule().strokeBorder(Color.borderSubtle, lineWidth: 1))
         }
         .buttonStyle(.plain)
@@ -304,7 +304,7 @@ struct HomeView: View {
             }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.bgSurface, in: RoundedRectangle(cornerRadius: 8))
+            .background(.bgSurface, in: RoundedRectangle(cornerRadius: 8))
             .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.borderSubtle, lineWidth: 1))
         }
         .buttonStyle(.plain)
@@ -364,7 +364,7 @@ struct HomeView: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, minHeight: 110, maxHeight: .infinity, alignment: .topLeading)
-        .background(Color.bgSurface, in: RoundedRectangle(cornerRadius: 10))
+        .background(.bgSurface, in: RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.borderSubtle, lineWidth: 1))
     }
 
@@ -451,7 +451,7 @@ private struct FrequentPill: View {
             .font(.app(.callout))
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(Color.bgSurface, in: Capsule())
+            .background(.bgSurface, in: Capsule())
             .overlay(
                 Capsule().strokeBorder(
                     hovering ? Color.brandAccent : Color.borderSubtle,
@@ -496,7 +496,7 @@ private struct FeatureCard: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, minHeight: 96, alignment: .topLeading)
-            .background(Color.bgSurface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .background(.bgSurface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .strokeBorder(

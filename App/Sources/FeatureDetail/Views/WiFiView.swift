@@ -71,7 +71,7 @@ struct WiFiView: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.bgSurface, in: RoundedRectangle(cornerRadius: 10))
+        .background(.bgSurface, in: RoundedRectangle(cornerRadius: 10))
     }
 
     private var headline: String {
@@ -106,7 +106,7 @@ struct WiFiView: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.bgSurface, in: RoundedRectangle(cornerRadius: 10))
+        .background(.bgSurface, in: RoundedRectangle(cornerRadius: 10))
     }
 
     private var savedCard: some View {
@@ -131,7 +131,7 @@ struct WiFiView: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.bgSurface, in: RoundedRectangle(cornerRadius: 10))
+        .background(.bgSurface, in: RoundedRectangle(cornerRadius: 10))
     }
 
     private func savedRow(_ net: WifiNetwork) -> some View {

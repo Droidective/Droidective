@@ -103,6 +103,7 @@ struct AppsExplorerView: View {
                     List(visibleApps) { app in
                         appRow(app)
                     }
+                    .translucentListBackground()
                 }
                 HStack {
                     Text("\(visibleApps.count) of \(apps.count) apps")
@@ -183,7 +184,9 @@ struct AppsExplorerView: View {
                                 .foregroundStyle(isSelected ? accentText.opacity(0.8) : Color.textMuted)
                                 .padding(.horizontal, 4)
                                 .background(
-                                    isSelected ? AnyShapeStyle(accentText.opacity(0.15)) : AnyShapeStyle(Color.bgSurface),
+                                    isSelected
+                                        ? AnyShapeStyle(accentText.opacity(0.15))
+                                        : AnyShapeStyle(SurfaceFillStyle()),
                                     in: Capsule()
                                 )
                         }
