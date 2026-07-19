@@ -97,7 +97,9 @@ final class ReactotronSession {
     }
 
     /// What timeline pane `pane` shows: the shared buffer scoped by the pane's
-    /// clear watermark, then by the selected client.
+    /// clear watermark, then by the selected client. The boundary is
+    /// inclusive — `seq == mark` is the newest item at clear time and must
+    /// hide (`<` would leak the last pre-clear row back into the pane).
     fileprivate func displayedItems(forPane pane: Int) -> [RtItem] {
         let mark = paneClearSeqs[pane] ?? 0
         guard mark > 0 || selectedClient != nil else { return items }
@@ -1063,12 +1065,17 @@ struct ReactotronView: View {
     private func pane(
         _ index: Int, trailing: AnyView? = nil, findToken: Int = 0
     ) -> some View {
-        TimelinePane(
+        let paneItems = session.displayedItems(forPane: index)
+        return TimelinePane(
             pane: index,
-            items: session.displayedItems(forPane: index),
+            items: paneItems,
             targetEmpty: state.targetSerials.isEmpty,
             connection: session.connection,
             showOnboarding: index == 0,
+            // Empty because of this pane's clear watermark, not because
+            // nothing arrived — the pane shows a "cleared" state instead of
+            // the setup onboarding, which would mislead on a live session.
+            clearedEmpty: paneItems.isEmpty && !session.displayedItems.isEmpty,
             trailing: trailing,
             findToken: findToken,
             onExport: { session.export($0) },
@@ -1491,6 +1498,10 @@ private struct TimelinePane: View {
     let targetEmpty: Bool
     let connection: RtConnection
     let showOnboarding: Bool
+    /// True when this pane's clear watermark is hiding every buffered event —
+    /// empty by choice, so the empty state says "cleared", not "connect your
+    /// app".
+    let clearedEmpty: Bool
     /// Extra trailing toolbar content — the global timeline controls when the
     /// pane is the only one on screen (no dedicated strip above it).
     let trailing: AnyView?
@@ -1524,6 +1535,7 @@ private struct TimelinePane: View {
         targetEmpty: Bool,
         connection: RtConnection,
         showOnboarding: Bool,
+        clearedEmpty: Bool,
         trailing: AnyView?,
         findToken: Int = 0,
         onExport: @escaping ([RtItem]) -> Void,
@@ -1535,6 +1547,7 @@ private struct TimelinePane: View {
         self.targetEmpty = targetEmpty
         self.connection = connection
         self.showOnboarding = showOnboarding
+        self.clearedEmpty = clearedEmpty
         self.trailing = trailing
         self.findToken = findToken
         self.onExport = onExport
@@ -1801,6 +1814,16 @@ private struct TimelinePane: View {
             // A dead server trumps the other empty states — nothing can connect
             // until it's restarted, so lead with the error and the fix.
             ReactotronOnboarding(connection: connection, onRetry: onRetry)
+        } else if items.isEmpty, clearedEmpty {
+            // Empty because the user cleared this pane, not because nothing
+            // arrived — the setup onboarding would mislead on a live session.
+            ContentUnavailableView {
+                Label("Pane cleared", systemImage: "trash")
+            } description: {
+                Text(pane == 0
+                    ? "New events will appear here."
+                    : "New events will appear here — close and reopen the split to bring the cleared events back.")
+            }
         } else if items.isEmpty, targetEmpty {
             ContentUnavailableView(
                 "No device connected", systemImage: "iphone.slash",

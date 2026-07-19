@@ -1907,7 +1907,6 @@ private func jsTruncationNote(hiddenCharacters: Int) -> AttributedString {
 
 /// Syntax-colored `Text` for a value's tokens, with find matches highlighted
 /// and http(s) URLs linkified. Bounded to `jsDisplayCharacterLimit` characters.
-@MainActor
 func coloredTokenText(_ tokens: [JSToken], query: String, current: Bool) -> Text {
     var attr = AttributedString()
     var remaining = jsDisplayCharacterLimit
@@ -1936,7 +1935,6 @@ func coloredTokenText(_ tokens: [JSToken], query: String, current: Bool) -> Text
 /// A single-color `Text` (input/notice/error lines) with find matches
 /// highlighted and http(s) URLs linkified. Bounded to
 /// `jsDisplayCharacterLimit` characters.
-@MainActor
 func highlightedText(_ string: String, query: String, base: Color, current: Bool = false) -> Text {
     var attr = AttributedString(String(string.prefix(jsDisplayCharacterLimit)))
     attr.foregroundColor = base
@@ -1950,30 +1948,17 @@ func highlightedText(_ string: String, query: String, base: Color, current: Bool
     return Text(attr)
 }
 
-/// Shared URL detector — `NSDataDetector` is expensive to create and, like
-/// `NSRegularExpression`, immutable and safe to reuse.
-@MainActor
-private let jsLinkDetector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
-
 /// Underline http(s) URLs and attach `.link`, so the console's ⌘-click
-/// `openURL` gate can send them to the browser. Only explicit-scheme matches
-/// count: the detector also flags bare domains, and code output like
-/// "config.io" must not become a link.
-@MainActor
+/// `openURL` gate can send them to the browser. Detection — including the
+/// explicit-scheme guard and the UTF-16 → Character offset mapping — is
+/// `ConsoleLinkDetector` (pure, tested in ADBKit); this only applies the
+/// SwiftUI attributes at the returned offsets.
 func applyLinkAttributes(_ attr: inout AttributedString) {
     let plain = String(attr.characters)
-    guard plain.contains("://"), let detector = jsLinkDetector else { return }
-    let matches = detector.matches(in: plain, range: NSRange(plain.startIndex..., in: plain))
-    for match in matches {
-        guard let url = match.url,
-              url.scheme == "http" || url.scheme == "https",
-              let range = Range(match.range, in: plain),
-              plain[range].contains("://") else { continue }
-        let low = plain.distance(from: plain.startIndex, to: range.lowerBound)
-        let high = plain.distance(from: plain.startIndex, to: range.upperBound)
-        let lower = attr.index(attr.startIndex, offsetByCharacters: low)
-        let upper = attr.index(attr.startIndex, offsetByCharacters: high)
-        attr[lower ..< upper].link = url
+    for span in ConsoleLinkDetector.linkSpans(in: plain) {
+        let lower = attr.index(attr.startIndex, offsetByCharacters: span.start)
+        let upper = attr.index(lower, offsetByCharacters: span.count)
+        attr[lower ..< upper].link = span.url
         attr[lower ..< upper].swiftUI.underlineStyle = .single
     }
 }
