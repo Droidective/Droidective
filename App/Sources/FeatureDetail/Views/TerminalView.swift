@@ -28,7 +28,6 @@ final class TerminalManager {
     private(set) var layout = TerminalTabs()
     private var tabsByID: [UUID: Tab] = [:]
     var activeID: UUID?
-    private var counter = 0
     private var groupCounter = 0
 
     /// The rail's drag-in-flight state — which row/group is dragged and where
@@ -86,14 +85,13 @@ final class TerminalManager {
     /// `group` when given, else the active tab's group, else lands loose — a
     /// fresh rail has no groups.
     func newTab(inGroup group: UUID? = nil, name: String? = nil, initialCommand: String? = nil) {
-        counter += 1
         let paneID = UUID()
         let session = TerminalSession(
             startDirectory: activeSession?.currentDirectory,
             initialCommand: initialCommand
         )
         var tab = Tab(
-            name: name ?? "Terminal \(counter)",
+            name: name ?? nextAutoName(),
             splits: TerminalSplitTree(pane: paneID),
             activePaneID: paneID
         )
@@ -107,6 +105,21 @@ final class TerminalManager {
             layout.setCollapsed(groupID, false)
         }
         activeID = tab.id
+    }
+
+    /// The lowest "Terminal N" name not already in use, so a new tab reuses the
+    /// numbers freed by closed tabs instead of climbing forever (only Terminal 1
+    /// open ⇒ the next is Terminal 2, not Terminal 11). Names that aren't a plain
+    /// "Terminal <number>" — user-renamed tabs — are ignored.
+    private func nextAutoName() -> String {
+        let prefix = "Terminal "
+        let used = Set(tabsByID.values.compactMap { tab -> Int? in
+            guard tab.name.hasPrefix(prefix) else { return nil }
+            return Int(tab.name.dropFirst(prefix.count))
+        })
+        var n = 1
+        while used.contains(n) { n += 1 }
+        return "\(prefix)\(n)"
     }
 
     /// Kill every pane's shell and remove the tab. Focus falls to the neighbor
@@ -132,8 +145,9 @@ final class TerminalManager {
     }
 
     /// Kill every shell and clear the tabs — the Terminal feature tab was
-    /// closed, and background shells without a UI would be orphans. The name
-    /// counters reset so a reopened feature starts at "Terminal 1" again.
+    /// closed, and background shells without a UI would be orphans. With the
+    /// tabs cleared, the next new tab is "Terminal 1" again; only the group
+    /// counter needs an explicit reset.
     func killAll() {
         for tab in tabsByID.values {
             for session in tab.sessions.values {
@@ -143,7 +157,6 @@ final class TerminalManager {
         tabsByID.removeAll()
         layout = TerminalTabs()
         activeID = nil
-        counter = 0
         groupCounter = 0
     }
 
@@ -333,6 +346,10 @@ struct TerminalView: View {
     /// Where the tab list lives: a Chrome-style strip along the top (default)
     /// or a left rail.
     @AppStorage("terminalTabsOnTop") private var tabsOnTop = true
+    /// Live width of the top strip's scroll viewport, so its tab row can fill
+    /// the available space (the drop-at-end tail stretches to it) yet still
+    /// scroll once the tabs overflow instead of being clipped.
+    @State private var topStripWidth: CGFloat = 0
     @Environment(\.windowOpacity) private var windowOpacity
     private var terminals: TerminalManager { state.terminals }
 
@@ -661,22 +678,35 @@ struct TerminalView: View {
                     railButton("plus", help: "New terminal") {
                         terminals.newTab()
                     }
+
+                    // The strip's empty tail: dropping a drag here lands it at
+                    // the very end (loose), like the rail's bottom zone. It
+                    // lives inside the scroll content so the row can fill the
+                    // viewport (the `minWidth` below stretches it), and it
+                    // collapses to `minWidth` once the tabs overflow.
+                    Color.clear
+                        .frame(minWidth: 24, maxWidth: .infinity, maxHeight: .infinity)
+                        .contentShape(Rectangle())
+                        .overlay(alignment: .leading) {
+                            verticalGuideline(terminals.railDropSlot == .railEnd)
+                        }
+                        .onDrop(of: [.terminalRailItem], delegate: RailTailDropDelegate(
+                            terminals: terminals
+                        ))
                 }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 5)
+                // Fill the viewport when the tabs are short so the tail's drop
+                // zone spans the empty space; grow past it (scrolling) when
+                // they overflow, instead of clipping the rightmost tabs.
+                .frame(minWidth: topStripWidth, alignment: .leading)
             }
-
-            // The strip's empty tail: dropping a drag here lands it at the
-            // very end (loose), like the rail's bottom zone.
-            Color.clear
-                .frame(minWidth: 24, maxWidth: .infinity, maxHeight: .infinity)
-                .contentShape(Rectangle())
-                .overlay(alignment: .leading) {
-                    verticalGuideline(terminals.railDropSlot == .railEnd)
-                }
-                .onDrop(of: [.terminalRailItem], delegate: RailTailDropDelegate(
-                    terminals: terminals
-                ))
+            // The scroll view is now the only greedy sibling, so it takes all
+            // width up to the trailing button; measure that width to feed the
+            // row's `minWidth` above.
+            .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { width in
+                topStripWidth = width
+            }
 
             railButton("sidebar.left", help: "Move tabs to a sidebar") {
                 tabsOnTop = false
