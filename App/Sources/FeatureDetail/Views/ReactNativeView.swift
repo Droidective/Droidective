@@ -10,6 +10,11 @@ struct ReactNativeView: View {
     @Environment(AppState.self) private var state
     @AppStorage("rnDevHost") private var devHost = ""
     @State private var metroPort = "8081"
+    /// The single action currently running, keyed by feature id. Only that
+    /// button shows the running/disabled state — the shared global
+    /// `state.isRunningFeature` would grey out every button on this screen at
+    /// once, so we track the running one here instead.
+    @State private var runningID: String?
 
     private let actionColumns = [GridItem(.adaptive(minimum: 220), spacing: 10)]
 
@@ -21,19 +26,19 @@ struct ReactNativeView: View {
                         title: "Reload JS", detail: "Reload the JS bundle — like pressing R twice",
                         icon: "arrow.clockwise", prominent: true,
                         help: "Sends R·R (keycode 46) — needs an RN dev build with the app in front",
-                        disabled: actionsDisabled
+                        disabled: isDisabled("reload-js"), running: runningID == "reload-js"
                     ) { run("reload-js") }
                     RNActionCard(
                         title: "Dev Menu", detail: "Open the in-app developer menu",
                         icon: "filemenu.and.selection",
                         help: "Sends keycode 82 — needs an RN dev build with the app in front",
-                        disabled: actionsDisabled
+                        disabled: isDisabled("open-dev-menu"), running: runningID == "open-dev-menu"
                     ) { run("open-dev-menu") }
                     RNActionCard(
                         title: "Process Death", detail: "Background, then kill the app to test state restore",
                         icon: "xmark.octagon",
                         help: "Backgrounds then kills the selected bundle — or the app in front when none is chosen",
-                        disabled: actionsDisabled
+                        disabled: isDisabled("process-death"), running: runningID == "process-death"
                     ) { run("process-death") }
                 }
                 if state.targetSerials.isEmpty {
@@ -59,7 +64,7 @@ struct ReactNativeView: View {
                         run("reverse-port", ["port": .string(metroPort.trimmingCharacters(in: .whitespaces))])
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(actionsDisabled || metroPort.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .disabled(isDisabled("reverse-port") || metroPort.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
 
                 Divider()
@@ -77,7 +82,7 @@ struct ReactNativeView: View {
                         run("rn-dev-host", ["host": .string(devHost.trimmingCharacters(in: .whitespaces))])
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(actionsDisabled || devHost.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .disabled(isDisabled("rn-dev-host") || devHost.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
 
@@ -95,8 +100,10 @@ struct ReactNativeView: View {
         }
     }
 
-    private var actionsDisabled: Bool {
-        state.targetSerials.isEmpty || state.isRunningFeature
+    /// A button is disabled when no device is connected, or while *its own*
+    /// action is in flight — never because a different button is running.
+    private func isDisabled(_ id: String) -> Bool {
+        state.targetSerials.isEmpty || runningID == id
     }
 
     /// One Metro transport path: an eyebrow naming the transport, what the
@@ -148,7 +155,13 @@ struct ReactNativeView: View {
 
     private func run(_ id: String, _ params: [String: FeatureValue] = [:]) {
         guard let feature = FeatureRegistry.byID[id] else { return }
-        Task { await state.run(feature: feature, params: params) }
+        runningID = id
+        Task {
+            await state.run(feature: feature, params: params)
+            // Clear only if this same action is still the one showing as
+            // running — a newer click on another button owns the state now.
+            if runningID == id { runningID = nil }
+        }
     }
 }
 
@@ -163,20 +176,31 @@ private struct RNActionCard: View {
     var prominent = false
     var help = ""
     var disabled = false
+    /// This card's own action is in flight — shows a spinner in place of the
+    /// icon. Set independently per card so one running action never spins the
+    /// others.
+    var running = false
     let action: () -> Void
     @State private var hovering = false
 
     var body: some View {
         Button(action: action) {
             HStack(alignment: .top, spacing: 12) {
-                Image(systemName: icon)
-                    .font(.app(.body).weight(.medium))
-                    .foregroundStyle(prominent ? Color.brandAccent.contrastingForeground : .brandAccent)
-                    .frame(width: 30, height: 30)
-                    .background(
-                        prominent ? Color.brandAccent : Color.brandAccent.opacity(0.12),
-                        in: RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    )
+                Group {
+                    if running {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: icon)
+                            .font(.app(.body).weight(.medium))
+                            .foregroundStyle(prominent ? Color.brandAccent.contrastingForeground : .brandAccent)
+                    }
+                }
+                .frame(width: 30, height: 30)
+                .background(
+                    prominent ? Color.brandAccent : Color.brandAccent.opacity(0.12),
+                    in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                )
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
                         .font(.app(.headline))
