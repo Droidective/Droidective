@@ -38,6 +38,13 @@ struct SettingsView: View {
 /// from view lifecycle (RootView/Settings onAppear), never from App.init().
 @MainActor
 func applyStoredTheme() {
+    // A custom background overrides the theme picker: the appearance follows
+    // the color's luminance, so text, controls, and system chrome resolve to
+    // the readable variant on any background the user picks.
+    if let rgb = customBackgroundRGB {
+        NSApp.appearance = NSAppearance(named: BackgroundPalette.isLight(rgb) ? .aqua : .darkAqua)
+        return
+    }
     switch UserDefaults.standard.string(forKey: "theme") {
     case "light": NSApp.appearance = NSAppearance(named: .aqua)
     case "auto": NSApp.appearance = nil
@@ -260,6 +267,7 @@ struct GeneralSettingsView: View {
 struct AppearanceSettingsView: View {
     @AppStorage("theme") private var theme = "dark"
     @AppStorage(accentColorDefaultsKey) private var accentHex = ""
+    @AppStorage(backgroundColorDefaultsKey) private var backgroundHex = ""
     @AppStorage(appFontFamilyDefaultsKey) private var fontFamily = ""
     @AppStorage(appFontSizeScaleDefaultsKey) private var fontSizeScale = 1.0
     @AppStorage(windowOpacityDefaultsKey) private var windowOpacity = 1.0
@@ -267,6 +275,8 @@ struct AppearanceSettingsView: View {
     @AppStorage(windowGrainDefaultsKey) private var windowGrain = 0.0
     @State private var hexDraft = ""
     @State private var hexInvalid = false
+    @State private var bgHexDraft = ""
+    @State private var bgHexInvalid = false
     #if DEBUG
     @AppStorage(DevMetrics.overlayEnabledKey) private var showDevMetrics = true
     #endif
@@ -278,12 +288,27 @@ struct AppearanceSettingsView: View {
         ("Red", "#FF453A"), ("Orange", "#FF9F0A"), ("Yellow", "#FFD60A"),
     ]
 
+    /// One-click background presets; the leading nil swatch is the stock
+    /// graphite/lab palette. Dark roots first, two light ones at the end.
+    private static let presetBackgrounds: [(name: String, hex: String)] = [
+        ("Slate", "#0F172A"), ("Midnight", "#0D1B2A"), ("Espresso", "#211A16"),
+        ("Forest", "#0C1F17"), ("Plum", "#1B1023"), ("Steel", "#1C2126"),
+        ("Paper", "#F7F3EC"), ("Mist", "#EEF1F5"),
+    ]
+
     /// The accent ColorPicker reads/writes the stored hex; an empty value shows
     /// (and resets to) the bundled default.
     private var accentBinding: Binding<Color> {
         Binding(
             get: { Color(hex: accentHex) ?? Color("BrandAccent") },
             set: { accentHex = $0.hexString ?? "" })
+    }
+
+    /// The background ColorPicker, same contract as the accent's.
+    private var backgroundBinding: Binding<Color> {
+        Binding(
+            get: { Color(hex: backgroundHex) ?? Color("BgRoot") },
+            set: { backgroundHex = $0.hexString ?? "" })
     }
 
     /// One Window-section slider row: label, slider, live percent readout.
@@ -311,7 +336,12 @@ struct AppearanceSettingsView: View {
                 }
                 .pickerStyle(.segmented)
                 .onChange(of: theme) { applyStoredTheme() }
-                if theme == "light" {
+                .disabled(!backgroundHex.isEmpty)
+                if !backgroundHex.isEmpty {
+                    Text("Overridden by your custom background below — light/dark follows that color. Reset the background to use the theme.")
+                        .font(.app(.footnote))
+                        .foregroundStyle(.textMuted)
+                } else if theme == "light" {
                     Text("Light mode is in beta — a few screens are still being tuned for it.")
                         .font(.app(.footnote))
                         .foregroundStyle(.textMuted)
@@ -346,6 +376,38 @@ struct AppearanceSettingsView: View {
                         .foregroundStyle(.orange)
                 }
                 Text("Recolors buttons, toggles, selection, and active icons across the app. Pick a preset, use the color well, or type a hex code and press ⏎.")
+                    .font(.app(.footnote))
+                    .foregroundStyle(.textMuted)
+            }
+
+            Section("Background") {
+                LabeledContent("Presets") {
+                    HStack(spacing: 7) {
+                        backgroundSwatch(name: "Graphite (default)", hex: nil)
+                        ForEach(Self.presetBackgrounds, id: \.hex) { preset in
+                            backgroundSwatch(name: preset.name, hex: preset.hex)
+                        }
+                    }
+                }
+                LabeledContent("Custom") {
+                    HStack(spacing: 8) {
+                        ColorPicker("", selection: backgroundBinding, supportsOpacity: false).labelsHidden()
+                        TextField("Hex code", text: $bgHexDraft, prompt: Text("#0D1B2A"))
+                            .textFieldStyle(.roundedBorder)
+                            .labelsHidden()
+                            .frame(width: 110)
+                            .onSubmit { commitBackgroundHex() }
+                        if !backgroundHex.isEmpty {
+                            Button("Reset") { setBackground("") }
+                        }
+                    }
+                }
+                if bgHexInvalid {
+                    Text("Enter a hex color like #0D1B2A (or the short #123).")
+                        .font(.app(.footnote))
+                        .foregroundStyle(.orange)
+                }
+                Text("Repaints every pane, card, and bar; hairlines and the light/dark text treatment adapt to the color automatically. The Terminal and JS Console keep their console-dark surfaces, and the Window sliders below still turn it to glass.")
                     .font(.app(.footnote))
                     .foregroundStyle(.textMuted)
             }
@@ -404,10 +466,18 @@ struct AppearanceSettingsView: View {
             #endif
         }
         .formStyle(.grouped)
-        .onAppear { hexDraft = accentHex }
-        // Reflect swatch/color-well changes into the hex field so it always
-        // shows the effective value.
+        .onAppear {
+            hexDraft = accentHex
+            bgHexDraft = backgroundHex
+        }
+        // Reflect swatch/color-well changes into the hex fields so they always
+        // show the effective value; a background change also re-derives the
+        // appearance (light/dark follows the color).
         .onChange(of: accentHex) { hexDraft = accentHex }
+        .onChange(of: backgroundHex) {
+            bgHexDraft = backgroundHex
+            applyStoredTheme()
+        }
     }
 
     /// A one-click accent circle; nil hex is the bundled default. The selected
@@ -451,6 +521,48 @@ struct AppearanceSettingsView: View {
             return
         }
         setAccent(normalized)
+    }
+
+    /// A one-click background circle; nil hex is the stock palette. The
+    /// selected swatch carries a checkmark.
+    private func backgroundSwatch(name: String, hex: String?) -> some View {
+        let color = hex.flatMap { Color(hex: $0) } ?? Color("BgRoot")
+        let isSelected = backgroundHex == (hex ?? "")
+        return Button { setBackground(hex ?? "") } label: {
+            Circle()
+                .fill(color)
+                .frame(width: 18, height: 18)
+                .overlay {
+                    if isSelected {
+                        Image(systemName: "checkmark")
+                            .font(.app(size: 9, weight: .bold))
+                            .foregroundStyle(color.contrastingForeground)
+                    }
+                }
+                .overlay(Circle().strokeBorder(.primary.opacity(0.15), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .help(name)
+    }
+
+    private func setBackground(_ hex: String) {
+        backgroundHex = hex
+        bgHexDraft = hex
+        bgHexInvalid = false
+    }
+
+    /// The background twin of `commitHex` — empty resets to the stock palette.
+    private func commitBackgroundHex() {
+        let trimmed = bgHexDraft.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else {
+            setBackground("")
+            return
+        }
+        guard let color = Color(hex: trimmed), let normalized = color.hexString else {
+            bgHexInvalid = true
+            return
+        }
+        setBackground(normalized)
     }
 }
 

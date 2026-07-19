@@ -161,15 +161,16 @@ struct ADTApp: App {
     @AppStorage("showMenuBarExtra") private var showMenuBarExtra = true
     @AppStorage("sidebarWidth") private var sidebarWidth = 300.0
     @AppStorage(sidebarAutoHideDefaultsKey) private var sidebarAutoHide = false
-    /// The user-chosen accent and font. Read here so changing them re-renders
-    /// the scene and re-keys RootView (`.id`), forcing every `.brandAccent`
-    /// and `Font.app` to re-resolve.
+    /// The user-chosen accent, background, and font. Read here so changing
+    /// them re-renders the scene and re-keys RootView (`.id`), forcing every
+    /// `.brandAccent`, background token, and `Font.app` to re-resolve.
     @AppStorage(accentColorDefaultsKey) private var accentHex = ""
+    @AppStorage(backgroundColorDefaultsKey) private var backgroundHex = ""
     @AppStorage(appFontFamilyDefaultsKey) private var appFontFamily = ""
     @AppStorage(appFontSizeScaleDefaultsKey) private var appFontSizeScale = 1.0
 
     /// One key covering every appearance pref the view tree resolves statically.
-    private var appearanceKey: String { "\(accentHex)|\(appFontFamily)|\(appFontSizeScale)" }
+    private var appearanceKey: String { "\(accentHex)|\(backgroundHex)|\(appFontFamily)|\(appFontSizeScale)" }
 
     /// ⌃1…⌃9 accelerators for jumping straight to a tab by position.
     private static let tabDigitKeys: [KeyEquivalent] = ["1", "2", "3", "4", "5", "6", "7", "8", "9"]
