@@ -1,3 +1,60 @@
+## Droidective v3.5.0
+
+The window turns to glass, Reactotron's timeline remembers your filters and
+splits properly, Send Text becomes a manageable snippet library, and Quick
+Actions can stop emulators.
+
+### Translucent window (new)
+
+- **See your desktop through the app** — Settings ▸ Appearance gains a
+  Window section with Opacity, Blur, and Grain sliders. Below 100% opacity
+  the whole window turns to glass (down to 10%): what's behind shows through
+  every pane, softened by Blur and textured by a Metal-rendered Grain. Every
+  surface obeys, the terminal included.
+- The Settings window widens to 640×540, and the per-feature how-it-works
+  notes (and their Appearance toggle) are gone.
+
+### Reactotron, reworked
+
+- **Filters survive** — each timeline pane's event-kind filter, API
+  method/status refinements, and search persist per pane across feature
+  switches and app relaunches; the split itself is remembered too.
+- **Per-pane clear** — in a split, each pane gets its own clear that leaves
+  the other pane alone. An accidental right-pane clear is undone by closing
+  and reopening the split, and a cleared pane now says "Pane cleared"
+  instead of showing setup instructions over a live session.
+- **The split stops jumping** — opening or closing the split keeps the main
+  pane anchored on the row you're reading (expanded rows included) instead
+  of snapping back to the newest event.
+- **No more horizontal scrolling** — rows fit the pane at any width: long
+  lines truncate in the middle with the full text in the expanded row, and
+  the API Response/Request tabs collapse to a menu in narrow panes so no
+  control is ever clipped.
+- **Click anywhere on a row** to expand it — copying lives on the hover
+  copy button, the right-click menu, and the expanded row's selectable text.
+- **⌘-click URLs in the JS Console** — http(s) links in console output are
+  underlined; ⌘-click opens them in your browser, plain clicks still select
+  text (bare domains like `config.io` never turn into links).
+
+### Send Text, redesigned
+
+- The feature becomes two hub sections over one snippet list — sending and
+  managing snippets live together, New Snippet sits next to the list, and
+  only failed sends report inline.
+- **Click-to-append placeholders** — snippet placeholders insert with a
+  click; the `{ip}` placeholder shows only for the React Native role.
+
+### Quick Actions
+
+- **Stop running emulators and simulators** straight from the panel.
+
+### Install
+
+Download `Droidective-v3.5.0.dmg` below. Existing installs update in place
+via Sparkle.
+
+---
+
 ## Droidective v3.4.1
 
 A crash fix for AAB to APK, and a stricter keystore picker.
