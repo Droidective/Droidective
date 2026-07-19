@@ -28,7 +28,6 @@ final class TerminalManager {
     private(set) var layout = TerminalTabs()
     private var tabsByID: [UUID: Tab] = [:]
     var activeID: UUID?
-    private var counter = 0
     private var groupCounter = 0
 
     /// The rail's drag-in-flight state — which row/group is dragged and where
@@ -86,14 +85,13 @@ final class TerminalManager {
     /// `group` when given, else the active tab's group, else lands loose — a
     /// fresh rail has no groups.
     func newTab(inGroup group: UUID? = nil, name: String? = nil, initialCommand: String? = nil) {
-        counter += 1
         let paneID = UUID()
         let session = TerminalSession(
             startDirectory: activeSession?.currentDirectory,
             initialCommand: initialCommand
         )
         var tab = Tab(
-            name: name ?? "Terminal \(counter)",
+            name: name ?? nextAutoName(),
             splits: TerminalSplitTree(pane: paneID),
             activePaneID: paneID
         )
@@ -107,6 +105,21 @@ final class TerminalManager {
             layout.setCollapsed(groupID, false)
         }
         activeID = tab.id
+    }
+
+    /// The lowest "Terminal N" name not already in use, so a new tab reuses the
+    /// numbers freed by closed tabs instead of climbing forever (only Terminal 1
+    /// open ⇒ the next is Terminal 2, not Terminal 11). Names that aren't a plain
+    /// "Terminal <number>" — user-renamed tabs — are ignored.
+    private func nextAutoName() -> String {
+        let prefix = "Terminal "
+        let used = Set(tabsByID.values.compactMap { tab -> Int? in
+            guard tab.name.hasPrefix(prefix) else { return nil }
+            return Int(tab.name.dropFirst(prefix.count))
+        })
+        var n = 1
+        while used.contains(n) { n += 1 }
+        return "\(prefix)\(n)"
     }
 
     /// Kill every pane's shell and remove the tab. Focus falls to the neighbor
@@ -132,8 +145,9 @@ final class TerminalManager {
     }
 
     /// Kill every shell and clear the tabs — the Terminal feature tab was
-    /// closed, and background shells without a UI would be orphans. The name
-    /// counters reset so a reopened feature starts at "Terminal 1" again.
+    /// closed, and background shells without a UI would be orphans. With the
+    /// tabs cleared, the next new tab is "Terminal 1" again; only the group
+    /// counter needs an explicit reset.
     func killAll() {
         for tab in tabsByID.values {
             for session in tab.sessions.values {
@@ -143,7 +157,6 @@ final class TerminalManager {
         tabsByID.removeAll()
         layout = TerminalTabs()
         activeID = nil
-        counter = 0
         groupCounter = 0
     }
 
