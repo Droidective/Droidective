@@ -333,6 +333,10 @@ struct TerminalView: View {
     /// Where the tab list lives: a Chrome-style strip along the top (default)
     /// or a left rail.
     @AppStorage("terminalTabsOnTop") private var tabsOnTop = true
+    /// Live width of the top strip's scroll viewport, so its tab row can fill
+    /// the available space (the drop-at-end tail stretches to it) yet still
+    /// scroll once the tabs overflow instead of being clipped.
+    @State private var topStripWidth: CGFloat = 0
     @Environment(\.windowOpacity) private var windowOpacity
     private var terminals: TerminalManager { state.terminals }
 
@@ -661,22 +665,35 @@ struct TerminalView: View {
                     railButton("plus", help: "New terminal") {
                         terminals.newTab()
                     }
+
+                    // The strip's empty tail: dropping a drag here lands it at
+                    // the very end (loose), like the rail's bottom zone. It
+                    // lives inside the scroll content so the row can fill the
+                    // viewport (the `minWidth` below stretches it), and it
+                    // collapses to `minWidth` once the tabs overflow.
+                    Color.clear
+                        .frame(minWidth: 24, maxWidth: .infinity, maxHeight: .infinity)
+                        .contentShape(Rectangle())
+                        .overlay(alignment: .leading) {
+                            verticalGuideline(terminals.railDropSlot == .railEnd)
+                        }
+                        .onDrop(of: [.terminalRailItem], delegate: RailTailDropDelegate(
+                            terminals: terminals
+                        ))
                 }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 5)
+                // Fill the viewport when the tabs are short so the tail's drop
+                // zone spans the empty space; grow past it (scrolling) when
+                // they overflow, instead of clipping the rightmost tabs.
+                .frame(minWidth: topStripWidth, alignment: .leading)
             }
-
-            // The strip's empty tail: dropping a drag here lands it at the
-            // very end (loose), like the rail's bottom zone.
-            Color.clear
-                .frame(minWidth: 24, maxWidth: .infinity, maxHeight: .infinity)
-                .contentShape(Rectangle())
-                .overlay(alignment: .leading) {
-                    verticalGuideline(terminals.railDropSlot == .railEnd)
-                }
-                .onDrop(of: [.terminalRailItem], delegate: RailTailDropDelegate(
-                    terminals: terminals
-                ))
+            // The scroll view is now the only greedy sibling, so it takes all
+            // width up to the trailing button; measure that width to feed the
+            // row's `minWidth` above.
+            .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { width in
+                topStripWidth = width
+            }
 
             railButton("sidebar.left", help: "Move tabs to a sidebar") {
                 tabsOnTop = false
