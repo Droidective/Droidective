@@ -6,9 +6,9 @@
     <description>Most recent Droidective updates.</description>
     <language>en</language>
     <item>
-      <title>Droidective 3.4.1</title>
-      <sparkle:version>512</sparkle:version>
-      <sparkle:shortVersionString>3.4.1</sparkle:shortVersionString>
+      <title>Droidective 3.5.0</title>
+      <sparkle:version>542</sparkle:version>
+      <sparkle:shortVersionString>3.5.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <description><![CDATA[
 <style>
@@ -24,22 +24,65 @@ pre { background: color-mix(in srgb, currentColor 8%, transparent); padding: .6e
 pre code { background: none; padding: 0; }
 a { color: #2f9e44; }
 </style>
-<p>A crash fix for AAB to APK, and a stricter keystore picker.</p>
-<h3>Fixes</h3>
+<p>The window turns to glass, Reactotron's timeline remembers your filters and
+splits properly, Send Text becomes a manageable snippet library, and Quick
+Actions can stop emulators.</p>
+<h3>Translucent window (new)</h3>
 <ul>
 <li>
-<strong>No more crash when converting an AAB</strong> — asking for notification
-permission (so the converter can tell you when a background install
-finishes) crashed the app on the newest macOS, whether you allowed or
-denied. The permission request now uses a thread-safe path.</li>
+<strong>See your desktop through the app</strong> — Settings ▸ Appearance gains a
+Window section with Opacity, Blur, and Grain sliders. Below 100% opacity
+the whole window turns to glass (down to 10%): what's behind shows through
+every pane, softened by Blur and textured by a Metal-rendered Grain. Every
+surface obeys, the terminal included.</li>
+<li>The Settings window widens to 640×540, and the per-feature how-it-works
+notes (and their Appearance toggle) are gone.</li>
+</ul>
+<h3>Reactotron, reworked</h3>
+<ul>
 <li>
-<strong>The keystore chooser only accepts keystores</strong> — the signing file picker
-greys out everything except <code>.keystore</code> and <code>.jks</code> files, in both the AAB
-converter's signing sheet and APK Studio's Sign tab.</li>
+<strong>Filters survive</strong> — each timeline pane's event-kind filter, API
+method/status refinements, and search persist per pane across feature
+switches and app relaunches; the split itself is remembered too.</li>
+<li>
+<strong>Per-pane clear</strong> — in a split, each pane gets its own clear that leaves
+the other pane alone. An accidental right-pane clear is undone by closing
+and reopening the split, and a cleared pane now says "Pane cleared"
+instead of showing setup instructions over a live session.</li>
+<li>
+<strong>The split stops jumping</strong> — opening or closing the split keeps the main
+pane anchored on the row you're reading (expanded rows included) instead
+of snapping back to the newest event.</li>
+<li>
+<strong>No more horizontal scrolling</strong> — rows fit the pane at any width: long
+lines truncate in the middle with the full text in the expanded row, and
+the API Response/Request tabs collapse to a menu in narrow panes so no
+control is ever clipped.</li>
+<li>
+<strong>Click anywhere on a row</strong> to expand it — copying lives on the hover
+copy button, the right-click menu, and the expanded row's selectable text.</li>
+<li>
+<strong>⌘-click URLs in the JS Console</strong> — http(s) links in console output are
+underlined; ⌘-click opens them in your browser, plain clicks still select
+text (bare domains like <code>config.io</code> never turn into links).</li>
+</ul>
+<h3>Send Text, redesigned</h3>
+<ul>
+<li>The feature becomes two hub sections over one snippet list — sending and
+managing snippets live together, New Snippet sits next to the list, and
+only failed sends report inline.</li>
+<li>
+<strong>Click-to-append placeholders</strong> — snippet placeholders insert with a
+click; the <code>{ip}</code> placeholder shows only for the React Native role.</li>
+</ul>
+<h3>Quick Actions</h3>
+<ul>
+<li>
+<strong>Stop running emulators and simulators</strong> straight from the panel.</li>
 </ul>
 ]]></description>
-      <pubDate>Fri, 17 Jul 2026 10:39:49 +0000</pubDate>
-      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.4.1/Droidective-v3.4.1.dmg" sparkle:edSignature="9nzBIJRR6AUFV54eTIyg+Q8eAxKp9Uk+0935OV2KPS1itFDLL6wPpTFzAIJOjQ8ITSHqyvTpTy8PpD5rcg1GBA==" length="86496143" type="application/octet-stream" />
+      <pubDate>Sun, 19 Jul 2026 08:15:24 +0000</pubDate>
+      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.5.0/Droidective-v3.5.0.dmg" sparkle:edSignature="w46JQ4tVp2DZjlMvnxuzOVlnNuTBOu3+LgWFeKnBHj9gCMRR5OhEGlKX3BAUpf8S3eFXmJ6vj6ujawvRWujBAA==" length="87155058" type="application/octet-stream" />
     </item>
     
   </channel>
