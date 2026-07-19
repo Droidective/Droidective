@@ -50,6 +50,21 @@ extension AppState {
         }
     }
 
+    /// Gracefully stop a running emulator (`adb emu kill`); it leaves the
+    /// device bar once polling notices, and the AVD list re-tags it stopped.
+    func stopEmulator(serial: String, name: String) {
+        Task {
+            await CommandLog.userInitiated {
+                let result = (try? await env.engine.emulators.stop(serial: serial))
+                    ?? FeatureResult(ok: false, message: "adb not found")
+                showToast(Toast(message: result.ok ? "Stopping \(name)…" : result.message, ok: result.ok))
+            }
+            try? await Task.sleep(for: .seconds(2))
+            refreshDevices()
+            await refreshAvds()
+        }
+    }
+
     /// Shut a simulator down; it leaves the device bar on the next poll.
     func shutdownSimulator(_ simulator: Simulator) {
         Task {
