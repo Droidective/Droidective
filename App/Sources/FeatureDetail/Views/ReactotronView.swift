@@ -1471,13 +1471,314 @@ private enum RtEventKind: String, CaseIterable, Identifiable {
         }
     }
 
-    /// The filter popover's sections, mirroring Reactotron's dialog.
+    /// SF Symbol shown on the filter dialog's card for this kind.
+    var icon: String {
+        switch self {
+        case .log: "text.bubble"
+        case .image: "photo"
+        case .display: "chevron.left.forwardslash.chevron.right"
+        case .connection: "link"
+        case .benchmark: "gauge.with.dots.needle.67percent"
+        case .api: "globe"
+        case .asyncStorage: "cylinder.split.1x2"
+        case .action: "bolt.fill"
+        case .saga: "scope"
+        case .subscription: "dot.radiowaves.left.and.right"
+        }
+    }
+
+    /// The filter dialog's sections, mirroring Reactotron's dialog.
     static let groups: [(name: String, kinds: [RtEventKind])] = [
         ("Informational", [.log, .image, .display]),
         ("General", [.connection, .benchmark, .api]),
         ("Async Storage", [.asyncStorage]),
         ("State & Sagas", [.action, .saga, .subscription]),
     ]
+}
+
+// MARK: - Timeline filter dialog
+
+/// Reactotron's "Timeline Filter" dialog, restyled as grouped event-kind cards
+/// with the API method/status refinements nested under the API group. Sticks to
+/// the app theme (text tokens + the single `.brandAccent`) — no per-group hues.
+/// Edits a local draft so Cancel / Esc / the close button discard and Done
+/// applies the whole selection in one commit (the timeline behind the modal
+/// never flickers mid-edit). The hide-what-you-untick model matches the desktop
+/// app: an empty `hidden` set shows everything.
+private struct TimelineFilterSheet: View {
+    /// HTTP methods present in the buffer, for the API method picker.
+    let seenMethods: [String]
+    /// Commit the draft selection to the pane's persisted filters.
+    let onApply: (Set<RtEventKind>, String?, HTTPStatusClass?) -> Void
+    /// Dismiss without committing.
+    let onCancel: () -> Void
+
+    @State private var hidden: Set<RtEventKind>
+    @State private var method: String?
+    @State private var status: HTTPStatusClass?
+
+    init(
+        hiddenKinds: Set<RtEventKind>,
+        method: String?,
+        status: HTTPStatusClass?,
+        seenMethods: [String],
+        onApply: @escaping (Set<RtEventKind>, String?, HTTPStatusClass?) -> Void,
+        onCancel: @escaping () -> Void
+    ) {
+        _hidden = State(initialValue: hiddenKinds)
+        _method = State(initialValue: method)
+        _status = State(initialValue: status)
+        self.seenMethods = seenMethods
+        self.onApply = onApply
+        self.onCancel = onCancel
+    }
+
+    private let columns = [
+        GridItem(.flexible(), spacing: 8),
+        GridItem(.flexible(), spacing: 8),
+        GridItem(.flexible(), spacing: 8),
+    ]
+
+    /// Everything shown (no kind hidden). Drives the single Check/Uncheck toggle.
+    private var allChecked: Bool { hidden.isEmpty }
+
+    var body: some View {
+        // No fixed height — the sheet sizes to its content so there's no dead
+        // space above the footer. The content is bounded (10 kinds), so it
+        // never needs to scroll on a normal display.
+        VStack(alignment: .leading, spacing: 0) {
+            header
+            Divider()
+            VStack(alignment: .leading, spacing: 18) {
+                ForEach(RtEventKind.groups, id: \.name) { group in
+                    section(group)
+                }
+            }
+            .padding(20)
+            Divider()
+            footer
+        }
+        .frame(width: 500)
+        .background(.bgRoot)
+        .onExitCommand(perform: onCancel)
+    }
+
+    private var header: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "line.3.horizontal.decrease.circle")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(Color.brandAccent)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Timeline Filter")
+                    .font(.app(.headline))
+                Text("Choose which event types appear.")
+                    .font(.app(.caption))
+                    .foregroundStyle(.textMuted)
+            }
+            Spacer(minLength: 8)
+            Button(action: onCancel) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(.textMuted)
+                    .frame(width: 24, height: 24)
+                    .background(Circle().fill(.bgSurface))
+            }
+            .buttonStyle(.plain)
+            .help("Close without applying")
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+
+    private func section(_ group: (name: String, kinds: [RtEventKind])) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(group.name)
+                .font(.app(size: 10, weight: .semibold))
+                .foregroundStyle(.tertiary)
+
+            LazyVGrid(columns: columns, alignment: .leading, spacing: 10) {
+                ForEach(group.kinds) { kind in
+                    card(kind)
+                }
+            }
+
+            // Always render for the API group so toggling API doesn't resize
+            // the sheet — the row just dims/disables when API is hidden.
+            if group.kinds.contains(.api) {
+                apiOnlyRow
+            }
+        }
+    }
+
+    private func card(_ kind: RtEventKind) -> some View {
+        let on = !hidden.contains(kind)
+        return Button {
+            toggle(kind)
+        } label: {
+            HStack(spacing: 9) {
+                Image(systemName: kind.icon)
+                    .font(.system(size: 13))
+                    .foregroundStyle(.textMuted)
+                    .frame(width: 18)
+                Text(kind.label)
+                    .font(.app(.callout))
+                    .foregroundStyle(.textMain)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                Spacer(minLength: 4)
+                checkbox(on: on)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 11)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(.bgSurface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(.borderSubtle, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .help(on ? "Hide \(kind.label) events" : "Show \(kind.label) events")
+    }
+
+    private func checkbox(on: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 5, style: .continuous)
+            .fill(on ? Color.brandAccent : Color.clear)
+            .frame(width: 18, height: 18)
+            .overlay {
+                if on {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.white)
+                } else {
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .strokeBorder(.borderSubtle, lineWidth: 1.5)
+                }
+            }
+    }
+
+    private var apiOnlyRow: some View {
+        // Disabled/dimmed (not removed) when API is hidden, so the sheet keeps
+        // a constant height across the Check/Uncheck-all and API toggles.
+        let apiHidden = hidden.contains(.api)
+        return HStack(spacing: 8) {
+            Text("API only")
+                .font(.app(size: 10, weight: .semibold))
+                .foregroundStyle(.tertiary)
+            dropdown(
+                placeholder: "Method",
+                current: method,
+                options: seenMethods,
+                label: { $0 },
+                onSelect: { method = $0 }
+            )
+            .help("Show only requests with this HTTP method")
+            dropdown(
+                placeholder: "Status",
+                current: status,
+                options: HTTPStatusClass.allCases,
+                label: \.label,
+                onSelect: { status = $0 }
+            )
+            .help("Show only responses in this status class")
+            Spacer()
+        }
+        .disabled(apiHidden)
+        .opacity(apiHidden ? 0.4 : 1)
+    }
+
+    /// A theme-styled dropdown (a bordered `.bgSurface` chip) replacing the raw
+    /// macOS pop-up button, for the API method/status refinements. nil selection
+    /// shows the placeholder; picking "All" resets to nil.
+    private func dropdown<T: Hashable>(
+        placeholder: String,
+        current: T?,
+        options: [T],
+        label: @escaping (T) -> String,
+        onSelect: @escaping (T?) -> Void
+    ) -> some View {
+        Menu {
+            Button("All") { onSelect(nil) }
+            Divider()
+            ForEach(options, id: \.self) { option in
+                Button {
+                    onSelect(option)
+                } label: {
+                    if current == option {
+                        Label(label(option), systemImage: "checkmark")
+                    } else {
+                        Text(label(option))
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Text(current.map(label) ?? placeholder)
+                    .font(.app(.caption))
+                    .foregroundStyle(current == nil ? .textMuted : .textMain)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(.textMuted)
+            }
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(.bgSurface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .strokeBorder(.borderSubtle, lineWidth: 1)
+            )
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+    }
+
+    private var footer: some View {
+        HStack(spacing: 10) {
+            // One toggle: when everything's shown, offer Uncheck all; once
+            // anything is hidden, offer Check all. Same effect as the old pair.
+            Button(allChecked ? "Uncheck all" : "Check all") {
+                if allChecked {
+                    hidden = Set(RtEventKind.allCases)
+                    method = nil
+                    status = nil
+                } else {
+                    hidden = []
+                }
+            }
+            Spacer()
+            Button("Cancel", action: onCancel)
+                .keyboardShortcut(.cancelAction)
+            Button("Done") {
+                onApply(hidden, method, status)
+            }
+            .keyboardShortcut(.defaultAction)
+            .buttonStyle(.borderedProminent)
+            .tint(.brandAccent)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+
+    /// Toggle a kind's visibility; hiding API also clears its method/status
+    /// refinements so they can't filter invisibly once the group is off.
+    private func toggle(_ kind: RtEventKind) {
+        if hidden.contains(kind) {
+            hidden.remove(kind)
+        } else {
+            hidden.insert(kind)
+            if kind == .api {
+                method = nil
+                status = nil
+            }
+        }
+    }
 }
 
 // MARK: - Timeline pane
@@ -1599,7 +1900,21 @@ private struct TimelinePane: View {
             }
             .buttonStyle(IconButtonStyle())
             .help("Filter the timeline by event type")
-            .sheet(isPresented: $showFilterSheet) { filterSheet }
+            .sheet(isPresented: $showFilterSheet) {
+                TimelineFilterSheet(
+                    hiddenKinds: hiddenKinds,
+                    method: methodFilter,
+                    status: statusFilter,
+                    seenMethods: seenMethods,
+                    onApply: { kinds, method, status in
+                        hiddenKinds = kinds
+                        methodFilter = method
+                        statusFilter = status
+                        showFilterSheet = false
+                    },
+                    onCancel: { showFilterSheet = false }
+                )
+            }
 
             SearchField(prompt: "Search…", text: $search, focusToken: findToken)
                 .frame(maxWidth: 200)
@@ -1679,106 +1994,6 @@ private struct TimelinePane: View {
             // allocation-free substring check.
             if !query.isEmpty, !item.searchText.contains(query) { return false }
             return true
-        }
-    }
-
-    /// The Reactotron-style filter dialog, presented as a modal sheet like the
-    /// desktop app's "Timeline Filter": every event kind as a checkbox in the
-    /// same groups, the API method/status refinements nested under the API
-    /// toggle, and Check all / Uncheck all shortcuts.
-    private var filterSheet: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Timeline Filter")
-                    .font(.app(.title3).bold())
-                Text("Checked event types appear in the timeline.")
-                    .font(.app(.callout))
-                    .foregroundStyle(.textMuted)
-            }
-            ForEach(RtEventKind.groups, id: \.name) { group in
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(group.name)
-                        .font(.app(size: 10, weight: .semibold))
-                        .foregroundStyle(.tertiary)
-                    HStack(spacing: 16) {
-                        ForEach(group.kinds) { kind in
-                            Toggle(kind.label, isOn: shows(kind))
-                                .toggleStyle(.checkbox)
-                        }
-                    }
-                    if group.kinds.contains(.api), !hiddenKinds.contains(.api) {
-                        // Indented + captioned so the pickers read as API
-                        // refinements, not filters for the whole group.
-                        HStack(spacing: 8) {
-                            Text("API only")
-                                .font(.app(size: 10))
-                                .foregroundStyle(.tertiary)
-                            networkFilters
-                        }
-                        .padding(.leading, 18)
-                    }
-                }
-            }
-            Divider()
-            HStack(spacing: 10) {
-                Button("Check all") { hiddenKinds = [] }
-                    .disabled(hiddenKinds.isEmpty)
-                Button("Uncheck all") {
-                    hiddenKinds = Set(RtEventKind.allCases)
-                    methodFilter = nil
-                    statusFilter = nil
-                }
-                .disabled(hiddenKinds.count == RtEventKind.allCases.count)
-                Spacer()
-                Button("Done") { showFilterSheet = false }
-                    .keyboardShortcut(.defaultAction)
-            }
-        }
-        .padding(20)
-        .frame(width: 430, alignment: .leading)
-        .onExitCommand { showFilterSheet = false }
-    }
-
-    /// Whether `kind` is currently shown; hiding API also clears its
-    /// method/status refinements so they can't filter invisibly.
-    private func shows(_ kind: RtEventKind) -> Binding<Bool> {
-        Binding(
-            get: { !hiddenKinds.contains(kind) },
-            set: { shown in
-                if shown {
-                    hiddenKinds.remove(kind)
-                } else {
-                    hiddenKinds.insert(kind)
-                    if kind == .api {
-                        methodFilter = nil
-                        statusFilter = nil
-                    }
-                }
-            }
-        )
-    }
-
-    private var networkFilters: some View {
-        HStack(spacing: 6) {
-            Picker("Method", selection: $methodFilter) {
-                Text("Method").tag(String?.none)
-                ForEach(seenMethods, id: \.self) { method in
-                    Text(method).tag(Optional(method))
-                }
-            }
-            .labelsHidden()
-            .fixedSize()
-            .help("Show only requests with this HTTP method")
-
-            Picker("Status", selection: $statusFilter) {
-                Text("Status").tag(HTTPStatusClass?.none)
-                ForEach(HTTPStatusClass.allCases) { statusClass in
-                    Text(statusClass.label).tag(Optional(statusClass))
-                }
-            }
-            .labelsHidden()
-            .fixedSize()
-            .help("Show only responses in this status class")
         }
     }
 
