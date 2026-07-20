@@ -244,6 +244,7 @@ Copy this into the release PR and tick each item.
 - [ ] Feature counts updated if they changed: registry total in `README.md` and `CLAUDE.md`, marketing count in `website/src/lib/content.ts` and `website/index.html` (and the `site/*.html` SEO subpages).
 - [ ] Screenshots refreshed if the UI changed: `site/assets/screenshot-home.png` and `screenshot-catalog.png` (1512×948 window → 3024×1896 @2× Retina; Dock hidden; default layout — nothing pinned/collapsed). The og:image PNGs (`screenshot-device/catalog/react/logcat.png`) are regenerated from their updated `.webp` files with `sips -s format png <in>.webp --out <out>.png`.
 - [ ] `README.md`, `CLAUDE.md`, and `docs/` updated for new features or changed behavior.
+- [ ] `site/sitemap.xml` — bump `<lastmod>` on `/` and `/changelog/` to the release date (their content changes every release).
 - [ ] Diff re-read for leftover debug/seed/temp code, dead code, and unclear naming; nothing agent-only (`.claude/`) committed.
 
 ### Land
