@@ -1,3 +1,98 @@
+## Droidective v3.6.0
+
+The JS Console and Reactotron learn to export and search inside objects,
+logcat becomes a real columnar log viewer, emulators finally go by their AVD
+names, the React Native role reaches iOS Simulators, and the window gets a
+custom background and text color.
+
+### JS Console
+
+- **Export the filtered feed** — the share icon in the filter bar saves
+  exactly the rows the feed is showing (level and text filters applied) as a
+  JSON file, or copies them to the clipboard.
+- **Find in object, with clickable results** — typing in an expanded
+  object's find field lists `path: value` matches; clicking one expands the
+  tree along the path and highlights the node in place.
+- **Clear cache and restart** — Restart app becomes a split button; the new
+  option clears the app's cache first, and a hung cache clear can't stall
+  the restart.
+- **A connection that takes care of itself** — discovery now runs
+  `adb reverse` for you (and retries a transiently failed one), a half-dead
+  connection self-heals, the session survives pane moves, and auto-connect
+  waits for a target to settle before attaching, so it no longer crashes an
+  app that's still booting.
+- **Quieter rows** — URLs underline only on hover, the whole row toggles
+  its object, and the hover copy button reserves its space so rows never
+  reflow.
+
+### Reactotron
+
+- **Export a pane** — the same JSON file / clipboard menu as the console,
+  per timeline pane.
+- **Clickable search results in JSON trees** — searching a payload lists
+  matches; clicking one reveals the node in place.
+- **Reworked filter controls** in the timeline.
+
+### Logcat
+
+- **Aligned columns** — time (toggle the clock from the toolbar), pid-tid,
+  the process *name* (resolved live, refreshed as new processes spawn), a
+  filled level chip, the tag in a stable color, and the message tinted by
+  severity. Monospaced, scannable, and steady while streaming.
+- **Selection holds the tail** — clicking a line pauses follow so the
+  stream can't scroll your selection away; the jump button resumes.
+- **No more bounce at the cap** — the 5000-line ring now trims in chunks as
+  one editing pass.
+
+### Devices
+
+- **Emulators go by their AVD name** — "Medium Tablet" instead of the
+  generic system-image model, everywhere devices are listed: the device
+  dropdown and pill, Quick Actions device rows and run-on-all toasts, and
+  the menu bar.
+- **Mirror from the device bar** — a display button next to the device pill
+  opens the scrcpy mirror (Android devices, hidden while the mirror is
+  already open).
+- **The React Native role spans platforms** — booted iOS Simulators join
+  the device bar and launch lists, iOS Logs and the Simulate hub join the
+  role's curation, and the emulators screen covers both.
+
+### Appearance
+
+- **Custom window background and text colors** — pick both, like the
+  accent; the app's light/dark scheme follows the background's luminance,
+  opaque feeds and lists honor it, and a low-contrast text choice warns
+  without blocking. The Font settings section is now called Text.
+- **Grain at any opacity** — the film-grain texture no longer needs a
+  translucent window; the slider works at 100% too.
+
+### Updates
+
+- **A redesigned What's New sheet** — an accent-badged masthead and styled
+  release notes, applied to older entries too.
+
+### Fixes
+
+- Succeeded install rows hide themselves after five seconds; failures stay
+  until retried.
+- Terminal: top-strip tabs no longer clip, and closed tabs' numbers are
+  reused.
+- The React Native hub no longer greys every quick action while one runs.
+- The sidebar toggle works again after a split-resize eviction, and the JS
+  Console releases keyboard focus when its tab goes to the background.
+- Export failures (console and Reactotron) now show an error toast instead
+  of silently doing nothing.
+- Mirror Screen re-fits its video when the pane resizes — resizing a split
+  no longer leaves dead space on one side with the device screen drawn past
+  the pane edge.
+
+### Install
+
+Download `Droidective-v3.6.0.dmg` below. Existing installs update in place
+via Sparkle.
+
+---
+
 ## Droidective v3.5.0
 
 The window turns to glass, Reactotron's timeline remembers your filters and
