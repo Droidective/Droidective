@@ -457,14 +457,11 @@ struct RootView: View {
             }
         }
         // The Settings ▸ Appearance toggle flips the mode without going
-        // through toggleSidebarMode — apply the same safeguard here: never
-        // leave BOTH the fixed sidebar and the overlay hidden (turning
-        // auto-hide off after ⌘B would silently vanish the sidebar).
+        // through toggleSidebarMode — reconcile here too so both paths keep
+        // every flip visible (never leave BOTH the fixed sidebar and the
+        // overlay hidden, in either direction).
         .onChange(of: sidebarAutoHide) { _, autoHide in
-            state.sidebarOverlayShown = false
-            if !autoHide, !state.sidebarVisible {
-                withAnimation(.easeInOut(duration: 0.18)) { state.sidebarVisible = true }
-            }
+            withAnimation(.easeInOut(duration: 0.18)) { state.reconcileSidebarVisibility(autoHide: autoHide) }
         }
         // The stationary ancestor space both seam drags measure in — a drag
         // measured in the handle's own space feeds back on itself as the

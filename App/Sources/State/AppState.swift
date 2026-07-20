@@ -271,17 +271,32 @@ final class AppState {
         }
     }
 
-    /// The device bar's sidebar button: switches between the fixed sidebar
-    /// and Dock-style auto-hide. Returning to fixed always shows the sidebar —
-    /// a mode flip that leaves everything hidden would read as a dead button.
+    /// The device bar's sidebar button. When a split-resize has evicted the
+    /// pinned sidebar (fixed mode, `sidebarVisible == false`), the click just
+    /// brings it back — it used to be a dead no-op that only worked on the
+    /// second press. Otherwise it switches between the fixed sidebar and
+    /// Dock-style auto-hide.
     func toggleSidebarMode() {
         let defaults = UserDefaults.standard
-        let autoHide = !defaults.bool(forKey: sidebarAutoHideDefaultsKey)
+        let current = defaults.bool(forKey: sidebarAutoHideDefaultsKey)
+        let next = SidebarVisibility.afterButtonPress(autoHide: current, fixedVisible: sidebarVisible)
         withAnimation(.easeInOut(duration: 0.18)) {
-            defaults.set(autoHide, forKey: sidebarAutoHideDefaultsKey)
-            sidebarOverlayShown = false
-            if !autoHide { sidebarVisible = true }
+            if next.autoHide != current {
+                defaults.set(next.autoHide, forKey: sidebarAutoHideDefaultsKey)
+            }
+            sidebarVisible = next.fixedVisible
+            sidebarOverlayShown = next.overlayShown
         }
+    }
+
+    /// Reconcile the live flags to a mode the Settings ▸ Appearance toggle just
+    /// set (RootView observes the persisted flag and calls this), so that path
+    /// and `toggleSidebarMode` can't drift. Idempotent — the button's own flip
+    /// re-runs it harmlessly.
+    func reconcileSidebarVisibility(autoHide: Bool) {
+        let next = SidebarVisibility.afterModeChange(autoHide: autoHide, fixedVisible: sidebarVisible)
+        sidebarVisible = next.fixedVisible
+        sidebarOverlayShown = next.overlayShown
     }
 
     // MARK: - Font scaling (⌘= / ⌘- / ⌘0)
