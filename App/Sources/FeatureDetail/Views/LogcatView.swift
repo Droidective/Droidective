@@ -32,6 +32,8 @@ struct LogcatView: View {
     @State private var findFocusToken = 0
     @State private var waitingForPackage: String?
     @State private var streamingPid: Int?
+    /// pid → process name (a periodic `ps` snapshot) for the process column.
+    @State private var processNames: [String: String] = [:]
     /// One-shot: the App filter is seeded from the device bar's chosen bundle
     /// the first time the view appears, then left to the user.
     @State private var seededPackageFilter = false
@@ -47,6 +49,9 @@ struct LogcatView: View {
     /// Reversed feed: newest lines at the top instead of the terminal-style
     /// newest-at-bottom. Persisted per feature.
     @AppStorage("logcatNewestFirst") private var newestFirst = false
+    /// Show the leading time column. Hiding it buys the message ~20 columns
+    /// in narrow panes. Persisted per feature.
+    @AppStorage("logcatShowTime") private var showTime = true
 
     private static let levels: [(value: String, label: String)] = [
         ("All", "All levels"), ("V", "Verbose"), ("D", "Debug"),
@@ -188,6 +193,14 @@ struct LogcatView: View {
         // ⌘F opens an invisible find bar whose focus request lands on the
         // sidebar search.
         .keyboardShortcut(isActiveTab ? KeyboardShortcut("f", modifiers: .command) : nil)
+
+        Button {
+            showTime.toggle()
+        } label: {
+            Image(systemName: showTime ? "clock" : "clock.badge.xmark")
+        }
+        .buttonStyle(IconButtonStyle())
+        .help(showTime ? "Hide the time column" : "Show the time column")
 
         Button {
             newestFirst.toggle()
@@ -409,6 +422,7 @@ struct LogcatView: View {
             find: find,
             currentFindID: currentFindID,
             newestFirst: newestFirst,
+            showTime: showTime,
             edges: $edges,
             jump: jump,
             onFilterTag: { tagFilter = $0 }
@@ -475,7 +489,19 @@ struct LogcatView: View {
         guard let serial = state.targetSerials.first else { return }
 
         let streamer = LogcatStreamer(client: state.env.client)
+        // The process-name column: a ps snapshot up front so the initial tail
+        // is named, then refreshed on a slow cadence for processes that spawn
+        // mid-stream. Background polling — deliberately not CommandLog-wrapped.
+        processNames = await streamer.processNames(serial: serial)
+        let nameRefresher = Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(5))
+                if Task.isCancelled { return }
+                processNames = await streamer.processNames(serial: serial)
+            }
+        }
         defer {
+            nameRefresher.cancel()
             Task { await streamer.stop() }
             waitingForPackage = nil
             streamingPid = nil
@@ -533,8 +559,18 @@ struct LogcatView: View {
             for await batch in stream {
                 if Task.isCancelled { break }
                 if paused { continue }
-                lines.append(contentsOf: batch)
-                if lines.count > Self.maxLines {
+                // Stamp each line's process name at ingest — rendered rows are
+                // immutable, so resolving lazily at render would never fill in.
+                lines.append(contentsOf: batch.map { line in
+                    var stamped = line
+                    stamped.processName = processNames[line.pid]
+                    return stamped
+                })
+                // Hysteresis: once at the cap, trimming exactly per batch
+                // meant a head-trim text edit every flush (~120ms). Letting
+                // the buffer float a little above the cap turns that into one
+                // chunked trim per ~250 lines.
+                if lines.count > Self.maxLines + 250 {
                     lines.removeFirst(lines.count - Self.maxLines)
                 }
             }

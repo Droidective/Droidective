@@ -5,19 +5,30 @@ public struct LogLine: Sendable, Equatable, Identifiable {
     public let raw: String
     public let time: String
     public let pid: String
+    /// The emitting thread id (threadtime format); empty for sources that
+    /// don't carry one (unparsed lines, the simulator log).
+    public let tid: String
     public let level: String
     public let tag: String
     public let message: String
+    /// The process name behind `pid`, stamped at ingest from a `ps` snapshot
+    /// (see `LogcatStreamer.processNames`); nil renders as "?" like the pid
+    /// map does for a process that already exited.
+    public var processName: String?
     /// `raw` lowercased once at ingest, so the search filter is a plain
     /// substring check per line instead of a locale-aware case-insensitive
     /// scan re-done for the full buffer on every streamed batch.
     public let searchKey: String
 
-    public init(raw: String, time: String, pid: String, level: String, tag: String, message: String) {
+    public init(
+        raw: String, time: String, pid: String, tid: String = "",
+        level: String, tag: String, message: String
+    ) {
         self.id = UUID()
         self.raw = raw
         self.time = time
         self.pid = pid
+        self.tid = tid
         self.level = level
         self.tag = tag
         self.message = message
@@ -65,10 +76,24 @@ public enum LogcatLineParser {
             raw: raw,
             time: String(match.1),
             pid: String(match.2),
+            tid: String(match.3),
             level: String(match.4),
             tag: String(match.5),
             message: String(match.6)
         )
+    }
+
+    /// Parse `ps -A -o PID,NAME` output into pid → process name, for the log
+    /// pane's process column. Tolerates the header row, CRLF, and ragged
+    /// whitespace; rows that don't lead with a number are skipped.
+    public static func parseProcessNames(_ output: String) -> [String: String] {
+        var names: [String: String] = [:]
+        for row in output.components(separatedBy: .newlines) {
+            let fields = row.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
+            guard fields.count == 2, fields[0].allSatisfy(\.isNumber) else { continue }
+            names[String(fields[0])] = fields[1].trimmingCharacters(in: .whitespaces)
+        }
+        return names
     }
 
     public static func buildArgs(serial: String, filters: LogcatFilters) -> [String] {
@@ -105,6 +130,16 @@ public actor LogcatStreamer {
 
     public init(client: AdbClient) {
         self.client = client
+    }
+
+    /// A snapshot of the device's running processes (pid → name), for the
+    /// log pane's process column. Best-effort: an error reads as an empty
+    /// map and the column shows "?".
+    public func processNames(serial: String) async -> [String: String] {
+        guard let result = try? await client.run(on: serial, ["shell", "ps", "-A", "-o", "PID,NAME"]) else {
+            return [:]
+        }
+        return LogcatLineParser.parseProcessNames(result.stdout)
     }
 
     /// Resolve a package's running PID, or nil if it isn't running.
