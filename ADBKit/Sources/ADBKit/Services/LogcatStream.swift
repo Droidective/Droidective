@@ -115,7 +115,7 @@ public enum LogcatLineParser {
 /// yields debounced batches. One session per streamer; restarting stops the
 /// previous process.
 public actor LogcatStreamer {
-    static let flushInterval: Duration = .milliseconds(120)
+    static let flushInterval: Duration = .milliseconds(300)
     static let maxBatch = 500
 
     private let client: AdbClient

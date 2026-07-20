@@ -205,7 +205,7 @@ public enum SimulatorLogFilter {
 /// previous session (whose EOF arrives after a restart) can't tear down the
 /// new one.
 public actor SimulatorLogStreamer {
-    static let flushInterval: Duration = .milliseconds(120)
+    static let flushInterval: Duration = .milliseconds(300)
     static let maxBatch = 500
 
     private let xcrunPath: String

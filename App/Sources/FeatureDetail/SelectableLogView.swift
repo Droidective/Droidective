@@ -49,14 +49,17 @@ struct SelectableLogView: NSViewRepresentable {
         textView.textContainerInset = NSSize(width: 8, height: 4)
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
-        textView.autoresizingMask = [.width]
+        // Width is applied by LogScrollView when a resize settles — never by
+        // autoresizing, which would re-wrap the whole document on every tick
+        // of a divider drag (see LogScrollView).
+        textView.autoresizingMask = []
         textView.minSize = .zero
         textView.maxSize = NSSize(
             width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude
         )
         textView.textContainer?.widthTracksTextView = true
 
-        let scrollView = NSScrollView()
+        let scrollView = LogScrollView()
         scrollView.hasVerticalScroller = true
         scrollView.drawsBackground = false
         scrollView.documentView = textView
@@ -491,6 +494,40 @@ struct SelectableLogView: NSViewRepresentable {
                 textView.scrollRangeToVisible(range)
             }
         }
+    }
+}
+
+/// Applies width changes to the document text view only after the size
+/// settles. A split-divider or window drag resizes the pane ~60×/s, and with
+/// autoresizing every tick forced TextKit to re-wrap the entire multi-
+/// thousand-line document — one pegged core and an unusable drag. The clip
+/// view resizes live (scrollers stay correct); the text re-wraps once, when
+/// the drag rests for 150 ms. Until then the document keeps its old wrap
+/// width, which briefly clips or letterboxes at the trailing edge — invisible
+/// in practice and vastly cheaper.
+final class LogScrollView: NSScrollView {
+    private var pendingWidthApply: DispatchWorkItem?
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        guard let document = documentView else { return }
+        if document.frame.width == 0 {
+            // First layout: apply immediately so the initial render isn't late.
+            applyDocumentWidth()
+            return
+        }
+        guard document.frame.width != contentSize.width else { return }
+        pendingWidthApply?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated { self?.applyDocumentWidth() }
+        }
+        pendingWidthApply = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
+    }
+
+    private func applyDocumentWidth() {
+        guard let document = documentView, document.frame.width != contentSize.width else { return }
+        document.setFrameSize(NSSize(width: contentSize.width, height: document.frame.height))
     }
 }
 
