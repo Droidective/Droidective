@@ -90,7 +90,7 @@ opening it — verify those by hand.
 ## Build / test / run
 
 ```
-make test          # ADBKit unit tests (cd ADBKit && swift test) — 925 tests, keep green
+make test          # ADBKit unit tests (cd ADBKit && swift test) — 972 tests, keep green
 make build         # xcodegen generate + xcodebuild Debug
 make run           # build + open the .app
 ```
@@ -480,16 +480,32 @@ compile or test time* — lean on it instead of manual vigilance.
 ## Status
 
 Feature-complete across all planned milestones plus several UX rounds.
-Unreleased on `main`/in flight: the **translucent window appearance**
-(Settings ▸ Appearance ▸ Window — Opacity/Blur/Grain sliders; dynamic
-`.bgRoot`/`.bgSurface` tokens put every pane, card, bar, and the terminal on
-the glass; `WindowEffects` pure-tested in ADBKit), **Sparkle disabled in
-Debug builds** (it was silently replacing dev builds with the release on
-quit), the **feature notes system removed** (the ⓘ strip, its Settings
-toggle, and ADBKit's `FeatureNotes` are gone), a **Send Text redesign**
-(two hub sections — the send flow with its failed-result inline, one
-recency-ranked snippet list, click-to-append `{clipboard}`/`{ip}` chips,
-Return sends), and a wider Settings window (640×540). (Latest release:
+(Latest release: **v3.6.0** — the **JS Console and Reactotron rework**
+(filter-aware JSON export to file/clipboard via `ConsoleExport`,
+find-in-object with clickable results — `SnapNode.findMatches`/`TreeMatch`
++ `JSONSearch` — a split-button Restart with a bounded
+`pm clear --cache-only`, automatic `adb reverse` with capped retries,
+connection self-heal, view refcounting across pane moves, and two-scan
+auto-connect via `TargetStabilityTracker`), **logcat restyled as aligned
+columns** (tid capture, `ps`-snapshot process naming, level chips, hashed
+tag colors, click-holds-tail, chunked single-transaction ring trim),
+**emulators named by their AVD** everywhere devices are listed, a
+device-bar **Mirror Screen shortcut**, the **React Native role spanning
+Android and iOS Simulators**, a **custom window background & text color**
+(luminance-following scheme, low-contrast warning), grain independent of
+opacity, a redesigned What's New sheet, auto-hiding succeeded install rows,
+and the **mirror video re-fitting its pane on split resizes**
+(`MirrorLayerNSView.setFrameSize`). Before that, **v3.5.0** — the
+**translucent window appearance** (Settings ▸ Appearance ▸ Window —
+Opacity/Blur/Grain sliders; dynamic `.bgRoot`/`.bgSurface` tokens put every
+pane, card, bar, and the terminal on the glass; `WindowEffects` pure-tested
+in ADBKit), **Sparkle disabled in Debug builds** (it was silently replacing
+dev builds with the release on quit), the **feature notes system removed**
+(the ⓘ strip, its Settings toggle, and ADBKit's `FeatureNotes` are gone), a
+**Send Text redesign** (two hub sections — the send flow with its
+failed-result inline, one recency-ranked snippet list, click-to-append
+`{clipboard}`/`{ip}` chips, Return sends), **Reactotron filter persistence
+and per-pane clear**, and a wider Settings window (640×540). Before that,
 **v3.4.0** — an **AAB to APK converter** (the 58th feature: bundletool
 universal APK with optional release-keystore signing; bundletool +
 uber-apk-signer factory-seeded from `App/Resources`; double-clicked
@@ -553,7 +569,7 @@ jadx/apktool, recompile, and sign — with keystore creation) plus Frida setup, 
 custom accent color, launching emulators from the device bar, per-feature
 connect-a-device empty states, a live-preview hotkey recorder, and a Settings
 split into Appearance/Privacy; managed tools download from GitHub releases into
-Application Support and are sized/removable in Settings); 925 tests green;
+Application Support and are sized/removable in Settings); 972 tests green;
 builds clean with zero warnings (enforced as errors in CI). Verified live against a
 physical device and an Android emulator. Release builds are Developer ID-signed +
 notarized and bundle scrcpy/ffmpeg (see `RELEASING.md`). Open gaps: the Apps
