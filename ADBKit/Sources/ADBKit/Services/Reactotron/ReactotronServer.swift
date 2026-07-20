@@ -58,7 +58,10 @@ public actor ReactotronServer {
     /// its retained payloads within a byte budget.
     public enum Event: Sendable {
         case listening(port: UInt16)
-        case connected(connectionId: Int, intro: ReactotronCommand, frameBytes: Int)
+        /// `clientId` is the resolved Reactotron client id — the one from the
+        /// intro payload, or the server-generated id sent back via
+        /// `setClientId` when the client connected without one.
+        case connected(connectionId: Int, clientId: String, intro: ReactotronCommand, frameBytes: Int)
         case command(connectionId: Int, command: ReactotronCommand, frameBytes: Int)
         /// `reason` is nil for teardown-driven drops (stop, listener death).
         case disconnected(connectionId: Int, reason: DisconnectReason?)
@@ -385,8 +388,9 @@ public actor ReactotronServer {
             // with a `.connected`. Ordinary commands still drain below —
             // they're timeline data, not client state.
             guard connections[id] != nil else { return }
-            completeHandshake(connectionId: id, intro: command)
-            emit(.connected(connectionId: id, intro: command, frameBytes: data.count))
+            let clientId = completeHandshake(connectionId: id, intro: command)
+            emit(.connected(
+                connectionId: id, clientId: clientId, intro: command, frameBytes: data.count))
         } else {
             emit(.command(connectionId: id, command: command, frameBytes: data.count))
         }
@@ -398,8 +402,9 @@ public actor ReactotronServer {
     /// stale connection that shares the clientId (an app reload reconnects
     /// before its old socket dies), then send the (empty) subscription list to
     /// complete the handshake — exactly what `reactotron-core-server` does.
-    private func completeHandshake(connectionId id: Int, intro: ReactotronCommand) {
-        guard let box = connections[id] else { return }
+    /// Returns the resolved clientId, carried on the `.connected` event.
+    private func completeHandshake(connectionId id: Int, intro: ReactotronCommand) -> String {
+        guard let box = connections[id] else { return "connection-\(id)" }
         var clientId = intro.payload?["clientId"]?.stringValue
         if clientId == nil || clientId?.isEmpty == true {
             let generated = UUID().uuidString
@@ -411,6 +416,7 @@ public actor ReactotronServer {
             clientIds[id] = clientId
         }
         send(type: "state.values.subscribe", payload: .object(["paths": .array([])]), to: box)
+        return clientId ?? "connection-\(id)"
     }
 
     /// Forget other connections carrying the same clientId — reported with a

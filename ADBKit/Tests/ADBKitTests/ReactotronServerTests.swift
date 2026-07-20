@@ -28,7 +28,7 @@ import Testing
         try await task.send(.string(introFrame))
 
         let connected = try await nextEvent(&iterator)
-        guard case let .connected(_, intro, introBytes) = connected else {
+        guard case let .connected(_, _, intro, introBytes) = connected else {
             Issue.record("expected .connected, got \(connected)"); return
         }
         #expect(intro.commandType == .clientIntro)
@@ -79,7 +79,7 @@ import Testing
         }
 
         let first = try await connect(clientId: "same-app")
-        guard case let .connected(firstId, _, _) = try await nextEvent(&iterator) else {
+        guard case let .connected(firstId, firstClientId, _, _) = try await nextEvent(&iterator) else {
             Issue.record("expected first .connected"); return
         }
 
@@ -92,10 +92,12 @@ import Testing
         }
         #expect(droppedId == firstId)
         #expect(reason == nil)
-        guard case let .connected(secondId, _, _) = try await nextEvent(&iterator) else {
+        guard case let .connected(secondId, secondClientId, _, _) = try await nextEvent(&iterator) else {
             Issue.record("expected second .connected"); return
         }
         #expect(secondId != firstId)
+        #expect(firstClientId == "same-app")
+        #expect(secondClientId == "same-app")
 
         // A different app coexists — no dedupe, both stay live.
         let third = try await connect(clientId: "other-app")
