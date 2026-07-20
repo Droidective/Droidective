@@ -470,7 +470,7 @@ struct MenuBarView: View {
 
     var body: some View {
         if let device = state.selectedDevice {
-            Text(device.label)
+            Text(state.deviceDisplayName(device))
         } else {
             Text("No device")
         }

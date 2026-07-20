@@ -656,15 +656,27 @@ final class AppState {
         )
     }
 
+    /// The device's human name: a running emulator shows its AVD name
+    /// ("Medium Tablet") — every emulator otherwise carries the same generic
+    /// system-image model ("sdk gphone64 arm64") — and everything else keeps
+    /// its adb label.
+    func deviceDisplayName(_ device: Device) -> String {
+        if device.serial.hasPrefix("emulator-"),
+           let avd = availableAvds.first(where: { $0.runningSerial == device.serial }) {
+            return avd.displayName
+        }
+        return device.label
+    }
+
     /// Picker label with enrichment: "Pixel 7 (005F) · Android 14 · 82%",
     /// or "iPhone 16 Pro · iOS 18.2 · Simulator" for a booted simulator.
     func deviceTitle(_ device: Device) -> String {
         guard device.isReady else {
             return device.state == "unauthorized"
-                ? "\(device.label) — accept the prompt on the device"
-                : "\(device.label) — \(device.state)"
+                ? "\(deviceDisplayName(device)) — accept the prompt on the device"
+                : "\(deviceDisplayName(device)) — \(device.state)"
         }
-        var parts = [device.label]
+        var parts = [deviceDisplayName(device)]
         switch device.platform {
         case .android:
             if let details = deviceDetails[device.serial] {
@@ -1078,6 +1090,13 @@ final class AppState {
     func setQuickPanelOpen(_ open: Bool) {
         quickPanelOpen = open
         applyPollInterval()
+        // The panel's device rows name emulators by their AVD
+        // (`deviceDisplayName`) — refresh the AVD↔serial mapping on open, so
+        // it's right even when the main window (whose device bar usually
+        // keeps it fresh) has been closed all along.
+        if open {
+            Task { await refreshAvds() }
+        }
     }
 
     private func applyPollInterval() {

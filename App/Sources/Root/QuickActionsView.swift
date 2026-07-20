@@ -801,9 +801,9 @@ struct QuickActionsView: View {
             QuickRow(
                 id: "pick:\(device.serial)",
                 icon: device.platform == .iosSimulator ? "iphone" : "iphone.gen3",
-                title: device.label,
+                title: state.deviceDisplayName(device),
                 subtitle: state.deviceTitle(device),
-                action: .chooseDevice(serial: device.serial, label: device.label)
+                action: .chooseDevice(serial: device.serial, label: state.deviceDisplayName(device))
             )
         }
     }
@@ -1514,7 +1514,8 @@ struct QuickActionsView: View {
                 lastResult = result
                 // Mirror the Custom Commands screen: results land in the
                 // notifications history too, not just this transient footer.
-                let label = state.devices.first { $0.serial == serial }?.label
+                let label = state.devices.first { $0.serial == serial }
+                    .map { state.deviceDisplayName($0) }
                 state.showToast(Toast(
                     message: targets.count > 1 ? "\(label ?? serial): \(result.message)" : result.message,
                     ok: result.ok
