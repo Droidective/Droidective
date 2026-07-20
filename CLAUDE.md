@@ -466,6 +466,11 @@ compile or test time* — lean on it instead of manual vigilance.
   what the diff does in plain, factual language — no "critical/comprehensive".
 - Never commit secrets (gitleaks runs pre-commit); telemetry keys are build-time
   injected, never committed.
+- **This branch tracks main by rebase** — sync with the `rebase-cross-platform`
+  skill: `git rebase origin/main`, resolve the known conflict spots (CLAUDE.md,
+  Package.swift, the gated/seam files), audit main's new ADBKit code for
+  Apple-only imports and corelibs traps, then `swift test` + `make test-linux`
+  green before `git push --force-with-lease`.
 
 ## Status
 
