@@ -63,6 +63,11 @@ public actor McpCommandStore {
 
     private var listeningPort: UInt16?
 
+    /// Server-side redaction posture, hot-updatable from Settings (upstream
+    /// `updateRedactionConfig`). Lives here so tools/resources and the UI
+    /// share one source of truth.
+    private var redactionServerConfig: McpRedactionServerConfig = .standard
+
     private struct PendingWait {
         let type: String
         let clientId: String?
@@ -164,6 +169,12 @@ public actor McpCommandStore {
     }
 
     // MARK: - Reads
+
+    public var redactionConfig: McpRedactionServerConfig { redactionServerConfig }
+
+    public func setRedactionConfig(_ config: McpRedactionServerConfig) {
+        redactionServerConfig = config
+    }
 
     public var isListening: Bool { listeningPort != nil }
     public var port: UInt16? { listeningPort }
