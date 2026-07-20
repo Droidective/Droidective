@@ -7,13 +7,30 @@ pane per feature. Swift 6 + SwiftUI, macOS 14+.
 ## Architecture (the load-bearing rule)
 
 Two layers, strictly separated so a second **Apple** UI (iPad/visionOS) could
-reuse ADBKit almost as-is. Note the honest scope: a Linux/Windows port re-does
-the UI **plus** the macOS-bound seams inside ADBKit — the Mirror media stack
-(CoreMedia/VideoToolbox/AVFoundation), the Network.framework socket servers,
-`ToolLocator`'s macOS install/SDK paths + `zsh -lc`, and `.lzma`/`tar` extraction;
-an iOS companion can't run `Process` at all, so it would need a remote-host
-protocol, not just a UI swap. Keep the existing seams (`ProcessRunning`,
-injected directories) and don't pre-abstract the rest until a port is scheduled.
+reuse ADBKit almost as-is. A Windows/Linux port is staged on
+`feat/cross-platform-core`: a portable ADBKit core first (the full
+mock-driven suite runs on Linux there; Windows compiles), then a
+`droidectived` local daemon over ADBKit and a Tauri/React UI — the strategy
+lives in that branch's `docs/cross-platform.md`. An iOS companion can't run
+`Process` at all, so it would ride the same daemon protocol. Main doesn't
+carry the port, but new ADBKit code must stay easy to absorb there:
+
+- **No new Apple-only framework imports in ADBKit** (Network, CoreMedia,
+  AVFoundation, VideoToolbox, CryptoKit, os, Darwin) outside the already
+  Apple-bound subsystems — the Mirror pipeline + ScreenRecorder, the
+  Reactotron server, `ConsoleLinkDetector`, `ProcessStats`. A feature that
+  genuinely needs one goes in its own small file so the port can gate it
+  wholesale with `#if canImport`.
+- **Avoid the corelibs-Foundation traps** in new ADBKit code:
+  `NSDataDetector`, `FileHandle.bytes`, `FileManager.replaceItemAt`,
+  `OSAllocatedUnfairLock`, raw `posix_spawn`, and `readabilityHandler` as an
+  EOF signal. Each already has a portable pattern on the port branch; a
+  Darwin-only spelling in new code becomes a rebase conflict there.
+- **No hardcoded host facts**: avoid new `/usr/bin/...` and `/bin/zsh`
+  literals, and mock-driven tests must not stat the real filesystem (e.g.
+  assume `/usr/bin/xcrun` exists) — after the port merges, the same suite
+  runs on a Linux CI host with none of that present.
+- Keep the existing seams (`ProcessRunning`, injected directories) intact.
 
 - **`ADBKit/`** — a SwiftPM package holding *all* logic. Zero UI imports
   (feature icons are SF Symbol *name strings*). Actors for stateful services,
