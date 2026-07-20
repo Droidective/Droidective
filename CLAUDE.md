@@ -79,7 +79,7 @@ opening it — verify those by hand.
 ## Build / test / run
 
 ```
-make test          # ADBKit unit tests (cd ADBKit && swift test) — 941 tests, keep green
+make test          # ADBKit unit tests (cd ADBKit && swift test) — 946 tests, keep green
 make test-linux    # the same suite on Linux (Apple `container` CLI; the port gate)
 make build         # xcodegen generate + xcodebuild Debug
 make run           # build + open the .app
@@ -553,7 +553,7 @@ jadx/apktool, recompile, and sign — with keystore creation) plus Frida setup, 
 custom accent color, launching emulators from the device bar, per-feature
 connect-a-device empty states, a live-preview hotkey recorder, and a Settings
 split into Appearance/Privacy; managed tools download from GitHub releases into
-Application Support and are sized/removable in Settings); 941 tests green
+Application Support and are sized/removable in Settings); 946 tests green
 (macOS — the suite also runs on Linux in CI, minus the Darwin-gated files);
 builds clean with zero warnings (enforced as errors in CI). Verified live against a
 physical device and an Android emulator. Release builds are Developer ID-signed +
