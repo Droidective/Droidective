@@ -13,5 +13,6 @@ sparkle-private-key.txt
 AuthKey_*.p8
 .claude/*
 !.claude/commands/
+!.claude/skills/
 node_modules/
 website/dist/
