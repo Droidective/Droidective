@@ -55,15 +55,6 @@ final class MirrorLayerNSView: NSView {
     var videoSize: CGSize?
 
     private let displayLayer: AVSampleBufferDisplayLayer
-    /// Shown instead of the video while the pane is mid-resize: a phone-shaped
-    /// outline at the video's aspect. Re-letterboxing the live video layer on
-    /// every tick of a divider/window drag competes with the rest of the
-    /// window's relayout; a plain CALayer tracks the drag for free, and the
-    /// video snaps back in (no reconnect — the stream keeps running unseen)
-    /// once the size settles.
-    private let placeholderLayer = CALayer()
-    private var resizeSettle: DispatchWorkItem?
-    private var isResizing = false
 
     init(displayLayer: AVSampleBufferDisplayLayer) {
         self.displayLayer = displayLayer
@@ -71,12 +62,6 @@ final class MirrorLayerNSView: NSView {
         wantsLayer = true
         layer?.backgroundColor = NSColor.black.cgColor
         layer?.addSublayer(displayLayer)
-        placeholderLayer.isHidden = true
-        placeholderLayer.backgroundColor = NSColor(white: 0.14, alpha: 1).cgColor
-        placeholderLayer.borderColor = NSColor(white: 1, alpha: 0.25).cgColor
-        placeholderLayer.borderWidth = 1
-        placeholderLayer.cornerRadius = 14
-        layer?.addSublayer(placeholderLayer)
     }
 
     @available(*, unavailable)
@@ -87,67 +72,16 @@ final class MirrorLayerNSView: NSView {
 
     override func layout() {
         super.layout()
-        if isResizing { syncPlaceholderFrame() } else { syncDisplayLayerFrame() }
+        syncDisplayLayerFrame()
     }
 
     /// `layout()` alone misses direct frame changes (a SwiftUI split-divider
-    /// drag resizes the view without a constraint pass) — track every size
-    /// change explicitly. A change arriving while the view already has a laid-
-    /// out video means the user is dragging: swap to the placeholder and defer
-    /// the video re-letterbox until the size rests.
+    /// drag resizes the view without a constraint pass), leaving the layer at
+    /// its old size — video letterboxed against a stale width and drawn past
+    /// the pane. Track every size change explicitly.
     override func setFrameSize(_ newSize: NSSize) {
-        let hadLayout = displayLayer.frame != .zero && bounds.size != .zero
         super.setFrameSize(newSize)
-        guard hadLayout, videoSize != nil else {
-            syncDisplayLayerFrame()
-            return
-        }
-        beginResizeIfNeeded()
-        syncPlaceholderFrame()
-        scheduleResizeSettle()
-    }
-
-    override func viewWillStartLiveResize() {
-        super.viewWillStartLiveResize()
-        if videoSize != nil { beginResizeIfNeeded() }
-    }
-
-    override func viewDidEndLiveResize() {
-        super.viewDidEndLiveResize()
-        endResize()
-    }
-
-    private func beginResizeIfNeeded() {
-        guard !isResizing else { return }
-        isResizing = true
-        displayLayer.isHidden = true
-        placeholderLayer.isHidden = false
-    }
-
-    /// Divider drags have no live-resize begin/end signals — the size resting
-    /// for a beat is the end. During a window live resize the explicit
-    /// `viewDidEndLiveResize` is the end; a mid-drag pause must not swap the
-    /// video back in, so the timer defers to `inLiveResize`.
-    private func scheduleResizeSettle() {
-        resizeSettle?.cancel()
-        let work = DispatchWorkItem { [weak self] in
-            MainActor.assumeIsolated {
-                guard let self, !self.inLiveResize else { return }
-                self.endResize()
-            }
-        }
-        resizeSettle = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: work)
-    }
-
-    private func endResize() {
-        resizeSettle?.cancel()
-        resizeSettle = nil
-        guard isResizing else { return }
-        isResizing = false
         syncDisplayLayerFrame()
-        displayLayer.isHidden = false
-        placeholderLayer.isHidden = true
     }
 
     private func syncDisplayLayerFrame() {
@@ -157,15 +91,6 @@ final class MirrorLayerNSView: NSView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         displayLayer.frame = bounds
-        CATransaction.commit()
-    }
-
-    private func syncPlaceholderFrame() {
-        let frame = videoRect() ?? bounds
-        guard placeholderLayer.frame != frame else { return }
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        placeholderLayer.frame = frame
         CATransaction.commit()
     }
 

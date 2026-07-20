@@ -619,6 +619,15 @@ private struct TerminalCloseConfirmation: ViewModifier {
 struct TabHostView: View {
     @Environment(AppState.self) private var state
     let group: Int
+    /// The pane size as it changes live, and the copy hidden tabs lay out
+    /// against. The frozen copy trails a resize by 250 ms: during a divider or
+    /// window drag every hidden tab keeps receiving the identical (stale)
+    /// proposal, so SwiftUI short-circuits their whole subtrees — a drag lays
+    /// out only the visible tab instead of every mounted one (a hidden logcat
+    /// or crash browser re-wrapping thousands of styled lines per tick was
+    /// most of the drag's cost). One catch-up layout runs when the size rests.
+    @State private var paneSize: CGSize = .zero
+    @State private var frozenSize: CGSize = .zero
 
     var body: some View {
         let ids = state.openTabIDs(inGroup: group)
@@ -626,6 +635,10 @@ struct TabHostView: View {
         ZStack {
             ForEach(ids, id: \.self) { id in
                 FeatureDetailView(featureID: id)
+                    .frame(
+                        width: id == active || frozenSize == .zero ? nil : frozenSize.width,
+                        height: id == active || frozenSize == .zero ? nil : frozenSize.height
+                    )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .environment(\.tabFeatureID, id)
                     .environment(\.tabIsActive, id == active)
@@ -634,6 +647,16 @@ struct TabHostView: View {
                     .accessibilityHidden(id != active)
                     .zIndex(id == active ? 1 : 0)
             }
+        }
+        .clipped()
+        .onGeometryChange(for: CGSize.self, of: { $0.size }) { paneSize = $0 }
+        .task(id: paneSize) {
+            guard paneSize != .zero, paneSize != frozenSize else { return }
+            if frozenSize != .zero {
+                try? await Task.sleep(for: .milliseconds(250))
+                guard !Task.isCancelled else { return }
+            }
+            frozenSize = paneSize
         }
     }
 }
