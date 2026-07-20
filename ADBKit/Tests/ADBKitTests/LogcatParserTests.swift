@@ -8,12 +8,40 @@ import Testing
         )
         #expect(line.time == "06-12 14:03:22.123")
         #expect(line.pid == "1234")
+        #expect(line.tid == "5678")
         #expect(line.level == "E")
         #expect(line.tag == "ReactNativeJS")
         #expect(line.message == "TypeError: undefined is not a function")
         // The cached search key backs the view's per-keystroke filter — it
         // must be the lowercased raw line.
         #expect(line.searchKey == line.raw.lowercased())
+    }
+
+    @Test func malformedLineHasNoTid() {
+        #expect(LogcatLineParser.parse("not a log line").tid == "")
+    }
+
+    @Test func parsesProcessNameTable() {
+        let output = """
+        PID NAME
+            1 init
+          813 system_server
+         3011 com.google.android.gms
+        30246 com.google.android.webview:sandboxed_process0:org.chromium.content.app.SandboxedProcessService0:0
+        garbage row
+        """
+        let names = LogcatLineParser.parseProcessNames(output)
+        #expect(names["1"] == "init")
+        #expect(names["813"] == "system_server")
+        #expect(names["3011"] == "com.google.android.gms")
+        #expect(names["30246"]?.hasPrefix("com.google.android.webview:sandboxed") == true)
+        #expect(names["PID"] == nil)
+        #expect(names.count == 4)
+    }
+
+    @Test func processNameTableHandlesCRLFAndEmpty() {
+        #expect(LogcatLineParser.parseProcessNames("PID NAME\r\n  42 my.app\r\n")["42"] == "my.app")
+        #expect(LogcatLineParser.parseProcessNames("").isEmpty)
     }
 
     @Test func parsesEmptyMessage() {

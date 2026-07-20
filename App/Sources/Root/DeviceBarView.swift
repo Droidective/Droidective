@@ -53,6 +53,9 @@ struct DeviceBarView: View {
                 if let device = selectedDevice, device.isWireless {
                     disconnectControl(device)
                 }
+                if mirrorButtonVisible {
+                    mirrorButton
+                }
             }
 
             // Only when the selected feature actually works with an app bundle.
@@ -118,6 +121,27 @@ struct DeviceBarView: View {
 
     private var selectedDevice: Device? {
         state.devices.first { $0.serial == state.selectedSerial }
+    }
+
+    // MARK: - Mirror shortcut
+
+    /// Quick jump to Mirror Screen for the selected device. Android only
+    /// (scrcpy can't mirror an iOS Simulator), and hidden while the mirror is
+    /// already on screen — as the focused tab or in either split pane
+    /// (`activeTabIDs` is the active tab of every visible pane).
+    private var mirrorButtonVisible: Bool {
+        selectedDevice?.platform == .android && !state.activeTabIDs.contains("scrcpy")
+    }
+
+    private var mirrorButton: some View {
+        Button {
+            state.requestFeature("scrcpy")
+        } label: {
+            Image(systemName: "display")
+        }
+        .buttonStyle(IconButtonStyle())
+        .help("Mirror this device's screen (scrcpy)")
+        .accessibilityLabel("Mirror screen")
     }
 
     // MARK: - Device pill

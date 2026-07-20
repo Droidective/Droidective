@@ -122,6 +122,15 @@ extension AppState {
     private func finishInstallJob(_ id: UUID, result: FeatureResult) {
         guard let index = installJobs.firstIndex(where: { $0.id == id }) else { return }
         installJobs[index].status = result.ok ? .succeeded : .failed(result.message)
+        // A success row has said its piece after a few seconds — drop it so
+        // the install screens don't carry a stale green check forever.
+        // Failures stay: the user needs the reason until a retry replaces it.
+        if result.ok {
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(5))
+                self?.installJobs.removeAll { $0.id == id }
+            }
+        }
     }
 
     /// A short install headline for the toast; on failure the full adb output is

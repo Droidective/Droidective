@@ -23,6 +23,8 @@ struct SelectableLogView: NSViewRepresentable {
     /// Display order: false reads oldest-top/newest-bottom (terminal style),
     /// true flips the feed so new lines land at the top.
     let newestFirst: Bool
+    /// Whether rows lead with the time column (the toolbar's clock toggle).
+    let showTime: Bool
     /// Which ends the viewport touches and whether it can scroll at all — the
     /// caller feeds this to the shared `LogJumpControls`. While parked at the
     /// newest edge the view follows new lines; scrolling away pauses that.
@@ -65,7 +67,7 @@ struct SelectableLogView: NSViewRepresentable {
 
     func updateNSView(_ nsView: NSScrollView, context: Context) {
         context.coordinator.onFilterTag = onFilterTag
-        context.coordinator.update(lines: lines, find: find, newestFirst: newestFirst)
+        context.coordinator.update(lines: lines, find: find, newestFirst: newestFirst, showTime: showTime)
         context.coordinator.showFindCurrent(currentFindID)
         context.coordinator.handleJump(jump)
     }
@@ -88,7 +90,15 @@ struct SelectableLogView: NSViewRepresentable {
         private var lineLengths: [Int] = []
         private var renderedFind = ""
         private var renderedNewestFirst = false
+        private var renderedShowTime = true
         private var lastJumpToken: Int?
+        /// Clicking (or right-clicking) a line means the user is reading it —
+        /// hold the tail-follow so streaming lines can't scroll the selection
+        /// away even while the viewport sits at the newest edge. The
+        /// jump-to-newest button (which appears as soon as new lines land
+        /// beyond the held viewport) resumes following; clearing the buffer
+        /// resets it too.
+        private var holdFollow = false
         /// The Find match line currently painted (via temporary attributes) —
         /// scroll-to fires only when this changes, so streamed batches don't
         /// keep yanking the viewport back to the match.
@@ -106,6 +116,9 @@ struct SelectableLogView: NSViewRepresentable {
             }
             textView.filterTag = { [weak self] tag in
                 self?.onFilterTag?(tag)
+            }
+            textView.onUserClick = { [weak self] in
+                self?.holdFollow = true
             }
             scrollView.contentView.postsBoundsChangedNotifications = true
             NotificationCenter.default.addObserver(
@@ -152,6 +165,10 @@ struct SelectableLogView: NSViewRepresentable {
         func handleJump(_ request: LogJumpRequest?) {
             guard let request, request.token != lastJumpToken else { return }
             lastJumpToken = request.token
+            // Jumping to the newest edge is the explicit "resume following"
+            // gesture — it lifts a click-hold. Jumping into scrollback keeps it.
+            let newestEdge: VerticalEdge = renderedNewestFirst ? .top : .bottom
+            if request.edge == newestEdge { holdFollow = false }
             switch request.edge {
             case .top: scrollToTop()
             case .bottom: scrollToBottom()
@@ -165,12 +182,16 @@ struct SelectableLogView: NSViewRepresentable {
         /// (prepend + tail-trim) when the display order is newest-first;
         /// anything else (filter change, clear, search change, an order flip)
         /// rebuilds.
-        func update(lines: [LogLine], find: String, newestFirst: Bool) {
+        func update(lines: [LogLine], find: String, newestFirst: Bool, showTime: Bool) {
             guard let storage = textView?.textStorage else { return }
+            // A cleared buffer starts a fresh tail — a hold from the old
+            // content has nothing left to protect.
+            if lines.isEmpty { holdFollow = false }
             // Judged against the *rendered* orientation, so flipping the order
             // while parked on the newest line keeps following it at the other
-            // edge.
-            let wasTailing = renderedLines.isEmpty || isAtNewestEdge(newestFirst: renderedNewestFirst)
+            // edge. A click-hold suspends following even at the edge.
+            let wasTailing = renderedLines.isEmpty
+                || (!holdFollow && isAtNewestEdge(newestFirst: renderedNewestFirst))
 
             defer {
                 if wasTailing { newestFirst ? scrollToTop() : scrollToBottom() }
@@ -180,9 +201,10 @@ struct SelectableLogView: NSViewRepresentable {
                 syncEdges()
             }
 
-            if find != renderedFind || newestFirst != renderedNewestFirst {
+            if find != renderedFind || newestFirst != renderedNewestFirst || showTime != renderedShowTime {
                 renderedFind = find
                 renderedNewestFirst = newestFirst
+                renderedShowTime = showTime
                 rebuild(lines, in: storage)
                 return
             }
@@ -196,6 +218,16 @@ struct SelectableLogView: NSViewRepresentable {
             case .rebuild:
                 rebuild(lines, in: storage)
             case .edit(let dropHead, let appendFrom):
+                // While tailing, run the ring trim and the append as ONE
+                // editing transaction: layout and display coalesce, and the
+                // follow-scroll in the defer lands in the same frame. Without
+                // this, once the buffer hit its line cap every batch painted
+                // an intermediate frame — content clamped upward by the trim
+                // before the append + re-pin caught up — and the feed visibly
+                // bounced. Scrollback paths stay unbatched: their scroll-place
+                // compensation measures layout between the edits.
+                let batchable = wasTailing
+                if batchable { storage.beginEditing() }
                 if newestFirst {
                     // Mirrored: the stream's head-trim is the *bottom* of the
                     // display, its tail-append the *top*.
@@ -213,6 +245,7 @@ struct SelectableLogView: NSViewRepresentable {
                         append(Array(lines[appendFrom...]), to: storage)
                     }
                 }
+                if batchable { storage.endEditing() }
             }
         }
 
@@ -269,7 +302,7 @@ struct SelectableLogView: NSViewRepresentable {
             guard !lines.isEmpty else { return }
             let batch = NSMutableAttributedString()
             for line in lines {
-                let attributed = Self.attributedLine(line, find: renderedFind)
+                let attributed = Self.attributedLine(line, find: renderedFind, showTime: renderedShowTime)
                 lineLengths.append(attributed.length)
                 batch.append(attributed)
             }
@@ -288,7 +321,7 @@ struct SelectableLogView: NSViewRepresentable {
             let batch = NSMutableAttributedString()
             var batchLengths: [Int] = []
             for line in displayLines {
-                let attributed = Self.attributedLine(line, find: renderedFind)
+                let attributed = Self.attributedLine(line, find: renderedFind, showTime: renderedShowTime)
                 batchLengths.append(attributed.length)
                 batch.append(attributed)
             }
@@ -330,7 +363,15 @@ struct SelectableLogView: NSViewRepresentable {
 
         // MARK: Rendering
 
+        // Columnar rows (the Android-log-viewer convention): time, pid–tid,
+        // process name, a colored level chip, the tag in a stable per-tag
+        // color, then the message tinted by severity. Widths are fixed so the
+        // monospaced columns align down the feed.
         private static let font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        private static let chipFont = NSFont.monospacedSystemFont(ofSize: 11, weight: .semibold)
+        private static let pidWidth = 11
+        private static let processWidth = 20
+        private static let tagWidth = 22
 
         private static func color(for level: String) -> NSColor {
             switch level {
@@ -341,22 +382,72 @@ struct SelectableLogView: NSViewRepresentable {
             }
         }
 
-        static func display(_ line: LogLine) -> String {
-            line.level.isEmpty
-                ? line.raw
-                : "\(line.time)  \(line.pid)  \(line.level)/\(line.tag): \(line.message)"
+        /// The level badge: a filled block behind the letter, like the I/W/E
+        /// chips in desktop log viewers.
+        private static func chipColors(for level: String) -> (bg: NSColor, fg: NSColor) {
+            switch level {
+            case "V": return (.systemGray, .white)
+            case "D": return (.systemBlue, .white)
+            case "I": return (.systemGreen, .black)
+            case "W": return (.systemOrange, .black)
+            case "E": return (.systemRed, .white)
+            case "F": return (.systemPurple, .white)
+            default: return (.tertiaryLabelColor, .labelColor)
+            }
         }
 
-        /// One rendered line (newline included), with every Find match
-        /// highlighted.
-        static func attributedLine(_ line: LogLine, find: String) -> NSAttributedString {
-            let text = display(line) + "\n"
-            let attributed = NSMutableAttributedString(string: text, attributes: [
-                .font: font,
-                .foregroundColor: color(for: line.level),
-            ])
+        /// A stable per-tag hue so one tag reads as one color across the feed
+        /// and across launches (djb2 — String.hashValue reseeds per launch).
+        private static let tagPalette: [NSColor] = [
+            .systemTeal, .systemOrange, .systemPurple, .systemPink,
+            .systemBlue, .systemCyan, .systemMint, .systemIndigo,
+            .systemBrown, .systemYellow,
+        ]
+
+        private static func tagColor(_ tag: String) -> NSColor {
+            var hash: UInt64 = 5381
+            for byte in tag.utf8 { hash = hash &* 33 &+ UInt64(byte) }
+            return tagPalette[Int(hash % UInt64(tagPalette.count))]
+        }
+
+        /// Fixed-width cell: pads short values, mid-ellipsizes long ones so
+        /// the trailing discriminator (`:process0`, numbered tags) survives.
+        private static func pad(_ text: String, to width: Int) -> String {
+            let count = text.count
+            if count <= width {
+                return text + String(repeating: " ", count: width - count)
+            }
+            let head = (width - 1) / 2
+            let tail = width - 1 - head
+            return text.prefix(head) + "…" + text.suffix(tail)
+        }
+
+        /// One rendered line (newline included): the aligned columns above,
+        /// with every Find match highlighted. Lines that didn't parse (buffer
+        /// separators) stay raw and muted.
+        static func attributedLine(_ line: LogLine, find: String, showTime: Bool) -> NSAttributedString {
+            let attributed = NSMutableAttributedString()
+            func run(_ text: String, _ color: NSColor, font: NSFont = font, background: NSColor? = nil) {
+                var attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
+                if let background { attributes[.backgroundColor] = background }
+                attributed.append(NSAttributedString(string: text, attributes: attributes))
+            }
+            if line.level.isEmpty {
+                run(line.raw, .secondaryLabelColor)
+            } else {
+                let chip = chipColors(for: line.level)
+                let pidTid = line.tid.isEmpty ? line.pid : "\(line.pid)-\(line.tid)"
+                if showTime { run(line.time + "  ", .tertiaryLabelColor) }
+                run(pad(pidTid, to: pidWidth) + " ", .secondaryLabelColor)
+                run(pad(line.processName ?? "?", to: processWidth) + " ", .secondaryLabelColor)
+                run(" \(line.level) ", chip.fg, font: chipFont, background: chip.bg)
+                run("  ", .labelColor)
+                run(pad(line.tag, to: tagWidth) + " ", tagColor(line.tag))
+                run(line.message, color(for: line.level))
+            }
+            run("\n", .labelColor)
             guard !find.isEmpty else { return attributed }
-            let haystack = text as NSString
+            let haystack = attributed.string as NSString
             var location = 0
             while location < haystack.length {
                 let range = haystack.range(
@@ -408,9 +499,18 @@ struct SelectableLogView: NSViewRepresentable {
 final class LogTextView: NSTextView {
     var lineAt: ((Int) -> LogLine?)?
     var filterTag: ((String) -> Void)?
+    /// Fired on any click into the log (left or right) — the coordinator
+    /// holds tail-follow so the line being read/selected stays put.
+    var onUserClick: (() -> Void)?
     private var menuLine: LogLine?
 
+    override func mouseDown(with event: NSEvent) {
+        onUserClick?()
+        super.mouseDown(with: event)
+    }
+
     override func menu(for event: NSEvent) -> NSMenu? {
+        onUserClick?()
         let point = convert(event.locationInWindow, from: nil)
         menuLine = lineAt?(characterIndexForInsertion(at: point))
         let menu = NSMenu()

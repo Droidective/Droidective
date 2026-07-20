@@ -207,6 +207,10 @@ final class JSConsoleSession {
     /// Drops the re-replayed console history on reconnects to the same app so
     /// the persistent feed doesn't duplicate.
     @ObservationIgnored private var replayGate = ConsoleReplayGate()
+    /// Auto-connect waits for a target to survive two discovery passes —
+    /// attaching the instant it first registered crashed Hermes mid-boot
+    /// (`TargetStabilityTracker`). Manual picks bypass this.
+    @ObservationIgnored private var targetStability = TargetStabilityTracker()
     /// Whether the "connected" notice was posted for the current app — an
     /// auto-reconnect to the same app doesn't repeat the welcome.
     private var hasWelcomed = false
@@ -217,6 +221,14 @@ final class JSConsoleSession {
     /// device keep reaching Metro. Keyed by port so changing the port and
     /// re-reversing doesn't orphan the earlier binding.
     @ObservationIgnored private var reversedTunnels: [Int: Set<String>] = [:]
+    /// port → per-serial auto-reverse try count, capped at `autoReverseTryLimit`
+    /// so the 2s loop doesn't respawn adb forever for a device that keeps
+    /// failing — while a transient failure still gets retried instead of
+    /// stranding the device on its first bad pass. A serial that leaves the
+    /// device list is forgotten (a replug drops the binding device-side, so it
+    /// must be re-attempted).
+    @ObservationIgnored private var autoReverseAttempts: [Int: [String: Int]] = [:]
+    private let autoReverseTryLimit = 3
     weak var app: AppState?
 
     var isConnected: Bool { connectedTarget != nil }
@@ -261,6 +273,35 @@ final class JSConsoleSession {
         discoveryTask = nil
     }
 
+    // MARK: View attach/detach
+
+    /// Views currently showing this session. Moving the tab between split
+    /// panes REMOUNTS the view, and SwiftUI may fire the new pane's onAppear
+    /// before the old pane's onDisappear — a hard `stop()` there killed the
+    /// live connection and dropped the chosen target. So the view lifecycle
+    /// counts attachments and only stops once no view has claimed the session
+    /// for a beat; the direct `start`/`stop` remain for AppState's explicit
+    /// paths (tab close, window close, reopen).
+    @ObservationIgnored private var attachedViews = 0
+
+    func viewAppeared(serials: [String]) {
+        attachedViews += 1
+        start(serials: serials)
+    }
+
+    func viewDisappeared() {
+        attachedViews = max(0, attachedViews - 1)
+        guard attachedViews == 0 else { return }
+        // Deferred: on a pane move the replacement view attaches within the
+        // same UI beat (in either onAppear/onDisappear order) and vetoes the
+        // stop. Only a real teardown leaves the count at zero.
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard let self, self.attachedViews == 0 else { return }
+            self.stop()
+        }
+    }
+
     /// Run discovery + connection until cancelled; tears the connection down on
     /// the way out.
     private func activate(serials: [String]) async {
@@ -270,11 +311,22 @@ final class JSConsoleSession {
         autoReconnectSuspended = false
         if !isConnected { phase = .searching }
         while !Task.isCancelled {
+            // Self-heal a half-dead connection: the socket is gone but its
+            // close event was never consumed (a torn-down consumer during a
+            // reconnect race) — without this, discovery idles forever
+            // believing it's connected while the status shows a green dot
+            // over a silent feed. Restarting the feature used to be the fix.
+            if connectedTarget != nil, !(await cdp.isConnected) {
+                connectedTarget = nil
+                phase = .searching
+            }
+            if connectedTarget == nil { await autoReverse() }
             let scannedPort = port
             let found = (try? await MetroInspector(port: scannedPort).listTargets()) ?? []
             // Drop a pass whose port changed mid-fetch — its results are stale.
             if !Task.isCancelled, scannedPort == port {
                 targets = found
+                targetStability.recordPass(ids: found.map(\.id))
                 // A takeover stand-down holds while any target is still
                 // listed; once the list is empty there's no debugger left to
                 // kick off and discovery should self-heal again.
@@ -283,11 +335,17 @@ final class JSConsoleSession {
                     phase = .searching
                 }
                 if connectedTarget == nil, !autoReconnectSuspended {
+                    // Auto-connect only once the candidate has survived two
+                    // consecutive scans: attaching the instant an app first
+                    // registers hit Hermes mid-boot and crashed it. A booting
+                    // app waits one extra pass; a long-listed target (JS
+                    // reload, socket drop) reconnects immediately; the user's
+                    // pick from the target menu skips the gate entirely.
                     if let candidate = MetroInspector.autoConnectCandidate(
                         from: found,
                         preferredDeviceId: preferredLogicalDeviceId,
                         preferredAppId: preferredAppId
-                    ) {
+                    ), targetStability.isStable(candidate.id) {
                         await connect(to: candidate)
                     } else if phase != .connecting {
                         phase = found.isEmpty ? .searching : .targetsAvailable
@@ -308,7 +366,45 @@ final class JSConsoleSession {
         phase = .searching
     }
 
-    func updateSerials(_ serials: [String]) { self.serials = serials }
+    func updateSerials(_ serials: [String]) {
+        // A serial that vanished is forgotten so a replugged device gets its
+        // reverse re-attempted — replugging drops the binding device-side.
+        let removed = Set(self.serials).subtracting(serials)
+        if !removed.isEmpty {
+            for key in autoReverseAttempts.keys {
+                for serial in removed { autoReverseAttempts[key]?[serial] = nil }
+            }
+            for key in reversedTunnels.keys { reversedTunnels[key]?.subtract(removed) }
+        }
+        self.serials = serials
+    }
+
+    /// Install the device→Mac Metro binding automatically while searching, so
+    /// a USB device can register with Metro without the user knowing to click
+    /// "adb reverse" first (`react-native run-android` does the same on every
+    /// launch — its absence was why the console often found no target until
+    /// the feature was poked). A failed reverse stays eligible on later scan
+    /// passes, up to a few tries per device+port — a transient adb hiccup
+    /// shouldn't strand the device; the manual button stays as the fallback.
+    /// Background work, so deliberately not CommandLog-wrapped.
+    private func autoReverse() async {
+        let metroPort = port
+        let eligible = serials.filter {
+            autoReverseAttempts[metroPort, default: [:]][$0, default: 0] < autoReverseTryLimit
+        }
+        guard !eligible.isEmpty else { return }
+        var reversed: Set<String> = []
+        for serial in eligible where !Task.isCancelled {
+            if let result = try? await adb.run(on: serial, ["reverse", "tcp:\(metroPort)", "tcp:\(metroPort)"]),
+               result.succeeded {
+                autoReverseAttempts[metroPort, default: [:]][serial] = autoReverseTryLimit
+                reversed.insert(serial)
+            } else {
+                autoReverseAttempts[metroPort, default: [:]][serial, default: 0] += 1
+            }
+        }
+        if !reversed.isEmpty { reversedTunnels[metroPort, default: []].formUnion(reversed) }
+    }
 
     func connect(to target: CDPTarget) async {
         guard let url = URL(string: target.webSocketDebuggerUrl),
@@ -534,6 +630,8 @@ final class JSConsoleSession {
         autoReconnectSuspended = false
         resetWelcome()
         targets = []
+        // Sightings from the old port say nothing about the new one.
+        targetStability = TargetStabilityTracker()
         phase = .searching
         Task { [weak self] in await self?.cdp.disconnect() }
     }
@@ -600,8 +698,8 @@ final class JSConsoleSession {
     /// else the selected bundle. Disconnected — or when detection/relaunch
     /// fails — the installed-apps picker opens instead. Discovery reconnects
     /// by logical-device id once the app is back.
-    func restartApp() {
-        Task { [weak self] in await self?.performRestart() }
+    func restartApp(clearCache: Bool = false) {
+        Task { [weak self] in await self?.performRestart(clearCache: clearCache) }
     }
 
     /// Drives the fallback installed-apps picker sheet.
@@ -609,8 +707,12 @@ final class JSConsoleSession {
     /// The user's manual pick from the restart sheet, reused on later restarts
     /// whenever the connected target doesn't report its own `appId`.
     private var manualRestartPackage: String?
+    /// Whether the restart currently in flight (including one waiting on the
+    /// fallback picker) should clear the app's cache first.
+    private var pendingClearCache = false
 
-    private func performRestart() async {
+    private func performRestart(clearCache: Bool) async {
+        pendingClearCache = clearCache
         guard !serials.isEmpty else {
             app?.showToast(Toast(message: "Can't restart — no device selected.", ok: false))
             return
@@ -620,16 +722,17 @@ final class JSConsoleSession {
         let detected: String? = isConnected
             ? connectedTarget?.appId ?? manualRestartPackage ?? app?.selectedBundle?.packageId
             : nil
-        if let detected, await restart(package: detected) { return }
+        if let detected, await restart(package: detected, clearCache: clearCache) { return }
         restartPickerVisible = true
     }
 
     /// A pick from the fallback sheet: restart it and remember the choice.
     func restartPicked(_ package: String) {
         manualRestartPackage = package
+        let clearCache = pendingClearCache
         Task { [weak self] in
             guard let self else { return }
-            if !(await restart(package: package)) {
+            if !(await restart(package: package, clearCache: clearCache)) {
                 app?.showToast(Toast(
                     message: "Couldn't relaunch \(package) — is it installed on the selected device?",
                     ok: false
@@ -639,24 +742,55 @@ final class JSConsoleSession {
     }
 
     /// Force-stop + relaunch on every target device (the service's `.restart`
-    /// verb); true when any relaunch worked (the toast reports success;
+    /// verb), optionally clearing the app's cache first (`pm clear
+    /// --cache-only`, Android 14+ — best-effort, the restart proceeds either
+    /// way); true when any relaunch worked (the toast reports success;
     /// failures fall back to the picker).
-    private func restart(package: String) async -> Bool {
+    private func restart(package: String, clearCache: Bool) async -> Bool {
         let serials = serials
         let control = AppControlService(client: adb)
-        let relaunched = await CommandLog.userInitiated {
+        let (relaunched, cacheCleared) = await CommandLog.userInitiated {
             var relaunched = 0
+            var cacheCleared = true
             for serial in serials {
+                if clearCache, !(await Self.clearCacheBounded(control, serial: serial, package: package)) {
+                    cacheCleared = false
+                }
                 if let result = try? await control.control(serial: serial, packageId: package, action: .restart),
                    result.ok {
                     relaunched += 1
                 }
             }
-            return relaunched
+            return (relaunched, cacheCleared)
         }
         guard relaunched > 0 else { return false }
-        app?.showToast(Toast(message: "Restarting \(package)…", ok: true))
+        let message = if !clearCache {
+            "Restarting \(package)…"
+        } else if cacheCleared {
+            "Cleared cache — restarting \(package)…"
+        } else {
+            "Cache clear didn't finish — restarting \(package)…"
+        }
+        app?.showToast(Toast(message: message, ok: true))
         return true
+    }
+
+    /// `pm clear --cache-only` never returns on some images (observed live on
+    /// the API 36 emulator), so the clear gets a bounded window — cancelling
+    /// the task kills the adb child — and the restart proceeds either way.
+    private static func clearCacheBounded(
+        _ control: AppControlService, serial: String, package: String
+    ) async -> Bool {
+        let clear = Task {
+            (try? await control.control(serial: serial, packageId: package, action: .clearCache))?.ok == true
+        }
+        let watchdog = Task {
+            try? await Task.sleep(for: .seconds(10))
+            clear.cancel()
+        }
+        let ok = await clear.value
+        watchdog.cancel()
+        return ok
     }
 
     /// Remove the `adb reverse` bindings this console installed. Called when the
@@ -851,11 +985,12 @@ struct JSConsoleView: View {
             inputBar
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear { session.start(serials: state.targetSerials) }
-        // A real unmount (tab closed) — keep-alive tab switches never fire
-        // this. AppState also stops the session on tab/window close; both
-        // paths are idempotent.
-        .onDisappear { session.stop() }
+        .onAppear { session.viewAppeared(serials: state.targetSerials) }
+        // Fires on a real unmount: tab closed, or the tab MOVED between split
+        // panes (a remount — the attach count and its deferred zero-check in
+        // the session keep the connection alive through that). AppState also
+        // stops the session on tab/window close; every path is idempotent.
+        .onDisappear { session.viewDisappeared() }
         .onChange(of: state.targetSerials) { _, serials in session.updateSerials(serials) }
         .onAppear { portText = String(session.port) }
         .onChange(of: session.port) { _, newPort in portText = String(newPort) }
@@ -947,9 +1082,20 @@ struct JSConsoleView: View {
             .help("Reload the JS bundle — what ⌘R in React Native DevTools does")
         }
         if !state.targetSerials.isEmpty {
-            Button { session.restartApp() } label: {
+            // A split button: the primary click restarts, the chevron reveals
+            // the cache-clearing variant (pm clear --cache-only, then relaunch).
+            Menu {
+                Button {
+                    session.restartApp(clearCache: true)
+                } label: {
+                    Label("Clear cache and restart", systemImage: "arrow.triangle.2.circlepath")
+                }
+            } label: {
                 Label("Restart app", systemImage: "restart.circle")
+            } primaryAction: {
+                session.restartApp()
             }
+            .fixedSize()
             .help(session.isConnected
                 ? "Force-stop and relaunch the connected app on the device"
                 : "Pick an app to force-stop and relaunch")
@@ -1074,12 +1220,67 @@ struct JSConsoleView: View {
                 .help(session.newestFirst
                     ? "Newest at top — click to show newest at bottom"
                     : "Newest at bottom — click to show newest at top")
+            Menu {
+                Button("Save as JSON…") { exportToFile() }
+                Button("Copy to Clipboard") { exportToClipboard() }
+            } label: {
+                Image(systemName: "square.and.arrow.up")
+            }
+            .buttonStyle(IconButtonStyle())
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("Export the filtered console — save as a JSON file or copy to the clipboard")
+            .disabled(session.filteredEntries.isEmpty)
             Button { session.clear() } label: { Image(systemName: "trash") }
                 .buttonStyle(IconButtonStyle())
                 .help("Clear the console")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
+    }
+
+    // MARK: Export
+
+    /// What Export writes: exactly the rows the feed is showing — the level
+    /// and text filters apply, in display (chronological) order.
+    private var exportJSON: String? {
+        ConsoleExport.json(session.filteredEntries.map { entry in
+            let (type, level): (String, String?) = switch entry.kind {
+            case .input: ("input", nil)
+            case .result: ("result", nil)
+            case .evalError: ("error", nil)
+            case .notice: ("notice", nil)
+            case let .log(logLevel, _, _): ("log", logLevel.rawValue)
+            }
+            return ConsoleExportEntry(at: entry.at, type: type, level: level, text: jsEntryPlainText(entry.kind))
+        })
+    }
+
+    private func exportToFile() {
+        let count = session.filteredEntries.count
+        guard let file = state.askSaveLocation(
+            suggestedName: "js-console_\(ScreenCaptureService.stamp()).json"
+        ) else { return }
+        guard let json = exportJSON else {
+            state.showToast(Toast(message: "Export failed: entries couldn't be encoded", ok: false))
+            return
+        }
+        do {
+            try Data(json.utf8).write(to: file)
+            state.showToast(Toast(message: "Exported \(count) entries", ok: true, revealPath: file.path))
+        } catch {
+            state.showToast(Toast(message: "Export failed: \(error.localizedDescription)", ok: false))
+        }
+    }
+
+    private func exportToClipboard() {
+        let count = session.filteredEntries.count
+        guard let json = exportJSON else {
+            state.showToast(Toast(message: "Copy failed: entries couldn't be encoded", ok: false))
+            return
+        }
+        copyToPasteboard(json)
+        state.showToast(Toast(message: "Copied \(count) entries as JSON", ok: true))
     }
 
     /// Multi-select level filter: one dropdown that toggles several levels at
@@ -1238,8 +1439,8 @@ struct JSConsoleView: View {
         }
         return """
         Open a dev build running Hermes with Metro on port \(session.port). \
-        The app must be connected to Metro — for a USB device, tap “adb reverse” so it can reach the dev server. \
-        Targets appear automatically.
+        Droidective routes the device's port to Metro automatically (adb reverse); \
+        the button below retries it. Targets appear automatically.
         """
     }
 
@@ -1290,6 +1491,12 @@ struct JSConsoleView: View {
 private struct JSEntryRow: View {
     let entry: JSEntry
     let session: JSConsoleSession
+    @State private var hovering = false
+    @State private var copied = false
+    /// Bumped by a click anywhere on the row; the primary expandable value
+    /// observes it and toggles, so the whole row is the disclosure target —
+    /// not just the value's own summary line.
+    @State private var rowToggleToken = 0
 
     private var query: String { session.findText.trimmingCharacters(in: .whitespaces) }
     private var isCurrentFind: Bool { session.findVisible && session.currentFindID == entry.id }
@@ -1299,11 +1506,26 @@ private struct JSEntryRow: View {
             glyph
             content
                 .frame(maxWidth: .infinity, alignment: .leading)
+            // Always in the layout — hidden, not removed, when idle — so
+            // hovering can't change the row's width and reflow its text.
+            copyButton
+                .opacity(hovering || copied ? 1 : 0)
+                .allowsHitTesting(hovering || copied)
             Text(entry.at, format: .dateTime.hour().minute().second())
                 .font(.app(.caption2).monospacedDigit())
                 .foregroundStyle(JSConsoleTheme.muted)
                 .padding(.top, 1)
         }
+        .contentShape(Rectangle())
+        // Whitespace, glyph, and timestamp clicks toggle the row's expandable
+        // value too (the value's own header still works). Text keeps its
+        // selection gesture — this only catches clicks nothing else claims.
+        .onTapGesture {
+            if primaryObjectID != nil { rowToggleToken += 1 }
+        }
+        .onHover { hovering = $0 }
+        // Hovering the row is what reveals its URLs' underlines.
+        .environment(\.consoleLinkUnderline, hovering)
         .contextMenu {
             Button("Copy") { copyToPasteboard(jsEntryPlainText(entry.kind)) }
             if let objectID = primaryObjectID {
@@ -1315,6 +1537,27 @@ private struct JSEntryRow: View {
                 }
             }
         }
+    }
+
+    /// Hover copy affordance (the Reactotron rows' pattern): copies the row's
+    /// plain text with a checkmark flash; the right-click menu keeps the
+    /// deep "Copy as JSON".
+    private var copyButton: some View {
+        Button {
+            copyToPasteboard(jsEntryPlainText(entry.kind))
+            copied = true
+            Task { try? await Task.sleep(for: .seconds(1.5)); copied = false }
+        } label: {
+            Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                .font(.app(.caption))
+                .foregroundStyle(copied ? .green : JSConsoleTheme.muted)
+                // Fixed footprint for both glyphs, so neither hover nor the
+                // copy→checkmark swap nudges the layout.
+                .frame(width: 14)
+        }
+        .buttonStyle(.plain)
+        .padding(.top, 1)
+        .help("Copy this entry (right-click for JSON)")
     }
 
     /// The object handle to deep-copy as JSON (result value, or the first
@@ -1355,7 +1598,7 @@ private struct JSEntryRow: View {
         case let .input(text):
             line(text, base: JSConsoleTheme.muted)
         case let .result(object):
-            JSValueView(object: object, session: session, scrollTargetID: entry.id)
+            JSValueView(object: object, session: session, scrollTargetID: entry.id, toggleToken: rowToggleToken)
         case let .evalError(details):
             errorContent(details)
         case let .log(level, args, stack):
@@ -1366,7 +1609,7 @@ private struct JSEntryRow: View {
     }
 
     private func line(_ text: String, base: Color) -> some View {
-        highlightedText(text, query: query, base: base, current: isCurrentFind)
+        highlightedText(text, query: query, base: base, current: isCurrentFind, underlineLinks: hovering)
             .font(.app(.callout, design: .monospaced))
             .lineSpacing(2)
             .textSelection(.enabled)
@@ -1374,26 +1617,33 @@ private struct JSEntryRow: View {
     }
 
     private func logContent(level: JSLevel, args: [RemoteObject], stack: CDPStackTrace?) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
+        let rows = argRows(args)
+        // The row-level click toggles the first expandable object — the one
+        // "Copy as JSON" also targets.
+        let primaryRowID = rows.first { if case .object = $0.kind { true } else { false } }?.id
+        return VStack(alignment: .leading, spacing: 3) {
             // Each expandable object renders exactly once, as its own disclosure
             // row in argument order — it used to appear twice (inline in the
             // message line AND repeated below), which doubled every logged object.
             // Scalar runs keep the level tint for errors/warnings and VSCode-style
             // syntax colors otherwise.
-            ForEach(argRows(args)) { row in
+            ForEach(rows) { row in
                 switch row.kind {
                 case let .scalars(text, tokens):
                     if level == .error || level == .warning {
                         line(text, base: level.consoleTextColor)
                     } else {
-                        coloredTokenText(tokens, query: query, current: isCurrentFind)
+                        coloredTokenText(tokens, query: query, current: isCurrentFind, underlineLinks: hovering)
                             .font(.app(.callout, design: .monospaced))
                             .lineSpacing(2)
                             .textSelection(.enabled)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 case let .object(arg):
-                    JSValueView(object: arg, session: session, scrollTargetID: entry.id)
+                    JSValueView(
+                        object: arg, session: session, scrollTargetID: entry.id,
+                        toggleToken: row.id == primaryRowID ? rowToggleToken : 0
+                    )
                 }
             }
             if level == .error, let stack { StackView(stack: stack) }
@@ -1459,8 +1709,12 @@ private struct JSValueView: View {
     /// scrolls that row's header into view instead of leaving the viewport at
     /// the object's end (the flipped-layout jump).
     var scrollTargetID: AnyHashable?
+    /// Bumped by the owning row when the user clicks anywhere on it — the
+    /// whole log row acts as this value's disclosure toggle.
+    var toggleToken = 0
     @Environment(\.logTailScrollToHeader) private var scrollToHeader
     @Environment(\.logTailPauseFollow) private var pauseFollow
+    @Environment(\.consoleLinkUnderline) private var underlineLinks
     @State private var expanded = false
     @State private var snapshot: SnapNode?
     @State private var failed = false
@@ -1476,15 +1730,7 @@ private struct JSValueView: View {
             // whole object — expanding is how you read the rest.
             VStack(alignment: .leading, spacing: 2) {
                 Button {
-                    expanded.toggle()
-                    if expanded {
-                        // Expanding means the user is reading — pause
-                        // tail-follow so streaming lines can't scroll the
-                        // object away (same affordances as Reactotron:
-                        // the jump button or scrolling back resumes).
-                        pauseFollow()
-                        if snapshot == nil, !loading { load() } else { scrollHeaderToTop() }
-                    }
+                    toggleExpanded()
                 } label: {
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
                         Image(systemName: expanded ? "chevron.down" : "chevron.right")
@@ -1502,6 +1748,7 @@ private struct JSValueView: View {
                 if expanded { expandedChildren.padding(.leading, 18) }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .onChange(of: toggleToken) { _, _ in toggleExpanded() }
         } else {
             summaryText
                 .fixedSize(horizontal: false, vertical: true)
@@ -1510,8 +1757,19 @@ private struct JSValueView: View {
         }
     }
 
+    private func toggleExpanded() {
+        expanded.toggle()
+        if expanded {
+            // Expanding means the user is reading — pause tail-follow so
+            // streaming lines can't scroll the object away (same affordances
+            // as Reactotron: the jump button or scrolling back resumes).
+            pauseFollow()
+            if snapshot == nil, !loading { load() } else { scrollHeaderToTop() }
+        }
+    }
+
     private var summaryText: some View {
-        coloredTokenText(object.tokens, query: query, current: false)
+        coloredTokenText(object.tokens, query: query, current: false, underlineLinks: underlineLinks)
             .font(.app(.callout, design: .monospaced))
             .textSelection(.enabled)
     }
@@ -1574,75 +1832,143 @@ private struct JSValueView: View {
 
 // MARK: - Snapshot tree (client-side, no getProperties)
 
-/// An expanded object/array: an optional "search in object" field over the
-/// tree, rendered inline (the feed grows to fit — no nested scroll). The scroll
-/// jump on expand is handled by the owning row scrolling its header into view.
+/// An expanded object/array: a "find in object" field over the tree, rendered
+/// inline (the feed grows to fit — no nested scroll). Typing shows a clickable
+/// result list (`SnapNode.findMatches`, pure in ADBKit); clicking a result
+/// expands the tree along its path and highlights the node in place. The
+/// scroll jump on expand is handled by the owning row scrolling its header
+/// into view.
 private struct ExpandedTree: View {
     let node: SnapNode
     let session: JSConsoleSession
     @State private var search = ""
-
-    /// Only worth an in-object search box once there are enough children.
-    private var searchable: Bool {
-        (node.entries?.count ?? node.items?.count ?? 0) >= 8
-    }
+    /// Ordinal paths ("0/3/1") of the containers currently open — hoisted here
+    /// so a clicked find result can expand its whole ancestor chain.
+    @State private var expandedPaths: Set<String> = []
+    /// The last revealed find result, tinted until the next find/reveal.
+    @State private var highlightedPath: String?
 
     var body: some View {
         let query = search.trimmingCharacters(in: .whitespaces).lowercased()
         VStack(alignment: .leading, spacing: 4) {
-            if searchable {
-                SearchField(prompt: "Search in object…", text: $search)
-                    .controlSize(.small)
-                    .frame(maxWidth: 260)
+            SearchField(prompt: "Find in object…", text: $search)
+                .controlSize(.small)
+                .frame(maxWidth: 260)
+            if query.isEmpty {
+                SnapChildrenView(
+                    node: node, session: session, path: "",
+                    expandedPaths: $expandedPaths, highlightedPath: highlightedPath
+                )
+            } else {
+                SnapMatchList(matches: node.findMatches(query: query), onSelect: reveal)
             }
-            SnapChildrenView(node: node, session: session, query: query)
         }
+        // A newly typed query drops the previous reveal's tint (reveal itself
+        // clears the field, so its own highlight survives this).
+        .onChange(of: search) { _, newValue in
+            if !newValue.trimmingCharacters(in: .whitespaces).isEmpty { highlightedPath = nil }
+        }
+    }
+
+    /// Open every container down to the match, mark it, and swap back to the
+    /// tree so the user lands on the node.
+    private func reveal(_ match: TreeMatch) {
+        var path = ""
+        for index in match.path {
+            path = path.isEmpty ? String(index) : "\(path)/\(index)"
+            expandedPaths.insert(path)
+        }
+        highlightedPath = path
+        search = ""
+    }
+}
+
+/// The clickable results of a find inside one object — location, then value.
+private struct SnapMatchList: View {
+    let matches: [TreeMatch]
+    let onSelect: (TreeMatch) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            if matches.isEmpty {
+                Text("No matches").font(.app(.caption)).foregroundStyle(.tertiary)
+            }
+            ForEach(Array(matches.enumerated()), id: \.offset) { _, match in
+                Button {
+                    onSelect(match)
+                } label: {
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Image(systemName: "arrow.turn.down.right")
+                            .font(.app(size: 10))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 14)
+                        Text("\(match.displayPath):")
+                            .font(.app(.callout, design: .monospaced))
+                            .foregroundStyle(jsColor(.key))
+                        Text(match.preview)
+                            .font(.app(.callout, design: .monospaced))
+                            .foregroundStyle(jsColor(match.isContainer ? .className : .plain))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Reveal in the tree")
+            }
+            if matches.count >= 200 {
+                Text("…first 200 matches — narrow the search")
+                    .font(.app(.caption)).foregroundStyle(.tertiary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
 /// The ordered child rows of a container `SnapNode` — array items with index
-/// labels, or object entries with key labels. `query` (lowercased) prunes to
-/// matching branches for the in-object search.
+/// labels, or object entries with key labels. `path` is the container's own
+/// ordinal path; expansion state lives in the owning `ExpandedTree` so find
+/// results can drive it.
 private struct SnapChildrenView: View {
     let node: SnapNode
     let session: JSConsoleSession
-    var query: String = ""
-
-    /// Rows shown per level while an in-object search is active. The search
-    /// auto-expands every matching container, and the rows are not lazy — an
-    /// uncapped broad query over a big snapshot (the device allows up to
-    /// 20 000 nodes) laid out tens of thousands of views in one pass.
-    private static let maxSearchRows = 100
+    let path: String
+    @Binding var expandedPaths: Set<String>
+    let highlightedPath: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             if node.type == "array", let items = node.items {
-                let matched = items.enumerated().filter { query.isEmpty || $0.element.matches(query) }
-                let shown = query.isEmpty ? matched : Array(matched.prefix(Self.maxSearchRows))
-                if shown.isEmpty { emptyRow }
-                ForEach(shown, id: \.offset) { index, child in
-                    SnapValueView(label: String(index), node: child, session: session, query: query)
+                if items.isEmpty { emptyRow }
+                ForEach(Array(items.enumerated()), id: \.offset) { index, child in
+                    SnapValueView(
+                        label: String(index), node: child, session: session,
+                        path: childPath(index), expandedPaths: $expandedPaths,
+                        highlightedPath: highlightedPath
+                    )
                 }
-                if query.isEmpty, let hidden = node.hiddenCount, hidden > 0 { moreRow("…(+\(hidden) more)") }
-                if matched.count > shown.count { moreRow("…(+\(matched.count - shown.count) more matches — narrow the search)") }
+                if let hidden = node.hiddenCount, hidden > 0 { moreRow("…(+\(hidden) more)") }
             } else if let entries = node.entries {
-                let matched = entries.enumerated().filter { query.isEmpty || $0.element.node.matches(query, key: $0.element.name) }
-                let shown = query.isEmpty ? matched : Array(matched.prefix(Self.maxSearchRows))
-                if shown.isEmpty { emptyRow }
-                ForEach(shown, id: \.offset) { _, entry in
-                    SnapValueView(label: entry.name, node: entry.node, session: session, query: query)
+                if entries.isEmpty { emptyRow }
+                ForEach(Array(entries.enumerated()), id: \.offset) { index, entry in
+                    SnapValueView(
+                        label: entry.name, node: entry.node, session: session,
+                        path: childPath(index), expandedPaths: $expandedPaths,
+                        highlightedPath: highlightedPath
+                    )
                 }
-                if query.isEmpty, node.truncated == true { moreRow("…(more)") }
-                if matched.count > shown.count { moreRow("…(+\(matched.count - shown.count) more matches — narrow the search)") }
+                if node.truncated == true { moreRow("…(more)") }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    private func childPath(_ index: Int) -> String {
+        path.isEmpty ? String(index) : "\(path)/\(index)"
+    }
+
     private var emptyRow: some View {
-        Text(query.isEmpty
-            ? (node.type == "array" ? "(empty array)" : "(no enumerable properties)")
-            : "No matches")
+        Text(node.type == "array" ? "(empty array)" : "(no enumerable properties)")
             .font(.app(.caption)).foregroundStyle(.tertiary)
     }
 
@@ -1653,30 +1979,34 @@ private struct SnapChildrenView: View {
 
 /// One row in the snapshot tree: a primitive `key: value`, or a collapsible
 /// container header whose children (another `SnapChildrenView`) indent below.
-/// A non-empty `query` auto-expands containers so matches are revealed, and
-/// highlights the matched text.
+/// The row revealed by a find result carries a highlight tint.
 private struct SnapValueView: View {
     let label: String?
     let node: SnapNode
     let session: JSConsoleSession
-    var query: String = ""
+    let path: String
+    @Binding var expandedPaths: Set<String>
+    let highlightedPath: String?
     @Environment(\.logTailPauseFollow) private var pauseFollow
-    @State private var expanded = false
+    @Environment(\.consoleLinkUnderline) private var underlineLinks
 
-    /// Text highlighted in rows: the in-object search when active, else the ⌘F find.
-    private var highlight: String {
-        query.isEmpty ? session.findText.trimmingCharacters(in: .whitespaces) : query
-    }
-    private var isOpen: Bool { expanded || !query.isEmpty }
+    /// Text highlighted in rows: the ⌘F find query.
+    private var highlight: String { session.findText.trimmingCharacters(in: .whitespaces) }
+    private var isOpen: Bool { expandedPaths.contains(path) }
+    private var isRevealed: Bool { path == highlightedPath }
 
     var body: some View {
         if node.isContainer {
             VStack(alignment: .leading, spacing: 2) {
                 Button {
-                    expanded.toggle()
-                    // Reading a nested node is still reading — keep the feed
-                    // from scrolling it away.
-                    if expanded { pauseFollow() }
+                    if isOpen {
+                        expandedPaths.remove(path)
+                    } else {
+                        expandedPaths.insert(path)
+                        // Reading a nested node is still reading — keep the
+                        // feed from scrolling it away.
+                        pauseFollow()
+                    }
                 } label: {
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
                         Image(systemName: isOpen ? "chevron.down" : "chevron.right")
@@ -1684,26 +2014,40 @@ private struct SnapValueView: View {
                             .foregroundStyle(.secondary)
                             .frame(width: 14)
                         labelText
-                        highlightedText(summary, query: highlight, base: jsColor(.className))
+                        highlightedText(node.containerSummary, query: highlight, base: jsColor(.className))
                             .font(.app(.callout, design: .monospaced))
                     }
                     .contentShape(Rectangle())
+                    .background(revealTint)
                 }
                 .buttonStyle(.plain)
-                .disabled(!query.isEmpty)   // search drives expansion; manual toggle resumes when cleared
                 if isOpen {
-                    SnapChildrenView(node: node, session: session, query: query).padding(.leading, 18)
+                    SnapChildrenView(
+                        node: node, session: session, path: path,
+                        expandedPaths: $expandedPaths, highlightedPath: highlightedPath
+                    )
+                    .padding(.leading, 18)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 labelText
-                highlightedText(primitiveText, query: highlight, base: jsColor(kind))
-                    .font(.app(.callout, design: .monospaced))
-                    .textSelection(.enabled)
+                highlightedText(
+                    node.primitivePreview, query: highlight, base: jsColor(kind),
+                    underlineLinks: underlineLinks
+                )
+                .font(.app(.callout, design: .monospaced))
+                .textSelection(.enabled)
             }
+            .background(revealTint)
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder private var revealTint: some View {
+        if isRevealed {
+            RoundedRectangle(cornerRadius: 3).fill(JSConsoleTheme.findMatch.opacity(0.22))
         }
     }
 
@@ -1713,21 +2057,6 @@ private struct SnapValueView: View {
                 .font(.app(.callout, design: .monospaced))
                 .fixedSize(horizontal: false, vertical: true)
         }
-    }
-
-    /// Collapsed one-liner for a container, e.g. `Array(200)`, `{3}`, `Map {2}`.
-    private var summary: String {
-        if node.type == "array" {
-            return "Array(\(node.length ?? node.items?.count ?? 0))"
-        }
-        let count = node.entries?.count ?? 0
-        let ctor = node.ctor ?? "Object"
-        return ctor == "Object" ? "{\(count)}" : "\(ctor) {\(count)}"
-    }
-
-    private var primitiveText: String {
-        let text = node.text ?? "—"
-        return node.type == "string" ? "\"\(text)\"" : text
     }
 
     private var kind: JSTokenKind {
@@ -1921,9 +2250,22 @@ private func jsTruncationNote(hiddenCharacters: Int) -> AttributedString {
     return note
 }
 
+/// Whether detected URLs in console text draw their underline — set true by
+/// the hovered row, so links read as plain text until pointed at.
+private struct ConsoleLinkUnderlineKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    fileprivate var consoleLinkUnderline: Bool {
+        get { self[ConsoleLinkUnderlineKey.self] }
+        set { self[ConsoleLinkUnderlineKey.self] = newValue }
+    }
+}
+
 /// Syntax-colored `Text` for a value's tokens, with find matches highlighted
 /// and http(s) URLs linkified. Bounded to `jsDisplayCharacterLimit` characters.
-func coloredTokenText(_ tokens: [JSToken], query: String, current: Bool) -> Text {
+func coloredTokenText(_ tokens: [JSToken], query: String, current: Bool, underlineLinks: Bool = false) -> Text {
     var attr = AttributedString()
     var remaining = jsDisplayCharacterLimit
     var hidden = 0
@@ -1944,14 +2286,16 @@ func coloredTokenText(_ tokens: [JSToken], query: String, current: Bool) -> Text
         attr += jsTruncationNote(hiddenCharacters: hidden)
     }
     applyFindHighlight(&attr, query: query, current: current)
-    applyLinkAttributes(&attr)
+    applyLinkAttributes(&attr, underlined: underlineLinks)
     return Text(attr)
 }
 
 /// A single-color `Text` (input/notice/error lines) with find matches
 /// highlighted and http(s) URLs linkified. Bounded to
 /// `jsDisplayCharacterLimit` characters.
-func highlightedText(_ string: String, query: String, base: Color, current: Bool = false) -> Text {
+func highlightedText(
+    _ string: String, query: String, base: Color, current: Bool = false, underlineLinks: Bool = false
+) -> Text {
     var attr = AttributedString(String(string.prefix(jsDisplayCharacterLimit)))
     attr.foregroundColor = base
     let hidden = string.utf8.count - jsDisplayCharacterLimit
@@ -1960,22 +2304,26 @@ func highlightedText(_ string: String, query: String, base: Color, current: Bool
         attr += jsTruncationNote(hiddenCharacters: hidden)
     }
     applyFindHighlight(&attr, query: query, current: current)
-    applyLinkAttributes(&attr)
+    applyLinkAttributes(&attr, underlined: underlineLinks)
     return Text(attr)
 }
 
-/// Underline http(s) URLs and attach `.link`, so the console's ⌘-click
-/// `openURL` gate can send them to the browser. Detection — including the
-/// explicit-scheme guard and the UTF-16 → Character offset mapping — is
-/// `ConsoleLinkDetector` (pure, tested in ADBKit); this only applies the
-/// SwiftUI attributes at the returned offsets.
-func applyLinkAttributes(_ attr: inout AttributedString) {
+/// Attach `.link` to http(s) URLs — underlined only while the owning row is
+/// hovered (`underlined`), so a URL-heavy feed doesn't read as a wall of
+/// underlines — letting the console's ⌘-click `openURL` gate send them to the
+/// browser. Detection — including the explicit-scheme guard and the
+/// UTF-16 → Character offset mapping — is `ConsoleLinkDetector` (pure, tested
+/// in ADBKit); this only applies the SwiftUI attributes at the returned
+/// offsets.
+func applyLinkAttributes(_ attr: inout AttributedString, underlined: Bool) {
     let plain = String(attr.characters)
     for span in ConsoleLinkDetector.linkSpans(in: plain) {
         let lower = attr.index(attr.startIndex, offsetByCharacters: span.start)
         let upper = attr.index(lower, offsetByCharacters: span.count)
         attr[lower ..< upper].link = span.url
-        attr[lower ..< upper].swiftUI.underlineStyle = .single
+        if underlined {
+            attr[lower ..< upper].swiftUI.underlineStyle = .single
+        }
     }
 }
 

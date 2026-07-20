@@ -12,10 +12,24 @@ import Testing
         #expect(FeatureRegistry.visiblePlatforms(for: nil) == [.android, .iosSimulator])
     }
 
+    /// React Native apps ship on Android and iOS, so the role spans both —
+    /// booted simulators join the device bar and the launch lists.
+    @Test func reactNativeSeesBothPlatforms() {
+        #expect(FeatureRegistry.visiblePlatforms(for: .reactNativeDeveloper) == [.android, .iosSimulator])
+    }
+
+    /// The RN role curates the iOS-side tools too: the simulator log stream
+    /// and the Simulate hub (which carries the iOS-only push tester).
+    @Test func reactNativeCuratesIOSTools() {
+        let ids = FeatureRegistry.featureIDs(for: .reactNativeDeveloper)
+        #expect(ids.contains("ios-logs"))
+        #expect(ids.contains("simulate"))
+    }
+
     @Test(arguments: [
-        UserRole.androidDeveloper, .reactNativeDeveloper, .qaTester, .supportTriage, .securityTester,
+        UserRole.androidDeveloper, .qaTester, .supportTriage, .securityTester,
     ])
-    func everyNonIOSRoleSeesOnlyAndroid(role: UserRole) {
+    func androidOnlyRolesSeeOnlyAndroid(role: UserRole) {
         #expect(FeatureRegistry.visiblePlatforms(for: role) == [.android])
     }
 
@@ -23,7 +37,9 @@ import Testing
         let emulators = try #require(FeatureRegistry.byID["emulators"])
         #expect(FeatureRegistry.presented(emulators, for: nil).title == "Emulators & Simulators")
         #expect(FeatureRegistry.presented(emulators, for: .iosDeveloper).title == "Simulators")
-        for role in UserRole.allCases where role != .iosDeveloper {
+        // Both platforms visible → the combined default title stands.
+        #expect(FeatureRegistry.presented(emulators, for: .reactNativeDeveloper).title == "Emulators & Simulators")
+        for role in UserRole.allCases where role != .iosDeveloper && role != .reactNativeDeveloper {
             #expect(FeatureRegistry.presented(emulators, for: role).title == "Emulators")
         }
     }

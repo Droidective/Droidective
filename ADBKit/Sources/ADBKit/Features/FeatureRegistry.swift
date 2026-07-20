@@ -635,13 +635,16 @@ public enum FeatureRegistry {
             "emulators", "connection",
             "terminal", "custom-commands",
         ],
-        // RN-specific tools first, then the shared debug loop (logs, crash,
-        // perf, network), app management, and device/capture.
+        // RN-specific tools first, then the shared debug loop (logs — both
+        // platforms' — crash, perf, network), app management, device/capture
+        // with state simulation, and infra. RN apps ship on Android AND iOS,
+        // so the iOS Simulator tools (ios-logs, the Simulate hub with its
+        // push tester) ride along and the role sees both platforms.
         .reactNativeDeveloper: [
             "react-native", "reactotron", "js-console",
-            "logcat", "crash-catcher", "performance", "network-speed",
+            "logcat", "ios-logs", "crash-catcher", "performance", "network-speed",
             "apps", "install-app", "apk-studio", "aab-convert",
-            "device-info", "scrcpy", "screenshot", "send-text",
+            "device-info", "simulate", "scrcpy", "screenshot", "send-text",
             "emulators", "connection",
             "terminal", "custom-commands",
         ],
@@ -695,25 +698,28 @@ public enum FeatureRegistry {
 
     /// The device platforms a role works with. The device bar, the virtual-
     /// device launch lists, and the Emulators screen show only these; `nil`
-    /// ("all features") shows both. The iOS Developer role is simulator-only,
-    /// every other role is Android-only.
+    /// ("all features") shows both. iOS Developer is simulator-only, React
+    /// Native spans both (RN apps ship on Android and iOS), every other role
+    /// is Android-only.
     public static func visiblePlatforms(for role: UserRole?) -> Set<DevicePlatform> {
         switch role {
         case .iosDeveloper: return [.iosSimulator]
-        case nil: return [.android, .iosSimulator]
+        case .reactNativeDeveloper, nil: return [.android, .iosSimulator]
         default: return [.android]
         }
     }
 
     /// The def as `role` presents it: the emulators screen renames itself to
-    /// the platform(s) the role can see ("Simulators" for iOS Developer,
-    /// "Emulators" for the Android-only roles, the combined title with no
-    /// role). Only display strings change — id, kind, icon, and behavior
-    /// don't, so ids stay a stable contract.
+    /// the platform(s) the role can see ("Simulators" for a simulator-only
+    /// role, "Emulators" for the Android-only ones, the combined title when
+    /// both platforms are visible). Only display strings change — id, kind,
+    /// icon, and behavior don't, so ids stay a stable contract.
     public static func presented(_ def: FeatureDef, for role: UserRole?) -> FeatureDef {
         guard def.id == "emulators", let role else { return def }
+        let platforms = visiblePlatforms(for: role)
+        guard platforms != [.android, .iosSimulator] else { return def }
         var adapted = def
-        if role == .iosDeveloper {
+        if platforms == [.iosSimulator] {
             adapted.title = "Simulators"
             adapted.subtitle = "Boot and shut down iOS Simulators"
         } else {

@@ -149,6 +149,18 @@ import Testing
         #expect(!result.ok)
     }
 
+    @Test func clearCacheUsesCacheOnlyAndQuotesPackage() async throws {
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["-s"], stdout: "Success")
+        let service = await makeService(runner)
+
+        let result = try await service.control(serial: "S1", packageId: "a'b", action: .clearCache)
+        #expect(result.ok)
+        #expect(runner.invocations.last?.arguments == [
+            "-s", "S1", "shell", "pm", "clear", "--cache-only", "'a'\\''b'",
+        ])
+    }
+
     @Test func clearCacheReportsFailureWhenNoSuccessText() async throws {
         // Older devices print nothing (no --cache-only support) and exit 0.
         let runner = MockProcessRunner()

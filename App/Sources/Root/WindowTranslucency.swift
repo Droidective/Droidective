@@ -74,8 +74,7 @@ struct WindowTranslucencyModifier: ViewModifier {
             // Outside RootView's zoom scaleEffect, so ⌘= never magnifies
             // the specks.
             .overlay {
-                GrainOverlay(
-                    strength: WindowEffects.grainOpacity(root: windowOpacity, amount: windowGrain))
+                GrainOverlay(strength: WindowEffects.grainOpacity(amount: windowGrain))
             }
             .environment(\.windowOpacity, WindowEffects.clamped(windowOpacity))
             .onChange(of: windowOpacity) { _, value in

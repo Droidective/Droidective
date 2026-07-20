@@ -49,10 +49,12 @@ import Testing
         #expect(WindowEffects.blurRadius(amount: 2, root: 0.5) == 40)
     }
 
-    @Test func grainScalesWithTheSliderAndDiesWhenOpaque() {
-        #expect(WindowEffects.grainOpacity(root: 0.5, amount: 1) == WindowEffects.maximumGrainAlpha)
-        #expect(WindowEffects.grainOpacity(root: 0.5, amount: 0.5) == WindowEffects.maximumGrainAlpha / 2)
-        #expect(WindowEffects.grainOpacity(root: 0.5, amount: 0) == 0)
-        #expect(WindowEffects.grainOpacity(root: 1.0, amount: 1) == 0)
+    @Test func grainScalesWithTheSliderIndependentOfOpacity() {
+        #expect(WindowEffects.grainOpacity(amount: 1) == WindowEffects.maximumGrainAlpha)
+        #expect(WindowEffects.grainOpacity(amount: 0.5) == WindowEffects.maximumGrainAlpha / 2)
+        #expect(WindowEffects.grainOpacity(amount: 0) == 0)
+        // Out-of-range and non-finite amounts clamp like the other sliders.
+        #expect(WindowEffects.grainOpacity(amount: 2) == WindowEffects.maximumGrainAlpha)
+        #expect(WindowEffects.grainOpacity(amount: .nan) == 0)
     }
 }
