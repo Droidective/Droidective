@@ -72,7 +72,26 @@ final class MirrorLayerNSView: NSView {
 
     override func layout() {
         super.layout()
+        syncDisplayLayerFrame()
+    }
+
+    /// `layout()` alone misses direct frame changes (a SwiftUI split-divider
+    /// drag resizes the view without a constraint pass), leaving the layer at
+    /// its old size — video letterboxed against a stale width and drawn past
+    /// the pane. Track every size change explicitly.
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        syncDisplayLayerFrame()
+    }
+
+    private func syncDisplayLayerFrame() {
+        guard displayLayer.frame != bounds else { return }
+        // Sublayer frame changes are implicitly animated — a 0.25s lag per
+        // divider tick reads as the video chasing the drag. Snap instead.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         displayLayer.frame = bounds
+        CATransaction.commit()
     }
 
     // MARK: - Mouse → touch
