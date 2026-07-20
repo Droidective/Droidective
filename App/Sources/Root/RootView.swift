@@ -619,18 +619,17 @@ private struct TerminalCloseConfirmation: ViewModifier {
 struct TabHostView: View {
     @Environment(AppState.self) private var state
     let group: Int
-    /// Hidden tabs lay out against the pane size they had when last visible —
-    /// never the live one. During a divider or window drag every hidden tab
-    /// keeps receiving an identical (stale) proposal, so SwiftUI short-
-    /// circuits their whole subtrees: a resize lays out only the visible tab
-    /// instead of every mounted one (a hidden logcat or crash browser
-    /// re-wrapping thousands of styled lines per tick was most of the drag's
-    /// cost). A tab re-fits exactly once, the moment it becomes active and its
-    /// fixed frame drops away — there is deliberately no catch-up pass on
-    /// resize: re-laying-out all hidden tabs in one transaction stalled the
-    /// window for seconds after a drag.
+    /// While a divider or window drag is in flight, hidden tabs lay out
+    /// against the pane size from just before it started — identical (stale)
+    /// proposals let SwiftUI short-circuit their whole subtrees, so a drag
+    /// lays out only the visible tab instead of every mounted one (a hidden
+    /// logcat or crash browser re-wrapping thousands of styled lines per tick
+    /// was most of the drag's cost). The freeze releases 300 ms after the
+    /// size rests: hidden tabs catch up once, at rest, and are otherwise
+    /// always live — a long-lived freeze left tabs that measure their own
+    /// width laid out against a poisoned (stale) measurement.
     @State private var paneSize: CGSize = .zero
-    @State private var frozen: [String: CGSize] = [:]
+    @State private var frozenSize: CGSize?
 
     var body: some View {
         let ids = state.openTabIDs(inGroup: group)
@@ -639,8 +638,8 @@ struct TabHostView: View {
             ForEach(ids, id: \.self) { id in
                 FeatureDetailView(featureID: id)
                     .frame(
-                        width: id == active ? nil : frozen[id]?.width,
-                        height: id == active ? nil : frozen[id]?.height
+                        width: id == active ? nil : frozenSize?.width,
+                        height: id == active ? nil : frozenSize?.height
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .environment(\.tabFeatureID, id)
@@ -649,22 +648,22 @@ struct TabHostView: View {
                     .allowsHitTesting(id == active)
                     .accessibilityHidden(id != active)
                     .zIndex(id == active ? 1 : 0)
-                    // A tab opened in the background was never active — pin it
-                    // to the current pane size so it doesn't track resizes.
-                    .onAppear {
-                        if id != active, frozen[id] == nil, paneSize != .zero {
-                            frozen[id] = paneSize
-                        }
-                    }
             }
         }
         .clipped()
-        .onGeometryChange(for: CGSize.self, of: { $0.size }) { paneSize = $0 }
-        .onChange(of: active) { previous, current in
-            if let previous, previous != current, paneSize != .zero {
-                frozen[previous] = paneSize
+        .onGeometryChange(for: CGSize.self, of: { $0.size }) { newSize in
+            if paneSize != .zero, newSize != paneSize, frozenSize == nil {
+                frozenSize = paneSize
             }
-            if let current { frozen[current] = nil }
+            paneSize = newSize
+        }
+        .task(id: paneSize) {
+            guard frozenSize != nil else { return }
+            // Re-keyed (and the sleep cancelled) on every tick while the drag
+            // runs; only the tick the size rests on survives to release.
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            frozenSize = nil
         }
     }
 }
