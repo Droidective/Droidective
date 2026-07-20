@@ -816,6 +816,10 @@ struct JSConsoleView: View {
     @State private var inputHeight: CGFloat = 26
     @State private var showLevels = false
     @FocusState private var findFocused: Bool
+    /// This tab stays mounted when the user switches away (see `TabHostView`).
+    /// The input is a bare `NSTextView`, which `installFocusRelease` can't
+    /// resign, so it hands this down to relinquish first responder when hidden.
+    @Environment(\.tabIsActive) private var tabIsActive
 
     private var session: JSConsoleSession { state.jsConsoleSession }
 
@@ -1258,6 +1262,7 @@ struct JSConsoleView: View {
                 JSCodeEditor(
                     text: $input,
                     height: $inputHeight,
+                    isActive: tabIsActive,
                     onSubmit: run,
                     historyUp: { session.historyUp(current: $0) },
                     historyDown: { session.historyDown() }
@@ -1763,6 +1768,7 @@ private struct StackView: View {
 private struct JSCodeEditor: NSViewRepresentable {
     @Binding var text: String
     @Binding var height: CGFloat
+    var isActive: Bool
     var onSubmit: () -> Void
     var historyUp: (String) -> String?
     var historyDown: () -> String?
@@ -1805,6 +1811,16 @@ private struct JSCodeEditor: NSViewRepresentable {
         if textView.string != text {
             textView.string = text
             context.coordinator.recalculateHeight()
+        }
+        // The tab went to the background but stays mounted (TabHostView), and a
+        // standalone NSTextView isn't a field editor, so nothing else resigns it
+        // — leaving it first responder means every keystroke lands in this hidden
+        // input while the visible pane looks keyboard-dead. Hand focus back to the
+        // window. Deferred so we never touch first responder during a view update.
+        if !isActive, let window = textView.window, window.firstResponder === textView {
+            Task { @MainActor in
+                if window.firstResponder === textView { window.makeFirstResponder(nil) }
+            }
         }
     }
 
