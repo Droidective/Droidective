@@ -11,6 +11,8 @@ sparkle-private-key.txt
 .env.signing
 *.p12
 AuthKey_*.p8
-.claude/
+.claude/*
+!.claude/commands/
+!.claude/skills/
 node_modules/
 website/dist/
