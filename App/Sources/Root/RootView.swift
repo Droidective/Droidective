@@ -619,17 +619,6 @@ private struct TerminalCloseConfirmation: ViewModifier {
 struct TabHostView: View {
     @Environment(AppState.self) private var state
     let group: Int
-    /// While a divider or window drag is in flight, hidden tabs lay out
-    /// against the pane size from just before it started — identical (stale)
-    /// proposals let SwiftUI short-circuit their whole subtrees, so a drag
-    /// lays out only the visible tab instead of every mounted one (a hidden
-    /// logcat or crash browser re-wrapping thousands of styled lines per tick
-    /// was most of the drag's cost). The freeze releases 300 ms after the
-    /// size rests: hidden tabs catch up once, at rest, and are otherwise
-    /// always live — a long-lived freeze left tabs that measure their own
-    /// width laid out against a poisoned (stale) measurement.
-    @State private var paneSize: CGSize = .zero
-    @State private var frozenSize: CGSize?
 
     var body: some View {
         let ids = state.openTabIDs(inGroup: group)
@@ -637,10 +626,6 @@ struct TabHostView: View {
         ZStack {
             ForEach(ids, id: \.self) { id in
                 FeatureDetailView(featureID: id)
-                    .frame(
-                        width: id == active ? nil : frozenSize?.width,
-                        height: id == active ? nil : frozenSize?.height
-                    )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .environment(\.tabFeatureID, id)
                     .environment(\.tabIsActive, id == active)
@@ -649,21 +634,6 @@ struct TabHostView: View {
                     .accessibilityHidden(id != active)
                     .zIndex(id == active ? 1 : 0)
             }
-        }
-        .clipped()
-        .onGeometryChange(for: CGSize.self, of: { $0.size }) { newSize in
-            if paneSize != .zero, newSize != paneSize, frozenSize == nil {
-                frozenSize = paneSize
-            }
-            paneSize = newSize
-        }
-        .task(id: paneSize) {
-            guard frozenSize != nil else { return }
-            // Re-keyed (and the sleep cancelled) on every tick while the drag
-            // runs; only the tick the size rests on survives to release.
-            try? await Task.sleep(for: .milliseconds(300))
-            guard !Task.isCancelled else { return }
-            frozenSize = nil
         }
     }
 }
