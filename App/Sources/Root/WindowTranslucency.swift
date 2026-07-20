@@ -132,7 +132,18 @@ private struct TranslucentListBackground: ViewModifier {
     @Environment(\.windowOpacity) private var opacity
 
     func body(content: Content) -> some View {
-        content.scrollContentBackground(WindowEffects.isTranslucent(opacity) ? .hidden : .automatic)
+        if WindowEffects.isTranslucent(opacity) {
+            // Glass: hide the scroll material; the single root wash behind
+            // shows through (a fill here would compound with it).
+            content.scrollContentBackground(.hidden)
+        } else if customBackgroundRGB != nil {
+            // Opaque with a custom background: the system scroll material
+            // ignores it, so hide it and paint the chosen root color the
+            // list would otherwise cover.
+            content.scrollContentBackground(.hidden).background(.bgRoot)
+        } else {
+            content.scrollContentBackground(.automatic)
+        }
     }
 }
 
@@ -140,6 +151,16 @@ private struct TranslucentFeedBackground: ViewModifier {
     @Environment(\.windowOpacity) private var opacity
 
     func body(content: Content) -> some View {
-        content.background(.background.opacity(WindowEffects.isTranslucent(opacity) ? 0 : 1))
+        if WindowEffects.isTranslucent(opacity) {
+            // Glass: drop the material so the single root wash behind shows
+            // through (a second fill here would compound and darken it).
+            content.background(.background.opacity(0))
+        } else if customBackgroundRGB != nil {
+            // Opaque with a custom background: the system `.background`
+            // material ignores it, so paint the chosen root color instead.
+            content.background(.bgRoot)
+        } else {
+            content.background(.background)
+        }
     }
 }
