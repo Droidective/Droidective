@@ -66,9 +66,20 @@ extension ShapeStyle where Self == Color {
         return Color("BorderSubtle")
     }
     /// Primary reading text, header titles, active values, resting-action icons.
-    static var textMain: Color { Color("TextMain") }
-    /// Subtitles, timestamps, labels, and quiet navigation/input icons.
-    static var textMuted: Color { Color("TextMuted") }
+    /// Honors a user-chosen text color (Settings ▸ Appearance ▸ Text) when set,
+    /// read fresh per render (the root view keys on the stored hex).
+    static var textMain: Color {
+        if let rgb = customTextRGB { return Color(rgb: rgb) }
+        return Color("TextMain")
+    }
+    /// Subtitles, timestamps, labels, and quiet navigation/input icons. With a
+    /// custom text color, the muted tone is that color at `TextPalette`'s
+    /// primary→muted opacity, so it composites over the surface behind it the
+    /// same way the stock muted step does.
+    static var textMuted: Color {
+        if let rgb = customTextRGB { return Color(rgb: rgb).opacity(TextPalette.mutedOpacity) }
+        return Color("TextMuted")
+    }
     /// "The electricity" — CTAs, active toggles, selection, loaders, logo mark.
     /// Honors a user-chosen accent (Settings ▸ Appearance) when set, otherwise the
     /// bundled asset. A fixed color either way, so it doesn't desaturate on focus
@@ -98,6 +109,19 @@ let backgroundColorDefaultsKey = "backgroundColorHex"
 /// re-reads it. nil when unset or malformed → the stock assets.
 var customBackgroundRGB: BackgroundPalette.RGB? {
     guard let hex = UserDefaults.standard.string(forKey: backgroundColorDefaultsKey),
+          !hex.isEmpty else { return nil }
+    return BackgroundPalette.parse(hex: hex)
+}
+
+/// UserDefaults key for the user-chosen text color ("#RRGGBB"). Empty or unset
+/// → the bundled TextMain/TextMuted assets. When set, it drives primary text
+/// and the muted/subtitle tone is derived from it (`TextPalette`).
+let textColorDefaultsKey = "textColorHex"
+
+/// The stored custom text color, parsed fresh per render (the root view keys on
+/// the stored hex). nil when unset or malformed → the stock text assets.
+var customTextRGB: BackgroundPalette.RGB? {
+    guard let hex = UserDefaults.standard.string(forKey: textColorDefaultsKey),
           !hex.isEmpty else { return nil }
     return BackgroundPalette.parse(hex: hex)
 }
@@ -160,6 +184,13 @@ extension Color {
     /// white-on-white in light mode. Feeding the label a pre-resolved concrete
     /// color sidesteps that. Falls back to the dynamic asset if resolution fails.
     static func resolved(_ name: String, for scheme: ColorScheme) -> Color {
+        // A custom text color is already concrete (no light/dark variant to
+        // flatten), so hand it back directly — this is the path the device-bar
+        // pill title uses, which would otherwise keep the stock asset.
+        if name == "TextMain", let rgb = customTextRGB { return Color(rgb: rgb) }
+        if name == "TextMuted", let rgb = customTextRGB {
+            return Color(rgb: rgb).opacity(TextPalette.mutedOpacity)
+        }
         guard let appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua),
               let dynamic = NSColor(named: name) else { return Color(name) }
         var flat = dynamic

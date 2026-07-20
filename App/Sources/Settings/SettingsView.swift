@@ -268,6 +268,7 @@ struct AppearanceSettingsView: View {
     @AppStorage("theme") private var theme = "dark"
     @AppStorage(accentColorDefaultsKey) private var accentHex = ""
     @AppStorage(backgroundColorDefaultsKey) private var backgroundHex = ""
+    @AppStorage(textColorDefaultsKey) private var textHex = ""
     @AppStorage(appFontFamilyDefaultsKey) private var fontFamily = ""
     @AppStorage(appFontSizeScaleDefaultsKey) private var fontSizeScale = 1.0
     @AppStorage(windowOpacityDefaultsKey) private var windowOpacity = 1.0
@@ -277,6 +278,8 @@ struct AppearanceSettingsView: View {
     @State private var hexInvalid = false
     @State private var bgHexDraft = ""
     @State private var bgHexInvalid = false
+    @State private var textHexDraft = ""
+    @State private var textHexInvalid = false
     #if DEBUG
     @AppStorage(DevMetrics.overlayEnabledKey) private var showDevMetrics = true
     #endif
@@ -309,6 +312,13 @@ struct AppearanceSettingsView: View {
         Binding(
             get: { Color(hex: backgroundHex) ?? Color("BgRoot") },
             set: { backgroundHex = $0.hexString ?? "" })
+    }
+
+    /// The text-color ColorPicker, same contract as the accent's.
+    private var textBinding: Binding<Color> {
+        Binding(
+            get: { Color(hex: textHex) ?? Color("TextMain") },
+            set: { textHex = $0.hexString ?? "" })
     }
 
     /// One Window-section slider row: label, slider, live percent readout.
@@ -412,7 +422,7 @@ struct AppearanceSettingsView: View {
                     .foregroundStyle(.textMuted)
             }
 
-            Section("Font") {
+            Section("Text") {
                 Picker("Font", selection: $fontFamily) {
                     Text("System (San Francisco)").tag("")
                     if !FontCatalog.standardFamilies.isEmpty {
@@ -434,7 +444,25 @@ struct AppearanceSettingsView: View {
                     Text("Large").tag(1.1)
                     Text("Extra large").tag(1.25)
                 }
-                Text("Applies across the app — code and log views keep their monospaced font, and the terminal keeps its own. ⌘= / ⌘- additionally zoom the whole window.")
+                LabeledContent("Color") {
+                    HStack(spacing: 8) {
+                        ColorPicker("", selection: textBinding, supportsOpacity: false).labelsHidden()
+                        TextField("Hex code", text: $textHexDraft, prompt: Text("#ECECEC"))
+                            .textFieldStyle(.roundedBorder)
+                            .labelsHidden()
+                            .frame(width: 110)
+                            .onSubmit { commitTextHex() }
+                        if !textHex.isEmpty {
+                            Button("Reset") { setText("") }
+                        }
+                    }
+                }
+                if textHexInvalid {
+                    Text("Enter a hex color like #ECECEC (or the short #EEE).")
+                        .font(.app(.footnote))
+                        .foregroundStyle(.orange)
+                }
+                Text("Sets the primary text color; subtitles and muted labels are derived from it automatically. Font applies across the app — code and log views keep their monospaced font, and the terminal keeps its own. ⌘= / ⌘- additionally zoom the whole window.")
                     .font(.app(.footnote))
                     .foregroundStyle(.textMuted)
             }
@@ -469,6 +497,7 @@ struct AppearanceSettingsView: View {
         .onAppear {
             hexDraft = accentHex
             bgHexDraft = backgroundHex
+            textHexDraft = textHex
         }
         // Reflect swatch/color-well changes into the hex fields so they always
         // show the effective value; a background change also re-derives the
@@ -478,6 +507,7 @@ struct AppearanceSettingsView: View {
             bgHexDraft = backgroundHex
             applyStoredTheme()
         }
+        .onChange(of: textHex) { textHexDraft = textHex }
     }
 
     /// A one-click accent circle; nil hex is the bundled default. The selected
@@ -563,6 +593,26 @@ struct AppearanceSettingsView: View {
             return
         }
         setBackground(normalized)
+    }
+
+    private func setText(_ hex: String) {
+        textHex = hex
+        textHexDraft = hex
+        textHexInvalid = false
+    }
+
+    /// The text-color twin of `commitHex` — empty resets to the stock tokens.
+    private func commitTextHex() {
+        let trimmed = textHexDraft.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else {
+            setText("")
+            return
+        }
+        guard let color = Color(hex: trimmed), let normalized = color.hexString else {
+            textHexInvalid = true
+            return
+        }
+        setText(normalized)
     }
 }
 

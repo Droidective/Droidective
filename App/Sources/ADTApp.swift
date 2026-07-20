@@ -166,11 +166,14 @@ struct ADTApp: App {
     /// `.brandAccent`, background token, and `Font.app` to re-resolve.
     @AppStorage(accentColorDefaultsKey) private var accentHex = ""
     @AppStorage(backgroundColorDefaultsKey) private var backgroundHex = ""
+    @AppStorage(textColorDefaultsKey) private var textHex = ""
     @AppStorage(appFontFamilyDefaultsKey) private var appFontFamily = ""
     @AppStorage(appFontSizeScaleDefaultsKey) private var appFontSizeScale = 1.0
 
     /// One key covering every appearance pref the view tree resolves statically.
-    private var appearanceKey: String { "\(accentHex)|\(backgroundHex)|\(appFontFamily)|\(appFontSizeScale)" }
+    private var appearanceKey: String {
+        "\(accentHex)|\(backgroundHex)|\(textHex)|\(appFontFamily)|\(appFontSizeScale)"
+    }
 
     /// ⌃1…⌃9 accelerators for jumping straight to a tab by position.
     private static let tabDigitKeys: [KeyEquivalent] = ["1", "2", "3", "4", "5", "6", "7", "8", "9"]

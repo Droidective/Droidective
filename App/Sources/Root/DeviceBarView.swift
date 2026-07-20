@@ -231,7 +231,7 @@ struct DeviceBarView: View {
     }
 
     private var deviceStatusColor: Color {
-        guard let device = selectedDevice else { return Color("TextMuted") }
+        guard let device = selectedDevice else { return .textMuted }
         // Ready rides the accent (it doubles as the bar's active marker);
         // trouble states keep their semaphore colors.
         if device.isReady { return .brandAccent }
@@ -254,7 +254,7 @@ struct DeviceBarView: View {
     }
 
     private var bundleIconColor: Color {
-        state.selectedBundle == nil ? Color("TextMuted") : .brandAccent
+        state.selectedBundle == nil ? .textMuted : .brandAccent
     }
 
     private var deviceStatusHelp: String {
