@@ -519,10 +519,22 @@ final class LogScrollView: NSScrollView {
         guard document.frame.width != contentSize.width else { return }
         pendingWidthApply?.cancel()
         let work = DispatchWorkItem { [weak self] in
-            MainActor.assumeIsolated { self?.applyDocumentWidth() }
+            MainActor.assumeIsolated {
+                self?.pendingWidthApply = nil
+                self?.applyDocumentWidth()
+            }
         }
         pendingWidthApply = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
+    }
+
+    /// Legacy (always-on) scrollers change `contentSize` without a
+    /// `setFrameSize` — the vertical scroller appearing as content grows
+    /// would leave the document a scroller's width too wide until the next
+    /// window resize. `tile()` runs on scroller changes; sync there too.
+    override func tile() {
+        super.tile()
+        if pendingWidthApply == nil { applyDocumentWidth() }
     }
 
     private func applyDocumentWidth() {
