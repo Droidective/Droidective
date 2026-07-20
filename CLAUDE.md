@@ -7,13 +7,19 @@ pane per feature. Swift 6 + SwiftUI, macOS 14+.
 ## Architecture (the load-bearing rule)
 
 Two layers, strictly separated so a second **Apple** UI (iPad/visionOS) could
-reuse ADBKit almost as-is. Note the honest scope: a Linux/Windows port re-does
-the UI **plus** the macOS-bound seams inside ADBKit — the Mirror media stack
-(CoreMedia/VideoToolbox/AVFoundation), the Network.framework socket servers,
-`ToolLocator`'s macOS install/SDK paths + `zsh -lc`, and `.lzma`/`tar` extraction;
-an iOS companion can't run `Process` at all, so it would need a remote-host
-protocol, not just a UI swap. Keep the existing seams (`ProcessRunning`,
-injected directories) and don't pre-abstract the rest until a port is scheduled.
+reuse ADBKit almost as-is. The Windows/Linux port is now scheduled and staged
+(strategy + phases in `docs/cross-platform.md`): ADBKit compiles and tests on
+Linux (CI `test-linux`; `make test-linux` locally) and build-verifies on
+Windows (CI `build-windows`). The Apple-bound subsystems — the Mirror media
+stack, the Network.framework servers (Reactotron, the JS-console test fake),
+`NSDataDetector`, `proc_pid_rusage` — are `#if canImport`-gated out rather than
+stubbed; the portable seams (`HostArchive` extraction, `FileHandleLines`,
+per-OS `ToolLocator`, swift-crypto digests off-Apple) carry everything else.
+Next phases: a `droidectived` local daemon over ADBKit, then a Tauri/React UI
+for Windows/Linux; an iOS companion can't run `Process` at all, so it would
+ride the same daemon protocol. Keep the seams (`ProcessRunning`, injected
+directories) intact, and keep new ADBKit code portable — no new Apple-only
+framework use outside the gated subsystems.
 
 - **`ADBKit/`** — a SwiftPM package holding *all* logic. Zero UI imports
   (feature icons are SF Symbol *name strings*). Actors for stateful services,
@@ -73,7 +79,8 @@ opening it — verify those by hand.
 ## Build / test / run
 
 ```
-make test          # ADBKit unit tests (cd ADBKit && swift test) — 925 tests, keep green
+make test          # ADBKit unit tests (cd ADBKit && swift test) — 941 tests, keep green
+make test-linux    # the same suite on Linux (Apple `container` CLI; the port gate)
 make build         # xcodegen generate + xcodebuild Debug
 make run           # build + open the .app
 ```
@@ -463,7 +470,12 @@ compile or test time* — lean on it instead of manual vigilance.
 ## Status
 
 Feature-complete across all planned milestones plus several UX rounds.
-Unreleased on `main`/in flight: the **translucent window appearance**
+Unreleased on `main`/in flight: the **cross-platform core** (ADBKit compiles
+and tests on Linux, build-verifies on Windows; Apple-only subsystems
+`#if canImport`-gated; `test-linux`/`build-windows` CI jobs and
+`make test-linux`; the Way-2 strategy — portable core → `droidectived` daemon
+→ Tauri/React UI — lives in `docs/cross-platform.md`), the **translucent
+window appearance**
 (Settings ▸ Appearance ▸ Window — Opacity/Blur/Grain sliders; dynamic
 `.bgRoot`/`.bgSurface` tokens put every pane, card, bar, and the terminal on
 the glass; `WindowEffects` pure-tested in ADBKit), **Sparkle disabled in
@@ -536,7 +548,8 @@ jadx/apktool, recompile, and sign — with keystore creation) plus Frida setup, 
 custom accent color, launching emulators from the device bar, per-feature
 connect-a-device empty states, a live-preview hotkey recorder, and a Settings
 split into Appearance/Privacy; managed tools download from GitHub releases into
-Application Support and are sized/removable in Settings); 925 tests green;
+Application Support and are sized/removable in Settings); 941 tests green
+(macOS — the suite also runs on Linux in CI, minus the Darwin-gated files);
 builds clean with zero warnings (enforced as errors in CI). Verified live against a
 physical device and an Android emulator. Release builds are Developer ID-signed +
 notarized and bundle scrcpy/ffmpeg (see `RELEASING.md`). Open gaps: the Apps
