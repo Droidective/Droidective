@@ -1,3 +1,7 @@
+// The in-app mirror is Apple-only: it decodes and muxes through the Apple media
+// frameworks and tunnels over Network.framework. Other hosts drive the scrcpy
+// desktop app instead of this pipeline.
+#if canImport(AVFoundation) && canImport(Network)
 import AVFoundation
 import CoreMedia
 import Foundation
@@ -296,3 +300,4 @@ public actor MirrorSession {
             height: CVPixelBufferGetHeight(box.buffer))
     }
 }
+#endif

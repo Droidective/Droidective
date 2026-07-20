@@ -1,3 +1,6 @@
+// Detection rides NSDataDetector, which corelibs Foundation doesn't have —
+// off-Darwin `linkSpans` deliberately returns [] (see ConsoleLinkDetector).
+#if canImport(Darwin)
 import Foundation
 import Testing
 @testable import ADBKit
@@ -69,3 +72,4 @@ import Testing
         #expect(ConsoleLinkDetector.linkSpans(in: "no urls here at all").isEmpty)
     }
 }
+#endif

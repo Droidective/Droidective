@@ -1,3 +1,4 @@
+#if canImport(AVFoundation) && canImport(Network)
 import Foundation
 import Testing
 @testable import ADBKit
@@ -258,4 +259,5 @@ import Testing
         if let final { #expect(abs(final - target) <= 1) }
     }
 }
+#endif
 

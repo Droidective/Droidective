@@ -1,4 +1,8 @@
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
 import Foundation
 import Testing
 @testable import ADBKit
@@ -145,10 +149,11 @@ import Testing
     }
 
     @Test func decompressesXzAssetIntoTheRunnableBinary() async throws {
-        // frida ships bare .xz; round-trip a payload through the same algorithm
-        // the store uses, then confirm it lands as an executable frida-server.
+        // frida ships bare .xz; round-trip a payload through the same coder the
+        // store decodes with on this platform, then confirm it lands as an
+        // executable frida-server.
         let payload = Data("ELF-ish-frida-server-bytes".utf8)
-        let xz = try (payload as NSData).compressed(using: .lzma) as Data
+        let xz = try Self.makeXz(payload)
         let http = MockHTTP(
             releaseJSON: releaseJSON(tag: "16.4.0", assetName: "frida-server-16.4.0-android-arm64.xz"),
             assetBytes: xz)
@@ -159,6 +164,26 @@ import Testing
         #expect(path.hasSuffix("/frida-server"))
         #expect(FileManager.default.contents(atPath: path) == payload)
         #expect(FileManager.default.isExecutableFile(atPath: path))
+    }
+
+    /// A bare `.xz` of `payload`, made with the same coder the store decodes
+    /// with on this platform (Compression's lzma on Darwin, the xz CLI else).
+    private static func makeXz(_ payload: Data) throws -> Data {
+        #if canImport(Darwin)
+        return try (payload as NSData).compressed(using: .lzma) as Data
+        #else
+        let fm = FileManager.default
+        let work = fm.temporaryDirectory.appendingPathComponent("xz-src-\(UUID().uuidString)")
+        try fm.createDirectory(at: work, withIntermediateDirectories: true)
+        let raw = work.appendingPathComponent("payload")
+        try payload.write(to: raw)
+        let xz = Process()
+        xz.executableURL = URL(fileURLWithPath: "/usr/bin/xz")
+        xz.arguments = ["--compress", raw.path]
+        try xz.run()
+        xz.waitUntilExit()
+        return try Data(contentsOf: work.appendingPathComponent("payload.xz"))
+        #endif
     }
 
     /// A real `.tar.gz` containing a single executable at `runnableRelPath`

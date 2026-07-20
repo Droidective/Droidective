@@ -137,6 +137,9 @@ import Testing
 }
 
 @Suite struct ProcessStatsTests {
+    // Self-usage sampling is a Darwin kernel call; off-Darwin `sample()` is
+    // deliberately nil (see ProcessStats).
+    #if canImport(Darwin)
     @Test func sampleReportsPlausibleValuesForThisProcess() throws {
         let first = try #require(ProcessStats.sample())
         let second = try #require(ProcessStats.sample())
@@ -145,4 +148,9 @@ import Testing
         #expect(second.cpuTimeSeconds >= first.cpuTimeSeconds)
         #expect(second.uptime >= first.uptime)
     }
+    #else
+    @Test func sampleIsNilOffDarwin() {
+        #expect(ProcessStats.sample() == nil)
+    }
+    #endif
 }

@@ -1,14 +1,18 @@
 import Foundation
+#if canImport(os)
 import os
+#else
+import Synchronization
+#endif
 
 /// Process-wide tally of the bytes Droidective *itself* moves over the network:
 /// the JS-console CDP WebSocket, the scrcpy mirror sockets, the Reactotron
 /// server, and managed-tool downloads. adb's own transfers run in the separate
 /// `adb` process, so they're correctly excluded — this is "this app's" traffic.
 ///
-/// A single `OSAllocatedUnfairLock` add per chunk keeps it off the hot path; the
-/// debug metrics overlay reads `totals()` on a timer and turns the deltas into a
-/// throughput. Counters are cumulative and monotonic (`&+` wraps rather than
+/// A single lock add per chunk (`OSAllocatedUnfairLock`; a `Mutex` off-Darwin)
+/// keeps it off the hot path; the debug metrics overlay reads `totals()` on a
+/// timer and turns the deltas into a throughput. Counters are cumulative and monotonic (`&+` wraps rather than
 /// traps, which the overlay's delta clamps to zero).
 public final class NetworkTrafficMeter: Sendable {
     public static let shared = NetworkTrafficMeter()
@@ -24,7 +28,11 @@ public final class NetworkTrafficMeter: Sendable {
         }
     }
 
+    #if canImport(os)
     private let state = OSAllocatedUnfairLock(initialState: Totals())
+    #else
+    private let state = Mutex(Totals())
+    #endif
 
     /// Internal so production uses the shared meter while tests can measure a
     /// fresh instance without cross-test interference.

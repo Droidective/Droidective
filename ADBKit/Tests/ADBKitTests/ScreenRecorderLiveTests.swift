@@ -1,3 +1,4 @@
+#if canImport(AVFoundation) && canImport(Network)
 import AVFoundation
 import Foundation
 import Testing
@@ -153,3 +154,4 @@ import Testing
         #expect(ok)
     }
 }
+#endif

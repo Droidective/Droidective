@@ -102,7 +102,7 @@ public struct AabConvertService: Sendable {
 
         onStage?(.extracting)
         let extract = await runner.run(
-            executable: "/usr/bin/unzip",
+            executable: HostArchive.unzipExecutable,
             arguments: Self.extractArguments(apks: apksPath, destination: work.path),
             timeout: .seconds(120), maxOutputBytes: 1 << 20)
         let universal = work.appendingPathComponent("universal.apk")
@@ -152,7 +152,12 @@ public struct AabConvertService: Sendable {
     }
 
     static func extractArguments(apks: String, destination: String) -> [String] {
+        #if os(Windows)
+        // The system bsdtar reads zips; universal.apk sits at the archive root.
+        ["-xf", apks, "-C", destination, "universal.apk"]
+        #else
         ["-q", "-o", "-j", apks, "universal.apk", "-d", destination]
+        #endif
     }
 
     /// The most useful line out of a failed run: bundletool prefixes its real

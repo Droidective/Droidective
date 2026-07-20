@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// One debuggable JavaScript target advertised by the Metro inspector proxy.
 ///

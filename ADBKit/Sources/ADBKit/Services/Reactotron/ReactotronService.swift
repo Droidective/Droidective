@@ -1,3 +1,4 @@
+#if canImport(Network)
 import Foundation
 
 /// Orchestrates the Reactotron server for a device session: brings up the
@@ -87,3 +88,4 @@ public actor ReactotronService {
         "adb reverse tcp:\(port) tcp:\(port)"
     }
 }
+#endif

@@ -99,6 +99,7 @@ public struct EmulatorService: Sendable {
     /// stdio is routed to `/dev/null` so it neither inherits nor holds the app's
     /// descriptors. Returns false if the spawn fails.
     static func spawnDetached(path: String, arguments: [String], environment: [String: String]) -> Bool {
+        #if canImport(Darwin)
         var attr: posix_spawnattr_t?
         posix_spawnattr_init(&attr)
         defer { posix_spawnattr_destroy(&attr) }
@@ -138,6 +139,30 @@ public struct EmulatorService: Sendable {
 
         var pid: pid_t = 0
         return posix_spawn(&pid, path, &fileActions, &attr, argv, envp) == 0
+        #else
+        // Same intent without Apple's posix_spawn extensions: Linux makes the
+        // child a session leader via util-linux's `setsid --fork` (the
+        // POSIX_SPAWN_SETSID equivalent); Windows children are independent of
+        // the parent's lifetime by default. Stdio still goes to the null device.
+        let process = Process()
+        #if os(Windows)
+        process.executableURL = URL(fileURLWithPath: path)
+        process.arguments = arguments
+        #else
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/setsid")
+        process.arguments = ["--fork", path] + arguments
+        #endif
+        process.environment = environment
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+            return true
+        } catch {
+            return false
+        }
+        #endif
     }
 
     /// Graceful shutdown via the emulator console.

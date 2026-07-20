@@ -1,3 +1,4 @@
+#if canImport(AVFoundation) && canImport(Network)
 import AVFoundation
 import Foundation
 import Testing
@@ -95,3 +96,4 @@ import Testing
         #expect((frame?.width ?? 0) > 0)
     }
 }
+#endif

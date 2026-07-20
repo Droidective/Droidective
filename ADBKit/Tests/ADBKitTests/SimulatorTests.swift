@@ -157,7 +157,9 @@ import Testing
     @Test func prefixesEveryCallWithSimctl() async throws {
         let runner = MockProcessRunner()
         runner.script(argsPrefix: [], stdout: "ok")
-        let client = SimctlClient(runner: runner, log: CommandLog(), xcrunPath: "/usr/bin/xcrun")
+        let client = SimctlClient(
+            runner: runner, log: CommandLog(), xcrunPath: "/usr/bin/xcrun",
+            isExecutableFile: { _ in true })
         let result = try await client.run(["list", "-j", "devices"])
         #expect(result.succeeded)
         #expect(runner.invocations == [
@@ -167,7 +169,9 @@ import Testing
 
     @Test func missingXcrunThrowsTyped() async {
         let runner = MockProcessRunner()
-        let client = SimctlClient(runner: runner, log: CommandLog(), xcrunPath: "/nonexistent/xcrun")
+        let client = SimctlClient(
+            runner: runner, log: CommandLog(), xcrunPath: "/nonexistent/xcrun",
+            isExecutableFile: { _ in false })
         await #expect(throws: SimctlError.xcrunNotFound) {
             _ = try await client.run(["list"])
         }
@@ -177,7 +181,9 @@ import Testing
     @Test func failureWithSilentStderrGetsAFallbackMessage() async throws {
         let runner = MockProcessRunner()
         runner.script(argsPrefix: [], exitCode: 1)
-        let client = SimctlClient(runner: runner, log: CommandLog(), xcrunPath: "/usr/bin/xcrun")
+        let client = SimctlClient(
+            runner: runner, log: CommandLog(), xcrunPath: "/usr/bin/xcrun",
+            isExecutableFile: { _ in true })
         let result = try await client.run(["boot", "X"])
         #expect(!result.succeeded)
         #expect(result.stderr == "simctl command failed")
@@ -188,7 +194,9 @@ import Testing
 
 @Suite struct SimulatorServiceTests {
     private func makeService(_ runner: MockProcessRunner) -> SimulatorService {
-        SimulatorService(client: SimctlClient(runner: runner, log: CommandLog(), xcrunPath: "/usr/bin/xcrun"))
+        SimulatorService(client: SimctlClient(
+            runner: runner, log: CommandLog(), xcrunPath: "/usr/bin/xcrun",
+            isExecutableFile: { _ in true }))
     }
 
     @Test func bootBootsThenSurfacesTheSimulatorApp() async throws {
@@ -349,7 +357,9 @@ import Testing
             client: client, locator: client.locator, monitor: DeviceMonitor(client: client),
             overridesStore: makeTempOverridesStore(),
             toolsDirectory: FileManager.default.temporaryDirectory
-                .appendingPathComponent("tools-\(UUID().uuidString)")
+                .appendingPathComponent("tools-\(UUID().uuidString)"),
+            simctl: SimctlClient(
+                runner: runner, log: CommandLog(), isExecutableFile: { _ in true })
         )
     }
 
