@@ -82,6 +82,9 @@ custom background and text color.
   Console releases keyboard focus when its tab goes to the background.
 - Export failures (console and Reactotron) now show an error toast instead
   of silently doing nothing.
+- Mirror Screen re-fits its video when the pane resizes — resizing a split
+  no longer leaves dead space on one side with the device screen drawn past
+  the pane edge.
 
 ### Install
 
