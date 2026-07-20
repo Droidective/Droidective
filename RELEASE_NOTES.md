@@ -1,3 +1,23 @@
+## Droidective v3.6.1
+
+A resize-performance fix: dragging a split divider or resizing the window
+with Mirror Screen and streaming log tabs open no longer slows to a crawl.
+
+### Fixes
+
+- **Resizing is smooth with logs streaming** — the log view re-wrapped its
+  entire buffer on every tick of a drag, pinning a CPU core; it now re-wraps
+  once, when the drag rests. Log feeds also coalesce their updates a little
+  more (three refreshes per second instead of eight), which cuts idle CPU
+  with a busy logcat tab roughly in half.
+
+### Install
+
+Download `Droidective-v3.6.1.dmg` below. Existing installs update in place
+via Sparkle.
+
+---
+
 ## Droidective v3.6.0
 
 The JS Console and Reactotron learn to export and search inside objects,

@@ -480,7 +480,12 @@ compile or test time* — lean on it instead of manual vigilance.
 ## Status
 
 Feature-complete across all planned milestones plus several UX rounds.
-(Latest release: **v3.6.0** — the **JS Console and Reactotron rework**
+(Latest release: **v3.6.1** — a resize-performance fix: `LogScrollView`
+applies the log document width only after a drag rests (autoresizing
+re-wrapped the whole buffer per tick — a pegged core while dragging with
+Mirror Screen and log tabs open), and the logcat/iOS-logs stream flush
+cadence went 120→300 ms. Before that, **v3.6.0** — the **JS Console and
+Reactotron rework**
 (filter-aware JSON export to file/clipboard via `ConsoleExport`,
 find-in-object with clickable results — `SnapNode.findMatches`/`TreeMatch`
 + `JSONSearch` — a split-button Restart with a bounded
