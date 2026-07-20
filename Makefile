@@ -1,4 +1,4 @@
-.PHONY: generate build test run dmg clean site-dev site-build
+.PHONY: generate build test test-linux run dmg clean site-dev site-build
 
 # Optional telemetry keys for local builds. Create .env.telemetry (gitignored)
 # with SENTRY_DSN=... and POSTHOG_KEY=... to enable crash/analytics locally.
@@ -26,6 +26,14 @@ build: generate
 
 test:
 	cd ADBKit && swift test
+
+# The same suite on Linux (see docs/cross-platform.md), via Apple's
+# `container` CLI — run `container system start` once per boot. The scratch
+# path keeps Linux build artifacts out of the macOS .build.
+test-linux:
+	container run --rm --cpus 8 --memory 10g \
+	  --volume "$(CURDIR)/ADBKit:/src" --workdir /src swift:6.2 \
+	  bash -c "apt-get update -qq >/dev/null 2>&1 && apt-get install -y -qq unzip xz-utils >/dev/null 2>&1; swift test --scratch-path /src/.build/linux"
 
 run: build
 	-pkill -x Droidective
