@@ -40,4 +40,23 @@ import Testing
     @Test func mutedOpacityIsInUnitRange() {
         #expect(TextPalette.mutedOpacity > 0 && TextPalette.mutedOpacity < 1)
     }
+
+    @Test func contrastRatioSpansTheFullRange() {
+        // White on black is the maximum (~21); a color against itself is 1.
+        #expect(abs(TextPalette.contrastRatio(rgb("#FFFFFF"), rgb("#000000")) - 21) < 0.01)
+        #expect(abs(TextPalette.contrastRatio(rgb("#3A7BD5"), rgb("#3A7BD5")) - 1) < 0.001)
+        // Symmetric in its arguments.
+        #expect(
+            TextPalette.contrastRatio(rgb("#ECECEC"), rgb("#1A1A1A"))
+                == TextPalette.contrastRatio(rgb("#1A1A1A"), rgb("#ECECEC")))
+    }
+
+    @Test func lowContrastPairsFallBelowTheThreshold() {
+        // Readable choices clear the bar…
+        #expect(TextPalette.contrastRatio(rgb("#ECECEC"), rgb("#1A1A1A")) >= TextPalette.minComfortableContrast)
+        #expect(TextPalette.contrastRatio(rgb("#FFB000"), rgb("#1A1A1A")) >= TextPalette.minComfortableContrast)
+        // …a dark gray on the dark root, or a light text on a light background, does not.
+        #expect(TextPalette.contrastRatio(rgb("#444444"), rgb("#1A1A1A")) < TextPalette.minComfortableContrast)
+        #expect(TextPalette.contrastRatio(rgb("#F0F0F0"), rgb("#F7F3EC")) < TextPalette.minComfortableContrast)
+    }
 }

@@ -27,4 +27,19 @@ public enum TextPalette {
             green: main.green * mutedOpacity + background.green * (1 - mutedOpacity),
             blue: main.blue * mutedOpacity + background.blue * (1 - mutedOpacity))
     }
+
+    /// A WCAG-style contrast ratio (1…21) between two colors, using the app's
+    /// gamma-encoded luminance approximation (`BackgroundPalette.luminance`, the
+    /// same one behind `isLight`) rather than a second, linearized model — so
+    /// the number lines up with the rest of the palette math.
+    public static func contrastRatio(_ a: RGB, _ b: RGB) -> Double {
+        let la = BackgroundPalette.luminance(a)
+        let lb = BackgroundPalette.luminance(b)
+        return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
+    }
+
+    /// Below this ratio a custom text color is likely hard to read on its
+    /// background, so Settings shows a non-blocking warning (it never prevents
+    /// applying the color). 3.0 is WCAG AA for large text / UI components.
+    public static let minComfortableContrast = 3.0
 }

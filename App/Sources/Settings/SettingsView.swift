@@ -321,6 +321,38 @@ struct AppearanceSettingsView: View {
             set: { textHex = $0.hexString ?? "" })
     }
 
+    /// The color the primary text actually sits on: the custom background if
+    /// one is set, else the stock root asset resolved for the effective
+    /// appearance. Used only to gauge text contrast.
+    private var effectiveBackgroundRGB: BackgroundPalette.RGB? {
+        if let custom = customBackgroundRGB { return custom }
+        let name: NSAppearance.Name =
+            theme == "light" ? .aqua
+            : theme == "dark" ? .darkAqua
+            : (NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) ?? .darkAqua)
+        guard let appearance = NSAppearance(named: name), let nc = NSColor(named: "BgRoot") else {
+            return nil
+        }
+        var rgb: BackgroundPalette.RGB?
+        appearance.performAsCurrentDrawingAppearance {
+            if let s = nc.usingColorSpace(.sRGB) {
+                rgb = BackgroundPalette.RGB(
+                    red: s.redComponent, green: s.greenComponent, blue: s.blueComponent)
+            }
+        }
+        return rgb
+    }
+
+    /// Non-blocking readability nudge: a custom text color whose contrast on the
+    /// effective background falls below the comfortable threshold. nil (no
+    /// warning) unless a custom text color is set and genuinely low-contrast.
+    private var textContrastWarning: String? {
+        guard let text = customTextRGB, let bg = effectiveBackgroundRGB,
+              TextPalette.contrastRatio(text, bg) < TextPalette.minComfortableContrast
+        else { return nil }
+        return "This color may be hard to read on your background — the contrast is low. It's still applied."
+    }
+
     /// One Window-section slider row: label, slider, live percent readout.
     private func effectSlider(
         _ label: String, value: Binding<Double>, in range: ClosedRange<Double>, percent: Double
@@ -459,6 +491,10 @@ struct AppearanceSettingsView: View {
                 }
                 if textHexInvalid {
                     Text("Enter a hex color like #ECECEC (or the short #EEE).")
+                        .font(.app(.footnote))
+                        .foregroundStyle(.orange)
+                } else if let warning = textContrastWarning {
+                    Label(warning, systemImage: "exclamationmark.triangle")
                         .font(.app(.footnote))
                         .foregroundStyle(.orange)
                 }
