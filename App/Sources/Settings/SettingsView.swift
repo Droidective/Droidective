@@ -13,6 +13,8 @@ struct SettingsView: View {
                 .tabItem { Label("Appearance", systemImage: "paintbrush") }
             PrivacySettingsView()
                 .tabItem { Label("Privacy", systemImage: "hand.raised") }
+            McpSettingsView()
+                .tabItem { Label("MCP", systemImage: "sparkles") }
             DoctorSettingsView()
                 .tabItem { Label("Doctor", systemImage: "stethoscope") }
             ManagedToolsSettingsView()

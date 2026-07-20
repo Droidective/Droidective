@@ -170,6 +170,18 @@ final class ReactotronSession {
                 self?.handle(event)
             }
         }
+        // The MCP layer (if enabled) taps the fresh server — additive only,
+        // never this session's stream.
+        app?.mcp.reactotronServerChanged()
+    }
+
+    /// MCP attachment: an independent event tap plus the outbound sender,
+    /// when the relay is up. The tap never affects this session's stream.
+    func mcpAttachment() async -> (
+        events: AsyncStream<ReactotronServer.Event>, sender: ReactotronService
+    )? {
+        guard let service else { return nil }
+        return (await service.tap(), service)
     }
 
     func applyReverse(serials: [String]) async {
@@ -234,6 +246,7 @@ final class ReactotronSession {
         service = nil
         await stopping?.stop(serials: serials)
         reset()
+        app?.mcp.reactotronServerChanged()
     }
 
     /// Stop on app termination, bounded so a hung adb can't freeze quit. The
@@ -480,7 +493,7 @@ final class ReactotronSession {
         switch event {
         case .listening:
             if clients.isEmpty { connection = .listening }
-        case let .connected(connectionId, intro, frameBytes):
+        case let .connected(connectionId, _, intro, frameBytes):
             let parsed = ReactotronEvent(command: intro)
             var name = "App"
             var platform: String?

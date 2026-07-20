@@ -220,6 +220,15 @@ public actor McpCommandStore {
         totalBytes = 0
     }
 
+    /// Forget all connected clients — called when the relay is torn down,
+    /// which cancels sockets without per-connection disconnect events, so
+    /// agents would otherwise see ghost apps.
+    public func clearClients() {
+        clients.removeAll()
+        customCommandsByClient.removeAll()
+        listeningPort = nil
+    }
+
     /// Replace the subscribed-paths list (kept when tools subscribe before
     /// any `state.values.change` confirms).
     public func setSubscriptions(_ paths: [String]) {

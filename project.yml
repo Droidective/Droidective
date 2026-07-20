@@ -47,6 +47,8 @@ targets:
     dependencies:
       - package: ADBKit
         product: ADBKit
+      - package: ADBKit
+        product: ReactotronMCP
       - package: KeyboardShortcuts
         product: KeyboardShortcuts
       - package: SwiftTerm

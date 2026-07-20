@@ -131,9 +131,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             isQuitting = true
             // The leave prompt's resolution (quit / cancel) drives termination.
             if !appState.requestQuit() { return .terminateLater }
-            guard appState.reactotronSession.isRunning else { return .terminateNow }
+            guard appState.reactotronSession.isRunning || appState.mcp.isEnabled else {
+                return .terminateNow
+            }
             Task { @MainActor in
-                await appState.reactotronSession.stopForQuit()
+                await appState.mcp.stopForQuit()
+                if appState.reactotronSession.isRunning {
+                    await appState.reactotronSession.stopForQuit()
+                }
                 NSApp.reply(toApplicationShouldTerminate: true)
             }
             return .terminateLater

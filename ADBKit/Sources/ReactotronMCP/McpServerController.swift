@@ -73,6 +73,13 @@ public actor McpServerController {
         currentStatus = .listening(port: bound)
     }
 
+    /// The Reactotron relay went down: keep serving MCP (agents get
+    /// `no_apps_connected` guidance), but drop the ghost client records —
+    /// the relay's teardown cancels sockets without disconnect events.
+    public func noteRelayStopped() async {
+        await store.clearClients()
+    }
+
     /// Stop serving. Bounded work (session closes + socket close), so it is
     /// safe inside the app's quit budget.
     public func stop() async {
