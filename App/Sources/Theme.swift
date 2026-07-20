@@ -26,19 +26,25 @@ extension EnvironmentValues {
 /// Deepest layer — the content background (the "graphite case"). Resolves
 /// against the window opacity environment, so every `.bgRoot` fill in the
 /// main window turns to glass with the translucency slider and stays fully
-/// opaque everywhere else (panels, Settings, sheets' own scenes).
+/// opaque everywhere else (panels, Settings, sheets' own scenes). Honors a
+/// user-chosen background (Settings ▸ Appearance) when set.
 struct RootFillStyle: ShapeStyle {
     func resolve(in environment: EnvironmentValues) -> some ShapeStyle {
-        Color("BgRoot").opacity(WindowEffects.clamped(environment.windowOpacity))
+        let base = customBackgroundRGB.map(Color.init(rgb:)) ?? Color("BgRoot")
+        return base.opacity(WindowEffects.clamped(environment.windowOpacity))
     }
 }
 
 /// Lifted surface — sidebar, cards, and bars sit one step above `bgRoot`.
 /// Stacked on the root wash, so under translucency it carries only the
 /// contrast step (`WindowEffects.cardAlpha`) instead of compounding solid.
+/// With a custom background, the surface is derived from it
+/// (`BackgroundPalette.surface`) so the lift step matches the stock palette.
 struct SurfaceFillStyle: ShapeStyle {
     func resolve(in environment: EnvironmentValues) -> some ShapeStyle {
-        Color("BgSurface").opacity(WindowEffects.cardAlpha(root: environment.windowOpacity))
+        let base = customBackgroundRGB.map { Color(rgb: BackgroundPalette.surface(for: $0)) }
+            ?? Color("BgSurface")
+        return base.opacity(WindowEffects.cardAlpha(root: environment.windowOpacity))
     }
 }
 
@@ -51,12 +57,29 @@ extension ShapeStyle where Self == SurfaceFillStyle {
 }
 
 extension ShapeStyle where Self == Color {
-    /// Thin dividers and borders.
-    static var borderSubtle: Color { Color("BorderSubtle") }
+    /// Thin dividers and borders — derived from a custom background when one
+    /// is set, so hairlines keep their contrast on any color.
+    static var borderSubtle: Color {
+        if let rgb = customBackgroundRGB {
+            return Color(rgb: BackgroundPalette.border(for: rgb))
+        }
+        return Color("BorderSubtle")
+    }
     /// Primary reading text, header titles, active values, resting-action icons.
-    static var textMain: Color { Color("TextMain") }
-    /// Subtitles, timestamps, labels, and quiet navigation/input icons.
-    static var textMuted: Color { Color("TextMuted") }
+    /// Honors a user-chosen text color (Settings ▸ Appearance ▸ Text) when set,
+    /// read fresh per render (the root view keys on the stored hex).
+    static var textMain: Color {
+        if let rgb = customTextRGB { return Color(rgb: rgb) }
+        return Color("TextMain")
+    }
+    /// Subtitles, timestamps, labels, and quiet navigation/input icons. With a
+    /// custom text color, the muted tone is that color at `TextPalette`'s
+    /// primary→muted opacity, so it composites over the surface behind it the
+    /// same way the stock muted step does.
+    static var textMuted: Color {
+        if let rgb = customTextRGB { return Color(rgb: rgb).opacity(TextPalette.mutedOpacity) }
+        return Color("TextMuted")
+    }
     /// "The electricity" — CTAs, active toggles, selection, loaders, logo mark.
     /// Honors a user-chosen accent (Settings ▸ Appearance) when set, otherwise the
     /// bundled asset. A fixed color either way, so it doesn't desaturate on focus
@@ -74,6 +97,40 @@ extension ShapeStyle where Self == Color {
 /// UserDefaults key for the user-chosen accent (hex like "#34C759"). Empty or
 /// unset → the bundled BrandAccent asset.
 let accentColorDefaultsKey = "accentColorHex"
+
+/// UserDefaults key for the user-chosen window background ("#RRGGBB"). Empty
+/// or unset → the bundled BgRoot/BgSurface/BorderSubtle assets. While set,
+/// the app's appearance follows the color's luminance (see
+/// `applyStoredTheme`), so text and controls stay readable on any background.
+let backgroundColorDefaultsKey = "backgroundColorHex"
+
+/// The stored custom background, parsed fresh per render — the app keys its
+/// root view on the stored hex (like the accent), so a change rebuilds and
+/// re-reads it. nil when unset or malformed → the stock assets.
+var customBackgroundRGB: BackgroundPalette.RGB? {
+    guard let hex = UserDefaults.standard.string(forKey: backgroundColorDefaultsKey),
+          !hex.isEmpty else { return nil }
+    return BackgroundPalette.parse(hex: hex)
+}
+
+/// UserDefaults key for the user-chosen text color ("#RRGGBB"). Empty or unset
+/// → the bundled TextMain/TextMuted assets. When set, it drives primary text
+/// and the muted/subtitle tone is derived from it (`TextPalette`).
+let textColorDefaultsKey = "textColorHex"
+
+/// The stored custom text color, parsed fresh per render (the root view keys on
+/// the stored hex). nil when unset or malformed → the stock text assets.
+var customTextRGB: BackgroundPalette.RGB? {
+    guard let hex = UserDefaults.standard.string(forKey: textColorDefaultsKey),
+          !hex.isEmpty else { return nil }
+    return BackgroundPalette.parse(hex: hex)
+}
+
+extension Color {
+    init(rgb: BackgroundPalette.RGB) {
+        self.init(.sRGB, red: rgb.red, green: rgb.green, blue: rgb.blue)
+    }
+}
 
 extension Color {
     /// Parse "#RRGGBB" / "RRGGBB" (or the "#RGB" shorthand) as sRGB. nil on
@@ -127,6 +184,13 @@ extension Color {
     /// white-on-white in light mode. Feeding the label a pre-resolved concrete
     /// color sidesteps that. Falls back to the dynamic asset if resolution fails.
     static func resolved(_ name: String, for scheme: ColorScheme) -> Color {
+        // A custom text color is already concrete (no light/dark variant to
+        // flatten), so hand it back directly — this is the path the device-bar
+        // pill title uses, which would otherwise keep the stock asset.
+        if name == "TextMain", let rgb = customTextRGB { return Color(rgb: rgb) }
+        if name == "TextMuted", let rgb = customTextRGB {
+            return Color(rgb: rgb).opacity(TextPalette.mutedOpacity)
+        }
         guard let appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua),
               let dynamic = NSColor(named: name) else { return Color(name) }
         var flat = dynamic

@@ -59,7 +59,18 @@ struct RootView: View {
     ///
     /// `nil` / system pass-through for "auto" keeps both following the system
     /// appearance live.
+    /// A custom background overrides the theme picker: light/dark follows the
+    /// chosen color's luminance, so SwiftUI resolves asset colors (text,
+    /// icons, borders) for that color instead of the stored theme. Without
+    /// this, a light background keeps dark-mode light-gray text — invisible on
+    /// the light surface. Matches `applyStoredTheme`, which sets the *native*
+    /// appearance the same way.
+    private var backgroundScheme: ColorScheme? {
+        customBackgroundRGB.map { BackgroundPalette.isLight($0) ? .light : .dark }
+    }
+
     private var preferredScheme: ColorScheme? {
+        if let backgroundScheme { return backgroundScheme }
         switch theme {
         case "light": return .light
         case "dark": return .dark
@@ -68,6 +79,7 @@ struct RootView: View {
     }
 
     private var injectedColorScheme: ColorScheme {
+        if let backgroundScheme { return backgroundScheme }
         switch theme {
         case "light": return .light
         case "auto": return colorScheme
