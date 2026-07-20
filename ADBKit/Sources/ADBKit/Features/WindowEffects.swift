@@ -57,10 +57,11 @@ public enum WindowEffects {
         return Int((clampedAmount(amount) * maximumBlurRadius).rounded())
     }
 
-    /// The grain film's alpha for a slider amount — zero whenever the window
-    /// is opaque, so the film never sits over a solid background.
-    public static func grainOpacity(root opacity: Double, amount: Double) -> Double {
-        guard isTranslucent(opacity) else { return 0 }
-        return clampedAmount(amount) * maximumGrainAlpha
+    /// The grain film's alpha for a slider amount. Deliberately independent
+    /// of the window opacity: the film reads as texture over a solid window
+    /// just as well as over glass. (Blur, by contrast, needs something
+    /// showing through, so it stays opacity-gated above.)
+    public static func grainOpacity(amount: Double) -> Double {
+        clampedAmount(amount) * maximumGrainAlpha
     }
 }

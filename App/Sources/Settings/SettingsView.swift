@@ -514,8 +514,7 @@ struct AppearanceSettingsView: View {
                 effectSlider(
                     "Grain", value: $windowGrain, in: 0...1,
                     percent: WindowEffects.clampedAmount(windowGrain))
-                    .disabled(!WindowEffects.isTranslucent(windowOpacity))
-                Text("Below 100% opacity the main window turns to glass — what's behind shows through every pane, softened by Blur and textured by Grain.")
+                Text("Below 100% opacity the main window turns to glass — what's behind shows through every pane, softened by Blur. Grain films the window with texture at any opacity.")
                     .font(.app(.footnote))
                     .foregroundStyle(.textMuted)
             }
