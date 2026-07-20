@@ -33,22 +33,6 @@ import Testing
     @Test func malformedJSONReturnsNil() {
         #expect(SnapNode.parse("not json") == nil)
     }
-
-    @Test func matchesFindsKeysAndValuesInDescendants() {
-        let json = """
-        {"type":"object","entries":[
-          {"name":"userId","node":{"type":"number","text":"7"}},
-          {"name":"profile","node":{"type":"object","entries":[
-            {"name":"city","node":{"type":"string","text":"Berlin"}}]}}
-        ]}
-        """
-        let node = SnapNode.parse(json)!
-        #expect(node.matches("berlin"))          // nested value
-        #expect(node.matches("city"))            // nested key
-        #expect(node.matches("userid"))          // top-level key, case-insensitive
-        #expect(!node.matches("london"))         // absent
-        #expect(node.matches(""))                // empty query matches everything
-    }
 }
 
 /// Pure tests for the CDP framing: request shapes and decoding of the replies

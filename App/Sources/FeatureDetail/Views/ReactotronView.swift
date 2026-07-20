@@ -440,18 +440,32 @@ final class ReactotronSession {
         Self.discardInBackground(previous)
     }
 
+    /// The export payload: the raw wire commands of the given (already
+    /// filtered) items, pretty-printed — one shape for file and clipboard.
+    private func exportJSON(_ itemsToExport: [RtItem]) -> Data? {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        return try? encoder.encode(itemsToExport.map(\.command))
+    }
+
     fileprivate func export(_ itemsToExport: [RtItem]) {
         guard let file = app?.askSaveLocation(
             suggestedName: "reactotron_\(ScreenCaptureService.stamp()).json"
         ) else { return }
         do {
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-            try encoder.encode(itemsToExport.map(\.command)).write(to: file)
+            guard let data = exportJSON(itemsToExport) else { return }
+            try data.write(to: file)
             app?.showToast(Toast(message: "Exported \(itemsToExport.count) events", ok: true, revealPath: file.path))
         } catch {
             app?.showToast(Toast(message: "Export failed: \(error.localizedDescription)", ok: false))
         }
+    }
+
+    fileprivate func copyExport(_ itemsToExport: [RtItem]) {
+        guard let data = exportJSON(itemsToExport) else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(String(decoding: data, as: UTF8.self), forType: .string)
+        app?.showToast(Toast(message: "Copied \(itemsToExport.count) events as JSON", ok: true))
     }
 
     // MARK: - Inbound
@@ -1079,6 +1093,7 @@ struct ReactotronView: View {
             trailing: trailing,
             findToken: findToken,
             onExport: { session.export($0) },
+            onCopyExport: { session.copyExport($0) },
             onRetry: { Task { await session.start(serials: readySerials) } },
             onClear: split ? { session.clearPane(index) } : nil
         )
@@ -1810,6 +1825,7 @@ private struct TimelinePane: View {
     /// pane in a split; the second pane always gets the never-firing 0).
     let findToken: Int
     let onExport: ([RtItem]) -> Void
+    let onCopyExport: ([RtItem]) -> Void
     let onRetry: () -> Void
     /// Clears just this pane (split mode only — the single pane's trash in the
     /// trailing controls clears the whole timeline). nil hides the button.
@@ -1840,6 +1856,7 @@ private struct TimelinePane: View {
         trailing: AnyView?,
         findToken: Int = 0,
         onExport: @escaping ([RtItem]) -> Void,
+        onCopyExport: @escaping ([RtItem]) -> Void,
         onRetry: @escaping () -> Void,
         onClear: (() -> Void)? = nil
     ) {
@@ -1852,6 +1869,7 @@ private struct TimelinePane: View {
         self.trailing = trailing
         self.findToken = findToken
         self.onExport = onExport
+        self.onCopyExport = onCopyExport
         self.onRetry = onRetry
         self.onClear = onClear
         _search = AppStorage(wrappedValue: "", "reactotronPane\(pane)Search")
@@ -1937,13 +1955,16 @@ private struct TimelinePane: View {
                 ? "Newest at top — click to show newest at bottom"
                 : "Newest at bottom — click to show newest at top")
 
-            Button {
-                onExport(visible)
+            Menu {
+                Button("Save as JSON…") { onExport(visible) }
+                Button("Copy to Clipboard") { onCopyExport(visible) }
             } label: {
                 Image(systemName: "square.and.arrow.up")
             }
             .buttonStyle(IconButtonStyle())
-            .help("Export this pane's filtered timeline to JSON")
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("Export this pane's filtered timeline — save as a JSON file or copy to the clipboard")
             .disabled(visible.isEmpty)
 
             if let onClear {
@@ -2524,6 +2545,9 @@ private struct JSONTreeView: View {
     var showSearch: Bool = true
     @State private var expanded: Set<String> = []
     @State private var search = ""
+    /// The last find result revealed by a click, tinted in the tree until the
+    /// next search.
+    @State private var highlightedPath: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -2543,21 +2567,33 @@ private struct JSONTreeView: View {
                 }
             }
             LazyVStack(alignment: .leading, spacing: 1) {
-                let nodes = rows
-                ForEach(nodes) { node in
-                    rowView(node)
-                }
-                if nodes.isEmpty {
-                    Text(search.isEmpty ? "(empty)" : "No matches")
-                        .font(.app(size: 11))
-                        .foregroundStyle(.tertiary)
+                if search.isEmpty {
+                    let nodes = collapsedRows()
+                    ForEach(nodes) { node in
+                        rowView(node)
+                    }
+                    if nodes.isEmpty {
+                        emptyRow("(empty)")
+                    }
+                } else {
+                    // Clickable results (JSONSearch, pure in ADBKit): clicking
+                    // one expands the tree along its path and highlights the
+                    // node in place.
+                    let matches = JSONSearch.matches(in: root, query: search)
+                    ForEach(Array(matches.enumerated()), id: \.offset) { _, match in
+                        matchRow(match)
+                    }
+                    if matches.isEmpty { emptyRow("No matches") }
+                    if matches.count >= 200 { emptyRow("…first 200 matches — narrow the search") }
                 }
             }
         }
     }
 
-    private var rows: [JSONNode] {
-        search.isEmpty ? collapsedRows() : matchRows(search.lowercased())
+    private func emptyRow(_ text: String) -> some View {
+        Text(text)
+            .font(.app(size: 11))
+            .foregroundStyle(.tertiary)
     }
 
     private func collapsedRows() -> [JSONNode] {
@@ -2571,26 +2607,52 @@ private struct JSONTreeView: View {
         return out
     }
 
-    private func matchRows(_ query: String) -> [JSONNode] {
-        var out: [JSONNode] = []
-        var visited = 0
-        func walk(_ node: JSONNode) {
-            if out.count >= 800 || visited >= 40_000 { return }
-            visited += 1
-            if node.matches(query) { out.append(JSONNode(path: node.path, key: node.key, value: node.value, depth: 0)) }
-            for child in node.children { walk(child) }
+    /// One find result: its dot-path and value; clicking reveals it in the tree.
+    private func matchRow(_ match: TreeMatch) -> some View {
+        Button {
+            reveal(match)
+        } label: {
+            HStack(alignment: .top, spacing: 4) {
+                Image(systemName: "arrow.turn.down.right")
+                    .font(.app(size: 9))
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 14)
+                Text(match.displayPath)
+                    .font(.app(size: 11, design: .monospaced))
+                    .foregroundStyle(.rtKey)
+                Text(":")
+                    .font(.app(size: 11, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+                Text(match.preview)
+                    .font(.app(size: 11, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .padding(.vertical, 2)
+            .contentShape(Rectangle())
         }
-        for child in JSONNode(path: "", key: "", value: root, depth: -1).children { walk(child) }
-        return out
+        .buttonStyle(.plain)
+        .help("Reveal in the tree")
+    }
+
+    /// Open every container down to the match, mark it, and swap back to the
+    /// tree so the clicked result is visible in place.
+    private func reveal(_ match: TreeMatch) {
+        var path = ""
+        for index in match.path {
+            path += ".\(index)"
+            expanded.insert(path)
+        }
+        highlightedPath = path
+        search = ""
     }
 
     @ViewBuilder
     private func rowView(_ node: JSONNode) -> some View {
         HStack(alignment: .top, spacing: 4) {
-            if search.isEmpty {
-                Color.clear.frame(width: CGFloat(max(0, node.depth)) * 12, height: 1)
-            }
-            if node.isContainer, search.isEmpty {
+            Color.clear.frame(width: CGFloat(max(0, node.depth)) * 12, height: 1)
+            if node.isContainer {
                 Image(systemName: expanded.contains(node.path) ? "chevron.down" : "chevron.right")
                     .font(.app(size: 10, weight: .bold))
                     .foregroundStyle(.secondary)
@@ -2616,8 +2678,13 @@ private struct JSONTreeView: View {
         // Rows were 13pt slivers — give container rows a real click target.
         .padding(.vertical, 2)
         .contentShape(Rectangle())
+        .background {
+            if node.path == highlightedPath {
+                RoundedRectangle(cornerRadius: 3).fill(Color.brandAccent.opacity(0.14))
+            }
+        }
         .onTapGesture {
-            if node.isContainer, search.isEmpty { toggle(node.path) }
+            if node.isContainer { toggle(node.path) }
         }
         .contextMenu {
             Button("Copy value") {
@@ -2661,16 +2728,6 @@ private struct JSONNode: Identifiable {
             }
         default:
             return []
-        }
-    }
-
-    func matches(_ query: String) -> Bool {
-        if key.lowercased().contains(query) { return true }
-        switch value {
-        case let .string(text): return text.lowercased().contains(query)
-        case let .number(number): return "\(number)".contains(query)
-        case let .bool(flag): return "\(flag)".contains(query)
-        default: return false
         }
     }
 
