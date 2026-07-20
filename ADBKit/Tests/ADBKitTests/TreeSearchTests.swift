@@ -60,6 +60,21 @@ struct SnapNodeFindMatchesTests {
         // matches come from keys and primitive values.
         #expect(root.findMatches(query: "object").isEmpty)
     }
+
+    @Test func containerSummariesCoverObjectMapAndArray() {
+        let map = SnapNode.parse(
+            #"{"type":"object","ctor":"Map","entries":[{"name":"a","node":{"type":"number","text":"1"}},{"name":"b","node":{"type":"number","text":"2"}}]}"#
+        )
+        #expect(map?.containerSummary == "Map {2}")
+
+        let plain = SnapNode.parse(
+            #"{"type":"object","entries":[{"name":"a","node":{"type":"number","text":"1"}}]}"#
+        )
+        #expect(plain?.containerSummary == "{1}")
+
+        let array = SnapNode.parse(#"{"type":"array","length":3,"items":[]}"#)
+        #expect(array?.containerSummary == "Array(3)")
+    }
 }
 
 /// `JSONSearch` — Reactotron's find-in-payload result list.
@@ -120,5 +135,23 @@ struct JSONSearchTests {
 
     @Test func emptyQueryReturnsNothing() {
         #expect(JSONSearch.matches(in: root, query: "").isEmpty)
+    }
+
+    @Test func sortOrderIsCaseSensitiveASCIIMatchingTheTree() {
+        // The Reactotron tree view sorts object keys with `<` (ASCII,
+        // uppercase first). JSONSearch must index the identical order or a
+        // clicked result reveals the wrong row — this locks the contract.
+        let mixed = JSONValue.object(["a": .number(2), "B": .number(1)])
+        let matches = JSONSearch.matches(in: mixed, query: "1")
+        #expect(matches.map(\.path) == [[0]]) // "B" sorts before "a"
+        #expect(matches[0].displayPath == "B")
+    }
+
+    @Test func numberPreviewsHandleBoundariesAndNegatives() {
+        #expect(JSONSearch.preview(.number(-3)) == "-3")
+        // At and beyond the 9e15 integer-safety cutoff the raw Double form
+        // is kept rather than a lossy Int conversion.
+        #expect(JSONSearch.preview(.number(1e16)) == "1e+16")
+        #expect(JSONSearch.preview(.number(-1e16)) == "-1e+16")
     }
 }

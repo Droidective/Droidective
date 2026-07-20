@@ -38,14 +38,16 @@ public enum ConsoleExport {
 
     /// A pretty-printed JSON array of the entries, in the order given (the
     /// caller passes them in display/chronological order). `level` is omitted
-    /// for entries that have none.
-    public static func json(_ entries: [ConsoleExportEntry]) -> String {
+    /// for entries that have none. Returns nil if encoding fails so the caller
+    /// surfaces the failure instead of shipping an empty artifact with a
+    /// success message.
+    public static func json(_ entries: [ConsoleExportEntry]) -> String? {
         let lines = entries.map {
             Line(timestamp: stamp($0.at), type: $0.type, level: $0.level, text: $0.text)
         }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-        guard let data = try? encoder.encode(lines) else { return "[]" }
+        guard let data = try? encoder.encode(lines) else { return nil }
         return String(decoding: data, as: UTF8.self)
     }
 }

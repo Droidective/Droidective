@@ -8,16 +8,17 @@ struct ConsoleExportTests {
     }
 
     @Test func emptyFeedExportsEmptyArray() throws {
-        let data = try #require(ConsoleExport.json([]).data(using: .utf8))
+        let json = try #require(ConsoleExport.json([]))
+        let data = try #require(json.data(using: .utf8))
         let decoded = try #require(try JSONSerialization.jsonObject(with: data) as? [Any])
         #expect(decoded.isEmpty)
     }
 
     @Test func exportsEntriesInGivenOrderWithISOTimestamps() throws {
-        let json = ConsoleExport.json([
+        let json = try #require(ConsoleExport.json([
             ConsoleExportEntry(at: date(0), type: "log", level: "error", text: "boom"),
             ConsoleExportEntry(at: date(1.5), type: "input", text: "1 + 1"),
-        ])
+        ]))
         let data = try #require(json.data(using: .utf8))
         let decoded = try #require(
             try JSONSerialization.jsonObject(with: data) as? [[String: Any]]
@@ -33,16 +34,16 @@ struct ConsoleExportTests {
     }
 
     @Test func levelIsOmittedWhenAbsent() throws {
-        let json = ConsoleExport.json([
+        let json = try #require(ConsoleExport.json([
             ConsoleExportEntry(at: date(0), type: "notice", text: "connected"),
-        ])
+        ]))
         #expect(!json.contains("\"level\""))
     }
 
     @Test func escapesQuotesAndNewlines() throws {
-        let json = ConsoleExport.json([
+        let json = try #require(ConsoleExport.json([
             ConsoleExportEntry(at: date(0), type: "log", level: "log", text: "a \"quoted\"\nline"),
-        ])
+        ]))
         let data = try #require(json.data(using: .utf8))
         let decoded = try #require(
             try JSONSerialization.jsonObject(with: data) as? [[String: Any]]

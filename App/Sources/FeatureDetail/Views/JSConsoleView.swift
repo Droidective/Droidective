@@ -221,11 +221,14 @@ final class JSConsoleSession {
     /// device keep reaching Metro. Keyed by port so changing the port and
     /// re-reversing doesn't orphan the earlier binding.
     @ObservationIgnored private var reversedTunnels: [Int: Set<String>] = [:]
-    /// port → serials automatic discovery already tried to reverse, so the 2s
-    /// loop doesn't respawn adb forever for a device that keeps failing. A
-    /// serial that leaves the device list is forgotten (a replug drops the
-    /// binding device-side, so it must be re-attempted).
-    @ObservationIgnored private var autoReverseAttempted: [Int: Set<String>] = [:]
+    /// port → per-serial auto-reverse try count, capped at `autoReverseTryLimit`
+    /// so the 2s loop doesn't respawn adb forever for a device that keeps
+    /// failing — while a transient failure still gets retried instead of
+    /// stranding the device on its first bad pass. A serial that leaves the
+    /// device list is forgotten (a replug drops the binding device-side, so it
+    /// must be re-attempted).
+    @ObservationIgnored private var autoReverseAttempts: [Int: [String: Int]] = [:]
+    private let autoReverseTryLimit = 3
     weak var app: AppState?
 
     var isConnected: Bool { connectedTarget != nil }
@@ -368,7 +371,9 @@ final class JSConsoleSession {
         // reverse re-attempted — replugging drops the binding device-side.
         let removed = Set(self.serials).subtracting(serials)
         if !removed.isEmpty {
-            for key in autoReverseAttempted.keys { autoReverseAttempted[key]?.subtract(removed) }
+            for key in autoReverseAttempts.keys {
+                for serial in removed { autoReverseAttempts[key]?[serial] = nil }
+            }
             for key in reversedTunnels.keys { reversedTunnels[key]?.subtract(removed) }
         }
         self.serials = serials
@@ -378,19 +383,24 @@ final class JSConsoleSession {
     /// a USB device can register with Metro without the user knowing to click
     /// "adb reverse" first (`react-native run-android` does the same on every
     /// launch — its absence was why the console often found no target until
-    /// the feature was poked). Once per device+port; the manual button stays
-    /// as the retry path. Background work, so deliberately not
-    /// CommandLog-wrapped.
+    /// the feature was poked). A failed reverse stays eligible on later scan
+    /// passes, up to a few tries per device+port — a transient adb hiccup
+    /// shouldn't strand the device; the manual button stays as the fallback.
+    /// Background work, so deliberately not CommandLog-wrapped.
     private func autoReverse() async {
         let metroPort = port
-        let missing = serials.filter { !autoReverseAttempted[metroPort, default: []].contains($0) }
-        guard !missing.isEmpty else { return }
-        autoReverseAttempted[metroPort, default: []].formUnion(missing)
+        let eligible = serials.filter {
+            autoReverseAttempts[metroPort, default: [:]][$0, default: 0] < autoReverseTryLimit
+        }
+        guard !eligible.isEmpty else { return }
         var reversed: Set<String> = []
-        for serial in missing where !Task.isCancelled {
+        for serial in eligible where !Task.isCancelled {
             if let result = try? await adb.run(on: serial, ["reverse", "tcp:\(metroPort)", "tcp:\(metroPort)"]),
                result.succeeded {
+                autoReverseAttempts[metroPort, default: [:]][serial] = autoReverseTryLimit
                 reversed.insert(serial)
+            } else {
+                autoReverseAttempts[metroPort, default: [:]][serial, default: 0] += 1
             }
         }
         if !reversed.isEmpty { reversedTunnels[metroPort, default: []].formUnion(reversed) }
@@ -1233,7 +1243,7 @@ struct JSConsoleView: View {
 
     /// What Export writes: exactly the rows the feed is showing — the level
     /// and text filters apply, in display (chronological) order.
-    private var exportJSON: String {
+    private var exportJSON: String? {
         ConsoleExport.json(session.filteredEntries.map { entry in
             let (type, level): (String, String?) = switch entry.kind {
             case .input: ("input", nil)
@@ -1251,8 +1261,12 @@ struct JSConsoleView: View {
         guard let file = state.askSaveLocation(
             suggestedName: "js-console_\(ScreenCaptureService.stamp()).json"
         ) else { return }
+        guard let json = exportJSON else {
+            state.showToast(Toast(message: "Export failed: entries couldn't be encoded", ok: false))
+            return
+        }
         do {
-            try Data(exportJSON.utf8).write(to: file)
+            try Data(json.utf8).write(to: file)
             state.showToast(Toast(message: "Exported \(count) entries", ok: true, revealPath: file.path))
         } catch {
             state.showToast(Toast(message: "Export failed: \(error.localizedDescription)", ok: false))
@@ -1261,7 +1275,11 @@ struct JSConsoleView: View {
 
     private func exportToClipboard() {
         let count = session.filteredEntries.count
-        copyToPasteboard(exportJSON)
+        guard let json = exportJSON else {
+            state.showToast(Toast(message: "Copy failed: entries couldn't be encoded", ok: false))
+            return
+        }
+        copyToPasteboard(json)
         state.showToast(Toast(message: "Copied \(count) entries as JSON", ok: true))
     }
 
@@ -1844,6 +1862,11 @@ private struct ExpandedTree: View {
             } else {
                 SnapMatchList(matches: node.findMatches(query: query), onSelect: reveal)
             }
+        }
+        // A newly typed query drops the previous reveal's tint (reveal itself
+        // clears the field, so its own highlight survives this).
+        .onChange(of: search) { _, newValue in
+            if !newValue.trimmingCharacters(in: .whitespaces).isEmpty { highlightedPath = nil }
         }
     }
 

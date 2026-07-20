@@ -497,7 +497,10 @@ struct LogcatView: View {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(5))
                 if Task.isCancelled { return }
-                processNames = await streamer.processNames(serial: serial)
+                let refreshed = await streamer.processNames(serial: serial)
+                // A transient ps failure comes back empty — keep the last good
+                // map rather than blanking the process column for a cycle.
+                if !Task.isCancelled, !refreshed.isEmpty { processNames = refreshed }
             }
         }
         defer {

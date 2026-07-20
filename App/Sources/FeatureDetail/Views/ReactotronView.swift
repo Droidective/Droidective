@@ -452,8 +452,11 @@ final class ReactotronSession {
         guard let file = app?.askSaveLocation(
             suggestedName: "reactotron_\(ScreenCaptureService.stamp()).json"
         ) else { return }
+        guard let data = exportJSON(itemsToExport) else {
+            app?.showToast(Toast(message: "Export failed: events couldn't be encoded", ok: false))
+            return
+        }
         do {
-            guard let data = exportJSON(itemsToExport) else { return }
             try data.write(to: file)
             app?.showToast(Toast(message: "Exported \(itemsToExport.count) events", ok: true, revealPath: file.path))
         } catch {
@@ -462,7 +465,10 @@ final class ReactotronSession {
     }
 
     fileprivate func copyExport(_ itemsToExport: [RtItem]) {
-        guard let data = exportJSON(itemsToExport) else { return }
+        guard let data = exportJSON(itemsToExport) else {
+            app?.showToast(Toast(message: "Copy failed: events couldn't be encoded", ok: false))
+            return
+        }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(String(decoding: data, as: UTF8.self), forType: .string)
         app?.showToast(Toast(message: "Copied \(itemsToExport.count) events as JSON", ok: true))
@@ -2587,6 +2593,11 @@ private struct JSONTreeView: View {
                     if matches.count >= 200 { emptyRow("…first 200 matches — narrow the search") }
                 }
             }
+        }
+        // A newly typed query drops the previous reveal's tint (reveal itself
+        // clears the field, so its own highlight survives this).
+        .onChange(of: search) { _, newValue in
+            if !newValue.isEmpty { highlightedPath = nil }
         }
     }
 
