@@ -6,9 +6,9 @@
     <description>Most recent Droidective updates.</description>
     <language>en</language>
     <item>
-      <title>Droidective 3.6.0</title>
-      <sparkle:version>574</sparkle:version>
-      <sparkle:shortVersionString>3.6.0</sparkle:shortVersionString>
+      <title>Droidective 3.6.1</title>
+      <sparkle:version>585</sparkle:version>
+      <sparkle:shortVersionString>3.6.1</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <description><![CDATA[
 <style>
@@ -24,111 +24,20 @@ pre { background: color-mix(in srgb, currentColor 8%, transparent); padding: .6e
 pre code { background: none; padding: 0; }
 a { color: #2f9e44; }
 </style>
-<p>The JS Console and Reactotron learn to export and search inside objects,
-logcat becomes a real columnar log viewer, emulators finally go by their AVD
-names, the React Native role reaches iOS Simulators, and the window gets a
-custom background and text color.</p>
-<h3>JS Console</h3>
-<ul>
-<li>
-<strong>Export the filtered feed</strong> — the share icon in the filter bar saves
-exactly the rows the feed is showing (level and text filters applied) as a
-JSON file, or copies them to the clipboard.</li>
-<li>
-<strong>Find in object, with clickable results</strong> — typing in an expanded
-object's find field lists <code>path: value</code> matches; clicking one expands the
-tree along the path and highlights the node in place.</li>
-<li>
-<strong>Clear cache and restart</strong> — Restart app becomes a split button; the new
-option clears the app's cache first, and a hung cache clear can't stall
-the restart.</li>
-<li>
-<strong>A connection that takes care of itself</strong> — discovery now runs
-<code>adb reverse</code> for you (and retries a transiently failed one), a half-dead
-connection self-heals, the session survives pane moves, and auto-connect
-waits for a target to settle before attaching, so it no longer crashes an
-app that's still booting.</li>
-<li>
-<strong>Quieter rows</strong> — URLs underline only on hover, the whole row toggles
-its object, and the hover copy button reserves its space so rows never
-reflow.</li>
-</ul>
-<h3>Reactotron</h3>
-<ul>
-<li>
-<strong>Export a pane</strong> — the same JSON file / clipboard menu as the console,
-per timeline pane.</li>
-<li>
-<strong>Clickable search results in JSON trees</strong> — searching a payload lists
-matches; clicking one reveals the node in place.</li>
-<li>
-<strong>Reworked filter controls</strong> in the timeline.</li>
-</ul>
-<h3>Logcat</h3>
-<ul>
-<li>
-<strong>Aligned columns</strong> — time (toggle the clock from the toolbar), pid-tid,
-the process <em>name</em> (resolved live, refreshed as new processes spawn), a
-filled level chip, the tag in a stable color, and the message tinted by
-severity. Monospaced, scannable, and steady while streaming.</li>
-<li>
-<strong>Selection holds the tail</strong> — clicking a line pauses follow so the
-stream can't scroll your selection away; the jump button resumes.</li>
-<li>
-<strong>No more bounce at the cap</strong> — the 5000-line ring now trims in chunks as
-one editing pass.</li>
-</ul>
-<h3>Devices</h3>
-<ul>
-<li>
-<strong>Emulators go by their AVD name</strong> — "Medium Tablet" instead of the
-generic system-image model, everywhere devices are listed: the device
-dropdown and pill, Quick Actions device rows and run-on-all toasts, and
-the menu bar.</li>
-<li>
-<strong>Mirror from the device bar</strong> — a display button next to the device pill
-opens the scrcpy mirror (Android devices, hidden while the mirror is
-already open).</li>
-<li>
-<strong>The React Native role spans platforms</strong> — booted iOS Simulators join
-the device bar and launch lists, iOS Logs and the Simulate hub join the
-role's curation, and the emulators screen covers both.</li>
-</ul>
-<h3>Appearance</h3>
-<ul>
-<li>
-<strong>Custom window background and text colors</strong> — pick both, like the
-accent; the app's light/dark scheme follows the background's luminance,
-opaque feeds and lists honor it, and a low-contrast text choice warns
-without blocking. The Font settings section is now called Text.</li>
-<li>
-<strong>Grain at any opacity</strong> — the film-grain texture no longer needs a
-translucent window; the slider works at 100% too.</li>
-</ul>
-<h3>Updates</h3>
-<ul>
-<li>
-<strong>A redesigned What's New sheet</strong> — an accent-badged masthead and styled
-release notes, applied to older entries too.</li>
-</ul>
+<p>A resize-performance fix: dragging a split divider or resizing the window
+with Mirror Screen and streaming log tabs open no longer slows to a crawl.</p>
 <h3>Fixes</h3>
 <ul>
-<li>Succeeded install rows hide themselves after five seconds; failures stay
-until retried.</li>
-<li>Terminal: top-strip tabs no longer clip, and closed tabs' numbers are
-reused.</li>
-<li>The React Native hub no longer greys every quick action while one runs.</li>
-<li>The sidebar toggle works again after a split-resize eviction, and the JS
-Console releases keyboard focus when its tab goes to the background.</li>
-<li>Export failures (console and Reactotron) now show an error toast instead
-of silently doing nothing.</li>
-<li>Mirror Screen re-fits its video when the pane resizes — resizing a split
-no longer leaves dead space on one side with the device screen drawn past
-the pane edge.</li>
+<li>
+<strong>Resizing is smooth with logs streaming</strong> — the log view re-wrapped its
+entire buffer on every tick of a drag, pinning a CPU core; it now re-wraps
+once, when the drag rests. Log feeds also coalesce their updates a little
+more (three refreshes per second instead of eight), which cuts idle CPU
+with a busy logcat tab roughly in half.</li>
 </ul>
 ]]></description>
-      <pubDate>Mon, 20 Jul 2026 20:04:31 +0000</pubDate>
-      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.6.0/Droidective-v3.6.0.dmg" sparkle:edSignature="e3st7JzW5TWuI5Q5tOZoqCeJ2qx0yeebAITMSTFoWJ4Mk1PuhJWeLUF1Wd09EVSI3kOgzMDYatK+oC9xHlHaDQ==" length="86672234" type="application/octet-stream" />
+      <pubDate>Mon, 20 Jul 2026 21:29:05 +0000</pubDate>
+      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.6.1/Droidective-v3.6.1.dmg" sparkle:edSignature="ejvQZwXcNQvJDgCou0rRCHRVClJQYN/WMBSHsyBNJgUHrJ7mBlLZz15uBYwJZ9Chx4dkzZH/YCayLmgysUPnAw==" length="86738051" type="application/octet-stream" />
     </item>
     
   </channel>
