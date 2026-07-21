@@ -6,6 +6,13 @@ import SwiftUI
 /// control-bar toggle opts in (and persists).
 let mirrorIncludeAudioKey = "mirrorIncludeAudio"
 
+/// How long a hidden mirror keeps streaming before it's torn down. Switching
+/// tabs used to stop-and-reconnect instantly, so flipping away and back — even
+/// for a moment — flashed the "Connecting…" screen every time. Holding the live
+/// session for this window lets a quick return resume in place; only a genuinely
+/// abandoned tab pays the teardown to reclaim the video-encode CPU.
+let mirrorHiddenGraceSeconds: TimeInterval = 120
+
 /// In-app screen mirror: a native scrcpy client renders the device live, in
 /// window. The toolbar takes a screenshot (→ annotate in place) or records
 /// (→ video editor on stop) without interrupting the live, controllable mirror.
@@ -20,6 +27,8 @@ struct ScreenMirrorView: View {
     @State private var connectTask: Task<Void, Never>?
     /// Identifies this view's leave guard so a stale clear can't wipe another's.
     @State private var exitGuardID = UUID()
+    /// Delayed teardown for a hidden tab; cancelled if the tab returns in time.
+    @State private var teardownTask: Task<Void, Never>?
 
     var body: some View {
         ZStack {
@@ -66,14 +75,17 @@ struct ScreenMirrorView: View {
         }
         .onChange(of: tabIsActive) { _, active in
             if active {
+                // Returned to the tab: cancel any pending teardown so a session
+                // still inside its grace window resumes in place (no reconnect
+                // flash). Only reconnect if it was already torn down.
+                teardownTask?.cancel()
+                teardownTask = nil
                 if model == nil { scheduleReconnect(to: state.targetSerials.first) }
             } else if model?.isRecording != true {
-                // Pause the live mirror while hidden — unless it's recording,
-                // which must keep capturing.
-                connectTask?.cancel()
-                let leaving = model
-                model = nil
-                Task { await leaving?.stop() }
+                // Hidden — keep streaming for a grace window instead of tearing
+                // down instantly, so a quick tab flip doesn't stop-and-reconnect.
+                // Recording sessions must keep capturing regardless.
+                scheduleHiddenTeardown()
             }
         }
         .onChange(of: includeAudio) { _, include in
@@ -105,10 +117,27 @@ struct ScreenMirrorView: View {
         }
         .onDisappear {
             state.clearExitGuard(exitGuardID)
+            teardownTask?.cancel()
             connectTask?.cancel()
             let leaving = model
             model = nil
             Task { await leaving?.stop() }
+        }
+    }
+
+    /// Stop the hidden mirror after the grace window elapses, unless the tab
+    /// returns first (which cancels this task). Reclaims the video-encode CPU
+    /// of a mirror the user has actually left behind. Runs on the main actor,
+    /// so mutating `model` here is safe.
+    private func scheduleHiddenTeardown() {
+        teardownTask?.cancel()
+        teardownTask = Task {
+            try? await Task.sleep(for: .seconds(mirrorHiddenGraceSeconds))
+            guard !Task.isCancelled else { return }
+            connectTask?.cancel()
+            let leaving = model
+            model = nil
+            await leaving?.stop()
         }
     }
 
