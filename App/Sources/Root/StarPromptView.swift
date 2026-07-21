@@ -1,12 +1,11 @@
 import SwiftUI
 
-/// One-time nudge to star the project on GitHub, shown once the app has been
-/// launched several times (gated in RootView, after the privacy consent). Marks
-/// itself shown the moment it appears, so it never nags twice — whatever the
-/// user does with it.
+/// Recurring nudge to star the project on GitHub, shown every few launches
+/// until the user stars or the ask cap is hit (cadence + outcome handled in
+/// RootView). The view is presentation-only: it opens the repo via `onStar`
+/// and dismisses; RootView's `onDismiss` records the outcome.
 struct StarPromptView: View {
     @Environment(\.dismiss) private var dismiss
-    @AppStorage("starPromptShown") private var starPromptShown = false
 
     /// Opens the GitHub repository (routed through AppState so views stay thin).
     let onStar: () -> Void
@@ -20,9 +19,9 @@ struct StarPromptView: View {
                 .background(Color.brandAccent.opacity(0.12), in: RoundedRectangle(cornerRadius: 16))
 
             VStack(spacing: 7) {
-                Text("Enjoying Droidective?")
+                Text("Enjoying the app?")
                     .font(.app(.title2).bold())
-                Text("A star on GitHub helps other Android and React Native developers find it. It takes a moment and genuinely helps.")
+                Text("If the project's useful to you, consider giving it a star on GitHub. It takes a moment and genuinely helps others find it.")
                     .font(.app(.callout))
                     .foregroundStyle(.textMuted)
                     .multilineTextAlignment(.center)
@@ -50,6 +49,5 @@ struct StarPromptView: View {
         .padding(28)
         .frame(width: 380)
         .background(.bgRoot)
-        .onAppear { starPromptShown = true }
     }
 }

@@ -17,20 +17,30 @@ enum LaunchPrompt: Equatable {
     static func next(
         hasChosenRole: Bool,
         hasSeenTour: Bool,
-        starPromptShown: Bool,
+        starResolved: Bool,
         launchCount: Int,
-        starAfterLaunches: Int
+        snoozeCount: Int,
+        nextLaunch: Int,
+        maxAsks: Int
     ) -> LaunchPrompt? {
         if !hasChosenRole && !hasSeenTour { return .rolePicker }
         if !hasSeenTour { return .tour }
-        if starDue(starPromptShown: starPromptShown, launchCount: launchCount, afterLaunches: starAfterLaunches) {
+        if starDue(
+            resolved: starResolved, launchCount: launchCount,
+            snoozeCount: snoozeCount, nextLaunch: nextLaunch, maxAsks: maxAsks
+        ) {
             return .star
         }
         return nil
     }
 
-    /// Whether the one-time GitHub-star nudge is due.
-    static func starDue(starPromptShown: Bool, launchCount: Int, afterLaunches: Int) -> Bool {
-        !starPromptShown && launchCount >= afterLaunches
+    /// Whether the recurring GitHub-star nudge is due. It stops for good once
+    /// the user stars (`resolved`) and only re-appears every `nextLaunch`
+    /// milestone up to `maxAsks` times — each "Maybe Later" pushes `nextLaunch`
+    /// out and bumps `snoozeCount`.
+    static func starDue(
+        resolved: Bool, launchCount: Int, snoozeCount: Int, nextLaunch: Int, maxAsks: Int
+    ) -> Bool {
+        !resolved && snoozeCount < maxAsks && launchCount >= nextLaunch
     }
 }

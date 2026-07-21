@@ -24,9 +24,19 @@ struct RootView: View {
     @AppStorage("hasSeenTour") private var hasSeenTour = false
     @AppStorage("hasChosenRole") private var hasChosenRole = false
     @AppStorage("launchCount") private var launchCount = 0
-    @AppStorage("starPromptShown") private var starPromptShown = false
+    /// GitHub-star nudge state. `starPromptResolved` ends it for good (the user
+    /// starred); `starPromptSnoozeCount` counts "Maybe Later" taps; and
+    /// `starPromptNextLaunch` is the launch milestone the next ask is due at.
+    /// The pre-3.6 one-time `starPromptShown` flag is intentionally *not* read,
+    /// so users who only ever dismissed the old prompt are re-engaged.
+    @AppStorage("starPromptResolved") private var starPromptResolved = false
+    @AppStorage("starPromptSnoozeCount") private var starPromptSnoozeCount = 0
+    @AppStorage("starPromptNextLaunch") private var starPromptNextLaunch = 10
     @AppStorage("theme") private var theme = "dark"
     @State private var presentStar = false
+    /// Set by the "Star on GitHub" button so the sheet's `onDismiss` records a
+    /// resolve; any other dismissal (Maybe Later, Esc) counts as a snooze.
+    @State private var starStarred = false
     /// True only while the *first-run* role picker is up, so its dismissal
     /// chains into the welcome tour. Changing role later (pill / Settings)
     /// leaves this false, so the tour never reappears.
@@ -40,8 +50,11 @@ struct RootView: View {
     @AppStorage(windowOpacityDefaultsKey) private var windowOpacity = 1.0
     @AppStorage(windowBlurDefaultsKey) private var windowBlur = 0.6
 
-    /// Launches before the one-time GitHub-star nudge.
-    private let starPromptAfterLaunches = 10
+    /// GitHub-star nudge cadence: first ask at 10 launches, then every 10 more
+    /// launches each time the user taps "Maybe Later", up to 5 asks total.
+    private let starPromptFirstLaunch = 10
+    private let starPromptReAskGap = 10
+    private let starPromptMaxAsks = 5
 
     /// Theme color-sync needs two modifiers because they reach different layers,
     /// and neither alone is enough:
@@ -87,11 +100,6 @@ struct RootView: View {
         }
     }
 
-    private var shouldPromptStar: Bool {
-        LaunchPrompt.starDue(
-            starPromptShown: starPromptShown, launchCount: launchCount, afterLaunches: starPromptAfterLaunches)
-    }
-
     var body: some View {
         @Bindable var state = state
         // Read pendingExit here so body re-renders when a navigation is deferred
@@ -135,8 +143,11 @@ struct RootView: View {
             .background {
                 // Its own host view so the star sheet reliably presents (two
                 // .sheet modifiers on one view can drop one).
-                Color.clear.sheet(isPresented: $presentStar) {
-                    StarPromptView(onStar: { state.openRepository() })
+                Color.clear.sheet(isPresented: $presentStar, onDismiss: starPromptDismissed) {
+                    StarPromptView(onStar: {
+                        starStarred = true
+                        state.openRepository()
+                    })
                 }
             }
             #if !APPSTORE
@@ -241,8 +252,9 @@ struct RootView: View {
         installFocusRelease()
         switch LaunchPrompt.next(
             hasChosenRole: hasChosenRole, hasSeenTour: hasSeenTour,
-            starPromptShown: starPromptShown,
-            launchCount: launchCount, starAfterLaunches: starPromptAfterLaunches
+            starResolved: starPromptResolved, launchCount: launchCount,
+            snoozeCount: starPromptSnoozeCount, nextLaunch: starPromptNextLaunch,
+            maxAsks: starPromptMaxAsks
         ) {
         case .rolePicker:
             // Brand-new user: pick a role first, then run the tour.
@@ -255,6 +267,20 @@ struct RootView: View {
         case nil:
             break
         }
+    }
+
+    /// Records the outcome of the star nudge. "Star on GitHub" resolves it for
+    /// good; anything else (Maybe Later, or dismissing with Esc) is a snooze
+    /// that schedules the next ask `starPromptReAskGap` launches out — the
+    /// `starDue` cap stops it after `starPromptMaxAsks` asks.
+    private func starPromptDismissed() {
+        if starStarred {
+            starPromptResolved = true
+        } else {
+            starPromptSnoozeCount += 1
+            starPromptNextLaunch = launchCount + starPromptReAskGap
+        }
+        starStarred = false
     }
 
     /// The main window's frame-autosave name — the value must stay
