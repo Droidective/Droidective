@@ -17,6 +17,14 @@ final class MirrorViewModel {
     }
 
     private(set) var status: Status = .connecting
+    /// Whether the session ended (failed or stopped) — e.g. the device dropped
+    /// while the tab was hidden — so returning to the tab needs a fresh connect.
+    var hasEnded: Bool {
+        switch status {
+        case .failed, .stopped: return true
+        case .connecting, .streaming: return false
+        }
+    }
     private(set) var isRecording = false
     private(set) var isPaused = false
     private var recordBusy = false
@@ -38,7 +46,9 @@ final class MirrorViewModel {
 
     private let adb: AdbClient
     private let locator: ToolLocator
-    private let serial: String
+    /// The device this session is bound to — set once at init (a session never
+    /// re-targets; the view reconnects to follow the device-bar selection).
+    let serial: String
 
     private var session: MirrorSession?
     private var displayTask: Task<Void, Never>?
