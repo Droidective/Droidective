@@ -90,7 +90,7 @@ opening it — verify those by hand.
 ## Build / test / run
 
 ```
-make test          # ADBKit unit tests (cd ADBKit && swift test) — 972 tests, keep green
+make test          # ADBKit unit tests (cd ADBKit && swift test) — 1081 tests, keep green
 make build         # xcodegen generate + xcodebuild Debug
 make run           # build + open the .app
 ```
@@ -554,12 +554,29 @@ compile or test time* — lean on it instead of manual vigilance.
 ## Status
 
 Feature-complete across all planned milestones plus several UX rounds.
-Unreleased on `main`/in flight: **Reactotron MCP support** (Settings ▸ MCP:
-an embedded localhost Streamable-HTTP MCP server with upstream Reactotron's
-exact 10-tool/8-resource contract and default-on redaction — see the
-"Reactotron MCP" bullet and sync recipe above; `ReactotronMCP` target,
-~100 new tests incl. real-socket and golden-contract suites).
-(Latest release: **v3.6.1** — a resize-performance fix: `LogScrollView`
+(Latest release: **v3.7.0** — the **universal (arm64 + x86_64) build**
+(app + bundled ffmpeg lipo'd from per-slice SHA-pinned downloads;
+`scripts/unpack-ffmpeg.sh` inflates the committed `ffmpeg.zip` before
+generate — `make generate` and CI run it; `package-dmg.sh` refuses a DMG
+missing a slice), **Reactotron MCP support** (Settings ▸ MCP: an embedded
+localhost Streamable-HTTP MCP server with upstream Reactotron's exact
+10-tool/8-resource contract and default-on redaction — see the "Reactotron
+MCP" bullet and sync recipe above; `ReactotronMCP` target, ~100 new tests
+incl. real-socket and golden-contract suites), **terminal session resume**
+(implicit teardowns — quit, feature-tab close, background window close —
+snapshot each tab's cwd via `TerminalResume` +
+`LayoutState.terminalResumeDirs`; explicitly closed tabs are forgotten),
+**per-pane Reactotron sort order** (`reactotronPane<n>NewestFirst`), a
+**clear-data restart variant** on both consoles (`RestartClearScope`,
+confirmed, beside the bounded cache clear; Reactotron gains the split
+button), the **mirror grace window** (a hidden mirror stays live 2 min and
+resumes in place; returning re-targets after a device switch —
+`MirrorTabPolicy`, pinned in AppTests), a **redesigned What's New sheet**
+(theme-resolved colors/size injected into the notes CSS,
+`ReleaseNotesStyler` tested), and a **recurring, capped GitHub-star nudge**
+(ask recorded at presentation so a quit can't replay it;
+`LaunchPrompt.nextAskLaunch`). Before that, **v3.6.1** — a
+resize-performance fix: `LogScrollView`
 applies the log document width only after a drag rests (autoresizing
 re-wrapped the whole buffer per tick — a pegged core while dragging with
 Mirror Screen and log tabs open), and the logcat/iOS-logs stream flush
@@ -653,7 +670,7 @@ jadx/apktool, recompile, and sign — with keystore creation) plus Frida setup, 
 custom accent color, launching emulators from the device bar, per-feature
 connect-a-device empty states, a live-preview hotkey recorder, and a Settings
 split into Appearance/Privacy; managed tools download from GitHub releases into
-Application Support and are sized/removable in Settings); 972 tests green;
+Application Support and are sized/removable in Settings); 1081 tests green;
 builds clean with zero warnings (enforced as errors in CI). Verified live against a
 physical device and an Android emulator. Release builds are Developer ID-signed +
 notarized and bundle scrcpy/ffmpeg (see `RELEASING.md`). Open gaps: the Apps

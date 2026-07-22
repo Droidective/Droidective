@@ -1,3 +1,71 @@
+## Droidective v3.7.0
+
+The app goes universal — Intel Macs run it natively at last — and the
+Reactotron relay learns to serve its data to AI agents over MCP. The
+Terminal resumes your working directories across quits, both debug consoles
+gain a clear-data restart, split Reactotron panes order themselves
+independently, and a hidden mirror stops reconnecting on every tab flip.
+
+### Runs natively on Intel Macs
+
+- **A universal app** — the DMG now carries arm64 and x86_64 slices of both
+  the app and the bundled ffmpeg, so Intel Macs run natively (previous
+  releases were Apple Silicon-only). The packaging step now refuses to ship
+  a DMG that lost a slice.
+
+### Reactotron MCP — your app's timeline for AI agents
+
+- **An opt-in MCP server** (Settings ▸ MCP) exposes the Reactotron relay's
+  timeline, state, and network data to Claude Code, Cursor, or VS Code over
+  localhost HTTP — the same tool and resource contract as the official
+  Reactotron desktop, so the upstream setup line works verbatim:
+  `claude mcp add --transport http reactotron http://127.0.0.1:4567/mcp`.
+- **Private by default** — it binds 127.0.0.1 only, validates Origin,
+  supports a bearer token, and redacts sensitive values at the MCP boundary
+  with upstream's default rules. An in-feature guide walks through
+  connecting an agent and trying the tools.
+
+### Terminal
+
+- **Sessions resume where you left off** — quitting the app, closing the
+  Terminal tab, or closing the window remembers each shell's working
+  directory; the next open starts one shell per directory, in order. A tab
+  you close yourself (⌘W, the ×, or `exit`) is forgotten — closing a tab
+  means you're done with it.
+
+### Reactotron & JS Console
+
+- **Independent pane order** — each split timeline pane keeps its own
+  newest-first / chronological toggle instead of both flipping together.
+- **Clear data and restart** — both consoles' Restart button gains a
+  full-data-clear variant behind a confirmation (it signs you out), next to
+  the existing cache clear; Reactotron's plain Restart becomes the same
+  split button the JS Console has.
+
+### Screen Mirror
+
+- **No more reconnect flash** — switching tabs keeps the mirror session
+  alive for a two-minute grace window, so flipping away and back resumes
+  instantly. Returning re-targets if you switched devices meanwhile, a
+  session that died while hidden reconnects, and a recording always stays
+  on its device.
+
+### Polish
+
+- **What's New sheet redesigned** — the release notes render in the app's
+  own colors and text size (no more black-on-dark when the app and OS
+  themes differ), with a version pill and a link to the full changelog.
+- **A gentler GitHub-star nudge** — it recurs every ten launches instead of
+  firing once, stops for good after five asks (or one star), and quitting
+  with the prompt open no longer replays it every launch.
+
+### Install
+
+Download `Droidective-v3.7.0.dmg` below. Existing installs update in place
+via Sparkle.
+
+---
+
 ## Droidective v3.6.1
 
 A resize-performance fix: dragging a split divider or resizing the window
