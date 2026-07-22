@@ -79,15 +79,19 @@ final class TerminalManager {
         group.tabIDs.compactMap { tabsByID[$0] }
     }
 
-    /// Open a fresh shell tab and focus it. The shell starts in the focused
+    /// Open a fresh shell tab and focus it. The shell starts in
+    /// `startDirectory` when given (the session-resume path), else the focused
     /// shell's working directory (home when there is none), and types
     /// `initialCommand` as soon as it spawns when one is given. It joins
     /// `group` when given, else the active tab's group, else lands loose — a
     /// fresh rail has no groups.
-    func newTab(inGroup group: UUID? = nil, name: String? = nil, initialCommand: String? = nil) {
+    func newTab(
+        inGroup group: UUID? = nil, name: String? = nil, initialCommand: String? = nil,
+        startDirectory: String? = nil
+    ) {
         let paneID = UUID()
         let session = TerminalSession(
-            startDirectory: activeSession?.currentDirectory,
+            startDirectory: startDirectory ?? activeSession?.currentDirectory,
             initialCommand: initialCommand
         )
         var tab = Tab(
@@ -142,6 +146,29 @@ final class TerminalManager {
         let name = rawName.trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty, tabsByID[id] != nil else { return }
         tabsByID[id]?.name = name
+    }
+
+    /// Each open tab's working directory — the focused pane's shell, read live
+    /// from the kernel, falling back to where a never-shown shell was going to
+    /// start — in display order. Read only at teardown time (no polling); this
+    /// is the raw input to the session-resume snapshot (`TerminalResume`).
+    var openTabDirectories: [String] {
+        tabs.map { tab in
+            tab.activeSession?.directoryToRemember
+                ?? FileManager.default.homeDirectoryForCurrentUser.path
+        }
+    }
+
+    /// Session resume: reopen one tab per remembered directory, display order,
+    /// first tab focused. Cheap — tab structs only; each shell spawns lazily
+    /// when its pane first renders. No-op unless the rail is empty (a live
+    /// rail must never be doubled) or there's nothing to resume.
+    func restore(directories: [String]) {
+        guard tabsByID.isEmpty, !directories.isEmpty else { return }
+        for directory in directories {
+            newTab(startDirectory: directory)
+        }
+        activeID = layout.allTabIDs.first
     }
 
     /// Kill every shell and clear the tabs — the Terminal feature tab was
@@ -335,6 +362,29 @@ extension AppState {
         terminals.newTab(name: name, initialCommand: line)
         requestFeature("terminal")
     }
+
+    /// Remember every open terminal tab's working directory (display order,
+    /// capped — see `TerminalResume`) so the next Terminal open resumes there.
+    /// Called only on *implicit* teardown: the feature tab closing, quit, a
+    /// background-mode window close, a role reset. Tabs closed explicitly
+    /// (⌘W / × / `exit`) already left the rail, so they're forgotten by
+    /// construction — closing a tab means done with it.
+    func rememberTerminalDirectories() {
+        layout.terminalResumeDirs = TerminalResume.snapshot(terminals.openTabDirectories)
+        persistLayout()
+    }
+
+    /// First shell(s) for a Terminal showing an empty rail: resume the
+    /// directories remembered at the last implicit teardown, or a single
+    /// fresh shell when there's nothing to resume.
+    func openTerminalResumingWork() {
+        let remembered = TerminalResume.snapshot(layout.terminalResumeDirs ?? [])
+        if remembered.isEmpty {
+            terminals.newTab()
+        } else {
+            terminals.restore(directories: remembered)
+        }
+    }
 }
 
 struct TerminalView: View {
@@ -376,9 +426,12 @@ struct TerminalView: View {
         // was mounted. Rail drags that end without a drop are cleared by the
         // root drag janitor (`RootView.installDragJanitor`) instead.
         // A first visit opens a shell right away — an empty terminal screen
-        // with a lone + button would just be a speed bump.
+        // with a lone + button would just be a speed bump. Directories
+        // remembered at the last implicit teardown resume here; a window
+        // reopened from background mode restores in `activateMainWindow`
+        // instead (the view stays mounted, so this task won't re-fire).
         .task {
-            if terminals.tabs.isEmpty { terminals.newTab() }
+            if terminals.tabs.isEmpty { state.openTerminalResumingWork() }
         }
         // The menu bar's Rename Terminal… (⇧⌘R) can't reach this view's dialog
         // state directly — it posts a request on the manager instead.

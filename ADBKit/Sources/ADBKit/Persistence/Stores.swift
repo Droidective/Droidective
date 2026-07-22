@@ -184,6 +184,13 @@ public struct LayoutState: Codable, Sendable, Equatable {
     /// tiles' right-click Hide, and the Settings ▸ General toggles). nil/empty
     /// = everything eligible shows. Optional so older files decode.
     public var quickPanelHiddenIds: [String]?
+    /// Working directories of the terminal tabs alive at the last *implicit*
+    /// teardown — app quit, the Terminal feature tab closed, a background-mode
+    /// window close — in display order (see `TerminalResume`). The next
+    /// Terminal open resumes one shell per directory. Tabs closed explicitly
+    /// (⌘W / × / `exit`) are absent by construction: they left the rail before
+    /// the snapshot. Optional so older files decode.
+    public var terminalResumeDirs: [String]?
 
     public init(
         enabledIds: [String]? = nil,
@@ -200,7 +207,8 @@ public struct LayoutState: Codable, Sendable, Equatable {
         seededRoleIds: [String]? = nil,
         tabGroups: [TabGroupState]? = nil,
         focusedGroup: Int? = nil,
-        quickPanelHiddenIds: [String]? = nil
+        quickPanelHiddenIds: [String]? = nil,
+        terminalResumeDirs: [String]? = nil
     ) {
         self.enabledIds = enabledIds
         self.favorites = favorites
@@ -217,6 +225,7 @@ public struct LayoutState: Codable, Sendable, Equatable {
         self.tabGroups = tabGroups
         self.focusedGroup = focusedGroup
         self.quickPanelHiddenIds = quickPanelHiddenIds
+        self.terminalResumeDirs = terminalResumeDirs
     }
 
     /// The effective enabled set: explicit user choice or registry defaults,

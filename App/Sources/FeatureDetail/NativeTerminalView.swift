@@ -260,6 +260,12 @@ final class TerminalSession {
         return path
     }
 
+    /// The directory session resume remembers for this shell: the live cwd
+    /// when the process is running, else where it was going to start — so a
+    /// restored tab that was never shown (no process yet) keeps its remembered
+    /// directory across teardown cycles instead of decaying to home.
+    var directoryToRemember: String? { currentDirectory ?? startDirectory }
+
     /// The session's terminal view, starting the login shell on first use. The
     /// selected device serial is exported as `ANDROID_SERIAL` so `adb` targets
     /// it without `-s`.

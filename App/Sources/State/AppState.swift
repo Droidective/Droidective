@@ -484,6 +484,12 @@ final class AppState {
         if openFeatureIDs.contains("js-console") {
             jsConsoleSession.start(serials: targetSerials)
         }
+        // Same mounted-view caveat for the terminal: the background close
+        // killed its shells, so a still-open tab reopens on an empty rail —
+        // resume the remembered directories (shells spawn lazily on render).
+        if openFeatureIDs.contains("terminal"), terminals.tabs.isEmpty {
+            openTerminalResumingWork()
+        }
     }
 
     private func bringMainWindowFront() {
@@ -945,6 +951,7 @@ final class AppState {
             if confirmed { performClose("terminal") }
         case .quit:
             if confirmed {
+                rememberTerminalDirectories()
                 terminals.killAll()
                 quitNow()
             } else {
@@ -1046,6 +1053,10 @@ final class AppState {
             Task { await jsConsoleSession.removeReverseTunnels() }
         }
         if id == "terminal" {
+            // Implicit teardown (feature tab closed, background window close,
+            // role reset) — remember the shells' directories before killing
+            // them, so the next Terminal open resumes where they were.
+            rememberTerminalDirectories()
             terminals.killAll()
         }
     }
@@ -1197,8 +1208,23 @@ final class AppState {
     /// Finish a deferred quit: tear down a kept-alive Reactotron session (as the
     /// normal quit path does), then let termination proceed.
     private func quitNow() {
+        // A quit deferred by an exit guard skips the terminal prompt entirely
+        // (`requestQuit` checks guards first), so shells can still be alive
+        // here — remember their directories before the process takes them
+        // down. The prompt-confirmed path already snapshotted and killed them,
+        // leaving the rail empty, so this doesn't overwrite that snapshot.
+        if !terminals.tabs.isEmpty {
+            rememberTerminalDirectories()
+        }
         Task {
             if reactotronSession.isRunning { await reactotronSession.stopForQuit() }
+            // Flush the layout store before termination proceeds —
+            // `persistLayout` saves through a fire-and-forget Task, and the
+            // write racing process exit would lose whatever this quit just
+            // recorded (the terminal-resume snapshot above included).
+            if didLoadLayout {
+                try? await env.stores.layout.save(layout)
+            }
             NSApp.reply(toApplicationShouldTerminate: true)
         }
     }
