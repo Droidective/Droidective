@@ -3,7 +3,9 @@ import MCP
 import NIOCore
 import NIOHTTP1
 import NIOPosix
+#if canImport(os)
 import os
+#endif
 
 /// The localhost HTTP front door for MCP: a port of the SDK's conformance
 /// `HTTPApp` (the reference implementation its server transport is tested
@@ -48,8 +50,15 @@ public actor McpHTTPListener {
         }
     }
 
-    private static let log = Logger(
-        subsystem: "com.rohindh.droidective", category: "reactotron-mcp")
+    /// Unified-log notice, gated so the target stays portable (the port
+    /// branch's Linux daemon builds this file; everything else here is
+    /// cross-platform — NIO, the MCP SDK, Foundation).
+    private static func note(_ message: String) {
+        #if canImport(os)
+        Logger(subsystem: "com.rohindh.droidective", category: "reactotron-mcp")
+            .notice("\(message, privacy: .public)")
+        #endif
+    }
 
     private let configuration: Configuration
     private let factory: McpServerFactory
@@ -111,7 +120,7 @@ public actor McpHTTPListener {
             throw ListenerError.bindFailed("\(error)")
         }
 
-        Self.log.notice("MCP listener bound on 127.0.0.1:\(self.boundPort ?? 0, privacy: .public)")
+        Self.note("MCP listener bound on 127.0.0.1:\(boundPort ?? 0)")
         reaperTask = Task { [weak self, configuration] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(60))
@@ -133,7 +142,7 @@ public actor McpHTTPListener {
             try? await group.shutdownGracefully()
         }
         group = nil
-        Self.log.notice("MCP listener stopped")
+        Self.note("MCP listener stopped")
     }
 
     // MARK: - Request routing (port of HTTPApp.handleHTTPRequest)
@@ -244,7 +253,7 @@ public actor McpHTTPListener {
         let now = ContinuousClock.Instant.now
         let expired = sessions.filter { now - $0.value.lastAccessedAt > timeout }
         for sessionID in expired.keys {
-            Self.log.notice("MCP session idle-expired")
+            Self.note("MCP session idle-expired")
             await closeSession(sessionID)
         }
     }
