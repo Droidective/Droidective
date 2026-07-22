@@ -152,6 +152,7 @@ public enum FeatureRegistry {
                 "reactotron", "inspector", "timeline", "redux", "mst", "state",
                 "network", "api", "display", "log", "debug", "react native", "rn",
                 "9090", "infinite red", "devtools",
+                "mcp", "ai", "agent", "claude", "cursor",
             ],
             category: .reactNative, icon: "antenna.radiowaves.left.and.right", kind: .view,
             needsDevice: false
@@ -695,6 +696,12 @@ public enum FeatureRegistry {
     public static func featureIDs(for role: UserRole) -> [String] {
         (featuresByRole[role] ?? []).filter { byID[$0] != nil }
     }
+
+    /// The React Native stack tools the role picker's "I work with React
+    /// Native" toggle adds to any chosen role — a React Native QA is both
+    /// "QA" and "React Native", so the role picks the workflow and this
+    /// toggle picks the stack. Ordered as they should lead the sidebar.
+    public static let reactNativeStackIDs = ["react-native", "reactotron", "js-console"]
 
     /// The device platforms a role works with. The device bar, the virtual-
     /// device launch lists, and the Emulators screen show only these; `nil`

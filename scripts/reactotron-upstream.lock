@@ -1,0 +1,6 @@
+# The upstream Reactotron state the ReactotronMCP contract targets.
+# Bump these after syncing (see scripts/check-reactotron-upstream.sh and
+# CLAUDE.md ▸ "Reactotron MCP — syncing with upstream").
+REACTOTRON_COMMIT=763c1c8e0d4f33d6357c3ee95567ee595eb287e0
+REACTOTRON_COMMIT_DATE=2026-05-28
+REACTOTRON_MCP_NPM_VERSION=0.3.0

@@ -28,7 +28,7 @@ import Testing
         try await task.send(.string(introFrame))
 
         let connected = try await nextEvent(&iterator)
-        guard case let .connected(_, intro, introBytes) = connected else {
+        guard case let .connected(_, _, intro, introBytes) = connected else {
             Issue.record("expected .connected, got \(connected)"); return
         }
         #expect(intro.commandType == .clientIntro)
@@ -79,7 +79,7 @@ import Testing
         }
 
         let first = try await connect(clientId: "same-app")
-        guard case let .connected(firstId, _, _) = try await nextEvent(&iterator) else {
+        guard case let .connected(firstId, firstClientId, _, _) = try await nextEvent(&iterator) else {
             Issue.record("expected first .connected"); return
         }
 
@@ -92,10 +92,12 @@ import Testing
         }
         #expect(droppedId == firstId)
         #expect(reason == nil)
-        guard case let .connected(secondId, _, _) = try await nextEvent(&iterator) else {
+        guard case let .connected(secondId, secondClientId, _, _) = try await nextEvent(&iterator) else {
             Issue.record("expected second .connected"); return
         }
         #expect(secondId != firstId)
+        #expect(firstClientId == "same-app")
+        #expect(secondClientId == "same-app")
 
         // A different app coexists — no dedupe, both stay live.
         let third = try await connect(clientId: "other-app")
@@ -158,6 +160,78 @@ import Testing
             }
             #expect(command.payload?["message"]?.stringValue == "\(index)")
         }
+    }
+
+    /// A `client.intro` that drains out of a connection's frame feed *after*
+    /// the connection dropped must not resurrect a ghost client: no
+    /// `.connected` is emitted for a connection the server no longer tracks.
+    /// Ordinary commands still drain — they're timeline data, not client state.
+    @Test(.timeLimit(.minutes(1)))
+    func drainedIntroAfterDropDoesNotResurrectAGhostClient() async throws {
+        let server = ReactotronServer(port: 0)
+        let stream = try await server.start()
+        defer { Task { await server.stop() } }
+        var iterator = stream.makeAsyncIterator()
+        _ = try await waitForListening(&iterator)
+
+        // Connection 999 was never accepted (stands in for one already
+        // dropped): its drained intro must vanish, its drained log must land.
+        let intro = Data(
+            #"{"type":"client.intro","payload":{"name":"Ghost"},"important":false,"date":"d","deltaTime":0}"#
+                .utf8)
+        await server.handleFrame(connectionId: 999, data: intro)
+        let log = Data(
+            #"{"type":"log","payload":{"level":"debug","message":"drained"},"important":false,"date":"d","deltaTime":1}"#
+                .utf8)
+        await server.handleFrame(connectionId: 999, data: log)
+
+        let event = try await nextEvent(&iterator)
+        guard case let .command(connectionId, command, _) = event else {
+            Issue.record("expected the drained log as the next event, got \(event)")
+            return
+        }
+        #expect(connectionId == 999)
+        #expect(command.commandType == .log)
+    }
+
+    /// A tap receives the same events as the primary stream without stealing
+    /// from it, and keeps receiving across a `stop()`/`start()` restart.
+    @Test(.timeLimit(.minutes(1)))
+    func tapMirrorsThePrimaryStreamAndSurvivesRestart() async throws {
+        let server = ReactotronServer(port: 0)
+        let stream = try await server.start()
+        var iterator = stream.makeAsyncIterator()
+        var tapIterator = await server.tap().makeAsyncIterator()
+        _ = try await waitForListening(&iterator)
+
+        let frame = Data(
+            #"{"type":"log","payload":{"level":"warn","message":"both"},"important":false,"date":"d","deltaTime":1}"#
+                .utf8)
+        await server.handleFrame(connectionId: 1, data: frame)
+
+        guard case let .command(_, primary, _) = try await nextEvent(&iterator) else {
+            Issue.record("expected .command on the primary stream"); return
+        }
+        // The tap also carries lifecycle events (.listening) — drain to the
+        // first command rather than assuming arrival order.
+        let tapped = try await nextTapCommand(&tapIterator)
+        #expect(primary == tapped)
+
+        // Restart: the primary stream is replaced, the tap keeps flowing.
+        await server.stop()
+        let restarted = try await server.start()
+        var restartedIterator = restarted.makeAsyncIterator()
+        _ = try await waitForListening(&restartedIterator)
+        await server.handleFrame(connectionId: 2, data: frame)
+        _ = try await nextTapCommand(&tapIterator)
+        await server.stop()
+    }
+
+    private func nextTapCommand(_ iterator: inout Iterator) async throws -> ReactotronCommand {
+        while let event = await iterator.next() {
+            if case let .command(_, command, _) = event { return command }
+        }
+        throw ReactotronServer.ServerError.startFailed("tap ended before a command arrived")
     }
 
     private func waitForListening(_ iterator: inout Iterator) async throws -> UInt16 {

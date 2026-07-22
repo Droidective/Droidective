@@ -698,6 +698,35 @@ import Testing
         #expect(mustCover.isSubset(of: covered), "uncovered catalog features: \(mustCover.subtracting(covered))")
     }
 
+    @Test func reactNativeStackIDsAreRealNonAbsorbedFeatures() {
+        for id in FeatureRegistry.reactNativeStackIDs {
+            #expect(FeatureRegistry.byID[id] != nil, "unknown RN stack id \(id)")
+            #expect(!FeatureRegistry.absorbedFeatureIDs.contains(id),
+                    "\(id) is a hub member — reference the hub instead")
+        }
+    }
+
+    @Test func seedRoleWithReactNativeStackLeadsWithTheStackTools() {
+        var layout = LayoutState()
+        layout.seedRole(.qaTester, includeReactNativeStack: true)
+        let curated = FeatureRegistry.featureIDs(for: .qaTester)
+        let expected = FeatureRegistry.reactNativeStackIDs + curated
+        #expect(layout.enabledIds == expected)
+        #expect(layout.sidebarOrder == expected)
+        #expect(layout.effectiveEnabledIDs.contains("reactotron"))
+        // The role-additions baseline stays the pure role list, so future
+        // role-curation changes still reach this user.
+        #expect(layout.seededRoleIds == curated)
+        #expect(Set(layout.enabledIds ?? []).count == (layout.enabledIds ?? []).count)
+    }
+
+    @Test func seedRoleWithReactNativeStackIsANoOpForTheRNRole() {
+        var layout = LayoutState()
+        layout.seedRole(.reactNativeDeveloper, includeReactNativeStack: true)
+        // The RN role already carries its stack — no duplicates, no reorder.
+        #expect(layout.enabledIds == FeatureRegistry.featureIDs(for: .reactNativeDeveloper))
+    }
+
     @Test func seedRoleSetsGroupOrderFromTheCuration() {
         var layout = LayoutState()
         layout.seedRole(.securityTester)

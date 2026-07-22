@@ -72,6 +72,13 @@ public actor ReactotronService {
         }
     }
 
+    /// An additive observer stream of the server's events (see
+    /// `ReactotronServer.tap()`). The MCP layer subscribes here; the primary
+    /// `start()` stream the timeline view consumes is unaffected.
+    public func tap() async -> AsyncStream<ReactotronServer.Event> {
+        await server.tap()
+    }
+
     /// Send a server→client frame to a specific connection.
     public func send(type: String, payload: JSONValue, toConnection id: Int) async {
         await server.send(type: type, payload: payload, toConnection: id)

@@ -81,7 +81,7 @@ public enum UserRole: String, Sendable, Codable, CaseIterable, Identifiable {
     public var blurb: String {
         switch self {
         case .androidDeveloper: return "Logs, app internals, files, and device connection."
-        case .reactNativeDeveloper: return "Metro reload, dev menu, logs, and performance — Android & iOS."
+        case .reactNativeDeveloper: return "Reactotron, JS console, dev menu, and logs — Android & iOS."
         case .iosDeveloper: return "Simulators, push testing, capture, and deep links."
         case .qaTester: return "Capture, recording, crash hunting, and state simulation."
         case .supportTriage: return "Device diagnostics, connection, and quick checks."

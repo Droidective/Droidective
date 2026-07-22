@@ -236,6 +236,9 @@ final class AppState {
     /// The Reactotron server + timeline, owned here (not by the view) so leaving
     /// the feature can keep the connection alive and return to an intact session.
     let reactotronSession: ReactotronSession
+    /// Settings ▸ MCP: serves the Reactotron relay's data to AI agents over
+    /// localhost Streamable HTTP. Strictly downstream of the relay.
+    let mcp = McpCoordinator()
 
     /// The JS Console (Hermes CDP) session — owned here so its log buffer and
     /// connection survive leaving the feature, like the Reactotron session.
@@ -531,6 +534,7 @@ final class AppState {
         jsConsoleSession = JSConsoleSession(adb: env.client)
         reactotronSession.app = self
         jsConsoleSession.app = self
+        mcp.app = self
         // Typing `exit` (or a shell crash) closes that tab like the × does.
         // The contains-check drops late callbacks racing a killAll teardown.
         terminals.onShellExited = { [weak self] id in
@@ -560,6 +564,8 @@ final class AppState {
             restoreTabs(from: layout)
         }
         didLoadLayout = true
+        // MCP enabled in a previous run comes back up with the app.
+        if mcp.isEnabled { mcp.applySettings() }
         // Replay feature opens that raced the load (e.g. openAPKs from Finder),
         // then persist for the first time now that `layout` is authoritative.
         for id in pendingFeatureOpens {
@@ -1045,7 +1051,9 @@ final class AppState {
     /// closing their tab has to tear them down explicitly. A feature is open in at
     /// most one tab, so once it's closed no other tab still needs it.
     private func stopBackgroundWork(for id: String) {
-        if id == "reactotron", reactotronSession.isRunning {
+        // With MCP on, the relay must survive tab/window close — agents keep
+        // querying while the user isn't looking (Settings ▸ MCP turns it off).
+        if id == "reactotron", reactotronSession.isRunning, !mcp.keepsRelayAlive {
             Task { await reactotronSession.stop() }
         }
         if id == "js-console" {
@@ -1217,6 +1225,7 @@ final class AppState {
             rememberTerminalDirectories()
         }
         Task {
+            await mcp.stopForQuit()
             if reactotronSession.isRunning { await reactotronSession.stopForQuit() }
             // Flush the layout store before termination proceeds —
             // `persistLayout` saves through a fire-and-forget Task, and the
@@ -1432,12 +1441,12 @@ final class AppState {
     /// Apply the user's role choice (first-run or "Change role"): curate the
     /// enabled set + sidebar order to that role, or keep everything on for
     /// `nil` ("show me everything"). Persists and lands on the launchpad.
-    func chooseRole(_ role: UserRole?) {
+    func chooseRole(_ role: UserRole?, includeReactNativeStack: Bool = false) {
         let isChange = layout.selectedRole != nil
         Telemetry.shared.trackRoleChosen(role?.rawValue ?? "all", isChange: isChange)
         Telemetry.shared.applyRole(role?.rawValue)
         if let role {
-            layout.seedRole(role)
+            layout.seedRole(role, includeReactNativeStack: includeReactNativeStack)
         } else {
             layout.seedEverything()
         }
@@ -1455,6 +1464,16 @@ final class AppState {
         // stop each one's background work explicitly — otherwise kept-alive
         // sessions (terminal shells, the Reactotron server) leak with no UI
         // left to reach them.
+        // A role without Reactotron also loses the Settings ▸ MCP tab — a
+        // running MCP server would have no visible off-switch, so turn it
+        // off with the role switch (re-enable any time from a role that has
+        // the feature). Before the stop loop below: with the pref cleared,
+        // `keepsRelayAlive` no longer exempts the Reactotron session.
+        if mcp.isEnabled, role != nil, role != .reactNativeDeveloper,
+           !enabledFeatures.contains(where: { $0.id == "reactotron" }) {
+            UserDefaults.standard.set(false, forKey: mcpEnabledKey)
+            mcp.applySettings()
+        }
         for id in workspace.groups.flatMap(\.openTabs) {
             stopBackgroundWork(for: id)
         }

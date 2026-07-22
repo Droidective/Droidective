@@ -58,7 +58,10 @@ public actor ReactotronServer {
     /// its retained payloads within a byte budget.
     public enum Event: Sendable {
         case listening(port: UInt16)
-        case connected(connectionId: Int, intro: ReactotronCommand, frameBytes: Int)
+        /// `clientId` is the resolved Reactotron client id — the one from the
+        /// intro payload, or the server-generated id sent back via
+        /// `setClientId` when the client connected without one.
+        case connected(connectionId: Int, clientId: String, intro: ReactotronCommand, frameBytes: Int)
         case command(connectionId: Int, command: ReactotronCommand, frameBytes: Int)
         /// `reason` is nil for teardown-driven drops (stop, listener death).
         case disconnected(connectionId: Int, reason: DisconnectReason?)
@@ -92,6 +95,10 @@ public actor ReactotronServer {
     private var clientIds: [Int: String] = [:]
     private var nextConnectionId = 1
     private var continuation: AsyncStream<Event>.Continuation?
+    /// Additive observers of the same events the primary stream carries (the
+    /// MCP layer holds one). Keyed so a tap whose consumer went away can be
+    /// removed without touching the others.
+    private var taps: [UUID: AsyncStream<Event>.Continuation] = [:]
     private var pingTask: Task<Void, Never>?
 
     /// - Parameters:
@@ -178,7 +185,37 @@ public actor ReactotronServer {
         return stream
     }
 
+    /// An additional, independent stream of the same events `start()` delivers.
+    /// Registering a tap never affects the primary stream, and a tap survives
+    /// `stop()`/`start()` cycles — it ends when its consumer stops iterating.
+    /// Buffering matches the primary stream so a slow tap drops its own oldest
+    /// events instead of back-pressuring the server.
+    public func tap() -> AsyncStream<Event> {
+        let id = UUID()
+        let (stream, tapContinuation) = AsyncStream.makeStream(
+            of: Event.self, bufferingPolicy: .bufferingNewest(512))
+        taps[id] = tapContinuation
+        tapContinuation.onTermination = { [weak self] _ in
+            Task { await self?.removeTap(id) }
+        }
+        return stream
+    }
+
+    private func removeTap(_ id: UUID) {
+        taps[id] = nil
+    }
+
+    /// Deliver an event to the primary stream and every tap.
+    private func emit(_ event: Event) {
+        continuation?.yield(event)
+        for tapContinuation in taps.values {
+            tapContinuation.yield(event)
+        }
+    }
+
     /// Tear down the listener and all client sockets. Safe to call repeatedly.
+    /// Taps deliberately survive — `start()` calls this to restart, and a tap
+    /// consumer (the MCP layer) must keep receiving across restarts.
     public func stop() {
         pingTask?.cancel()
         pingTask = nil
@@ -199,7 +236,7 @@ public actor ReactotronServer {
 
     private func listenerBecameReady() {
         guard let port = listener?.port?.rawValue else { return }
-        continuation?.yield(.listening(port: port))
+        emit(.listening(port: port))
         startPinging()
     }
 
@@ -235,7 +272,7 @@ public actor ReactotronServer {
         if case let .posix(code) = error, code == .EADDRINUSE {
             portInUse = true
         }
-        continuation?.yield(.failed(reason: "\(error)", portInUse: portInUse))
+        emit(.failed(reason: "\(error)", portInUse: portInUse))
         stop()
     }
 
@@ -289,7 +326,7 @@ public actor ReactotronServer {
         // the close still drain into the timeline, then the consumer ends.
         frameFeeds.removeValue(forKey: id)?.finish()
         box.connection.cancel()
-        continuation?.yield(.disconnected(connectionId: id, reason: reason))
+        emit(.disconnected(connectionId: id, reason: reason))
     }
 
     /// Recursive receive loop, off the actor (like `MirrorTransport.receiveLoop`).
@@ -330,11 +367,14 @@ public actor ReactotronServer {
         }
     }
 
-    private func handleFrame(connectionId id: Int, data: Data) {
+    /// Internal (not private) so tests can drive the drained-frame paths
+    /// deterministically — racing a real socket against `dropConnection` isn't
+    /// reliably reproducible.
+    func handleFrame(connectionId id: Int, data: Data) {
         guard let command = try? ReactotronCommand.decode(data) else {
             let raw = String(data: data, encoding: .utf8) ?? "<\(data.count) bytes>"
             let preview = String(raw.prefix(300))
-            continuation?.yield(.command(
+            emit(.command(
                 connectionId: id,
                 command: ReactotronCommand(type: "(undecodable)", payload: .string(preview)),
                 frameBytes: preview.utf8.count
@@ -342,10 +382,17 @@ public actor ReactotronServer {
             return
         }
         if command.commandType == .clientIntro {
-            completeHandshake(connectionId: id, intro: command)
-            continuation?.yield(.connected(connectionId: id, intro: command, frameBytes: data.count))
+            // A `client.intro` draining after `dropConnection` must not
+            // resurrect a ghost client: the connection is gone, so there is
+            // no handshake to complete and no future `.disconnected` to pair
+            // with a `.connected`. Ordinary commands still drain below —
+            // they're timeline data, not client state.
+            guard connections[id] != nil else { return }
+            let clientId = completeHandshake(connectionId: id, intro: command)
+            emit(.connected(
+                connectionId: id, clientId: clientId, intro: command, frameBytes: data.count))
         } else {
-            continuation?.yield(.command(connectionId: id, command: command, frameBytes: data.count))
+            emit(.command(connectionId: id, command: command, frameBytes: data.count))
         }
     }
 
@@ -355,8 +402,9 @@ public actor ReactotronServer {
     /// stale connection that shares the clientId (an app reload reconnects
     /// before its old socket dies), then send the (empty) subscription list to
     /// complete the handshake — exactly what `reactotron-core-server` does.
-    private func completeHandshake(connectionId id: Int, intro: ReactotronCommand) {
-        guard let box = connections[id] else { return }
+    /// Returns the resolved clientId, carried on the `.connected` event.
+    private func completeHandshake(connectionId id: Int, intro: ReactotronCommand) -> String {
+        guard let box = connections[id] else { return "connection-\(id)" }
         var clientId = intro.payload?["clientId"]?.stringValue
         if clientId == nil || clientId?.isEmpty == true {
             let generated = UUID().uuidString
@@ -368,6 +416,7 @@ public actor ReactotronServer {
             clientIds[id] = clientId
         }
         send(type: "state.values.subscribe", payload: .object(["paths": .array([])]), to: box)
+        return clientId ?? "connection-\(id)"
     }
 
     /// Forget other connections carrying the same clientId — reported with a
@@ -380,7 +429,7 @@ public actor ReactotronServer {
             clientIds[staleId] = nil
             frameFeeds.removeValue(forKey: staleId)?.finish()
             guard let stale = connections.removeValue(forKey: staleId) else { continue }
-            continuation?.yield(.disconnected(connectionId: staleId, reason: nil))
+            emit(.disconnected(connectionId: staleId, reason: nil))
             Task {
                 try? await Task.sleep(for: .milliseconds(500))
                 stale.connection.cancel()

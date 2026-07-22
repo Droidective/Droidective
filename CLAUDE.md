@@ -206,6 +206,33 @@ Node 22 in CI; scroll reveals and the hero palette demo must keep their
   `apk-sign`) into one workspace over a single loaded APK — Inspect · Decompile ·
   Recompile · Sign tabs (the views take an optional injected APK so they embed in
   the studio and still work standalone via hotkey).
+- **`ReactotronMCP/`** — a *separate* SwiftPM target in the ADBKit package
+  (its own product; ADBKit itself stays dependency-free) serving the
+  Reactotron relay's data to AI agents over localhost Streamable HTTP —
+  the same contract as the official Reactotron desktop's embedded MCP
+  server (`claude mcp add --transport http reactotron
+  http://127.0.0.1:4567/mcp`). Deps: `modelcontextprotocol/swift-sdk`
+  (pinned exact) + swift-nio (listener only). Strictly downstream of the
+  relay: it consumes an additive `ReactotronServer.tap()` (the UI stream is
+  untouched) into `McpCommandStore` (actor; its own 500-item + 32 MiB ring
+  buffer, independent of the UI timeline; event-driven `awaitCommand`
+  correlation with afterMessageId markers — no polling), and its failure
+  can never take the relay down. `McpToolRegistry` (declarative 10-tool
+  table, FeatureRegistry-style, with invariant + golden-signature tests) →
+  `McpToolHandlers`; `McpResources` (8 URIs incl. the `timeline/{type}`
+  template); `McpRedaction` (default-ON at the MCP boundary only — the
+  Reactotron UI is never redacted — with upstream's two-key opt-out:
+  client `mcpRedaction` in `client.intro`, server permissions in
+  Settings ▸ MCP); `McpHTTPListener` (NIO port of the SDK's conformance
+  HTTPApp: per-session `Server`+`StatefulHTTPServerTransport` — one
+  initialize per Server, SDK #144 — idle reaper, 127.0.0.1-only,
+  `OriginValidator.localhost()`, optional static bearer token; never use
+  the SDK's Stateless transport — concurrency bugs #254/#255);
+  `McpServerController` (the facade the App layer calls). App side:
+  `McpCoordinator` (@MainActor, owned by AppState) + Settings ▸ MCP —
+  off by default; enabling starts the relay and keeps it alive across
+  tab/window close; it never restarts a relay the user stopped (status
+  goes amber, ghost clients cleared via `noteRelayStopped`).
 
 ## The 58 features
 
@@ -256,6 +283,49 @@ shows a "works with Android devices" state with a switch-device button when a
 simulator is selected. New cross-platform features add a `dispatchIOS` case +
 an arg-vector test; `everyIOSCapableActionResolvesToASimctlRunner` catches a
 platforms annotation without a runner.
+
+## Reactotron MCP — syncing with upstream
+
+The MCP surface mirrors `infinitered/reactotron`'s `lib/reactotron-mcp` at
+the commit pinned in `scripts/reactotron-upstream.lock`. When Reactotron
+changes (new tools, new command types, new redaction rules), the upgrade is
+mechanical — follow this recipe:
+
+1. **Detect**: `./scripts/check-reactotron-upstream.sh` (run before releases).
+   It diffs the contract-defining upstream files against the pinned commit and
+   checks the `reactotron-mcp` npm version. "✓ in sync" means stop here.
+2. **Locate**: the target layout mirrors upstream file-for-file, so the
+   script's diff tells you exactly which Swift file to touch —
+   `tools.ts` → `McpToolRegistry.swift` + `McpToolHandlers.swift`;
+   `resources.ts` → `McpResources.swift`; `redaction.ts` →
+   `McpRedaction.swift` (rule lists ported verbatim); `serialization.ts` →
+   `McpSerialization.swift` + `McpConstants.swift` (caps keep upstream's
+   names: `BUFFER_SIZE`→`bufferSize`, `MAX_RESPONSE_CHARS`→
+   `maxResponseChars`, …); `mcp-server.ts` → `McpHTTPListener.swift` +
+   `McpCommandStore.swift`; `reactotron-core-contract/command.ts` →
+   ADBKit's `ReactotronProtocol.swift`.
+3. **Port**: a new *tool* is one `McpToolDef` table entry + one handler case
+   + a contract test (the invariant tests fail on a missing handler or a
+   schema that doesn't decode). A new *resource* is a `staticResources`
+   entry + a `read` case. A new *wire command type* needs **zero** MCP code
+   for visibility — raw commands flow into `reactotron://timeline` and
+   `timeline/{type}` automatically (the type list is derived from the
+   buffer) — add the `ReactotronCommandType` case + parser case + test only
+   for typed conveniences.
+4. **Re-pin**: update `McpGoldenContractTests`' golden signature (the test
+   failure prints the actual — the diff IS the contract change, reviewable
+   in the PR), bump `scripts/reactotron-upstream.lock`, `swift test`.
+5. **SDK bumps** (`modelcontextprotocol/swift-sdk` is pinned exact in
+   `ADBKit/Package.swift`): treat as a deliberate change — bump, re-run the
+   `McpHTTPListenerTests` socket suite, and re-check the two known traps:
+   per-session `Server` instances (#144) and never the Stateless transport
+   (#254/#255).
+6. The npm `reactotron-mcp` package is a *different* surface (a standalone
+   stdio proxy on port 9091, `get_*`-style tools + 5 prompts) — not what we
+   mirror, but new capabilities there are candidates to adopt as extensions.
+
+The full design analysis (upstream ground truth, decisions, failure-mode
+table) is in `docs/reactotron-mcp-analysis.md`.
 
 ## Conventions / gotchas learned the hard way
 
@@ -484,6 +554,11 @@ compile or test time* — lean on it instead of manual vigilance.
 ## Status
 
 Feature-complete across all planned milestones plus several UX rounds.
+Unreleased on `main`/in flight: **Reactotron MCP support** (Settings ▸ MCP:
+an embedded localhost Streamable-HTTP MCP server with upstream Reactotron's
+exact 10-tool/8-resource contract and default-on redaction — see the
+"Reactotron MCP" bullet and sync recipe above; `ReactotronMCP` target,
+~100 new tests incl. real-socket and golden-contract suites).
 (Latest release: **v3.6.1** — a resize-performance fix: `LogScrollView`
 applies the log document width only after a drag rests (autoresizing
 re-wrapped the whole buffer per tick — a pegged core while dragging with

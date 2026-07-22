@@ -170,6 +170,18 @@ final class ReactotronSession {
                 self?.handle(event)
             }
         }
+        // The MCP layer (if enabled) taps the fresh server — additive only,
+        // never this session's stream.
+        app?.mcp.reactotronServerChanged()
+    }
+
+    /// MCP attachment: an independent event tap plus the outbound sender,
+    /// when the relay is up. The tap never affects this session's stream.
+    func mcpAttachment() async -> (
+        events: AsyncStream<ReactotronServer.Event>, sender: ReactotronService
+    )? {
+        guard let service else { return nil }
+        return (await service.tap(), service)
     }
 
     func applyReverse(serials: [String]) async {
@@ -234,6 +246,7 @@ final class ReactotronSession {
         service = nil
         await stopping?.stop(serials: serials)
         reset()
+        app?.mcp.reactotronServerChanged()
     }
 
     /// Stop on app termination, bounded so a hung adb can't freeze quit. The
@@ -480,7 +493,7 @@ final class ReactotronSession {
         switch event {
         case .listening:
             if clients.isEmpty { connection = .listening }
-        case let .connected(connectionId, intro, frameBytes):
+        case let .connected(connectionId, _, intro, frameBytes):
             let parsed = ReactotronEvent(command: intro)
             var name = "App"
             var platform: String?
@@ -750,6 +763,8 @@ struct ReactotronView: View {
     /// One-time first-open intro (the recorded split/filter demo).
     @AppStorage("hasSeenReactotronIntro") private var hasSeenIntro = false
     @State private var showIntro = false
+    /// The MCP onboarding sheet (header "AI Agents" button).
+    @State private var showMcpGuide = false
 
     private var session: ReactotronSession { state.reactotronSession }
 
@@ -812,6 +827,9 @@ struct ReactotronView: View {
         }
         .sheet(isPresented: $showIntro, onDismiss: { hasSeenIntro = true }) {
             ReactotronIntroSheet()
+        }
+        .sheet(isPresented: $showMcpGuide) {
+            McpAgentGuideSheet()
         }
     }
 
@@ -925,6 +943,13 @@ struct ReactotronView: View {
         }
         .controlSize(.small)
         .help("Run adb reverse tcp:9090 tcp:9090 on connected devices")
+        Button {
+            showMcpGuide = true
+        } label: {
+            Label("AI Agents", systemImage: "sparkles")
+        }
+        .controlSize(.small)
+        .help("Serve this timeline to Claude Code, Cursor, or any MCP client")
     }
 
     /// The server failing (port taken, socket error) used to be a red dot with a

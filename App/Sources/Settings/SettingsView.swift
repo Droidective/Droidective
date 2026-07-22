@@ -5,6 +5,18 @@ import ServiceManagement
 import SwiftUI
 
 struct SettingsView: View {
+    @Environment(AppState.self) private var state
+
+    /// The MCP tab rides the Reactotron feature: React Native and
+    /// all-features users see it, as does anyone who added Reactotron to
+    /// another role's set — other roles don't carry a tab for a feature
+    /// they don't have.
+    private var showsMcpTab: Bool {
+        state.selectedRole == nil
+            || state.selectedRole == .reactNativeDeveloper
+            || state.enabledFeatures.contains { $0.id == "reactotron" }
+    }
+
     var body: some View {
         TabView {
             GeneralSettingsView()
@@ -13,6 +25,10 @@ struct SettingsView: View {
                 .tabItem { Label("Appearance", systemImage: "paintbrush") }
             PrivacySettingsView()
                 .tabItem { Label("Privacy", systemImage: "hand.raised") }
+            if showsMcpTab {
+                McpSettingsView()
+                    .tabItem { Label("MCP", systemImage: "sparkles") }
+            }
             DoctorSettingsView()
                 .tabItem { Label("Doctor", systemImage: "stethoscope") }
             ManagedToolsSettingsView()
