@@ -763,6 +763,8 @@ struct ReactotronView: View {
     /// One-time first-open intro (the recorded split/filter demo).
     @AppStorage("hasSeenReactotronIntro") private var hasSeenIntro = false
     @State private var showIntro = false
+    /// The MCP onboarding sheet (header "AI Agents" button).
+    @State private var showMcpGuide = false
 
     private var session: ReactotronSession { state.reactotronSession }
 
@@ -825,6 +827,9 @@ struct ReactotronView: View {
         }
         .sheet(isPresented: $showIntro, onDismiss: { hasSeenIntro = true }) {
             ReactotronIntroSheet()
+        }
+        .sheet(isPresented: $showMcpGuide) {
+            McpAgentGuideSheet()
         }
     }
 
@@ -938,6 +943,13 @@ struct ReactotronView: View {
         }
         .controlSize(.small)
         .help("Run adb reverse tcp:9090 tcp:9090 on connected devices")
+        Button {
+            showMcpGuide = true
+        } label: {
+            Label("AI Agents", systemImage: "sparkles")
+        }
+        .controlSize(.small)
+        .help("Serve this timeline to Claude Code, Cursor, or any MCP client")
     }
 
     /// The server failing (port taken, socket error) used to be a red dot with a

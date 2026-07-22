@@ -152,6 +152,7 @@ public enum FeatureRegistry {
                 "reactotron", "inspector", "timeline", "redux", "mst", "state",
                 "network", "api", "display", "log", "debug", "react native", "rn",
                 "9090", "infinite red", "devtools",
+                "mcp", "ai", "agent", "claude", "cursor",
             ],
             category: .reactNative, icon: "antenna.radiowaves.left.and.right", kind: .view,
             needsDevice: false
