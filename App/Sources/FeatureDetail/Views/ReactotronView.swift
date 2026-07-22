@@ -1807,10 +1807,9 @@ private struct TimelineFilterSheet: View {
 /// One scrollable timeline column with its own filter and search, fed from the
 /// shared event buffer. Used once on its own or twice side-by-side (the
 /// VSCode-style split), so each pane can watch a different slice at the same
-/// time. Filter, API refinements, and search are UserDefaults-backed per pane
-/// index, so each pane keeps its slice across feature switches and relaunches.
-/// The sort order is a per-feature preference (`@AppStorage`), so split panes
-/// flip together and the choice survives relaunches.
+/// time. Filter, API refinements, search, and sort order are
+/// UserDefaults-backed per pane index, so each pane keeps its slice — and its
+/// direction — across feature switches and relaunches.
 private struct TimelinePane: View {
     /// 0 = the single/left pane, 1 = the right split pane — keys the persisted
     /// filters and picks the clear button's wording (the right pane's clear is
@@ -1847,10 +1846,10 @@ private struct TimelinePane: View {
     @AppStorage private var methodFilter: String?
     @AppStorage private var statusFilter: HTTPStatusClass?
     @State private var showFilterSheet = false
-    /// Newest at the top (the Reactotron app's order) unless the toolbar's
-    /// reverse button flips the feed to chronological. Persisted per feature —
-    /// split panes share the key, so they stay in sync.
-    @AppStorage("reactotronNewestFirst") private var newestFirst = true
+    /// Newest at the top (the Reactotron app's order) unless this pane's
+    /// reverse button flips its feed to chronological. Persisted per pane, so
+    /// each side of a split orders independently.
+    @AppStorage private var newestFirst: Bool
 
     init(
         pane: Int,
@@ -1882,6 +1881,12 @@ private struct TimelinePane: View {
         _hiddenKindsRaw = AppStorage(wrappedValue: "", "reactotronPane\(pane)HiddenKinds")
         _methodFilter = AppStorage("reactotronPane\(pane)Method")
         _statusFilter = AppStorage("reactotronPane\(pane)Status")
+        // Seeded from the retired shared-order key so an existing flipped
+        // preference carries into both panes; each persists its own from then on.
+        _newestFirst = AppStorage(
+            wrappedValue: UserDefaults.standard.object(forKey: "reactotronNewestFirst") as? Bool ?? true,
+            "reactotronPane\(pane)NewestFirst"
+        )
     }
 
     /// Decoded view of `hiddenKindsRaw`. Unknown raw values (a kind renamed or
@@ -2956,7 +2961,9 @@ private struct ReactotronIntroSheet: View {
 /// the Reactotron server. Detects the app automatically — the connected
 /// client's reported name matched against installed packages, else the
 /// foreground app — and only opens the searchable picker when detection or
-/// the relaunch fails.
+/// the relaunch fails. A split button (parity with the JS Console): the
+/// primary click restarts, the chevron reveals the clearing variants — cache
+/// (`pm clear --cache-only`) or full data (`pm clear`, behind a confirmation).
 private struct RestartAppMenu: View {
     /// The connected Reactotron client's app name, when one is connected —
     /// the strongest detection signal (it names the exact app to restart).
@@ -2965,22 +2972,48 @@ private struct RestartAppMenu: View {
     @Environment(AppState.self) private var state
     @State private var restarting = false
     @State private var showPicker = false
+    @State private var confirmClearData = false
+    /// What the restart currently in flight (including one waiting on the
+    /// fallback picker) should clear first, if anything.
+    @State private var pendingClear: RestartClearScope?
 
     private var serial: String? {
         state.selectedSerial ?? state.devices.first(where: \.isReady)?.serial
     }
 
     var body: some View {
-        Button {
-            Task { await smartRestart() }
+        Menu {
+            Button {
+                Task { await smartRestart(clearing: .cache) }
+            } label: {
+                Label("Clear cache and restart", systemImage: "arrow.triangle.2.circlepath")
+            }
+            Button(role: .destructive) {
+                confirmClearData = true
+            } label: {
+                Label("Clear data and restart", systemImage: "trash")
+            }
         } label: {
             Label("Restart app", systemImage: "arrow.clockwise.circle")
+        } primaryAction: {
+            Task { await smartRestart() }
         }
+        .fixedSize()
         .disabled(serial == nil || restarting)
+        .confirmationDialog(
+            "Clear all data for the app and restart? This signs you out and wipes local storage.",
+            isPresented: $confirmClearData
+        ) {
+            Button("Clear Data & Restart", role: .destructive) {
+                Task { await smartRestart(clearing: .data) }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
         .sheet(isPresented: $showPicker) {
             RestartAppPickerSheet(serial: serial) { package in
+                let scope = pendingClear
                 Task {
-                    if !(await restart(package)) {
+                    if !(await restart(package, clearing: scope)) {
                         state.showToast(Toast(message: "Couldn't restart \(package)", ok: false))
                     }
                 }
@@ -2992,15 +3025,16 @@ private struct RestartAppMenu: View {
     /// wrong thing) is detected, or the relaunch fails. With no client
     /// connected there is nothing trustworthy to detect — the foreground app
     /// could be anything — so ask straight away.
-    private func smartRestart() async {
+    private func smartRestart(clearing scope: RestartClearScope? = nil) async {
         guard serial != nil else { return }
+        pendingClear = scope
         guard clientName != nil else {
             showPicker = true
             return
         }
         restarting = true
         defer { restarting = false }
-        if let detected = await detectPackage(), await restart(detected) { return }
+        if let detected = await detectPackage(), await restart(detected, clearing: scope) { return }
         showPicker = true
     }
 
@@ -3024,15 +3058,31 @@ private struct RestartAppMenu: View {
         }
     }
 
-    private func restart(_ package: String) async -> Bool {
+    private func restart(_ package: String, clearing scope: RestartClearScope? = nil) async -> Bool {
         guard let serial else { return false }
         let service = AppControlService(client: state.env.client)
-        let result = await CommandLog.userInitiated {
+        let (relaunched, cleared) = await CommandLog.userInitiated {
+            var cleared = true
+            if let scope, !(await service.clear(scope, serial: serial, package: package)) {
+                cleared = false
+            }
             _ = try? await service.control(serial: serial, packageId: package, action: .stop)
-            return try? await service.control(serial: serial, packageId: package, action: .open)
+            let result = try? await service.control(serial: serial, packageId: package, action: .open)
+            return (result?.ok == true, cleared)
         }
-        guard result?.ok == true else { return false }
-        state.showToast(Toast(message: "Restarting \(package)…", ok: true))
+        guard relaunched else { return false }
+        let message = switch scope {
+        case nil: "Restarting \(package)…"
+        case .cache:
+            cleared
+                ? "Cleared cache — restarting \(package)…"
+                : "Cache clear didn't finish — restarting \(package)…"
+        case .data:
+            cleared
+                ? "Cleared data — restarting \(package)…"
+                : "Data clear failed — restarting \(package)…"
+        }
+        state.showToast(Toast(message: message, ok: true))
         return true
     }
 }

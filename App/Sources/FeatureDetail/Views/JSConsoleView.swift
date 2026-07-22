@@ -698,8 +698,8 @@ final class JSConsoleSession {
     /// else the selected bundle. Disconnected — or when detection/relaunch
     /// fails — the installed-apps picker opens instead. Discovery reconnects
     /// by logical-device id once the app is back.
-    func restartApp(clearCache: Bool = false) {
-        Task { [weak self] in await self?.performRestart(clearCache: clearCache) }
+    func restartApp(clearing scope: RestartClearScope? = nil) {
+        Task { [weak self] in await self?.performRestart(clearing: scope) }
     }
 
     /// Drives the fallback installed-apps picker sheet.
@@ -707,12 +707,12 @@ final class JSConsoleSession {
     /// The user's manual pick from the restart sheet, reused on later restarts
     /// whenever the connected target doesn't report its own `appId`.
     private var manualRestartPackage: String?
-    /// Whether the restart currently in flight (including one waiting on the
-    /// fallback picker) should clear the app's cache first.
-    private var pendingClearCache = false
+    /// What the restart currently in flight (including one waiting on the
+    /// fallback picker) should clear first, if anything.
+    private var pendingClear: RestartClearScope?
 
-    private func performRestart(clearCache: Bool) async {
-        pendingClearCache = clearCache
+    private func performRestart(clearing scope: RestartClearScope?) async {
+        pendingClear = scope
         guard !serials.isEmpty else {
             app?.showToast(Toast(message: "Can't restart — no device selected.", ok: false))
             return
@@ -722,17 +722,17 @@ final class JSConsoleSession {
         let detected: String? = isConnected
             ? connectedTarget?.appId ?? manualRestartPackage ?? app?.selectedBundle?.packageId
             : nil
-        if let detected, await restart(package: detected, clearCache: clearCache) { return }
+        if let detected, await restart(package: detected, clearing: scope) { return }
         restartPickerVisible = true
     }
 
     /// A pick from the fallback sheet: restart it and remember the choice.
     func restartPicked(_ package: String) {
         manualRestartPackage = package
-        let clearCache = pendingClearCache
+        let scope = pendingClear
         Task { [weak self] in
             guard let self else { return }
-            if !(await restart(package: package, clearCache: clearCache)) {
+            if !(await restart(package: package, clearing: scope)) {
                 app?.showToast(Toast(
                     message: "Couldn't relaunch \(package) — is it installed on the selected device?",
                     ok: false
@@ -742,55 +742,42 @@ final class JSConsoleSession {
     }
 
     /// Force-stop + relaunch on every target device (the service's `.restart`
-    /// verb), optionally clearing the app's cache first (`pm clear
-    /// --cache-only`, Android 14+ — best-effort, the restart proceeds either
-    /// way); true when any relaunch worked (the toast reports success;
-    /// failures fall back to the picker).
-    private func restart(package: String, clearCache: Bool) async -> Bool {
+    /// verb), optionally clearing the app's cache (`pm clear --cache-only`,
+    /// Android 14+ — best-effort, bounded) or its whole data (`pm clear`)
+    /// first — the restart proceeds either way, and the toast reports what the
+    /// clear did. True when any relaunch worked (failures fall back to the
+    /// picker).
+    private func restart(package: String, clearing scope: RestartClearScope?) async -> Bool {
         let serials = serials
         let control = AppControlService(client: adb)
-        let (relaunched, cacheCleared) = await CommandLog.userInitiated {
+        let (relaunched, cleared) = await CommandLog.userInitiated {
             var relaunched = 0
-            var cacheCleared = true
+            var cleared = true
             for serial in serials {
-                if clearCache, !(await Self.clearCacheBounded(control, serial: serial, package: package)) {
-                    cacheCleared = false
+                if let scope, !(await control.clear(scope, serial: serial, package: package)) {
+                    cleared = false
                 }
                 if let result = try? await control.control(serial: serial, packageId: package, action: .restart),
                    result.ok {
                     relaunched += 1
                 }
             }
-            return (relaunched, cacheCleared)
+            return (relaunched, cleared)
         }
         guard relaunched > 0 else { return false }
-        let message = if !clearCache {
-            "Restarting \(package)…"
-        } else if cacheCleared {
-            "Cleared cache — restarting \(package)…"
-        } else {
-            "Cache clear didn't finish — restarting \(package)…"
+        let message = switch scope {
+        case nil: "Restarting \(package)…"
+        case .cache:
+            cleared
+                ? "Cleared cache — restarting \(package)…"
+                : "Cache clear didn't finish — restarting \(package)…"
+        case .data:
+            cleared
+                ? "Cleared data — restarting \(package)…"
+                : "Data clear failed — restarting \(package)…"
         }
         app?.showToast(Toast(message: message, ok: true))
         return true
-    }
-
-    /// `pm clear --cache-only` never returns on some images (observed live on
-    /// the API 36 emulator), so the clear gets a bounded window — cancelling
-    /// the task kills the adb child — and the restart proceeds either way.
-    private static func clearCacheBounded(
-        _ control: AppControlService, serial: String, package: String
-    ) async -> Bool {
-        let clear = Task {
-            (try? await control.control(serial: serial, packageId: package, action: .clearCache))?.ok == true
-        }
-        let watchdog = Task {
-            try? await Task.sleep(for: .seconds(10))
-            clear.cancel()
-        }
-        let ok = await clear.value
-        watchdog.cancel()
-        return ok
     }
 
     /// Remove the `adb reverse` bindings this console installed. Called when the
@@ -949,6 +936,8 @@ struct JSConsoleView: View {
     @State private var connectionBarWidth: CGFloat = 0
     @State private var inputHeight: CGFloat = 26
     @State private var showLevels = false
+    /// The "Clear data and restart" confirmation (it signs the user out).
+    @State private var confirmClearDataRestart = false
     @FocusState private var findFocused: Bool
     /// This tab stays mounted when the user switches away (see `TabHostView`).
     /// The input is a bare `NSTextView`, which `installFocusRelease` can't
@@ -1083,12 +1072,18 @@ struct JSConsoleView: View {
         }
         if !state.targetSerials.isEmpty {
             // A split button: the primary click restarts, the chevron reveals
-            // the cache-clearing variant (pm clear --cache-only, then relaunch).
+            // the clearing variants — cache (pm clear --cache-only) or full
+            // data (pm clear, behind a confirmation), then relaunch.
             Menu {
                 Button {
-                    session.restartApp(clearCache: true)
+                    session.restartApp(clearing: .cache)
                 } label: {
                     Label("Clear cache and restart", systemImage: "arrow.triangle.2.circlepath")
+                }
+                Button(role: .destructive) {
+                    confirmClearDataRestart = true
+                } label: {
+                    Label("Clear data and restart", systemImage: "trash")
                 }
             } label: {
                 Label("Restart app", systemImage: "restart.circle")
@@ -1099,6 +1094,15 @@ struct JSConsoleView: View {
             .help(session.isConnected
                 ? "Force-stop and relaunch the connected app on the device"
                 : "Pick an app to force-stop and relaunch")
+            .confirmationDialog(
+                "Clear all data for the app and restart? This signs you out and wipes local storage.",
+                isPresented: $confirmClearDataRestart
+            ) {
+                Button("Clear Data & Restart", role: .destructive) {
+                    session.restartApp(clearing: .data)
+                }
+                Button("Cancel", role: .cancel) {}
+            }
         }
         if !state.targetSerials.isEmpty, !session.isConnected {
             Button {
