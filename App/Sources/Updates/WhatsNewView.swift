@@ -27,14 +27,23 @@ struct WhatsNewView: View {
 
     /// The app's accent resolved to a concrete hex so the notes' section
     /// headers/links use the exact same green as the version pill and Continue
-    /// button (the raw UserDefaults value is empty when the bundled asset is in
-    /// use, which is a different green from the asset).
-    private var accentHex: String { Color.brandAccent.hexString ?? "#2f9e44" }
+    /// button. Like `textColorHex`, the bundled asset is resolved explicitly
+    /// for the sheet's scheme — BrandAccent has distinct light/dark greens, and
+    /// the ambient appearance isn't guaranteed to match at eval time. A
+    /// user-chosen accent (Settings ▸ Appearance) is a fixed color either way.
+    private var accentHex: String {
+        let custom = UserDefaults.standard.string(forKey: accentColorDefaultsKey)
+            .flatMap(Color.init(hex:))
+        let color = custom ?? Color.resolved("BrandAccent", for: colorScheme)
+        return color.hexString ?? "#2f9e44"
+    }
 
     /// The app's body point size (honoring the user's text-size scale) so the
     /// notes read at the same size as the rest of the app rather than the
     /// webview's larger 16px default.
-    private var baseFontPx: Double { 13 * AppFontPrefs.sizeScale }
+    private var baseFontPx: Double {
+        Double(AppFontPrefs.pointSize(for: .body)) * AppFontPrefs.sizeScale
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -210,48 +219,14 @@ private struct ReleaseNotesHTMLView: NSViewRepresentable {
         // canvas painting a second, slightly-off surface.
         view.underPageBackgroundColor = .clear
         view.setValue(false, forKey: "drawsBackground")
-        // The app injects its own text color (see `styled`) so the notes match
-        // the sheet's theme rather than the OS appearance.
+        // The app injects its own text color (see `ReleaseNotesStyler`) so the
+        // notes match the sheet's theme rather than the OS appearance.
         view.loadHTMLString(
-            Self.styled(html, textColor: textColorHex, accent: accentHex, baseFontPx: baseFontPx),
+            ReleaseNotesStyler.styled(
+                html, textColor: textColorHex, accent: accentHex, baseFontPx: baseFontPx),
             baseURL: nil
         )
         return view
-    }
-
-    /// Append an app-side style layer — later rules win at equal specificity,
-    /// so this restyles the appcast's baseline without the release pipeline
-    /// changing.
-    static func styled(_ notes: String, textColor: String, accent: String, baseFontPx: Double) -> String {
-        return notes + """
-        <style>
-        html, body { background: transparent; }
-        body { padding: 16px 22px 24px; color: \(textColor); font-size: \(baseFontPx)px; line-height: 1.5; }
-        /* Lead paragraph reads as a highlighted callout with an accent rail. */
-        body > p:first-of-type {
-            font-size: 1em;
-            margin: 2px 0 1.5em;
-            padding: 12px 14px;
-            border: 1px solid color-mix(in srgb, currentColor 12%, transparent);
-            border-left: 3px solid \(accent);
-            border-radius: 10px;
-            background: transparent;
-        }
-        h2, h3 { font-weight: 700; }
-        /* Section headers: accent, with a divider above each. */
-        h3 {
-            color: \(accent);
-            font-size: 1em;
-            margin: 1.7em 0 .55em;
-            padding-top: 1.5em;
-            border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent);
-        }
-        h3:first-of-type { border-top: none; padding-top: 0; margin-top: .2em; }
-        li { margin: .38em 0; }
-        li::marker { color: \(accent); }
-        a { color: \(accent); }
-        </style>
-        """
     }
 
     func updateNSView(_ view: WKWebView, context: Context) {}
