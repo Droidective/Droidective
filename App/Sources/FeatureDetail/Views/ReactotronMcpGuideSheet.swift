@@ -28,11 +28,14 @@ struct McpAgentGuideSheet: View {
                 stepOne
                 stepTwo
                 stepThree
-                footerSection
             }
             .formStyle(.grouped)
             Divider()
-            HStack {
+            HStack(spacing: 12) {
+                SettingsLink {
+                    Text("Settings ▸ MCP")
+                }
+                .help("Port, bearer token, and redaction rules")
                 Text("Localhost only. Passwords, tokens, and keys are redacted "
                     + "before anything reaches an agent.")
                     .font(.app(.footnote))
@@ -54,8 +57,8 @@ struct McpAgentGuideSheet: View {
                 .onChange(of: mcpEnabled) { state.mcp.applySettings() }
             LabeledContent("Status") { statusLabel }
             Text("Agents get this timeline, the network log, and Redux/MST state — "
-                + "plus tools to dispatch actions, run the app's custom commands, and "
-                + "query state. The server keeps running while the window is closed.")
+                + "plus tools to dispatch actions and run the app's custom commands. "
+                + "Keeps running while the window is closed.")
                 .font(.app(.footnote))
                 .foregroundStyle(.textMuted)
         }
@@ -212,13 +215,4 @@ struct McpAgentGuideSheet: View {
         }
     }
 
-    private var footerSection: some View {
-        Section {
-            LabeledContent("Port, token, and redaction rules") {
-                SettingsLink {
-                    Text("Open Settings ▸ MCP")
-                }
-            }
-        }
-    }
 }
