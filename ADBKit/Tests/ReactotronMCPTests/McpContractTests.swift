@@ -225,7 +225,7 @@ actor FakeSender: McpCommandSender {
     }
 
     @Test func showOverlayEmbedsALocalPngAndFillsDimensions() async throws {
-        let (store, sender, handlers) = makeWorld()
+        let (store, sender, _) = makeWorld()
         try await connectApp(store)
         // Minimal PNG header: signature + IHDR with 320x200 at offsets 16/20.
         var png = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
@@ -233,7 +233,7 @@ actor FakeSender: McpCommandSender {
         png += Data([0, 0, 0x01, 0x40, 0, 0, 0, 0xC8, 8, 6, 0, 0, 0])
         let fixture = png
         let handlersWithFile = McpToolHandlers(
-            store: store, sender: await sender as any McpCommandSender,
+            store: store, sender: sender as any McpCommandSender,
             readFile: { _ in fixture }
         )
         let body = try resultBody(try await handlersWithFile.call(
