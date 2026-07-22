@@ -6,9 +6,9 @@
     <description>Most recent Droidective updates.</description>
     <language>en</language>
     <item>
-      <title>Droidective 3.6.1</title>
-      <sparkle:version>585</sparkle:version>
-      <sparkle:shortVersionString>3.6.1</sparkle:shortVersionString>
+      <title>Droidective 3.7.0</title>
+      <sparkle:version>609</sparkle:version>
+      <sparkle:shortVersionString>3.7.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <description><![CDATA[
 <style>
@@ -24,20 +24,76 @@ pre { background: color-mix(in srgb, currentColor 8%, transparent); padding: .6e
 pre code { background: none; padding: 0; }
 a { color: #2f9e44; }
 </style>
-<p>A resize-performance fix: dragging a split divider or resizing the window
-with Mirror Screen and streaming log tabs open no longer slows to a crawl.</p>
-<h3>Fixes</h3>
+<p>The app goes universal — Intel Macs run it natively at last — and the
+Reactotron relay learns to serve its data to AI agents over MCP. The
+Terminal resumes your working directories across quits, both debug consoles
+gain a clear-data restart, split Reactotron panes order themselves
+independently, and a hidden mirror stops reconnecting on every tab flip.</p>
+<h3>Runs natively on Intel Macs</h3>
 <ul>
 <li>
-<strong>Resizing is smooth with logs streaming</strong> — the log view re-wrapped its
-entire buffer on every tick of a drag, pinning a CPU core; it now re-wraps
-once, when the drag rests. Log feeds also coalesce their updates a little
-more (three refreshes per second instead of eight), which cuts idle CPU
-with a busy logcat tab roughly in half.</li>
+<strong>A universal app</strong> — the DMG now carries arm64 and x86_64 slices of both
+the app and the bundled ffmpeg, so Intel Macs run natively (previous
+releases were Apple Silicon-only). The packaging step now refuses to ship
+a DMG that lost a slice.</li>
+</ul>
+<h3>Reactotron MCP — your app's timeline for AI agents</h3>
+<ul>
+<li>
+<strong>An opt-in MCP server</strong> (Settings ▸ MCP) exposes the Reactotron relay's
+timeline, state, and network data to Claude Code, Cursor, or VS Code over
+localhost HTTP — the same tool and resource contract as the official
+Reactotron desktop, so the upstream setup line works verbatim:
+<code>claude mcp add --transport http reactotron http://127.0.0.1:4567/mcp</code>.</li>
+<li>
+<strong>Private by default</strong> — it binds 127.0.0.1 only, validates Origin,
+supports a bearer token, and redacts sensitive values at the MCP boundary
+with upstream's default rules. An in-feature guide walks through
+connecting an agent and trying the tools.</li>
+</ul>
+<h3>Terminal</h3>
+<ul>
+<li>
+<strong>Sessions resume where you left off</strong> — quitting the app, closing the
+Terminal tab, or closing the window remembers each shell's working
+directory; the next open starts one shell per directory, in order. A tab
+you close yourself (⌘W, the ×, or <code>exit</code>) is forgotten — closing a tab
+means you're done with it.</li>
+</ul>
+<h3>Reactotron &amp; JS Console</h3>
+<ul>
+<li>
+<strong>Independent pane order</strong> — each split timeline pane keeps its own
+newest-first / chronological toggle instead of both flipping together.</li>
+<li>
+<strong>Clear data and restart</strong> — both consoles' Restart button gains a
+full-data-clear variant behind a confirmation (it signs you out), next to
+the existing cache clear; Reactotron's plain Restart becomes the same
+split button the JS Console has.</li>
+</ul>
+<h3>Screen Mirror</h3>
+<ul>
+<li>
+<strong>No more reconnect flash</strong> — switching tabs keeps the mirror session
+alive for a two-minute grace window, so flipping away and back resumes
+instantly. Returning re-targets if you switched devices meanwhile, a
+session that died while hidden reconnects, and a recording always stays
+on its device.</li>
+</ul>
+<h3>Polish</h3>
+<ul>
+<li>
+<strong>What's New sheet redesigned</strong> — the release notes render in the app's
+own colors and text size (no more black-on-dark when the app and OS
+themes differ), with a version pill and a link to the full changelog.</li>
+<li>
+<strong>A gentler GitHub-star nudge</strong> — it recurs every ten launches instead of
+firing once, stops for good after five asks (or one star), and quitting
+with the prompt open no longer replays it every launch.</li>
 </ul>
 ]]></description>
-      <pubDate>Mon, 20 Jul 2026 21:29:05 +0000</pubDate>
-      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.6.1/Droidective-v3.6.1.dmg" sparkle:edSignature="ejvQZwXcNQvJDgCou0rRCHRVClJQYN/WMBSHsyBNJgUHrJ7mBlLZz15uBYwJZ9Chx4dkzZH/YCayLmgysUPnAw==" length="86738051" type="application/octet-stream" />
+      <pubDate>Wed, 22 Jul 2026 11:25:41 +0000</pubDate>
+      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.7.0/Droidective-v3.7.0.dmg" sparkle:edSignature="p+YFH0kUGYR2qz65LgIOg1QtzyE4ZaCQvdvksXqSec4s1t0922SF9M6pT0k3LXbCo62zB7kLhyxqnIeWeFu3Cg==" length="141137882" type="application/octet-stream" />
     </item>
     
   </channel>
