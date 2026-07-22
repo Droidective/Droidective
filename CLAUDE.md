@@ -216,7 +216,11 @@ terminal — multi-tab PTY login shells via SwiftTerm, with the device selected 
 open exported as ANDROID_SERIAL; tabs split into panes (⌘D/⇧⌘D — the pure
 `TerminalSplitTree` model, tested in ADBKit; ⌘W peels a pane, then the tab), a
 new shell inherits the focused shell's cwd (read from the kernel via
-`proc_pidinfo`, no OSC 7 needed), and the tab list toggles between the left
+`proc_pidinfo`, no OSC 7 needed), an *implicit* teardown (quit, the feature
+tab closing, a background window close) snapshots each tab's cwd so the next
+open resumes there (`TerminalResume` in ADBKit + `LayoutState.terminalResumeDirs`;
+explicitly closed tabs — ⌘W/×/`exit` — are forgotten by construction), and
+the tab list toggles between the left
 rail and a Chrome-style top strip (`terminalTabsOnTop`) — + the
 custom-commands/catalog system panels). Several are **hub** screens — `react-native`, `simulate`,
 and `connection` gather related instant-/form-/toggle-actions into one scrollable

@@ -270,7 +270,14 @@ struct ADTApp: App {
                 Button("New Terminal") {
                     appState.activateMainWindow()
                     appState.requestFeature("terminal")
-                    appState.terminals.newTab()
+                    // An empty rail resumes the remembered session instead of
+                    // pre-filling a fresh tab here — a tab created now would
+                    // make the view's restore-on-empty a no-op.
+                    if appState.terminals.tabs.isEmpty {
+                        appState.openTerminalResumingWork()
+                    } else {
+                        appState.terminals.newTab()
+                    }
                 }
                 .keyboardShortcut("n", modifiers: .command)
 
