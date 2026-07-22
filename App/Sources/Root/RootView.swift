@@ -24,7 +24,17 @@ struct RootView: View {
     @AppStorage("hasSeenTour") private var hasSeenTour = false
     @AppStorage("hasChosenRole") private var hasChosenRole = false
     @AppStorage("launchCount") private var launchCount = 0
-    @AppStorage("starPromptShown") private var starPromptShown = false
+    /// GitHub-star nudge state. `starPromptResolved` ends it for good (the user
+    /// starred); `starPromptAskCount` counts asks shown; and
+    /// `starPromptNextLaunch` is the launch milestone the next ask is due at
+    /// (its default is the first-ask milestone). Both advance when the sheet is
+    /// *presented* — recording on dismiss would lose the ask to a quit or
+    /// window close with the sheet open and replay it every launch.
+    /// The pre-3.6 one-time `starPromptShown` flag is intentionally *not* read,
+    /// so users who only ever dismissed the old prompt are re-engaged.
+    @AppStorage("starPromptResolved") private var starPromptResolved = false
+    @AppStorage("starPromptAskCount") private var starPromptAskCount = 0
+    @AppStorage("starPromptNextLaunch") private var starPromptNextLaunch = 10
     @AppStorage("theme") private var theme = "dark"
     @State private var presentStar = false
     /// True only while the *first-run* role picker is up, so its dismissal
@@ -40,8 +50,11 @@ struct RootView: View {
     @AppStorage(windowOpacityDefaultsKey) private var windowOpacity = 1.0
     @AppStorage(windowBlurDefaultsKey) private var windowBlur = 0.6
 
-    /// Launches before the one-time GitHub-star nudge.
-    private let starPromptAfterLaunches = 10
+    /// GitHub-star nudge cadence: every `starPromptReAskGap` launches after
+    /// each ask (the first-ask milestone is `starPromptNextLaunch`'s default),
+    /// up to `starPromptMaxAsks` asks total.
+    private let starPromptReAskGap = 10
+    private let starPromptMaxAsks = 5
 
     /// Theme color-sync needs two modifiers because they reach different layers,
     /// and neither alone is enough:
@@ -85,11 +98,6 @@ struct RootView: View {
         case "auto": return colorScheme
         default: return .dark
         }
-    }
-
-    private var shouldPromptStar: Bool {
-        LaunchPrompt.starDue(
-            starPromptShown: starPromptShown, launchCount: launchCount, afterLaunches: starPromptAfterLaunches)
     }
 
     var body: some View {
@@ -136,7 +144,10 @@ struct RootView: View {
                 // Its own host view so the star sheet reliably presents (two
                 // .sheet modifiers on one view can drop one).
                 Color.clear.sheet(isPresented: $presentStar) {
-                    StarPromptView(onStar: { state.openRepository() })
+                    StarPromptView(onStar: {
+                        starPromptResolved = true
+                        state.openRepository()
+                    })
                 }
             }
             #if !APPSTORE
@@ -241,8 +252,9 @@ struct RootView: View {
         installFocusRelease()
         switch LaunchPrompt.next(
             hasChosenRole: hasChosenRole, hasSeenTour: hasSeenTour,
-            starPromptShown: starPromptShown,
-            launchCount: launchCount, starAfterLaunches: starPromptAfterLaunches
+            starResolved: starPromptResolved, launchCount: launchCount,
+            askCount: starPromptAskCount, nextLaunch: starPromptNextLaunch,
+            maxAsks: starPromptMaxAsks
         ) {
         case .rolePicker:
             // Brand-new user: pick a role first, then run the tour.
@@ -251,6 +263,13 @@ struct RootView: View {
         case .tour:
             state.presentTour = true
         case .star:
+            // Record the ask now, at presentation — dismissal isn't guaranteed
+            // (a quit or window close with the sheet open skips onDismiss), and
+            // an unrecorded ask would re-fire every launch with the cap never
+            // advancing. "Star on GitHub" resolves it for good in the sheet.
+            starPromptAskCount += 1
+            starPromptNextLaunch = LaunchPrompt.nextAskLaunch(
+                launchCount: launchCount, reAskGap: starPromptReAskGap)
             presentStar = true
         case nil:
             break
