@@ -32,10 +32,16 @@ targets:
         excludes:
           - scrcpy-server
           - ffmpeg
+          # The compressed source of the ffmpeg binary — unpacked at generate
+          # time, must not itself ship in the bundle.
+          - ffmpeg.zip
       # Extension-less binaries: force them into the resources phase so they land
       # in the .app bundle (XcodeGen otherwise can't infer the build phase).
       # scrcpy-server is pushed to the device; ffmpeg runs on the Mac for the
       # video editor. See BundledTools + scripts/update-bundled-tools.sh.
+      # ffmpeg is unpacked from the committed ffmpeg.zip by
+      # scripts/unpack-ffmpeg.sh (run it before a bare `xcodegen generate`;
+      # `make generate` and CI already do).
       - path: App/Resources/scrcpy-server
         buildPhase: resources
       - path: App/Resources/ffmpeg
@@ -120,6 +126,11 @@ targets:
       base:
         PRODUCT_NAME: Droidective
         PRODUCT_BUNDLE_IDENTIFIER: com.rohindh.droidective
+        # Universal app (Intel + Apple Silicon) — pinned so a toolchain default
+        # change can't silently drop a slice. Debug stays fast via
+        # ONLY_ACTIVE_ARCH=YES; scripts/package-dmg.sh verifies the built
+        # product carries both slices before packaging.
+        ARCHS: arm64 x86_64
         SENTRY_DSN: ""
         POSTHOG_KEY: ""
         MARKETING_VERSION: "3.6.1"

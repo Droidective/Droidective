@@ -19,6 +19,7 @@ SIGNING := CODE_SIGN_IDENTITY="$(SIGN_IDENTITY)" DEVELOPMENT_TEAM="$(DEVELOPMENT
 endif
 
 generate:
+	./scripts/unpack-ffmpeg.sh
 	xcodegen generate
 
 build: generate
@@ -32,8 +33,11 @@ run: build
 	@sleep 0.3
 	open "DerivedData/Build/Products/Debug/Droidective.app"
 
+# The generic destination is what makes the build universal: xcodebuild's
+# default (the concrete local Mac) builds the active arch only, silently
+# dropping the x86_64 slice. package-dmg.sh verifies both slices are present.
 dmg: generate
-	xcodebuild -project Droidective.xcodeproj -scheme App -configuration Release -derivedDataPath DerivedData build $(TELEMETRY) $(SIGNING)
+	xcodebuild -project Droidective.xcodeproj -scheme App -configuration Release -destination "generic/platform=macOS" -derivedDataPath DerivedData build $(TELEMETRY) $(SIGNING)
 	SIGN_IDENTITY="$(SIGN_IDENTITY)" ./scripts/package-dmg.sh $(VERSION)
 
 clean:
