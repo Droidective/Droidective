@@ -9,12 +9,51 @@ struct WhatsNewView: View {
     let whatsNew: UpdaterViewModel.WhatsNew
     let dismiss: () -> Void
 
+    @Environment(\.openURL) private var openURL
+    @Environment(\.colorScheme) private var colorScheme
+
+    private static let changelogURL = URL(string: "https://droidective.com/changelog/")!
+
+    /// The app's primary text color resolved to a concrete hex for the notes
+    /// webview. The WKWebView follows the OS appearance on its own, which goes
+    /// black-on-dark whenever the app's theme (custom background, or a scheme
+    /// that differs from the system) doesn't match — so we hand it the same
+    /// color the rest of the sheet uses.
+    private var textColorHex: String {
+        let color: Color = customTextRGB.map { Color(rgb: $0) }
+            ?? Color.resolved("TextMain", for: colorScheme)
+        return color.hexString ?? (colorScheme == .dark ? "#ECECEC" : "#1A1A1A")
+    }
+
+    /// The app's accent resolved to a concrete hex so the notes' section
+    /// headers/links use the exact same green as the version pill and Continue
+    /// button. Like `textColorHex`, the bundled asset is resolved explicitly
+    /// for the sheet's scheme — BrandAccent has distinct light/dark greens, and
+    /// the ambient appearance isn't guaranteed to match at eval time. A
+    /// user-chosen accent (Settings ▸ Appearance) is a fixed color either way.
+    private var accentHex: String {
+        let custom = UserDefaults.standard.string(forKey: accentColorDefaultsKey)
+            .flatMap(Color.init(hex:))
+        let color = custom ?? Color.resolved("BrandAccent", for: colorScheme)
+        return color.hexString ?? "#2f9e44"
+    }
+
+    /// The app's body point size (honoring the user's text-size scale) so the
+    /// notes read at the same size as the rest of the app rather than the
+    /// webview's larger 16px default.
+    private var baseFontPx: Double {
+        Double(AppFontPrefs.pointSize(for: .body)) * AppFontPrefs.sizeScale
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             header
             Divider()
             if let notes = whatsNew.notesHTML {
-                ReleaseNotesHTMLView(html: notes)
+                ReleaseNotesHTMLView(
+                    html: notes, textColorHex: textColorHex,
+                    accentHex: accentHex, baseFontPx: baseFontPx
+                )
             } else {
                 // An update staged without embedded notes (shouldn't happen
                 // with our appcast) still gets a friendly landing.
@@ -35,51 +74,97 @@ struct WhatsNewView: View {
         .background(.bgRoot)
     }
 
-    /// Accent-badged masthead: eyebrow + version title, with an "up to date"
-    /// seal on the trailing edge.
+    /// Masthead: a version pill beside the title, a "latest version" subtitle,
+    /// and a close control on the trailing edge.
     private var header: some View {
-        HStack(spacing: 14) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(LinearGradient(
-                        colors: [Color.brandAccent, Color.brandAccent.opacity(0.55)],
-                        startPoint: .topLeading, endPoint: .bottomTrailing))
-                    .frame(width: 46, height: 46)
-                Image(systemName: "sparkles")
-                    .font(.system(size: 21, weight: .semibold))
-                    .foregroundStyle(.white)
-            }
-            VStack(alignment: .leading, spacing: 3) {
-                Text("WHAT'S NEW")
-                    .font(.app(size: 10, weight: .bold))
-                    .kerning(1.2)
-                    .foregroundStyle(Color.brandAccent)
-                Text("Droidective \(whatsNew.version)")
-                    .font(.app(.title2).weight(.bold))
+        HStack(alignment: .top, spacing: 14) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Text("What's new in Droidective")
+                        .font(.app(.title2).weight(.bold))
+                    Text(whatsNew.version)
+                        .font(.app(size: 13, weight: .semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(Color.brandAccent)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 3)
+                        .background(Color.brandAccent.opacity(0.12), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .strokeBorder(Color.brandAccent.opacity(0.35), lineWidth: 1)
+                        )
+                }
+                Text("You're now on the latest version.")
+                    .font(.app(.subheadline))
+                    .foregroundStyle(.textMuted)
             }
             Spacer(minLength: 12)
-            Label("Up to date", systemImage: "checkmark.seal.fill")
-                .font(.app(.caption).weight(.medium))
-                .foregroundStyle(.green)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(Color.green.opacity(0.12), in: Capsule())
+            Button(action: dismiss) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.textMuted)
+                    .frame(width: 22, height: 22)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Close")
         }
         .padding(.horizontal, 20)
-        .padding(.vertical, 16)
+        .padding(.top, 18)
+        .padding(.bottom, 14)
     }
 
     private var footer: some View {
         HStack {
+            Button {
+                openURL(Self.changelogURL)
+            } label: {
+                Label("See full changelog", systemImage: "arrow.up.right.square")
+            }
+            // Same rounded-rect border as the version pill, neutral coloring.
+            .buttonStyle(PillButtonStyle(
+                fill: Color.secondary.opacity(0.10),
+                stroke: Color.secondary.opacity(0.35),
+                foreground: .textMuted
+            ))
+
             Spacer()
+
+            // Same rounded-rect border as the pill, filled green (primary).
             Button("Continue") { dismiss() }
                 .keyboardShortcut(.defaultAction)
-                .buttonStyle(.borderedProminent)
-                .tint(.brandAccent)
-                .controlSize(.large)
+                .buttonStyle(PillButtonStyle(
+                    fill: .brandAccent,
+                    stroke: .brandAccent,
+                    foreground: .white
+                ))
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 14)
+    }
+}
+
+/// Footer buttons that echo the version pill's shape — a 7pt rounded rect with
+/// a thin border — so the sheet's chrome reads as one family. Only the colors
+/// vary (neutral for the secondary link, filled green for the primary).
+private struct PillButtonStyle: ButtonStyle {
+    let fill: Color
+    let stroke: Color
+    let foreground: Color
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.app(.body))
+            .foregroundStyle(foreground)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
+            .background(fill, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .strokeBorder(stroke, lineWidth: 1)
+            )
+            .opacity(configuration.isPressed ? 0.7 : 1)
+            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
     }
 }
 
@@ -110,6 +195,15 @@ struct WhatsNewPresenter: ViewModifier {
 /// transparent canvas over the sheet background.
 private struct ReleaseNotesHTMLView: NSViewRepresentable {
     let html: String
+    /// The app-resolved primary text color, injected so the notes stay legible
+    /// on the sheet's themed background (the webview would otherwise follow the
+    /// OS appearance and go black-on-dark).
+    let textColorHex: String
+    /// The app-resolved accent, so section headers/links match the rest of the
+    /// sheet's green exactly.
+    let accentHex: String
+    /// The app's body point size, so the notes match the rest of the app.
+    let baseFontPx: Double
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -125,30 +219,14 @@ private struct ReleaseNotesHTMLView: NSViewRepresentable {
         // canvas painting a second, slightly-off surface.
         view.underPageBackgroundColor = .clear
         view.setValue(false, forKey: "drawsBackground")
-        // The appcast notes declare `color-scheme: light dark`, so the text
-        // follows the app's appearance on its own.
-        view.loadHTMLString(Self.styled(html), baseURL: nil)
+        // The app injects its own text color (see `ReleaseNotesStyler`) so the
+        // notes match the sheet's theme rather than the OS appearance.
+        view.loadHTMLString(
+            ReleaseNotesStyler.styled(
+                html, textColor: textColorHex, accent: accentHex, baseFontPx: baseFontPx),
+            baseURL: nil
+        )
         return view
-    }
-
-    /// Append an app-side style layer — later rules win at equal specificity,
-    /// so this restyles the appcast's baseline without the release pipeline
-    /// changing.
-    static func styled(_ notes: String) -> String {
-        let accent = UserDefaults.standard.string(forKey: accentColorDefaultsKey)
-            .flatMap { $0.isEmpty ? nil : $0 } ?? "#2f9e44"
-        return notes + """
-        <style>
-        html, body { background: transparent; }
-        body { padding: 16px 22px 24px; }
-        body > p:first-of-type { font-size: 1.06em; color: color-mix(in srgb, currentColor 75%, transparent); margin-bottom: 1em; }
-        h2, h3 { font-weight: 700; }
-        h3 { margin: 1.5em 0 .45em; padding-bottom: .35em; border-bottom: 1px solid color-mix(in srgb, currentColor 14%, transparent); }
-        li { margin: .38em 0; }
-        li::marker { color: \(accent); }
-        a { color: \(accent); }
-        </style>
-        """
     }
 
     func updateNSView(_ view: WKWebView, context: Context) {}
