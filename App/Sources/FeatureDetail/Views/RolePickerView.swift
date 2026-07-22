@@ -31,6 +31,14 @@ struct RolePickerView: View {
                 }
             }
             .frame(maxWidth: 790)
+            // The #1 miss from feedback: React Native folks picking QA and
+            // concluding Reactotron isn't in the app. One targeted line.
+            Text("Build React Native apps? Choose **React Native** — that's where Reactotron, the JS console, and the RN tools live.")
+                .font(.app(.footnote))
+                .foregroundStyle(.textMuted)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 480)
+                .fixedSize(horizontal: false, vertical: true)
             skipButton
         }
         .padding(40)

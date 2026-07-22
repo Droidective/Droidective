@@ -1464,6 +1464,16 @@ final class AppState {
         // stop each one's background work explicitly — otherwise kept-alive
         // sessions (terminal shells, the Reactotron server) leak with no UI
         // left to reach them.
+        // A role without Reactotron also loses the Settings ▸ MCP tab — a
+        // running MCP server would have no visible off-switch, so turn it
+        // off with the role switch (re-enable any time from a role that has
+        // the feature). Before the stop loop below: with the pref cleared,
+        // `keepsRelayAlive` no longer exempts the Reactotron session.
+        if mcp.isEnabled, role != nil, role != .reactNativeDeveloper,
+           !enabledFeatures.contains(where: { $0.id == "reactotron" }) {
+            UserDefaults.standard.set(false, forKey: mcpEnabledKey)
+            mcp.applySettings()
+        }
         for id in workspace.groups.flatMap(\.openTabs) {
             stopBackgroundWork(for: id)
         }
