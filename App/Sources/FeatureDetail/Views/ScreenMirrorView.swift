@@ -77,11 +77,19 @@ struct ScreenMirrorView: View {
             if active {
                 // Returned to the tab: cancel any pending teardown so a session
                 // still inside its grace window resumes in place (no reconnect
-                // flash). Only reconnect if it was already torn down.
+                // flash). Reconnect when there's nothing to resume — torn down,
+                // ended while hidden, or the device-bar selection moved on while
+                // hidden (resuming then would silently mirror and control the
+                // wrong device; a recording always stays on its device).
                 teardownTask?.cancel()
                 teardownTask = nil
-                if model == nil { scheduleReconnect(to: state.targetSerials.first) }
-            } else if model?.isRecording != true {
+                let action = MirrorTabPolicy.onReturn(
+                    hasSession: model != nil,
+                    isRecording: model?.isRecording == true,
+                    sessionEnded: model?.hasEnded == true,
+                    deviceChanged: model?.serial != state.targetSerials.first)
+                if action == .reconnect { scheduleReconnect(to: state.targetSerials.first) }
+            } else if MirrorTabPolicy.schedulesTeardownOnHide(isRecording: model?.isRecording == true) {
                 // Hidden — keep streaming for a grace window instead of tearing
                 // down instantly, so a quick tab flip doesn't stop-and-reconnect.
                 // Recording sessions must keep capturing regardless.
@@ -134,6 +142,9 @@ struct ScreenMirrorView: View {
         teardownTask = Task {
             try? await Task.sleep(for: .seconds(mirrorHiddenGraceSeconds))
             guard !Task.isCancelled else { return }
+            // Fired: drop the handle now (before the await) so a fresh
+            // hide can't schedule a successor this stale task would clobber.
+            teardownTask = nil
             connectTask?.cancel()
             let leaving = model
             model = nil
