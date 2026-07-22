@@ -1,9 +1,9 @@
 import SwiftUI
 
 /// Recurring nudge to star the project on GitHub, shown every few launches
-/// until the user stars or the ask cap is hit (cadence + outcome handled in
-/// RootView). The view is presentation-only: it opens the repo via `onStar`
-/// and dismisses; RootView's `onDismiss` records the outcome.
+/// until the user stars or the ask cap is hit (cadence handled in RootView,
+/// which records each ask when it presents the sheet). The view is
+/// presentation-only: it reports a star via `onStar` and dismisses.
 struct StarPromptView: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -29,10 +29,14 @@ struct StarPromptView: View {
             }
 
             HStack(spacing: 10) {
-                Button("Maybe Later") { dismiss() }
-                    .buttonStyle(.bordered)
-                    .tint(.secondary)
-                    .frame(maxWidth: .infinity)
+                Button {
+                    dismiss()
+                } label: {
+                    Text("Maybe Later")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .tint(.secondary)
 
                 Button {
                     onStar()

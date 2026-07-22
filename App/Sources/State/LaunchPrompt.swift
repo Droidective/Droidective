@@ -19,7 +19,7 @@ enum LaunchPrompt: Equatable {
         hasSeenTour: Bool,
         starResolved: Bool,
         launchCount: Int,
-        snoozeCount: Int,
+        askCount: Int,
         nextLaunch: Int,
         maxAsks: Int
     ) -> LaunchPrompt? {
@@ -27,7 +27,7 @@ enum LaunchPrompt: Equatable {
         if !hasSeenTour { return .tour }
         if starDue(
             resolved: starResolved, launchCount: launchCount,
-            snoozeCount: snoozeCount, nextLaunch: nextLaunch, maxAsks: maxAsks
+            askCount: askCount, nextLaunch: nextLaunch, maxAsks: maxAsks
         ) {
             return .star
         }
@@ -35,12 +35,20 @@ enum LaunchPrompt: Equatable {
     }
 
     /// Whether the recurring GitHub-star nudge is due. It stops for good once
-    /// the user stars (`resolved`) and only re-appears every `nextLaunch`
-    /// milestone up to `maxAsks` times — each "Maybe Later" pushes `nextLaunch`
-    /// out and bumps `snoozeCount`.
+    /// the user stars (`resolved`) or after `maxAsks` asks, and otherwise waits
+    /// for the `nextLaunch` milestone. Each ask is recorded at *presentation*
+    /// (bump `askCount`, push `nextLaunch` out via `nextAskLaunch`), so a quit
+    /// with the sheet still open can't replay the ask every launch.
     static func starDue(
-        resolved: Bool, launchCount: Int, snoozeCount: Int, nextLaunch: Int, maxAsks: Int
+        resolved: Bool, launchCount: Int, askCount: Int, nextLaunch: Int, maxAsks: Int
     ) -> Bool {
-        !resolved && snoozeCount < maxAsks && launchCount >= nextLaunch
+        !resolved && askCount < maxAsks && launchCount >= nextLaunch
+    }
+
+    /// The milestone the next ask is due at, anchored to the *current* launch —
+    /// not the old milestone — so a re-engaged user with an ancient `nextLaunch`
+    /// waits a full gap instead of burning through every stale milestone.
+    static func nextAskLaunch(launchCount: Int, reAskGap: Int) -> Int {
+        launchCount + reAskGap
     }
 }
