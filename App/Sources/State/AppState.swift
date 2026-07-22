@@ -1441,12 +1441,12 @@ final class AppState {
     /// Apply the user's role choice (first-run or "Change role"): curate the
     /// enabled set + sidebar order to that role, or keep everything on for
     /// `nil` ("show me everything"). Persists and lands on the launchpad.
-    func chooseRole(_ role: UserRole?) {
+    func chooseRole(_ role: UserRole?, includeReactNativeStack: Bool = false) {
         let isChange = layout.selectedRole != nil
         Telemetry.shared.trackRoleChosen(role?.rawValue ?? "all", isChange: isChange)
         Telemetry.shared.applyRole(role?.rawValue)
         if let role {
-            layout.seedRole(role)
+            layout.seedRole(role, includeReactNativeStack: includeReactNativeStack)
         } else {
             layout.seedEverything()
         }

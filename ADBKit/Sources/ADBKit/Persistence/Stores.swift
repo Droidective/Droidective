@@ -279,14 +279,23 @@ public struct LayoutState: Codable, Sendable, Equatable {
     /// sidebar order to the curated order. Marks `knownIds`/`didEnableAll` so
     /// `adoptNewDefaults`/`adoptAllEnabled` can't re-expand the set back to
     /// all-on. Used at first-run pick and when changing role later.
-    public mutating func seedRole(_ role: UserRole) {
-        let ids = FeatureRegistry.featureIDs(for: role)
+    /// `includeReactNativeStack` unions the RN stack tools
+    /// (`FeatureRegistry.reactNativeStackIDs`) into the seed, leading the
+    /// sidebar — the picker's "I work with React Native" toggle. The
+    /// role-additions baseline (`seededRoleIds`) stays the pure role list so
+    /// `adoptNewRoleFeatures` keeps working from the role's own curation.
+    public mutating func seedRole(_ role: UserRole, includeReactNativeStack: Bool = false) {
+        let roleIds = FeatureRegistry.featureIDs(for: role)
+        var ids = roleIds
+        if includeReactNativeStack {
+            ids = FeatureRegistry.reactNativeStackIDs.filter { !ids.contains($0) } + ids
+        }
         selectedRole = role.rawValue
         roleChosen = true
         enabledIds = ids
         sidebarOrder = ids
         categoryOrder = FeatureRegistry.categoryOrder(for: role)
-        seededRoleIds = ids
+        seededRoleIds = roleIds
         knownIds = FeatureRegistry.all.map(\.id)
         didEnableAll = true
     }

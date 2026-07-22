@@ -697,6 +697,12 @@ public enum FeatureRegistry {
         (featuresByRole[role] ?? []).filter { byID[$0] != nil }
     }
 
+    /// The React Native stack tools the role picker's "I work with React
+    /// Native" toggle adds to any chosen role — a React Native QA is both
+    /// "QA" and "React Native", so the role picks the workflow and this
+    /// toggle picks the stack. Ordered as they should lead the sidebar.
+    public static let reactNativeStackIDs = ["react-native", "reactotron", "js-console"]
+
     /// The device platforms a role works with. The device bar, the virtual-
     /// device launch lists, and the Emulators screen show only these; `nil`
     /// ("all features") shows both. iOS Developer is simulator-only, React

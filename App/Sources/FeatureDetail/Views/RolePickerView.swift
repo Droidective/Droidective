@@ -13,6 +13,11 @@ struct RolePickerView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("hasChosenRole") private var hasChosenRole = false
     @State private var appeared = false
+    /// "I work with React Native": unions the RN stack tools (Reactotron,
+    /// JS Console, the RN hub) into whichever role is chosen — a React
+    /// Native QA is both "QA" and "React Native", so the role picks the
+    /// workflow and this picks the stack.
+    @State private var includeRNTools = false
 
     private let columns = [GridItem(.adaptive(minimum: 236), spacing: 14)]
 
@@ -21,7 +26,7 @@ struct RolePickerView: View {
             header
             LazyVGrid(columns: columns, spacing: 14) {
                 ForEach(Array(UserRole.allCases.enumerated()), id: \.element) { index, role in
-                    RoleCard(role: role) { choose(role) }
+                    RoleCard(role: role, includeRNStack: includeRNTools) { choose(role) }
                         .opacity(appeared ? 1 : 0)
                         .offset(y: appeared ? 0 : 14)
                         .animation(
@@ -31,14 +36,7 @@ struct RolePickerView: View {
                 }
             }
             .frame(maxWidth: 790)
-            // The #1 miss from feedback: React Native folks picking QA and
-            // concluding Reactotron isn't in the app. One targeted line.
-            Text("Build React Native apps? Choose **React Native** — that's where Reactotron, the JS console, and the RN tools live.")
-                .font(.app(.footnote))
-                .foregroundStyle(.textMuted)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 480)
-                .fixedSize(horizontal: false, vertical: true)
+            rnStackToggle
             skipButton
         }
         .padding(40)
@@ -92,6 +90,40 @@ struct RolePickerView: View {
         }
     }
 
+    /// The #1 miss from feedback: React Native folks picked QA and concluded
+    /// Reactotron wasn't in the app. Role and stack are different axes, so
+    /// the stack is its own control — flipping it adds the RN tools to every
+    /// card (their counts update live) instead of forcing the RN role.
+    private var rnStackToggle: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "atom")
+                .font(.app(size: 16, weight: .medium))
+                .foregroundStyle(.brandAccent)
+            VStack(alignment: .leading, spacing: 2) {
+                Toggle("I work with React Native", isOn: $includeRNTools.animation())
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .font(.app(.callout).weight(.medium))
+                    .foregroundStyle(.textMain)
+                Text("Adds Reactotron, the JS Console, and the React Native hub to any role you pick.")
+                    .font(.app(.footnote))
+                    .foregroundStyle(.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 11)
+        .background(
+            Color.brandAccent.opacity(includeRNTools ? 0.10 : 0.04),
+            in: RoundedRectangle(cornerRadius: 11, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .strokeBorder(
+                    Color.brandAccent.opacity(includeRNTools ? 0.45 : 0.15), lineWidth: 1)
+        )
+    }
+
     /// Deliberately quiet next to the cards (one primary action per screen),
     /// but with a real hit area and the concrete outcome in the label.
     private var skipButton: some View {
@@ -112,7 +144,7 @@ struct RolePickerView: View {
 
     private func choose(_ role: UserRole?) {
         hasChosenRole = true
-        state.chooseRole(role)
+        state.chooseRole(role, includeReactNativeStack: includeRNTools)
     }
 }
 
@@ -123,12 +155,24 @@ struct RolePickerView: View {
 /// method sees a distinct state.
 private struct RoleCard: View {
     let role: UserRole
+    let includeRNStack: Bool
     let action: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hovering = false
     @FocusState private var focused: Bool
 
     private var curated: [String] { FeatureRegistry.featuresByRole[role] ?? [] }
+
+    /// What this card would seed with the RN stack toggle applied — counts
+    /// update live so flipping the toggle visibly changes every card.
+    private var seededCount: Int {
+        includeRNStack
+            ? Set(curated).union(FeatureRegistry.reactNativeStackIDs).count
+            : curated.count
+    }
+
+    /// True when the toggle adds tools this role doesn't already carry.
+    private var stackAdds: Bool { includeRNStack && seededCount > curated.count }
 
     private var previewFeatures: [FeatureDef] {
         // Presented for the card's role, so the iOS card previews
@@ -151,12 +195,20 @@ private struct RoleCard: View {
                             in: RoundedRectangle(cornerRadius: 9, style: .continuous)
                         )
                     Spacer(minLength: 8)
-                    Text("\(curated.count) tools")
-                        .font(.app(.caption))
-                        .foregroundStyle(.textMuted)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(.bgRoot, in: Capsule())
+                    HStack(spacing: 4) {
+                        if stackAdds {
+                            Image(systemName: "atom")
+                                .font(.app(size: 9, weight: .semibold))
+                                .foregroundStyle(.brandAccent)
+                        }
+                        Text("\(seededCount) tools")
+                            .font(.app(.caption))
+                            .foregroundStyle(stackAdds ? .brandAccent : .textMuted)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(.bgRoot, in: Capsule())
+                    .contentTransition(.numericText())
                 }
                 Text(role.label)
                     .font(.app(.title3).weight(.semibold))
