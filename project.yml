@@ -135,7 +135,7 @@ targets:
         ARCHS: arm64 x86_64
         SENTRY_DSN: ""
         POSTHOG_KEY: ""
-        MARKETING_VERSION: "3.6.1"
+        MARKETING_VERSION: "3.7.0"
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "6.0"
         SWIFT_STRICT_CONCURRENCY: complete
