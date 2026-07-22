@@ -15,8 +15,10 @@ is bundled.
 
 ## ffmpeg
 
-`App/Resources/ffmpeg` is a static build of [ffmpeg](https://ffmpeg.org) (v8.1.2,
-macOS arm64), bundled and run on the Mac to power the video editor's exports
+`App/Resources/ffmpeg.zip` holds a static build of [ffmpeg](https://ffmpeg.org)
+(v8.1.2, macOS universal — arm64 + x86_64; committed compressed because the raw
+binary exceeds GitHub's file size limit, unpacked into the app bundle at build
+time), bundled and run on the Mac to power the video editor's exports
 (trim/crop/rotate/scale/speed and mp4/mov/mkv/webm/gif encoding) without a
 separate ffmpeg install.
 
@@ -24,10 +26,11 @@ separate ffmpeg install.
 - License: **GNU General Public License v3** (this build is configured with
   `--enable-gpl --enable-version3`, which includes GPL components such as
   libx264/libx265). The full license text is at https://www.gnu.org/licenses/gpl-3.0.html
-- Build source: https://ffmpeg.martin-riedl.de (macOS arm64, "release")
-- The pinned SHA-256 in `scripts/update-bundled-tools.sh` is the source of
-  truth for the exact bundled build; update the version stated above whenever
-  that script refreshes the binary.
+- Build source: https://ffmpeg.martin-riedl.de (macOS arm64 + x86_64 "release"
+  builds, combined into one universal binary with `lipo`)
+- The pinned per-slice SHA-256s in `scripts/update-bundled-tools.sh` are the
+  source of truth for the exact bundled build; update the version stated above
+  whenever that script refreshes the binary.
 - The binary is redistributed unmodified. FFmpeg's source is available from
   https://ffmpeg.org/download.html and https://git.ffmpeg.org/ffmpeg.git
 

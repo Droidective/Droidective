@@ -20,6 +20,19 @@ if [[ ! -d "$APP" ]]; then
   exit 1
 fi
 
+# The release is a universal app (Intel + Apple Silicon). Fail packaging if the
+# main executable or the bundled ffmpeg lost a slice — e.g. an ONLY_ACTIVE_ARCH
+# build slipping through, or a bundled tool refreshed single-arch.
+for bin in "$APP/Contents/MacOS/Droidective" "$APP/Contents/Resources/ffmpeg"; do
+  archs="$(lipo -archs "$bin")"
+  for want in arm64 x86_64; do
+    if [[ " $archs " != *" $want "* ]]; then
+      echo "error: $bin is missing the $want slice (archs: $archs) — the DMG must be universal" >&2
+      exit 1
+    fi
+  done
+done
+
 opts=(--force --sign "$SIGN_IDENTITY")
 if [[ "$SIGN_IDENTITY" != "-" ]]; then
   opts+=(--options runtime --timestamp)

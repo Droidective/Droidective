@@ -31,6 +31,7 @@ jobs:
         run: brew install xcodegen
       - name: Build app
         run: |
+          ./scripts/unpack-ffmpeg.sh
           xcodegen generate
           xcodebuild -project Droidective.xcodeproj -scheme App -configuration Debug -derivedDataPath DerivedData build CODE_SIGNING_ALLOWED=NO
       - name: Run App tests
@@ -126,8 +127,12 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
+          ./scripts/unpack-ffmpeg.sh
           xcodegen generate
+          # generic/platform=macOS builds every arch in ARCHS (universal);
+          # the default concrete-Mac destination builds arm64 only.
           xcodebuild -project Droidective.xcodeproj -scheme App -configuration Release \
+            -destination "generic/platform=macOS" \
             -derivedDataPath DerivedData build \
             MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
             SENTRY_DSN="$SENTRY_DSN" POSTHOG_KEY="$POSTHOG_KEY" \

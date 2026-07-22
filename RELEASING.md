@@ -1,10 +1,14 @@
 # Releasing Droidective
 
-Droidective ships as a Developer ID-signed, notarized DMG via GitHub Releases,
-and updates itself with
+Droidective ships as a Developer ID-signed, notarized, **universal** (Apple
+Silicon + Intel) DMG via GitHub Releases, and updates itself with
 [Sparkle](https://sparkle-project.org). The marketing site and the Sparkle
 appcast are both served from GitHub Pages at
 `https://droidective.com/`.
+
+`ARCHS` is pinned in `project.yml`, the bundled ffmpeg is lipo'd universal by
+`scripts/update-bundled-tools.sh`, and `scripts/package-dmg.sh` refuses to
+package an app whose main executable or ffmpeg is missing a slice.
 
 ## One-time setup
 
