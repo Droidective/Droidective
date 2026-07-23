@@ -238,7 +238,7 @@ struct TourView: View {
             HStack(spacing: 8) {
                 if index > 0 {
                     // On the try page this returns to the pick-hotkey page.
-                    Button("Back") { withAnimation { index -= 1 } }
+                    Button("Back") { withAnimation { index = TourPaging.back(from: index) } }
                 }
                 if isLast {
                     // Pressing the hotkey is the celebrated finish (confetti
@@ -249,7 +249,9 @@ struct TourView: View {
                 } else {
                     // The try page needs a hotkey to press, so the pick page
                     // holds the gate.
-                    Button("Next") { withAnimation { index += 1 } }
+                    Button("Next") {
+                        withAnimation { index = TourPaging.next(from: index, count: Self.pages.count) }
+                    }
                         .keyboardShortcut(.defaultAction)
                         .disabled(isHotkeyPage && quickActionsShortcut == nil)
                 }
