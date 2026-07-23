@@ -193,4 +193,34 @@ import Testing
         #expect(UpdatePolicy.migratedAutoDownload(oldAutomaticChecks: nil) == nil)
         #expect(UpdatePolicy.migratedAutoDownload(oldAutomaticChecks: true) == nil)
     }
+
+    // MARK: interrupted install
+
+    /// A declined quit keeps its relaunch handler — the pill must return to
+    /// the actionable "Relaunch to update", not spin on "Installing…".
+    @Test func declinedQuitReturnsToReadyToRelaunch() {
+        #expect(
+            UpdatePolicy.phaseAfterInterruptedInstall(canRelaunch: true, updateKnown: true)
+                == .readyToRelaunch)
+    }
+
+    /// An aborted session consumed every handler — fall back to "Update
+    /// available", whose click re-enters the updater and resumes the staged
+    /// install with a fresh reply.
+    @Test func abortedSessionFallsBackToAvailable() {
+        #expect(
+            UpdatePolicy.phaseAfterInterruptedInstall(canRelaunch: false, updateKnown: true)
+                == .available)
+    }
+
+    /// With no update in hand there is nothing to offer — hide the pill
+    /// rather than promise an install that can't happen.
+    @Test func interruptionWithoutAKnownUpdateHidesThePill() {
+        #expect(
+            UpdatePolicy.phaseAfterInterruptedInstall(canRelaunch: false, updateKnown: false)
+                == .idle)
+        #expect(
+            UpdatePolicy.phaseAfterInterruptedInstall(canRelaunch: true, updateKnown: false)
+                == .idle)
+    }
 }

@@ -122,4 +122,28 @@ public enum UpdatePolicy {
         guard let oldAutomaticChecks, !oldAutomaticChecks else { return nil }
         return false
     }
+
+    /// Where the pill lands after an install attempt stops with the app
+    /// still running — the quit was declined (a leave confirmation was
+    /// cancelled) or Sparkle abandoned the session. "Installing…" has no
+    /// affordance, so a phase that outlives its attempt pins the pill on an
+    /// indeterminate spinner forever.
+    public enum InterruptedInstallPhase: Equatable, Sendable {
+        /// A relaunch handler survives — the staged update installs on the
+        /// next click; offer "Relaunch to update" again.
+        case readyToRelaunch
+        /// Every handler is consumed but the update is known — offer "Update
+        /// available"; its click re-enters the updater, which resumes the
+        /// staged install with a fresh handler.
+        case available
+        /// No update in hand — hide the pill.
+        case idle
+    }
+
+    public static func phaseAfterInterruptedInstall(
+        canRelaunch: Bool, updateKnown: Bool
+    ) -> InterruptedInstallPhase {
+        guard updateKnown else { return .idle }
+        return canRelaunch ? .readyToRelaunch : .available
+    }
 }
