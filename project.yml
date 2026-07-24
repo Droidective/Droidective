@@ -161,6 +161,7 @@ targets:
       - App/Sources/State/LaunchPrompt.swift
       - App/Sources/Theme.swift
       - App/Sources/LogScrollGeometry.swift
+      - App/Sources/Root/PaneFreezePolicy.swift
       - App/Sources/FeatureDetail/Views/Mirror/MirrorTabPolicy.swift
       - App/Sources/FeatureDetail/Views/TourPaging.swift
       - App/Sources/FeatureDetail/Views/ConsoleLinkSpanMemo.swift

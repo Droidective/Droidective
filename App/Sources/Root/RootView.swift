@@ -109,6 +109,9 @@ struct RootView: View {
             .overlay(alignment: .topTrailing) { devMetricsOverlay }
             .modifier(PostTourCelebration(state: state))
             .modifier(WindowTranslucencyModifier(state: state))
+            .modifier(
+                ResizeActivityBridge(
+                    seamDragging: splitDragFraction != nil || sidebarDragWidth != nil))
             .environment(\.colorScheme, injectedColorScheme)
             .preferredColorScheme(preferredScheme)
             .background(WindowAccessor { window in
@@ -126,6 +129,7 @@ struct RootView: View {
                 }
                 window.setFrameAutosaveName(autosaveName)
                 WindowMinSizeGuard.shared.attach(to: window)
+                ResizeActivity.shared.track(window)
                 applyWindowTranslucency(window, opacity: windowOpacity, blurAmount: windowBlur)
             })
             .overlay {
@@ -637,14 +641,26 @@ private struct TerminalCloseConfirmation: ViewModifier {
 /// dragged across panes — switching within a pane is the keep-alive path.)
 struct TabHostView: View {
     @Environment(AppState.self) private var state
+    @Environment(ResizeActivity.self) private var resizeActivity: ResizeActivity?
     let group: Int
+    @State private var measured = PaneMeasure()
 
     var body: some View {
         let ids = state.openTabIDs(inGroup: group)
         let active = state.activeTab(inGroup: group)
+        let resizing = resizeActivity?.isActive == true
         ZStack {
             ForEach(ids, id: \.self) { id in
+                // Hidden tabs pin to the pane's resting size during a live
+                // resize: a constant proposal lets SwiftUI reuse the cached
+                // subtree layout, so a heavyweight offscreen tab (a Crash
+                // Catcher trace, a hub form) costs nothing per drag tick —
+                // re-wrapping one hidden multi-thousand-line trace per tick
+                // was a multi-second beachball (Sentry DROIDECTIVE-MAC-54).
+                let pinned = PaneFreezePolicy.pinnedSize(
+                    isActive: id == active, isResizing: resizing, resting: measured.settled)
                 FeatureDetailView(featureID: id)
+                    .frame(width: pinned?.width, height: pinned?.height)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .environment(\.tabFeatureID, id)
                     .environment(\.tabIsActive, id == active)
@@ -654,7 +670,29 @@ struct TabHostView: View {
                     .zIndex(id == active ? 1 : 0)
             }
         }
+        // Measure the flexible frame, not the ZStack: while a pinned tab
+        // overflows a shrinking pane, the ZStack reports the overflow size —
+        // the frame always reports the pane area itself.
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onGeometryChange(for: CGSize.self, of: { $0.size }) { size in
+            measured.latest = size
+            if resizeActivity?.isActive != true { measured.settled = size }
+        }
+        // Mid-resize sizes are deliberately not recorded above, so re-arm the
+        // resting size from the last measurement once the resize ends.
+        .onChange(of: resizing) { _, nowResizing in
+            if !nowResizing { measured.settled = measured.latest }
+        }
     }
+}
+
+/// Continuous pane-size measurements for `TabHostView` — a plain reference
+/// box (deliberately not observable) so per-pixel geometry updates don't
+/// re-render the host; `settled` is only read when the freeze engages.
+@MainActor
+private final class PaneMeasure {
+    var latest: CGSize = .zero
+    var settled: CGSize?
 }
 
 /// Accepts a tab dragged from a strip onto a pane (or the split-create zone).
