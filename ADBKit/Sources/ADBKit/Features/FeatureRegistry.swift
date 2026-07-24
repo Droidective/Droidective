@@ -235,6 +235,16 @@ public enum FeatureRegistry {
             category: .deviceState, icon: "lock.open", kind: .view
         ),
         FeatureDef(
+            id: "dev-settings", title: "Developer Settings",
+            subtitle: "Layout bounds, overdraw, taps, animation scales & more",
+            keywords: [
+                "developer", "options", "dev settings", "layout bounds", "overdraw",
+                "gpu", "profile", "taps", "touches", "pointer", "strict mode",
+                "don't keep activities", "animation scale", "debug",
+            ],
+            category: .deviceState, icon: "wrench.and.screwdriver", kind: .view
+        ),
+        FeatureDef(
             id: "simulate", title: "Simulate",
             subtitle: "Fake battery, appearance, locale, network & proxy",
             keywords: [
@@ -632,6 +642,7 @@ public enum FeatureRegistry {
             "device-info", "apps", "install-app", "apk-studio", "aab-convert",
             "file-explorer", "sandbox-browser", "meminfo",
             "current-activity", "foreground-package",
+            "dev-settings",
             "scrcpy", "screenshot", "send-text", "monkey",
             "emulators", "connection",
             "terminal", "custom-commands",

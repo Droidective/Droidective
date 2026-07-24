@@ -92,13 +92,11 @@ struct EmulatorsView: View {
             .translucentListBackground()
         }
         .confirmationDialog(
-            "Wipe all data on \(wipeTarget?.displayName ?? "")? Apps, accounts, and settings on the AVD are erased.",
+            "Wipe all data on \(wipeTarget?.displayName ?? "")? Apps, accounts, settings, and snapshots on the AVD are erased.",
             isPresented: Binding(get: { wipeTarget != nil }, set: { if !$0 { wipeTarget = nil } })
         ) {
-            Button("Wipe & Launch", role: .destructive) {
-                if let avd = wipeTarget {
-                    launch(avd, options: EmulatorService.LaunchOptions(wipeData: true))
-                }
+            Button("Wipe Data", role: .destructive) {
+                if let avd = wipeTarget { wipe(avd) }
                 wipeTarget = nil
             }
             Button("Cancel", role: .cancel) { wipeTarget = nil }
@@ -159,6 +157,11 @@ struct EmulatorsView: View {
             Spacer()
 
             if let serial = avd.runningSerial {
+                Button("Relaunch") {
+                    relaunch(avd, serial: serial)
+                }
+                .controlSize(.small)
+                .help("Stop the emulator and boot it again")
                 Button("Stop") {
                     stop(serial: serial, name: avd.displayName)
                 }
@@ -173,7 +176,7 @@ struct EmulatorsView: View {
                     Button("Cold Boot (skip snapshot)") {
                         launch(avd, options: EmulatorService.LaunchOptions(coldBoot: true))
                     }
-                    Button("Wipe Data & Launch…", role: .destructive) {
+                    Button("Wipe Data…", role: .destructive) {
                         wipeTarget = avd
                     }
                 } label: {
@@ -301,6 +304,31 @@ struct EmulatorsView: View {
                 return
             }
             try? await Task.sleep(for: .seconds(1))
+        }
+    }
+
+    /// Wipe a stopped AVD's data in place — no launch. The row's Launch
+    /// button is unchanged, so wiping and starting stay separate choices.
+    private func wipe(_ avd: Avd) {
+        Task {
+            let result = await state.env.engine.emulators.wipeData(avd: avd.name)
+            state.showToast(Toast(message: result.message, ok: result.ok))
+        }
+    }
+
+    /// Stop the running emulator, wait for its console port to free (so the
+    /// relaunch can't come up as a second serial), then boot the same AVD.
+    private func relaunch(_ avd: Avd, serial: String) {
+        Task {
+            await CommandLog.userInitiated {
+                _ = try? await state.env.engine.emulators.stop(serial: serial)
+            }
+            for _ in 0..<20 {
+                if await state.env.engine.emulators.consolePID(serial: serial) == nil { break }
+                try? await Task.sleep(for: .seconds(1))
+            }
+            state.refreshDevices()
+            launch(avd, options: EmulatorService.LaunchOptions())
         }
     }
 

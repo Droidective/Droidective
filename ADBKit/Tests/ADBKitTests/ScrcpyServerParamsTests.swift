@@ -59,6 +59,22 @@ import Testing
         #expect(!params.parameters().contains("audio=false"))
     }
 
+    @Test func showTouchesEmitsOnlyWhenOn() {
+        // Off is the server default — nothing emitted; on asks the server to
+        // enable "Show taps" for the session (restored by its CleanUp).
+        #expect(!ScrcpyServerParams(scid: 0x1).parameters()
+            .contains { $0.hasPrefix("show_touches=") })
+        let params = ScrcpyServerParams(scid: 0x1, control: true, maxSize: 1280, showTouches: true)
+        #expect(params.parameters() == [
+            "scid=00000001",
+            "log_level=info",
+            "audio=false",
+            "max_size=1280",
+            "tunnel_forward=true",
+            "show_touches=true",
+        ])
+    }
+
     @Test func shellArgumentsRunTheServerJar() {
         #expect(ScrcpyServerParams(scid: 0x1a2b_3c4d)
             .shellArguments(serverVersion: "4.0", remoteJarPath: "/data/local/tmp/scrcpy-server.jar") == [

@@ -72,6 +72,10 @@ final class MirrorViewModel {
     /// emulators) — scrcpy aborts the whole session, video included, when its
     /// audio encoder can't start. See `MirrorAudioFallback`.
     private var requestAudio: Bool
+    /// Whether the device draws its "Show taps" dot while mirrored — applied
+    /// as the scrcpy `show_touches` start option on every (re)connect, and as
+    /// a live settings write (`ShowTouches`) for mid-session flips.
+    private var requestShowTouches: Bool
     /// Set once video frames begin flowing; gates the video-only fallback so a
     /// session that streamed and later stopped isn't silently restarted.
     private var didStream = false
@@ -81,11 +85,12 @@ final class MirrorViewModel {
     /// stop, each burning ~a core until quit (Sentry DROIDECTIVE-MAC-2K).
     private var stopped = false
 
-    init(adb: AdbClient, locator: ToolLocator, serial: String, includeAudio: Bool) {
+    init(adb: AdbClient, locator: ToolLocator, serial: String, includeAudio: Bool, showTouches: Bool) {
         self.adb = adb
         self.locator = locator
         self.serial = serial
         requestAudio = includeAudio
+        requestShowTouches = showTouches
     }
 
     func start() async {
@@ -109,9 +114,15 @@ final class MirrorViewModel {
         // control-bar toggle). Cap the size for smooth, low-latency display.
         // Recording never taps this stream — it runs its own scrcpy session
         // (see `screenRecorder`) so it starts on a fresh key frame.
+        // Show touches goes through the scrcpy start option only: the server
+        // snapshots the device's own value before enabling it, and its CleanUp
+        // restores that value when the session dies. A settings write here
+        // would poison that snapshot and leave the dot stuck on after the
+        // session — live writes are for mid-session flips (`setShowTouches`).
         let params = ScrcpyServerParams(
             scid: UInt32.random(in: 1 ... 0x7fff_ffff),
-            audio: requestAudio, control: true, maxSize: 1280)
+            audio: requestAudio, control: true, maxSize: 1280,
+            showTouches: requestShowTouches)
         let config = MirrorTransport.Configuration(
             serial: serial, params: params,
             serverVersion: server.version, localJarPath: server.jarPath)
@@ -225,6 +236,15 @@ final class MirrorViewModel {
         requestAudio = include
         await teardown()
         await start()
+    }
+
+    /// Show or hide the device's "Show taps" dot — a live settings write, so
+    /// it takes effect immediately without touching the session (recording
+    /// included; flipping it on mid-recording is the point).
+    func setShowTouches(_ show: Bool) async {
+        guard !stopped, requestShowTouches != show else { return }
+        requestShowTouches = show
+        try? await ShowTouches(client: adb).set(show, serial: serial)
     }
 
     private func teardown() async {

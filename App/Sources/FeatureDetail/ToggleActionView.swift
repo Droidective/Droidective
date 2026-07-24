@@ -52,16 +52,26 @@ struct OverrideToggleControl<Label: View>: View {
 /// clicked a row's text or empty space and saw the switch flip.
 struct SwitchRow: View {
     let title: String
+    /// One muted line under the title — what the switch does on the device.
+    let subtitle: String?
     @Binding var isOn: Bool
 
-    init(_ title: String, isOn: Binding<Bool>) {
+    init(_ title: String, subtitle: String? = nil, isOn: Binding<Bool>) {
         self.title = title
+        self.subtitle = subtitle
         self._isOn = isOn
     }
 
     var body: some View {
         HStack {
-            Text(title)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.app(.footnote))
+                        .foregroundStyle(.textMuted)
+                }
+            }
             Spacer(minLength: 12)
             Toggle("", isOn: $isOn)
                 .labelsHidden()
