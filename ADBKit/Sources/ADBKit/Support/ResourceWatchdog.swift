@@ -94,10 +94,12 @@ public struct ResourceWatchdog: Sendable {
     /// Feed the next sample; returns the threshold events it triggered.
     ///
     /// `cpuLimitOverride` replaces the configured CPU limit for this sample only.
-    /// The App layer raises it (to `.infinity`) while a feature that legitimately
-    /// pegs the CPU is on screen — live screen mirroring and recording decode
-    /// H.264 in-process, so ~two busy cores is expected there, not an incident.
-    /// Memory is always judged against the configured limit.
+    /// The App layer raises it while a feature that legitimately pegs the CPU is
+    /// on screen — live screen mirroring and recording decode H.264 in-process,
+    /// so ~two busy cores is expected there, not an incident. Raised, never
+    /// waived: an unbounded override hid a real mirror-session leak from
+    /// telemetry for hours. Memory is always judged against the configured
+    /// limit.
     public mutating func ingest(
         _ sample: ResourceSample, cpuLimitOverride: Double? = nil
     ) -> [ResourceEvent] {

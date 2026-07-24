@@ -134,6 +134,25 @@ import Testing
             cpuLimitOverride: .infinity)
         #expect(events == [.began(metric: .memory, value: 1_500 * mb, limit: 1_000 * mb)])
     }
+
+    @Test func finiteCpuOverrideStillFiresPastTheRaisedLimit() {
+        // The mirror override is a *raised* limit, not a pass: a leak burning
+        // ~five cores with a mirror tab open must still report. An unbounded
+        // override is what kept the v3.1.0 mirror-session leak (hours at
+        // 250%+) invisible to telemetry.
+        var dog = ResourceWatchdog(limits: .init(cpuPercent: 200, sustainedSamples: 1))
+        _ = dog.ingest(cpuSample(at: 0, cpuTime: 0))
+        #expect(dog.ingest(cpuSample(at: 5, cpuTime: 25), cpuLimitOverride: 450)
+            == [.began(metric: .cpu, value: 500, limit: 450)])
+    }
+
+    @Test func finiteCpuOverrideStillCoversExpectedHeavyLoad() {
+        // Healthy mirroring (~three busy cores) stays inside the raised
+        // limit — expected load must not become incident noise.
+        var dog = ResourceWatchdog(limits: .init(cpuPercent: 200, sustainedSamples: 1))
+        _ = dog.ingest(cpuSample(at: 0, cpuTime: 0))
+        #expect(dog.ingest(cpuSample(at: 5, cpuTime: 15), cpuLimitOverride: 450).isEmpty)
+    }
 }
 
 @Suite struct ProcessStatsTests {

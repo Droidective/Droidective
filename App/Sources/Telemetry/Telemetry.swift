@@ -1,4 +1,5 @@
 import ADBKit
+import AppKit
 import Foundation
 import PostHog
 import Sentry
@@ -58,6 +59,85 @@ final class Telemetry {
     func start() {
         if crashReportingEnabled { startSentry() }
         if analyticsEnabled { startAnalytics() }
+        trackAppActivity()
+    }
+
+    /// Keep an `app_active` flag on every event from both sinks. Hangs and
+    /// perf incidents that fire while the user is in another app are a
+    /// different bug class (work running behind the user's back) than ones
+    /// mid-interaction — this one flag separates them at a glance, where
+    /// before it took manually correlating event sequences.
+    private func trackAppActivity() {
+        let update: @MainActor (Bool) -> Void = { [weak self] active in
+            guard let self else { return }
+            if self.crashReportingEnabled, self.sentryRunning {
+                SentrySDK.configureScope { $0.setTag(value: active ? "true" : "false", key: "app_active") }
+            }
+            if self.analyticsEnabled, self.postHogReady {
+                PostHogSDK.shared.register(["app_active": active])
+            }
+        }
+        update(NSApp.isActive)
+        for (name, active) in [
+            (NSApplication.didBecomeActiveNotification, true),
+            (NSApplication.didResignActiveNotification, false),
+        ] {
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { _ in
+                // The observer queue is main; hop is compile-time ceremony.
+                MainActor.assumeIsolated { update(active) }
+            }
+        }
+    }
+
+    // MARK: - Diagnostic context
+
+    /// PostHog super-property names registered per diagnostic key, so clearing
+    /// a context unregisters exactly what it registered.
+    private var diagnosticKeys: [String: [String]] = [:]
+
+    /// Attach always-on diagnostic state that rides every *subsequent* event
+    /// on both sinks — a Sentry context block and prefixed PostHog
+    /// super-properties. Costs no extra event volume: the values only ship
+    /// attached to events that were being sent anyway (hangs, crashes, perf
+    /// incidents), which is what makes root causes readable from a single
+    /// event on the free plans. Pass nil to clear. Callers should publish on
+    /// state *changes*, not on a hot path — every call crosses both SDKs.
+    func setDiagnosticContext(_ key: String, _ values: [String: Any]?) {
+        if crashReportingEnabled, sentryRunning {
+            SentrySDK.configureScope { scope in
+                if let values {
+                    scope.setContext(value: values, key: key)
+                } else {
+                    scope.removeContext(key: key)
+                }
+            }
+        }
+        if let values {
+            guard analyticsEnabled, postHogReady else { return }
+            var flat: [String: Any] = [:]
+            for (name, value) in values { flat["\(key)_\(name)"] = value }
+            diagnosticKeys[key] = Array(flat.keys)
+            PostHogSDK.shared.register(flat)
+        } else if postHogReady {
+            // Clearing is deliberately not gated on the consent toggle:
+            // super-properties persist in the SDK across opt-out/opt-in, so
+            // a clear that lands while opted out must still unregister —
+            // otherwise a re-opt-in resurrects a dead session's context on
+            // every event.
+            for name in diagnosticKeys.removeValue(forKey: key) ?? [] {
+                PostHogSDK.shared.unregister(name)
+            }
+        }
+    }
+
+    /// A Sentry breadcrumb — free until an event ships, then it's the
+    /// timeline explaining that event. For state transitions worth seeing
+    /// leading up to a hang or crash (session connects, bursts, teardowns).
+    func breadcrumb(category: String, _ message: String) {
+        guard crashReportingEnabled, sentryRunning else { return }
+        let crumb = Breadcrumb(level: .info, category: category)
+        crumb.message = message
+        SentrySDK.addBreadcrumb(crumb)
     }
 
     func setCrashReporting(_ enabled: Bool) {
