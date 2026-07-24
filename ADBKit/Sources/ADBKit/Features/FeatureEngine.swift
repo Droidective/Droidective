@@ -66,6 +66,7 @@ public struct FeatureEngine: Sendable {
     public let systemApps: SystemAppsService
     public let dns: DnsService
     public let restrictions: RestrictionsService
+    public let developerSettings: DeveloperSettingsService
     public let simulators: SimulatorService
     let textInput: TextInputService
     let screenCapture: ScreenCaptureService
@@ -107,6 +108,7 @@ public struct FeatureEngine: Sendable {
         self.systemApps = SystemAppsService(client: client)
         self.dns = DnsService(client: client)
         self.restrictions = RestrictionsService(client: client)
+        self.developerSettings = DeveloperSettingsService(client: client)
         self.textInput = TextInputService(client: client)
         self.screenCapture = ScreenCaptureService(client: client)
     }
@@ -127,7 +129,7 @@ public struct FeatureEngine: Sendable {
         "file-explorer", "apps", "apk-studio", "apk-inspector", "apk-sign", "apk-decompile", "aab-convert",
         "frida-console",
         "emulators", "performance", "network-speed",
-        "root-status", "wifi", "private-dns", "system-restrictions",
+        "root-status", "wifi", "private-dns", "system-restrictions", "dev-settings",
         "reactotron", "js-console",
     ]
 

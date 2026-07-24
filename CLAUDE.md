@@ -55,7 +55,7 @@ opening it — verify those by hand.
 
 1. **Define it** — add a `FeatureDef` to `FeatureRegistry.all` (unique `id`,
    title, keywords, category, `kind`; set `platforms` if it works on iOS
-   Simulators — the default is Android-only). **[test: `hasAll58Features` —
+   Simulators — the default is Android-only). **[test: `hasAll59Features` —
    bump the count; `byID` traps on a duplicate id]**
 2. **If it's an action** (`.instantAction`/`.formAction`/`.toggleAction`):
    - add the runner `case` to `FeatureEngine.dispatch`,
@@ -134,7 +134,7 @@ Node 22 in CI; scroll reveals and the hero palette demo must keep their
   twins — booted iOS Simulators surface as `Device`s with
   `platform: .iosSimulator`, merged into the bar in `AppState`), `DeviceProps` (getprop), `DeviceOverview` (RAM/storage/
   battery/CPU/app counts), `DeviceDetails` (picker enrichment).
-- `Features/`: `FeatureRegistry` (58 `FeatureDef`s, declarative; `absorbedByHub`
+- `Features/`: `FeatureRegistry` (59 `FeatureDef`s, declarative; `absorbedByHub`
   maps a hub screen to the features it gathers, flattened to
   `absorbedFeatureIDs`; `catalogFeatureIDs` is the registry minus those),
   `FeatureModel`,
@@ -234,7 +234,7 @@ Node 22 in CI; scroll reveals and the hero palette demo must keep their
   tab/window close; it never restarts a relay the user stopped (status
   goes amber, ghost clients cleared via `noteRelayStopped`).
 
-## The 58 features
+## The 59 features
 
 Most `.view` features are full-screen bespoke panels (file-explorer, apps,
 emulators, device-info, logcat, ios-logs — the simulator unified-log twin (`SimulatorLogStreamer` over `simctl spawn <udid> log stream --style ndjson`, iOS-only, standalone), crash-catcher, sandbox-browser, performance,
@@ -266,7 +266,7 @@ Apps hub. They stay hotkey-able (every feature registers a shortcut; the Hotkeys
 tab lists bound members under "Hidden features"). This is a pure display filter —
 no persisted migration — so it also covers a hub that grows later. The rest are generic instant-/form-/toggle-actions
 driven by the registry. The catalog and Home's "All N features" count use
-`catalogFeatureIDs` (36). **Every feature is enabled by default**
+`catalogFeatureIDs` (37). **Every feature is enabled by default**
 (`defaultEnabledIDs == catalogFeatureIDs`); the catalog (Manage features) is for
 turning OFF the ones you don't want, not opting in — there's no Restore button.
 `LayoutState.adoptAllEnabled()` is a one-time migration that turns everything on

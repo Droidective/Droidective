@@ -79,6 +79,8 @@ struct FeatureDetailView: View {
                 PrivateDnsView()
             case "system-restrictions":
                 SystemRestrictionsView()
+            case "dev-settings":
+                DeveloperSettingsView()
             case "screen-record":
                 ScreenRecordView()
             case "video-editor":
