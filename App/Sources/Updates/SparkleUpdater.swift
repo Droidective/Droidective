@@ -198,6 +198,35 @@ final class UpdaterViewModel: NSObject, ObservableObject {
     /// (dirty-state confirmations); the pill retries through it.
     private var retryTerminate: (() -> Void)?
 
+    /// The app declined the quit an install requested (a leave confirmation
+    /// was cancelled — `AppState.cancelDeferredQuit`). Without this,
+    /// "Installing…" outlives the attempt and the pill spins forever on a
+    /// phase whose only exit was the quit that just got cancelled.
+    func noteQuitDeclined() {
+        resolveInterruptedInstall()
+    }
+
+    /// Map a dead `.installing` back to an actionable pill. With a handler
+    /// still in hand the staged update relaunches on click; with all of them
+    /// consumed, "Update available" re-enters the updater, whose re-check
+    /// resumes the staged install with a fresh reply.
+    private func resolveInterruptedInstall() {
+        guard case .installing = phase else { return }
+        let canRelaunch = retryTerminate != nil || immediateInstall != nil || heldReply != nil
+        switch UpdatePolicy.phaseAfterInterruptedInstall(
+            canRelaunch: canRelaunch, updateKnown: currentInfo != nil
+        ) {
+        case .readyToRelaunch:
+            guard let currentInfo else { return phase = .idle }
+            phase = .readyToRelaunch(currentInfo)
+        case .available:
+            guard let currentInfo else { return phase = .idle }
+            phase = .available(currentInfo)
+        case .idle:
+            phase = .idle
+        }
+    }
+
     // MARK: - Settings bindings
 
     /// Settings toggles bind to these computed properties, whose truth lives
@@ -493,7 +522,13 @@ extension UpdaterViewModel: SPUUserDriver {
         switch phase {
         case .checking, .downloading:
             phase = .idle
-        case .idle, .upToDate, .available, .readyToRelaunch, .installing:
+        case .installing:
+            // An abort with the app still alive (installer error, superseded
+            // session) — on the successful hand-off the app is quitting and
+            // nobody sees the pill change. Left as-is, "Installing…" spins
+            // forever with every handler cleared and clicks doing nothing.
+            resolveInterruptedInstall()
+        case .idle, .upToDate, .available, .readyToRelaunch:
             break
         }
     }

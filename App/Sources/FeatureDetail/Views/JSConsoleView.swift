@@ -135,10 +135,12 @@ final class JSConsoleSession {
     /// when `newestFirst` is on.
     // The 128 MB byte budget (Reactotron's figure) matters as much as the
     // count cap: 2000 entries each holding a multi-megabyte logged string
-    // would otherwise retain gigabytes.
+    // would otherwise retain gigabytes. Shared with the pending early-flush
+    // bound so the two can't drift apart when retuned.
+    private static let bufferByteBudget = 128 << 20
     private var buffer = FilteredLogBuffer<JSEntry>(
         capacity: JSConsoleSession.maxEntries,
-        byteBudget: 128 << 20,
+        byteBudget: JSConsoleSession.bufferByteBudget,
         cost: { $0.approximateBytes }
     )
     var filteredEntries: [JSEntry] { buffer.filtered }
@@ -352,6 +354,7 @@ final class JSConsoleSession {
                     }
                 }
             }
+            publishDiagnostics()
             try? await Task.sleep(for: .seconds(2))
         }
         // Tear down only if a newer activation hasn't taken over (rapid
@@ -364,6 +367,60 @@ final class JSConsoleSession {
         await cdp.disconnect()
         connectedTarget = nil
         phase = .searching
+        // Session over — a later hang must not read as "the console did it".
+        Telemetry.shared.setDiagnosticContext("js_console", nil)
+        Telemetry.shared.breadcrumb(category: "js-console", "session stopped")
+        publishedDiagnostics = nil
+    }
+
+    // MARK: Diagnostics
+
+    /// The last stream shape shipped to telemetry, so re-publishing only
+    /// happens on change (each publish crosses both SDKs).
+    private struct StreamDiagnostics: Equatable {
+        var connected: Bool
+        /// Buffered entries, rounded to hundreds — precision isn't the point.
+        var bufferedEntries: Int
+        /// Ingest rate over the last pass, bucketed to its decade so a noisy
+        /// stream doesn't re-publish every 2 s.
+        var ingestPerMinute: Int
+    }
+
+    @ObservationIgnored private var publishedDiagnostics: StreamDiagnostics?
+    @ObservationIgnored private var lastRateCount = 0
+    @ObservationIgnored private var lastRateTime = ContinuousClock.now
+
+    /// Ship the stream's shape as always-on diagnostic context (a Sentry
+    /// context + PostHog super-properties), so any hang/crash/perf event that
+    /// fires carries "what the console was doing" — the missing fact when
+    /// diagnosing the 3.7.0 hang burst from telemetry alone. Runs on the 2 s
+    /// discovery pass; publishes only when a bucketed value changes.
+    private func publishDiagnostics() {
+        let now = ContinuousClock.now
+        let elapsed = lastRateTime.duration(to: now)
+        let seconds = max(0.001, Double(elapsed.components.seconds)
+            + Double(elapsed.components.attoseconds) * 1e-18)
+        let perMinute = Double(receivedCount - lastRateCount) / seconds * 60
+        lastRateCount = receivedCount
+        lastRateTime = now
+        let snapshot = StreamDiagnostics(
+            connected: isConnected,
+            bufferedEntries: (buffer.entries.count / 100) * 100,
+            ingestPerMinute: ConsoleRateBucket.decade(perMinute)
+        )
+        guard snapshot != publishedDiagnostics else { return }
+        if ConsoleRateBucket.isBurst(
+            from: publishedDiagnostics?.ingestPerMinute, to: snapshot.ingestPerMinute
+        ) {
+            Telemetry.shared.breadcrumb(
+                category: "js-console", "stream burst: ~\(snapshot.ingestPerMinute)/min")
+        }
+        publishedDiagnostics = snapshot
+        Telemetry.shared.setDiagnosticContext("js_console", [
+            "connected": snapshot.connected,
+            "buffered_entries": snapshot.bufferedEntries,
+            "ingest_per_min": snapshot.ingestPerMinute,
+        ])
     }
 
     func updateSerials(_ serials: [String]) {
@@ -436,6 +493,9 @@ final class JSConsoleSession {
             phase = .connected
             receivedCount = 0
             replayGate.connectionOpened(resumingSameApp: resumingSameApp)
+            // No target identity in the crumb — bundle ids stay out of
+            // telemetry (the Settings ▸ Privacy promise).
+            Telemetry.shared.breadcrumb(category: "js-console", "connected to a Hermes target")
             consumeTask = Task { [weak self] in
                 for await event in stream {
                     if Task.isCancelled { break }
@@ -485,6 +545,8 @@ final class JSConsoleSession {
             welcomeTask?.cancel()
             welcomeTask = nil
             connectedTarget = nil
+            Telemetry.shared.breadcrumb(
+                category: "js-console", takeover ? "closed: debugger takeover" : "connection closed")
             if takeover {
                 autoReconnectSuspended = true
                 phase = .targetsAvailable
@@ -838,16 +900,41 @@ final class JSConsoleSession {
     /// and flushed together so a thousand-message burst causes a handful of renders,
     /// not one per message (the fix for the multi-second open stall).
     private func enqueue(_ kind: JSEntry.Kind) {
-        pendingEntries.append(JSEntry(id: nextEntryId, kind: kind, at: Date()))
+        let entry = JSEntry(id: nextEntryId, kind: kind, at: Date())
+        pendingEntries.append(entry)
+        pendingBytes += entry.approximateBytes
         nextEntryId += 1
         receivedCount += 1
-        scheduleFlush()
+        // A burst of huge payloads must not sit unrendered for a whole flush
+        // window — flush early once pending holds a quarter of the buffer's
+        // byte budget, so pending memory stays bounded at any cadence.
+        if pendingBytes >= Self.bufferByteBudget / 4 {
+            flushPending()
+        } else {
+            scheduleFlush()
+        }
+    }
+
+    /// Bytes waiting in `pendingEntries`, for the early-flush bound.
+    @ObservationIgnored private var pendingBytes = 0
+
+    /// Flush pacing: each flush re-diffs the whole visible feed (a 2000-row
+    /// ForEach), so the old 16 ms cadence meant up to 60 full diffs a second
+    /// under a chatty Metro stream — the sustained main-thread churn behind
+    /// the js-console hang cluster (Sentry DROIDECTIVE-MAC-2N and the 3.7.0
+    /// hang burst; logcat shipped the same 300 ms fix in v3.6.1). Entries
+    /// keep accumulating between flushes; only rendering is paced. While the
+    /// app is inactive nobody is reading in real time, so the feed coasts at
+    /// 1 s — streaming with the window unfocused used to burn CPU for hours.
+    private var flushInterval: Duration {
+        NSApp.isActive ? .milliseconds(250) : .seconds(1)
     }
 
     private func scheduleFlush() {
         guard flushTask == nil else { return }
+        let interval = flushInterval
         flushTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(16))
+            try? await Task.sleep(for: interval)
             guard let self, !Task.isCancelled else { return }
             self.flushPending()
         }
@@ -859,6 +946,7 @@ final class JSConsoleSession {
         guard !pendingEntries.isEmpty else { return }
         let batch = pendingEntries
         pendingEntries.removeAll(keepingCapacity: true)
+        pendingBytes = 0
         PerfLog.measure(PerfLog.console, "flush \(batch.count) entries into \(buffer.filtered.count)") {
             appendEntries(batch)
         }
@@ -881,6 +969,7 @@ final class JSConsoleSession {
         flushTask?.cancel()
         flushTask = nil
         pendingEntries.removeAll(keepingCapacity: true)
+        pendingBytes = 0
         buffer.removeAll()
         findMatchIDs = []
     }
@@ -2269,6 +2358,7 @@ extension EnvironmentValues {
 
 /// Syntax-colored `Text` for a value's tokens, with find matches highlighted
 /// and http(s) URLs linkified. Bounded to `jsDisplayCharacterLimit` characters.
+@MainActor
 func coloredTokenText(_ tokens: [JSToken], query: String, current: Bool, underlineLinks: Bool = false) -> Text {
     var attr = AttributedString()
     var remaining = jsDisplayCharacterLimit
@@ -2297,6 +2387,7 @@ func coloredTokenText(_ tokens: [JSToken], query: String, current: Bool, underli
 /// A single-color `Text` (input/notice/error lines) with find matches
 /// highlighted and http(s) URLs linkified. Bounded to
 /// `jsDisplayCharacterLimit` characters.
+@MainActor
 func highlightedText(
     _ string: String, query: String, base: Color, current: Bool = false, underlineLinks: Bool = false
 ) -> Text {
@@ -2318,10 +2409,12 @@ func highlightedText(
 /// browser. Detection — including the explicit-scheme guard and the
 /// UTF-16 → Character offset mapping — is `ConsoleLinkDetector` (pure, tested
 /// in ADBKit); this only applies the SwiftUI attributes at the returned
-/// offsets.
+/// offsets, and reads detection through `ConsoleLinkSpanMemo` so a row's
+/// re-renders don't re-run `NSDataDetector` on unchanged text.
+@MainActor
 func applyLinkAttributes(_ attr: inout AttributedString, underlined: Bool) {
     let plain = String(attr.characters)
-    for span in ConsoleLinkDetector.linkSpans(in: plain) {
+    for span in ConsoleLinkSpanMemo.spans(in: plain) {
         let lower = attr.index(attr.startIndex, offsetByCharacters: span.start)
         let upper = attr.index(lower, offsetByCharacters: span.count)
         attr[lower ..< upper].link = span.url
