@@ -521,7 +521,9 @@ struct TerminalView: View {
         }
     }
 
-    /// The thin strip the rail collapses to: expand + new-shell, nothing else.
+    /// The thin strip the rail collapses to: expand + new-shell on top, then
+    /// one two-letter badge per open shell so the tabs stay reachable —
+    /// hover for the full name, click to switch.
     private var collapsedRail: some View {
         VStack(spacing: 6) {
             railButton("sidebar.left", help: "Show the terminal list") {
@@ -530,11 +532,39 @@ struct TerminalView: View {
             railButton("plus", help: "New terminal") {
                 terminals.newTab()
             }
-            Spacer()
+
+            Divider().padding(.horizontal, 6)
+
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 4) {
+                    ForEach(terminals.tabs) { tab in
+                        collapsedTabBadge(tab)
+                    }
+                }
+                .padding(.bottom, 6)
+            }
         }
         .padding(.vertical, 6)
         .frame(width: 32)
         .background(.bgSurface)
+    }
+
+    /// A collapsed tab's stand-in: the first two letters of its name.
+    private func collapsedTabBadge(_ tab: TerminalManager.Tab) -> some View {
+        let isActive = tab.id == terminals.activeID
+        return Text(TerminalText.railBadge(for: tab.name))
+            .font(.app(.caption).weight(.semibold))
+            .lineLimit(1)
+            .foregroundStyle(isActive ? AnyShapeStyle(.brandAccent) : AnyShapeStyle(.textMuted))
+            .frame(width: 26, height: 26)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(isActive ? AnyShapeStyle(.brandAccent.opacity(0.14)) : AnyShapeStyle(.clear))
+            )
+            .contentShape(Rectangle())
+            .onTapGesture { terminals.activeID = tab.id }
+            .contextMenu { tabMenu(tab) }
+            .help(tab.name)
     }
 
     private var expandedRail: some View {
@@ -961,7 +991,8 @@ private struct TerminalSplitNodeView: View {
                 NativeTerminalView(
                     session: session,
                     serial: serial,
-                    isActive: isActiveTab && paneID == tab.activePaneID
+                    isActive: isActiveTab && paneID == tab.activePaneID,
+                    isVisibleTab: isActiveTab
                 )
                 // In a split, the shell sits inside a small gutter so the
                 // focus ring never draws over the first/last row of text.

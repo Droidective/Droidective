@@ -52,6 +52,52 @@ final class DroidTerminalView: LocalProcessTerminalView {
     /// Fired on every frame change; the session debounces it into a prompt
     /// repaint nudge once the layout settles.
     var onFrameChanged: (() -> Void)?
+    /// Asks the manager to make this pane the active one — fired when a file
+    /// drop lands here, so ⌘W / splits / new-tab inheritance follow the shell
+    /// the user just dropped into.
+    var onDropFocus: (() -> Void)?
+
+    // MARK: - File drops
+
+    private var acceptsFileDrops = false
+
+    /// Only the visible tab's shells accept file drags. Every open tab stays
+    /// mounted behind an `opacity(0)` keep-alive, and AppKit routes a drag to
+    /// the deepest *registered* view under the cursor regardless of SwiftUI
+    /// hit-testing — a hidden shell registered for file URLs would swallow
+    /// the drop meant for the one on screen. Registering only `.fileURL`
+    /// keeps the in-app tab drags (private UTIs) flowing past to their own
+    /// targets.
+    func setAcceptsFileDrops(_ accepts: Bool) {
+        guard accepts != acceptsFileDrops else { return }
+        acceptsFileDrops = accepts
+        if accepts {
+            registerForDraggedTypes([.fileURL])
+        } else {
+            unregisterDraggedTypes()
+        }
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        droppedFileURLs(sender).isEmpty ? [] : .copy
+    }
+
+    /// Dropping files types their paths into the shell (quoted only when
+    /// needed, trailing space — like Terminal.app), and focuses this pane.
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        let paths = droppedFileURLs(sender).map(\.path)
+        guard !paths.isEmpty else { return false }
+        onDropFocus?()
+        window?.makeFirstResponder(self)
+        send(txt: TerminalText.droppedPathsInsertion(paths))
+        return true
+    }
+
+    private func droppedFileURLs(_ info: NSDraggingInfo) -> [URL] {
+        info.draggingPasteboard.readObjects(
+            forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]
+        ) as? [URL] ?? []
+    }
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
@@ -276,6 +322,8 @@ final class TerminalSession {
         view.processDelegate = self
         view.onMenuAction = { [weak self] action in self?.onMenuAction?(action) }
         view.isInSplit = { [weak self] in self?.isInSplit?() ?? false }
+        // A file drop focuses the pane it landed in, same as a click.
+        view.onDropFocus = { [weak self] in self?.onFocus?() }
         // Any frame change (split, pane close, window resize) can leave the
         // shell's prompt drawn for the old width — nudge a redisplay once the
         // layout stops moving.
@@ -456,6 +504,10 @@ struct NativeTerminalView: NSViewRepresentable {
     let serial: String?
     /// Whether this session's pane is the focused one in the terminal strip.
     let isActive: Bool
+    /// Whether this pane's tab is the one on screen — gates file-drop
+    /// registration so hidden keep-alive tabs can't capture drags (see
+    /// `DroidTerminalView.setAcceptsFileDrops`).
+    let isVisibleTab: Bool
     @Environment(\.windowOpacity) private var windowOpacity
 
     /// Remembers the last activation state so focus is grabbed only on the
@@ -481,6 +533,7 @@ struct NativeTerminalView: NSViewRepresentable {
         let terminal = session.view(serial: serial)
         (terminal as? DroidTerminalView)?
             .applyBackgroundAlpha(WindowEffects.clamped(windowOpacity))
+        (terminal as? DroidTerminalView)?.setAcceptsFileDrops(isVisibleTab)
         // Re-set on every update, not just on make: SwiftUI may reuse this
         // container for a different session, and a click must focus the shell
         // that lives here now, not the one mounted first.
