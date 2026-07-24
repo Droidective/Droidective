@@ -46,7 +46,7 @@ struct DeveloperSettingsView: View {
             }
 
             HubSection("Drawing") {
-                toggleRows(ids: ["layout-bounds", "gpu-overdraw", "gpu-profile", "force-rtl"])
+                toggleRows(ids: ["layout-bounds", "gpu-overdraw", "gpu-profile"])
             }
 
             HubSection("Animations") {

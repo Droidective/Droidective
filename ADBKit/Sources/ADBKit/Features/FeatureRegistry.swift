@@ -239,7 +239,7 @@ public enum FeatureRegistry {
             subtitle: "Layout bounds, overdraw, taps, animation scales & more",
             keywords: [
                 "developer", "options", "dev settings", "layout bounds", "overdraw",
-                "gpu", "profile", "taps", "touches", "pointer", "rtl", "strict mode",
+                "gpu", "profile", "taps", "touches", "pointer", "strict mode",
                 "don't keep activities", "animation scale", "debug",
             ],
             category: .deviceState, icon: "wrench.and.screwdriver", kind: .view

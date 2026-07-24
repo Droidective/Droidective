@@ -18,7 +18,7 @@ import Testing
             let (on, off): (String, String)
             switch toggle.backing {
             case .setting(_, _, let onValue, let offValue): (on, off) = (onValue, offValue)
-            case .sysprop(let _, let onValue, let offValue): (on, off) = (onValue, offValue)
+            case .sysprop(_, let onValue, let offValue): (on, off) = (onValue, offValue)
             }
             #expect(DeveloperSettingsService.isOn(on + "\n", toggle: toggle))
             #expect(!DeveloperSettingsService.isOn(off + "\n", toggle: toggle))

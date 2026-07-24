@@ -70,11 +70,10 @@ public struct DeveloperSettingsService: Sendable {
             detail: "Flash the screen when an app blocks its main thread",
             backing: .sysprop(key: "persist.sys.strictmode.visual", on: "1", off: "0")
         ),
-        DevToggleDef(
-            id: "force-rtl", title: "Force RTL layout",
-            detail: "Lay every screen out right-to-left, any locale",
-            backing: .setting(namespace: "global", key: "debug.force_rtl", on: "1", off: "0")
-        ),
+        // No force-RTL toggle: the `debug.force_rtl` global setting is only
+        // Developer Options' persistence — the effect needs the sysprop plus a
+        // locale-config refresh only the Settings app can trigger, and neither
+        // works over adb (verified live on an Android 16 emulator).
         DevToggleDef(
             id: "keep-activities", title: "Don't keep activities",
             detail: "Destroy every activity the moment it's left — surfaces state-restore bugs",

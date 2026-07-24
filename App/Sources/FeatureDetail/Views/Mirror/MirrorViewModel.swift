@@ -72,9 +72,9 @@ final class MirrorViewModel {
     /// emulators) — scrcpy aborts the whole session, video included, when its
     /// audio encoder can't start. See `MirrorAudioFallback`.
     private var requestAudio: Bool
-    /// Whether the device draws its "Show taps" dot while mirrored (see
-    /// `ShowTouches`). A live settings write, so no session restart and it
-    /// works mid-recording.
+    /// Whether the device draws its "Show taps" dot while mirrored — applied
+    /// as the scrcpy `show_touches` start option on every (re)connect, and as
+    /// a live settings write (`ShowTouches`) for mid-session flips.
     private var requestShowTouches: Bool
     /// Set once video frames begin flowing; gates the video-only fallback so a
     /// session that streamed and later stopped isn't silently restarted.
@@ -97,11 +97,6 @@ final class MirrorViewModel {
         guard !stopped else { return }
         status = .connecting
         didStream = false
-        // The persisted show-touches choice applies to every (re)connect; a
-        // plain settings write, so it doesn't gate the session bring-up below.
-        if requestShowTouches {
-            try? await ShowTouches(client: adb).set(true, serial: serial)
-        }
         // Prefer the bundled server (self-contained); fall back to an installed
         // scrcpy only if the bundled resource is somehow missing.
         let server: ScrcpyServerInfo?
@@ -119,10 +114,11 @@ final class MirrorViewModel {
         // control-bar toggle). Cap the size for smooth, low-latency display.
         // Recording never taps this stream — it runs its own scrcpy session
         // (see `screenRecorder`) so it starts on a fresh key frame.
-        // Show touches rides both mechanisms: the scrcpy start option (the
-        // server enables it and its CleanUp restores the device's own value
-        // when the session dies) plus the live settings write above (instant
-        // toggling without a restart).
+        // Show touches goes through the scrcpy start option only: the server
+        // snapshots the device's own value before enabling it, and its CleanUp
+        // restores that value when the session dies. A settings write here
+        // would poison that snapshot and leave the dot stuck on after the
+        // session — live writes are for mid-session flips (`setShowTouches`).
         let params = ScrcpyServerParams(
             scid: UInt32.random(in: 1 ... 0x7fff_ffff),
             audio: requestAudio, control: true, maxSize: 1280,
