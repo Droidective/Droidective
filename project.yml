@@ -162,6 +162,7 @@ targets:
       - App/Sources/Theme.swift
       - App/Sources/LogScrollGeometry.swift
       - App/Sources/FeatureDetail/Views/Mirror/MirrorTabPolicy.swift
+      - App/Sources/FeatureDetail/Views/TourPaging.swift
       - App/Sources/FeatureDetail/Views/ConsoleLinkSpanMemo.swift
       - App/Sources/FeatureDetail/Views/ConsoleRateBucket.swift
       - App/Sources/Updates/ReleaseNotesStyler.swift
