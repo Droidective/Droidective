@@ -1191,8 +1191,14 @@ final class AppState {
     /// Abandon a quit `applicationShouldTerminate` deferred: clear the
     /// delegate's in-quit flag first, so a later window close still routes
     /// through background mode instead of being mistaken for quit teardown.
+    /// The updater must hear about it too — a quit it requested that got
+    /// cancelled here would otherwise leave its pill on "Installing…"
+    /// forever (that phase's only exit was this quit).
     private func cancelDeferredQuit() {
         appDelegate?.isQuitting = false
+        #if !APPSTORE
+            SparkleUpdater.shared.noteQuitDeclined()
+        #endif
         NSApp.reply(toApplicationShouldTerminate: false)
     }
 
