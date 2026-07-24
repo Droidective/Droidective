@@ -409,8 +409,9 @@ final class JSConsoleSession {
             ingestPerMinute: ConsoleRateBucket.decade(perMinute)
         )
         guard snapshot != publishedDiagnostics else { return }
-        if let previous = publishedDiagnostics, snapshot.ingestPerMinute > previous.ingestPerMinute,
-           snapshot.ingestPerMinute >= 1000 {
+        if ConsoleRateBucket.isBurst(
+            from: publishedDiagnostics?.ingestPerMinute, to: snapshot.ingestPerMinute
+        ) {
             Telemetry.shared.breadcrumb(
                 category: "js-console", "stream burst: ~\(snapshot.ingestPerMinute)/min")
         }

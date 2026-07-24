@@ -47,13 +47,15 @@ import Testing
     }
 
     @Test func clearsWholesaleAtCapacity() {
-        // Fill to at least capacity, then one more insert must clear first —
-        // the count right after is 1 (just the newest entry), never above
-        // capacity.
-        for index in 0 ..< ConsoleLinkSpanMemo.capacity {
+        // Top the cache up to exactly capacity (other tests may have left
+        // entries behind — the count, not the iteration total, is what
+        // arms the clear), then one more insert must clear wholesale and
+        // leave only itself.
+        var index = 0
+        while ConsoleLinkSpanMemo.cachedTextCount < ConsoleLinkSpanMemo.capacity {
             _ = ConsoleLinkSpanMemo.spans(in: "fill-\(#function)-\(index)")
+            index += 1
         }
-        #expect(ConsoleLinkSpanMemo.cachedTextCount <= ConsoleLinkSpanMemo.capacity)
         _ = ConsoleLinkSpanMemo.spans(in: "overflow-\(#function)")
         #expect(ConsoleLinkSpanMemo.cachedTextCount == 1)
     }

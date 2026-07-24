@@ -10,4 +10,17 @@ enum ConsoleRateBucket {
         while Double(bucket * 10) <= perMinute { bucket *= 10 }
         return bucket
     }
+
+    /// The bucket at which a rate rise counts as a burst worth a breadcrumb.
+    static let burstFloor = 1000
+
+    /// Whether a bucket transition is a burst: only a *rise* landing at or
+    /// above `burstFloor`, and only when a previous publication exists — the
+    /// first publish after a connect is baseline, not news, and a steady or
+    /// falling rate must never crumb (it would spam the timeline on every
+    /// re-publish of an already-busy stream).
+    static func isBurst(from previous: Int?, to next: Int) -> Bool {
+        guard let previous else { return false }
+        return next > previous && next >= burstFloor
+    }
 }

@@ -22,4 +22,23 @@ import Testing
         #expect(ConsoleRateBucket.decade(1234) == 1000)
         #expect(ConsoleRateBucket.decade(60000) == 10000)
     }
+
+    // A burst breadcrumb fires only on a rise that reaches the floor — the
+    // first publish, a steady rate, and a falling rate must all stay quiet.
+
+    @Test func risesToTheFloorAndAboveAreBursts() {
+        #expect(ConsoleRateBucket.isBurst(from: 100, to: 1000))
+        #expect(ConsoleRateBucket.isBurst(from: 1000, to: 10000))
+        #expect(ConsoleRateBucket.isBurst(from: 0, to: 1000))
+    }
+
+    @Test func firstPublishIsBaselineNotABurst() {
+        #expect(!ConsoleRateBucket.isBurst(from: nil, to: 10000))
+    }
+
+    @Test func steadyFallingAndSmallRatesAreNotBursts() {
+        #expect(!ConsoleRateBucket.isBurst(from: 1000, to: 1000))
+        #expect(!ConsoleRateBucket.isBurst(from: 10000, to: 1000))
+        #expect(!ConsoleRateBucket.isBurst(from: 10, to: 100))
+    }
 }
