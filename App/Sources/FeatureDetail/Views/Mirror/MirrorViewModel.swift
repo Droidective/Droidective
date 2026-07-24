@@ -119,9 +119,14 @@ final class MirrorViewModel {
         // control-bar toggle). Cap the size for smooth, low-latency display.
         // Recording never taps this stream — it runs its own scrcpy session
         // (see `screenRecorder`) so it starts on a fresh key frame.
+        // Show touches rides both mechanisms: the scrcpy start option (the
+        // server enables it and its CleanUp restores the device's own value
+        // when the session dies) plus the live settings write above (instant
+        // toggling without a restart).
         let params = ScrcpyServerParams(
             scid: UInt32.random(in: 1 ... 0x7fff_ffff),
-            audio: requestAudio, control: true, maxSize: 1280)
+            audio: requestAudio, control: true, maxSize: 1280,
+            showTouches: requestShowTouches)
         let config = MirrorTransport.Configuration(
             serial: serial, params: params,
             serverVersion: server.version, localJarPath: server.jarPath)

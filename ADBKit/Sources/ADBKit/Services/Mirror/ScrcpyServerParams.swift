@@ -32,6 +32,10 @@ public struct ScrcpyServerParams: Sendable, Equatable {
     public var maxFps: Int
     /// Forward tunnel: the server listens and the client connects.
     public var tunnelForward: Bool
+    /// Ask the server to turn on the device's "Show taps" setting for the
+    /// session (scrcpy's `--show-touches`): it flips the system setting on
+    /// start and its CleanUp restores it when the session dies.
+    public var showTouches: Bool
 
     public init(
         scid: UInt32,
@@ -43,7 +47,8 @@ public struct ScrcpyServerParams: Sendable, Equatable {
         maxSize: Int = 0,
         videoBitRate: Int = 0,
         maxFps: Int = 0,
-        tunnelForward: Bool = true
+        tunnelForward: Bool = true,
+        showTouches: Bool = false
     ) {
         self.scid = scid
         self.logLevel = logLevel
@@ -55,6 +60,7 @@ public struct ScrcpyServerParams: Sendable, Equatable {
         self.videoBitRate = videoBitRate
         self.maxFps = maxFps
         self.tunnelForward = tunnelForward
+        self.showTouches = showTouches
     }
 
     /// The local abstract socket name the server listens on.
@@ -81,6 +87,7 @@ public struct ScrcpyServerParams: Sendable, Equatable {
         if maxFps > 0 { params.append("max_fps=\(maxFps)") }
         if tunnelForward { params.append("tunnel_forward=true") }
         if !control { params.append("control=false") }
+        if showTouches { params.append("show_touches=true") }
         return params
     }
 
