@@ -15,11 +15,29 @@ public struct EmulatorService: Sendable {
     let client: AdbClient
     let locator: ToolLocator
     let runner: any ProcessRunning
+    /// Where AVDs live — injectable so wipe tests run against a temp dir.
+    let avdHome: URL
 
-    public init(client: AdbClient, locator: ToolLocator, runner: any ProcessRunning = SystemProcessRunner()) {
+    public init(
+        client: AdbClient, locator: ToolLocator,
+        runner: any ProcessRunning = SystemProcessRunner(),
+        avdHome: URL? = nil
+    ) {
         self.client = client
         self.locator = locator
         self.runner = runner
+        self.avdHome = avdHome ?? Self.defaultAvdHome()
+    }
+
+    /// The emulator's own lookup order: `$ANDROID_AVD_HOME`, else
+    /// `~/.android/avd`.
+    static func defaultAvdHome() -> URL {
+        if let env = ProcessInfo.processInfo.environment["ANDROID_AVD_HOME"], !env.isEmpty {
+            return URL(fileURLWithPath: env)
+        }
+        return FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".android")
+            .appendingPathComponent("avd")
     }
 
     public func emulatorInstalled() async -> Bool {
@@ -138,6 +156,62 @@ public struct EmulatorService: Sendable {
 
         var pid: pid_t = 0
         return posix_spawn(&pid, path, &fileActions, &attr, argv, envp) == 0
+    }
+
+    // MARK: - Wipe data
+
+    /// The per-AVD files a data wipe deletes — the set Android Studio's
+    /// "Wipe Data" removes: user data (recreated from the base image on the
+    /// next launch), caches, the SD card images, and every snapshot (stale
+    /// once the data under it is gone).
+    static let wipeArtifacts = [
+        "userdata-qemu.img", "userdata-qemu.img.qcow2",
+        "cache.img", "cache.img.qcow2",
+        "sdcard.img.qcow2",
+        "snapshots",
+    ]
+
+    /// The `path=` line of an AVD's `<name>.ini` — where its data folder
+    /// lives (CRLF-safe).
+    public static func parseAvdIniPath(_ ini: String) -> String? {
+        for line in ini.components(separatedBy: .newlines) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard trimmed.hasPrefix("path=") else { continue }
+            let value = String(trimmed.dropFirst("path=".count)).trimmingCharacters(in: .whitespaces)
+            if !value.isEmpty { return value }
+        }
+        return nil
+    }
+
+    /// Factory-reset a *stopped* AVD without launching it: delete its user
+    /// data, caches, and snapshots. The next launch recreates user data from
+    /// the base image — the standalone counterpart of `-wipe-data`, which
+    /// can only wipe by booting. Runs detached because a snapshots folder
+    /// can be gigabytes and unlinking it must not park a cooperative thread.
+    public func wipeData(avd: String) async -> FeatureResult {
+        let ini = avdHome.appendingPathComponent("\(avd).ini")
+        let iniText = (try? String(contentsOf: ini, encoding: .utf8)) ?? ""
+        let dataDir = Self.parseAvdIniPath(iniText).map(URL.init(fileURLWithPath:))
+            ?? avdHome.appendingPathComponent("\(avd).avd")
+        guard FileManager.default.fileExists(atPath: dataDir.path) else {
+            return FeatureResult(ok: false, message: "Couldn't find the AVD's data folder at \(dataDir.path).")
+        }
+        let failure = await Task.detached(priority: .utility) { () -> String? in
+            for name in Self.wipeArtifacts {
+                let target = dataDir.appendingPathComponent(name)
+                guard FileManager.default.fileExists(atPath: target.path) else { continue }
+                do {
+                    try FileManager.default.removeItem(at: target)
+                } catch {
+                    return "Couldn't remove \(name): \(error.localizedDescription)"
+                }
+            }
+            return nil
+        }.value
+        if let failure {
+            return FeatureResult(ok: false, message: failure)
+        }
+        return FeatureResult(ok: true, message: "Wiped \(avd) — the next launch starts factory-fresh.")
     }
 
     /// Graceful shutdown via the emulator console.
