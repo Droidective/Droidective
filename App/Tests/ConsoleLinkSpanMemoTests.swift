@@ -33,4 +33,28 @@ import Testing
         }
         #expect(ConsoleLinkSpanMemo.spans(in: text) == before)
     }
+
+    /// Transparency also holds for a no-op cache — these two pin the memo's
+    /// actual point: entries are stored (not recomputed) and the store stays
+    /// bounded by the wholesale clear.
+    @Test func storesEachTextOnceAndRepeatsDoNotGrowIt() {
+        let text = "unique-\(#function) https://example.com/memo"
+        let before = ConsoleLinkSpanMemo.cachedTextCount
+        _ = ConsoleLinkSpanMemo.spans(in: text)
+        #expect(ConsoleLinkSpanMemo.cachedTextCount == before + 1)
+        _ = ConsoleLinkSpanMemo.spans(in: text)
+        #expect(ConsoleLinkSpanMemo.cachedTextCount == before + 1)
+    }
+
+    @Test func clearsWholesaleAtCapacity() {
+        // Fill to at least capacity, then one more insert must clear first —
+        // the count right after is 1 (just the newest entry), never above
+        // capacity.
+        for index in 0 ..< ConsoleLinkSpanMemo.capacity {
+            _ = ConsoleLinkSpanMemo.spans(in: "fill-\(#function)-\(index)")
+        }
+        #expect(ConsoleLinkSpanMemo.cachedTextCount <= ConsoleLinkSpanMemo.capacity)
+        _ = ConsoleLinkSpanMemo.spans(in: "overflow-\(#function)")
+        #expect(ConsoleLinkSpanMemo.cachedTextCount == 1)
+    }
 }

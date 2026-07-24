@@ -135,10 +135,12 @@ final class JSConsoleSession {
     /// when `newestFirst` is on.
     // The 128 MB byte budget (Reactotron's figure) matters as much as the
     // count cap: 2000 entries each holding a multi-megabyte logged string
-    // would otherwise retain gigabytes.
+    // would otherwise retain gigabytes. Shared with the pending early-flush
+    // bound so the two can't drift apart when retuned.
+    private static let bufferByteBudget = 128 << 20
     private var buffer = FilteredLogBuffer<JSEntry>(
         capacity: JSConsoleSession.maxEntries,
-        byteBudget: 128 << 20,
+        byteBudget: JSConsoleSession.bufferByteBudget,
         cost: { $0.approximateBytes }
     )
     var filteredEntries: [JSEntry] { buffer.filtered }
@@ -404,7 +406,7 @@ final class JSConsoleSession {
         let snapshot = StreamDiagnostics(
             connected: isConnected,
             bufferedEntries: (buffer.entries.count / 100) * 100,
-            ingestPerMinute: Self.decadeBucket(perMinute)
+            ingestPerMinute: ConsoleRateBucket.decade(perMinute)
         )
         guard snapshot != publishedDiagnostics else { return }
         if let previous = publishedDiagnostics, snapshot.ingestPerMinute > previous.ingestPerMinute,
@@ -418,14 +420,6 @@ final class JSConsoleSession {
             "buffered_entries": snapshot.bufferedEntries,
             "ingest_per_min": snapshot.ingestPerMinute,
         ])
-    }
-
-    /// 0, 10, 100, 1000… — the order of magnitude is the diagnostic signal.
-    private static func decadeBucket(_ perMinute: Double) -> Int {
-        guard perMinute >= 1 else { return 0 }
-        var bucket = 1
-        while Double(bucket * 10) <= perMinute { bucket *= 10 }
-        return bucket
     }
 
     func updateSerials(_ serials: [String]) {
@@ -913,7 +907,7 @@ final class JSConsoleSession {
         // A burst of huge payloads must not sit unrendered for a whole flush
         // window — flush early once pending holds a quarter of the buffer's
         // byte budget, so pending memory stays bounded at any cadence.
-        if pendingBytes >= (128 << 20) / 4 {
+        if pendingBytes >= Self.bufferByteBudget / 4 {
             flushPending()
         } else {
             scheduleFlush()

@@ -14,6 +14,11 @@ enum ConsoleLinkSpanMemo {
     static let capacity = 2048
     private static var cache: [String: [ConsoleLinkDetector.Span]] = [:]
 
+    /// How many texts are cached — what lets a test prove the memo actually
+    /// memoizes and clears at `capacity` (transparency alone also holds for
+    /// a broken no-op cache).
+    static var cachedTextCount: Int { cache.count }
+
     static func spans(in text: String) -> [ConsoleLinkDetector.Span] {
         if let hit = cache[text] { return hit }
         let spans = ConsoleLinkDetector.linkSpans(in: text)

@@ -33,7 +33,8 @@ final class PerformanceMonitor {
     private static let mirrorCPULimitPercent: Double = 450
 
     /// Whether a CPU-intensive feature is on screen (focused or open in either
-    /// pane), so CPU-overuse incidents should be waived for this sample.
+    /// pane), so this sample is judged against the raised mirror limit
+    /// instead of the base one.
     private static func cpuExpectedHigh(_ context: FeatureContext) -> Bool {
         if let active = context.activeFeature, cpuIntensiveFeatures.contains(active) { return true }
         return context.openFeatures.contains { cpuIntensiveFeatures.contains($0) }

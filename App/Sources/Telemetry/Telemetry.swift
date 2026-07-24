@@ -112,13 +112,18 @@ final class Telemetry {
                 }
             }
         }
-        guard analyticsEnabled, postHogReady else { return }
         if let values {
+            guard analyticsEnabled, postHogReady else { return }
             var flat: [String: Any] = [:]
             for (name, value) in values { flat["\(key)_\(name)"] = value }
             diagnosticKeys[key] = Array(flat.keys)
             PostHogSDK.shared.register(flat)
-        } else {
+        } else if postHogReady {
+            // Clearing is deliberately not gated on the consent toggle:
+            // super-properties persist in the SDK across opt-out/opt-in, so
+            // a clear that lands while opted out must still unregister —
+            // otherwise a re-opt-in resurrects a dead session's context on
+            // every event.
             for name in diagnosticKeys.removeValue(forKey: key) ?? [] {
                 PostHogSDK.shared.unregister(name)
             }
