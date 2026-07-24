@@ -1,3 +1,66 @@
+## Droidective v3.7.1
+
+A new Developer Settings panel drives Android's Developer Options over adb,
+the mirror gains a Show touches option, emulators wipe and relaunch as
+separate actions, and the Terminal's collapsed rail keeps every tab
+reachable — with dropped files typing their paths into the shell. Plus
+fixes for a welcome-tour crash, an update pill that could spin forever, and
+JS Console hangs on chatty Metro streams.
+
+### Developer Settings — the 59th feature
+
+- **Android's Developer Options over adb** — show taps, pointer location,
+  layout bounds, GPU overdraw, GPU profile bars, strict-mode flash, don't
+  keep activities, and the three animation scales, all in one panel. Values
+  load from the device so the panel shows ground truth, and overlay toggles
+  repaint running apps immediately — no app restart.
+
+### Terminal
+
+- **Collapsed rail keeps tabs reachable** — the thin rail now lists every
+  open shell as a two-letter badge: click to switch, hover for the full
+  name, right-click for the tab menu.
+- **Dropping files types their paths** — drop Finder files on a shell and
+  their paths are typed in (quoted only when needed, trailing space), with
+  that pane focused — like dropping onto Terminal.app.
+
+### Screen Mirror
+
+- **Show touches** — a new ⋯ options menu (audio lives there too) toggles
+  Android's touch dot for the session: it flips instantly, works
+  mid-recording, and the device's own setting is restored when the session
+  ends. The dot draws only for physical touches on the device — taps
+  injected by clicking the mirror don't render it.
+
+### Emulators
+
+- **Wipe without launching** — "Wipe Data…" on a stopped AVD wipes in place
+  (user data, caches, snapshots — the same set Android Studio removes)
+  instead of booting the emulator to do it.
+- **Relaunch** — running AVDs gain a Relaunch button: graceful stop, wait
+  for the console port to free, boot the same AVD.
+
+### Fixes
+
+- **Welcome tour crash** — double-activating Next or Back (Return
+  auto-repeat, or a double-click racing the render) could step past the
+  last page and crash mid-onboarding. Paging is now clamped to the range.
+- **Update pill no longer sticks** — cancelling the quit confirmation or an
+  interrupted install left the sidebar pill on "Installing update…"
+  forever; it now returns to a clickable "Relaunch to update" (or a
+  retryable error state).
+- **JS Console hangs on chatty streams** — a busy Metro feed drove up to 60
+  full feed re-renders a second and re-ran link detection on every visible
+  row; flushes are now paced and link detection cached, ending the app
+  hangs reported with the console open.
+
+### Install
+
+Download `Droidective-v3.7.1.dmg` below. Existing installs update in place
+via Sparkle.
+
+---
+
 ## Droidective v3.7.0
 
 The app goes universal — Intel Macs run it natively at last — and the

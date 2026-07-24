@@ -90,7 +90,7 @@ opening it — verify those by hand.
 ## Build / test / run
 
 ```
-make test          # ADBKit unit tests (cd ADBKit && swift test) — 1081 tests, keep green
+make test          # ADBKit unit tests (cd ADBKit && swift test) — 1110 tests, keep green
 make build         # xcodegen generate + xcodebuild Debug
 make run           # build + open the .app
 ```
@@ -554,7 +554,24 @@ compile or test time* — lean on it instead of manual vigilance.
 ## Status
 
 Feature-complete across all planned milestones plus several UX rounds.
-(Latest release: **v3.7.0** — the **universal (arm64 + x86_64) build**
+(Latest release: **v3.7.1** — the **Developer Settings feature** (the 59th:
+`dev-settings`, a `DeveloperSettingsService` declarative toggle table over
+`settings put`/`setprop` + the SYSPROPS poke — no force-RTL toggle; the
+adb-reachable writes are only Developer Options' persistence, verified
+ineffective live), a **mirror Show touches option** behind a new ⋯ options
+menu (scrcpy's `show_touches` start option per (re)connect — its CleanUp
+restores the device's own value — plus live `ShowTouches` writes only for
+mid-session flips; persisted as `mirrorShowTouches`), **emulator Wipe Data
+and Relaunch as separate actions** (`EmulatorService.wipeData` deletes the
+Android-Studio wipe set in place, resolving the data dir from the AVD's
+`.ini` `path=` line; Relaunch = console stop → port-free wait → boot),
+**collapsed-rail tab badges** (`TerminalText.railBadge`) and **file drops
+that type quoted paths into the shell** (`TerminalText.droppedPathsInsertion`;
+AppKit-level `.fileURL`-only registration gated to the visible tab), and
+fixes: welcome-tour paging clamped (double-activation crash), the update
+pill recovering from an interrupted install, and the JS console feed paced
+against chatty Metro streams (`ConsoleRateBucket`)). Before that,
+**v3.7.0** — the **universal (arm64 + x86_64) build**
 (app + bundled ffmpeg lipo'd from per-slice SHA-pinned downloads;
 `scripts/unpack-ffmpeg.sh` inflates the committed `ffmpeg.zip` before
 generate — `make generate` and CI run it; `package-dmg.sh` refuses a DMG
@@ -670,7 +687,7 @@ jadx/apktool, recompile, and sign — with keystore creation) plus Frida setup, 
 custom accent color, launching emulators from the device bar, per-feature
 connect-a-device empty states, a live-preview hotkey recorder, and a Settings
 split into Appearance/Privacy; managed tools download from GitHub releases into
-Application Support and are sized/removable in Settings); 1081 tests green;
+Application Support and are sized/removable in Settings); 1110 tests green;
 builds clean with zero warnings (enforced as errors in CI). Verified live against a
 physical device and an Android emulator. Release builds are Developer ID-signed +
 notarized and bundle scrcpy/ffmpeg (see `RELEASING.md`). Open gaps: the Apps
