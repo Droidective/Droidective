@@ -6,6 +6,12 @@ import SwiftUI
 /// control-bar toggle opts in (and persists).
 let mirrorIncludeAudioKey = "mirrorIncludeAudio"
 
+/// Whether the mirror turns on Android's "Show taps" dot (see `ShowTouches`),
+/// drawn on the device display itself, so touches read clearly in the mirror
+/// and in recordings. Off by default; a live settings write, no session
+/// restart.
+let mirrorShowTouchesKey = "mirrorShowTouches"
+
 /// How long a hidden mirror keeps streaming before it's torn down. Switching
 /// tabs used to stop-and-reconnect instantly, so flipping away and back — even
 /// for a moment — flashed the "Connecting…" screen every time. Holding the live
@@ -22,6 +28,7 @@ struct ScreenMirrorView: View {
     @Environment(\.tabIsActive) private var tabIsActive
     @Environment(\.openWindow) private var openWindow
     @AppStorage(mirrorIncludeAudioKey) private var includeAudio = false
+    @AppStorage(mirrorShowTouchesKey) private var showTouches = false
     @State private var model: MirrorViewModel?
     /// The in-flight (re)connect, so a newer one can cancel and supersede it.
     @State private var connectTask: Task<Void, Never>?
@@ -102,6 +109,12 @@ struct ScreenMirrorView: View {
             // stopped model; with no model, the choice applies on next connect.
             guard let model else { return }
             Task { await model.setAudio(include) }
+        }
+        .onChange(of: showTouches) { _, show in
+            // A live settings write — no restart; with no model, the choice
+            // applies on the next connect.
+            guard let model else { return }
+            Task { await CommandLog.userInitiated { await model.setShowTouches(show) } }
         }
         .onChange(of: model?.recordingError) { _, message in
             guard let message else { return }
@@ -213,7 +226,8 @@ struct ScreenMirrorView: View {
             adb: state.env.engine.client,
             locator: state.env.engine.locator,
             serial: serial,
-            includeAudio: includeAudio)
+            includeAudio: includeAudio,
+            showTouches: showTouches)
         model = viewModel
         await viewModel.start()
     }
@@ -230,6 +244,7 @@ struct ScreenMirrorView: View {
 private struct MirrorStage: View {
     @Bindable var model: MirrorViewModel
     @AppStorage(mirrorIncludeAudioKey) private var includeAudio = false
+    @AppStorage(mirrorShowTouchesKey) private var showTouches = false
     /// Reconnect the current device in place (the stopped/failed cards' button).
     let onReconnect: () -> Void
     /// Move the mirror to its own window; nil when already hosted in one.
@@ -309,16 +324,35 @@ private struct MirrorStage: View {
 
             Divider().frame(height: 22)
 
-            // Outside the streaming gate: the audio choice also applies to the
-            // next connect, so it stays flippable from the failed/stopped cards.
-            // Disabled mid-recording — the restart would abort the recorder.
-            Toggle("Audio", isOn: $includeAudio)
-                .toggleStyle(.switch)
-                .controlSize(.mini)
-                .help("Stream device audio — flipping this restarts the mirror")
-                .disabled(model.isRecording)
+            // Outside the streaming gate: both choices also apply to the next
+            // connect, so they stay flippable from the failed/stopped cards.
+            optionsMenu
         }
         .fixedSize()
+    }
+
+    /// Audio and show-touches live behind one ⋯ menu in both bar layouts:
+    /// session options, not per-tap controls, so neither earns an
+    /// always-visible bar slot. Audio restarts the session, so it's disabled
+    /// mid-recording (the restart would abort the recorder); show-touches is
+    /// a live settings write on the device — flipping it *on* mid-recording
+    /// is the point (touches stay legible in the captured video).
+    @ViewBuilder private var optionsToggles: some View {
+        Toggle("Stream audio (restarts mirror)", isOn: $includeAudio)
+            .disabled(model.isRecording)
+        Toggle("Show touches", isOn: $showTouches)
+    }
+
+    private var optionsMenu: some View {
+        Menu {
+            optionsToggles
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .font(.app(.title3))
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("Audio and touch options")
     }
 
     /// The narrow-pane bar: nav / screenshot / record stay one-tap buttons,
@@ -343,8 +377,7 @@ private struct MirrorStage: View {
                 }
                 .disabled(model.status != .streaming)
                 Divider()
-                Toggle("Stream audio (restarts mirror)", isOn: $includeAudio)
-                    .disabled(model.isRecording)
+                optionsToggles
                 if let onPopOut, !model.isRecording {
                     Divider()
                     Button("Open in a separate window") { onPopOut() }
@@ -356,7 +389,7 @@ private struct MirrorStage: View {
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
-            .help("Volume, audio, and window options")
+            .help("Volume, audio, touch, and window options")
         }
         .fixedSize()
     }
