@@ -496,10 +496,13 @@ struct VideoEditorPane: View {
     // MARK: loading + export
 
     private func loadAsset() async {
-        if let size = await Self.naturalVideoSize(at: source.url) {
-            videoSize = size
-        }
-        if let loaded = try? await asset.load(.duration) { assetDuration = loaded.seconds }
+        let size = await Self.naturalVideoSize(at: source.url)
+        let loaded = try? await asset.load(.duration)
+        // Both probes complete before anything is published, so a re-keyed task
+        // (a different video) writes none of this one's metadata.
+        guard !Task.isCancelled else { return }
+        if let size { videoSize = size }
+        if let loaded { assetDuration = loaded.seconds }
         player.isMuted = edit.mute
     }
 

@@ -73,9 +73,15 @@ struct FridaConsoleView: View {
     private func refresh() async {
         guard let serial else { return }
         do {
-            arch = try await state.env.engine.frida.deviceArch(serial: serial)
-            serverRunning = try await state.env.engine.frida.isServerRunning(serial: serial)
+            // Both probes complete before anything is published, so a re-keyed
+            // task (the device changed) writes neither half.
+            let deviceArch = try await state.env.engine.frida.deviceArch(serial: serial)
+            let running = try await state.env.engine.frida.isServerRunning(serial: serial)
+            guard !Task.isCancelled else { return }
+            arch = deviceArch
+            serverRunning = running
         } catch {
+            guard !Task.isCancelled else { return }
             status = error.localizedDescription
         }
     }

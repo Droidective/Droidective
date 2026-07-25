@@ -120,6 +120,8 @@ struct DeepLinksSection: View {
             return
         }
         let map = await state.env.stores.deepLinks.load()
+        // A re-keyed task (the bundle changed) must not land the old app's links.
+        guard !Task.isCancelled else { return }
         links = map[bundleId] ?? []
     }
 
