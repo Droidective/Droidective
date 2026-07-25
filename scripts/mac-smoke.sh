@@ -19,6 +19,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP="$ROOT/DerivedData/Build/Products/Debug/Droidective.app"
 BIN="$APP/Contents/MacOS/Droidective"
 SETTLE_SECONDS=6
+# A window can take longer than the liveness settle on a cold start.
+WINDOW_TIMEOUT=45
 
 KEEP=0
 SHOT=""
@@ -87,9 +89,33 @@ if ((proc_epoch > 0 && proc_epoch < bin_epoch)); then
   die "running process started before the binary was built — a stale instance is in front"
 fi
 
-# A window, via the accessibility tree rather than pixel guessing.
-windows="$(osascript -e 'tell application "System Events" to tell process "Droidective" to count windows' 2>/dev/null || echo 0)"
-[[ "$windows" -ge 1 ]] || die "no window in the accessibility tree (count=$windows)"
+# A locked or sleeping display reports zero windows to System Events and makes
+# `screencapture` return an all-black frame, so the window checks below would
+# fail for reasons that have nothing to do with the app. Liveness above is the
+# part that matters and it holds regardless, so report and stop rather than
+# claiming a failure — an unattended run on a locked Mac must not look like a
+# regression.
+if [[ "$(ioreg -n Root -d1 -a 2>/dev/null | plutil -extract IOConsoleLocked raw -o - - 2>/dev/null)" == "true" ]]; then
+  echo "── display is locked: skipping the window and screenshot checks"
+  echo "───────────────────────────────────────────────────────────"
+  echo "mac smoke: OK (liveness only — unlock the display for the full check)"
+  exit 0
+fi
+
+# A window, via the accessibility tree rather than pixel guessing. Polled, not
+# checked once: a cold start right after a rebuild can outlast any fixed settle,
+# and a fixed sleep either makes the test flaky or makes every run pay the
+# worst case.
+windows=0
+window_deadline=$((SECONDS + WINDOW_TIMEOUT))
+while ((SECONDS < window_deadline)); do
+  windows="$(osascript -e 'tell application "System Events" to tell process "Droidective" to count windows' 2>/dev/null || echo 0)"
+  [[ "$windows" -ge 1 ]] && break
+  pgrep -x Droidective >/dev/null || die "the app exited while waiting for its window"
+  sleep 1
+done
+[[ "$windows" -ge 1 ]] ||
+  die "no window in the accessibility tree after ${WINDOW_TIMEOUT}s (count=$windows)"
 echo "── window count: $windows"
 
 title="$(osascript -e 'tell application "System Events" to tell process "Droidective" to get title of window 1' 2>/dev/null || echo "")"
