@@ -1,6 +1,6 @@
 .PHONY: generate build test test-app run dmg clean site-dev site-build \
 	verify verify-fast verify-self \
-	test-emulator test-emulator-rooted test-emulator-mirror
+	test-emulator test-emulator-rooted test-emulator-mirror test-mutation
 
 # Optional telemetry keys for local builds. Create .env.telemetry (gitignored)
 # with SENTRY_DSN=... and POSTHOG_KEY=... to enable crash/analytics locally.
@@ -61,6 +61,12 @@ test-emulator-rooted:
 test-emulator-mirror:
 	./scripts/emulator-harness.sh --filter DeviceLiveTests --filter MirrorTransportLiveTests \
 	  --filter MirrorSessionLiveTests --filter ScreenRecorderLiveTests
+
+# Tier 6 — prove the suite has teeth. Breaks real code one mutation at a time and
+# asserts `swift test` fails for each; a survivor is a coverage gap. Runs the full
+# suite per mutation, so it's for nightly/pre-release, not the edit loop.
+test-mutation:
+	./scripts/mutation-gate.sh
 
 run: build
 	-pkill -x Droidective
