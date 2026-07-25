@@ -54,6 +54,10 @@ let package = Package(
                     name: "Crypto", package: "swift-crypto",
                     condition: .when(platforms: [.linux, .windows])),
             ],
+            // Recorded device fixtures are read from the source tree via
+            // `#filePath`, not from a bundle, so SwiftPM should ignore them
+            // rather than warn about unhandled files.
+            exclude: ["Fixtures"],
             swiftSettings: [.swiftLanguageMode(.v6)]),
         .testTarget(
             name: "ReactotronMCPTests",

@@ -149,9 +149,11 @@ fi
 args=()
 for f in "${FILTERS[@]}"; do args+=(--filter "$f"); done
 
-record_env=()
+# Exported rather than passed as an `env` array: macOS ships bash 3.2, where
+# expanding an empty array under `set -u` is an unbound-variable error, so the
+# array form worked with --record and broke without it.
 if ((RECORD == 1)); then
-  record_env=(RECORD_FIXTURES=1)
+  export RECORD_FIXTURES=1
   echo "── recording fixtures (review the JSON diff before committing)"
 fi
 
@@ -159,8 +161,7 @@ echo "── running live suites: ${FILTERS[*]}"
 set +e
 (
   cd "$ROOT/ADBKit" &&
-    env "${record_env[@]}" \
-      DEVICE_LIVE_TEST=1 MIRROR_LIVE_TEST=1 MIRROR_SERIAL="$SERIAL" \
+    DEVICE_LIVE_TEST=1 MIRROR_LIVE_TEST=1 MIRROR_SERIAL="$SERIAL" \
       ANDROID_SERIAL="$SERIAL" swift test "${args[@]}"
 )
 run_status=$?
