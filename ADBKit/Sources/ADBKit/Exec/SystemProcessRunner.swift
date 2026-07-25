@@ -7,7 +7,8 @@ import Foundation
 /// cooperative thread is ever parked. (A blocking `waitUntilExit`/
 /// `availableData` design starves the cooperative pool once a few adb calls
 /// overlap — device polling + a feature run is enough — wedging the whole
-/// async runtime.) A watchdog escalates SIGTERM → SIGKILL on timeout.
+/// async runtime.) A watchdog escalates SIGTERM → SIGKILL on timeout, except
+/// on Windows where `terminate()` is already TerminateProcess.
 public struct SystemProcessRunner: ProcessRunning {
     public init() {}
 
@@ -68,10 +69,17 @@ public struct SystemProcessRunner: ProcessRunning {
                     timedOut.set(true)
                     boxed.value.terminate()
                 }
+                // Windows has no SIGKILL, and needs none: Foundation maps
+                // `terminate()` to TerminateProcess, which is already the
+                // forceful kill rather than a request to exit. POSIX hosts keep
+                // the SIGTERM → SIGKILL escalation for a child that ignores the
+                // first signal.
+                #if !os(Windows)
                 try await Task.sleep(for: .seconds(2))
                 if boxed.value.isRunning {
                     kill(boxed.value.processIdentifier, SIGKILL)
                 }
+                #endif
             }
 
             let exitCode: Int32? = await withCheckedContinuation { continuation in
@@ -111,13 +119,16 @@ public struct SystemProcessRunner: ProcessRunning {
             // Cancelling the calling Task (e.g. a SwiftUI .task torn down on
             // navigation, or a .task(id:) re-keying) must kill the child so
             // run() returns promptly and no orphaned adb process lingers until
-            // its timeout. SIGTERM first, then SIGKILL for anything ignoring it.
+            // its timeout. SIGTERM first, then SIGKILL for anything ignoring it
+            // (POSIX only — Windows' terminate() is already TerminateProcess).
             cancelled.set(true)
             if boxed.value.isRunning { boxed.value.terminate() }
+            #if !os(Windows)
             Task {
                 try? await Task.sleep(for: .seconds(2))
                 if boxed.value.isRunning { kill(boxed.value.processIdentifier, SIGKILL) }
             }
+            #endif
         }
     }
 }
