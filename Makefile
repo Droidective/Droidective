@@ -1,4 +1,6 @@
-.PHONY: generate build test run dmg clean site-dev site-build
+.PHONY: generate build test test-app run dmg clean site-dev site-build \
+	verify verify-fast verify-self \
+	test-emulator test-emulator-rooted test-emulator-mirror
 
 # Optional telemetry keys for local builds. Create .env.telemetry (gitignored)
 # with SENTRY_DSN=... and POSTHOG_KEY=... to enable crash/analytics locally.
@@ -27,6 +29,38 @@ build: generate
 
 test:
 	cd ADBKit && swift test
+
+test-app: generate
+	xcodebuild test -project Droidective.xcodeproj -scheme AppTests \
+	  -destination 'platform=macOS' -derivedDataPath DerivedData CODE_SIGNING_ALLOWED=NO
+
+# Tiered verification gate — the edit→verify loop. `verify-fast` is tiers 0-1 for
+# ADBKit only (no xcodegen, no Xcode); `verify` adds the AppTests bundle. Both
+# assert a non-zero swift-testing count, so a suite that discovers nothing fails
+# instead of reporting success. `verify-self` tests those guards.
+verify-fast:
+	./scripts/verify.sh fast
+
+verify: generate
+	./scripts/verify.sh all
+
+verify-self:
+	./scripts/test-verify-guards.sh
+
+# Tier 3 — the device-dependent suites against a real emulator. Reuses an
+# attached device when there is one and otherwise boots an AVD headless, tearing
+# down only what it started. `test-emulator-rooted` uses the rooted AVD for the
+# root-gated features; `test-emulator-mirror` adds the scrcpy-backed suites,
+# which need a resolvable scrcpy server payload.
+test-emulator:
+	./scripts/emulator-harness.sh
+
+test-emulator-rooted:
+	./scripts/emulator-harness.sh --rooted
+
+test-emulator-mirror:
+	./scripts/emulator-harness.sh --filter DeviceLiveTests --filter MirrorTransportLiveTests \
+	  --filter MirrorSessionLiveTests --filter ScreenRecorderLiveTests
 
 run: build
 	-pkill -x Droidective
