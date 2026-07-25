@@ -77,7 +77,11 @@ final class Telemetry {
                 PostHogSDK.shared.register(["app_active": active])
             }
         }
-        update(NSApp.isActive)
+        // `NSApp` is an implicitly-unwrapped global that stays nil until
+        // NSApplication exists, and this runs from `ADTApp.init()` — which
+        // predates it. Optional-chain the seed: no app yet means not active
+        // yet, and `didBecomeActiveNotification` corrects it at launch.
+        update(NSApp?.isActive ?? false)
         for (name, active) in [
             (NSApplication.didBecomeActiveNotification, true),
             (NSApplication.didResignActiveNotification, false),
