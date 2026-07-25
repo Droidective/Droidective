@@ -1,6 +1,6 @@
 .PHONY: generate build test test-app run dmg clean site-dev site-build \
 	verify verify-fast verify-self \
-	test-emulator test-emulator-rooted test-emulator-mirror test-mutation
+	test-emulator test-emulator-rooted test-emulator-mirror test-mutation test-smoke
 
 # Optional telemetry keys for local builds. Create .env.telemetry (gitignored)
 # with SENTRY_DSN=... and POSTHOG_KEY=... to enable crash/analytics locally.
@@ -67,6 +67,12 @@ test-emulator-mirror:
 # suite per mutation, so it's for nightly/pre-release, not the edit loop.
 test-mutation:
 	./scripts/mutation-gate.sh
+
+# Tier 4a — does the built app actually come up? `make build` proves it
+# compiles and AppTests proves the pure logic works, but neither catches a
+# crash on launch, a missing bundled resource, or a window that never appears.
+test-smoke: build
+	./scripts/mac-smoke.sh
 
 run: build
 	-pkill -x Droidective
