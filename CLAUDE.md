@@ -19,10 +19,10 @@ Next phases: a `droidectived` local daemon over ADBKit, then a Tauri/React UI
 for Windows/Linux; an iOS companion can't run `Process` at all, so it would
 ride the same daemon protocol. Keep the seams (`ProcessRunning`, injected
 directories) intact, and keep new ADBKit code portable — no new Apple-only
-framework use outside the gated subsystems.
-The rule is enforced, not just documented: `PortabilityGuardTests` fails on an
-Apple-only import or a corelibs trap in a file that isn't on its allowlist, and
-the allowlist must shrink as the port lands.
+framework use outside the gated subsystems. The rule is **enforced, not just
+documented**: `PortabilityGuardTests` scans ADBKit and fails on an Apple-only
+import or a corelibs trap that isn't inside a matching `#if canImport(...)`
+gate. Its allowlist is empty, and a companion test fails on a stale entry.
 
 - **`ADBKit/`** — a SwiftPM package holding *all* logic. Zero UI imports
   (feature icons are SF Symbol *name strings*). Actors for stateful services,
@@ -543,6 +543,21 @@ compile or test time* — lean on it instead of manual vigilance.
   — data races fail the build.
 - The 16-process starvation canary, the feature-dispatch consistency tests, and
   the registry-invariant tests guard the highest-risk seams. Don't regress them.
+- **`make verify`** is the tiered gate (`scripts/verify.sh`): tier 0 compiles
+  ADBKit warnings-as-errors, tier 1 runs both test bundles. Both bundles are
+  swift-testing-only, so `xcodebuild test` reports them through XCTest as
+  "Executed 0 tests … TEST SUCCEEDED" — every tier therefore asserts a non-zero
+  count from swift-testing's own summary, and `make verify-self` tests those
+  assertions. Above that: `make test-emulator` (real device), `make test-smoke`
+  (the app actually launches), `make test-mutation` (the suite goes red when code
+  breaks), `make test-linux` (the same suite on Linux).
+- **Real device output is a fixture, not a guess.** `RecordingProcessRunner`
+  captures genuine adb output once (`scripts/emulator-harness.sh --record`) and
+  `FixtureProcessRunner` replays it
+  with no device, so parsers face real `getprop`/`ls -la`/threadtime `logcat` in
+  CI. Redaction runs at record time — IPs, MACs, serials and the host home
+  directory are scrubbed and credential-bearing commands are never recorded — so
+  regenerate with `--record` and review the JSON diff rather than editing it.
 
 ### Git / contributing
 

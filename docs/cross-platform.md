@@ -1,6 +1,6 @@
 # Cross-platform: Windows & Linux
 
-The port strategy, what is already true on this branch, and what comes next.
+The port strategy, what is already true on `main`, and what comes next.
 
 ## Shape
 
@@ -22,7 +22,7 @@ portable — and off-Apple Swift GUI toolkits are alpha-grade while the web
 stack is mature. Rewriting the core in another language would throw away the
 900+-test suite.
 
-## Phase 1 (this branch): a portable core
+## Phase 1 (landed): a portable core
 
 `cd ADBKit && swift test` passes on Linux — CI runs the same suite in a
 `swift:6.2` container (`test-linux`) — and Windows compiles the library and
@@ -71,7 +71,15 @@ crash catcher, overrides, custom commands, and managed tool downloads —
 everything the mock-driven suite exercises.
 
 Run the Linux suite locally with `make test-linux` (Apple's `container` CLI;
-`container system start` once per boot).
+`container system start` once per boot, and it needs a kernel installed via
+`container system kernel set --recommended`). CI's `test-linux` job is the
+authoritative gate — it needs no local runtime.
+
+The rule is enforced rather than remembered: `PortabilityGuardTests` scans
+ADBKit for Apple-only imports and the corelibs traps listed above and fails on
+any that is not inside a matching `#if canImport(...)` gate. Its allowlist is
+empty, and a companion test fails on a stale entry, so debt cannot be excused
+and then quietly forgotten.
 
 ## Phase 2: `droidectived`
 
