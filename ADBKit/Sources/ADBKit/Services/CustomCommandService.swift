@@ -21,12 +21,21 @@ public struct CustomCommandService: Sendable {
         }
     }
 
+    /// The platform's fallback login shell when $SHELL is unset or empty: zsh
+    /// on macOS (the default since Catalina), sh elsewhere.
+    #if os(macOS)
+    public static let fallbackShell = "/bin/zsh"
+    #else
+    public static let fallbackShell = "/bin/sh"
+    #endif
+
     let client: AdbClient
     let loginShell: String
 
     public init(
         client: AdbClient,
-        loginShell: String = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
+        loginShell: String = ProcessInfo.processInfo.environment["SHELL"]
+            ?? CustomCommandService.fallbackShell
     ) {
         self.client = client
         self.loginShell = loginShell
@@ -89,7 +98,7 @@ public struct CustomCommandService: Sendable {
     /// line as typed. The serial is `shellQuote`d — it reaches a Mac shell
     /// verbatim, and a crafted serial must stay one assignment, not code.
     public static func commandScript(line: String, serial: String, shellPath: String) -> String {
-        let shell = shellPath.isEmpty ? "/bin/zsh" : shellPath
+        let shell = shellPath.isEmpty ? Self.fallbackShell : shellPath
         var script = "#!\(shell) -l\n"
         if !serial.isEmpty {
             script += "export ANDROID_SERIAL=\(shellQuote(serial))\n"
@@ -207,7 +216,7 @@ public struct CustomCommandService: Sendable {
     /// quoting, no injection surface beyond what the user typed. Other shells
     /// (fish sources its config unconditionally) keep the plain form.
     static func shellInvocation(line: String, shellPath: String) -> (executable: String, arguments: [String]) {
-        let shell = shellPath.isEmpty ? "/bin/zsh" : shellPath
+        let shell = shellPath.isEmpty ? Self.fallbackShell : shellPath
         switch URL(fileURLWithPath: shell).lastPathComponent {
         case "zsh":
             return (shell, [

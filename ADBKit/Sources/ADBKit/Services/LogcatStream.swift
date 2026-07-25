@@ -186,14 +186,12 @@ public actor LogcatStreamer {
 
         let handle = UncheckedSendable(pipe.fileHandleForReading)
         readerTask = Task {
-            do {
-                for try await line in handle.value.bytes.lines {
-                    guard !Task.isCancelled else { break }
-                    if line.trimmingCharacters(in: .whitespaces).isEmpty { continue }
-                    self.append(LogcatLineParser.parse(line), epoch: sessionEpoch)
-                }
-            } catch {
-                // Pipe closed (process killed) — fall through to final flush.
+            // The stream ends on EOF — including a killed process's closed
+            // pipe — then falls through to the final flush.
+            for await line in FileHandleLines.lines(of: handle.value) {
+                guard !Task.isCancelled else { break }
+                if line.trimmingCharacters(in: .whitespaces).isEmpty { continue }
+                self.append(LogcatLineParser.parse(line), epoch: sessionEpoch)
             }
             self.finishStream(epoch: sessionEpoch)
         }
@@ -214,8 +212,12 @@ public actor LogcatStreamer {
         flusherTask = nil
         process?.terminate()
         process = nil
-        // Closing our read end EOFs the stale reader promptly.
+        // Closing our read end EOFs the stale reader promptly. Off-Darwin the
+        // reader thread owns the fd (see FileHandleLines); the terminated
+        // child EOFs it instead.
+        #if canImport(Darwin)
         try? readHandle?.close()
+        #endif
         readHandle = nil
         if !batch.isEmpty {
             continuation?.yield(batch)
@@ -247,7 +249,9 @@ public actor LogcatStreamer {
         flusherTask?.cancel()
         flusherTask = nil
         process = nil
+        #if canImport(Darwin)
         try? readHandle?.close()
+        #endif
         readHandle = nil
     }
 }

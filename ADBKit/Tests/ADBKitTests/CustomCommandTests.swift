@@ -219,9 +219,9 @@ import Testing
         #expect(script == "#!/opt/homebrew/bin/fish -l\n~/scripts/reset.sh\n")
     }
 
-    @Test func commandScriptFallsBackToZshForEmptyShell() {
+    @Test func commandScriptFallsBackToThePlatformShellForEmptyShell() {
         let script = CustomCommandService.commandScript(line: "ls", serial: "S1", shellPath: "")
-        #expect(script.hasPrefix("#!/bin/zsh -l\n"))
+        #expect(script.hasPrefix("#!\(CustomCommandService.fallbackShell) -l\n"))
     }
 
     @Test func shellInvocationSourcesTheMatchingRcFile() {
@@ -249,9 +249,9 @@ import Testing
         #expect(fish.executable == "/opt/homebrew/bin/fish")
         #expect(fish.arguments == ["-lc", "bs"])
 
-        // An empty SHELL falls back to zsh, the macOS default.
+        // An empty SHELL falls back to the platform default (zsh on macOS).
         let fallback = CustomCommandService.shellInvocation(line: "bs", shellPath: "")
-        #expect(fallback.executable == "/bin/zsh")
+        #expect(fallback.executable == CustomCommandService.fallbackShell)
     }
 
     @Test func shellKindSubstitutesBundleAndReportsFailure() async {

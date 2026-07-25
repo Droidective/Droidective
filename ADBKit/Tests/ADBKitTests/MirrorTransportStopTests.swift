@@ -1,3 +1,4 @@
+#if canImport(Network)
 import Foundation
 import Network
 import Testing
@@ -143,3 +144,4 @@ private final class HoldingRunner: ProcessRunning, @unchecked Sendable {
             timeout: timeout, maxOutputBytes: maxOutputBytes)
     }
 }
+#endif

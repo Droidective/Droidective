@@ -1,4 +1,4 @@
-.PHONY: generate build test test-app run dmg clean site-dev site-build \
+.PHONY: generate build test test-app test-linux run dmg clean site-dev site-build \
 	verify verify-fast verify-self \
 	test-emulator test-emulator-rooted test-emulator-mirror test-mutation test-smoke
 
@@ -73,6 +73,14 @@ test-mutation:
 # crash on launch, a missing bundled resource, or a window that never appears.
 test-smoke: build
 	./scripts/mac-smoke.sh
+
+# The same suite on Linux (see docs/cross-platform.md), via Apple's
+# `container` CLI — run `container system start` once per boot. The scratch
+# path keeps Linux build artifacts out of the macOS .build.
+test-linux:
+	container run --rm --cpus 8 --memory 10g \
+	  --volume "$(CURDIR)/ADBKit:/src" --workdir /src swift:6.3 \
+	  bash -c "apt-get update -qq >/dev/null 2>&1 && apt-get install -y -qq unzip xz-utils >/dev/null 2>&1; swift test --scratch-path /src/.build/linux"
 
 run: build
 	-pkill -x Droidective

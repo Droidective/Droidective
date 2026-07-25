@@ -1,9 +1,12 @@
+#if canImport(Darwin)
 import Darwin
+#endif
 import Foundation
 
 /// Reads the current process's own resource usage — cumulative CPU time and
 /// physical memory footprint — via `proc_pid_rusage`, for `ResourceWatchdog`.
 public enum ProcessStats {
+    #if canImport(Darwin)
     /// Seconds per mach absolute-time tick, from the host timebase.
     private static let machTickSeconds: Double = {
         var timebase = mach_timebase_info_data_t()
@@ -26,4 +29,9 @@ public enum ProcessStats {
             footprintBytes: info.ri_phys_footprint
         )
     }
+    #else
+    /// Self-usage sampling is a Darwin kernel call (`proc_pid_rusage`); other
+    /// hosts report nothing and the watchdog stays quiet.
+    public static func sample() -> ResourceSample? { nil }
+    #endif
 }

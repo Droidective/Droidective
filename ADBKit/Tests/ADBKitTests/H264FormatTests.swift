@@ -1,3 +1,4 @@
+#if canImport(CoreMedia)
 import CoreMedia
 import Foundation
 import Testing
@@ -83,3 +84,4 @@ import Testing
             == CMTime(value: 123_456, timescale: 1_000_000))
     }
 }
+#endif

@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// Downloads the ADBKeyboard IME (needed for Unicode/% text input) and
 /// installs it on the device.

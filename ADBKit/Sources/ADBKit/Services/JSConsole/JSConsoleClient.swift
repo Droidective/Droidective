@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// A Chrome DevTools Protocol client over a single WebSocket — the transport for
 /// the JS console. Connects to a target's `webSocketDebuggerUrl` (handed out by

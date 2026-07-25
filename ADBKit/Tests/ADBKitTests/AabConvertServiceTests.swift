@@ -115,9 +115,9 @@ import Testing
         #expect(build?.arguments[2] == "build-apks")
         #expect(build?.arguments.contains("--bundle=/in/My App.aab") == true)
         #expect(build?.arguments.contains("--mode=universal") == true)
-        // Second: /usr/bin/unzip pulling exactly universal.apk.
+        // Second: the host unzip pulling exactly universal.apk.
         let extract = runner.invocations.last
-        #expect(extract?.executable == "/usr/bin/unzip")
+        #expect(extract?.executable == HostArchive.unzipExecutable)
         #expect(extract?.arguments.contains("universal.apk") == true)
     }
 
@@ -233,9 +233,10 @@ private final class FileProducingRunner: ProcessRunning, @unchecked Sendable {
         if let output = arguments.first(where: { $0.hasPrefix("--output=") }) {
             FileManager.default.createFile(atPath: String(output.dropFirst("--output=".count)), contents: Data("apks".utf8))
         }
-        if producesUniversalApk, executable == "/usr/bin/unzip",
-           let dashD = arguments.firstIndex(of: "-d"), arguments.count > dashD + 1 {
-            let dest = URL(fileURLWithPath: arguments[dashD + 1]).appendingPathComponent("universal.apk")
+        if producesUniversalApk, executable == HostArchive.unzipExecutable,
+           let flag = arguments.firstIndex(where: { $0 == "-d" || $0 == "-C" }),
+           arguments.count > flag + 1 {
+            let dest = URL(fileURLWithPath: arguments[flag + 1]).appendingPathComponent("universal.apk")
             FileManager.default.createFile(atPath: dest.path, contents: Data("universal".utf8))
         }
     }

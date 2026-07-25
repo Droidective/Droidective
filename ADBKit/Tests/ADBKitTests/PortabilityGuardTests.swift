@@ -73,30 +73,14 @@ import Testing
         "ADBKit/Support/ProcessStats.swift",  // Darwin process sampling
     ]
 
-    /// Known debt on `main`: the exact Apple-only imports and traps each file is
-    /// allowed to keep, so everything else can be enforced now. The fixes belong
-    /// on `feat/cross-platform-core`, which already gates all of these behind
-    /// `#if canImport(...)` — repeating them here would only conflict with that
-    /// branch. `everyKnownDebtEntryIsStillALiveViolation` fails on a stale entry,
-    /// so the list shrinks as the port lands instead of rotting.
-    private static let knownDebt: [String: Set<String>] = [
-        // `import os` for OSAllocatedUnfairLock; the port keeps it under
-        // canImport(Darwin) and uses Synchronization's Mutex elsewhere.
-        "ADBKit/Support/NetworkTrafficMeter.swift": ["os", "OSAllocatedUnfairLock"],
-        // CryptoKit SHA256 over a downloaded asset; the port falls back to swift-crypto.
-        "ADBKit/Tools/ManagedToolStore.swift": ["CryptoKit"],
-        // CryptoKit SHA256 for the decompile output-directory name; same fallback.
-        "ADBKit/Services/DecompileService.swift": ["CryptoKit"],
-        // Darwin getifaddrs for the Mac's LAN address; the port adds a Glibc branch.
-        "ADBKit/Services/HostNetwork.swift": ["Darwin"],
-        // FileManager.replaceItemAt for the atomic store write; corelibs has no such method.
-        "ADBKit/Persistence/JSONStore.swift": ["FileManager.replaceItemAt"],
-        // Raw posix_spawn to detach a booting emulator from the app's process group.
-        "ADBKit/Services/EmulatorService.swift": ["posix_spawn"],
-        // FileHandle.bytes line iteration over a long-running stream; no AsyncBytes in corelibs.
-        "ADBKit/Services/LogcatStream.swift": ["FileHandle.bytes"],
-        "ADBKit/Services/SimulatorLogStream.swift": ["FileHandle.bytes"],
-    ]
+    /// Known portability debt, keyed by file and item. An allowlisted file still
+    /// fails on any *other* violation.
+    ///
+    /// Empty, and that is the point: the portable-core merge gated every previous
+    /// entry behind `#if canImport(...)`, so the guard now holds with nothing
+    /// excused. `everyKnownDebtEntryIsStillALiveViolation` fails on a stale entry,
+    /// so this cannot silently refill with things that were already fixed.
+    private static let knownDebt: [String: Set<String>] = [:]
 
     // MARK: - The scan
 

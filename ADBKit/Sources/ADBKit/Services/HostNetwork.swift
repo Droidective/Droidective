@@ -1,4 +1,8 @@
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 import Foundation
 
 /// The Mac's own LAN address — what a device on the same network dials to
@@ -18,6 +22,11 @@ public enum HostNetwork {
 
     /// The Mac's primary IPv4 address, or nil when it has no LAN address.
     public static func primaryIPv4() -> String? {
+        #if os(Windows)
+        // Interface enumeration needs GetAdaptersAddresses on Windows; nothing
+        // consumes the host IP there yet.
+        return nil
+        #else
         var list: UnsafeMutablePointer<ifaddrs>?
         guard getifaddrs(&list) == 0, let first = list else { return nil }
         defer { freeifaddrs(list) }
@@ -33,8 +42,15 @@ public enum HostNetwork {
                   flags & UInt32(IFF_LOOPBACK) == 0
             else { continue }
             var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+            // Linux's sockaddr carries no sa_len; the family is guarded to
+            // AF_INET above, so the length is sockaddr_in's.
+            #if canImport(Darwin)
+            let addressLength = socklen_t(address.pointee.sa_len)
+            #else
+            let addressLength = socklen_t(MemoryLayout<sockaddr_in>.size)
+            #endif
             guard getnameinfo(
-                address, socklen_t(address.pointee.sa_len),
+                address, addressLength,
                 &host, socklen_t(host.count), nil, 0, NI_NUMERICHOST
             ) == 0 else { continue }
             // `String(cString: [CChar])` is deprecated — truncate at the NUL
@@ -45,6 +61,7 @@ public enum HostNetwork {
                 address: String(decoding: hostBytes, as: UTF8.self)))
         }
         return pickPrimary(from: candidates)
+        #endif
     }
 
     /// Picks the address a teammate would call "the Mac's IP": real network

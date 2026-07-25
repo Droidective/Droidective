@@ -1,3 +1,4 @@
+#if canImport(CoreMedia)
 import CoreMedia
 import Foundation
 
@@ -81,3 +82,4 @@ enum H264Format {
             Unmanaged.passUnretained(kCFBooleanTrue).toOpaque())
     }
 }
+#endif

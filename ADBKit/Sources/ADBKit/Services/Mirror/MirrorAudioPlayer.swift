@@ -1,3 +1,4 @@
+#if canImport(AVFoundation)
 import AVFoundation
 import Foundation
 
@@ -76,3 +77,4 @@ public final class MirrorAudioPlayer: @unchecked Sendable {
         player.scheduleBuffer(buffer, completionHandler: nil)
     }
 }
+#endif

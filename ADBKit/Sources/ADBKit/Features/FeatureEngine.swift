@@ -73,11 +73,14 @@ public struct FeatureEngine: Sendable {
 
     public init(
         client: AdbClient, locator: ToolLocator, monitor: DeviceMonitor,
-        overridesStore: JSONStore<OverridesMap>, toolsDirectory: URL
+        overridesStore: JSONStore<OverridesMap>, toolsDirectory: URL,
+        simctl: SimctlClient? = nil
     ) {
         self.client = client
-        self.simctl = SimctlClient(runner: client.runner, log: client.log)
-        self.simulators = SimulatorService(client: simctl)
+        // Injectable so mock-driven tests don't depend on the host having an
+        // xcrun; the default probes the real filesystem.
+        self.simctl = simctl ?? SimctlClient(runner: client.runner, log: client.log)
+        self.simulators = SimulatorService(client: self.simctl)
         self.locator = locator
         self.monitor = monitor
         self.managedTools = ManagedToolStore(rootDirectory: toolsDirectory)

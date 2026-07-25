@@ -21,6 +21,35 @@ jobs:
       - name: Run ADBKit tests
         run: cd ADBKit && swift test -Xswiftc -warnings-as-errors
 
+  # The Windows/Linux port rides on ADBKit staying portable (see
+  # docs/cross-platform.md). Linux runs the full mock-driven suite; Windows
+  # compiles the library and tests (running them there waits on a Windows
+  # audit of the process-spawning tests, which hardcode POSIX paths).
+  test-linux:
+    runs-on: ubuntu-24.04
+    container: swift:6.2-noble
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Install extraction tools the suite shells out to
+        run: apt-get update -q && apt-get install -y -q unzip xz-utils
+      - name: Run ADBKit tests (Linux)
+        run: cd ADBKit && swift test -Xswiftc -warnings-as-errors
+
+  build-windows:
+    runs-on: windows-2025
+    steps:
+      - uses: compnerd/gha-setup-swift@eeda069c5bc95ac8a9ac5cea7d4f588ae5420ca5  # v0.4.0
+        with:
+          branch: swift-6.2.4-release
+          tag: 6.2.4-RELEASE
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Build ADBKit and its tests (Windows)
+        run: cd ADBKit && swift build --build-tests -Xswiftc -warnings-as-errors
+
   build:
     runs-on: macos-15
     steps:

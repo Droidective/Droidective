@@ -27,13 +27,20 @@ public enum ConsoleLinkDetector {
         }
     }
 
+    #if canImport(Darwin)
     /// Built once — construction compiles the detector and would dominate
     /// per-row render cost. `NSDataDetector` is immutable and thread-safe
     /// (an `NSRegularExpression` subclass, `Sendable` in the SDK).
     private static let detector =
         try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
+    #endif
 
     public static func linkSpans(in text: String) -> [Span] {
+        #if !canImport(Darwin)
+        // corelibs Foundation has no NSDataDetector; a host UI for other
+        // platforms linkifies in its own view layer instead.
+        return []
+        #else
         guard text.contains("://"), let detector else { return [] }
         let matches = detector.matches(in: text, range: NSRange(text.startIndex..., in: text))
         var spans: [Span] = []
@@ -49,5 +56,6 @@ public enum ConsoleLinkDetector {
             ))
         }
         return spans
+        #endif
     }
 }

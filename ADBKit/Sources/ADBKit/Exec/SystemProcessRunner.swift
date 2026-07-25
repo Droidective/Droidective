@@ -141,6 +141,7 @@ final class PipeCollector: @unchecked Sendable {
         lock.lock()
         self.handle = handle
         lock.unlock()
+        #if canImport(Darwin)
         handle.readabilityHandler = { [weak self] handle in
             let chunk = handle.availableData
             if chunk.isEmpty {
@@ -151,12 +152,36 @@ final class PipeCollector: @unchecked Sendable {
                 self?.append(chunk)
             }
         }
+        #else
+        // corelibs never delivers the empty EOF callback when the last data
+        // and the writer's close arrive together (verified on 6.2), so the
+        // handler-based spelling hangs. A dedicated blocking-read thread is
+        // the reliable one: read() returns empty exactly at EOF. The thread
+        // retains the handle, so the fd can't be closed-and-reused under a
+        // read; it closes with the handle after the thread ends.
+        let boxed = UncheckedSendable(handle)
+        let thread = Thread { [weak self] in
+            while true {
+                let chunk = boxed.value.availableData
+                if chunk.isEmpty { break }
+                self?.append(chunk)
+            }
+            self?.finish()
+        }
+        thread.name = "adbkit-pipe-collector"
+        thread.stackSize = 512 * 1024
+        thread.start()
+        #endif
     }
 
-    /// Detach the handler, close the FD, and mark finished.
+    /// Detach the handler, close the FD, and mark finished. Off-Darwin the
+    /// reader thread owns the fd (closing here could re-issue the fd number
+    /// under its blocked read); the child's termination EOFs it instead.
     func cancel(_ handle: FileHandle) {
+        #if canImport(Darwin)
         handle.readabilityHandler = nil
         try? handle.close()
+        #endif
         finish()
     }
 

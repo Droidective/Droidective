@@ -1,3 +1,4 @@
+#if canImport(AVFoundation)
 import AVFoundation
 import CoreMedia
 import Foundation
@@ -135,3 +136,4 @@ final class MirrorRecorder: @unchecked Sendable {
         return sampleBuffer
     }
 }
+#endif

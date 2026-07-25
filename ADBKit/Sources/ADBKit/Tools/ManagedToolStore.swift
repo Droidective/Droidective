@@ -1,5 +1,12 @@
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+import Crypto
+#endif
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// Network seam for the tool store: fetch the releases JSON and download asset
 /// files. Injected so the store's orchestration is tested without the network.
@@ -271,18 +278,34 @@ public actor ManagedToolStore {
         case .jar:
             try fileManager.moveItem(at: asset, to: dir.appendingPathComponent(asset.lastPathComponent))
         case .zipArchive:
-            try await extract("/usr/bin/unzip", ["-q", "-o", asset.path, "-d", dir.path])
+            try await extract(
+                HostArchive.unzipExecutable,
+                HostArchive.unzipArguments(archive: asset.path, into: dir.path))
         case .tarGz:
-            try await extract("/usr/bin/tar", ["-xzf", asset.path, "-C", dir.path])
+            try await extract(
+                HostArchive.tarExecutable,
+                HostArchive.tarGzArguments(archive: asset.path, into: dir.path))
         case .xzBinary:
+            guard let name = spec.runnableName else { throw StoreError.runnableNotFound(spec.tool) }
+            #if canImport(Darwin)
             // frida ships a bare .xz (macOS has no `xz` CLI) — decompress with the
             // system Compression framework into the runnable's fixed name.
-            guard let name = spec.runnableName else { throw StoreError.runnableNotFound(spec.tool) }
+            let out = dir.appendingPathComponent(name)
             let compressed = try Data(contentsOf: asset)
             let decompressed = try (compressed as NSData).decompressed(using: .lzma) as Data
-            let out = dir.appendingPathComponent(name)
             try decompressed.write(to: out, options: .atomic)
             try fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: out.path)
+            #elseif os(Windows)
+            throw StoreError.extractionFailed("xz decompression of \(name) isn't supported on Windows yet")
+            #else
+            // Foundation has no lzma off-Darwin; Linux's ubiquitous xz-utils CLI
+            // decompresses in place (dropping the .xz suffix → the runnable's name).
+            let staged = dir.appendingPathComponent(name + ".xz")
+            try fileManager.moveItem(at: asset, to: staged)
+            try await extract("/usr/bin/xz", ["--decompress", "--force", staged.path])
+            try fileManager.setAttributes(
+                [.posixPermissions: 0o755], ofItemAtPath: dir.appendingPathComponent(name).path)
+            #endif
         }
     }
 

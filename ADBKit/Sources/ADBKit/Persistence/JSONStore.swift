@@ -60,10 +60,16 @@ public actor JSONStore<T: Codable & Sendable> {
         try FileManager.default.createDirectory(
             at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true
         )
+        #if canImport(Darwin)
         let tempURL = fileURL.deletingLastPathComponent()
             .appendingPathComponent(".\(fileURL.lastPathComponent).tmp-\(UUID().uuidString)")
         try data.write(to: tempURL)
         _ = try FileManager.default.replaceItemAt(fileURL, withItemAt: tempURL)
+        #else
+        // corelibs Foundation doesn't implement replaceItemAt; its `.atomic`
+        // write is the same temp-file-then-rename(2) dance.
+        try data.write(to: fileURL, options: .atomic)
+        #endif
         cached = value
     }
 

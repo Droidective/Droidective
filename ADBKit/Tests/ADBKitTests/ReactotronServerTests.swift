@@ -1,3 +1,4 @@
+#if canImport(Network)
 import Foundation
 import Testing
 @testable import ADBKit
@@ -256,3 +257,4 @@ import Testing
         }
     }
 }
+#endif
