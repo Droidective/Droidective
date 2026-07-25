@@ -79,6 +79,8 @@ private struct RecordingDecisionModifier: ViewModifier {
         let data = await VideoEditService(
             locator: state.env.client.locator, bundledPath: BundledTools.ffmpegPath()
         ).thumbnail(of: url)
+        // A re-keyed task (a different recording) must not land this frame.
+        guard !Task.isCancelled else { return }
         thumbnail = data.flatMap(NSImage.init(data:))
         loadingThumbnail = false
     }
