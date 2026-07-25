@@ -7,11 +7,14 @@
 # without a runner they never execute. This boots an emulator, sets the gates,
 # runs them, and tears down only what it started.
 #
-# Usage: emulator-harness.sh [--avd NAME] [--rooted] [--filter SUITE] [--keep]
+# Usage: emulator-harness.sh [--avd NAME] [--rooted] [--filter SUITE] [--keep] [--record]
 #   --avd NAME    boot this AVD instead of the default
 #   --rooted      shorthand for the rooted AVD (root-gated features)
 #   --filter S    pass a --filter through to swift test (repeatable)
 #   --keep        leave a self-booted emulator running afterwards
+#   --record      regenerate the committed process fixture from this device
+#                 (writes ADBKit/Tests/ADBKitTests/Fixtures/android-emulator.json —
+#                 review the diff before committing)
 #
 # Safety: an emulator that was already attached before this script ran is reused
 # and never killed — only a device this script booted gets shut down.
@@ -28,6 +31,7 @@ BOOT_TIMEOUT=300
 
 AVD=""
 KEEP=0
+RECORD=0
 FILTERS=()
 
 die() {
@@ -51,6 +55,10 @@ while [[ $# -gt 0 ]]; do
     ;;
   --keep)
     KEEP=1
+    shift
+    ;;
+  --record)
+    RECORD=1
     shift
     ;;
   *) die "unknown argument '$1'" ;;
@@ -131,24 +139,35 @@ echo "── device ready: $(adb -s "$SERIAL" shell getprop ro.product.model | t
 # Default to the device suite; the mirror suites need a scrcpy server payload and
 # are opt-in via --filter so a missing one doesn't fail the whole run.
 if ((${#FILTERS[@]} == 0)); then
-  FILTERS=(DeviceLiveTests)
+  if ((RECORD == 1)); then
+    FILTERS=(FixtureRecordingTests)
+  else
+    FILTERS=(DeviceLiveTests)
+  fi
 fi
 
 args=()
 for f in "${FILTERS[@]}"; do args+=(--filter "$f"); done
 
+record_env=()
+if ((RECORD == 1)); then
+  record_env=(RECORD_FIXTURES=1)
+  echo "── recording fixtures (review the JSON diff before committing)"
+fi
+
 echo "── running live suites: ${FILTERS[*]}"
 set +e
 (
   cd "$ROOT/ADBKit" &&
-    DEVICE_LIVE_TEST=1 MIRROR_LIVE_TEST=1 MIRROR_SERIAL="$SERIAL" \
+    env "${record_env[@]}" \
+      DEVICE_LIVE_TEST=1 MIRROR_LIVE_TEST=1 MIRROR_SERIAL="$SERIAL" \
       ANDROID_SERIAL="$SERIAL" swift test "${args[@]}"
 )
-status=$?
+run_status=$?
 set -e
 
-if ((status != 0)); then
-  die "live suites failed (exit $status)"
+if ((run_status != 0)); then
+  die "live suites failed (exit $run_status)"
 fi
 
 echo "───────────────────────────────────────────────────────────"
