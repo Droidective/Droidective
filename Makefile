@@ -4,7 +4,10 @@
 
 # Optional telemetry keys for local builds. Create .env.telemetry (gitignored)
 # with SENTRY_DSN=... and POSTHOG_KEY=... to enable crash/analytics locally.
-# Without it both stay empty, so neither SDK starts — fine for development.
+# Without it both stay empty, so neither SDK starts. That is a genuinely
+# different startup path from a keyed build — `SentrySDK.start` is what first
+# creates the shared NSApplication — and CI compiles the keyless path without
+# ever launching it, so keyless-only launch bugs can hide there.
 -include .env.telemetry
 TELEMETRY := SENTRY_DSN="$(SENTRY_DSN)" POSTHOG_KEY="$(POSTHOG_KEY)"
 

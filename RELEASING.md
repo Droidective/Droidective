@@ -167,7 +167,11 @@ POSTHOG_KEY=phc_…
 ```
 
 `make build` / `make dmg` pick it up automatically. Without it, local builds run
-with telemetry disabled — fine for development.
+with telemetry disabled — fine for development, but note it is a different
+startup path from a keyed release build: `SentrySDK.start` is what first creates
+the shared `NSApplication`, so with empty keys nothing has created it by the time
+the rest of `Telemetry.start()` runs. CI's `build` job compiles that keyless path
+and never launches it.
 
 Both are client-side write keys, safe to ship in the binary. Users get a one-time
 privacy disclosure on first launch, managed afterward in Settings → Privacy.
