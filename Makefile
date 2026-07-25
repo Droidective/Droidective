@@ -79,7 +79,7 @@ test-smoke: build
 # path keeps Linux build artifacts out of the macOS .build.
 test-linux:
 	container run --rm --cpus 8 --memory 10g \
-	  --volume "$(CURDIR)/ADBKit:/src" --workdir /src swift:6.3 \
+	  --volume "$(CURDIR)/ADBKit:/src" --workdir /src swift:6.2-noble \
 	  bash -c "apt-get update -qq >/dev/null 2>&1 && apt-get install -y -qq unzip xz-utils >/dev/null 2>&1; swift test --scratch-path /src/.build/linux"
 
 run: build

@@ -47,8 +47,18 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
         with:
           persist-credentials: false
+      # ADBKit and its own test target only — deliberately not `--build-tests`,
+      # which would also build ReactotronMCP. That target depends on swift-nio,
+      # whose Windows support is still partial: TCP compiles but Unix domain
+      # sockets, UDP and pipe channels are unsupported, NIOFileSystem is stubbed
+      # with fatalError, and apple/swift-nio#3647 blocks downstream packages on
+      # Swift 6.1+. The portable core is what this job is here to protect; the MCP
+      # server is knowingly macOS/Linux-only for now.
       - name: Build ADBKit and its tests (Windows)
-        run: cd ADBKit && swift build --build-tests -Xswiftc -warnings-as-errors
+        run: |
+          cd ADBKit
+          swift build --target ADBKit -Xswiftc -warnings-as-errors
+          swift build --target ADBKitTests -Xswiftc -warnings-as-errors
 
   build:
     runs-on: macos-15
