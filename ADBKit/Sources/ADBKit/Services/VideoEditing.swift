@@ -100,8 +100,9 @@ public struct VideoExportOptions: Sendable, Equatable {
     var normalizedRotation: Int { ((rotationDegrees % 360) + 360) % 360 }
 }
 
-/// Pure ffmpeg argument builder — the test seam for the video editor. UI picks
-/// `VideoExportOptions`; this turns them into an ffmpeg invocation.
+/// Pure ffmpeg argument builder and stderr reader — the test seam for the video
+/// editor. UI picks `VideoExportOptions`; this turns them into an ffmpeg
+/// invocation, and turns a failed run's stderr into a message worth showing.
 public enum VideoEditing {
     /// ffmpeg arguments (excluding the `ffmpeg` executable itself) that apply
     /// `options` to `input` and write `output`.
@@ -144,6 +145,27 @@ public enum VideoEditing {
             "-f", "concat", "-safe", "0", "-i", listFile,
             "-c", "copy", "-movflags", "+faststart", "-y", output,
         ]
+    }
+
+    /// The last `lines` non-blank lines of an ffmpeg stderr dump — the reason a
+    /// run failed, for a user-facing message.
+    ///
+    /// ffmpeg ends each progress update with a carriage return so they overwrite
+    /// one terminal line, which makes `"\n"` the wrong separator: the whole
+    /// `\r`-packed progress blob is a single `"\n"` component and swallows the
+    /// error text that follows. `.newlines` breaks on `\r`, `\n`, and CRLF
+    /// alike; the blank-line filter drops the empty components CRLF leaves
+    /// behind as well as a trailing newline's.
+    ///
+    /// - Parameters:
+    ///   - stderr: raw stderr as ffmpeg wrote it.
+    ///   - lines: how many trailing lines to keep.
+    /// - Returns: the lines joined by `"\n"`, or `""` when there is no output.
+    public static func stderrTail(_ stderr: String, lines: Int = 3) -> String {
+        stderr.components(separatedBy: .newlines)
+            .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+            .suffix(lines)
+            .joined(separator: "\n")
     }
 
     /// Input-side `-ss`/`-t` so trimming composes correctly with speed changes
