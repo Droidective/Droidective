@@ -42,86 +42,9 @@ struct FeatureDetailView: View {
     private func detailByKind(for feature: FeatureDef) -> some View {
         switch feature.kind {
         case .view, .system:
-            switch feature.id {
-            case "react-native":
-                ReactNativeView()
-            case "reactotron":
-                ReactotronView()
-            case "js-console":
-                JSConsoleView()
-            case "simulate":
-                SimulateView()
-            case "connection":
-                NetworkConnectionView()
-            case "app-management":
-                AppManagementView()
-            case "deep-link":
-                DeepLinksView()
-            case "logcat":
-                LogcatView()
-            case "ios-logs":
-                SimulatorLogsView()
-            case "permissions":
-                PermissionsView()
-            case "app-info":
-                AppInfoView()
-            case "meminfo":
-                MeminfoView()
-            case "sandbox-browser":
-                SandboxBrowserView()
-            case "device-info":
-                DeviceInfoView()
-            case "root-status":
-                RootStatusView()
-            case "wifi":
-                WiFiView()
-            case "private-dns":
-                PrivateDnsView()
-            case "system-restrictions":
-                SystemRestrictionsView()
-            case "dev-settings":
-                DeveloperSettingsView()
-            case "screen-record":
-                ScreenRecordView()
-            case "video-editor":
-                VideoEditorView()
-            case "crash-catcher":
-                CrashView()
-            case "bug-report":
-                BugReportView()
-            case "wireless-adb":
-                WirelessAdbView()
-            case "custom-commands":
-                CustomCommandsView()
-            case "terminal":
-                TerminalView()
-            case "file-explorer":
-                FileExplorerView()
-            case "apps":
-                AppsExplorerView()
-            case "install-app":
-                InstallAppView()
-            case "apk-studio":
-                ApkStudioView()
-            case "apk-inspector":
-                ApkInspectorView()
-            case "apk-sign":
-                ApkSignView()
-            case "apk-decompile":
-                DecompileBrowserView()
-            case "aab-convert":
-                AabConvertView()
-            case "frida-console":
-                FridaConsoleView()
-            case "emulators":
-                EmulatorsView()
-            case "performance":
-                PerformanceView()
-            case "network-speed":
-                NetworkView()
-            case "scrcpy":
-                ScreenMirrorView()
-            default:
+            if let route = FeatureDetailRoute(rawValue: feature.id) {
+                pane(for: route)
+            } else {
                 ComingSoonView(feature: feature)
             }
         case .instantAction:
@@ -144,6 +67,93 @@ struct FeatureDetailView: View {
             } else {
                 ComingSoonView(feature: feature)
             }
+        }
+    }
+
+    /// One pane per routed id. Exhaustive over `FeatureDetailRoute` on purpose
+    /// — no `default` — so adding a case there fails the build until it has a
+    /// view here, and the id strings stay in the enum alone.
+    @ViewBuilder
+    private func pane(for route: FeatureDetailRoute) -> some View {
+        switch route {
+        case .reactNative:
+            ReactNativeView()
+        case .reactotron:
+            ReactotronView()
+        case .jsConsole:
+            JSConsoleView()
+        case .simulate:
+            SimulateView()
+        case .connection:
+            NetworkConnectionView()
+        case .appManagement:
+            AppManagementView()
+        case .deepLink:
+            DeepLinksView()
+        case .logcat:
+            LogcatView()
+        case .iosLogs:
+            SimulatorLogsView()
+        case .permissions:
+            PermissionsView()
+        case .appInfo:
+            AppInfoView()
+        case .meminfo:
+            MeminfoView()
+        case .sandboxBrowser:
+            SandboxBrowserView()
+        case .deviceInfo:
+            DeviceInfoView()
+        case .rootStatus:
+            RootStatusView()
+        case .wifi:
+            WiFiView()
+        case .privateDns:
+            PrivateDnsView()
+        case .systemRestrictions:
+            SystemRestrictionsView()
+        case .devSettings:
+            DeveloperSettingsView()
+        case .screenRecord:
+            ScreenRecordView()
+        case .videoEditor:
+            VideoEditorView()
+        case .crashCatcher:
+            CrashView()
+        case .bugReport:
+            BugReportView()
+        case .wirelessAdb:
+            WirelessAdbView()
+        case .customCommands:
+            CustomCommandsView()
+        case .terminal:
+            TerminalView()
+        case .fileExplorer:
+            FileExplorerView()
+        case .apps:
+            AppsExplorerView()
+        case .installApp:
+            InstallAppView()
+        case .apkStudio:
+            ApkStudioView()
+        case .apkInspector:
+            ApkInspectorView()
+        case .apkSign:
+            ApkSignView()
+        case .apkDecompile:
+            DecompileBrowserView()
+        case .aabConvert:
+            AabConvertView()
+        case .fridaConsole:
+            FridaConsoleView()
+        case .emulators:
+            EmulatorsView()
+        case .performance:
+            PerformanceView()
+        case .networkSpeed:
+            NetworkView()
+        case .scrcpy:
+            ScreenMirrorView()
         }
     }
 }
