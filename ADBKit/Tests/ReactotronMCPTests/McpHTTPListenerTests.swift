@@ -1,3 +1,5 @@
+#if canImport(Network)
+
 import ADBKit
 import Foundation
 import MCP
@@ -230,3 +232,5 @@ import Testing
         }
     }
 }
+
+#endif

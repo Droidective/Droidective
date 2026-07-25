@@ -38,7 +38,13 @@ jobs:
         run: cd ADBKit && swift test -Xswiftc -warnings-as-errors
 
   build-windows:
-    runs-on: windows-2025
+    # windows-2022, not -2025: the 2025 image ships MSVC 14.51, whose STL header
+    # yvals_core.h hard-errors with "STL1000: Unexpected compiler version,
+    # expected Clang 20 or newer". The Swift 6.2.4 toolchain bundles an older
+    # clang, and swift-crypto vendors BoringSSL as C/C++, so that assert fires
+    # while compiling BoringSSL rather than any Swift we wrote. 2022's MSVC
+    # accepts the bundled clang. Revisit when a Swift release ships clang 20+.
+    runs-on: windows-2022
     steps:
       - uses: compnerd/gha-setup-swift@eeda069c5bc95ac8a9ac5cea7d4f588ae5420ca5  # v0.4.0
         with:
