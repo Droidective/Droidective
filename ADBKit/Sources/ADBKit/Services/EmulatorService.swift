@@ -252,7 +252,7 @@ public struct EmulatorService: Sendable {
     /// `lsof` maps the serial to the right pid even with several emulators up.
     /// Runs through the non-blocking runner so it can't park a cooperative
     /// thread (the reason this lives here, not in the view).
-    public func consolePID(serial: String) async -> pid_t? {
+    public func consolePID(serial: String) async -> Int32? {
         guard let port = serial.split(separator: "-").last.flatMap({ Int($0) }) else { return nil }
         let output = await runner.run(
             executable: "/usr/sbin/lsof",
@@ -263,9 +263,11 @@ public struct EmulatorService: Sendable {
     }
 
     /// First pid from `lsof -t` output (one pid per line; tolerates CRLF).
-    static func parseLsofPID(_ output: String) -> pid_t? {
+    /// Typed `Int32` rather than `pid_t`: they are the same type on POSIX, and
+    /// `pid_t` does not exist on Windows.
+    static func parseLsofPID(_ output: String) -> Int32? {
         output.split(whereSeparator: \.isNewline)
-            .compactMap { pid_t($0.trimmingCharacters(in: .whitespaces)) }
+            .compactMap { Int32($0.trimmingCharacters(in: .whitespaces)) }
             .first
     }
 }
