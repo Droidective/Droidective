@@ -11,16 +11,14 @@ import { APP_VERSION, DOWNLOAD_URL, GITHUB_URL } from "@/lib/content"
 
 export function Hero() {
   const reducedMotion = usePrefersReducedMotion()
-  // The dot field reacts to the mouse; on touch devices it would just burn
-  // battery in a rAF loop, so those get the same field painted in CSS.
   const finePointer = useFinePointer()
   const staticHeading = reducedMotion || !finePointer
 
   return (
-    <header id="top" className="relative overflow-hidden pt-19 pb-16">
-      {/* Interactive dot field, masked so it fades toward the content */}
+    <header id="top" className="relative overflow-hidden pt-19 pb-20">
+      {/* Interactive dot field */}
       <div
-        className="absolute inset-0 opacity-70 [mask-image:radial-gradient(900px_600px_at_70%_0%,black,transparent_75%)]"
+        className="absolute inset-0 opacity-70 [mask-image:radial-gradient(1000px_700px_at_50%_0%,black,transparent_75%)]"
         aria-hidden
       >
         {finePointer && !reducedMotion ? (
@@ -37,70 +35,78 @@ export function Hero() {
           <div className="h-full w-full bg-[radial-gradient(circle,#1b1f1e_1.25px,transparent_1.25px)] bg-[size:28.5px_28.5px]" />
         )}
       </div>
-      {/* Green glow behind the palette */}
+      {/* Green glow behind content — centered */}
       <div
         aria-hidden
-        className="pointer-events-none absolute -top-[20%] right-0 h-175 w-225 rounded-full bg-[radial-gradient(closest-side,rgba(155,224,33,0.3),transparent_70%)] opacity-55 blur-lg"
+        className="pointer-events-none absolute -top-[15%] left-1/2 h-175 w-225 -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(155,224,33,0.25),transparent_70%)] opacity-55 blur-lg"
       />
 
-      <div className="relative mx-auto grid max-w-[1120px] items-center gap-14 px-6 max-[940px]:grid-cols-1 max-[940px]:gap-11 min-[940px]:grid-cols-[0.92fr_1.08fr]">
-        <div>
-          <span className="mb-6 inline-flex items-center gap-2.25 rounded-full border border-border bg-white/3 px-3.25 py-1.5 font-mono text-[12.5px] text-muted max-[620px]:items-start max-[620px]:rounded-xl">
-            <span className="size-1.75 shrink-0 rounded-full bg-green shadow-[0_0_10px_var(--color-green)] max-[620px]:mt-1.5" />
-            Free &amp; open source · Signed &amp; notarized · macOS 14+ · Apple Silicon &amp; Intel
-          </span>
-          <h1 className="mb-5.5 max-w-[14ch] text-[clamp(38px,5.4vw,62px)] leading-[1.02] font-extrabold tracking-[-0.035em] max-[940px]:max-w-[18ch]">
-            {staticHeading ? (
-              <>
-                Every adb tool, <span className="text-green">one keystroke</span> away.
-              </>
-            ) : (
-              // words 4 & 5 ("one keystroke") carry the accent color
-              <BlurText
-                text="Every adb tool, one keystroke away."
-                animateBy="words"
-                direction="top"
-                delay={120}
-                stepDuration={0.3}
-                className="[&>span:nth-child(4)]:text-green [&>span:nth-child(5)]:text-green"
-              />
-            )}
-          </h1>
-          <p className="mb-7.5 max-w-[52ch] text-[clamp(16px,1.5vw,19px)] text-muted">
-            Droidective is a native macOS command palette for{" "}
-            <strong className="font-semibold text-text">Android &amp; React Native</strong> debugging over adb.
-            Mirror screens, tail logcat, browse device files, fake any state, and watch performance live —{" "}
-            <strong className="font-semibold text-text">56 tools</strong>, no terminal required.
-          </p>
-          <div className="flex flex-wrap gap-3.25">
-            <Button
-              asChild
-              size="lg"
-              className="h-auto rounded-xl px-5 py-3 text-[15px] font-bold shadow-glow transition-transform duration-150 hover:-translate-y-px hover:bg-green-bright"
-            >
-              <a href={DOWNLOAD_URL} data-dl="hero">
-                <Download aria-hidden />
-                Download for macOS
-              </a>
-            </Button>
-            <Button
-              asChild
-              variant="outline"
-              size="lg"
-              className="h-auto rounded-xl border-border-2 bg-white/4 px-5 py-3 text-[15px] font-semibold transition-transform duration-150 hover:-translate-y-px hover:bg-white/8"
-            >
-              <a href={GITHUB_URL}>
-                <Star aria-hidden />
-                Star on GitHub
-              </a>
-            </Button>
-          </div>
-          <p className="mt-5 font-mono text-[12.5px] text-faint">
-            $ <span className="text-muted">requires Android adb · auto-updates via Sparkle · {APP_VERSION}</span>
-          </p>
+      <div className="relative mx-auto flex max-w-[1120px] flex-col items-center px-6 text-center">
+        {/* Eyebrow banner */}
+        <a
+          href={`${GITHUB_URL}/releases/tag/${APP_VERSION}`}
+          className="group mb-7 inline-flex items-center gap-2.25 rounded-full border border-border bg-white/3 px-3.5 py-1.5 font-mono text-[12.5px] text-muted transition-colors duration-150 hover:border-green/30 hover:text-text"
+        >
+          <span className="size-1.75 shrink-0 rounded-full bg-green shadow-[0_0_10px_var(--color-green)]" />
+          {APP_VERSION} Released · Free &amp; Open Source · macOS 14+
+          <span className="text-faint transition-colors duration-150 group-hover:text-green">→</span>
+        </a>
+
+        <h1 className="mb-6 max-w-[18ch] text-[clamp(38px,5.8vw,68px)] leading-[1.02] font-extrabold tracking-[-0.035em]">
+          {staticHeading ? (
+            <>
+              All your Android debugging tools,{" "}
+              <span className="text-green">one keystroke</span> away.
+            </>
+          ) : (
+            <BlurText
+              text="All your Android debugging tools, one keystroke away."
+              animateBy="words"
+              direction="top"
+              delay={120}
+              stepDuration={0.3}
+              className="[&>span:nth-child(6)]:text-green [&>span:nth-child(7)]:text-green"
+            />
+          )}
+        </h1>
+
+        <p className="mb-8 max-w-[58ch] text-[clamp(16px,1.5vw,19px)] leading-[1.65] text-muted">
+          Droidective is a native macOS command palette for{" "}
+          <strong className="font-semibold text-text">Android &amp; React Native</strong> debugging.
+          Mirror screens, tail logcat, browse files, fake any state, and watch performance live —{" "}
+          <strong className="font-semibold text-text">59 tools</strong>, no terminal required.
+        </p>
+
+        <div className="mb-3.5 flex flex-wrap justify-center gap-3.25">
+          <Button
+            asChild
+            size="lg"
+            className="h-auto rounded-xl px-6 py-3.5 text-[15.5px] font-bold shadow-glow transition-transform duration-150 hover:-translate-y-px hover:bg-green-bright"
+          >
+            <a href={DOWNLOAD_URL} data-dl="hero">
+              <Download aria-hidden />
+              Download for macOS
+            </a>
+          </Button>
+          <Button
+            asChild
+            variant="outline"
+            size="lg"
+            className="h-auto rounded-xl border-border-2 bg-white/4 px-6 py-3.5 text-[15.5px] font-semibold transition-transform duration-150 hover:-translate-y-px hover:bg-white/8"
+          >
+            <a href={GITHUB_URL}>
+              <Star aria-hidden />
+              Star on GitHub
+            </a>
+          </Button>
         </div>
 
-        <Reveal>
+        <p className="mb-14 font-mono text-[12.5px] text-faint">
+          Signed &amp; notarized · Apple Silicon &amp; Intel · Auto-updates via Sparkle
+        </p>
+
+        {/* Centered PaletteDemo */}
+        <Reveal className="w-full max-w-[620px]">
           <PaletteDemo />
         </Reveal>
       </div>

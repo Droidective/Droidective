@@ -11,16 +11,18 @@ import { DOWNLOAD_URL, GITHUB_URL } from "@/lib/content"
 
 export function FinalCta() {
   const reducedMotion = usePrefersReducedMotion()
-  // ShinyText animates every frame for as long as it is mounted, so swap in
-  // the plain heading whenever the section is off screen.
   const headingRef = useRef<HTMLHeadingElement>(null)
   const inView = useInView(headingRef)
 
   return (
     <section className="mx-auto max-w-[1120px] px-6 pb-26 max-[620px]:pb-18">
       <Reveal>
-        <div className="relative overflow-hidden rounded-3xl border border-border-2 bg-[radial-gradient(600px_280px_at_50%_-10%,rgba(155,224,33,0.1),transparent_70%),var(--color-ink-800)] px-8 py-19 text-center">
-          <h2 ref={headingRef} className="mb-3.5 text-[clamp(28px,4vw,40px)] font-extrabold tracking-[-0.03em]">
+        <div className="relative overflow-hidden rounded-3xl border border-border-2 bg-[radial-gradient(600px_280px_at_50%_-10%,rgba(155,224,33,0.12),transparent_70%),var(--color-ink-800)] px-8 py-20 text-center">
+          <p className="mb-4 font-mono text-[12.5px] font-medium tracking-[0.04em] text-green">
+            <span className="mr-2 text-green-dim">&gt;_</span>
+            ready to ship faster?
+          </p>
+          <h2 ref={headingRef} className="mb-4 text-[clamp(28px,4vw,42px)] font-extrabold tracking-[-0.03em]">
             {reducedMotion || !inView ? (
               "Debug Android without the terminal."
             ) : (
@@ -33,12 +35,14 @@ export function FinalCta() {
               />
             )}
           </h2>
-          <p className="mb-7.5 text-[17px] text-muted">Free, open source, and one keystroke away.</p>
+          <p className="mb-8 text-[17px] text-muted">
+            Free, open source, and one keystroke away. Join thousands of developers.
+          </p>
           <div className="flex flex-wrap justify-center gap-3.25">
             <Button
               asChild
               size="lg"
-              className="h-auto rounded-xl px-5 py-3 text-[15px] font-bold shadow-glow transition-transform duration-150 hover:-translate-y-px hover:bg-green-bright"
+              className="h-auto rounded-xl px-6 py-3.5 text-[15.5px] font-bold shadow-glow transition-transform duration-150 hover:-translate-y-px hover:bg-green-bright"
             >
               <a href={DOWNLOAD_URL} data-dl="final-cta">
                 <Download aria-hidden />
@@ -49,7 +53,7 @@ export function FinalCta() {
               asChild
               variant="outline"
               size="lg"
-              className="h-auto rounded-xl border-border-2 bg-white/4 px-5 py-3 text-[15px] font-semibold transition-transform duration-150 hover:-translate-y-px hover:bg-white/8"
+              className="h-auto rounded-xl border-border-2 bg-white/4 px-6 py-3.5 text-[15.5px] font-semibold transition-transform duration-150 hover:-translate-y-px hover:bg-white/8"
             >
               <a href={GITHUB_URL}>
                 <Star aria-hidden />

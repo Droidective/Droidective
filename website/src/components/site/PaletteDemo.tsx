@@ -101,7 +101,7 @@ export function PaletteDemo() {
       </div>
 
       {/* Results */}
-      <ul className="m-0 max-h-93 list-none overflow-hidden p-2">
+      <ul className="m-0 min-h-93 max-h-93 list-none overflow-hidden p-2">
         {paletteCommands.map((cmd) => {
           const shown = matches(query, cmd.keys, cmd.name)
           return (

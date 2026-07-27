@@ -44,26 +44,6 @@ export const paletteCommands: PaletteCommand[] = [
 
 export const paletteQueries = ["logcat", "scrcpy", "battery", "fps", "wifi", "react"]
 
-export interface Feature {
-  icon: LucideIcon
-  title: string
-  body: string
-  shell: string
-}
-
-export const features: Feature[] = [
-  { icon: Search, title: "Command palette", body: "Fuzzy-search every tool and run it instantly. Pin favorites, bind global hotkeys, and stop looking up adb flags.", shell: "⌘T → run anything" },
-  { icon: Cast, title: "Screen mirror & record", body: "A friendly GUI for scrcpy — mirror and control the device, tune bitrate, FPS and crop, record to file or GIF.", shell: "scrcpy --max-size 1920" },
-  { icon: ScrollText, title: "Logcat & crash catcher", body: "Stream logs with level, tag and per-app filters, follow an app across restarts, grab the last crash for Slack or Jira.", shell: "adb logcat -v color" },
-  { icon: Folder, title: "Device file explorer", body: "Browse shared storage — or the whole filesystem on rooted devices — copy, move, delete, and push/pull to your Mac.", shell: "adb pull /sdcard/..." },
-  { icon: LayoutGrid, title: "App management", body: "Drag in an APK to install on every device, uninstall, force-stop, clear data, toggle runtime permissions, pull APKs, and browse a debug app's sandbox.", shell: "adb install app.apk" },
-  { icon: Activity, title: "Performance monitor", body: "Live per-core CPU, RAM, FPS & jank, and network throughput — charted, recordable, exportable to JSON & CSV.", shell: "dumpsys gfxinfo" },
-  { icon: Atom, title: "React Native tools", body: "Open the dev menu, reload the JS bundle, reverse the Metro port, and point the app at any dev server.", shell: "adb reverse tcp:8081" },
-  { icon: Bug, title: "Reactotron, built in", body: "A full Reactotron debugger with no desktop app — Droidective runs the server itself. Live timeline of logs & API calls, a store browser, custom commands, and a REPL.", shell: "no Reactotron install" },
-  { icon: Wifi, title: "Wireless ADB & connection", body: "Connect over Wi-Fi (with Android 11 pairing), manage Wi-Fi and private DNS, check root status, fan out to every device.", shell: "adb tcpip 5555" },
-  { icon: SlidersHorizontal, title: "State simulation", body: "Fake the battery, force dark mode, change locale, scale fonts and density, set a proxy — every override is reset-tracked.", shell: "cmd uimode night yes" },
-]
-
 export interface Guide {
   icon: LucideIcon
   title: string
@@ -234,6 +214,56 @@ export const releases: { version: string; date: string; latest?: boolean; html: 
   { version: "v2.1.0", date: "Jun 2026", html: "<b>Device control suite</b> — Wi-Fi, private DNS, root status, system restrictions — plus in-app feedback and <b>automatic updates</b> via Sparkle." },
   { version: "v2.0.0", date: "Jun 2026", html: "<b>Performance monitor</b> and <b>network speed</b> graphs, a home screen and welcome tour, and a per-feature command bar with an embedded terminal." },
   { version: "v1.0.0", date: "Jun 2026", html: "First public release — 37 one-click adb actions behind <code>⌘K</code>, built on a fully tested ADBKit engine." },
+]
+
+export interface ProblemSolution {
+  problem: string
+  solution: string
+  detail: string
+}
+
+export const problemSolutions: ProblemSolution[] = [
+  {
+    problem: "Memorizing adb flags and shell incantations",
+    solution: "A command palette that finds every tool for you",
+    detail: "Type what you need in plain words — Droidective fuzzy-matches across 59 tools and runs the right adb command. Pin favorites, bind hotkeys, and never look up a flag again.",
+  },
+  {
+    problem: "Juggling terminal tabs, scrcpy, and Reactotron",
+    solution: "One native app for everything, running side by side",
+    detail: "Mirror the screen next to live logcat in split panes. Reactotron is built in. Tabs keep running in the background — no more window hunting.",
+  },
+  {
+    problem: "Reproducing device states for bug reports",
+    solution: "Fake any state with one click — battery, locale, dark mode, proxy",
+    detail: "Every override is tracked and reset-able. Capture an annotated screenshot, pull a full bug report, and paste the adb command that created the state.",
+  },
+  {
+    problem: "Setting up wireless ADB and pairing codes",
+    solution: "A guided wizard that pairs, connects, and remembers",
+    detail: "Android 11+ pairing codes, direct IP connect, or one-click USB-to-Wi-Fi. Paste the string from your phone's screen and go.",
+  },
+]
+
+export interface BentoFeature {
+  icon: LucideIcon
+  title: string
+  body: string
+  shell: string
+  span: "wide" | "normal"
+}
+
+export const bentoFeatures: BentoFeature[] = [
+  { icon: Search, title: "Command palette", body: "Fuzzy-search every tool and run it instantly. Pin favorites, bind global hotkeys, and stop looking up adb flags.", shell: "⌘T → run anything", span: "wide" },
+  { icon: Cast, title: "Screen mirror & record", body: "Mirror and control the device with a GUI for scrcpy — tune bitrate, FPS, crop, and record to file or GIF.", shell: "scrcpy --max-size 1920", span: "normal" },
+  { icon: ScrollText, title: "Logcat & crash catcher", body: "Stream logs with level, tag, and per-app filters. Grab the last crash for Slack or Jira in one click.", shell: "adb logcat -v color", span: "normal" },
+  { icon: Atom, title: "React Native tools", body: "Dev menu, JS reload, Metro port forwarding, built-in Reactotron — the whole RN stack in one hub.", shell: "adb reverse tcp:8081", span: "wide" },
+  { icon: Folder, title: "File explorer", body: "Browse shared storage or the full filesystem on rooted devices. Copy, move, delete, push and pull to your Mac.", shell: "adb pull /sdcard/...", span: "normal" },
+  { icon: Activity, title: "Performance monitor", body: "Live per-core CPU, RAM, FPS & jank, and network throughput — charted, recordable, exportable.", shell: "dumpsys gfxinfo", span: "normal" },
+  { icon: SlidersHorizontal, title: "State simulation", body: "Fake the battery, force dark mode, change locale, scale fonts and density, set a proxy — every override tracked.", shell: "cmd uimode night yes", span: "normal" },
+  { icon: Bug, title: "Reactotron, built in", body: "A full Reactotron debugger with no desktop app. Live timeline, store browser, custom commands, and a REPL.", shell: "no Reactotron install", span: "wide" },
+  { icon: Wifi, title: "Wireless ADB", body: "Connect over Wi-Fi with Android 11 pairing, manage DNS, check root status, and fan out to every device.", shell: "adb tcpip 5555", span: "normal" },
+  { icon: LayoutGrid, title: "App management", body: "Drag in an APK to install on every device. Uninstall, force-stop, clear data, toggle permissions, browse sandboxes.", shell: "adb install app.apk", span: "normal" },
 ]
 
 export const faqs: { q: string; html: string }[] = [

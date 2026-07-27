@@ -6,7 +6,7 @@ export function TrustStrip() {
 
   const items = [
     {
-      value: reducedMotion ? <>56</> : <CountUp to={56} duration={1.4} />,
+      value: reducedMotion ? <>59</> : <CountUp to={59} duration={1.4} />,
       label: "built-in tools",
       green: true,
     },

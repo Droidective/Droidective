@@ -10,6 +10,7 @@ import { Guides } from "@/components/site/Guides"
 import { Hero } from "@/components/site/Hero"
 import { HowItWorks } from "@/components/site/HowItWorks"
 import { Nav } from "@/components/site/Nav"
+import { Problems } from "@/components/site/Problems"
 import { Screenshots } from "@/components/site/Screenshots"
 import { TrustStrip } from "@/components/site/TrustStrip"
 
@@ -26,6 +27,7 @@ export default function App() {
       <main>
         <Hero />
         <TrustStrip />
+        <Problems />
         <Features />
         <Screenshots />
         <HowItWorks />
