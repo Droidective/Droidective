@@ -6,17 +6,18 @@ import { Faq } from "@/components/site/Faq"
 import { Features } from "@/components/site/Features"
 import { FinalCta } from "@/components/site/FinalCta"
 import { Footer } from "@/components/site/Footer"
-import { Guides } from "@/components/site/Guides"
 import { Hero } from "@/components/site/Hero"
 import { HowItWorks } from "@/components/site/HowItWorks"
 import { Nav } from "@/components/site/Nav"
 import { Problems } from "@/components/site/Problems"
+import { ProductShowcase } from "@/components/site/ProductShowcase"
 import { Screenshots } from "@/components/site/Screenshots"
 import { TrustStrip } from "@/components/site/TrustStrip"
+import { UseCases } from "@/components/site/UseCases"
 
 export default function App() {
   return (
-    <>
+    <div className="noise">
       <a
         href="#features"
         className="absolute top-0 -left-[999px] z-200 rounded-br-[10px] bg-green px-4 py-2.5 font-bold text-ink-900 focus:left-0"
@@ -29,9 +30,10 @@ export default function App() {
         <TrustStrip />
         <Problems />
         <Features />
+        <ProductShowcase />
         <Screenshots />
         <HowItWorks />
-        <Guides />
+        <UseCases />
         <Blog />
         <Changelog />
         <Faq />
@@ -40,6 +42,6 @@ export default function App() {
         <FinalCta />
       </main>
       <Footer />
-    </>
+    </div>
   )
 }

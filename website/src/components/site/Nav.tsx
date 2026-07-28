@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 
-import { ChevronDown, Download, Menu, X } from "lucide-react"
+import { ChevronDown, Download, Menu, Star, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { DOWNLOAD_URL, GITHUB_URL } from "@/lib/content"
@@ -13,7 +13,7 @@ interface NavLink {
 
 const product: NavLink[] = [
   { label: "Features", href: "#features" },
-  { label: "Screens", href: "#screenshots" },
+  { label: "In action", href: "#in-action" },
   { label: "How it works", href: "#how" },
 ]
 
@@ -23,9 +23,6 @@ const resources: NavLink[] = [
   { label: "About", href: "#about" },
 ]
 
-/** A hover/click nav dropdown. Opens on pointer hover and on click/keyboard,
- *  closes on Escape or outside click; an invisible bridge keeps the pointer
- *  path from the trigger to the panel continuous. */
 function NavDropdown({ label, links }: { label: string; links: NavLink[] }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -58,7 +55,7 @@ function NavDropdown({ label, links }: { label: string; links: NavLink[] }) {
         aria-expanded={open}
         aria-haspopup="true"
         onClick={() => setOpen((o) => !o)}
-        className="inline-flex items-center gap-1 text-sm font-medium text-muted transition-colors duration-150 hover:text-text data-[open=true]:text-text"
+        className="inline-flex items-center gap-1 text-[13.5px] font-medium text-muted/80 transition-colors duration-150 hover:text-text data-[open=true]:text-text"
         data-open={open}
       >
         {label}
@@ -68,14 +65,14 @@ function NavDropdown({ label, links }: { label: string; links: NavLink[] }) {
         />
       </button>
       {open && (
-        <div className="absolute top-full left-1/2 z-50 -translate-x-1/2 pt-2.5">
-          <div className="min-w-46 rounded-xl border border-border-2 bg-popover p-1.5 shadow-[0_16px_40px_-12px_rgba(0,0,0,0.7)]">
+        <div className="absolute top-full left-1/2 z-50 -translate-x-1/2 pt-3">
+          <div className="min-w-46 rounded-xl border border-white/[0.08] bg-ink-800/95 p-1.5 shadow-[0_16px_40px_-12px_rgba(0,0,0,0.7)] backdrop-blur-xl">
             {links.map((link) => (
               <a
                 key={link.label}
                 href={link.href}
                 onClick={() => setOpen(false)}
-                className="block rounded-lg px-3 py-2 text-sm font-medium text-muted transition-colors duration-150 hover:bg-white/5 hover:text-text"
+                className="block rounded-lg px-3 py-2 text-[13.5px] font-medium text-muted transition-colors duration-150 hover:bg-white/5 hover:text-text"
               >
                 {link.label}
               </a>
@@ -89,59 +86,105 @@ function NavDropdown({ label, links }: { label: string; links: NavLink[] }) {
 
 export function Nav() {
   const [menuOpen, setMenuOpen] = useState(false)
+  const [scrolled, setScrolled] = useState(false)
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 40)
+    onScroll()
+    window.addEventListener("scroll", onScroll, { passive: true })
+    return () => window.removeEventListener("scroll", onScroll)
+  }, [])
 
   return (
-    <nav className="sticky top-0 z-100 border-b border-border bg-ink-850/72 backdrop-blur-lg backdrop-saturate-150">
-      <div className="mx-auto flex h-[62px] max-w-[1120px] items-center gap-4.5 px-6">
-        <a href="#top" className="flex items-center gap-2.75 text-base font-bold tracking-[-0.01em]">
-          <img src="/assets/icon-light-64.png" alt="Droidective icon" width={30} height={30} className="size-7.5 rounded-lg" />
-          Droidective
+    <nav
+      className={cn(
+        "fixed top-0 right-0 left-0 z-100 transition-all duration-300",
+        scrolled
+          ? "border-b border-white/[0.06] bg-ink-900/80 shadow-[0_4px_30px_-8px_rgba(0,0,0,0.5)] backdrop-blur-2xl backdrop-saturate-150"
+          : "border-b border-transparent bg-transparent",
+      )}
+    >
+      <div
+        className={cn(
+          "mx-auto flex max-w-[1120px] items-center gap-4.5 px-6 transition-[height] duration-300",
+          scrolled ? "h-[56px]" : "h-[64px]",
+        )}
+      >
+        <a href="#top" className="flex items-center gap-2.5 text-[15px] font-bold tracking-[-0.01em]">
+          <img
+            src="/assets/icon-light-64.png"
+            alt="Droidective icon"
+            width={28}
+            height={28}
+            className="size-7 rounded-[7px]"
+          />
+          <span className={cn("transition-opacity duration-300", scrolled ? "opacity-100" : "opacity-80")}>
+            Droidective
+          </span>
         </a>
-        <div className="ml-auto flex items-center gap-6.5">
-          <div className="hidden items-center gap-6.5 min-[940px]:flex">
+
+        <div className="ml-auto flex items-center gap-6">
+          <div className="hidden items-center gap-5.5 min-[940px]:flex">
             <NavDropdown label="Product" links={product} />
             <a
               href="#for-you"
-              className="text-sm font-medium text-muted transition-colors duration-150 hover:text-text"
+              className="text-[13.5px] font-medium text-muted/80 transition-colors duration-150 hover:text-text"
+            >
+              Developers
+            </a>
+            <a
+              href="#for-you"
+              className="text-[13.5px] font-medium text-muted/80 transition-colors duration-150 hover:text-text"
             >
               Guides
             </a>
             <a
               href="/blog/"
-              className="text-sm font-medium text-muted transition-colors duration-150 hover:text-text"
+              className="text-[13.5px] font-medium text-muted/80 transition-colors duration-150 hover:text-text"
             >
               Blog
             </a>
             <NavDropdown label="Resources" links={resources} />
+          </div>
+
+          <div className="hidden items-center gap-2.5 min-[940px]:flex">
             <a
               href={GITHUB_URL}
-              className="text-sm font-medium text-muted transition-colors duration-150 hover:text-text"
+              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] font-medium text-muted/80 transition-colors duration-150 hover:bg-white/5 hover:text-text"
             >
+              <Star className="size-3.5" aria-hidden />
               GitHub
             </a>
+            <Button
+              asChild
+              className={cn(
+                "h-auto rounded-xl px-4 py-2 text-[13px] font-bold transition-all duration-200",
+                scrolled
+                  ? "shadow-glow hover:bg-green-bright"
+                  : "bg-green/90 shadow-[0_0_0_1px_rgba(105,161,6,0.3)] hover:bg-green",
+              )}
+            >
+              <a href={DOWNLOAD_URL} data-dl="nav">
+                <Download className="size-3.5" aria-hidden />
+                Download
+              </a>
+            </Button>
           </div>
-          <Button
-            asChild
-            className="h-auto rounded-xl px-4 py-2 text-sm font-bold shadow-glow hover:bg-green-bright"
-          >
-            <a href={DOWNLOAD_URL} data-dl="nav">
-              <Download aria-hidden />
-              Download
-            </a>
-          </Button>
+
           <button
             type="button"
             aria-label={menuOpen ? "Close menu" : "Open menu"}
             aria-expanded={menuOpen}
             onClick={() => setMenuOpen((open) => !open)}
-            className="-mr-2 grid size-11 cursor-pointer place-items-center rounded-lg text-muted transition-colors duration-150 hover:text-text min-[940px]:hidden"
+            className="-mr-2 grid size-10 cursor-pointer place-items-center rounded-lg text-muted transition-colors duration-150 hover:text-text min-[940px]:hidden"
           >
-            {menuOpen ? <X className="size-5.5" aria-hidden /> : <Menu className="size-5.5" aria-hidden />}
+            {menuOpen ? <X className="size-5" aria-hidden /> : <Menu className="size-5" aria-hidden />}
           </button>
         </div>
       </div>
+
       {menuOpen && (
-        <div className="border-t border-border px-6 pt-3 pb-5 min-[940px]:hidden">
+        <div className="border-t border-white/[0.06] bg-ink-900/95 px-6 pt-3 pb-5 backdrop-blur-2xl min-[940px]:hidden">
           <MobileGroup label="Product" links={product} onNavigate={() => setMenuOpen(false)} />
           <a
             href="#for-you"
@@ -165,6 +208,14 @@ export function Nav() {
           >
             GitHub
           </a>
+          <div className="mt-4 flex gap-3">
+            <Button asChild className="h-auto flex-1 rounded-xl px-4 py-2.5 text-sm font-bold shadow-glow hover:bg-green-bright">
+              <a href={DOWNLOAD_URL} data-dl="nav-mobile">
+                <Download className="size-4" aria-hidden />
+                Download for macOS
+              </a>
+            </Button>
+          </div>
         </div>
       )}
     </nav>
@@ -181,8 +232,8 @@ function MobileGroup({
   onNavigate: () => void
 }) {
   return (
-    <div className="border-b border-border py-2 first:pt-0">
-      <p className="pb-1 font-mono text-[11.5px] tracking-[0.06em] text-faint uppercase">{label}</p>
+    <div className="border-b border-white/[0.06] py-2 first:pt-0">
+      <p className="pb-1 font-mono text-[11px] tracking-[0.06em] text-faint uppercase">{label}</p>
       {links.map((link) => (
         <a
           key={link.label}

@@ -15,44 +15,65 @@ export function Hero() {
   const staticHeading = reducedMotion || !finePointer
 
   return (
-    <header id="top" className="relative overflow-hidden pt-19 pb-20">
+    <header id="top" className="relative overflow-hidden pt-28 pb-24 max-[620px]:pt-22 max-[620px]:pb-18">
+      {/* Atmospheric grid */}
+      <div aria-hidden className="atmo-grid pointer-events-none absolute inset-0 opacity-60" />
+
       {/* Interactive dot field */}
       <div
-        className="absolute inset-0 opacity-70 [mask-image:radial-gradient(1000px_700px_at_50%_0%,black,transparent_75%)]"
+        className="absolute inset-0 opacity-50 [mask-image:radial-gradient(900px_600px_at_50%_0%,black,transparent_80%)]"
         aria-hidden
       >
         {finePointer && !reducedMotion ? (
           <DotGrid
-            dotSize={2.5}
-            gap={26}
+            dotSize={2}
+            gap={28}
             baseColor="#1b1f1e"
-            activeColor="#9be021"
-            proximity={110}
-            shockRadius={220}
-            shockStrength={4}
+            activeColor="#69a106"
+            proximity={100}
+            shockRadius={200}
+            shockStrength={3.5}
           />
         ) : (
-          <div className="h-full w-full bg-[radial-gradient(circle,#1b1f1e_1.25px,transparent_1.25px)] bg-[size:28.5px_28.5px]" />
+          <div className="h-full w-full bg-[radial-gradient(circle,#1b1f1e_1px,transparent_1px)] bg-[size:28px_28px]" />
         )}
       </div>
-      {/* Green glow behind content — centered */}
+
+      {/* Primary green atmospheric glow */}
       <div
         aria-hidden
-        className="pointer-events-none absolute -top-[15%] left-1/2 h-175 w-225 -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(155,224,33,0.25),transparent_70%)] opacity-55 blur-lg"
+        className="pointer-events-none absolute -top-[20%] left-1/2 h-[700px] w-[1100px] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(105,161,6,0.18),transparent_70%)] opacity-60 blur-2xl"
+      />
+      {/* Secondary deep teal ambient */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute top-[10%] left-1/4 h-[500px] w-[600px] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(16,60,80,0.12),transparent_70%)] blur-3xl"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute top-[15%] right-0 h-[400px] w-[500px] rounded-full bg-[radial-gradient(closest-side,rgba(30,50,90,0.08),transparent_70%)] blur-3xl"
       />
 
       <div className="relative mx-auto flex max-w-[1120px] flex-col items-center px-6 text-center">
-        {/* Eyebrow banner */}
-        <a
-          href={`${GITHUB_URL}/releases/tag/${APP_VERSION}`}
-          className="group mb-7 inline-flex items-center gap-2.25 rounded-full border border-border bg-white/3 px-3.5 py-1.5 font-mono text-[12.5px] text-muted transition-colors duration-150 hover:border-green/30 hover:text-text"
-        >
-          <span className="size-1.75 shrink-0 rounded-full bg-green shadow-[0_0_10px_var(--color-green)]" />
-          {APP_VERSION} Released · Free &amp; Open Source · macOS 14+
-          <span className="text-faint transition-colors duration-150 group-hover:text-green">→</span>
-        </a>
+        {/* Eyebrow */}
+        <Reveal>
+          <a
+            href={`${GITHUB_URL}/releases/tag/${APP_VERSION}`}
+            className="group mb-8 inline-flex items-center gap-2.25 rounded-full border border-white/[0.06] bg-white/[0.03] px-4 py-1.75 font-mono text-[12px] text-muted/90 transition-all duration-200 hover:border-green/20 hover:bg-green/[0.04] hover:text-text"
+          >
+            <span className="relative flex size-2">
+              <span className="cta-breathe absolute inline-flex size-full rounded-full bg-green" />
+              <span className="relative inline-flex size-2 rounded-full bg-green" />
+            </span>
+            {APP_VERSION} Released
+            <span className="mx-1 text-white/10">|</span>
+            Free &amp; Open Source · macOS 14+
+            <span className="text-faint transition-colors duration-150 group-hover:text-green">→</span>
+          </a>
+        </Reveal>
 
-        <h1 className="mb-6 max-w-[18ch] text-[clamp(38px,5.8vw,68px)] leading-[1.02] font-extrabold tracking-[-0.035em]">
+        {/* Headline */}
+        <h1 className="mb-7 max-w-[16ch] text-[clamp(40px,6vw,72px)] leading-[1.0] font-extrabold tracking-[-0.04em]">
           {staticHeading ? (
             <>
               All your Android debugging tools,{" "}
@@ -70,44 +91,56 @@ export function Hero() {
           )}
         </h1>
 
-        <p className="mb-8 max-w-[58ch] text-[clamp(16px,1.5vw,19px)] leading-[1.65] text-muted">
-          Droidective is a native macOS command palette for{" "}
-          <strong className="font-semibold text-text">Android &amp; React Native</strong> debugging.
-          Mirror screens, tail logcat, browse files, fake any state, and watch performance live —{" "}
-          <strong className="font-semibold text-text">59 tools</strong>, no terminal required.
-        </p>
+        {/* Subheading */}
+        <Reveal>
+          <p className="mb-9 max-w-[54ch] text-[clamp(16px,1.6vw,19px)] leading-[1.7] text-muted">
+            The complete{" "}
+            <strong className="font-semibold text-text">ADB workflow</strong> for Android &amp; React Native —
+            mirror screens, tail logcat, browse files, fake any state, and watch performance live.{" "}
+            <strong className="font-semibold text-text">59 tools</strong>, no terminal required.
+          </p>
+        </Reveal>
 
-        <div className="mb-3.5 flex flex-wrap justify-center gap-3.25">
-          <Button
-            asChild
-            size="lg"
-            className="h-auto rounded-xl px-6 py-3.5 text-[15.5px] font-bold shadow-glow transition-transform duration-150 hover:-translate-y-px hover:bg-green-bright"
-          >
-            <a href={DOWNLOAD_URL} data-dl="hero">
-              <Download aria-hidden />
-              Download for macOS
-            </a>
-          </Button>
-          <Button
-            asChild
-            variant="outline"
-            size="lg"
-            className="h-auto rounded-xl border-border-2 bg-white/4 px-6 py-3.5 text-[15.5px] font-semibold transition-transform duration-150 hover:-translate-y-px hover:bg-white/8"
-          >
-            <a href={GITHUB_URL}>
-              <Star aria-hidden />
-              Star on GitHub
-            </a>
-          </Button>
-        </div>
+        {/* CTAs */}
+        <Reveal>
+          <div className="mb-4 flex flex-wrap justify-center gap-3.5">
+            <Button
+              asChild
+              size="lg"
+              className="group/dl h-auto rounded-xl px-7 py-3.5 text-[15.5px] font-bold shadow-glow transition-all duration-200 hover:-translate-y-px hover:bg-green-bright hover:shadow-[0_0_0_1px_rgba(105,161,6,0.5),0_14px_40px_-8px_rgba(105,161,6,0.3)]"
+            >
+              <a href={DOWNLOAD_URL} data-dl="hero">
+                <Download className="transition-transform duration-200 group-hover/dl:-translate-y-px" aria-hidden />
+                Download for macOS
+              </a>
+            </Button>
+            <Button
+              asChild
+              variant="outline"
+              size="lg"
+              className="h-auto rounded-xl border-white/[0.08] bg-white/[0.03] px-7 py-3.5 text-[15.5px] font-semibold transition-all duration-200 hover:-translate-y-px hover:border-white/[0.14] hover:bg-white/[0.06]"
+            >
+              <a href={GITHUB_URL}>
+                <Star aria-hidden />
+                Star on GitHub
+              </a>
+            </Button>
+          </div>
+          <p className="mb-16 font-mono text-[12px] tracking-[0.02em] text-faint/80">
+            Signed &amp; notarized · Apple Silicon &amp; Intel · Auto-updates via Sparkle
+          </p>
+        </Reveal>
 
-        <p className="mb-14 font-mono text-[12.5px] text-faint">
-          Signed &amp; notarized · Apple Silicon &amp; Intel · Auto-updates via Sparkle
-        </p>
-
-        {/* Centered PaletteDemo */}
-        <Reveal className="w-full max-w-[620px]">
-          <PaletteDemo />
+        {/* Command Palette showcase */}
+        <Reveal className="w-full max-w-[640px]">
+          <div className="relative">
+            {/* Ambient glow behind palette */}
+            <div
+              aria-hidden
+              className="pointer-events-none absolute -inset-8 rounded-3xl bg-[radial-gradient(closest-side,rgba(105,161,6,0.06),transparent_70%)] blur-xl"
+            />
+            <PaletteDemo />
+          </div>
         </Reveal>
       </div>
     </header>

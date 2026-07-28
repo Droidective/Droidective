@@ -15,15 +15,12 @@ function matches(query: string, keys: string, name: string): boolean {
   return q === "" || `${keys} ${name}`.toLowerCase().includes(q)
 }
 
-/** The hero's animated ⌘T palette — types real queries and live-filters the list. */
 export function PaletteDemo() {
   const reducedMotion = usePrefersReducedMotion()
   const [query, setQuery] = useState("")
   const [inView, setInView] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
-  // The typing loop re-renders the whole list every 45–95ms; only run it
-  // while the palette is actually on screen.
   useEffect(() => {
     const el = ref.current
     if (!el) return
@@ -77,27 +74,30 @@ export function PaletteDemo() {
     <div
       ref={ref}
       aria-hidden
-      className="overflow-hidden rounded-[18px] border border-border-2 bg-linear-to-b from-ink-700 to-ink-800 shadow-[0_40px_110px_-30px_rgba(0,0,0,0.8),0_0_0_1px_rgba(155,224,33,0.06),inset_0_1px_0_rgba(231,234,229,0.04)]"
+      className="overflow-hidden rounded-[18px] border border-white/[0.08] bg-gradient-to-b from-ink-700 to-ink-800 shadow-[0_40px_110px_-30px_rgba(0,0,0,0.8),0_0_0_1px_rgba(105,161,6,0.04),inset_0_1px_0_rgba(231,234,229,0.04)]"
     >
       {/* Title bar */}
-      <div className="flex items-center gap-2.5 border-b border-border bg-ink-900/40 px-3.5 py-2.75">
+      <div className="flex items-center gap-2.5 border-b border-white/[0.06] bg-ink-900/40 px-3.5 py-2.75">
         <span className="flex gap-1.75">
           <i className="size-2.75 rounded-full bg-[#ff5f57]" />
           <i className="size-2.75 rounded-full bg-[#febc2e]" />
           <i className="size-2.75 rounded-full bg-[#28c840]" />
         </span>
-        <span className="ml-auto inline-flex items-center gap-1.75 rounded-full border border-border px-2.5 py-1 font-mono text-[11.5px] text-muted">
-          <span className="size-1.5 rounded-full bg-green shadow-[0_0_7px_var(--color-green)]" />
+        <span className="ml-auto inline-flex items-center gap-1.75 rounded-full border border-white/[0.06] px-2.5 py-1 font-mono text-[11px] text-muted/80">
+          <span className="relative flex size-1.5">
+            <span className="cta-breathe absolute inline-flex size-full rounded-full bg-green" />
+            <span className="relative inline-flex size-1.5 rounded-full bg-green" />
+          </span>
           Pixel 8 · Android 14
         </span>
       </div>
 
       {/* Search row */}
-      <div className="relative flex items-center gap-2.75 border-b border-border px-4.5 py-4 after:absolute after:inset-x-0 after:-bottom-px after:h-px after:bg-linear-to-r after:from-transparent after:via-green after:to-transparent after:opacity-50">
+      <div className="relative flex items-center gap-2.75 border-b border-white/[0.06] px-4.5 py-4 after:absolute after:inset-x-0 after:-bottom-px after:h-px after:bg-linear-to-r after:from-transparent after:via-green/50 after:to-transparent">
         <span className="font-mono text-[15px] text-green">&gt;</span>
         <span className="min-h-5 font-mono text-base">{query}</span>
-        <span className="-ml-0.5 inline-block h-4.5 w-2 animate-[blink_1.05s_steps(1)_infinite] bg-green shadow-[0_0_8px_rgba(155,224,33,0.3)] motion-reduce:animate-none" />
-        <kbd className="ml-auto rounded-md border border-border-2 bg-white/3 px-1.75 py-0.75 text-[11px] text-muted">⌘T</kbd>
+        <span className="-ml-0.5 inline-block h-4.5 w-2 animate-[blink_1.05s_steps(1)_infinite] bg-green shadow-[0_0_8px_rgba(105,161,6,0.3)] motion-reduce:animate-none" />
+        <kbd className="ml-auto rounded-md border border-white/[0.08] bg-white/[0.03] px-1.75 py-0.75 text-[11px] text-muted/70">⌘T</kbd>
       </div>
 
       {/* Results */}
@@ -110,15 +110,15 @@ export function PaletteDemo() {
               className={cn(
                 "grid grid-cols-[30px_1fr_auto] items-center gap-3.25 rounded-[11px] px-3 py-2.75 transition-colors duration-150",
                 !shown && "hidden",
-                shown && cmd.name === activeName && "bg-green/10 shadow-[inset_0_0_0_1px_rgba(155,224,33,0.22)]",
+                shown && cmd.name === activeName && "bg-green/8 shadow-[inset_0_0_0_1px_rgba(105,161,6,0.15)]",
               )}
             >
               <cmd.icon className="size-5.25 text-green" aria-hidden />
               <span className="min-w-0">
                 <span className="block text-[14.5px] leading-[1.3] font-semibold">{cmd.name}</span>
-                <span className="font-mono text-[11px] text-faint">{cmd.category}</span>
+                <span className="font-mono text-[11px] text-faint/70">{cmd.category}</span>
               </span>
-              <code className="max-w-55 overflow-hidden rounded-[7px] border border-border bg-ink-900/50 px-2.25 py-1 font-mono text-[11.5px] text-ellipsis whitespace-nowrap text-green-dim max-[620px]:hidden">
+              <code className="max-w-55 overflow-hidden rounded-[7px] border border-white/[0.06] bg-ink-900/50 px-2.25 py-1 font-mono text-[11.5px] text-ellipsis whitespace-nowrap text-green-dim/80 max-[620px]:hidden">
                 {cmd.shell}
               </code>
             </li>
@@ -127,18 +127,18 @@ export function PaletteDemo() {
       </ul>
 
       {/* Footer */}
-      <div className="flex gap-4.5 border-t border-border bg-ink-900/35 px-4 py-2.5 font-mono text-[11px] text-faint">
+      <div className="flex gap-4.5 border-t border-white/[0.06] bg-ink-900/35 px-4 py-2.5 font-mono text-[11px] text-faint/70">
         <span>
-          <b className="font-medium text-muted">↩</b> run
+          <b className="font-medium text-muted/70">↩</b> run
         </span>
         <span>
-          <b className="font-medium text-muted">⌘T</b> search
+          <b className="font-medium text-muted/70">⌘T</b> search
         </span>
         <span>
-          <b className="font-medium text-muted">esc</b> close
+          <b className="font-medium text-muted/70">esc</b> close
         </span>
         <span className="ml-auto">
-          <b className="font-medium text-muted">56</b> tools
+          <b className="font-medium text-muted/70">59</b> tools
         </span>
       </div>
     </div>

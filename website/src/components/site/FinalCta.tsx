@@ -15,37 +15,43 @@ export function FinalCta() {
   const inView = useInView(headingRef)
 
   return (
-    <section className="mx-auto max-w-[1120px] px-6 pb-26 max-[620px]:pb-18">
+    <section className="mx-auto max-w-[1120px] px-6 pb-28 max-[620px]:pb-20">
       <Reveal>
-        <div className="relative overflow-hidden rounded-3xl border border-border-2 bg-[radial-gradient(600px_280px_at_50%_-10%,rgba(155,224,33,0.12),transparent_70%),var(--color-ink-800)] px-8 py-20 text-center">
-          <p className="mb-4 font-mono text-[12.5px] font-medium tracking-[0.04em] text-green">
-            <span className="mr-2 text-green-dim">&gt;_</span>
+        <div className="relative overflow-hidden rounded-3xl border border-white/[0.06] bg-gradient-to-b from-ink-700/60 to-ink-800/60 px-8 py-22 text-center shadow-[0_40px_100px_-30px_rgba(0,0,0,0.5)]">
+          {/* Atmospheric green glow */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -top-20 left-1/2 h-40 w-[70%] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(105,161,6,0.1),transparent_70%)] blur-2xl"
+          />
+
+          <p className="mb-5 font-mono text-[12px] font-medium tracking-[0.06em] text-green/80 uppercase">
+            <span className="mr-2 text-green-dim/60">&gt;_</span>
             ready to ship faster?
           </p>
-          <h2 ref={headingRef} className="mb-4 text-[clamp(28px,4vw,42px)] font-extrabold tracking-[-0.03em]">
+          <h2 ref={headingRef} className="mb-4 text-[clamp(28px,4vw,44px)] font-extrabold tracking-[-0.035em]">
             {reducedMotion || !inView ? (
               "Debug Android without the terminal."
             ) : (
               <ShinyText
                 text="Debug Android without the terminal."
                 color="#e7eae5"
-                shineColor="#b6f24a"
+                shineColor="#84c610"
                 speed={3}
                 delay={1.5}
               />
             )}
           </h2>
-          <p className="mb-8 text-[17px] text-muted">
+          <p className="mb-9 text-[17px] text-muted">
             Free, open source, and one keystroke away. Join thousands of developers.
           </p>
-          <div className="flex flex-wrap justify-center gap-3.25">
+          <div className="flex flex-wrap justify-center gap-3.5">
             <Button
               asChild
               size="lg"
-              className="h-auto rounded-xl px-6 py-3.5 text-[15.5px] font-bold shadow-glow transition-transform duration-150 hover:-translate-y-px hover:bg-green-bright"
+              className="group/dl h-auto rounded-xl px-7 py-3.5 text-[15.5px] font-bold shadow-glow transition-all duration-200 hover:-translate-y-px hover:bg-green-bright hover:shadow-[0_0_0_1px_rgba(105,161,6,0.5),0_14px_40px_-8px_rgba(105,161,6,0.3)]"
             >
               <a href={DOWNLOAD_URL} data-dl="final-cta">
-                <Download aria-hidden />
+                <Download className="transition-transform duration-200 group-hover/dl:-translate-y-px" aria-hidden />
                 Download for macOS
               </a>
             </Button>
@@ -53,7 +59,7 @@ export function FinalCta() {
               asChild
               variant="outline"
               size="lg"
-              className="h-auto rounded-xl border-border-2 bg-white/4 px-6 py-3.5 text-[15.5px] font-semibold transition-transform duration-150 hover:-translate-y-px hover:bg-white/8"
+              className="h-auto rounded-xl border-white/[0.08] bg-white/[0.03] px-7 py-3.5 text-[15.5px] font-semibold transition-all duration-200 hover:-translate-y-px hover:border-white/[0.14] hover:bg-white/[0.06]"
             >
               <a href={GITHUB_URL}>
                 <Star aria-hidden />
