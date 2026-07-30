@@ -100,16 +100,18 @@ export function PaletteDemo() {
         <kbd className="ml-auto rounded-md border border-white/[0.08] bg-white/[0.03] px-1.75 py-0.75 text-[11px] text-muted/70">⌘T</kbd>
       </div>
 
-      {/* Results */}
-      <ul className="m-0 min-h-93 max-h-93 list-none overflow-hidden p-2">
+      {/* Results — non-matches dim rather than unmount, so the list height never
+          changes. Hiding them collapsed the box and left a large void whenever a
+          query matched a single tool, which jumped everything below it. */}
+      <ul className="m-0 list-none p-2">
         {paletteCommands.map((cmd) => {
           const shown = matches(query, cmd.keys, cmd.name)
           return (
             <li
               key={cmd.name}
               className={cn(
-                "grid grid-cols-[30px_1fr_auto] items-center gap-3.25 rounded-[11px] px-3 py-2.75 transition-colors duration-150",
-                !shown && "hidden",
+                "grid grid-cols-[30px_1fr_auto] items-center gap-3.25 rounded-[11px] px-3 py-2.75 transition-all duration-200",
+                !shown && "opacity-20",
                 shown && cmd.name === activeName && "bg-green/8 shadow-[inset_0_0_0_1px_rgba(105,161,6,0.15)]",
               )}
             >

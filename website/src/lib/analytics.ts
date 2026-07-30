@@ -4,7 +4,7 @@
 // clicks are already handled by capture_pageview + autocapture — these are the
 // structured blog events on top of that.
 interface PostHogLite {
-  capture: (event: string, properties?: Record<string, unknown>) => void
+  capture?: (event: string, properties?: Record<string, unknown>) => void
 }
 
 declare global {
@@ -15,5 +15,10 @@ declare global {
 
 export function track(event: string, properties?: Record<string, unknown>): void {
   if (typeof window === "undefined") return
-  window.posthog?.capture(event, properties)
+  // The snippet only attaches its method stubs inside posthog.init(), which it
+  // skips when no key is configured — so `capture` is genuinely absent in local
+  // checkouts and forks. Calling it there threw and unmounted the blog pages.
+  const capture = window.posthog?.capture
+  if (typeof capture !== "function") return
+  capture.call(window.posthog, event, properties)
 }

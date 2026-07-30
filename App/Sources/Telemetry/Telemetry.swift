@@ -77,7 +77,7 @@ final class Telemetry {
                 PostHogSDK.shared.register(["app_active": active])
             }
         }
-        update(NSApp.isActive)
+        update(NSApp?.isActive ?? false)
         for (name, active) in [
             (NSApplication.didBecomeActiveNotification, true),
             (NSApplication.didResignActiveNotification, false),
