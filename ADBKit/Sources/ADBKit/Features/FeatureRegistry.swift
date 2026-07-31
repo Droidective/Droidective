@@ -563,11 +563,15 @@ public enum FeatureRegistry {
         // ── Tool UX ──────────────────────────────────────────────────────
         FeatureDef(
             id: "api-client", title: "API Testing",
-            subtitle: "Compose HTTP requests from cURL, send, inspect, and save",
+            subtitle: "Send HTTP requests, import Postman collections, assert on responses",
             keywords: [
-                "api", "http", "rest", "postman", "request", "curl", "endpoint",
-                "json", "get", "post", "put", "delete", "patch", "response",
-                "header", "body", "url", "collection", "environment",
+                "api", "http", "https", "rest", "postman", "request", "curl", "endpoint",
+                "json", "xml", "graphql", "get", "post", "put", "delete", "patch",
+                "response", "header", "body", "url", "query", "collection", "folder",
+                "environment", "variable", "globals", "auth", "bearer", "basic",
+                "oauth", "token", "apikey", "cookie", "redirect", "multipart",
+                "form", "upload", "assert", "test", "runner", "history", "code",
+                "fetch", "axios", "requests", "httpie", "insomnia",
             ],
             category: .toolUX, icon: "arrow.up.arrow.down.circle", kind: .view,
             needsDevice: false

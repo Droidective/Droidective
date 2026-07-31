@@ -1,144 +1,119 @@
 import Foundation
 
-public actor HttpClientService {
-    private var inFlight: [String: Task<ApiResponse, any Error>] = [:]
+/// Everything one send produced: the response, exactly what went on the wire,
+/// the assertion results, and any non-fatal notes.
+public struct ApiSendOutcome: Sendable {
+    public var response: ApiResponse
+    public var prepared: PreparedRequest
+    public var assertions: [AssertionResult]
+    public var warnings: [String]
 
-    public init() {}
-
-    public func send(_ request: SavedRequest, environment: ApiEnvironment? = nil) async throws -> ApiResponse {
-        let resolved = EnvironmentEngine.resolveRequest(request, with: environment)
-        let urlRequest = try Self.buildURLRequest(from: resolved)
-        let id = request.id
-        let task = Task<ApiResponse, any Error> {
-            let start = ContinuousClock.now
-            let (data, response) = try await URLSession.shared.data(for: urlRequest)
-            let elapsed = start.duration(to: ContinuousClock.now)
-            let ms = Double(elapsed.components.seconds) * 1000
-                + Double(elapsed.components.attoseconds) / 1_000_000_000_000_000
-
-            guard let http = response as? HTTPURLResponse else {
-                throw HttpClientError.notHTTP
-            }
-
-            let headers = http.allHeaderFields.compactMap { key, value -> (String, String)? in
-                guard let k = key as? String, let v = value as? String else { return nil }
-                return (k, v)
-            }.sorted { $0.0.lowercased() < $1.0.lowercased() }
-
-            return ApiResponse(
-                statusCode: http.statusCode,
-                statusText: ApiResponse.statusText(for: http.statusCode),
-                headers: headers,
-                body: data,
-                elapsedMs: ms,
-                size: data.count
-            )
-        }
-        inFlight[id] = task
-        defer { inFlight[id] = nil }
-        return try await task.value
+    public init(
+        response: ApiResponse,
+        prepared: PreparedRequest,
+        assertions: [AssertionResult] = [],
+        warnings: [String] = []
+    ) {
+        self.response = response
+        self.prepared = prepared
+        self.assertions = assertions
+        self.warnings = warnings
     }
 
-    public func cancel(id: String) {
-        inFlight[id]?.cancel()
-        inFlight[id] = nil
-    }
-
-    // MARK: - URLRequest builder
-
-    public static func buildURLRequest(from request: SavedRequest) throws -> URLRequest {
-        var urlString = request.url
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .components(separatedBy: .newlines)
-            .first ?? ""
-        if !urlString.contains("://") {
-            urlString = "https://" + urlString
-        }
-
-        let enabledParams = request.queryParams.filter(\.enabled)
-        if !enabledParams.isEmpty, var components = URLComponents(string: urlString) {
-            var items = components.queryItems ?? []
-            for param in enabledParams {
-                items.append(URLQueryItem(name: param.key, value: param.value))
-            }
-            components.queryItems = items
-            if let built = components.url { urlString = built.absoluteString }
-        }
-
-        guard let url = URL(string: urlString) else {
-            throw HttpClientError.invalidURL(urlString)
-        }
-
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = request.method.rawValue
-        urlRequest.timeoutInterval = 60
-
-        for h in request.headers where h.enabled {
-            urlRequest.setValue(h.value, forHTTPHeaderField: h.key)
-        }
-
-        switch request.auth.type {
-        case .bearer:
-            if !request.auth.bearerToken.isEmpty {
-                urlRequest.setValue("Bearer \(request.auth.bearerToken)", forHTTPHeaderField: "Authorization")
-            }
-        case .basic:
-            let cred = Data("\(request.auth.basicUsername):\(request.auth.basicPassword)".utf8).base64EncodedString()
-            urlRequest.setValue("Basic \(cred)", forHTTPHeaderField: "Authorization")
-        case .apiKey:
-            if !request.auth.apiKeyName.isEmpty {
-                urlRequest.setValue(request.auth.apiKeyValue, forHTTPHeaderField: request.auth.apiKeyName)
-            }
-        case .none:
-            break
-        }
-
-        switch request.body.type {
-        case .json:
-            if !request.body.jsonText.isEmpty {
-                urlRequest.httpBody = Data(request.body.jsonText.utf8)
-                if urlRequest.value(forHTTPHeaderField: "Content-Type") == nil {
-                    urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                }
-            }
-        case .formUrlEncoded:
-            let enabled = request.body.formFields.filter(\.enabled)
-            if !enabled.isEmpty {
-                let encoded = enabled.map { "\(formEscape($0.key))=\(formEscape($0.value))" }.joined(separator: "&")
-                urlRequest.httpBody = Data(encoded.utf8)
-                if urlRequest.value(forHTTPHeaderField: "Content-Type") == nil {
-                    urlRequest.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-                }
-            }
-        case .raw:
-            if !request.body.rawText.isEmpty {
-                urlRequest.httpBody = Data(request.body.rawText.utf8)
-                if urlRequest.value(forHTTPHeaderField: "Content-Type") == nil {
-                    urlRequest.setValue(request.body.rawContentType, forHTTPHeaderField: "Content-Type")
-                }
-            }
-        case .none:
-            break
-        }
-
-        return urlRequest
-    }
-
-    private static func formEscape(_ value: String) -> String {
-        var allowed = CharacterSet.urlQueryAllowed
-        allowed.remove(charactersIn: "+=&")
-        return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
-    }
+    public var assertionsPassed: Bool { assertions.allSatisfy(\.passed) }
 }
 
-public enum HttpClientError: Error, LocalizedError, Sendable {
-    case invalidURL(String)
-    case notHTTP
+/// Resolves, builds, and sends a request.
+///
+/// Cancellation rides Swift's own task cancellation: the caller keeps the `Task`
+/// wrapping `send` and cancels it, which tears down the URLSession task through
+/// the transport's cancellation handler. There is deliberately no in-flight
+/// registry — keying one by request id can't distinguish two concurrent sends of
+/// the same saved request.
+public actor HttpClientService {
+    private let transport: any HttpTransport
+    private let files: any ApiFileReading
 
-    public var errorDescription: String? {
-        switch self {
-        case .invalidURL(let url): return "Invalid URL: \(url)"
-        case .notHTTP: return "Response is not HTTP"
+    public init(
+        transport: any HttpTransport = URLSessionTransport(),
+        files: any ApiFileReading = DiskFileReader()
+    ) {
+        self.transport = transport
+        self.files = files
+    }
+
+    /// Resolves variables, applies inherited auth, and builds the wire form
+    /// without sending it — used by the code-generation and cURL previews.
+    public func prepare(
+        _ request: SavedRequest,
+        scope: VariableScope = .empty,
+        inheritedAuth: AuthSpec? = nil,
+        dynamic: DynamicVariables = .live
+    ) throws -> PreparedRequest {
+        let resolved = Self.resolve(request, scope: scope, inheritedAuth: inheritedAuth, dynamic: dynamic)
+        return try HttpRequestBuilder.prepare(resolved, files: files)
+    }
+
+    public func send(
+        _ request: SavedRequest,
+        scope: VariableScope = .empty,
+        inheritedAuth: AuthSpec? = nil,
+        dynamic: DynamicVariables = .live
+    ) async throws -> ApiSendOutcome {
+        let resolved = Self.resolve(request, scope: scope, inheritedAuth: inheritedAuth, dynamic: dynamic)
+        let prepared = try HttpRequestBuilder.prepare(resolved, files: files)
+
+        var warnings = prepared.warnings
+        let unresolved = ApiVariables.unresolvedNames(in: request, scope: scope)
+        if !unresolved.isEmpty {
+            warnings.insert(
+                "No value for \(unresolved.map { "{{\($0)}}" }.joined(separator: ", "))"
+                    + " — sent as written.",
+                at: 0
+            )
         }
+
+        try Task.checkCancellation()
+        let result = try await transport.perform(prepared)
+
+        let response = ApiResponse(
+            statusCode: result.statusCode,
+            headers: result.headers,
+            body: result.body,
+            elapsedMs: result.timing?.total ?? 0,
+            size: result.receivedBytes,
+            truncated: result.truncated,
+            redirects: result.redirects,
+            timing: result.timing,
+            finalURL: result.finalURL.isEmpty ? prepared.url : result.finalURL
+        )
+        if result.truncated {
+            warnings.append(
+                "Response was larger than \(ApiResponse.formatBytes(prepared.settings.effectiveMaxResponseBytes))"
+                    + " and was truncated."
+            )
+        }
+
+        return ApiSendOutcome(
+            response: response,
+            prepared: prepared,
+            assertions: ApiAssertions.evaluate(request.assertions, against: response),
+            warnings: warnings
+        )
+    }
+
+    /// Collection auth applies to requests that don't set their own — Postman's
+    /// per-request "Inherit auth from parent".
+    static func resolve(
+        _ request: SavedRequest,
+        scope: VariableScope,
+        inheritedAuth: AuthSpec?,
+        dynamic: DynamicVariables
+    ) -> SavedRequest {
+        var source = request
+        if source.auth.type == .none, let inheritedAuth, inheritedAuth.type != .none {
+            source.auth = inheritedAuth
+        }
+        return ApiVariables.resolveRequest(source, scope: scope, dynamic: dynamic)
     }
 }
