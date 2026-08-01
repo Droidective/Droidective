@@ -203,46 +203,56 @@ final class DroidTerminalView: LocalProcessTerminalView {
     /// program writes, which makes scrolling back through the output of
     /// anything that keeps drawing — an agent CLI, `tail -f`, a build — look
     /// like scrolling is broken.
+    ///
+    /// One monitor serves every terminal. Each open tab and split pane stays
+    /// mounted (the keep-alive), so a monitor apiece would hit-test the whole
+    /// view tree once per terminal for every one of the ~100 wheel events a
+    /// second a trackpad produces; the shared one hit-tests once and hands
+    /// the event to whichever terminal is under the pointer.
+    private static let liveTerminals = NSHashTable<DroidTerminalView>.weakObjects()
+    private static var sharedMonitor: Any?
+
     private func installInputMonitor() {
-        guard inputMonitor == nil else { return }
-        inputMonitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .keyDown]) {
-            [weak self] event in
+        Self.liveTerminals.add(self)
+        guard Self.sharedMonitor == nil else { return }
+        Self.sharedMonitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .keyDown]) {
+            event in
             // `NSEvent` isn't Sendable, so the isolated body hands back the
             // decision and the event is passed on out here.
-            let consumed = MainActor.assumeIsolated { self?.handleMonitored(event) ?? false }
+            let consumed = MainActor.assumeIsolated { DroidTerminalView.handleMonitored(event) }
             return consumed ? nil : event
         }
     }
 
-    /// Returns whether the event was consumed here (only ever a wheel event —
+    private func removeInputMonitor() {
+        Self.liveTerminals.remove(self)
+        guard Self.liveTerminals.count == 0, let monitor = Self.sharedMonitor else { return }
+        NSEvent.removeMonitor(monitor)
+        Self.sharedMonitor = nil
+    }
+
+    /// Returns whether the event was consumed (only ever a wheel event —
     /// keystrokes are observed, never swallowed).
-    private func handleMonitored(_ event: NSEvent) -> Bool {
-        guard isEventInThisTerminal(event) else { return false }
+    private static func handleMonitored(_ event: NSEvent) -> Bool {
+        guard let target = terminal(under: event) else { return false }
         guard event.type == .scrollWheel else {
-            followOutputAfterTyping(event)
+            target.followOutputAfterTyping(event)
             return false
         }
-        return handleScrollWheel(event)
+        return target.handleScrollWheel(event)
     }
 
-    private func removeInputMonitor() {
-        if let inputMonitor { NSEvent.removeMonitor(inputMonitor) }
-        inputMonitor = nil
-    }
-
-    /// Every mounted terminal installs a monitor — including the hidden
-    /// keep-alive tabs — so each one must claim only its own events: the
-    /// pointer inside this view for the wheel, the keyboard focus for keys.
-    private func isEventInThisTerminal(_ event: NSEvent) -> Bool {
-        guard let window else { return false }
-        // Reject an event that belongs to *another* window, but not one with
-        // no window at all: a synthesized event (accessibility tooling, a UI
-        // test) carries none, and the hit test below is the real answer to
-        // "is the pointer over this terminal".
-        if let eventWindow = event.window, eventWindow !== window { return false }
-        if event.type == .keyDown { return window.firstResponder === self }
-        guard let hit = window.contentView?.hitTest(event.locationInWindow) else { return false }
-        return hit === self || hit.isDescendant(of: self)
+    /// The terminal this event belongs to: the one under the pointer for the
+    /// wheel, the one holding keyboard focus for keys.
+    private static func terminal(under event: NSEvent) -> DroidTerminalView? {
+        // A synthesized event (accessibility tooling, a UI test) carries no
+        // window, so fall back to the key window rather than dropping it.
+        guard let window = event.window ?? NSApp.keyWindow else { return nil }
+        if event.type == .keyDown {
+            return liveTerminals.allObjects.first { $0.window === window && window.firstResponder === $0 }
+        }
+        guard let hit = window.contentView?.hitTest(event.locationInWindow) else { return nil }
+        return liveTerminals.allObjects.first { hit === $0 || hit.isDescendant(of: $0) }
     }
 
     /// Returns whether the wheel event was consumed here. Three destinations,
@@ -260,11 +270,17 @@ final class DroidTerminalView: LocalProcessTerminalView {
             )
             return true
         }
-        let lines = TerminalWheel.lines(delta: event.deltaY, rows: terminal.rows)
         if terminal.isCurrentBufferAlternate {
-            sendAlternateScroll(up: up, lines: lines, terminal: terminal)
+            // Not the viewport curve: each key moves the *program's* cursor
+            // one line, so the accelerated count would fling it pages at a
+            // time (and in an editor, drag the caret with it).
+            sendAlternateScroll(
+                up: up, lines: TerminalWheel.reports(delta: event.deltaY, rows: terminal.rows),
+                terminal: terminal
+            )
             return true
         }
+        let lines = TerminalWheel.lines(delta: event.deltaY, rows: terminal.rows)
         if up {
             scrollUp(lines: lines)
         } else {
