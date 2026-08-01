@@ -161,11 +161,18 @@ already had to solve:
 - **Batched, not per-line.** `LogcatStreamer` already coalesces on a 300 ms
   flush (v3.6.1 moved it from 120 ms for exactly this reason). The socket sends
   whatever the flush produced; it must not re-split into one frame per line.
-- **Backpressure is explicit.** A slow UI must not grow an unbounded queue in
-  the daemon — the same trap that made me re-gate the macOS log readers. Each
-  subscription gets a bounded buffer and drops oldest with a
-  `{"event":"dropped","count":N}` marker, so the UI can show a gap instead of
-  the daemon eating memory. **This is the part I would most want reviewed.**
+- **Backpressure is explicit — decided: drop oldest, mark the gap.** A slow UI
+  must not grow an unbounded queue in the daemon (the trap that made us re-gate
+  the macOS log readers). Each subscription gets a bounded buffer; on overflow
+  the oldest go and the client receives `{"event":"dropped","count":N}` so the
+  UI renders a visible gap rather than silently missing lines.
+
+  This deliberately differs from the Mac app, which stalls: `bytes.lines` is
+  pull-driven, so a slow consumer backpressures the pipe. Both are defensible
+  and the divergence is intentional — a responsive UI with an honest gap beats
+  one that silently falls behind real time. It also matches what the device
+  already does: Android's logcat ring buffer drops under load regardless, so
+  "lossless" was never actually on offer.
 - **Unsubscribe tears down the child.** ADBKit already kills the adb child on
   task cancellation (`SystemProcessRunner.withTaskCancellationHandler`); the
   subscription must hold that task so closing the socket kills `adb logcat`
@@ -202,19 +209,23 @@ The daemon must not be the one part of the system verified by hand.
   *runtime* behaviour matters off-Apple, so `test-linux` and the Windows job
   become load-bearing rather than compile checks.
 
-## 8. Open questions
+## 8. Decisions and open questions
 
-1. **Drop policy.** Drop-oldest with a gap marker, or apply backpressure and let
-   the daemon's read of adb stall? Dropping favours a responsive UI; stalling
-   favours completeness. The Mac app implicitly chose stalling (pull-driven
-   reads); the daemon probably wants dropping, and the two differing is
-   defensible but should be deliberate.
-2. **Does the Mac app ever adopt this?** Keeping it daemon-free is zero-risk but
-   means two integration paths forever. My inclination is to leave macOS alone
-   until the daemon has shipped on another OS and proven itself.
-3. **File transfer.** `adb push`/`pull` over HTTP needs streaming bodies and
+**Decided — drop policy:** drop oldest with a gap marker. See §5.
+
+**Decided — macOS stays native, indefinitely.** The Mac app keeps linking
+ADBKit directly and never talks to the daemon. That is two integration paths to
+maintain, accepted knowingly: the shipping Mac flow is the thing with users on
+it, and no daemon work should ever be able to reach it. Practically this means
+the daemon is free to make choices the Mac app does not share (the drop policy
+above being the first), and nothing here should be designed as a migration
+path.
+
+Still open:
+
+1. **File transfer.** `adb push`/`pull` over HTTP needs streaming bodies and
    progress; probably its own endpoint pair rather than the JSON action path.
-4. **Tool downloads.** `ManagedToolStore` fetches from GitHub. Does the daemon
+3. **Tool downloads.** `ManagedToolStore` fetches from GitHub. Does the daemon
    own that, or the UI? Daemon, most likely — it already has the digest
    verification — but it means the daemon needs outbound network, which
    complicates the "loopback only" story.
