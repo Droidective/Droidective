@@ -228,7 +228,19 @@ import Testing
         var files: [(path: String, contents: String)] = []
         for case let relativePath as String in walker where relativePath.hasSuffix(".swift") {
             let file = root.appendingPathComponent(relativePath)
-            files.append((relativePath, try String(contentsOf: file, encoding: .utf8)))
+            // The enumerator yields the host's separator, so on Windows every
+            // key arrives as `ADBKit\Services\…`. That is not cosmetic: the
+            // Apple-bound prefixes are written with `/`, so unnormalised keys
+            // stop matching and the *gated* Mirror and Reactotron files get
+            // reported as violations — the guard cries wolf on the one host it
+            // most needs to be trusted on. A no-op on POSIX, where the
+            // enumerator already yields `/`.
+            #if os(Windows)
+            let key = relativePath.replacingOccurrences(of: #"\"#, with: "/")
+            #else
+            let key = relativePath
+            #endif
+            files.append((key, try String(contentsOf: file, encoding: .utf8)))
         }
         return files.sorted { $0.path < $1.path }
     }

@@ -55,20 +55,11 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
         with:
           persist-credentials: false
-      # Compile-only for now, but no longer for the reason the old comment gave.
-      # It was not swift-nio: nio and swift-crypto's BoringSSL both build here.
-      # The blocker was the MCP SDK's `HTTPClientTransport`, which imports
-      # `EventSource` behind `#if !os(Linux)` — a gate that wrongly includes
-      # Windows, where the module is unbuildable — so merely *resolving*
-      # swift-sdk failed the build. Moving MCP to its own package fixed that,
-      # and `swift test` now discovers and runs all 1375 tests here.
-      #
-      # 14 of them fail, in three known clusters, tracked in
-      # docs/cross-platform.md: the real-process tests spawn POSIX binaries
-      # (/bin/echo, /bin/sh, /bin/sleep), PortabilityGuardTests does `/`-based
-      # path arithmetic, and the toolchain tests want POSIX tool paths plus an
-      # xz decoder Windows does not have. Flip this to `swift test` in the
-      # change that fixes them, so this job never lands red.
+      # Compile-only, but only 3 tests short of running. Moving MCP to its own
+      # package (#231) let `swift test` discover and run all 1375 tests here;
+      # successive passes took the failures from 14 to 3. The remainder is
+      # tracked in docs/cross-platform.md. Flip this to `swift test` in the
+      # change that clears them, so the job never lands red.
       - name: Build ADBKit and its tests (Windows)
         run: |
           cd ADBKit

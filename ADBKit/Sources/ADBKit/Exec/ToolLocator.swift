@@ -144,7 +144,10 @@ public actor ToolLocator {
 
     private func buildToolBinary(_ name: String) async -> String? {
         guard let dir = await buildToolsDir() else { return nil }
-        let path = "\(dir)/\(name)"
+        // The SDK ships these as `.exe` on Windows, so the bare name resolves
+        // nothing there and every APK feature reports its tool as missing.
+        // `executableName` is the identity function on POSIX.
+        let path = "\(dir)/\(Self.executableName(name))"
         return isExecutableFile(path) ? path : nil
     }
 

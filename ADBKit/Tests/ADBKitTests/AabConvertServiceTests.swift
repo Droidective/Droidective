@@ -56,8 +56,16 @@ import Testing
     }
 
     @Test func extractPullsOnlyUniversalApkFlattened() {
-        #expect(AabConvertService.extractArguments(apks: "/w/bundle.apks", destination: "/w")
-            == ["-q", "-o", "-j", "/w/bundle.apks", "universal.apk", "-d", "/w"])
+        // Windows extracts with the system bsdtar (which reads zips) rather
+        // than unzip, so the vector differs by host — see `HostArchive`.
+        #if os(Windows)
+        let expected = ["-xf", "/w/bundle.apks", "-C", "/w", "universal.apk"]
+        #else
+        let expected = ["-q", "-o", "-j", "/w/bundle.apks", "universal.apk", "-d", "/w"]
+        #endif
+        #expect(
+            AabConvertService.extractArguments(apks: "/w/bundle.apks", destination: "/w")
+                == expected)
     }
 
     // MARK: failure summary
