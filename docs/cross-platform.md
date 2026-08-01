@@ -40,12 +40,20 @@ stubbed — a platform that can't mirror simply doesn't expose the type:
 | `ConsoleLinkDetector` | returns no spans (corelibs has no `NSDataDetector`); a web UI linkifies in its own view layer |
 | `ProcessStats` (the watchdog's `proc_pid_rusage` sampling) | returns nil |
 | `HostNetwork.primaryIPv4` | `getifaddrs` on Linux; nil on Windows (GetAdaptersAddresses is a follow-up) |
+| `URLSessionTransport`'s TLS opt-out (API client) | compiles and runs, but `validateTLS: false` cannot be honoured — corelibs has no server-trust protection space — so its two delegate suites are Apple-scoped |
 
 Portable seams that changed shape:
 
-- `FileHandleLines` replaces Darwin-only `FileHandle.bytes.lines` for the
-  logcat and simulator-log streams: `readabilityHandler`-based (the same
-  non-blocking pattern as `SystemProcessRunner`), CRLF-tolerant, tested.
+- `FileHandleLines` supplies the logcat and simulator-log streams *off-Darwin*,
+  where `FileHandle.bytes.lines` does not exist: CRLF-tolerant, tested, and
+  backed by a dedicated blocking-read thread because corelibs never delivers
+  `readabilityHandler`'s empty EOF callback when the final data and the
+  writer's close arrive together. **Apple platforms deliberately keep
+  Foundation's own `bytes.lines`.** It is pull-driven, so a slow consumer
+  backpressures the pipe rather than queueing lines in an unbounded
+  `AsyncStream` buffer — and this is the live logcat feed, the most-used
+  surface in the shipping app. The rule the port follows: gate, don't replace;
+  a portability edit must leave the macOS path byte-identical.
 - SHA-256 digests come from CryptoKit on Apple platforms and swift-crypto's
   API-compatible `Crypto` elsewhere — the package's first dependency, linked
   only off-Apple.
@@ -109,3 +117,12 @@ stays with the scrcpy desktop app.
 - [ ] Windows: audit the process-spawning tests so `swift test` runs in CI
 - [ ] Windows: xz decode for frida assets; `HostNetwork` via GetAdaptersAddresses
 - [ ] Linux: interface ranking in `HostNetwork.pickPrimary` (en*/eth*/wl* over docker0/veth)
+- [ ] API client: portable expectations for `URLSessionTransport` so
+      `ApiTransportTests` / `ApiTransportLiveTests` run off-Darwin
+- [ ] A guard for corelibs-*unavailable* / *deprecated* Foundation symbols.
+      `PortabilityGuardTests` only catches Apple-only imports and a listed set
+      of traps, so it missed both API-client breaks
+      (`NSURLAuthenticationMethodServerTrust`,
+      `NSURLErrorFailingURLStringErrorKey`); only the real Linux compile found
+      them. Until that exists, `test-linux` is the only thing standing between
+      a new macOS feature and a broken port.
