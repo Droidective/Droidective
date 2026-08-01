@@ -50,6 +50,7 @@ verify: generate
 
 verify-self:
 	./scripts/test-verify-guards.sh
+	./scripts/test-release-channel.sh
 
 # Tier 3 — the device-dependent suites against a real emulator. Reuses an
 # attached device when there is one and otherwise boots an AVD headless, tearing

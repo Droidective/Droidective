@@ -29,7 +29,7 @@ needs a new UI layer.
 
 ## Features
 
-A searchable palette (`⌘T`) of 59 tools, organised by category and
+A searchable palette (`⌘T`) of 60 tools, organised by category and
 gathered into focused hubs (React Native, Simulate, Connection, APK Studio) so
 the sidebar stays short. Every action is on by default; hide the ones you don't want from
 the in-app catalog.
@@ -129,7 +129,7 @@ through Sparkle.
 ADBKit/   Swift package — all logic, zero UI dependencies (swift test)
   Exec/         adb process execution, tool location, scoped command log
   Devices/      discovery (2s polling), getprop, hardware/usage overview
-  Features/     declarative 59-feature registry + runners + how-to notes
+  Features/     declarative 60-feature registry + runners + how-to notes
   Services/     logcat streaming, overrides, file/apps explorers, capture,
                 screen record, crash, bug report, wireless, emulators,
                 performance + network monitors, APK inspect/sign/decompile,

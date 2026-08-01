@@ -6,6 +6,15 @@ Silicon + Intel) DMG via GitHub Releases, and updates itself with
 appcast are both served from GitHub Pages at
 `https://droidective.com/`.
 
+**Two channels, decided by the tag.** `vX.Y.Z` is the stable channel and is
+**macOS-only**; `vX.Y.Z-beta.N` is the beta channel and additionally carries
+the Windows and Linux builds. That split is a standing arrangement, not a
+pre-release cycle — the ports are expected to sit on beta for a long time, and
+the public macOS release never ships from a beta tag. The policy, the artifact
+matrix, and the per-channel version touchpoints live in
+**[`docs/release-channels.md`](docs/release-channels.md)**; this file covers
+setup, secrets, and the mechanics.
+
 `ARCHS` is pinned in `project.yml`, the bundled ffmpeg is lipo'd universal by
 `scripts/update-bundled-tools.sh`, and `scripts/package-dmg.sh` refuses to
 package an app whose main executable or ffmpeg is missing a slice.
@@ -197,7 +206,12 @@ CI (the `release` job) then:
 - signs the app — with the scrcpy-server and ffmpeg bundled inside it — with the
   Developer ID, and packages `Droidective-vX.Y.Z.dmg`;
 - notarizes the DMG with Apple and staples the ticket;
-- publishes the GitHub release with that DMG and the latest release notes;
+- stages the artifacts this tag's channel is allowed to publish
+  (`scripts/stage-release-artifacts.sh`) and fails the release if the set is
+  wrong in either direction — a missing DMG, or a Windows build trying to ride
+  a stable macOS tag;
+- publishes the GitHub release with those artifacts and the notes for that
+  exact tag (`scripts/extract-notes.sh`);
 - signs the stapled DMG with the EdDSA key and commits the regenerated
   `site/appcast.xml` to `main` — with those notes rendered to HTML and embedded
   in the item's `<description>`, so Sparkle shows them in its update window
@@ -213,42 +227,56 @@ offer the update automatically.
 
 ## Beta releases
 
-A tag with a pre-release suffix rides the beta channel — only installs with
-Settings ▸ General ▸ Updates ▸ "Receive beta updates" switched on see it:
+A tag with a pre-release suffix rides the beta channel. On macOS only installs
+with Settings ▸ General ▸ Updates ▸ "Receive beta updates" switched on see it;
+Windows and Linux have no other channel, so for them beta is the product.
 
 ```sh
 git tag vX.Y.Z-beta.1
 git push origin vX.Y.Z-beta.1
 ```
 
-Same pipeline, three differences:
+Same pipeline, four differences:
 
 - the GitHub release is marked **prerelease**, so the site's
   `/releases/latest/download/Droidective.dmg` button keeps serving the latest
   stable;
 - the appcast item carries `<sparkle:channel>beta</sparkle:channel>`, and
   `update-appcast.sh` keeps the current stable item alongside it (a newer beta
-  replaces the previous beta item).
+  replaces the previous beta item);
+- the Windows and Linux artifacts are built and attached, and
+  `site/updates/beta/latest.json` is regenerated for the site's beta section
+  (stage 1 onward — see `docs/release-channels.md` for where that stands);
+- the site's stable-facing version stays put: a beta must **not** bump
+  `APP_VERSION` or add a `releases` entry in `website/src/lib/content.ts`, or
+  the landing page starts advertising a pre-release as the current release.
 
-Put the beta's notes as the top `## ` section of `RELEASE_NOTES.md` — the notes
-extraction always takes the first section. Shipping the stable `vX.Y.Z`
-afterwards writes a stable-only appcast (the beta cycle ends) and beta installs
-move to it automatically: the run-number `CFBundleVersion` keeps increasing, so
-the stable is an upgrade for them. Opting out of beta never downgrades anyone —
-the install just waits for the next stable.
+Notes are selected by tag (`scripts/extract-notes.sh`), so the beta's
+`## Droidective vX.Y.Z-beta.N` section can sit anywhere in `RELEASE_NOTES.md`
+and a stable hotfix cut during a beta cycle still gets its own notes.
+
+Shipping the stable `vX.Y.Z` afterwards writes a stable-only appcast (the Mac
+beta cycle ends) and beta installs move to it automatically: the run-number
+`CFBundleVersion` keeps increasing, so the stable is an upgrade for them.
+Opting out of beta never downgrades anyone — the install just waits for the
+next stable. The beta feed for Windows and Linux is **not** cleared by a stable
+release: the newest beta is still the newest thing those platforms have.
 
 ## Release checklist
 
-Copy this into the release PR and tick each item.
+Copy this into the release PR and tick each item. Items marked **(stable only)**
+are skipped for a beta — see the touchpoint table in
+[`docs/release-channels.md`](docs/release-channels.md).
 
 ### Prepare (on the feature branch)
 
 - [ ] `cd ADBKit && swift test` is green (no skips).
 - [ ] `make build` is clean — zero warnings.
+- [ ] `make verify-self` is green (the verify guards and the release channel policy).
 - [ ] App runs and the changed features are verified live against a device or emulator.
-- [ ] Bump `MARKETING_VERSION` in `project.yml` to the new `X.Y.Z`.
-- [ ] Add a `## Droidective vX.Y.Z` section to the top of `RELEASE_NOTES.md` (summary, New features, Improvements, Install). Plain, factual language — no superlatives.
-- [ ] Bump `APP_VERSION` in `website/src/lib/content.ts` and add the release to `releases` there — it drives the hero badge, the changelog, and (at build time) the JSON-LD `softwareVersion` in `website/index.html`.
+- [ ] **(stable only)** Bump `MARKETING_VERSION` in `project.yml` to the new `X.Y.Z`.
+- [ ] Add a `## Droidective vX.Y.Z` section to `RELEASE_NOTES.md` (summary, New features, Improvements, Install). The heading must carry the exact tag — `extract-notes.sh` matches on it. Plain, factual language — no superlatives.
+- [ ] **(stable only)** Bump `APP_VERSION` in `website/src/lib/content.ts` and add the release to `releases` there — it drives the hero badge, the changelog, and (at build time) the JSON-LD `softwareVersion` in `website/index.html`.
 - [ ] Feature counts updated if they changed: registry total in `README.md` and `CLAUDE.md`, marketing count in `website/src/lib/content.ts` and `website/index.html` (and the `site/*.html` SEO subpages).
 - [ ] Screenshots refreshed if the UI changed: `site/assets/screenshot-home.png` and `screenshot-catalog.png` (1512×948 window → 3024×1896 @2× Retina; Dock hidden; default layout — nothing pinned/collapsed). The og:image PNGs (`screenshot-device/catalog/react/logcat.png`) are regenerated from their updated `.webp` files with `sips -s format png <in>.webp --out <out>.png`.
 - [ ] `README.md`, `CLAUDE.md`, and `docs/` updated for new features or changed behavior.
@@ -262,13 +290,14 @@ Copy this into the release PR and tick each item.
 
 ### Release (CI does the build — triggered by the tag)
 
-- [ ] Tag from `main` and push: `git tag vX.Y.Z && git push origin vX.Y.Z`.
-- [ ] The Actions `release` job succeeds: builds Release with `MARKETING_VERSION=X.Y.Z` (scrcpy-server + ffmpeg ship inside the app), signs with the Developer ID, packages `Droidective-vX.Y.Z.dmg`, notarizes + staples it, signs it with the Sparkle EdDSA key, publishes the GitHub release with the DMG + latest notes, and commits the regenerated `site/appcast.xml` to `main`.
+- [ ] Tag from `main` and push: `git tag vX.Y.Z && git push origin vX.Y.Z`. (A `-beta.N` suffix picks the beta channel instead.)
+- [ ] The Actions `release` job succeeds: builds Release with `MARKETING_VERSION=X.Y.Z` (scrcpy-server + ffmpeg ship inside the app), signs with the Developer ID, packages `Droidective-vX.Y.Z.dmg`, notarizes + staples it, signs it with the Sparkle EdDSA key, publishes the GitHub release with this channel's artifacts + this tag's notes, and commits the regenerated `site/appcast.xml` to `main`.
+- [ ] The staging step reported the expected artifact set for the channel — DMG-only for a stable tag.
 - [ ] The follow-up `pages` run (triggered by that appcast commit) deploys the site + appcast to GitHub Pages.
 
 ### Verify (post-release)
 
-- [ ] GitHub release page shows the right version, the notes, and a downloadable DMG.
+- [ ] GitHub release page shows the right version, the notes for *that* tag, and a downloadable DMG — and, for a stable release, nothing else attached.
 - [ ] Fresh download launches cleanly: mount the DMG, drag to `/Applications`, open — no Gatekeeper warning. `spctl -a -vvv -t install Droidective-vX.Y.Z.dmg` reports *accepted, source=Notarized Developer ID*.
 - [ ] `https://droidective.com/` shows the new screenshots and copy.
 - [ ] `https://droidective.com/appcast.xml` lists the new version with a valid `sparkle:edSignature` and the release notes inline in `<description>`.
