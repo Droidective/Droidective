@@ -12,7 +12,7 @@ export function ChangelogPage() {
       <header className="border-b border-border px-6 py-4">
         <div className="mx-auto flex max-w-[1120px] items-center justify-between gap-4">
           <a href="/" className="flex items-center gap-2.75 text-base font-bold tracking-[-0.01em]">
-            <img src="/assets/icon-64.png" alt="" width={26} height={26} className="rounded-md" />
+            <img src="/assets/icon-light-64.png" alt="" width={26} height={26} className="rounded-md" />
             Droidective
           </a>
           <a

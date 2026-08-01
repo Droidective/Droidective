@@ -49,4 +49,5 @@ enum FeatureDetailRoute: String, CaseIterable {
     case performance = "performance"
     case networkSpeed = "network-speed"
     case scrcpy = "scrcpy"
+    case apiClient = "api-client"
 }

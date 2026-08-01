@@ -186,13 +186,29 @@ public actor LogcatStreamer {
 
         let handle = UncheckedSendable(pipe.fileHandleForReading)
         readerTask = Task {
-            // The stream ends on EOF — including a killed process's closed
-            // pipe — then falls through to the final flush.
+            // Apple platforms keep Foundation's own reader: this is the live
+            // logcat feed, and `bytes.lines` is pull-driven, so a slow consumer
+            // backpressures the pipe rather than queueing lines in memory.
+            // `FileHandle.bytes` is Darwin-only, so other hosts assemble lines
+            // themselves. Either way the stream ends on EOF — including a
+            // killed process's closed pipe — then falls through to the flush.
+            #if canImport(Darwin)
+            do {
+                for try await line in handle.value.bytes.lines {
+                    guard !Task.isCancelled else { break }
+                    if line.trimmingCharacters(in: .whitespaces).isEmpty { continue }
+                    self.append(LogcatLineParser.parse(line), epoch: sessionEpoch)
+                }
+            } catch {
+                // Pipe closed (process killed) — fall through to final flush.
+            }
+            #else
             for await line in FileHandleLines.lines(of: handle.value) {
                 guard !Task.isCancelled else { break }
                 if line.trimmingCharacters(in: .whitespaces).isEmpty { continue }
                 self.append(LogcatLineParser.parse(line), epoch: sessionEpoch)
             }
+            #endif
             self.finishStream(epoch: sessionEpoch)
         }
         flusherTask = Task {

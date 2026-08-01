@@ -18,3 +18,18 @@ paths = [
   '''App/Resources/scrcpy-server''',
   '''App/Resources/ffmpeg''',
 ]
+
+[[allowlists]]
+description = "cURL parser test fixtures — invented credentials in command strings the parser must handle"
+paths = [
+  '''ADBKit/Tests/ADBKitTests/ApiCurlTests\.swift''',
+  '''ADBKit/Tests/ADBKitTests/PostmanFormatTests\.swift''',
+]
+regexes = [
+  '''alice:s3cret''',
+  '''alice:a:b:c''',
+  '''alice''',
+  '''hunter2''',
+  '''eyJhbGciOi''',
+  '''tok-staging''',
+]

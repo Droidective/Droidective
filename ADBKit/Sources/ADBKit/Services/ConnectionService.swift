@@ -239,8 +239,15 @@ public struct ConnectionService: Sendable {
             if compressed { tail.removeLast() } else { head.removeLast() }
         }
 
+        // ASCII only: `isHexDigit` also accepts fullwidth forms like U+FF11,
+        // which `inet_pton` — the call this replaced — rejects. Same reason
+        // `isIPv4` parses through `Int(_:)` rather than trusting `isNumber`.
         let hextets = head + tail
-        guard hextets.allSatisfy({ (1...4).contains($0.count) && $0.allSatisfy(\.isHexDigit) })
+        guard
+            hextets.allSatisfy({ hextet in
+                (1...4).contains(hextet.count)
+                    && hextet.allSatisfy { $0.isASCII && $0.isHexDigit }
+            })
         else { return false }
 
         let total = hextets.count + ipv4GroupCount

@@ -9,10 +9,27 @@
   --color-ink-650: #1b1f1e;
   --color-ink-600: #232827;
 
-  /* The electricity — one chromatic accent, everywhere it counts */
-  --color-green: #9be021;
-  --color-green-bright: #b6f24a;
-  --color-green-dim: #7cb81e;
+  /*
+   * Droidective brand green — extracted from the Android robot BODY
+   * in the actual logo asset (icon-light.png).
+   * Body average: #5f9205 → HSL(82°, 93%, 30%).
+   * Primary is nudged slightly brighter for readability on dark backgrounds.
+   */
+  --color-green: #69a106;
+  --color-green-bright: #84c610;
+  --color-green-dim: #466a05;
+
+  /* Full brand green scale (logo body-matched) */
+  --color-green-50: #f2f9e5;
+  --color-green-100: #e2f4c2;
+  --color-green-200: #c5eb84;
+  --color-green-300: #a5e532;
+  --color-green-400: #84c610;
+  --color-green-500: #69a106;
+  --color-green-600: #5e9203;
+  --color-green-700: #466a05;
+  --color-green-800: #324b06;
+  --color-green-900: #223205;
 
   /* Ink */
   --color-text: #e7eae5;
@@ -33,7 +50,7 @@
   --color-card-foreground: #e7eae5;
   --color-popover: #16191a;
   --color-popover-foreground: #e7eae5;
-  --color-primary: #9be021;
+  --color-primary: #69a106;
   --color-primary-foreground: #0a0c0b;
   --color-secondary: #1b1f1e;
   --color-secondary-foreground: #e7eae5;
@@ -44,14 +61,19 @@
   --color-border: rgba(231, 234, 229, 0.08);
   --color-border-2: rgba(231, 234, 229, 0.14);
   --color-input: rgba(231, 234, 229, 0.14);
-  --color-ring: #9be021;
+  --color-ring: #69a106;
 
   --radius-lg: 16px;
   --radius-md: 12px;
   --radius-sm: 8px;
 
-  --shadow-glow: 0 0 0 1px rgba(155, 224, 33, 0.4),
-    0 10px 30px -8px rgba(155, 224, 33, 0.3);
+  --shadow-glow: 0 0 0 1px rgba(105, 161, 6, 0.45),
+    0 10px 30px -8px rgba(105, 161, 6, 0.25);
+
+  /* Glass surfaces */
+  --color-glass: rgba(18, 21, 20, 0.72);
+  --color-glass-heavy: rgba(18, 21, 20, 0.88);
+  --color-glass-border: rgba(231, 234, 229, 0.06);
 }
 
 html {
@@ -78,11 +100,71 @@ body {
 }
 
 ::selection {
-  background: rgba(155, 224, 33, 0.25);
+  background: rgba(105, 161, 6, 0.25);
+}
+
+/* Noise texture overlay — applied via .noise class */
+.noise::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0.018;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 256px 256px;
+}
+
+/* Atmospheric grid */
+.atmo-grid {
+  background-image:
+    linear-gradient(rgba(105, 161, 6, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(105, 161, 6, 0.02) 1px, transparent 1px);
+  background-size: 60px 60px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 20%, black, transparent 70%);
+}
+
+/* Section divider glow line */
+.glow-line {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(105, 161, 6, 0.3), transparent);
 }
 
 @keyframes blink {
   50% {
     opacity: 0;
+  }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes breathe {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
+
+/* Panel entrance for tab/segment switches */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Subtle green breathing glow for CTAs */
+.cta-breathe {
+  animation: breathe 4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cta-breathe {
+    animation: none;
   }
 }
