@@ -412,8 +412,17 @@ table) is in `docs/reactotron-mcp-analysis.md`.
 - **Recording audio is one AAC track fed by up to two sources.** A recording
   captures device audio (scrcpy, Android 11+), the Mac's microphone, both, or
   neither — `RecordAudioMode` in ScreenTools, persisted by the App-layer
-  `RecordAudioPreference` (`recAudioMode`/`recMicInput`) and shared by the
-  Screen Record screen's Audio picker and the mirror bar's ⋯ ▸ Recording audio.
+  `RecordAudioPreference` (`recAudioMode`/`recMicInput`). **Two independent
+  on/off controls, never a mode list** — a Device audio switch and a
+  Microphone switch on the Screen Record screen, and the matching pair of
+  buttons beside the mirror bar's record button (waveform + mic; the four
+  combinations fall out of the two). Mid-take the pair keeps the same two-way
+  shape: the mirror's buttons switch to mute/unmute (a source the recording
+  never included is disabled, not hidden), and the Screen Record screen shows
+  the two mute chips over the live preview. The mirror's device-audio icon is a **waveform, not a speaker**: the
+  volume cluster two buttons along already owns the speaker icons (its mute is
+  `speaker.slash.fill`). Which mic to use is a set-once picker — Input on the
+  Screen Record screen, ⋯ ▸ Microphone input in the mirror.
   Both sources land in **one** track, never two: players (QuickTime, browsers,
   chat apps) play only the first audio track, so a second one is silently lost
   for whoever the clip is sent to. With one source the samples go straight to
@@ -421,9 +430,8 @@ table) is in `docs/reactotron-mcp-analysis.md`.
   portable, tested) on a shared timeline, because the device stamps its audio
   in the device clock and the mic in the host clock — `AudioTimeline` anchors
   the two at the frame the file opens on, or narration drifts over a long take.
-  Mute (the chips on the recording screen) writes *silence* rather than
-  dropping samples, so the track keeps one continuous timeline and unmuting is
-  instant. `MicrophoneCapture` (Apple-gated, its own file) requests access
+  Mute writes *silence* rather than dropping samples, so the track keeps one
+  continuous timeline and unmuting is instant. `MicrophoneCapture` (Apple-gated, its own file) requests access
   itself when the status is undetermined — recordings start from several places
   and only one has a picker — and a mic that won't start is surfaced through
   `ScreenRecorder.audioStatus()` while the recording keeps going: losing the

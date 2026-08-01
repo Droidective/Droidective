@@ -247,6 +247,8 @@ private struct MirrorStage: View {
     @AppStorage(mirrorShowTouchesKey) private var showTouches = false
     @AppStorage(RecordAudioPreference.modeKey) private var recordAudioModeRaw =
         RecordAudioMode.deviceOnly.rawValue
+    @AppStorage(RecordAudioPreference.inputKey) private var micInputID = ""
+    @State private var micInputs: [MicrophoneCapture.Input] = []
     /// Reconnect the current device in place (the stopped/failed cards' button).
     let onReconnect: () -> Void
     /// Move the mirror to its own window; nil when already hosted in one.
@@ -343,27 +345,109 @@ private struct MirrorStage: View {
         Toggle("Stream audio (restarts mirror)", isOn: $includeAudio)
             .disabled(model.isRecording)
         Toggle("Show touches", isOn: $showTouches)
-        // What a recording started from this bar captures — the same stored
-        // choice the Screen Record screen uses. Locked mid-recording: the
-        // sources are fixed when the capture opens.
-        Picker("Recording audio", selection: recordAudioMode) {
-            ForEach(RecordAudioMode.allCases, id: \.self) { option in
-                Label(option.title, systemImage: option.symbolName).tag(option)
+        // Which mic to record from is a set-once setting — the on/off that
+        // matters per take is the bar button.
+        if storedMode.includesMicrophone {
+            Picker("Microphone input", selection: $micInputID) {
+                Text("System default").tag("")
+                ForEach(micInputs) { input in
+                    Text(input.name).tag(input.id)
+                }
             }
+            .disabled(model.isRecording)
         }
-        .disabled(model.isRecording)
     }
 
-    /// Choosing a microphone mode here asks for access straight away — this
-    /// menu is the only audio control the mirror has, so the prompt can't wait
-    /// for a picker the user may never open.
-    private var recordAudioMode: Binding<RecordAudioMode> {
-        Binding(
-            get: { RecordAudioMode(rawValue: recordAudioModeRaw) ?? .deviceOnly },
-            set: { mode in
-                recordAudioModeRaw = mode.rawValue
-                Task { await MicrophoneAccess.requestIfNeeded(for: mode) }
-            })
+    /// The recording's two audio sources, as two plain on/off buttons beside
+    /// the record button: the device's own sound, and the Mac's microphone.
+    /// Both, either, or neither — no mode list to read. During a take the same
+    /// two buttons mute and unmute what's being captured.
+    private func audioSourceButtons(buttonWidth: CGFloat) -> some View {
+        Group {
+            // A waveform, not a speaker: the volume cluster two buttons along
+            // already owns the speaker icons (its mute is literally
+            // `speaker.slash.fill`), and two speakers meaning different things
+            // in one bar is exactly the confusion to avoid.
+            audioSourceButton(
+                on: "waveform", off: "waveform.slash",
+                isOn: deviceAudioOn, width: buttonWidth,
+                enabled: !model.isRecording || recordingCarries(\.includesDevice),
+                help: deviceAudioOn
+                    ? (model.isRecording ? "Mute the device's audio" : "Device audio on (Android 11+)")
+                    : (model.isRecording ? "Unmute the device's audio" : "Device audio off")
+            ) { setDeviceAudio(!deviceAudioOn) }
+
+            audioSourceButton(
+                on: "mic.fill", off: "mic.slash.fill",
+                isOn: microphoneOn, width: buttonWidth,
+                enabled: !model.isRecording || recordingCarries(\.includesMicrophone),
+                help: microphoneOn
+                    ? (model.isRecording ? "Mute your microphone" : "Microphone on")
+                    : (model.isRecording ? "Unmute your microphone" : "Microphone off")
+            ) { setMicrophone(!microphoneOn) }
+        }
+        // Inputs come and go with headsets; refresh where the ⋯ menu's picker
+        // will read them.
+        .onAppear { micInputs = MicrophoneCapture.availableInputs() }
+    }
+
+    private func audioSourceButton(
+        on: String, off: String, isOn: Bool, width: CGFloat, enabled: Bool, help: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        navButton(
+            isOn ? on : off,
+            tint: isOn ? .primary : .textMuted,
+            width: width,
+            help: enabled ? help : "Not part of this recording",
+            action: action
+        )
+        .disabled(!enabled)
+    }
+
+    /// Before a take these read the stored choice; during one they read what
+    /// the recorder is actually capturing, so a muted source shows as off.
+    private var deviceAudioOn: Bool {
+        guard model.isRecording, let status = model.recordAudioStatus else {
+            return storedMode.includesDevice
+        }
+        return status.mode.includesDevice && !status.deviceMuted
+    }
+
+    private var microphoneOn: Bool {
+        guard model.isRecording, let status = model.recordAudioStatus else {
+            return storedMode.includesMicrophone
+        }
+        return status.mode.includesMicrophone && !status.microphoneMuted
+    }
+
+    private func recordingCarries(_ path: KeyPath<RecordAudioMode, Bool>) -> Bool {
+        model.recordAudioStatus?.mode[keyPath: path] ?? false
+    }
+
+    private var storedMode: RecordAudioMode {
+        RecordAudioMode(rawValue: recordAudioModeRaw) ?? .deviceOnly
+    }
+
+    private func setDeviceAudio(_ on: Bool) {
+        guard !model.isRecording else {
+            Task { await model.setRecordMuted(device: !on, microphone: !microphoneOn) }
+            return
+        }
+        recordAudioModeRaw = RecordAudioMode
+            .mode(device: on, microphone: storedMode.includesMicrophone).rawValue
+    }
+
+    /// Turning the microphone on asks for access straight away, so the system
+    /// prompt lands on the choice instead of on the first recording.
+    private func setMicrophone(_ on: Bool) {
+        guard !model.isRecording else {
+            Task { await model.setRecordMuted(device: !deviceAudioOn, microphone: !on) }
+            return
+        }
+        let mode = RecordAudioMode.mode(device: storedMode.includesDevice, microphone: on)
+        recordAudioModeRaw = mode.rawValue
+        Task { await MicrophoneAccess.requestIfNeeded(for: mode) }
     }
 
     private var optionsMenu: some View {
@@ -429,6 +513,8 @@ private struct MirrorStage: View {
         navButton("camera", width: buttonWidth, help: "Screenshot — edit in place") {
             Task { await model.takeScreenshot() }
         }
+
+        audioSourceButtons(buttonWidth: buttonWidth)
 
         if model.isRecording {
             navButton(

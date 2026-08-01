@@ -15,13 +15,27 @@ enum MicrophoneAccess {
     }
 }
 
-/// The audio choice on the Screen Record screen: one picker for what to
-/// capture, and — only when the microphone is part of it — the input to use,
-/// with a level check so you know it's hearing you before you hit Record.
+/// The audio choice on the Screen Record screen: two switches — the device's
+/// own sound, and the Mac's microphone — because that's what the recording
+/// actually has, and either can be on without the other. When the microphone
+/// is on it gains an input picker and a level check, so you know it's hearing
+/// you before you hit Record.
 struct RecordAudioOptionsRow: View {
     @Binding var mode: RecordAudioMode
     /// An `AVCaptureDevice.uniqueID`, or empty for the system default input.
     @Binding var inputID: String
+
+    private var deviceAudio: Binding<Bool> {
+        Binding(
+            get: { mode.includesDevice },
+            set: { mode = .mode(device: $0, microphone: mode.includesMicrophone) })
+    }
+
+    private var microphone: Binding<Bool> {
+        Binding(
+            get: { mode.includesMicrophone },
+            set: { mode = .mode(device: mode.includesDevice, microphone: $0) })
+    }
 
     @State private var inputs: [MicrophoneCapture.Input] = []
     @State private var authorization = MicrophoneCapture.authorization()
@@ -31,20 +45,18 @@ struct RecordAudioOptionsRow: View {
     @State private var micError: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("Audio")
-                Spacer()
-                modePicker
-            }
+        VStack(alignment: .leading, spacing: 12) {
+            SwitchRow(
+                "Device audio",
+                subtitle: "The app's own sound, from the device (Android 11+)",
+                isOn: deviceAudio)
+            SwitchRow(
+                "Microphone",
+                subtitle: "Your voice, from the Mac — narrate what you're showing",
+                isOn: microphone)
             if mode.includesMicrophone {
                 microphoneRow
                     .transition(.opacity.combined(with: .move(edge: .top)))
-            }
-            if mode.includesDevice {
-                Text("Device audio needs Android 11 or newer.")
-                    .font(.app(.footnote))
-                    .foregroundStyle(.textMuted)
             }
             if let message = warning {
                 warningRow(message)
@@ -57,15 +69,6 @@ struct RecordAudioOptionsRow: View {
         .onDisappear { stopTest() }
         .onChange(of: mode) { _, new in modeChanged(to: new) }
         .onChange(of: inputID) { _, _ in if isTesting { restartTest() } }
-    }
-
-    private var modePicker: some View {
-        Picker("", selection: $mode) {
-            ForEach(RecordAudioMode.allCases, id: \.self) { option in
-                Label(option.title, systemImage: option.symbolName).tag(option)
-            }
-        }
-        .labelsHidden().pickerStyle(.menu).fixedSize()
     }
 
     private var microphoneRow: some View {

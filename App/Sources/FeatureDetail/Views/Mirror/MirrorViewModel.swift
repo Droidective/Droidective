@@ -65,6 +65,10 @@ final class MirrorViewModel {
     /// to record on the live session can't get a key frame mid-stream — the
     /// encoder emits them rarely.)
     private var screenRecorder: ScreenRecorder?
+    /// What the running recording captures, so the bar's audio menu can show
+    /// it and offer live mutes. Read at start and after each mute; nothing
+    /// else changes it, so it needs no polling.
+    private(set) var recordAudioStatus: ScreenRecorder.AudioStatus?
     private var sendControl: (@Sendable (ScrcpyControlMessage) -> Void)?
     /// Whether to request device audio. Off by default (the toggle in the
     /// control bar opts in). Cleared after one failed start so the mirror
@@ -325,10 +329,11 @@ final class MirrorViewModel {
             screenRecorder = recorder
             isRecording = true
             isPaused = false
+            recordAudioStatus = await recorder.audioStatus()
             // The mirror has no mute chips to show this on, so a microphone
             // that wouldn't start is reported once instead of going unnoticed
             // until playback.
-            if let failure = await recorder.audioStatus().microphoneFailure {
+            if let failure = recordAudioStatus?.microphoneFailure {
                 recordingError = failure
             }
         } catch {
@@ -341,8 +346,17 @@ final class MirrorViewModel {
         screenRecorder = nil
         isRecording = false
         isPaused = false
+        recordAudioStatus = nil
         // Stopping returns the finished temp file; the view prompts discard/save/edit.
         if let url = try? await recorder.stop() { pendingRecording = url }
+    }
+
+    /// Silence either source mid-recording, from the bar's audio menu. The
+    /// capture keeps running, so unmuting is instant.
+    func setRecordMuted(device: Bool, microphone: Bool) async {
+        guard let recorder = screenRecorder else { return }
+        await recorder.setMuted(device: device, microphone: microphone)
+        recordAudioStatus = await recorder.audioStatus()
     }
 
     /// Stop recording for a "Stop & save" leave and return the finished file
@@ -352,6 +366,7 @@ final class MirrorViewModel {
         screenRecorder = nil
         isRecording = false
         isPaused = false
+        recordAudioStatus = nil
         return try? await recorder.stop()
     }
 
