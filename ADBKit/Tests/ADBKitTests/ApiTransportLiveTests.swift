@@ -238,16 +238,35 @@ final class LocalHTTPServer {
     }
 
     private func canConnect() -> Bool {
+        let reachable = Flag()
         let semaphore = DispatchSemaphore(value: 0)
-        var reachable = false
         let task = URLSession.shared.dataTask(with: URL(string: url("/json"))!) { _, response, _ in
-            reachable = (response as? HTTPURLResponse) != nil
+            reachable.value = (response as? HTTPURLResponse) != nil
             semaphore.signal()
         }
         task.resume()
         _ = semaphore.wait(timeout: .now() + 1)
         task.cancel()
-        return reachable
+        return reachable.value
+    }
+
+    /// The probe's result crosses out of URLSession's callback queue.
+    private final class Flag: @unchecked Sendable {
+        private let lock = NSLock()
+        private var storage = false
+
+        var value: Bool {
+            get {
+                lock.lock()
+                defer { lock.unlock() }
+                return storage
+            }
+            set {
+                lock.lock()
+                storage = newValue
+                lock.unlock()
+            }
+        }
     }
 
     enum LocalServerError: Error { case neverStarted }
