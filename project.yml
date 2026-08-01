@@ -162,6 +162,8 @@ targets:
       - App/Sources/Theme.swift
       - App/Sources/LogScrollGeometry.swift
       - App/Sources/Root/PaneFreezePolicy.swift
+      # FontCatalog.derive — the picker's filter/collation/curated split.
+      - App/Sources/AppFont.swift
       # The id → detail-pane table FeatureDetailView switches over, so the
       # tests can check it against the registry.
       - App/Sources/FeatureDetail/FeatureDetailRoute.swift
