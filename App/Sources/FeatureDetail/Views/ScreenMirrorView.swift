@@ -282,12 +282,9 @@ private struct MirrorStage: View {
             controlBar
         }
         .sheet(isPresented: $showAudioSheet) {
-            // Start is offered only when a recording could actually begin; from
-            // a stopped/failed mirror the sheet just edits the settings.
             RecordAudioSheet(
-                start: model.status == .streaming && !model.isRecording
-                    ? { Task { await model.startRecording() } }
-                    : nil)
+                start: { Task { await model.startRecording() } },
+                blockedReason: recordingBlockedReason)
         }
     }
 
@@ -454,6 +451,13 @@ private struct MirrorStage: View {
             .buttonStyle(.plain)
             .help("Recording audio — device playback or mic, plus the Mac's mic")
         }
+    }
+
+    /// Why the sheet's Start Recording can't run, or nil when it can.
+    private var recordingBlockedReason: String? {
+        if model.isRecording { return "A recording is already running." }
+        guard model.status == .streaming else { return "The mirror isn’t streaming yet." }
+        return nil
     }
 
     /// Mid-take the sources are fixed (the capture opened on them), so all

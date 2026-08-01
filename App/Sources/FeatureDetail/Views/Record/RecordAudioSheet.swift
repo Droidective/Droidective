@@ -14,9 +14,12 @@ struct RecordAudioSheet: View {
     @AppStorage(RecordAudioPreference.inputKey) private var inputID = ""
 
     @Environment(\.dismiss) private var dismiss
-    /// Nil when the mirror can't record right now (not streaming); the sheet
-    /// then only edits the settings.
-    let start: (() -> Void)?
+    /// Starts a take. Present even when it can't run right now — the button is
+    /// disabled with a reason instead of vanishing, because a control that
+    /// silently isn't there reads as a broken one.
+    let start: () -> Void
+    /// Why recording is unavailable, or nil when it's ready.
+    let blockedReason: String?
 
     private var deviceSource: Binding<DeviceAudioSource> {
         Binding(
@@ -36,21 +39,27 @@ struct RecordAudioSheet: View {
             controls
 
             HStack {
-                summaryLabel
+                VStack(alignment: .leading, spacing: 2) {
+                    summaryLabel
+                    if let blockedReason {
+                        Text(blockedReason)
+                            .font(.app(.footnote))
+                            .foregroundStyle(.orange)
+                    }
+                }
                 Spacer(minLength: 12)
                 Button("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                if let start {
-                    Button {
-                        dismiss()
-                        start()
-                    } label: {
-                        Label("Start Recording", systemImage: "record.circle")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.red)
-                    .keyboardShortcut(.defaultAction)
+                Button {
+                    dismiss()
+                    start()
+                } label: {
+                    Label("Start Recording", systemImage: "record.circle")
                 }
+                .buttonStyle(.borderedProminent)
+                .tint(.red)
+                .keyboardShortcut(.defaultAction)
+                .disabled(blockedReason != nil)
             }
         }
         .padding(20)
