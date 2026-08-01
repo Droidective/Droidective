@@ -37,6 +37,23 @@ import Testing
         #expect(!params.parameters().contains("control=false"))
     }
 
+    @Test func theDeviceMicrophoneIsRequestedWithAudioSource() {
+        let mic = ScrcpyServerParams(
+            scid: 0x0000_0001, audio: true, audioSource: .microphone)
+        #expect(mic.parameters().contains("audio_source=mic"))
+        // The server's default source is `output`, so it stays unsaid.
+        let playback = ScrcpyServerParams(scid: 0x0000_0001, audio: true, audioSource: .output)
+        #expect(!playback.parameters().contains(where: { $0.hasPrefix("audio_source=") }))
+    }
+
+    @Test func audioSourceIsNotSentWhenAudioIsOff() {
+        // A source without a stream would be a contradiction the server has to
+        // parse; audio=false is the whole statement.
+        let params = ScrcpyServerParams(scid: 1, audio: false, audioSource: .microphone)
+        #expect(!params.parameters().contains(where: { $0.hasPrefix("audio_source=") }))
+        #expect(params.parameters().contains("audio=false"))
+    }
+
     @Test func audioEnabledRequestsRawPcm() {
         // audio on => no audio=false, and the non-default raw codec is requested.
         let params = ScrcpyServerParams(

@@ -81,7 +81,9 @@ public final class MicrophoneCapture: NSObject, @unchecked Sendable {
             position: .unspecified
         ).devices
         let defaultID = AVCaptureDevice.default(for: .audio)?.uniqueID
-        let inputs = discovered.map { Input(id: $0.uniqueID, name: $0.localizedName) }
+        let inputs = discovered
+            .map { Input(id: $0.uniqueID, name: $0.localizedName) }
+            .filter { RecordAudioInputs.isSelectable(name: $0.name, uniqueID: $0.id) }
         guard let defaultID, let index = inputs.firstIndex(where: { $0.id == defaultID }) else {
             return inputs
         }

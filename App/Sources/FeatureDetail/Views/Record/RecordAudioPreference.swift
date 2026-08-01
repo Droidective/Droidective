@@ -11,57 +11,81 @@ enum MicrophoneChoice: Hashable, Sendable {
 }
 
 /// Where the recording-audio choice lives, shared by the Screen Record screen
-/// and the mirror's record button so both capture the same way.
+/// and the mirror's recording sheet so both capture the same way.
+///
+/// Two stored values, one per dropdown: what the device contributes (its
+/// playback, its own microphone, or nothing) and which Mac input is mixed in.
 enum RecordAudioPreference {
-    static let modeKey = "recAudioMode"
+    static let deviceKey = "recDeviceAudio"
+    static let hostMicKey = "recHostMic"
     static let inputKey = "recMicInput"
-    /// The pre-microphone key: one "capture device audio" switch.
-    static let legacyModeKey = "recCaptureAudio"
+    /// Superseded keys, read once by `migrate`: the original single "capture
+    /// device audio" switch, and the four-way mode that replaced it.
+    static let legacySwitchKey = "recCaptureAudio"
+    static let legacyModeKey = "recAudioMode"
 
     static func options(from defaults: UserDefaults) -> RecordAudioOptions {
-        let stored = defaults.string(forKey: modeKey).flatMap(RecordAudioMode.init(rawValue:))
         let input = defaults.string(forKey: inputKey) ?? ""
         return RecordAudioOptions(
-            mode: stored ?? inheritedMode(from: defaults),
+            deviceSource: deviceSource(from: defaults),
+            usesHostMicrophone: usesHostMicrophone(from: defaults),
             microphoneDeviceID: input.isEmpty ? nil : input)
     }
 
-    /// Carry the old single switch forward: someone who had device audio turned
-    /// off keeps recording silently instead of silently regaining audio.
-    static func inheritedMode(from defaults: UserDefaults) -> RecordAudioMode {
-        guard defaults.object(forKey: legacyModeKey) != nil else { return .deviceOnly }
-        return defaults.bool(forKey: legacyModeKey) ? .deviceOnly : .muted
+    static func deviceSource(from defaults: UserDefaults) -> DeviceAudioSource {
+        if let stored = defaults.string(forKey: deviceKey),
+           let source = DeviceAudioSource(rawValue: stored) {
+            return source
+        }
+        return inheritedMode(from: defaults).includesDevice ? .playback : .off
     }
 
+    static func usesHostMicrophone(from defaults: UserDefaults) -> Bool {
+        if defaults.object(forKey: hostMicKey) != nil { return defaults.bool(forKey: hostMicKey) }
+        return inheritedMode(from: defaults).includesMicrophone
+    }
+
+    /// Carry a superseded setting forward: someone who had audio turned off
+    /// keeps recording silently instead of silently regaining it.
+    static func inheritedMode(from defaults: UserDefaults) -> RecordAudioMode {
+        if let stored = defaults.string(forKey: legacyModeKey),
+           let mode = RecordAudioMode(rawValue: stored) {
+            return mode
+        }
+        guard defaults.object(forKey: legacySwitchKey) != nil else { return .deviceOnly }
+        return defaults.bool(forKey: legacySwitchKey) ? .deviceOnly : .muted
+    }
+
+    /// Fold the superseded keys into the current pair, once, and drop them.
+    static func migrate(_ defaults: UserDefaults) {
+        let superseded = [legacySwitchKey, legacyModeKey]
+        guard superseded.contains(where: { defaults.object(forKey: $0) != nil }) else { return }
+        if defaults.string(forKey: deviceKey) == nil {
+            defaults.set(deviceSource(from: defaults).rawValue, forKey: deviceKey)
+        }
+        if defaults.object(forKey: hostMicKey) == nil {
+            defaults.set(usesHostMicrophone(from: defaults), forKey: hostMicKey)
+        }
+        superseded.forEach { defaults.removeObject(forKey: $0) }
+    }
+
+    // MARK: - The microphone dropdown
+
     /// What the microphone dropdown shows for the stored settings.
-    static func microphoneChoice(mode: RecordAudioMode, inputID: String) -> MicrophoneChoice {
-        guard mode.includesMicrophone else { return .off }
+    static func microphoneChoice(usesHostMicrophone: Bool, inputID: String) -> MicrophoneChoice {
+        guard usesHostMicrophone else { return .off }
         return inputID.isEmpty ? .systemDefault : .input(inputID)
     }
 
-    /// The settings a dropdown pick implies. Device audio is untouched — the
-    /// two sources are independent — and turning the microphone off *keeps* the
-    /// chosen input, so switching it back on doesn't lose the choice.
+    /// The settings a dropdown pick implies. Turning the microphone off *keeps*
+    /// the chosen input, so switching it back on doesn't lose the choice.
     static func applying(
-        _ choice: MicrophoneChoice, mode: RecordAudioMode, inputID: String
-    ) -> (mode: RecordAudioMode, inputID: String) {
-        let device = mode.includesDevice
+        _ choice: MicrophoneChoice, inputID: String
+    ) -> (usesHostMicrophone: Bool, inputID: String) {
         switch choice {
-        case .off:
-            return (.mode(device: device, microphone: false), inputID)
-        case .systemDefault:
-            return (.mode(device: device, microphone: true), "")
-        case let .input(id):
-            return (.mode(device: device, microphone: true), id)
+        case .off: return (false, inputID)
+        case .systemDefault: return (true, "")
+        case let .input(id): return (true, id)
         }
-    }
-
-    /// Fold the old key into the new one, once, and drop it.
-    static func migrate(_ defaults: UserDefaults) {
-        guard defaults.object(forKey: legacyModeKey) != nil else { return }
-        if defaults.string(forKey: modeKey) == nil {
-            defaults.set(options(from: defaults).mode.rawValue, forKey: modeKey)
-        }
-        defaults.removeObject(forKey: legacyModeKey)
     }
 }

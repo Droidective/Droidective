@@ -1,48 +1,43 @@
 import ADBKit
 import SwiftUI
 
-/// Asking for microphone access at the moment the user opts in — from the
-/// Screen Record picker or the mirror's ⋯ menu — so the system prompt lands on
-/// a deliberate choice instead of surprising them when a recording starts.
+/// Asking for microphone access at the moment the user opts in, so the system
+/// prompt lands on a deliberate choice instead of surprising them when a
+/// recording starts.
 enum MicrophoneAccess {
     @discardableResult
-    static func requestIfNeeded(for mode: RecordAudioMode) async -> MicrophoneCapture.Authorization {
-        guard mode.includesMicrophone,
-              MicrophoneCapture.authorization() == .notDetermined
-        else { return MicrophoneCapture.authorization() }
+    static func requestIfNeeded(forHostMicrophone on: Bool) async
+        -> MicrophoneCapture.Authorization {
+        guard on, MicrophoneCapture.authorization() == .notDetermined else {
+            return MicrophoneCapture.authorization()
+        }
         _ = await MicrophoneCapture.requestAccess()
         return MicrophoneCapture.authorization()
     }
+
+    /// macOS only ever prompts once, so a denied app can only be fixed here.
+    static func openSettings() {
+        guard let url = URL(
+            string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
+        else { return }
+        NSWorkspace.shared.open(url)
+    }
 }
 
-/// The audio choice on the Screen Record screen: two switches — the device's
-/// own sound, and the Mac's microphone — because that's what the recording
-/// actually has, and either can be on without the other. When the microphone
-/// is on it gains an input picker and a level check, so you know it's hearing
-/// you before you hit Record.
+/// The recording's audio, as two independent dropdowns:
+///
+/// - **Device audio** — off, the device's playback, or the device's own
+///   microphone. scrcpy carries one device stream per session, so these are
+///   alternatives rather than a set.
+/// - **Microphone** — off, the Mac's default input, or a named input.
+///
+/// Any pairing works, and the summary line spells out the result so nobody has
+/// to hold the combination in their head.
 struct RecordAudioOptionsRow: View {
-    @Binding var mode: RecordAudioMode
+    @Binding var deviceSource: DeviceAudioSource
+    @Binding var usesHostMicrophone: Bool
     /// An `AVCaptureDevice.uniqueID`, or empty for the system default input.
     @Binding var inputID: String
-
-    private var deviceAudio: Binding<Bool> {
-        Binding(
-            get: { mode.includesDevice },
-            set: { mode = .mode(device: $0, microphone: mode.includesMicrophone) })
-    }
-
-    /// Off, the system default, or a named input — picking an input is what
-    /// turns the microphone on, so there's one control instead of two.
-    private var microphoneChoice: Binding<MicrophoneChoice> {
-        Binding(
-            get: { RecordAudioPreference.microphoneChoice(mode: mode, inputID: inputID) },
-            set: { choice in
-                let applied = RecordAudioPreference.applying(
-                    choice, mode: mode, inputID: inputID)
-                mode = applied.mode
-                inputID = applied.inputID
-            })
-    }
 
     @State private var inputs: [MicrophoneCapture.Input] = []
     @State private var authorization = MicrophoneCapture.authorization()
@@ -51,17 +46,38 @@ struct RecordAudioOptionsRow: View {
     @State private var testTask: Task<Void, Never>?
     @State private var micError: String?
 
+    /// What the current pairing will record, in words.
+    var summary: String {
+        RecordAudioOptions(
+            deviceSource: deviceSource,
+            usesHostMicrophone: usesHostMicrophone,
+            microphoneDeviceID: inputID.isEmpty ? nil : inputID
+        ).summary(microphoneName: usesHostMicrophone ? selectedInputName : nil)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            Toggle(isOn: devicePlayback) {
+                rowLabel(
+                    "Device audio",
+                    subtitle: "The sound the app itself plays (Android 11+)")
+            }
+            Toggle(isOn: deviceMicrophone) {
+                rowLabel(
+                    "Device microphone",
+                    subtitle: "What the phone's own mic hears")
+            }
+            if deviceSource == .microphone {
+                Text("The device sends one audio stream, so its mic replaces its playback.")
+                    .font(.app(.footnote))
+                    .foregroundStyle(.textMuted)
+                    .transition(.opacity)
+            }
             labeledRow(
-                "Device audio",
-                subtitle: "The app's own sound, from the device (Android 11+)"
-            ) { deviceAudioPicker }
-            labeledRow(
-                "Microphone",
-                subtitle: "Your voice, from the Mac — narrate what you're showing"
+                "Mac microphone",
+                subtitle: "Your voice — narrate what you're showing"
             ) { microphonePicker }
-            if mode.includesMicrophone {
+            if usesHostMicrophone {
                 levelCheckRow
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
@@ -70,41 +86,46 @@ struct RecordAudioOptionsRow: View {
                     .transition(.opacity)
             }
         }
-        .animation(.easeInOut(duration: 0.15), value: mode)
+        .animation(.easeInOut(duration: 0.15), value: usesHostMicrophone)
+        .animation(.easeInOut(duration: 0.15), value: deviceSource)
         .animation(.easeInOut(duration: 0.15), value: authorization)
         .onAppear { refreshInputs() }
         .onDisappear { stopTest() }
-        .onChange(of: mode) { _, new in modeChanged(to: new) }
+        .onChange(of: usesHostMicrophone) { _, on in microphoneToggled(on) }
         .onChange(of: inputID) { _, _ in if isTesting { restartTest() } }
     }
 
-    private func labeledRow(
-        _ title: String, subtitle: String, @ViewBuilder _ control: () -> some View
-    ) -> some View {
-        HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                Text(subtitle)
-                    .font(.app(.footnote))
-                    .foregroundStyle(.textMuted)
-            }
-            Spacer(minLength: 12)
-            control()
-        }
+    /// The device's playback and its own microphone are one checkbox each, but
+    /// scrcpy carries a single device stream — so ticking one unticks the
+    /// other, with a line of text saying why rather than a silently ignored
+    /// setting.
+    private var devicePlayback: Binding<Bool> {
+        Binding(
+            get: { deviceSource == .playback },
+            set: { deviceSource = $0 ? .playback : .off })
     }
 
-    private var deviceAudioPicker: some View {
-        Picker("", selection: deviceAudio) {
-            Text("On").tag(true)
-            Text("Off").tag(false)
+    private var deviceMicrophone: Binding<Bool> {
+        Binding(
+            get: { deviceSource == .microphone },
+            set: { deviceSource = $0 ? .microphone : .off })
+    }
+
+    private func rowLabel(_ title: String, subtitle: String) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(title)
+            Text(subtitle)
+                .font(.app(.footnote))
+                .foregroundStyle(.textMuted)
         }
-        .labelsHidden().pickerStyle(.menu).fixedSize()
     }
 
     private var microphonePicker: some View {
+        // No `Divider()` in here: a divider inside a Picker breaks tag matching,
+        // and SwiftUI then *writes back* a coerced selection — which silently
+        // turned the microphone on at launch.
         Picker("", selection: microphoneChoice) {
             Text("Off").tag(MicrophoneChoice.off)
-            Divider()
             Text("System default").tag(MicrophoneChoice.systemDefault)
             ForEach(inputs) { input in
                 Text(input.name).tag(MicrophoneChoice.input(input.id))
@@ -113,6 +134,24 @@ struct RecordAudioOptionsRow: View {
         .labelsHidden().pickerStyle(.menu)
         .frame(maxWidth: 210)
         .disabled(authorization == .denied)
+    }
+
+    private var microphoneChoice: Binding<MicrophoneChoice> {
+        Binding(
+            get: {
+                RecordAudioPreference.microphoneChoice(
+                    usesHostMicrophone: usesHostMicrophone, inputID: inputID)
+            },
+            set: { choice in
+                let applied = RecordAudioPreference.applying(choice, inputID: inputID)
+                usesHostMicrophone = applied.usesHostMicrophone
+                inputID = applied.inputID
+            })
+    }
+
+    private var selectedInputName: String {
+        guard !inputID.isEmpty else { return inputs.first?.name ?? "System default" }
+        return inputs.first(where: { $0.id == inputID })?.name ?? "Selected input"
     }
 
     /// Hear the chosen input before committing to a take.
@@ -131,10 +170,25 @@ struct RecordAudioOptionsRow: View {
         }
     }
 
+    private func labeledRow(
+        _ title: String, subtitle: String, @ViewBuilder _ control: () -> some View
+    ) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                Text(subtitle)
+                    .font(.app(.footnote))
+                    .foregroundStyle(.textMuted)
+            }
+            Spacer(minLength: 12)
+            control()
+        }
+    }
+
     /// Whichever of the two problems is worth saying out loud: no access, or an
     /// input that wouldn't start.
     private var warning: String? {
-        guard mode.includesMicrophone else { return nil }
+        guard usesHostMicrophone else { return nil }
         if authorization == .denied {
             return "Microphone access is off, so the recording won’t have mic audio."
         }
@@ -150,7 +204,7 @@ struct RecordAudioOptionsRow: View {
                 .foregroundStyle(.textMuted)
                 .fixedSize(horizontal: false, vertical: true)
             if authorization == .denied {
-                Button("Open Settings") { openMicrophoneSettings() }
+                Button("Open Settings") { MicrophoneAccess.openSettings() }
                     .buttonStyle(.link)
                     .font(.app(.footnote))
             }
@@ -159,15 +213,15 @@ struct RecordAudioOptionsRow: View {
 
     // MARK: - Access and inputs
 
-    private func modeChanged(to mode: RecordAudioMode) {
+    private func microphoneToggled(_ on: Bool) {
         micError = nil
-        guard mode.includesMicrophone else {
+        guard on else {
             stopTest()
             return
         }
         refreshInputs()
         Task { @MainActor in
-            authorization = await MicrophoneAccess.requestIfNeeded(for: mode)
+            authorization = await MicrophoneAccess.requestIfNeeded(forHostMicrophone: true)
         }
     }
 
@@ -177,13 +231,6 @@ struct RecordAudioOptionsRow: View {
         // The chosen input can vanish (a headset unplugged between recordings);
         // fall back to the system default rather than failing at Record time.
         if !inputID.isEmpty, !inputs.contains(where: { $0.id == inputID }) { inputID = "" }
-    }
-
-    private func openMicrophoneSettings() {
-        guard let url = URL(
-            string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
-        else { return }
-        NSWorkspace.shared.open(url)
     }
 
     // MARK: - Level check
@@ -274,8 +321,8 @@ struct RecordAudioMuteChips: View {
         HStack(spacing: 8) {
             if status.mode.includesDevice {
                 chip(
-                    title: "Device",
-                    symbol: "speaker.wave.2.fill",
+                    title: status.deviceSource == .microphone ? "Device mic" : "Device",
+                    symbol: status.deviceSource.symbolName,
                     mutedSymbol: "speaker.slash.fill",
                     isMuted: status.deviceMuted,
                     level: nil

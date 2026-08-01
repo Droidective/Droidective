@@ -53,7 +53,7 @@ import Testing
         try await recorder.start(
             serial: serial,
             options: ScreenRecordOptions(
-                maxSize: 800, audio: RecordAudioOptions(mode: .deviceOnly)))
+                maxSize: 800, audio: RecordAudioOptions(deviceSource: .playback)))
         try await Task.sleep(for: .seconds(3))
         let url = try await recorder.stop()
         defer { try? FileManager.default.removeItem(at: url) }

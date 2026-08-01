@@ -245,10 +245,8 @@ private struct MirrorStage: View {
     @Bindable var model: MirrorViewModel
     @AppStorage(mirrorIncludeAudioKey) private var includeAudio = false
     @AppStorage(mirrorShowTouchesKey) private var showTouches = false
-    @AppStorage(RecordAudioPreference.modeKey) private var recordAudioModeRaw =
-        RecordAudioMode.deviceOnly.rawValue
-    @AppStorage(RecordAudioPreference.inputKey) private var micInputID = ""
-    @State private var micInputs: [MicrophoneCapture.Input] = []
+    /// The recording-audio sheet: pick the combination, hear the mic, start.
+    @State private var showAudioSheet = false
     /// Reconnect the current device in place (the stopped/failed cards' button).
     let onReconnect: () -> Void
     /// Move the mirror to its own window; nil when already hosted in one.
@@ -282,6 +280,14 @@ private struct MirrorStage: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             controlBar
+        }
+        .sheet(isPresented: $showAudioSheet) {
+            // Start is offered only when a recording could actually begin; from
+            // a stopped/failed mirror the sheet just edits the settings.
+            RecordAudioSheet(
+                start: model.status == .streaming && !model.isRecording
+                    ? { Task { await model.startRecording() } }
+                    : nil)
         }
     }
 
@@ -345,59 +351,6 @@ private struct MirrorStage: View {
         Toggle("Stream audio (restarts mirror)", isOn: $includeAudio)
             .disabled(model.isRecording)
         Toggle("Show touches", isOn: $showTouches)
-    }
-
-    private var deviceAudioBinding: Binding<Bool> {
-        Binding(get: { deviceAudioOn }, set: { setDeviceAudio($0) })
-    }
-
-    private var microphoneBinding: Binding<Bool> {
-        Binding(get: { microphoneOn }, set: { setMicrophone($0) })
-    }
-
-    /// Before a take these read the stored choice; during one they read what
-    /// the recorder is actually capturing, so a muted source shows as off.
-    private var deviceAudioOn: Bool {
-        guard model.isRecording, let status = model.recordAudioStatus else {
-            return storedMode.includesDevice
-        }
-        return status.mode.includesDevice && !status.deviceMuted
-    }
-
-    private var microphoneOn: Bool {
-        guard model.isRecording, let status = model.recordAudioStatus else {
-            return storedMode.includesMicrophone
-        }
-        return status.mode.includesMicrophone && !status.microphoneMuted
-    }
-
-    private func recordingCarries(_ path: KeyPath<RecordAudioMode, Bool>) -> Bool {
-        model.recordAudioStatus?.mode[keyPath: path] ?? false
-    }
-
-    private var storedMode: RecordAudioMode {
-        RecordAudioMode(rawValue: recordAudioModeRaw) ?? .deviceOnly
-    }
-
-    private func setDeviceAudio(_ on: Bool) {
-        guard !model.isRecording else {
-            Task { await model.setRecordMuted(device: !on, microphone: !microphoneOn) }
-            return
-        }
-        recordAudioModeRaw = RecordAudioMode
-            .mode(device: on, microphone: storedMode.includesMicrophone).rawValue
-    }
-
-    /// Turning the microphone on asks for access straight away, so the system
-    /// prompt lands on the choice instead of on the first recording.
-    private func setMicrophone(_ on: Bool) {
-        guard !model.isRecording else {
-            Task { await model.setRecordMuted(device: !deviceAudioOn, microphone: !on) }
-            return
-        }
-        let mode = RecordAudioMode.mode(device: storedMode.includesDevice, microphone: on)
-        recordAudioModeRaw = mode.rawValue
-        Task { await MicrophoneAccess.requestIfNeeded(for: mode) }
     }
 
     private var optionsMenu: some View {
@@ -472,61 +425,89 @@ private struct MirrorStage: View {
             ) {
                 Task { model.isPaused ? await model.resumeRecording() : await model.pauseRecording() }
             }
-            recordSplitButton(
-                symbol: "stop.circle.fill", tint: .red,
-                help: "Stop recording — the arrow mutes either source"
-            ) {
+            navButton("stop.circle.fill", tint: .red, width: buttonWidth, help: "Stop recording") {
                 Task { await model.stopRecording() }
             }
+            liveAudioMenu
         } else {
-            recordSplitButton(
-                symbol: "record.circle", tint: nil,
-                help: "Record — keep mirroring; the arrow picks the audio"
-            ) {
-                Task { await model.startRecording() }
-            }
+            recordControl(buttonWidth: buttonWidth)
         }
     }
 
-    /// Recording and its audio as one control: the button records (or stops),
-    /// and the arrow beside it turns device audio and the microphone on or off
-    /// — before a take, and as mutes during one. Everything about the recording
-    /// hangs off the record button, so there's nothing to hunt for.
-    private func recordSplitButton(
-        symbol: String, tint: Color?, help: String, action: @escaping () -> Void
-    ) -> some View {
+    /// Record, plus a chevron opening the audio sheet — set the combination,
+    /// hear the microphone, and start the take from there. One control on the
+    /// bar, and the options get a panel of their own instead of a row of icons
+    /// or a menu that can't show what it's doing.
+    private func recordControl(buttonWidth: CGFloat) -> some View {
+        HStack(spacing: 0) {
+            navButton("record.circle", width: buttonWidth, help: "Record — keep mirroring") {
+                Task { await model.startRecording() }
+            }
+            Button {
+                showAudioSheet = true
+            } label: {
+                Image(systemName: "chevron.down")
+                    .font(.app(.caption2).weight(.semibold))
+                    .frame(width: 16, height: 30)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Recording audio — device playback or mic, plus the Mac's mic")
+        }
+    }
+
+    /// Mid-take the sources are fixed (the capture opened on them), so all
+    /// that's left is silencing them.
+    private var liveAudioMenu: some View {
         Menu {
-            recordAudioItems
+            if let status = model.recordAudioStatus, status.mode.hasAudio {
+                if status.mode.includesDevice {
+                    Toggle(
+                        status.deviceSource == .microphone ? "Device microphone" : "Device audio",
+                        isOn: Binding(
+                            get: { !status.deviceMuted },
+                            set: { on in
+                                Task {
+                                    await model.setRecordMuted(
+                                        device: !on, microphone: status.microphoneMuted)
+                                }
+                            }))
+                }
+                if status.mode.includesMicrophone {
+                    Toggle("Microphone", isOn: Binding(
+                        get: { !status.microphoneMuted },
+                        set: { on in
+                            Task {
+                                await model.setRecordMuted(
+                                    device: status.deviceMuted, microphone: !on)
+                            }
+                        }))
+                }
+            } else {
+                Text("This recording has no audio")
+            }
         } label: {
-            Image(systemName: symbol)
+            Image(systemName: liveAudioSymbol)
                 .font(.app(.title3))
-                .foregroundStyle(tint ?? .primary)
-        } primaryAction: {
-            action()
+                .foregroundStyle(anySourceMuted ? Color.orange : .primary)
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
-        .help(help)
-        .onAppear { micInputs = MicrophoneCapture.availableInputs() }
+        .help("Mute or unmute what's being recorded")
     }
 
-    /// Two independent on/off items — device audio and the microphone — which
-    /// between them cover both, either, and neither. During a take they mute
-    /// and unmute instead, and a source this recording never included is
-    /// disabled rather than silently doing nothing.
-    @ViewBuilder private var recordAudioItems: some View {
-        Toggle("Device audio", isOn: deviceAudioBinding)
-            .disabled(model.isRecording && !recordingCarries(\.includesDevice))
-        Toggle("Microphone", isOn: microphoneBinding)
-            .disabled(model.isRecording && !recordingCarries(\.includesMicrophone))
-        if storedMode.includesMicrophone, !model.isRecording {
-            Picker("Microphone input", selection: $micInputID) {
-                Text("System default").tag("")
-                ForEach(micInputs) { input in
-                    Text(input.name).tag(input.id)
-                }
-            }
-        }
+    private var liveAudioSymbol: String {
+        guard let status = model.recordAudioStatus else { return "waveform" }
+        let device = status.mode.includesDevice && !status.deviceMuted
+        let microphone = status.mode.includesMicrophone && !status.microphoneMuted
+        if !device, !microphone { return "speaker.slash.fill" }
+        return microphone ? "mic.fill" : status.deviceSource.symbolName
+    }
+
+    private var anySourceMuted: Bool {
+        guard let status = model.recordAudioStatus else { return false }
+        return (status.mode.includesDevice && status.deviceMuted)
+            || (status.mode.includesMicrophone && status.microphoneMuted)
     }
 
     private func navButton(

@@ -64,17 +64,89 @@ public enum RecordAudioMode: String, Sendable, Equatable, Codable, CaseIterable 
     }
 }
 
-/// The audio half of `ScreenRecordOptions`: what to capture, and which host
-/// input to capture the microphone from.
+/// What the device contributes to a recording. scrcpy captures **one** audio
+/// stream per session, so the device's playback and its own microphone are
+/// alternatives, not a pair — picking `microphone` records what the phone
+/// hears (the room, a call's uplink) instead of what it plays.
+public enum DeviceAudioSource: String, Sendable, Equatable, Codable, CaseIterable {
+    case off
+    case playback
+    case microphone
+
+    public var isOn: Bool { self != .off }
+
+    public var title: String {
+        switch self {
+        case .off: return "Off"
+        case .playback: return "Device playback"
+        case .microphone: return "Device microphone"
+        }
+    }
+
+    /// SF Symbol *name* — ADBKit stays UI-free, so this is a string.
+    public var symbolName: String {
+        switch self {
+        case .off: return "speaker.slash.fill"
+        case .playback: return "speaker.wave.2.fill"
+        case .microphone: return "mic.and.signal.meter.fill"
+        }
+    }
+
+    var scrcpySource: ScrcpyServerParams.AudioSource {
+        self == .microphone ? .microphone : .output
+    }
+}
+
+/// Which host inputs are worth offering in a picker.
+public enum RecordAudioInputs {
+    /// Core Audio's own scratch devices — the aggregate macOS builds around the
+    /// current default input (`CADefaultDeviceAggregate-…`) and the tap/loopback
+    /// shims some apps install — are implementation details, not microphones
+    /// anyone means to pick. Hiding them keeps the list to real hardware.
+    public static func isSelectable(name: String, uniqueID: String) -> Bool {
+        let hidden = ["CADefaultDeviceAggregate", "CATapAggregateDevice", "AMS2_Aggregate"]
+        return !hidden.contains { name.hasPrefix($0) || uniqueID.hasPrefix($0) }
+    }
+}
+
+/// The audio half of `ScreenRecordOptions`: what the device contributes, and
+/// which host input (if any) is mixed in alongside it.
 public struct RecordAudioOptions: Sendable, Equatable, Codable {
-    public var mode: RecordAudioMode
+    /// The device's own contribution — its playback, its microphone, or
+    /// nothing.
+    public var deviceSource: DeviceAudioSource
+    /// Whether the Mac's microphone is mixed in.
+    public var usesHostMicrophone: Bool
     /// Host input device id (an `AVCaptureDevice.uniqueID`), or nil for the
-    /// system default input. Ignored when the mode excludes the microphone.
+    /// system default input. Ignored when the host microphone is off.
     public var microphoneDeviceID: String?
 
-    public init(mode: RecordAudioMode = .deviceOnly, microphoneDeviceID: String? = nil) {
-        self.mode = mode
+    public init(
+        deviceSource: DeviceAudioSource = .playback,
+        usesHostMicrophone: Bool = false,
+        microphoneDeviceID: String? = nil
+    ) {
+        self.deviceSource = deviceSource
+        self.usesHostMicrophone = usesHostMicrophone
         self.microphoneDeviceID = microphoneDeviceID
+    }
+
+    /// Which sources the mixer has to reconcile — the device stream (whatever
+    /// it carries) and the host microphone.
+    public var mode: RecordAudioMode {
+        .mode(device: deviceSource.isOn, microphone: usesHostMicrophone)
+    }
+
+    /// One line naming exactly what a recording will capture, for the UI to
+    /// show before the user commits to a take.
+    public func summary(microphoneName: String?) -> String {
+        let host = microphoneName ?? "the Mac's microphone"
+        switch (deviceSource, usesHostMicrophone) {
+        case (.off, false): return "No audio"
+        case (.off, true): return host
+        case (let source, false): return source.title
+        case (let source, true): return "\(source.title) + \(host)"
+        }
     }
 }
 

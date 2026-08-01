@@ -86,7 +86,7 @@ opening it — verify those by hand.
 ## Build / test / run
 
 ```
-make test          # ADBKit unit tests (cd ADBKit && swift test) — 1482 tests, keep green
+make test          # ADBKit unit tests (cd ADBKit && swift test) — 1491 tests, keep green
 make test-app      # the AppTests logic bundle — 93 tests
 make verify        # tiers 0-1: warnings-as-errors + both test bundles
 make test-linux    # the same suite on Linux (Apple `container` CLI; the port gate)
@@ -410,22 +410,27 @@ table) is in `docs/reactotron-mcp-analysis.md`.
   bundle compiles that file standalone (and links ADBKit for it). JS Console
   keeps its Chrome-dark hue at the card step; CodeMirror webviews stay opaque.
 - **Recording audio is one AAC track fed by up to two sources.** A recording
-  captures device audio (scrcpy, Android 11+), the Mac's microphone, both, or
-  neither — `RecordAudioMode` in ScreenTools, persisted by the App-layer
-  `RecordAudioPreference` (`recAudioMode`/`recMicInput`). **The two sources are
-  always two independent on/off controls, never a mode list** — the four
-  combinations fall out of them. Two surfaces, shaped to their context:
-  - **Mirror bar**: everything hangs off *one* control — a record split button
-    (`Menu … primaryAction:`, the project's Restart-button idiom). The button
-    records; the arrow toggles Device audio / Microphone and picks the mic
-    input. Mid-take the pair becomes Stop + the same arrow, whose toggles now
-    mute and unmute; a source the recording never included is disabled, not
-    hidden. Nothing recording-related lives in ⋯ (it started there and nobody
-    found it).
-  - **Screen Record screen**: one dropdown each — Device audio (On/Off) and
-    Microphone (Off / System default / a named input, so picking an input *is*
-    turning it on: `MicrophoneChoice` + its round-trip tests). Mid-take the two
-    mute chips sit over the live preview.
+  captures the device's audio, the Mac's microphone, both, or neither —
+  `RecordAudioOptions`/`DeviceAudioSource` in ScreenTools, persisted by the
+  App-layer `RecordAudioPreference` (`recDeviceAudio`/`recHostMic`/
+  `recMicInput`, with migrations from the superseded `recCaptureAudio` and
+  `recAudioMode`). The device side is **playback *or* its own microphone, never
+  both**: scrcpy carries one device stream per session
+  (`ScrcpyServerParams.audioSource` → `audio_source=mic`), so the two
+  checkboxes are mutually exclusive and say so in a line of text rather than
+  silently ignoring one. The same three controls — Device audio, Device
+  microphone, Mac microphone (Off / System default / a named input) — appear on
+  the Screen Record screen inline and in the mirror's `RecordAudioSheet`, which
+  the chevron beside the mirror's record button opens: set the combination,
+  hear the mic on the level meter, and Start Recording from the sheet. Mid-take
+  the mirror bar shows a mute menu and the Screen Record screen its two mute
+  chips.
+  - **Two Picker traps live here.** A `Divider()` inside a `Picker` breaks tag
+    matching and SwiftUI then *writes back* a coerced selection — that silently
+    switched the microphone on at launch. And Core Audio's scratch devices
+    (`CADefaultDeviceAggregate-…`, tap aggregates) show up in
+    `AVCaptureDevice.DiscoverySession` and must be filtered out
+    (`RecordAudioInputs.isSelectable`) or they appear as pickable "microphones".
   Both sources land in **one** track, never two: players (QuickTime, browsers,
   chat apps) play only the first audio track, so a second one is silently lost
   for whoever the clip is sent to. With one source the samples go straight to
@@ -742,7 +747,7 @@ jadx/apktool, recompile, and sign — with keystore creation) plus Frida setup, 
 custom accent color, launching emulators from the device bar, per-feature
 connect-a-device empty states, a live-preview hotkey recorder, and a Settings
 split into Appearance/Privacy; managed tools download from GitHub releases into
-Application Support and are sized/removable in Settings); 1482 ADBKit + 93
+Application Support and are sized/removable in Settings); 1491 ADBKit + 93
 AppTests green (macOS — the suite also runs on Linux in CI, minus the
 Darwin-gated files);
 builds clean with zero warnings (enforced as errors in CI). Verified live against a

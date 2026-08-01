@@ -48,22 +48,24 @@ struct ScreenRecordView: View {
     @AppStorage("recMaxSize") private var maxSize = 0
     @AppStorage("recBitRate") private var bitRateMbps = 0
     @AppStorage("recMaxFps") private var maxFps = 0
-    @AppStorage(RecordAudioPreference.modeKey) private var audioModeRaw =
-        RecordAudioMode.deviceOnly.rawValue
+    @AppStorage(RecordAudioPreference.deviceKey) private var deviceSourceRaw =
+        DeviceAudioSource.playback.rawValue
+    @AppStorage(RecordAudioPreference.hostMicKey) private var usesHostMicrophone = false
     @AppStorage(RecordAudioPreference.inputKey) private var micInputID = ""
     @AppStorage("recTimeLimit") private var timeLimit = 0
 
-    private var audioMode: Binding<RecordAudioMode> {
+    private var deviceSource: Binding<DeviceAudioSource> {
         Binding(
-            get: { RecordAudioMode(rawValue: audioModeRaw) ?? .deviceOnly },
-            set: { audioModeRaw = $0.rawValue })
+            get: { DeviceAudioSource(rawValue: deviceSourceRaw) ?? .playback },
+            set: { deviceSourceRaw = $0.rawValue })
     }
 
     private var recordOptions: ScreenRecordOptions {
         ScreenRecordOptions(
             maxSize: maxSize, bitRateMbps: bitRateMbps, maxFps: maxFps,
             audio: RecordAudioOptions(
-                mode: audioMode.wrappedValue,
+                deviceSource: deviceSource.wrappedValue,
+                usesHostMicrophone: usesHostMicrophone,
                 microphoneDeviceID: micInputID.isEmpty ? nil : micInputID),
             timeLimitSeconds: timeLimit
         )
@@ -262,7 +264,10 @@ struct ScreenRecordView: View {
         GroupBox {
             VStack(alignment: .leading, spacing: 14) {
                 labeledRow("Resolution") { resolutionPicker }
-                RecordAudioOptionsRow(mode: audioMode, inputID: $micInputID)
+                RecordAudioOptionsRow(
+                    deviceSource: deviceSource,
+                    usesHostMicrophone: $usesHostMicrophone,
+                    inputID: $micInputID)
                 Button {
                     withAnimation(.easeInOut(duration: 0.15)) { showAdvanced.toggle() }
                 } label: {

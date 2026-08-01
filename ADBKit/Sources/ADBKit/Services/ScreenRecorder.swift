@@ -42,6 +42,9 @@ public actor ScreenRecorder {
     /// and level meter.
     public struct AudioStatus: Sendable, Equatable {
         public let mode: RecordAudioMode
+        /// What the device half of the recording is: its playback, its own
+        /// microphone, or nothing.
+        public let deviceSource: DeviceAudioSource
         public let deviceMuted: Bool
         public let microphoneMuted: Bool
         /// 0…1 level of the last microphone chunk; 0 when the mic isn't running.
@@ -93,6 +96,7 @@ public actor ScreenRecorder {
     public func audioStatus() -> AudioStatus {
         AudioStatus(
             mode: options.audio.mode,
+            deviceSource: options.audio.deviceSource,
             deviceMuted: deviceMuted,
             microphoneMuted: microphoneMuted,
             microphoneLevel: microphoneMuted ? 0 : microphoneLevel,
@@ -172,7 +176,8 @@ public actor ScreenRecorder {
     private func startSegment() async throws {
         let params = ScrcpyServerParams(
             scid: UInt32.random(in: 1 ... 0x7fff_ffff),
-            audio: options.audio.mode.includesDevice,
+            audio: options.audio.deviceSource.isOn,
+            audioSource: options.audio.deviceSource.scrcpySource,
             control: false,
             maxSize: options.maxSize,
             videoBitRate: options.bitRateMbps > 0 ? options.bitRateMbps * 1_000_000 : 0,
