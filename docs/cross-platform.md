@@ -83,7 +83,8 @@ and then quietly forgotten.
 
 ## Phase 2: `droidectived`
 
-Sketch — details land with the implementation:
+**Full protocol design: `droidectived-protocol.md`** (written, not implemented —
+review it before any code lands). Sketch:
 
 - An executable target in ADBKit's package; `swift build` produces it on
   Linux/Windows (static-musl is an option on Linux).
@@ -103,7 +104,7 @@ stays with the scrcpy desktop app.
 
 ## Follow-ups
 
-- [ ] `droidectived` scaffold + protocol tests
+- [ ] `droidectived` scaffold + protocol tests (design reviewed first — `droidectived-protocol.md`)
 - [ ] Portable fake CDP server so the JSConsoleClient wire tests run on Linux
 - [ ] Reactotron listener off Network.framework (SwiftNIO or raw sockets)
 - [ ] Windows: audit the process-spawning tests so `swift test` runs in CI
