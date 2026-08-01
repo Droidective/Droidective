@@ -393,7 +393,7 @@ dependency-free; `swift test` still covers everything):
 
 ```
 ADBKit/Package.swift            + target ReactotronMCP (deps: ADBKit, MCP swift-sdk [, NIO per D3])
-ADBKit/Sources/ReactotronMCP/
+ReactotronMCP/Sources/ReactotronMCP/
   McpCommandStore.swift         actor: ring buffer, derived state, awaitCommand()
   McpRedaction.swift            pure rules engine + DEFAULT_REDACTION_RULES port
   McpSerialization.swift        pure: summaries, previews, 800k truncation + guidance
@@ -408,7 +408,7 @@ ADBKit/Sources/ReactotronMCP/
 scripts/check-reactotron-upstream.sh   diff contract files vs the pinned commit (§13)
 ADBKit/Sources/ADBKit/Services/Reactotron/
   ReactotronService.swift       + event fan-out (the only existing-file change)
-ADBKit/Tests/ReactotronMCPTests/  (§11)
+ReactotronMCP/Tests/ReactotronMCPTests/  (§11)
 App/Sources/...
   Settings ▸ Reactotron MCP section (toggle, port, status, token toggle, redaction
   editor, copy claude-mcp-add / .mcp.json); ReactotronView header status chip;

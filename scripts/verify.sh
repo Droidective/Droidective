@@ -72,6 +72,17 @@ tier1_adbkit() {
   assert_passed "ADBKit"
 }
 
+# The MCP server is its own package (Apple-only; see ReactotronMCP/Package.swift),
+# so its suite needs its own run — without this the gate silently loses ~100 tests.
+tier1_mcp() {
+  echo "── tier 1: unit (ReactotronMCP) ───────────────────────────"
+  if ! (cd "$ROOT/ReactotronMCP" && swift test) >"$LOG" 2>&1; then
+    dump_failures
+    die "tier 1: ReactotronMCP suite failed"
+  fi
+  assert_passed "ReactotronMCP"
+}
+
 tier1_app() {
   echo "── tier 1: unit (AppTests) ────────────────────────────────"
   [[ -d "$ROOT/Droidective.xcodeproj" ]] ||
@@ -108,6 +119,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   all)
     tier0_static
     tier1_adbkit
+    tier1_mcp
     tier1_app
     ;;
   *) die "unknown mode '$MODE' (expected 'fast' or 'all')" ;;

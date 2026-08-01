@@ -208,8 +208,9 @@ Node 22 in CI; scroll reveals and the hero palette demo must keep their
   `apk-sign`) into one workspace over a single loaded APK — Inspect · Decompile ·
   Recompile · Sign tabs (the views take an optional injected APK so they embed in
   the studio and still work standalone via hotkey).
-- **`ReactotronMCP/`** — a *separate* SwiftPM target in the ADBKit package
-  (its own product; ADBKit itself stays dependency-free) serving the
+- **`ReactotronMCP/`** — a *separate SwiftPM package* beside ADBKit (which it
+  depends on by path; ADBKit's own graph stays free of swift-sdk and swift-nio,
+  which is what lets `swift test` run on Windows) serving the
   Reactotron relay's data to AI agents over localhost Streamable HTTP —
   the same contract as the official Reactotron desktop's embedded MCP
   server (`claude mcp add --transport http reactotron

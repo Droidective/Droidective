@@ -15,7 +15,7 @@ source "$lock"
 # The files that define the contract ReactotronMCP mirrors, and where each
 # one lands on our side (see CLAUDE.md ▸ "Reactotron MCP — syncing with upstream").
 contract_paths=(
-  "lib/reactotron-mcp/src/tools.ts"          # → ADBKit/Sources/ReactotronMCP/McpToolRegistry.swift + McpToolHandlers.swift
+  "lib/reactotron-mcp/src/tools.ts"          # → ReactotronMCP/Sources/ReactotronMCP/McpToolRegistry.swift + McpToolHandlers.swift
   "lib/reactotron-mcp/src/resources.ts"      # → McpResources.swift
   "lib/reactotron-mcp/src/redaction.ts"      # → McpRedaction.swift
   "lib/reactotron-mcp/src/serialization.ts"  # → McpSerialization.swift + McpConstants.swift

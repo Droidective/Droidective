@@ -32,6 +32,7 @@ build: generate
 
 test:
 	cd ADBKit && swift test
+	cd ReactotronMCP && swift test
 
 test-app: generate
 	xcodebuild test -project Droidective.xcodeproj -scheme AppTests \

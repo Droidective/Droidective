@@ -219,7 +219,7 @@ import Testing
     }
 
     /// Every Swift file under `Sources`, keyed by its path relative to it
-    /// (`ADBKit/Services/HostNetwork.swift`, `ReactotronMCP/McpResources.swift`).
+    /// (e.g. `ADBKit/Services/HostNetwork.swift`).
     private static func sourceFiles() throws -> [(path: String, contents: String)] {
         let root = sourcesRoot
         guard let walker = FileManager.default.enumerator(atPath: root.path) else {
@@ -293,8 +293,9 @@ import Testing
         // scanning nothing at all.
         let files = try Self.sourceFiles()
         #expect(files.count > 100, "expected the whole ADBKit tree, found \(files.count) Swift files")
+        // Two files from different subtrees, so a partial walk fails too.
         #expect(files.contains { $0.path == "ADBKit/Features/FeatureRegistry.swift" })
-        #expect(files.contains { $0.path == "ReactotronMCP/McpToolRegistry.swift" })
+        #expect(files.contains { $0.path == "ADBKit/Exec/SystemProcessRunner.swift" })
     }
 
     // MARK: - The guard's own teeth

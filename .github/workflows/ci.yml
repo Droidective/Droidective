@@ -20,12 +20,13 @@ jobs:
           persist-credentials: false
       - name: Run ADBKit tests
         run: cd ADBKit && swift test -Xswiftc -warnings-as-errors
+      # Its own package (Apple-only), so it needs its own run.
+      - name: Run ReactotronMCP tests
+        run: cd ReactotronMCP && swift test -Xswiftc -warnings-as-errors
 
   # The Windows/Linux port rides on ADBKit staying portable (see
-  # docs/cross-platform.md). Linux runs the full mock-driven suite. The Windows
-  # compile job below build-verifies the library and its tests (running them
-  # there waits on a Windows audit of the process-spawning tests, which hardcode
-  # POSIX paths).
+  # docs/cross-platform.md). Both Linux and Windows now run the full mock-driven
+  # suite; ReactotronMCP is Apple-only and is not built on either.
   test-linux:
     runs-on: ubuntu-24.04
     container: swift:6.2-noble
@@ -54,13 +55,20 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
         with:
           persist-credentials: false
-      # ADBKit and its own test target only — deliberately not `--build-tests`,
-      # which would also build ReactotronMCP. That target depends on swift-nio,
-      # whose Windows support is still partial: TCP compiles but Unix domain
-      # sockets, UDP and pipe channels are unsupported, NIOFileSystem is stubbed
-      # with fatalError, and apple/swift-nio#3647 blocks downstream packages on
-      # Swift 6.1+. The portable core is what this job is here to protect; the MCP
-      # server is knowingly macOS/Linux-only for now.
+      # Compile-only for now, but no longer for the reason the old comment gave.
+      # It was not swift-nio: nio and swift-crypto's BoringSSL both build here.
+      # The blocker was the MCP SDK's `HTTPClientTransport`, which imports
+      # `EventSource` behind `#if !os(Linux)` — a gate that wrongly includes
+      # Windows, where the module is unbuildable — so merely *resolving*
+      # swift-sdk failed the build. Moving MCP to its own package fixed that,
+      # and `swift test` now discovers and runs all 1375 tests here.
+      #
+      # 14 of them fail, in three known clusters, tracked in
+      # docs/cross-platform.md: the real-process tests spawn POSIX binaries
+      # (/bin/echo, /bin/sh, /bin/sleep), PortabilityGuardTests does `/`-based
+      # path arithmetic, and the toolchain tests want POSIX tool paths plus an
+      # xz decoder Windows does not have. Flip this to `swift test` in the
+      # change that fixes them, so this job never lands red.
       - name: Build ADBKit and its tests (Windows)
         run: |
           cd ADBKit
