@@ -55,20 +55,16 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
         with:
           persist-credentials: false
-      # Still compile-only, but 6 tests away from running rather than blocked.
-      # Moving MCP to its own package (#231) let `swift test` discover and run
-      # all 1375 tests here; this change fixed 8 of the 14 that failed. The
-      # remaining 6 are tracked in docs/cross-platform.md — four need the
-      # real-process fixtures rewritten as temp `.cmd` scripts (cmd.exe
-      # metacharacters do not survive Foundation's argument quoting, and
-      # terminating a `cmd /c` wrapper leaves its grandchild alive), and two
-      # are the APK toolchain fixtures. Flip to `swift test` when they are
-      # green, so this job never lands red.
-      - name: Build ADBKit and its tests (Windows)
+      # The suite runs here, not just compiles. Moving MCP to its own package
+      # (#231) is what made that possible: the MCP SDK's `HTTPClientTransport`
+      # imports `EventSource` behind `#if !os(Linux)` — a gate that wrongly
+      # includes Windows, where the module is unbuildable — so merely resolving
+      # swift-sdk failed the build. It was never swift-nio, which compiles here
+      # fine, as does swift-crypto's vendored BoringSSL.
+      - name: Run ADBKit tests (Windows)
         run: |
           cd ADBKit
-          swift build --target ADBKit -Xswiftc -warnings-as-errors
-          swift build --target ADBKitTests -Xswiftc -warnings-as-errors
+          swift test -Xswiftc -warnings-as-errors
 
   build:
     runs-on: macos-15

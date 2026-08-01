@@ -23,17 +23,44 @@ enum ChildCommands {
     private static let shell =
         ProcessInfo.processInfo.environment["ComSpec"] ?? #"C:\Windows\System32\cmd.exe"#
 
+    private static var systemRoot: String {
+        ProcessInfo.processInfo.environment["SystemRoot"] ?? #"C:\Windows"#
+    }
+
+    /// Writes a one-shot batch file and returns `cmd /c <path>`.
+    ///
+    /// Anything with `&`, `|` or a redirect has to arrive this way rather than
+    /// inline: Foundation quotes each argument for `CreateProcess`, and cmd's
+    /// own parsing of the result mangles metacharacters badly enough that the
+    /// child fails to launch at all. A lone script path has none. (The script
+    /// cannot be the executable directly — `CreateProcess` does not run
+    /// `.cmd` files, only real images.)
+    private static func script(
+        _ name: String, _ body: String
+    ) -> (executable: String, arguments: [String]) {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("adbkit-child-\(ProcessInfo.processInfo.processIdentifier)")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent("\(name).cmd")
+        try? Data(("@echo off\r\n" + body).utf8).write(to: url)
+        return (shell, ["/c", url.path])
+    }
+
     static let echo = (executable: shell, arguments: ["/c", "echo hello"])
-    // `(echo oops)1>&2` rather than `echo oops 1>&2`: in cmd the bare form
-    // binds the `1` to the redirect and emits a trailing space.
-    static let stderrAndExit3 = (executable: shell, arguments: ["/c", "(echo oops)1>&2 & exit 3"])
-    // No `sleep` on Windows, and `timeout` wants a console it does not have
-    // once stdio is redirected; pinging loopback is the portable idle.
-    static let sleepForever = (executable: shell, arguments: ["/c", "ping -n 31 127.0.0.1 > nul"])
-    static let spewForever = (executable: shell, arguments: ["/c", "for /l %i in () do @echo y"])
-    static let sleepThenPrint = (
-        executable: shell, arguments: ["/c", "ping -n 2 127.0.0.1 > nul & echo done"]
+    // `>&2 echo oops`, not `echo oops 1>&2`: the latter binds the `1` to the
+    // redirect and emits a trailing space.
+    static let stderrAndExit3 = script("stderr3", ">&2 echo oops\r\nexit /b 3\r\n")
+    // `ping` spawned directly, with no `cmd /c` wrapper. Terminating the
+    // wrapper would leave the ping grandchild running, so the timeout and
+    // cancellation tests would wait out the full sleep instead of observing a
+    // prompt kill — which is the behaviour they exist to prove.
+    static let sleepForever = (
+        executable: #"\#(systemRoot)\System32\ping.exe"#,
+        arguments: ["-n", "31", "127.0.0.1"]
     )
+    static let spewForever = (executable: shell, arguments: ["/c", "for /l %i in () do @echo y"])
+    static let sleepThenPrint = script(
+        "sleepprint", "ping -n 2 127.0.0.1 > nul\r\necho done\r\n")
 
     /// The host's own line ending, so the assertions stay exact.
     static let echoOutput = "hello\r\n"
