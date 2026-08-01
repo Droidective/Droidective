@@ -166,7 +166,13 @@ public struct URLSessionTransport: HttpTransport {
         case NSURLErrorNotConnectedToInternet, NSURLErrorDataNotAllowed:
             return HttpTransportError.offline
         case NSURLErrorCannotFindHost, NSURLErrorDNSLookupFailed:
+            // corelibs deprecates the string key (deprecation is an error under
+            // -warnings-as-errors); the URL key carries the same value there.
+            #if canImport(Darwin)
             let host = nsError.userInfo[NSURLErrorFailingURLStringErrorKey] as? String
+            #else
+            let host = (nsError.userInfo[NSURLErrorFailingURLErrorKey] as? URL)?.absoluteString
+            #endif
             return HttpTransportError.hostNotFound(
                 host.flatMap { URL(string: $0)?.host } ?? "that host"
             )
@@ -378,20 +384,22 @@ final class ResponseCollector: NSObject, URLSessionDataDelegate, @unchecked Send
         didReceive challenge: URLAuthenticationChallenge,
         completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
     ) {
-        guard !settings.validateTLS,
-              challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust
-        else {
-            completionHandler(.performDefaultHandling, nil)
-            return
-        }
+        // `NSURLAuthenticationMethodServerTrust` is unavailable in corelibs —
+        // it relies on the Darwin Security framework — so the whole opt-out is
+        // Darwin-only. Same conditions and same outcomes as before on macOS.
         #if canImport(Darwin)
-            guard let trust = challenge.protectionSpace.serverTrust else {
+            guard !settings.validateTLS,
+                  challenge.protectionSpace.authenticationMethod
+                      == NSURLAuthenticationMethodServerTrust,
+                  let trust = challenge.protectionSpace.serverTrust
+            else {
                 completionHandler(.performDefaultHandling, nil)
                 return
             }
             completionHandler(.useCredential, URLCredential(trust: trust))
         #else
-            // corelibs-foundation exposes no trust object to override.
+            // corelibs-foundation exposes no trust object to override, so TLS
+            // validation cannot be relaxed there.
             completionHandler(.performDefaultHandling, nil)
         #endif
     }
