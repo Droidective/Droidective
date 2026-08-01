@@ -236,8 +236,9 @@ struct RootView: View {
         migrateDefaultsIfNeeded()
         applyStoredTheme()
         // Enumerate installed font families now so the Settings ▸ Appearance
-        // font picker opens instantly.
-        FontCatalog.preload()
+        // font picker opens instantly — off the main actor, since the walk
+        // itself is what stalled launch (DROIDECTIVE-MAC-55).
+        Task { await FontCatalog.preload() }
         // Watch the app's own CPU/RAM and report sustained spikes to telemetry
         // with the features open at the time (consent-gated in Telemetry).
         PerformanceMonitor.shared.start { [state] in

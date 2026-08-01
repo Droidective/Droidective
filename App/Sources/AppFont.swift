@@ -1,4 +1,5 @@
 import AppKit
+import CoreText
 import SwiftUI
 
 /// UserDefaults key for the app-wide font family (Settings ▸ Appearance).
@@ -88,37 +89,78 @@ extension Font {
     }
 }
 
-/// Installed font families, enumerated once and cached — `preload()` runs at
-/// launch so the Settings picker opens instantly instead of walking the font
-/// registry on first click.
+/// Installed font families, enumerated once and cached — `preload()` warms the
+/// cache off the main actor at launch so the Settings picker opens instantly and
+/// the font-registry walk never lands on the main thread.
 @MainActor
 enum FontCatalog {
     /// Fonts that ship with macOS, shortlisted at the top of the picker.
-    private static let curated: [String] = [
+    /// `nonisolated` so the pure `derive` can read it off the main actor.
+    private nonisolated static let curated: [String] = [
         "Avenir", "Avenir Next", "Charter", "Futura", "Georgia", "Gill Sans",
         "Helvetica Neue", "Menlo", "Monaco", "Optima", "Palatino", "Seravek",
         "SF Mono", "Times New Roman", "Verdana",
     ]
 
+    /// The three picker lists, derived together from one enumeration.
+    struct Lists: Sendable, Equatable {
+        var families: [String] = []
+        var standard: [String] = []
+        var other: [String] = []
+    }
+
+    private static var cached: Lists?
+
+    /// Cached lists, or an inline enumeration if something reads them before
+    /// `preload()` finishes. That fallback is the pre-fix behavior kept as a
+    /// backstop — correct, just slower — rather than a path worth relying on.
+    private static var lists: Lists {
+        if let cached { return cached }
+        let built = derive(from: enumerateRawFamilies())
+        cached = built
+        return built
+    }
+
     /// Every installed family (hidden system fonts excluded), sorted.
-    static let families: [String] = NSFontManager.shared.availableFontFamilies
-        .filter { !$0.hasPrefix(".") }
-        .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
-
+    static var families: [String] { lists.families }
     /// The curated shortlist, limited to families actually installed.
-    static let standardFamilies: [String] = {
+    static var standardFamilies: [String] { lists.standard }
+    static var otherFamilies: [String] { lists.other }
+
+    /// Warm the cache without ever touching the main thread.
+    ///
+    /// `CTFontManagerCopyAvailableFontFamilyNames` is documented thread-safe
+    /// where `NSFontManager` is not (and measured ~7x faster besides), so the
+    /// walk can move off the main actor. On a machine with a cold font registry
+    /// the old main-thread enumeration blocked launch long enough to trip the
+    /// 2 s hang detector (DROIDECTIVE-MAC-55).
+    static func preload() async {
+        guard cached == nil else { return }
+        cached = await Task.detached { derive(from: enumerateRawFamilies()) }.value
+    }
+
+    /// Raw family names from Core Text. `nonisolated` so `preload` can run it
+    /// off the main actor.
+    private nonisolated static func enumerateRawFamilies() -> [String] {
+        CTFontManagerCopyAvailableFontFamilyNames() as? [String] ?? []
+    }
+
+    /// Splits raw family names into the picker's three lists: hidden system
+    /// families (dot-prefixed) dropped, the rest collated the way the picker
+    /// lists them, and the curated shortlist narrowed to what is installed.
+    /// Pure, so the filter, collation, and split are pinned by tests instead of
+    /// eyeballed in the picker.
+    nonisolated static func derive(from raw: [String]) -> Lists {
+        let families = raw
+            .filter { !$0.hasPrefix(".") }
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
         let installed = Set(families)
-        return curated.filter { installed.contains($0) }
-    }()
-
-    static let otherFamilies: [String] = {
-        let standard = Set(standardFamilies)
-        return families.filter { !standard.contains($0) }
-    }()
-
-    /// Touch the cached lists so the enumeration cost is paid at launch.
-    static func preload() {
-        _ = standardFamilies
-        _ = otherFamilies
+        let standard = curated.filter { installed.contains($0) }
+        let standardSet = Set(standard)
+        return Lists(
+            families: families,
+            standard: standard,
+            other: families.filter { !standardSet.contains($0) }
+        )
     }
 }
