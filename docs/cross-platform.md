@@ -107,6 +107,14 @@ stays with the scrcpy desktop app.
 - [ ] `droidectived` scaffold + protocol tests (design reviewed first — `droidectived-protocol.md`)
 - [ ] Portable fake CDP server so the JSConsoleClient wire tests run on Linux
 - [ ] Reactotron listener off Network.framework (SwiftNIO or raw sockets)
-- [ ] Windows: audit the process-spawning tests so `swift test` runs in CI
+- [ ] Windows: fix the 14 failing tests, then flip `build-windows` to
+      `swift test`. Since MCP moved to its own package the suite **does** run
+      there — 1375 tests discovered, 39 issues across 14 functions, in three
+      clusters: (1) `SystemProcessRunnerTests` spawns `/bin/echo`, `/bin/sh`,
+      `/bin/sleep`, `/usr/bin/yes` and needs a per-OS command table; (2)
+      `PortabilityGuardTests` does `/`-separator path arithmetic off `#filePath`;
+      (3) the toolchain tests (`ToolLocator` caching, `ManagedToolStore`
+      tar.gz/xz, aapt2/apksigner/zipalign arg vectors) assume POSIX tool paths,
+      and frida's `.xz` has no Windows decoder yet
 - [ ] Windows: xz decode for frida assets; `HostNetwork` via GetAdaptersAddresses
 - [ ] Linux: interface ranking in `HostNetwork.pickPrimary` (en*/eth*/wl* over docker0/veth)
