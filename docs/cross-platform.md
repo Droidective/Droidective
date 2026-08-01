@@ -115,15 +115,17 @@ stays with the scrcpy desktop app.
 - [ ] `droidectived` scaffold + protocol tests (design reviewed first — `droidectived-protocol.md`)
 - [ ] Portable fake CDP server so the JSConsoleClient wire tests run on Linux
 - [ ] Reactotron listener off Network.framework (SwiftNIO or raw sockets)
-- [ ] Windows: fix the 14 failing tests, then flip `build-windows` to
-      `swift test`. Since MCP moved to its own package the suite **does** run
-      there — 1375 tests discovered, 39 issues across 14 functions, in three
-      clusters: (1) `SystemProcessRunnerTests` spawns `/bin/echo`, `/bin/sh`,
-      `/bin/sleep`, `/usr/bin/yes` and needs a per-OS command table; (2)
-      `PortabilityGuardTests` does `/`-separator path arithmetic off `#filePath`;
-      (3) the toolchain tests (`ToolLocator` caching, `ManagedToolStore`
-      tar.gz/xz, aapt2/apksigner/zipalign arg vectors) assume POSIX tool paths,
-      and frida's `.xz` has no Windows decoder yet
+- [ ] Windows: fix the last 6 tests, then flip `build-windows` to `swift test`.
+      The suite runs there now — 1375 discovered, down from 14 failures to 6:
+      (1) four real-process tests in `SystemProcessRunnerTests`. `cmd.exe`
+      metacharacters (`&`, `1>&2`) do not survive Foundation's Windows argument
+      quoting, so those children fail to launch, and terminating a `cmd /c`
+      wrapper leaves its `ping` grandchild running, so the timeout and
+      cancellation tests wait the full 30 s. Both point at the same fix: write
+      a temp `.cmd` per fixture and spawn it directly, with no wrapper process.
+      (2) `ApkInspectionServiceTests` / `ApkSigningServiceTests` still resolve
+      no build-tools despite the fixtures now using `.exe` names — needs a look
+      at how `ToolLocator` walks a seeded build-tools dir on Windows
 - [ ] Windows: xz decode for frida assets; `HostNetwork` via GetAdaptersAddresses
 - [ ] Linux: interface ranking in `HostNetwork.pickPrimary` (en*/eth*/wl* over docker0/veth)
 - [ ] API client: portable expectations for `URLSessionTransport` so
