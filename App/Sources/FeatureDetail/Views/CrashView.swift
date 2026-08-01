@@ -7,6 +7,7 @@ import SwiftUI
 /// trace, live watch, and Slack/Jira-formatted copy.
 struct CrashView: View {
     @Environment(AppState.self) private var state
+    @Environment(ResizeActivity.self) private var resizeActivity: ResizeActivity?
     @State private var reports: [CrashReport] = []
     @State private var selectedID: CrashReport.ID?
     @State private var loading = false
@@ -33,6 +34,10 @@ struct CrashView: View {
     /// Measured pane width — below ~700pt (a narrow split pane) the toolbar
     /// reflows to two rows and the crash list narrows proportionally.
     @State private var paneWidth: CGFloat = 0
+    /// The trace scroller's resting width — what the trace pins to during a
+    /// live resize (see `detail`). A plain box so per-pixel geometry updates
+    /// don't re-render the view.
+    @State private var traceMeasure = TraceMeasure()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -264,6 +269,7 @@ struct CrashView: View {
 
     @ViewBuilder private var detail: some View {
         if let report = selectedReport {
+            let resizing = resizeActivity?.isActive == true
             VStack(spacing: 0) {
                 detailHeader(report)
                 Divider()
@@ -276,6 +282,21 @@ struct CrashView: View {
                     // with the same text.
                     CrashTraceText(text: showRaw ? report.raw : report.body)
                         .equatable()
+                        // The whole trace is ONE Text; re-wrapping a
+                        // multi-thousand-line ANR per drag tick beachballs
+                        // even with this tab visible (DROIDECTIVE-MAC-27) —
+                        // pin its width mid-resize, re-wrap once at rest.
+                        .frame(
+                            width: PaneFreezePolicy.pinnedWidth(
+                                isResizing: resizing, resting: traceMeasure.settled),
+                            alignment: .topLeading)
+                }
+                .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { width in
+                    traceMeasure.latest = width
+                    if resizeActivity?.isActive != true { traceMeasure.settled = width }
+                }
+                .onChange(of: resizing) { _, nowResizing in
+                    if !nowResizing { traceMeasure.settled = traceMeasure.latest }
                 }
             }
             .frame(maxWidth: .infinity)
@@ -518,6 +539,15 @@ private struct CrashTraceText: View, Equatable {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(8)
     }
+}
+
+/// Continuous width measurements for the trace scroller — a plain reference
+/// box (deliberately not observable) so per-pixel geometry updates don't
+/// re-render the view; `settled` is only read when the freeze engages.
+@MainActor
+private final class TraceMeasure {
+    var latest: CGFloat = 0
+    var settled: CGFloat?
 }
 
 private struct CrashRow: View {
