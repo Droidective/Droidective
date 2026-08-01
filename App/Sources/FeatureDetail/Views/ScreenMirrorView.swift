@@ -345,64 +345,14 @@ private struct MirrorStage: View {
         Toggle("Stream audio (restarts mirror)", isOn: $includeAudio)
             .disabled(model.isRecording)
         Toggle("Show touches", isOn: $showTouches)
-        // Which mic to record from is a set-once setting — the on/off that
-        // matters per take is the bar button.
-        if storedMode.includesMicrophone {
-            Picker("Microphone input", selection: $micInputID) {
-                Text("System default").tag("")
-                ForEach(micInputs) { input in
-                    Text(input.name).tag(input.id)
-                }
-            }
-            .disabled(model.isRecording)
-        }
     }
 
-    /// The recording's two audio sources, as two plain on/off buttons beside
-    /// the record button: the device's own sound, and the Mac's microphone.
-    /// Both, either, or neither — no mode list to read. During a take the same
-    /// two buttons mute and unmute what's being captured.
-    private func audioSourceButtons(buttonWidth: CGFloat) -> some View {
-        Group {
-            // A waveform, not a speaker: the volume cluster two buttons along
-            // already owns the speaker icons (its mute is literally
-            // `speaker.slash.fill`), and two speakers meaning different things
-            // in one bar is exactly the confusion to avoid.
-            audioSourceButton(
-                on: "waveform", off: "waveform.slash",
-                isOn: deviceAudioOn, width: buttonWidth,
-                enabled: !model.isRecording || recordingCarries(\.includesDevice),
-                help: deviceAudioOn
-                    ? (model.isRecording ? "Mute the device's audio" : "Device audio on (Android 11+)")
-                    : (model.isRecording ? "Unmute the device's audio" : "Device audio off")
-            ) { setDeviceAudio(!deviceAudioOn) }
-
-            audioSourceButton(
-                on: "mic.fill", off: "mic.slash.fill",
-                isOn: microphoneOn, width: buttonWidth,
-                enabled: !model.isRecording || recordingCarries(\.includesMicrophone),
-                help: microphoneOn
-                    ? (model.isRecording ? "Mute your microphone" : "Microphone on")
-                    : (model.isRecording ? "Unmute your microphone" : "Microphone off")
-            ) { setMicrophone(!microphoneOn) }
-        }
-        // Inputs come and go with headsets; refresh where the ⋯ menu's picker
-        // will read them.
-        .onAppear { micInputs = MicrophoneCapture.availableInputs() }
+    private var deviceAudioBinding: Binding<Bool> {
+        Binding(get: { deviceAudioOn }, set: { setDeviceAudio($0) })
     }
 
-    private func audioSourceButton(
-        on: String, off: String, isOn: Bool, width: CGFloat, enabled: Bool, help: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        navButton(
-            isOn ? on : off,
-            tint: isOn ? .primary : .textMuted,
-            width: width,
-            help: enabled ? help : "Not part of this recording",
-            action: action
-        )
-        .disabled(!enabled)
+    private var microphoneBinding: Binding<Bool> {
+        Binding(get: { microphoneOn }, set: { setMicrophone($0) })
     }
 
     /// Before a take these read the stored choice; during one they read what
@@ -514,8 +464,6 @@ private struct MirrorStage: View {
             Task { await model.takeScreenshot() }
         }
 
-        audioSourceButtons(buttonWidth: buttonWidth)
-
         if model.isRecording {
             navButton(
                 model.isPaused ? "play.fill" : "pause.fill",
@@ -524,12 +472,59 @@ private struct MirrorStage: View {
             ) {
                 Task { model.isPaused ? await model.resumeRecording() : await model.pauseRecording() }
             }
-            navButton("stop.circle.fill", tint: .red, width: buttonWidth, help: "Stop recording") {
+            recordSplitButton(
+                symbol: "stop.circle.fill", tint: .red,
+                help: "Stop recording — the arrow mutes either source"
+            ) {
                 Task { await model.stopRecording() }
             }
         } else {
-            navButton("record.circle", width: buttonWidth, help: "Record — keep mirroring") {
+            recordSplitButton(
+                symbol: "record.circle", tint: nil,
+                help: "Record — keep mirroring; the arrow picks the audio"
+            ) {
                 Task { await model.startRecording() }
+            }
+        }
+    }
+
+    /// Recording and its audio as one control: the button records (or stops),
+    /// and the arrow beside it turns device audio and the microphone on or off
+    /// — before a take, and as mutes during one. Everything about the recording
+    /// hangs off the record button, so there's nothing to hunt for.
+    private func recordSplitButton(
+        symbol: String, tint: Color?, help: String, action: @escaping () -> Void
+    ) -> some View {
+        Menu {
+            recordAudioItems
+        } label: {
+            Image(systemName: symbol)
+                .font(.app(.title3))
+                .foregroundStyle(tint ?? .primary)
+        } primaryAction: {
+            action()
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help(help)
+        .onAppear { micInputs = MicrophoneCapture.availableInputs() }
+    }
+
+    /// Two independent on/off items — device audio and the microphone — which
+    /// between them cover both, either, and neither. During a take they mute
+    /// and unmute instead, and a source this recording never included is
+    /// disabled rather than silently doing nothing.
+    @ViewBuilder private var recordAudioItems: some View {
+        Toggle("Device audio", isOn: deviceAudioBinding)
+            .disabled(model.isRecording && !recordingCarries(\.includesDevice))
+        Toggle("Microphone", isOn: microphoneBinding)
+            .disabled(model.isRecording && !recordingCarries(\.includesMicrophone))
+        if storedMode.includesMicrophone, !model.isRecording {
+            Picker("Microphone input", selection: $micInputID) {
+                Text("System default").tag("")
+                ForEach(micInputs) { input in
+                    Text(input.name).tag(input.id)
+                }
             }
         }
     }

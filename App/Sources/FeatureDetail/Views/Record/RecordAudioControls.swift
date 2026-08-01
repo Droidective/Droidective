@@ -31,10 +31,17 @@ struct RecordAudioOptionsRow: View {
             set: { mode = .mode(device: $0, microphone: mode.includesMicrophone) })
     }
 
-    private var microphone: Binding<Bool> {
+    /// Off, the system default, or a named input — picking an input is what
+    /// turns the microphone on, so there's one control instead of two.
+    private var microphoneChoice: Binding<MicrophoneChoice> {
         Binding(
-            get: { mode.includesMicrophone },
-            set: { mode = .mode(device: mode.includesDevice, microphone: $0) })
+            get: { RecordAudioPreference.microphoneChoice(mode: mode, inputID: inputID) },
+            set: { choice in
+                let applied = RecordAudioPreference.applying(
+                    choice, mode: mode, inputID: inputID)
+                mode = applied.mode
+                inputID = applied.inputID
+            })
     }
 
     @State private var inputs: [MicrophoneCapture.Input] = []
@@ -46,16 +53,16 @@ struct RecordAudioOptionsRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            SwitchRow(
+            labeledRow(
                 "Device audio",
-                subtitle: "The app's own sound, from the device (Android 11+)",
-                isOn: deviceAudio)
-            SwitchRow(
+                subtitle: "The app's own sound, from the device (Android 11+)"
+            ) { deviceAudioPicker }
+            labeledRow(
                 "Microphone",
-                subtitle: "Your voice, from the Mac — narrate what you're showing",
-                isOn: microphone)
+                subtitle: "Your voice, from the Mac — narrate what you're showing"
+            ) { microphonePicker }
             if mode.includesMicrophone {
-                microphoneRow
+                levelCheckRow
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
             if let message = warning {
@@ -71,25 +78,50 @@ struct RecordAudioOptionsRow: View {
         .onChange(of: inputID) { _, _ in if isTesting { restartTest() } }
     }
 
-    private var microphoneRow: some View {
-        HStack(spacing: 8) {
-            Text("Input")
-                .font(.app(.callout))
-                .foregroundStyle(.textMuted)
-            Picker("", selection: $inputID) {
-                Text("System default").tag("")
-                ForEach(inputs) { input in
-                    Text(input.name).tag(input.id)
-                }
+    private func labeledRow(
+        _ title: String, subtitle: String, @ViewBuilder _ control: () -> some View
+    ) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                Text(subtitle)
+                    .font(.app(.footnote))
+                    .foregroundStyle(.textMuted)
             }
-            .labelsHidden().pickerStyle(.menu)
-            .frame(maxWidth: 190)
-            .disabled(authorization == .denied)
+            Spacer(minLength: 12)
+            control()
+        }
+    }
 
+    private var deviceAudioPicker: some View {
+        Picker("", selection: deviceAudio) {
+            Text("On").tag(true)
+            Text("Off").tag(false)
+        }
+        .labelsHidden().pickerStyle(.menu).fixedSize()
+    }
+
+    private var microphonePicker: some View {
+        Picker("", selection: microphoneChoice) {
+            Text("Off").tag(MicrophoneChoice.off)
+            Divider()
+            Text("System default").tag(MicrophoneChoice.systemDefault)
+            ForEach(inputs) { input in
+                Text(input.name).tag(MicrophoneChoice.input(input.id))
+            }
+        }
+        .labelsHidden().pickerStyle(.menu)
+        .frame(maxWidth: 210)
+        .disabled(authorization == .denied)
+    }
+
+    /// Hear the chosen input before committing to a take.
+    private var levelCheckRow: some View {
+        HStack(spacing: 8) {
+            Spacer(minLength: 0)
             AudioLevelMeter(level: level)
                 .frame(width: 62)
                 .opacity(isTesting ? 1 : 0.35)
-
             Button(isTesting ? "Stop" : "Test") {
                 isTesting ? stopTest() : startTest()
             }

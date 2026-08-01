@@ -1,6 +1,15 @@
 import ADBKit
 import Foundation
 
+/// One microphone dropdown instead of a switch plus an input picker: off, the
+/// system default, or a named input. Picking an input *is* turning the
+/// microphone on, which is one decision rather than two.
+enum MicrophoneChoice: Hashable, Sendable {
+    case off
+    case systemDefault
+    case input(String)
+}
+
 /// Where the recording-audio choice lives, shared by the Screen Record screen
 /// and the mirror's record button so both capture the same way.
 enum RecordAudioPreference {
@@ -22,6 +31,29 @@ enum RecordAudioPreference {
     static func inheritedMode(from defaults: UserDefaults) -> RecordAudioMode {
         guard defaults.object(forKey: legacyModeKey) != nil else { return .deviceOnly }
         return defaults.bool(forKey: legacyModeKey) ? .deviceOnly : .muted
+    }
+
+    /// What the microphone dropdown shows for the stored settings.
+    static func microphoneChoice(mode: RecordAudioMode, inputID: String) -> MicrophoneChoice {
+        guard mode.includesMicrophone else { return .off }
+        return inputID.isEmpty ? .systemDefault : .input(inputID)
+    }
+
+    /// The settings a dropdown pick implies. Device audio is untouched — the
+    /// two sources are independent — and turning the microphone off *keeps* the
+    /// chosen input, so switching it back on doesn't lose the choice.
+    static func applying(
+        _ choice: MicrophoneChoice, mode: RecordAudioMode, inputID: String
+    ) -> (mode: RecordAudioMode, inputID: String) {
+        let device = mode.includesDevice
+        switch choice {
+        case .off:
+            return (.mode(device: device, microphone: false), inputID)
+        case .systemDefault:
+            return (.mode(device: device, microphone: true), "")
+        case let .input(id):
+            return (.mode(device: device, microphone: true), id)
+        }
     }
 
     /// Fold the old key into the new one, once, and drop it.
