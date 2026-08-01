@@ -48,7 +48,7 @@ opening it — verify those by hand.
 
 1. **Define it** — add a `FeatureDef` to `FeatureRegistry.all` (unique `id`,
    title, keywords, category, `kind`; set `platforms` if it works on iOS
-   Simulators — the default is Android-only). **[test: `hasAll59Features` —
+   Simulators — the default is Android-only). **[test: `hasAll60Features` —
    bump the count; `byID` traps on a duplicate id]**
 2. **If it's an action** (`.instantAction`/`.formAction`/`.toggleAction`):
    - add the runner `case` to `FeatureEngine.dispatch`,
@@ -136,7 +136,7 @@ Node 22 in CI; scroll reveals and the hero palette demo must keep their
   twins — booted iOS Simulators surface as `Device`s with
   `platform: .iosSimulator`, merged into the bar in `AppState`), `DeviceProps` (getprop), `DeviceOverview` (RAM/storage/
   battery/CPU/app counts), `DeviceDetails` (picker enrichment).
-- `Features/`: `FeatureRegistry` (59 `FeatureDef`s, declarative; `absorbedByHub`
+- `Features/`: `FeatureRegistry` (60 `FeatureDef`s, declarative; `absorbedByHub`
   maps a hub screen to the features it gathers, flattened to
   `absorbedFeatureIDs`; `catalogFeatureIDs` is the registry minus those),
   `FeatureModel`,
@@ -179,6 +179,18 @@ Node 22 in CI; scroll reveals and the hero palette demo must keep their
   reconnect-friendly event stream; `ConsoleReplayGate` drops the re-replayed
   console history on reconnects). No adb path (Metro runs on the Mac); the
   device only needs `adb reverse tcp:<metroPort>` to reach the dev server.
+  The **`ApiClient/`** group backs `api-client` (API Testing) — a device-free
+  HTTP client: `ApiModels` (methods, six body kinds, five auth kinds,
+  collections/folders/environments), `HttpRequestBuilder` +
+  `HttpTransport`/`HttpClientService` (the `ProcessRunning`-style injectable
+  seam is the transport protocol, so every send is testable without a
+  network), `CurlParser` (flag-table driven — a value-taking flag must never
+  be mistaken for the URL), `PostmanFormat` (import/export), `ApiVariables`
+  (`{{var}}` resolution, unresolved ones surfaced not sent),
+  `ApiAssertions`, `ApiRunner`, and `CodeGenerator` (six targets). Header
+  names/values are validated (CRLF header injection through a variable is
+  the boundary here, the way `shellQuote` is for adb) and query values are
+  percent-encoded against RFC 3986 unreserved.
   `ScreenTools` holds the
   `ScreenRecordOptions` struct and `RecordAudioMode`/`RecordAudioOptions`. **Bundled binaries** (scrcpy-server, a static
   GPLv3 ffmpeg, and the Apache-2.0 bundletool + uber-apk-signer jars — the
@@ -239,7 +251,7 @@ Node 22 in CI; scroll reveals and the hero palette demo must keep their
   tab/window close; it never restarts a relay the user stopped (status
   goes amber, ghost clients cleared via `noteRelayStopped`).
 
-## The 59 features
+## The 60 features
 
 Most `.view` features are full-screen bespoke panels (file-explorer, apps,
 emulators, device-info, logcat, ios-logs — the simulator unified-log twin (`SimulatorLogStreamer` over `simctl spawn <udid> log stream --style ndjson`, iOS-only, standalone), crash-catcher, sandbox-browser, performance,
@@ -271,7 +283,7 @@ Apps hub. They stay hotkey-able (every feature registers a shortcut; the Hotkeys
 tab lists bound members under "Hidden features"). This is a pure display filter —
 no persisted migration — so it also covers a hub that grows later. The rest are generic instant-/form-/toggle-actions
 driven by the registry. The catalog and Home's "All N features" count use
-`catalogFeatureIDs` (37). **Every feature is enabled by default**
+`catalogFeatureIDs` (38). **Every feature is enabled by default**
 (`defaultEnabledIDs == catalogFeatureIDs`); the catalog (Manage features) is for
 turning OFF the ones you don't want, not opting in — there's no Restore button.
 `LayoutState.adoptAllEnabled()` is a one-time migration that turns everything on
@@ -628,7 +640,28 @@ position in `RELEASE_NOTES.md`.
 ## Status
 
 Feature-complete across all planned milestones plus several UX rounds.
-(Latest release: **v3.7.1** — the **Developer Settings feature** (the 59th:
+(Latest release: **v3.8.0** — **API Testing** (the 60th feature: `api-client`,
+a device-free HTTP client — seven methods, six body kinds, five auth kinds,
+Postman collections/environments in and out, nested folders,
+`{{variable}}` scopes with unresolved ones flagged pre-send, assertions on
+status/timing/body/header/JSON-path, a collection runner, code generation to
+six targets, and a cURL paste that parses back; response pane with pretty/raw
+body, image preview, cookies, timing breakdown and redirect chain, JSON in
+the server's key order), **microphone recording** (the Mac's mic alongside
+the device's audio — mutually exclusive with the device's *own* mic since
+scrcpy carries one device stream — mixed to a single AAC track via
+`PCMMixdown`/`AudioTimeline`, level meter in `RecordAudioSheet`, per-source
+mute writing silence; see the recording-audio convention), and four
+main-thread hang fixes from Sentry (`FontCatalog` off the main actor via Core
+Text, the log tail scrolling to document height with non-contiguous layout
+instead of typesetting the buffer, Settings ▸ General's launchd round-trip
+off-main, and `PaneFreezePolicy`/`ResizeActivity` pinning hidden keep-alive
+tabs during live resizes) plus ffmpeg's real error surfacing through
+`VideoEditing.stderrTail`. Under the hood: the portable ADBKit core (Linux +
+Windows suites in CI, `PortabilityGuardTests`), the `ReactotronMCP` package
+split, the tiered `make verify` harness with a mutation gate, and the
+release-channel split above.) Before that,
+**v3.7.1** — the **Developer Settings feature** (the 59th:
 `dev-settings`, a `DeveloperSettingsService` declarative toggle table over
 `settings put`/`setprop` + the SYSPROPS poke — no force-RTL toggle; the
 adb-reachable writes are only Developer Options' persistence, verified
@@ -644,7 +677,7 @@ that type quoted paths into the shell** (`TerminalText.droppedPathsInsertion`;
 AppKit-level `.fileURL`-only registration gated to the visible tab), and
 fixes: welcome-tour paging clamped (double-activation crash), the update
 pill recovering from an interrupted install, and the JS console feed paced
-against chatty Metro streams (`ConsoleRateBucket`)). Before that,
+against chatty Metro streams (`ConsoleRateBucket`). Before that,
 **v3.7.0** — the **universal (arm64 + x86_64) build**
 (app + bundled ffmpeg lipo'd from per-slice SHA-pinned downloads;
 `scripts/unpack-ffmpeg.sh` inflates the committed `ffmpeg.zip` before
