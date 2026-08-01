@@ -204,12 +204,55 @@ public struct ConnectionService: Sendable {
         }
     }
 
+    /// Validates an IPv6 literal in pure Swift.
+    ///
+    /// This replaced `inet_pton`, whose `in6_addr` / `AF_INET6` symbols don't
+    /// exist on Windows — and a parser has no business needing libc anyway, per
+    /// the pure-static-parser rule. Accepts the full grammar the app can
+    /// plausibly be handed: 8 hex groups, one `::` run compressing one or more
+    /// zero groups, and a trailing dotted-quad occupying the last two groups
+    /// (`::ffff:192.168.1.1`).
     private static func isIPv6(_ text: String) -> Bool {
         // A zone index ("fe80::1%en0") rides after the address proper.
         let address = String(text.prefix { $0 != "%" })
-        guard !address.isEmpty else { return false }
-        var parsed = in6_addr()
-        return inet_pton(AF_INET6, address, &parsed) == 1
+        guard !address.isEmpty, address.count <= 45 else { return false }
+
+        // At most one compression run.
+        let halves = address.components(separatedBy: "::")
+        guard halves.count <= 2 else { return false }
+        let compressed = halves.count == 2
+
+        // An empty half contributes no groups; a non-empty one splits on ":",
+        // so a stray leading or trailing colon yields an empty group and fails
+        // the width check below.
+        func groups(_ part: String) -> [String] {
+            part.isEmpty ? [] : part.components(separatedBy: ":")
+        }
+        var head = groups(halves[0])
+        var tail = compressed ? groups(halves[1]) : []
+
+        // A dotted-quad tail stands in for the final two groups.
+        var ipv4GroupCount = 0
+        if let last = (compressed ? tail : head).last, last.contains(".") {
+            guard isIPv4(last) else { return false }
+            ipv4GroupCount = 2
+            if compressed { tail.removeLast() } else { head.removeLast() }
+        }
+
+        // ASCII only: `isHexDigit` also accepts fullwidth forms like U+FF11,
+        // which `inet_pton` — the call this replaced — rejects. Same reason
+        // `isIPv4` parses through `Int(_:)` rather than trusting `isNumber`.
+        let hextets = head + tail
+        guard
+            hextets.allSatisfy({ hextet in
+                (1...4).contains(hextet.count)
+                    && hextet.allSatisfy { $0.isASCII && $0.isHexDigit }
+            })
+        else { return false }
+
+        let total = hextets.count + ipv4GroupCount
+        // A compression run must stand for at least one group, so it caps at 7.
+        return compressed ? total <= 7 : total == 8
     }
 
     private static func isHostname(_ text: String) -> Bool {

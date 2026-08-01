@@ -117,6 +117,7 @@ public struct EmulatorService: Sendable {
     /// stdio is routed to `/dev/null` so it neither inherits nor holds the app's
     /// descriptors. Returns false if the spawn fails.
     static func spawnDetached(path: String, arguments: [String], environment: [String: String]) -> Bool {
+        #if canImport(Darwin)
         var attr: posix_spawnattr_t?
         posix_spawnattr_init(&attr)
         defer { posix_spawnattr_destroy(&attr) }
@@ -156,6 +157,30 @@ public struct EmulatorService: Sendable {
 
         var pid: pid_t = 0
         return posix_spawn(&pid, path, &fileActions, &attr, argv, envp) == 0
+        #else
+        // Same intent without Apple's posix_spawn extensions: Linux makes the
+        // child a session leader via util-linux's `setsid --fork` (the
+        // POSIX_SPAWN_SETSID equivalent); Windows children are independent of
+        // the parent's lifetime by default. Stdio still goes to the null device.
+        let process = Process()
+        #if os(Windows)
+        process.executableURL = URL(fileURLWithPath: path)
+        process.arguments = arguments
+        #else
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/setsid")
+        process.arguments = ["--fork", path] + arguments
+        #endif
+        process.environment = environment
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+            return true
+        } catch {
+            return false
+        }
+        #endif
     }
 
     // MARK: - Wipe data
@@ -227,7 +252,7 @@ public struct EmulatorService: Sendable {
     /// `lsof` maps the serial to the right pid even with several emulators up.
     /// Runs through the non-blocking runner so it can't park a cooperative
     /// thread (the reason this lives here, not in the view).
-    public func consolePID(serial: String) async -> pid_t? {
+    public func consolePID(serial: String) async -> Int32? {
         guard let port = serial.split(separator: "-").last.flatMap({ Int($0) }) else { return nil }
         let output = await runner.run(
             executable: "/usr/sbin/lsof",
@@ -238,9 +263,11 @@ public struct EmulatorService: Sendable {
     }
 
     /// First pid from `lsof -t` output (one pid per line; tolerates CRLF).
-    static func parseLsofPID(_ output: String) -> pid_t? {
+    /// Typed `Int32` rather than `pid_t`: they are the same type on POSIX, and
+    /// `pid_t` does not exist on Windows.
+    static func parseLsofPID(_ output: String) -> Int32? {
         output.split(whereSeparator: \.isNewline)
-            .compactMap { pid_t($0.trimmingCharacters(in: .whitespaces)) }
+            .compactMap { Int32($0.trimmingCharacters(in: .whitespaces)) }
             .first
     }
 }

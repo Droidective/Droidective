@@ -1,3 +1,6 @@
+// Rides the Apple-only mirror pipeline (see MirrorSession); other hosts will
+// record via the scrcpy desktop app instead.
+#if canImport(AVFoundation) && canImport(Network)
 import Foundation
 
 /// Screen recording built on the in-app scrcpy client (the bundled server), so
@@ -199,3 +202,4 @@ public actor ScreenRecorder {
             .appendingPathExtension(ext)
     }
 }
+#endif

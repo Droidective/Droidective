@@ -102,10 +102,10 @@ import Testing
         let buildTools = base.appendingPathComponent("build-tools/34.0.0")
         try fm.createDirectory(at: buildTools.appendingPathComponent("lib"), withIntermediateDirectories: true)
         let exec: [FileAttributeKey: Any] = [.posixPermissions: 0o755]
-        fm.createFile(atPath: buildTools.appendingPathComponent("zipalign").path, contents: Data("#!/bin/sh\n".utf8), attributes: exec)
-        fm.createFile(atPath: buildTools.appendingPathComponent("lib/apksigner.jar").path, contents: Data())
+        _ = fm.createFile(atPath: buildTools.appendingPathComponent("zipalign").path, contents: Data("#!/bin/sh\n".utf8), attributes: exec)
+        _ = fm.createFile(atPath: buildTools.appendingPathComponent("lib/apksigner.jar").path, contents: Data())
         let java = base.appendingPathComponent("java")
-        fm.createFile(atPath: java.path, contents: Data("#!/bin/sh\n".utf8), attributes: exec)
+        _ = fm.createFile(atPath: java.path, contents: Data("#!/bin/sh\n".utf8), attributes: exec)
         return (buildTools.path, java.path)
     }
 }

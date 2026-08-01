@@ -1,3 +1,5 @@
+#if canImport(Network)
+
 import ADBKit
 import Foundation
 import Testing
@@ -301,3 +303,5 @@ import Testing
         #expect(result.clientId == "app-b")
     }
 }
+
+#endif

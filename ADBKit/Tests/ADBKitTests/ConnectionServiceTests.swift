@@ -259,3 +259,74 @@ import Testing
         #expect(ConnectionService.parseMdnsServices("List of discovered mdns services\n").isEmpty)
     }
 }
+
+/// The IPv6 literal check is hand-written Swift rather than `inet_pton`, whose
+/// `in6_addr`/`AF_INET6` symbols are absent on Windows. These pin the grammar so
+/// the replacement cannot quietly drift from what a resolver would accept.
+/// Exercised through `parseEndpoint`, since the validator itself is private.
+@Suite struct ConnectionServiceIPv6GrammarTests {
+    private func accepts(_ literal: String) -> Bool {
+        ConnectionService.parseEndpoint("[\(literal)]:5555") != nil
+    }
+
+    @Test func acceptsTheFullEightGroupForm() {
+        #expect(accepts("2001:0db8:85a3:0000:0000:8a2e:0370:7334"))
+        #expect(accepts("2001:db8:85a3:0:0:8a2e:370:7334"))
+    }
+
+    @Test func acceptsCompressedForms() {
+        #expect(accepts("::"))
+        #expect(accepts("::1"))
+        #expect(accepts("fe80::"))
+        #expect(accepts("fe80::1"))
+        #expect(accepts("2001:db8::8a2e:370:7334"))
+        // Seven explicit groups plus a run standing for the eighth.
+        #expect(accepts("1:2:3:4:5:6:7::"))
+    }
+
+    @Test func acceptsATrailingDottedQuad() {
+        #expect(accepts("::ffff:192.168.1.1"))
+        #expect(accepts("64:ff9b::192.0.2.33"))
+        #expect(accepts("1:2:3:4:5:6:1.2.3.4"))
+    }
+
+    @Test func rejectsWrongGroupCounts() {
+        #expect(!accepts("1:2:3:4:5:6:7"))
+        #expect(!accepts("1:2:3:4:5:6:7:8:9"))
+        // A compression run must cover at least one group.
+        #expect(!accepts("1:2:3:4:5:6:7:8::"))
+    }
+
+    @Test func rejectsMalformedGroupsAndSeparators() {
+        #expect(!accepts("1::2::3"), "only one compression run is legal")
+        #expect(!accepts("fe80:"), "a trailing colon leaves an empty group")
+        #expect(!accepts(":1:2:3:4:5:6:7"), "a leading colon leaves an empty group")
+        #expect(!accepts("fe80::1::"))
+        #expect(!accepts("12345::1"), "a group is at most four hex digits")
+        #expect(!accepts("fe8g::1"), "g is not a hex digit")
+        #expect(!accepts(""))
+    }
+
+    @Test func rejectsABadDottedQuadTail() {
+        #expect(!accepts("::ffff:192.168.1.256"))
+        #expect(!accepts("::ffff:192.168.1"))
+    }
+
+    @Test func toleratesAZoneIndex() {
+        #expect(accepts("fe80::1%en0"))
+        #expect(accepts("fe80::1%2"))
+        #expect(!accepts("%en0"), "a zone with no address is not an address")
+    }
+
+    /// `Character.isHexDigit` is also true for fullwidth and other non-ASCII
+    /// digit forms, which `inet_pton` — the call this grammar replaced —
+    /// rejects. Differential-tested against `inet_pton` over 200k inputs:
+    /// these were the only divergences, so the hextet check stays ASCII-only.
+    @Test func rejectsNonASCIIHexDigits() {
+        #expect(!accepts("\u{FF11}::1"), "U+FF11 FULLWIDTH DIGIT ONE is not a hex digit")
+        #expect(!accepts("::\u{FF11}"))
+        #expect(!accepts("::\u{FF41}"), "U+FF41 FULLWIDTH LATIN SMALL LETTER A")
+        #expect(!accepts("4ac5::\u{FF11}"))
+        #expect(!accepts("\u{0663}::1"), "Arabic-Indic digit three")
+    }
+}

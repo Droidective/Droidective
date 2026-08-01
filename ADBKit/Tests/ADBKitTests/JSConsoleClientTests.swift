@@ -1,3 +1,7 @@
+// The client under test is portable (URLSessionWebSocketTask); only this
+// harness's fake CDP server rides Network.framework, so the wire tests are
+// Apple-only until the fake server gets a portable listener.
+#if canImport(Network)
 import Foundation
 import Network
 import Testing
@@ -378,3 +382,4 @@ private actor CDPTestServer {
         )
     }
 }
+#endif

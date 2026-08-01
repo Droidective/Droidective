@@ -153,17 +153,26 @@ public actor ToolLocator {
     /// `java_home` helper, then the login shell. Cached; cleared by `clearCache`.
     public func javaPath() async -> String? {
         if let cached = javaCache { return cached }
+        #if os(macOS)
         let candidates = [
             environment["JAVA_HOME"].map { "\($0)/bin/java" },
             "/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/java",
         ].compactMap(\.self)
+        #else
+        let candidates = [
+            environment["JAVA_HOME"].map { "\($0)/bin/\(Self.executableName("java"))" }
+        ].compactMap(\.self)
+        #endif
         var resolved = candidates.first { isExecutableFile($0) }
+        #if os(macOS)
         if resolved == nil { resolved = await resolveJavaHome() }
+        #endif
         if resolved == nil { resolved = await resolveViaLoginShellCommand("java") }
         javaCache = .some(resolved)
         return resolved
     }
 
+    #if os(macOS)
     /// Ask macOS's `/usr/libexec/java_home` for the default JDK, then point at
     /// its `bin/java`. Exits non-zero when no JDK is installed.
     private func resolveJavaHome() async -> String? {
@@ -176,6 +185,7 @@ public actor ToolLocator {
         let java = "\(home)/bin/java"
         return isExecutableFile(java) ? java : nil
     }
+    #endif
 
     /// Pre-populate the cache with a known path (tests, or a user-pinned
     /// tool location). Seeded entries never expire — not even seeded nils.
@@ -198,30 +208,48 @@ public actor ToolLocator {
         return path
     }
 
-    /// SDK roots to probe, from the environment then the default install path.
+    /// SDK roots to probe, from the environment then the platform's default
+    /// Android Studio install path.
     private var sdkRoots: [String] {
-        let home = fileManager.homeDirectoryForCurrentUser.path
+        #if os(macOS)
+        let defaultRoot: String? =
+            "\(fileManager.homeDirectoryForCurrentUser.path)/Library/Android/sdk"
+        #elseif os(Windows)
+        let defaultRoot = environment["LOCALAPPDATA"].map { "\($0)/Android/Sdk" }
+        #else
+        let defaultRoot: String? =
+            "\(fileManager.homeDirectoryForCurrentUser.path)/Android/Sdk"
+        #endif
         return [
             environment["ANDROID_HOME"],
             environment["ANDROID_SDK_ROOT"],
-            "\(home)/Library/Android/sdk",
+            defaultRoot,
         ].compactMap(\.self)
     }
 
     private func candidatePaths(for tool: Tool) -> [String] {
-        // The standard third-party install prefixes on macOS (Apple Silicon
-        // then Intel) — wherever the user's package manager put the binary.
+        // The standard third-party install prefixes — wherever the user's
+        // package manager put the binary (macOS: Apple Silicon then Intel
+        // Homebrew; Linux: distro packages). Windows installs land on PATH,
+        // which the resolve fallback scans.
+        #if os(macOS)
         let installPrefixes = ["/opt/homebrew/bin", "/usr/local/bin"]
+        #elseif os(Windows)
+        let installPrefixes: [String] = []
+        #else
+        let installPrefixes = ["/usr/local/bin", "/usr/bin"]
+        #endif
 
+        let name = Self.executableName(tool.rawValue)
         switch tool {
         case .adb:
-            return sdkRoots.map { "\($0)/platform-tools/adb" }
-                + installPrefixes.map { "\($0)/adb" }
+            return sdkRoots.map { "\($0)/platform-tools/\(name)" }
+                + installPrefixes.map { "\($0)/\(name)" }
         case .emulator:
             // The emulator launcher only ships with the SDK.
-            return sdkRoots.map { "\($0)/emulator/emulator" }
+            return sdkRoots.map { "\($0)/emulator/\(name)" }
         case .scrcpy, .ffmpeg:
-            return installPrefixes.map { "\($0)/\(tool.rawValue)" }
+            return installPrefixes.map { "\($0)/\(name)" }
         }
     }
 
@@ -229,11 +257,41 @@ public actor ToolLocator {
         await resolveViaLoginShellCommand(tool.rawValue)
     }
 
+    /// Platform executable name ("adb" → "adb.exe" on Windows).
+    static func executableName(_ name: String) -> String {
+        #if os(Windows)
+        return name + ".exe"
+        #else
+        return name
+        #endif
+    }
+
+    /// The shell for PATH-resolving fallbacks: macOS pins zsh (the platform's
+    /// default login shell); other POSIX hosts honor $SHELL, then sh.
+    static func loginShell(environment: [String: String]) -> String {
+        #if os(macOS)
+        return "/bin/zsh"
+        #else
+        return environment["SHELL"] ?? "/bin/sh"
+        #endif
+    }
+
     /// Ask the user's login shell (which loads their full PATH) to resolve a
     /// command by name — the fallback for tools installed off the app's PATH.
+    /// Windows has no dotfile PATH: a GUI app already inherits the registry
+    /// PATH, so a plain scan of it replaces the login shell there.
     private func resolveViaLoginShellCommand(_ name: String) async -> String? {
+        #if os(Windows)
+        let exe = Self.executableName(name)
+        let searchPath = environment["Path"] ?? environment["PATH"] ?? ""
+        for dir in searchPath.split(separator: ";") where !dir.isEmpty {
+            let candidate = "\(dir)\\\(exe)"
+            if isExecutableFile(candidate) { return candidate }
+        }
+        return nil
+        #else
         let output = await runner.run(
-            executable: "/bin/zsh",
+            executable: Self.loginShell(environment: environment),
             arguments: ["-lc", "command -v \(name)"],
             timeout: .seconds(8),
             maxOutputBytes: 1024 * 1024
@@ -245,5 +303,6 @@ public actor ToolLocator {
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
         guard let resolved, isExecutableFile(resolved) else { return nil }
         return resolved
+        #endif
     }
 }

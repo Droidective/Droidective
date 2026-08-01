@@ -23,21 +23,27 @@ public struct SimctlClient: Sendable {
     public let log: CommandLog
     let runner: any ProcessRunning
     let xcrunPath: String
+    let isExecutableFile: @Sendable (String) -> Bool
 
     public init(
         runner: any ProcessRunning = SystemProcessRunner(),
         log: CommandLog = CommandLog(),
-        xcrunPath: String = "/usr/bin/xcrun"
+        xcrunPath: String = "/usr/bin/xcrun",
+        isExecutableFile: @escaping @Sendable (String) -> Bool = {
+            FileManager.default.isExecutableFile(atPath: $0)
+        }
     ) {
         self.runner = runner
         self.log = log
         self.xcrunPath = xcrunPath
+        self.isExecutableFile = isExecutableFile
     }
 
     /// Whether `simctl` can run at all (Xcode's xcrun is present). Cheap — a
-    /// filesystem check, no process spawn.
+    /// filesystem check (injected in tests, so mock-driven suites don't
+    /// depend on the host having an /usr/bin/xcrun), no process spawn.
     public var available: Bool {
-        FileManager.default.isExecutableFile(atPath: xcrunPath)
+        isExecutableFile(xcrunPath)
     }
 
     public func run(

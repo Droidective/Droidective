@@ -7,7 +7,8 @@ import Foundation
 /// cooperative thread is ever parked. (A blocking `waitUntilExit`/
 /// `availableData` design starves the cooperative pool once a few adb calls
 /// overlap — device polling + a feature run is enough — wedging the whole
-/// async runtime.) A watchdog escalates SIGTERM → SIGKILL on timeout.
+/// async runtime.) A watchdog escalates SIGTERM → SIGKILL on timeout, except
+/// on Windows where `terminate()` is already TerminateProcess.
 public struct SystemProcessRunner: ProcessRunning {
     public init() {}
 
@@ -68,10 +69,17 @@ public struct SystemProcessRunner: ProcessRunning {
                     timedOut.set(true)
                     boxed.value.terminate()
                 }
+                // Windows has no SIGKILL, and needs none: Foundation maps
+                // `terminate()` to TerminateProcess, which is already the
+                // forceful kill rather than a request to exit. POSIX hosts keep
+                // the SIGTERM → SIGKILL escalation for a child that ignores the
+                // first signal.
+                #if !os(Windows)
                 try await Task.sleep(for: .seconds(2))
                 if boxed.value.isRunning {
                     kill(boxed.value.processIdentifier, SIGKILL)
                 }
+                #endif
             }
 
             let exitCode: Int32? = await withCheckedContinuation { continuation in
@@ -111,13 +119,16 @@ public struct SystemProcessRunner: ProcessRunning {
             // Cancelling the calling Task (e.g. a SwiftUI .task torn down on
             // navigation, or a .task(id:) re-keying) must kill the child so
             // run() returns promptly and no orphaned adb process lingers until
-            // its timeout. SIGTERM first, then SIGKILL for anything ignoring it.
+            // its timeout. SIGTERM first, then SIGKILL for anything ignoring it
+            // (POSIX only — Windows' terminate() is already TerminateProcess).
             cancelled.set(true)
             if boxed.value.isRunning { boxed.value.terminate() }
+            #if !os(Windows)
             Task {
                 try? await Task.sleep(for: .seconds(2))
                 if boxed.value.isRunning { kill(boxed.value.processIdentifier, SIGKILL) }
             }
+            #endif
         }
     }
 }
@@ -141,6 +152,7 @@ final class PipeCollector: @unchecked Sendable {
         lock.lock()
         self.handle = handle
         lock.unlock()
+        #if canImport(Darwin)
         handle.readabilityHandler = { [weak self] handle in
             let chunk = handle.availableData
             if chunk.isEmpty {
@@ -151,12 +163,36 @@ final class PipeCollector: @unchecked Sendable {
                 self?.append(chunk)
             }
         }
+        #else
+        // corelibs never delivers the empty EOF callback when the last data
+        // and the writer's close arrive together (verified on 6.2), so the
+        // handler-based spelling hangs. A dedicated blocking-read thread is
+        // the reliable one: read() returns empty exactly at EOF. The thread
+        // retains the handle, so the fd can't be closed-and-reused under a
+        // read; it closes with the handle after the thread ends.
+        let boxed = UncheckedSendable(handle)
+        let thread = Thread { [weak self] in
+            while true {
+                let chunk = boxed.value.availableData
+                if chunk.isEmpty { break }
+                self?.append(chunk)
+            }
+            self?.finish()
+        }
+        thread.name = "adbkit-pipe-collector"
+        thread.stackSize = 512 * 1024
+        thread.start()
+        #endif
     }
 
-    /// Detach the handler, close the FD, and mark finished.
+    /// Detach the handler, close the FD, and mark finished. Off-Darwin the
+    /// reader thread owns the fd (closing here could re-issue the fd number
+    /// under its blocked read); the child's termination EOFs it instead.
     func cancel(_ handle: FileHandle) {
+        #if canImport(Darwin)
         handle.readabilityHandler = nil
         try? handle.close()
+        #endif
         finish()
     }
 

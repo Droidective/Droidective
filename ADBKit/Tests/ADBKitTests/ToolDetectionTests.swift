@@ -83,16 +83,25 @@ import Testing
         #expect(runner.invocations.count == 2)  // TTL elapsed → probed again
     }
 
+    /// The first probed install-prefix candidate for scrcpy on this host.
+    private static var scrcpyCandidate: String {
+        #if os(macOS)
+        return "/opt/homebrew/bin/scrcpy"
+        #else
+        return "/usr/local/bin/scrcpy"
+        #endif
+    }
+
     @Test func foundPathsStayCachedIndefinitely() async {
         let runner = MockProcessRunner()
         let clock = FakeClock()
         let locator = makeLocator(
-            runner: runner, clock: clock, executables: ["/opt/homebrew/bin/scrcpy"]
+            runner: runner, clock: clock, executables: [Self.scrcpyCandidate]
         )
 
-        #expect(await locator.resolve(.scrcpy) == "/opt/homebrew/bin/scrcpy")
+        #expect(await locator.resolve(.scrcpy) == Self.scrcpyCandidate)
         clock.advance(by: ToolLocator.notFoundTTL * 10)
-        #expect(await locator.resolve(.scrcpy) == "/opt/homebrew/bin/scrcpy")
+        #expect(await locator.resolve(.scrcpy) == Self.scrcpyCandidate)
         #expect(runner.invocations.isEmpty)  // never needed the login shell
     }
 }

@@ -1,3 +1,7 @@
+// The Reactotron listener rides Network.framework's WebSocket stack, so it's
+// Apple-only for now; a portable host would re-implement the listener (the
+// protocol layer next door is already pure Swift).
+#if canImport(Network)
 import Foundation
 import Network
 import os
@@ -464,3 +468,4 @@ public actor ReactotronServer {
         )
     }
 }
+#endif

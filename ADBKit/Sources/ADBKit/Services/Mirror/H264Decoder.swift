@@ -1,3 +1,4 @@
+#if canImport(VideoToolbox)
 import CoreMedia
 import Foundation
 import VideoToolbox
@@ -58,3 +59,4 @@ final class H264Decoder {
 
     deinit { invalidate() }
 }
+#endif

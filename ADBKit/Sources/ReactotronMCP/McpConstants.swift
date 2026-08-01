@@ -1,3 +1,9 @@
+// ReactotronMCP serves the Reactotron relay's data, and that relay is
+// `Network.framework`-based, so this whole target is Apple-only until the
+// listener moves to NIO or raw sockets (a port follow-up). Gated rather than
+// stubbed: off-Apple the module simply exposes nothing.
+#if canImport(Network)
+
 import Foundation
 
 /// Caps and defaults for the MCP layer. Names deliberately mirror upstream
@@ -33,3 +39,5 @@ public enum McpConstants {
     /// Upstream `show_overlay` image cap (2 MB) and allowed formats.
     public static let maxOverlayImageBytes = 2 * 1024 * 1024
 }
+
+#endif

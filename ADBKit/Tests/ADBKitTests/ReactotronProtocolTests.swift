@@ -427,6 +427,7 @@ import Testing
 
     // MARK: Disconnect reasons — the timeline's "why did streaming stop" row.
 
+    #if canImport(Network)
     @Test func goingAwayCloseMapsToTheQueueOverflowReason() {
         // OkHttp (RN Android) sends 1001 when its 16 MiB send queue overflows.
         #expect(ReactotronServer.closeReason(.protocolCode(.goingAway))
@@ -437,4 +438,5 @@ import Testing
         #expect(ReactotronServer.closeReason(.protocolCode(.normalClosure))
             == .clientClosed(goingAway: false))
     }
+    #endif
 }

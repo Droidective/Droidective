@@ -1,3 +1,5 @@
+#if canImport(Network)
+
 import ADBKit
 import Foundation
 import Testing
@@ -168,3 +170,5 @@ import Testing
         #expect(responseBody.hasSuffix("..."))
     }
 }
+
+#endif

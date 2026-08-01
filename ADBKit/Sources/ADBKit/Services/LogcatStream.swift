@@ -186,6 +186,13 @@ public actor LogcatStreamer {
 
         let handle = UncheckedSendable(pipe.fileHandleForReading)
         readerTask = Task {
+            // Apple platforms keep Foundation's own reader: this is the live
+            // logcat feed, and `bytes.lines` is pull-driven, so a slow consumer
+            // backpressures the pipe rather than queueing lines in memory.
+            // `FileHandle.bytes` is Darwin-only, so other hosts assemble lines
+            // themselves. Either way the stream ends on EOF — including a
+            // killed process's closed pipe — then falls through to the flush.
+            #if canImport(Darwin)
             do {
                 for try await line in handle.value.bytes.lines {
                     guard !Task.isCancelled else { break }
@@ -195,6 +202,13 @@ public actor LogcatStreamer {
             } catch {
                 // Pipe closed (process killed) — fall through to final flush.
             }
+            #else
+            for await line in FileHandleLines.lines(of: handle.value) {
+                guard !Task.isCancelled else { break }
+                if line.trimmingCharacters(in: .whitespaces).isEmpty { continue }
+                self.append(LogcatLineParser.parse(line), epoch: sessionEpoch)
+            }
+            #endif
             self.finishStream(epoch: sessionEpoch)
         }
         flusherTask = Task {
@@ -214,8 +228,12 @@ public actor LogcatStreamer {
         flusherTask = nil
         process?.terminate()
         process = nil
-        // Closing our read end EOFs the stale reader promptly.
+        // Closing our read end EOFs the stale reader promptly. Off-Darwin the
+        // reader thread owns the fd (see FileHandleLines); the terminated
+        // child EOFs it instead.
+        #if canImport(Darwin)
         try? readHandle?.close()
+        #endif
         readHandle = nil
         if !batch.isEmpty {
             continuation?.yield(batch)
@@ -247,7 +265,9 @@ public actor LogcatStreamer {
         flusherTask?.cancel()
         flusherTask = nil
         process = nil
+        #if canImport(Darwin)
         try? readHandle?.close()
+        #endif
         readHandle = nil
     }
 }

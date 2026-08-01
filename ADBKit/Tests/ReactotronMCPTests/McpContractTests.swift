@@ -1,3 +1,5 @@
+#if canImport(Network)
+
 import ADBKit
 import Foundation
 import MCP
@@ -473,3 +475,5 @@ actor FakeSender: McpCommandSender {
         await server.stop()
     }
 }
+
+#endif

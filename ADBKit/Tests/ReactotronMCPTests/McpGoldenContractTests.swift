@@ -1,3 +1,5 @@
+#if canImport(Network)
+
 import Foundation
 import MCP
 import Testing
@@ -73,3 +75,5 @@ import Testing
         )
     }
 }
+
+#endif

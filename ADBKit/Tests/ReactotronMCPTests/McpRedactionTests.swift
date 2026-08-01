@@ -1,3 +1,5 @@
+#if canImport(Network)
+
 import ADBKit
 import Foundation
 import Testing
@@ -342,3 +344,5 @@ import Testing
         #expect(pairs[1].arrayValue?[1].stringValue == "en")
     }
 }
+
+#endif

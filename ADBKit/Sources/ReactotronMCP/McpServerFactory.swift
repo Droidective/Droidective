@@ -1,3 +1,9 @@
+// ReactotronMCP serves the Reactotron relay's data, and that relay is
+// `Network.framework`-based, so this whole target is Apple-only until the
+// listener moves to NIO or raw sockets (a port follow-up). Gated rather than
+// stubbed: off-Apple the module simply exposes nothing.
+#if canImport(Network)
+
 import ADBKit
 import Foundation
 import MCP
@@ -61,3 +67,5 @@ public struct McpServerFactory: Sendable {
         return server
     }
 }
+
+#endif
