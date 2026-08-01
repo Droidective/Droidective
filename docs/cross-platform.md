@@ -115,17 +115,20 @@ stays with the scrcpy desktop app.
 - [ ] `droidectived` scaffold + protocol tests (design reviewed first — `droidectived-protocol.md`)
 - [ ] Portable fake CDP server so the JSConsoleClient wire tests run on Linux
 - [ ] Reactotron listener off Network.framework (SwiftNIO or raw sockets)
-- [ ] Windows: fix the last 6 tests, then flip `build-windows` to `swift test`.
-      The suite runs there now — 1375 discovered, down from 14 failures to 6:
-      (1) four real-process tests in `SystemProcessRunnerTests`. `cmd.exe`
-      metacharacters (`&`, `1>&2`) do not survive Foundation's Windows argument
-      quoting, so those children fail to launch, and terminating a `cmd /c`
-      wrapper leaves its `ping` grandchild running, so the timeout and
-      cancellation tests wait the full 30 s. Both point at the same fix: write
-      a temp `.cmd` per fixture and spawn it directly, with no wrapper process.
-      (2) `ApkInspectionServiceTests` / `ApkSigningServiceTests` still resolve
-      no build-tools despite the fixtures now using `.exe` names — needs a look
-      at how `ToolLocator` walks a seeded build-tools dir on Windows
+- [ ] Windows: fix the last 3 tests, then flip `build-windows` to `swift test`.
+      The suite runs there now (1375 discovered); failures went 14 → 3.
+      Remaining, with the leading hypothesis for each:
+      (1) `capturesStderrAndNonZeroExit` — the child still fails to launch.
+      `ChildCommands` writes a temp `.cmd` and passes `url.path`, but Foundation
+      on Windows renders `URL.path` POSIX-style (`/C:/Users/…`), which cmd
+      cannot open. Build the path as a `String` with backslashes from `%TEMP%`
+      instead of going through `URL`.
+      (2)+(3) `ApkInspectionServiceTests` / `ApkSigningServiceTests` still
+      report `toolMissing` even though `buildToolBinary` now appends `.exe` and
+      the fixtures create `.exe` files. Next thing to check is
+      `FileManager.isExecutableFile` on Windows — the fixtures write shell-script
+      text into a file named `.exe`, and it may validate the PE image (or
+      consult PATHEXT) rather than just testing for readability.
 - [ ] Windows: xz decode for frida assets; `HostNetwork` via GetAdaptersAddresses
 - [ ] Linux: interface ranking in `HostNetwork.pickPrimary` (en*/eth*/wl* over docker0/veth)
 - [ ] API client: portable expectations for `URLSessionTransport` so
