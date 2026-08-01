@@ -23,8 +23,9 @@ jobs:
 
   # The Windows/Linux port rides on ADBKit staying portable (see
   # docs/cross-platform.md). Linux runs the full mock-driven suite. The Windows
-  # compile job lands with the Windows change so this one can be reviewed on its
-  # own.
+  # compile job below build-verifies the library and its tests (running them
+  # there waits on a Windows audit of the process-spawning tests, which hardcode
+  # POSIX paths).
   test-linux:
     runs-on: ubuntu-24.04
     container: swift:6.2-noble
@@ -36,6 +37,35 @@ jobs:
         run: apt-get update -q && apt-get install -y -q unzip xz-utils
       - name: Run ADBKit tests (Linux)
         run: cd ADBKit && swift test -Xswiftc -warnings-as-errors
+
+  build-windows:
+    # windows-2022, not -2025: the 2025 image ships MSVC 14.51, whose STL header
+    # yvals_core.h hard-errors with "STL1000: Unexpected compiler version,
+    # expected Clang 20 or newer". The Swift 6.2.4 toolchain bundles an older
+    # clang, and swift-crypto vendors BoringSSL as C/C++, so that assert fires
+    # while compiling BoringSSL rather than any Swift we wrote. 2022's MSVC
+    # accepts the bundled clang. Revisit when a Swift release ships clang 20+.
+    runs-on: windows-2022
+    steps:
+      - uses: compnerd/gha-setup-swift@eeda069c5bc95ac8a9ac5cea7d4f588ae5420ca5  # v0.4.0
+        with:
+          branch: swift-6.2.4-release
+          tag: 6.2.4-RELEASE
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          persist-credentials: false
+      # ADBKit and its own test target only — deliberately not `--build-tests`,
+      # which would also build ReactotronMCP. That target depends on swift-nio,
+      # whose Windows support is still partial: TCP compiles but Unix domain
+      # sockets, UDP and pipe channels are unsupported, NIOFileSystem is stubbed
+      # with fatalError, and apple/swift-nio#3647 blocks downstream packages on
+      # Swift 6.1+. The portable core is what this job is here to protect; the MCP
+      # server is knowingly macOS/Linux-only for now.
+      - name: Build ADBKit and its tests (Windows)
+        run: |
+          cd ADBKit
+          swift build --target ADBKit -Xswiftc -warnings-as-errors
+          swift build --target ADBKitTests -Xswiftc -warnings-as-errors
 
   build:
     runs-on: macos-15
