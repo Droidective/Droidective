@@ -245,6 +245,8 @@ private struct MirrorStage: View {
     @Bindable var model: MirrorViewModel
     @AppStorage(mirrorIncludeAudioKey) private var includeAudio = false
     @AppStorage(mirrorShowTouchesKey) private var showTouches = false
+    @AppStorage(RecordAudioPreference.modeKey) private var recordAudioModeRaw =
+        RecordAudioMode.deviceOnly.rawValue
     /// Reconnect the current device in place (the stopped/failed cards' button).
     let onReconnect: () -> Void
     /// Move the mirror to its own window; nil when already hosted in one.
@@ -341,6 +343,27 @@ private struct MirrorStage: View {
         Toggle("Stream audio (restarts mirror)", isOn: $includeAudio)
             .disabled(model.isRecording)
         Toggle("Show touches", isOn: $showTouches)
+        // What a recording started from this bar captures — the same stored
+        // choice the Screen Record screen uses. Locked mid-recording: the
+        // sources are fixed when the capture opens.
+        Picker("Recording audio", selection: recordAudioMode) {
+            ForEach(RecordAudioMode.allCases, id: \.self) { option in
+                Label(option.title, systemImage: option.symbolName).tag(option)
+            }
+        }
+        .disabled(model.isRecording)
+    }
+
+    /// Choosing a microphone mode here asks for access straight away — this
+    /// menu is the only audio control the mirror has, so the prompt can't wait
+    /// for a picker the user may never open.
+    private var recordAudioMode: Binding<RecordAudioMode> {
+        Binding(
+            get: { RecordAudioMode(rawValue: recordAudioModeRaw) ?? .deviceOnly },
+            set: { mode in
+                recordAudioModeRaw = mode.rawValue
+                Task { await MicrophoneAccess.requestIfNeeded(for: mode) }
+            })
     }
 
     private var optionsMenu: some View {

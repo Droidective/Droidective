@@ -316,11 +316,21 @@ final class MirrorViewModel {
         let recorder = ScreenRecorder(
             client: adb, server: server, ffmpegPath: BundledTools.ffmpegPath())
         do {
+            // The same audio choice the Screen Record screen uses, so a clip
+            // taken from the mirror captures what the user set up there.
             try await recorder.start(
-                serial: serial, options: ScreenRecordOptions(maxSize: 1280, captureAudio: true))
+                serial: serial,
+                options: ScreenRecordOptions(
+                    maxSize: 1280, audio: RecordAudioPreference.options(from: .standard)))
             screenRecorder = recorder
             isRecording = true
             isPaused = false
+            // The mirror has no mute chips to show this on, so a microphone
+            // that wouldn't start is reported once instead of going unnoticed
+            // until playback.
+            if let failure = await recorder.audioStatus().microphoneFailure {
+                recordingError = failure
+            }
         } catch {
             recordingError = error.localizedDescription
         }

@@ -27,7 +27,9 @@ import Testing
 
         let recorder = ScreenRecorder(client: adb, server: server)
         try await recorder.start(
-            serial: serial, options: ScreenRecordOptions(maxSize: 800, captureAudio: true))
+            serial: serial,
+            options: ScreenRecordOptions(
+                maxSize: 800, audio: RecordAudioOptions(mode: .deviceOnly)))
         try await Task.sleep(for: .seconds(3))
         let url = try await recorder.stop()
         defer { try? FileManager.default.removeItem(at: url) }
