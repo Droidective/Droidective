@@ -1,3 +1,108 @@
+## Droidective v3.8.0
+
+API Testing arrives as the 60th tool — a full HTTP client with Postman import
+and export, collections, environments, assertions, and code generation.
+Recordings can now capture microphone audio alongside the device, the Terminal
+scrolls properly in full-screen and streaming programs, and four main-thread
+hangs reported from v3.7.1 are fixed.
+
+### API Testing — the 60th feature
+
+- **A real HTTP client, in the palette** — all seven methods, six body kinds
+  (JSON, form-urlencoded, multipart, raw, GraphQL, binary), and five auth
+  kinds (bearer, basic, API key in header or query, OAuth 2). It needs no
+  device, so it works with nothing plugged in.
+- **Postman import and export** — bring collections and environments across,
+  and send them back. Import and export failures now report a reason instead
+  of failing silently.
+- **Collections, folders, and environments** — a searchable sidebar with
+  nested folders and per-item move, duplicate, and delete; `{{variables}}`
+  resolve from environment and global scopes, and unresolved ones are flagged
+  before a request goes out rather than being sent literally.
+- **Assertions and a collection runner** — assert on status code, response
+  time, body size, body text, any header, or a JSON path, and run a whole
+  collection in one sheet.
+- **Generated code** — every request exports as cURL, HTTPie, `fetch`, axios,
+  Python `requests`, or Swift `URLSession`. Pasting a cURL command parses it
+  back into a request, including `-u` credentials.
+- **A response pane that shows the response** — pretty and raw body, image
+  preview, headers, cookies, a timing breakdown, the redirect chain, and
+  save-to-file. JSON keeps the server's key order; the earlier printer sorted
+  keys, which misrepresents the payload you are inspecting.
+
+### Screen recording
+
+- **Microphone audio** — a recording can capture the device's audio, the Mac's
+  microphone, both, or neither. The device side is playback *or* the device's
+  own microphone, never both — scrcpy carries one device stream per session —
+  so those two options are mutually exclusive and say so.
+- **Set it up before you hit record** — the chevron beside the mirror's record
+  button opens a sheet with the three controls and a live level meter; the
+  Screen Record screen shows the same controls inline. Mid-take, each source
+  gets a mute control.
+- **One audio track, not two** — both sources are mixed onto a single track,
+  because players (QuickTime, browsers, chat apps) play only the first audio
+  track and silently drop the rest. Muting writes silence rather than dropping
+  samples, so the timeline stays continuous and unmuting is instant.
+
+### Terminal
+
+- **The wheel now scrolls full-screen programs** — an agent CLI, `htop`,
+  `less --mouse`, or vim with `mouse=a` could not be scrolled at all: those
+  programs take the mouse over and run on the alternate screen, where there is
+  no viewport to move. The wheel is now reported to the program, or sent as
+  cursor keys when the program hasn't taken the mouse (xterm alternate
+  scroll), following the scroll's own distance rather than flinging a pager
+  pages at a time.
+- **Scrolling one no longer corrupts the screen** — the alternate screen's
+  right margin was left at 0, so a scroll region copied a single column per
+  row and left the rest stale, leaving two frames interleaved on screen. The
+  margin is repaired when the alternate screen activates, leaving a program's
+  own margins alone.
+- **Scrollback stays put while output streams** — scrolling back through a
+  running command snapped to the newest line on every line written. The view
+  now holds where you left it; typing returns to the live output.
+
+### Fixes
+
+- **Launch hang on a cold font registry** — enumerating installed fonts ran on
+  the main thread during launch and could block past the 2-second hang
+  threshold. It now runs off the main actor through Core Text (13 ms against
+  the previous 91 ms warm, same 245 families).
+- **Log tail stalls** — scrolling the log to the bottom forced the text system
+  to typeset the entire buffer, so a filter change, an order flip, or a large
+  append could freeze the app. The view scrolls to the document height
+  instead, with non-contiguous layout enabled.
+- **Opening Settings ▸ General stalled** — it read the launch-at-login status
+  with a synchronous launchd round-trip on the main thread.
+- **Beachball when resizing with a heavyweight tab open** — every mounted tab
+  re-laid out on each tick of a divider drag, including hidden ones; a Crash
+  Catcher trace of a few thousand lines turned that into a multi-second hang.
+  Hidden tabs now pin to their last resting size mid-resize and re-wrap once
+  at rest.
+- **ffmpeg errors were hidden by its own progress output** — ffmpeg separates
+  progress updates with carriage returns, so the export and segment-stitching
+  error dialogs showed the progress blob instead of the actual error. Both now
+  split on all newline forms.
+- **Stale results from cancelled loads** — navigating away from a view while it
+  was still fetching could write the old result into the new state.
+
+### Under the hood
+
+- **Windows and Linux groundwork** — ADBKit, the layer holding all of
+  Droidective's logic, now compiles and runs its test suite on Linux and
+  Windows as well as macOS, with a guard test that fails the build on new
+  Apple-only code outside an explicit gate. Nothing changes for macOS users;
+  this is the foundation for the Windows and Linux builds, which will ship on
+  the beta channel (`docs/release-channels.md`).
+
+### Install
+
+Download `Droidective-v3.8.0.dmg` below. Existing installs update in place
+via Sparkle.
+
+---
+
 ## Droidective v3.7.1
 
 A new Developer Settings panel drives Android's Developer Options over adb,

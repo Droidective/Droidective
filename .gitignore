@@ -16,4 +16,6 @@ AuthKey_*.p8
 !.claude/skills/
 node_modules/
 website/dist/
+# Where stage-release-artifacts.sh collects a release's artifacts.
+/dist/
 App/Resources/ffmpeg

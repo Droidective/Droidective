@@ -25,6 +25,11 @@ jobs:
         run: cd ReactotronMCP && swift test -Xswiftc -warnings-as-errors
       - name: Run droidectived tests
         run: cd droidectived && swift test -Xswiftc -warnings-as-errors
+      # The release channel policy — which artifacts each channel may publish,
+      # and which notes a tag gets. Both failures are invisible until a release
+      # is already public and signed, so they are tested on every PR.
+      - name: Run release channel tests
+        run: ./scripts/test-release-channel.sh
 
   # The Windows/Linux port rides on ADBKit staying portable (see
   # docs/cross-platform.md). Both Linux and Windows now run the full mock-driven
@@ -61,20 +66,11 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
         with:
           persist-credentials: false
-      # Compile-only for now, but no longer for the reason the old comment gave.
-      # It was not swift-nio: nio and swift-crypto's BoringSSL both build here.
-      # The blocker was the MCP SDK's `HTTPClientTransport`, which imports
-      # `EventSource` behind `#if !os(Linux)` — a gate that wrongly includes
-      # Windows, where the module is unbuildable — so merely *resolving*
-      # swift-sdk failed the build. Moving MCP to its own package fixed that,
-      # and `swift test` now discovers and runs all 1375 tests here.
-      #
-      # 14 of them fail, in three known clusters, tracked in
-      # docs/cross-platform.md: the real-process tests spawn POSIX binaries
-      # (/bin/echo, /bin/sh, /bin/sleep), PortabilityGuardTests does `/`-based
-      # path arithmetic, and the toolchain tests want POSIX tool paths plus an
-      # xz decoder Windows does not have. Flip this to `swift test` in the
-      # change that fixes them, so this job never lands red.
+      # Compile-only, but only 3 tests short of running. Moving MCP to its own
+      # package (#231) let `swift test` discover and run all 1375 tests here;
+      # successive passes took the failures from 14 to 3. The remainder is
+      # tracked in docs/cross-platform.md. Flip this to `swift test` in the
+      # change that clears them, so the job never lands red.
       - name: Build ADBKit and its tests (Windows)
         run: |
           cd ADBKit
@@ -160,6 +156,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
+      # Before the expensive part. A malformed tag or a missing notes section
+      # is a 10-second failure here and a ~20-minute one after build, sign, and
+      # notarize have already run. release-body.md is reused by the publish and
+      # appcast steps below.
+      - name: Resolve the channel and this tag's notes
+        run: |
+          echo "publishing $GITHUB_REF_NAME on the $(./scripts/release-channel.sh channel "$GITHUB_REF_NAME") channel"
+          ./scripts/release-channel.sh artifacts "$GITHUB_REF_NAME"
+          ./scripts/extract-notes.sh "$GITHUB_REF_NAME" > release-body.md
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Import Developer ID certificate
@@ -225,8 +230,6 @@ jobs:
           AC_API_ISSUER_ID="$AC_API_ISSUER_ID" \
             ./scripts/notarize.sh "DerivedData/Build/Products/Release/Droidective-${GITHUB_REF_NAME}.dmg"
           rm -f "$RUNNER_TEMP/ac_api.p8"
-      - name: Extract notes for this release
-        run: awk '/^## /{c++} c==1{print} c==2{exit}' RELEASE_NOTES.md > release-body.md
       # A stable-named copy backs the site's download button via the permanent
       # /releases/latest/download/Droidective.dmg URL — always the newest
       # release, no appcast fetch, no Pages/browser cache staleness. Safe on a
@@ -235,14 +238,20 @@ jobs:
         run: |
           cp "DerivedData/Build/Products/Release/Droidective-${GITHUB_REF_NAME}.dmg" \
              "DerivedData/Build/Products/Release/Droidective.dmg"
+      # The channel gate. A stable tag publishes the macOS DMG and nothing else;
+      # a beta tag additionally carries the Windows and Linux artifacts once
+      # they exist. Staging asserts the exact set, so a Windows build left
+      # behind by an ungated job fails the stable release instead of shipping on
+      # it — and the publish step can glob `dist/*` without
+      # fail_on_unmatched_files breaking on the set that varies.
+      - name: Stage the artifacts this channel publishes
+        run: ./scripts/stage-release-artifacts.sh "$GITHUB_REF_NAME" DerivedData/Build/Products/Release dist
       # A hyphen in the tag (v3.3.0-beta.1) marks a beta: the GitHub release is
       # a prerelease and the appcast item rides the Sparkle beta channel.
       - name: Publish release with build
         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228  # v3.0.2
         with:
-          files: |
-            DerivedData/Build/Products/Release/Droidective-*.dmg
-            DerivedData/Build/Products/Release/Droidective.dmg
+          files: dist/*
           body_path: release-body.md
           fail_on_unmatched_files: true
           prerelease: ${{ contains(github.ref_name, '-') }}

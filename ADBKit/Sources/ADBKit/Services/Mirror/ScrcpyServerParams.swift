@@ -23,7 +23,19 @@ public struct ScrcpyServerParams: Sendable, Equatable {
     /// s16le, 48 kHz, stereo) so the client can play it without an Opus/AAC
     /// decoder; only consulted when `audio` is on.
     public var audioCodec: String
+    /// Which device-side source the server captures: its playback ("output",
+    /// the server's default) or the device's own microphone ("mic"). One
+    /// session carries one source — scrcpy captures a single audio stream — so
+    /// this is a choice, not a set. Only consulted when `audio` is on.
+    public var audioSource: AudioSource
     public var control: Bool
+
+    /// scrcpy's `audio_source` values. The server accepts several mic variants;
+    /// these are the two the recorder offers.
+    public enum AudioSource: String, Sendable, Equatable, CaseIterable {
+        case output
+        case microphone = "mic"
+    }
     /// Longest side in px (0 = device size).
     public var maxSize: Int
     /// Video bit-rate in bits/sec (0 = server default, ~8 Mbps).
@@ -43,6 +55,7 @@ public struct ScrcpyServerParams: Sendable, Equatable {
         video: Bool = true,
         audio: Bool = false,
         audioCodec: String = "raw",
+        audioSource: AudioSource = .output,
         control: Bool = false,
         maxSize: Int = 0,
         videoBitRate: Int = 0,
@@ -55,6 +68,7 @@ public struct ScrcpyServerParams: Sendable, Equatable {
         self.video = video
         self.audio = audio
         self.audioCodec = audioCodec
+        self.audioSource = audioSource
         self.control = control
         self.maxSize = maxSize
         self.videoBitRate = videoBitRate
@@ -80,6 +94,8 @@ public struct ScrcpyServerParams: Sendable, Equatable {
             // The server's default audio codec is Opus; request the configured
             // one (raw PCM) so the client plays it without bundling a decoder.
             if audioCodec != "opus" { params.append("audio_codec=\(audioCodec)") }
+            // `output` is the server's default, so it's left unsaid.
+            if audioSource != .output { params.append("audio_source=\(audioSource.rawValue)") }
         } else {
             params.append("audio=false")
         }

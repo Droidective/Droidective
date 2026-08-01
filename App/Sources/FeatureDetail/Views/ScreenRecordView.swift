@@ -41,16 +41,33 @@ struct ScreenRecordView: View {
     /// Reused across the preview poll — a fresh `CIContext` per frame is costly.
     @State private var previewContext = CIContext()
 
+    /// What the live recording is capturing, polled alongside the preview so the
+    /// mute chips and mic meter track the recorder without a second timer.
+    @State private var audioStatus: ScreenRecorder.AudioStatus?
+
     @AppStorage("recMaxSize") private var maxSize = 0
     @AppStorage("recBitRate") private var bitRateMbps = 0
     @AppStorage("recMaxFps") private var maxFps = 0
-    @AppStorage("recCaptureAudio") private var captureAudio = true
+    @AppStorage(RecordAudioPreference.deviceKey) private var deviceSourceRaw =
+        DeviceAudioSource.playback.rawValue
+    @AppStorage(RecordAudioPreference.hostMicKey) private var usesHostMicrophone = false
+    @AppStorage(RecordAudioPreference.inputKey) private var micInputID = ""
     @AppStorage("recTimeLimit") private var timeLimit = 0
+
+    private var deviceSource: Binding<DeviceAudioSource> {
+        Binding(
+            get: { DeviceAudioSource(rawValue: deviceSourceRaw) ?? .playback },
+            set: { deviceSourceRaw = $0.rawValue })
+    }
 
     private var recordOptions: ScreenRecordOptions {
         ScreenRecordOptions(
             maxSize: maxSize, bitRateMbps: bitRateMbps, maxFps: maxFps,
-            captureAudio: captureAudio, timeLimitSeconds: timeLimit
+            audio: RecordAudioOptions(
+                deviceSource: deviceSource.wrappedValue,
+                usesHostMicrophone: usesHostMicrophone,
+                microphoneDeviceID: micInputID.isEmpty ? nil : micInputID),
+            timeLimitSeconds: timeLimit
         )
     }
 
@@ -67,6 +84,7 @@ struct ScreenRecordView: View {
             }
         }
         .recordingDecision(url: $decisionURL) { recordedURL = $0 }
+        .onAppear { RecordAudioPreference.migrate(.standard) }
         .onChange(of: state.devices) {
             guard isRecording, !isStopping, !deviceLost, let recordingSerial,
                   !state.devices.contains(where: { $0.serial == recordingSerial && $0.isReady })
@@ -141,6 +159,11 @@ struct ScreenRecordView: View {
                 }
             }
 
+            if isRecording, let audioStatus, audioStatus.mode.hasAudio {
+                RecordAudioMuteChips(status: audioStatus) { device, microphone in
+                    Task { await recorder?.setMuted(device: device, microphone: microphone) }
+                }
+            }
             recordControlButtons
             hints
         }
@@ -241,7 +264,10 @@ struct ScreenRecordView: View {
         GroupBox {
             VStack(alignment: .leading, spacing: 14) {
                 labeledRow("Resolution") { resolutionPicker }
-                SwitchRow("Capture audio (Android 11+)", isOn: $captureAudio)
+                RecordAudioOptionsRow(
+                    deviceSource: deviceSource,
+                    usesHostMicrophone: $usesHostMicrophone,
+                    inputID: $micInputID)
                 Button {
                     withAnimation(.easeInOut(duration: 0.15)) { showAdvanced.toggle() }
                 } label: {
@@ -451,6 +477,7 @@ struct ScreenRecordView: View {
                    let image = MirrorImage.nsImage(from: snap.imageBuffer, context: context) {
                     previewImage = image
                 }
+                audioStatus = await recorder.audioStatus()
                 try? await Task.sleep(for: .milliseconds(90))
             }
         }
@@ -460,6 +487,7 @@ struct ScreenRecordView: View {
         previewTask?.cancel()
         previewTask = nil
         previewImage = nil
+        audioStatus = nil
     }
 
     /// The server has no time-limit knob, so the UI stops the recording after the

@@ -119,15 +119,20 @@ stays with the scrcpy desktop app.
       drop-oldest buffer with its gap marker
 - [ ] Portable fake CDP server so the JSConsoleClient wire tests run on Linux
 - [ ] Reactotron listener off Network.framework (SwiftNIO or raw sockets)
-- [ ] Windows: fix the 14 failing tests, then flip `build-windows` to
-      `swift test`. Since MCP moved to its own package the suite **does** run
-      there — 1375 tests discovered, 39 issues across 14 functions, in three
-      clusters: (1) `SystemProcessRunnerTests` spawns `/bin/echo`, `/bin/sh`,
-      `/bin/sleep`, `/usr/bin/yes` and needs a per-OS command table; (2)
-      `PortabilityGuardTests` does `/`-separator path arithmetic off `#filePath`;
-      (3) the toolchain tests (`ToolLocator` caching, `ManagedToolStore`
-      tar.gz/xz, aapt2/apksigner/zipalign arg vectors) assume POSIX tool paths,
-      and frida's `.xz` has no Windows decoder yet
+- [ ] Windows: fix the last 3 tests, then flip `build-windows` to `swift test`.
+      The suite runs there now (1375 discovered); failures went 14 → 3.
+      Remaining, with the leading hypothesis for each:
+      (1) `capturesStderrAndNonZeroExit` — the child still fails to launch.
+      `ChildCommands` writes a temp `.cmd` and passes `url.path`, but Foundation
+      on Windows renders `URL.path` POSIX-style (`/C:/Users/…`), which cmd
+      cannot open. Build the path as a `String` with backslashes from `%TEMP%`
+      instead of going through `URL`.
+      (2)+(3) `ApkInspectionServiceTests` / `ApkSigningServiceTests` still
+      report `toolMissing` even though `buildToolBinary` now appends `.exe` and
+      the fixtures create `.exe` files. Next thing to check is
+      `FileManager.isExecutableFile` on Windows — the fixtures write shell-script
+      text into a file named `.exe`, and it may validate the PE image (or
+      consult PATHEXT) rather than just testing for readability.
 - [ ] Windows: xz decode for frida assets; `HostNetwork` via GetAdaptersAddresses
 - [ ] Linux: interface ranking in `HostNetwork.pickPrimary` (en*/eth*/wl* over docker0/veth)
 - [ ] API client: portable expectations for `URLSessionTransport` so

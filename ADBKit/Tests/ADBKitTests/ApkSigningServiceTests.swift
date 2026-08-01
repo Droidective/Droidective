@@ -101,10 +101,12 @@ import Testing
         let base = fm.temporaryDirectory.appendingPathComponent("signbt-\(UUID().uuidString)")
         let buildTools = base.appendingPathComponent("build-tools/34.0.0")
         try fm.createDirectory(at: buildTools.appendingPathComponent("lib"), withIntermediateDirectories: true)
+        // `executableName` appends `.exe` on Windows, which is what the real
+        // SDK ships and what the locator looks for; a no-op on POSIX.
         let exec: [FileAttributeKey: Any] = [.posixPermissions: 0o755]
-        _ = fm.createFile(atPath: buildTools.appendingPathComponent("zipalign").path, contents: Data("#!/bin/sh\n".utf8), attributes: exec)
+        _ = fm.createFile(atPath: buildTools.appendingPathComponent(ToolLocator.executableName("zipalign")).path, contents: Data("#!/bin/sh\n".utf8), attributes: exec)
         _ = fm.createFile(atPath: buildTools.appendingPathComponent("lib/apksigner.jar").path, contents: Data())
-        let java = base.appendingPathComponent("java")
+        let java = base.appendingPathComponent(ToolLocator.executableName("java"))
         _ = fm.createFile(atPath: java.path, contents: Data("#!/bin/sh\n".utf8), attributes: exec)
         return (buildTools.path, java.path)
     }

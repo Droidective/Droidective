@@ -51,7 +51,9 @@ import Testing
         // Now record via a SECOND session while the display session keeps streaming.
         let recorder = ScreenRecorder(client: adb, server: server)
         try await recorder.start(
-            serial: serial, options: ScreenRecordOptions(maxSize: 800, captureAudio: true))
+            serial: serial,
+            options: ScreenRecordOptions(
+                maxSize: 800, audio: RecordAudioOptions(deviceSource: .playback)))
         try await Task.sleep(for: .seconds(3))
         let url = try await recorder.stop()
         defer { try? FileManager.default.removeItem(at: url) }
