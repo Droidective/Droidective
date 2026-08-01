@@ -611,6 +611,20 @@ compile or test time* — lean on it instead of manual vigilance.
   Apple-only imports and corelibs traps, then `swift test` + `make test-linux`
   green before `git push --force-with-lease`.
 
+## Release channels
+
+Two channels from one `main`, decided by the tag: **`vX.Y.Z` is stable and
+macOS-only**; **`vX.Y.Z-beta.N` is beta and additionally carries the Windows
+and Linux builds**. A standing arrangement, not a pre-release cycle — the
+ports are expected to sit on beta for a long time, and the public macOS
+release never ships from a beta tag. The policy, the artifact matrix, the
+per-channel version touchpoints, and the staged rollout are in
+`docs/release-channels.md`; `scripts/release-channel.sh` is the single
+resolver and `scripts/test-release-channel.sh` (in `make verify-self` and CI)
+keeps it honest — notably that a stable release can never attach a Windows or
+Linux artifact. Notes are picked by tag (`scripts/extract-notes.sh`), not by
+position in `RELEASE_NOTES.md`.
+
 ## Status
 
 Feature-complete across all planned milestones plus several UX rounds.
