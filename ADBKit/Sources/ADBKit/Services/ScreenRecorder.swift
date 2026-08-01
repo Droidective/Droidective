@@ -187,7 +187,7 @@ public actor ScreenRecorder {
         try? FileManager.default.removeItem(at: listURL)
         for url in segments { try? FileManager.default.removeItem(at: url) }
         guard result.exitCode == 0 else {
-            let tail = result.stderrText.split(separator: "\n").suffix(3).joined(separator: "\n")
+            let tail = VideoEditing.stderrTail(result.stderrText)
             throw RecordingError.concatFailed(tail.isEmpty ? "ffmpeg failed" : tail)
         }
         return output
