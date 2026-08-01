@@ -42,7 +42,13 @@ struct SelectableLogView: NSViewRepresentable {
         // Head-trims measure the deleted height through the TextKit 1 layout
         // manager; touch it before any content lands so the view starts in
         // TextKit 1 instead of downgrading mid-stream.
-        _ = textView.layoutManager
+        //
+        // Non-contiguous layout is what keeps a long buffer affordable: regions
+        // that were never scrolled into carry an *estimated* height instead of
+        // being typeset, so an edit — and the tail scroll below — can read the
+        // document's total height without laying out every line
+        // (DROIDECTIVE-MAC-2Q).
+        textView.layoutManager?.allowsNonContiguousLayout = true
         textView.isEditable = false
         textView.isSelectable = true
         textView.drawsBackground = false
@@ -341,9 +347,28 @@ struct SelectableLogView: NSViewRepresentable {
             scrollView.reflectScrolledClipView(clip)
         }
 
+        /// Parks the viewport on the newest line of a bottom-anchored feed.
+        ///
+        /// Deliberately scrolls the clip view rather than calling
+        /// `scrollRangeToVisible` on the end of the storage. Asking the text
+        /// view to reveal the last character makes NSLayoutManager fill *every*
+        /// layout hole up to it, so a rebuild (filter change, order flip, a
+        /// cleared buffer) or a large append typeset the whole document on the
+        /// main thread — seconds of beachball on a long logcat, and the app's
+        /// single biggest hang (DROIDECTIVE-MAC-2Q, 67 events/9 users).
+        ///
+        /// The document's height already carries the estimate for unlaid
+        /// regions, and it is the very measure `measuredEdges` calls the
+        /// bottom — so the follow scroll and the edge state now agree instead
+        /// of one forcing layout the other never needed.
         private func scrollToBottom() {
-            guard let textView, let storage = textView.textStorage else { return }
-            textView.scrollRangeToVisible(NSRange(location: storage.length, length: 0))
+            guard let scrollView, let document = scrollView.documentView else { return }
+            let clip = scrollView.contentView
+            let bottom = TailGeometry(
+                contentHeight: document.frame.height, viewportHeight: clip.bounds.height
+            ).scrollRange
+            clip.scroll(to: NSPoint(x: clip.bounds.origin.x, y: bottom))
+            scrollView.reflectScrolledClipView(clip)
         }
 
         private func scrollToTop() {

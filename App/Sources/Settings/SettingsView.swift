@@ -108,9 +108,17 @@ struct GeneralSettingsView: View {
 
     /// True when the login item is registered (enabled, or pending the user's
     /// approval in System Settings).
-    private func loginItemRegistered() -> Bool {
-        let status = SMAppService.mainApp.status
-        return status == .enabled || status == .requiresApproval
+    ///
+    /// Runs off the main actor deliberately: `SMAppService.status` is a
+    /// synchronous round-trip to launchd, and on a cold or busy system it blocks
+    /// long enough to trip the 2 s hang detector — reading it from the General
+    /// tab's appearance stalled the whole app just for opening Settings
+    /// (DROIDECTIVE-MAC-4G).
+    private static func loginItemRegistered() async -> Bool {
+        await Task.detached {
+            let status = SMAppService.mainApp.status
+            return status == .enabled || status == .requiresApproval
+        }.value
     }
 
     /// Registers/unregisters the app as a macOS login item. The toggle is backed
@@ -136,7 +144,7 @@ struct GeneralSettingsView: View {
                     openAtLoginOn = enabled
                 } catch {
                     state.showToast(Toast(message: "Couldn't update Open at Login: \(error.localizedDescription)", ok: false))
-                    openAtLoginOn = loginItemRegistered()
+                    Task { openAtLoginOn = await Self.loginItemRegistered() }
                 }
             }
         )
@@ -275,7 +283,7 @@ struct GeneralSettingsView: View {
 
         }
         .formStyle(.grouped)
-        .onAppear { openAtLoginOn = loginItemRegistered() }
+        .task { openAtLoginOn = await Self.loginItemRegistered() }
     }
 }
 

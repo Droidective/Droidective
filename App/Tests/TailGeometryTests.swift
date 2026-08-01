@@ -33,6 +33,18 @@ import Testing
         #expect(geo.scrollRange == 0)
     }
 
+    /// `scrollRange` doubles as the clip-view origin that parks a
+    /// bottom-anchored log on its newest line: `SelectableLogView.scrollToBottom`
+    /// reads it instead of asking TextKit to reveal the last character, which
+    /// typeset the whole buffer on the main thread (DROIDECTIVE-MAC-2Q). It must
+    /// clamp at zero — a negative origin would scroll above the document and
+    /// park the tail off-screen whenever the content is shorter than the pane.
+    @Test func scrollRangeIsTheBottomParkingOrigin() {
+        #expect(TailGeometry(contentHeight: 5000, viewportHeight: 600).scrollRange == 4400)
+        #expect(TailGeometry(contentHeight: 200, viewportHeight: 600).scrollRange == 0)
+        #expect(TailGeometry(contentHeight: 0, viewportHeight: 0).scrollRange == 0)
+    }
+
     // MARK: Newest edge (tail-follow) detection
 
     @Test func parkedAtOffsetZeroIsAtNewestEdge() {
