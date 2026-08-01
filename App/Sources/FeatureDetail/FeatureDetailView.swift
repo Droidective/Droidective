@@ -121,6 +121,8 @@ struct FeatureDetailView: View {
                 NetworkView()
             case "scrcpy":
                 ScreenMirrorView()
+            case "api-client":
+                ApiClientView()
             default:
                 ComingSoonView(feature: feature)
             }
