@@ -21,6 +21,14 @@ enum TerminalMenuAction: Int {
 final class DroidTerminalView: LocalProcessTerminalView {
     private var dragWatchTimer: Timer?
 
+    /// Where the user parked the viewport, so streaming output can't yank it
+    /// back to the newest line (see `TerminalScrollPin`).
+    private lazy var scrollPin = TerminalScrollPin(
+        scrollbackLines: getTerminal().options.scrollback
+    )
+    /// The wheel/keyboard tap that feeds the pin — see `installInputMonitor`.
+    private var inputMonitor: Any?
+
     /// SwiftTerm's default background, captured before the first alpha is
     /// applied so returning to an opaque window restores the stock look.
     private var opaqueBackground: NSColor?
@@ -122,7 +130,12 @@ final class DroidTerminalView: LocalProcessTerminalView {
     // repeating timer retains its target, so it must die here too.
     override func viewWillMove(toWindow newWindow: NSWindow?) {
         super.viewWillMove(toWindow: newWindow)
-        if newWindow == nil { stopDragWatch() }
+        if newWindow == nil {
+            stopDragWatch()
+            removeInputMonitor()
+        } else {
+            installInputMonitor()
+        }
     }
 
     private func startDragWatch() {
@@ -163,6 +176,7 @@ final class DroidTerminalView: LocalProcessTerminalView {
         } else {
             return
         }
+        noteViewportMoved()
         // Replay the drag at the (unmoved) pointer so the selection extends
         // into the rows the scroll just revealed.
         let synthesized = NSEvent.mouseEvent(
@@ -177,6 +191,180 @@ final class DroidTerminalView: LocalProcessTerminalView {
     /// Farther past the edge scrolls faster, like every native text view.
     private func dragScrollStep(overshoot: CGFloat) -> Int {
         max(1, min(6, Int(overshoot / 12)))
+    }
+
+    // MARK: - Scrolling
+
+    /// SwiftTerm seals `scrollWheel` as `public` (not `open`) — like
+    /// `mouseDragged` above — so the wheel is taken over with a local event
+    /// monitor instead, which is also the only way to hear a keystroke land
+    /// (`keyDown` is sealed the same way). Both feed `scrollPin`: the terminal
+    /// otherwise drags the viewport back to the newest line on every line the
+    /// program writes, which makes scrolling back through the output of
+    /// anything that keeps drawing — an agent CLI, `tail -f`, a build — look
+    /// like scrolling is broken.
+    private func installInputMonitor() {
+        guard inputMonitor == nil else { return }
+        inputMonitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .keyDown]) {
+            [weak self] event in
+            // `NSEvent` isn't Sendable, so the isolated body hands back the
+            // decision and the event is passed on out here.
+            let consumed = MainActor.assumeIsolated { self?.handleMonitored(event) ?? false }
+            return consumed ? nil : event
+        }
+    }
+
+    /// Returns whether the event was consumed here (only ever a wheel event —
+    /// keystrokes are observed, never swallowed).
+    private func handleMonitored(_ event: NSEvent) -> Bool {
+        guard isEventInThisTerminal(event) else { return false }
+        guard event.type == .scrollWheel else {
+            followOutputAfterTyping(event)
+            return false
+        }
+        return handleScrollWheel(event)
+    }
+
+    private func removeInputMonitor() {
+        if let inputMonitor { NSEvent.removeMonitor(inputMonitor) }
+        inputMonitor = nil
+    }
+
+    /// Every mounted terminal installs a monitor — including the hidden
+    /// keep-alive tabs — so each one must claim only its own events: the
+    /// pointer inside this view for the wheel, the keyboard focus for keys.
+    private func isEventInThisTerminal(_ event: NSEvent) -> Bool {
+        guard let window else { return false }
+        // Reject an event that belongs to *another* window, but not one with
+        // no window at all: a synthesized event (accessibility tooling, a UI
+        // test) carries none, and the hit test below is the real answer to
+        // "is the pointer over this terminal".
+        if let eventWindow = event.window, eventWindow !== window { return false }
+        if event.type == .keyDown { return window.firstResponder === self }
+        guard let hit = window.contentView?.hitTest(event.locationInWindow) else { return false }
+        return hit === self || hit.isDescendant(of: self)
+    }
+
+    /// Returns whether the wheel event was consumed here. Three destinations,
+    /// in the order every desktop terminal picks them: the program that took
+    /// the mouse over, else the program on the alternate screen, else this
+    /// terminal's own scrollback.
+    private func handleScrollWheel(_ event: NSEvent) -> Bool {
+        guard event.deltaY != 0 else { return false }
+        let terminal = getTerminal()
+        let up = event.deltaY > 0
+        if allowMouseReporting, terminal.mouseMode != .off {
+            sendWheelReport(
+                up: up, ticks: TerminalWheel.reports(delta: event.deltaY, rows: terminal.rows),
+                event: event, terminal: terminal
+            )
+            return true
+        }
+        let lines = TerminalWheel.lines(delta: event.deltaY, rows: terminal.rows)
+        if terminal.isCurrentBufferAlternate {
+            sendAlternateScroll(up: up, lines: lines, terminal: terminal)
+            return true
+        }
+        if up {
+            scrollUp(lines: lines)
+        } else {
+            scrollDown(lines: lines)
+        }
+        noteViewportMoved()
+        return true
+    }
+
+    /// A program that asked for the mouse (an agent CLI, `htop`, `vim` with
+    /// `mouse=a`) scrolls its own content and expects the wheel as a mouse
+    /// *button* report — and it usually sits on the alternate screen, where
+    /// there is no scrollback to move instead. SwiftTerm's wheel handling
+    /// never reports to the program, so the wheel is simply dead in every one
+    /// of them until this forwards it.
+    private func sendWheelReport(
+        up: Bool, ticks: Int, event: NSEvent, terminal: SwiftTerm.Terminal
+    ) {
+        let flags = event.modifierFlags
+        let buttons = terminal.encodeButton(
+            button: up ? 4 : 5, release: false,
+            shift: flags.contains(.shift), meta: flags.contains(.option),
+            control: flags.contains(.control)
+        )
+        let cell = cellUnderPointer(event)
+        for _ in 0..<ticks {
+            terminal.sendEvent(buttonFlags: buttons, x: cell.col, y: cell.row)
+        }
+    }
+
+    /// The grid cell under the pointer. SwiftTerm keeps its cell metrics
+    /// internal, so they are recovered from the frame and the grid it laid
+    /// out in it — off by at most a cell at the far edge, which no
+    /// wheel-scrolling program cares about.
+    private func cellUnderPointer(_ event: NSEvent) -> (col: Int, row: Int) {
+        let terminal = getTerminal()
+        let cols = max(1, terminal.cols)
+        let rows = max(1, terminal.rows)
+        let point = convert(event.locationInWindow, from: nil)
+        let col = Int(point.x / max(1, bounds.width / CGFloat(cols)))
+        let row = Int((bounds.height - point.y) / max(1, bounds.height / CGFloat(rows)))
+        return (min(max(0, col), cols - 1), min(max(0, row), rows - 1))
+    }
+
+    /// The alternate screen keeps no scrollback, so there is nothing to move
+    /// the viewport through — the wheel drives the program instead, one cursor
+    /// key per line (xterm's alternate scroll, which is how `less`, `vim` and
+    /// `man` scroll under a wheel everywhere else).
+    private func sendAlternateScroll(up: Bool, lines: Int, terminal: SwiftTerm.Terminal) {
+        let key: [UInt8]
+        switch (up, terminal.applicationCursor) {
+        case (true, true): key = EscapeSequences.moveUpApp
+        case (true, false): key = EscapeSequences.moveUpNormal
+        case (false, true): key = EscapeSequences.moveDownApp
+        case (false, false): key = EscapeSequences.moveDownNormal
+        }
+        send(Array(repeating: key, count: lines).flatMap { $0 })
+    }
+
+    /// Typing returns to the live output like every desktop terminal does —
+    /// keystrokes landing off-screen is worse than losing the scroll position.
+    /// Command shortcuts (⌘F, ⌘C) send nothing to the shell, so they don't.
+    private func followOutputAfterTyping(_ event: NSEvent) {
+        guard scrollPin.isPinned, !event.modifierFlags.contains(.command) else { return }
+        scrollPin.release()
+        scroll(toPosition: 1)
+    }
+
+    /// Record where the user just left the viewport. At the bottom the pin is
+    /// dropped, so new output scrolls the view again.
+    private func noteViewportMoved() {
+        scrollPin.userScrolled(
+            to: getTerminal().getTopVisibleRow(), atBottom: !canScroll || scrollPosition >= 1
+        )
+    }
+
+    /// The terminal has moved the viewport to the newest line after scrolling
+    /// one line of output. Put it back if the user is reading history: the
+    /// rows on screen don't change, so nothing needs repainting beyond what
+    /// the feed already marked dirty.
+    /// A program switching to (or away from) the alternate screen — where
+    /// SwiftTerm leaves the right margin uninitialized and corrupts every
+    /// `CSI T` scroll. See `TerminalCompat`.
+    override func bufferActivated(source: SwiftTerm.Terminal) {
+        TerminalCompat.repairAlternateScreenMargins(source)
+        super.bufferActivated(source: source)
+    }
+
+    override func scrolled(source terminal: SwiftTerm.Terminal, yDisp: Int) {
+        if terminal.isCurrentBufferAlternate {
+            scrollPin.release()
+        } else if let row = scrollPin.bufferScrolled(bottomRow: yDisp), row != yDisp {
+            // The live buffer, not `scrollTo(row:)`: during synchronized
+            // output (DECSET 2026, which agent CLIs draw their frames with)
+            // the terminal displays a frozen snapshot and `scrollTo` compares
+            // against *that*, so it would skip the write the frame's end then
+            // reveals.
+            terminal.buffer.yDisp = row
+        }
+        super.scrolled(source: terminal, yDisp: yDisp)
     }
 
     /// Right-click menu: the standard edit/find items (targeting self so
