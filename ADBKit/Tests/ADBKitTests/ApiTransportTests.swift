@@ -1,3 +1,14 @@
+// `URLSessionTransport`'s delegate behaviour is Apple-only in practice:
+// corelibs-Foundation has no server-trust protection space (so the
+// `validateTLS` opt-out cannot exist there), deprecates
+// `NSURLErrorFailingURLStringErrorKey`, and moves the URL loading types into
+// FoundationNetworking. `HttpTransport.swift` is gated accordingly and still
+// *compiles* on Linux and Windows; these suites pin the Darwin semantics, so
+// they are scoped to Apple platforms rather than given different expectations
+// per host. Every pure part of the API client — the cURL parser, Postman
+// interop, request building, variables, assertions and response modelling —
+// stays in the Linux run.
+#if canImport(Darwin)
 import Foundation
 import Testing
 
@@ -433,3 +444,4 @@ private final class NoopChallengeSender: NSObject, URLAuthenticationChallengeSen
         #expect(await transport.lastRequest == prepared)
     }
 }
+#endif
