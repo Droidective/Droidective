@@ -1,198 +1,171 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 
-import { ChevronDown, Download, Menu, X } from "lucide-react"
+import { Download, Menu, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { DOWNLOAD_URL, GITHUB_URL } from "@/lib/content"
 import { cn } from "@/lib/utils"
 
-interface NavLink {
-  label: string
-  href: string
+const links = [
+  { label: "Features", href: "#features" },
+  { label: "Workflows", href: "#workflows" },
+  { label: "Why Droidective", href: "#why" },
+  { label: "Changelog", href: "/changelog/" },
+  { label: "Blog", href: "/blog/" },
+]
+
+function GithubMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className={className}>
+      <path d="M12 1.5A10.5 10.5 0 0 0 8.7 22c.5.1.7-.2.7-.5v-1.8c-2.9.6-3.5-1.4-3.5-1.4-.5-1.2-1.2-1.5-1.2-1.5-.9-.6.1-.6.1-.6 1 .1 1.6 1 1.6 1 .9 1.6 2.4 1.1 3 .9.1-.7.4-1.1.6-1.4-2.3-.3-4.7-1.2-4.7-5.1 0-1.1.4-2 1-2.7-.1-.3-.5-1.3.1-2.7 0 0 .8-.3 2.7 1a9.4 9.4 0 0 1 5 0c1.9-1.3 2.7-1 2.7-1 .6 1.4.2 2.4.1 2.7.6.7 1 1.6 1 2.7 0 3.9-2.4 4.8-4.7 5.1.4.3.7 1 .7 2v2.9c0 .3.2.6.7.5A10.5 10.5 0 0 0 12 1.5" />
+    </svg>
+  )
 }
 
-const product: NavLink[] = [
-  { label: "Features", href: "#features" },
-  { label: "Screens", href: "#screenshots" },
-  { label: "How it works", href: "#how" },
-]
-
-const resources: NavLink[] = [
-  { label: "Changelog", href: "/changelog/" },
-  { label: "FAQ", href: "#faq" },
-  { label: "About", href: "#about" },
-]
-
-/** A hover/click nav dropdown. Opens on pointer hover and on click/keyboard,
- *  closes on Escape or outside click; an invisible bridge keeps the pointer
- *  path from the trigger to the panel continuous. */
-function NavDropdown({ label, links }: { label: string; links: NavLink[] }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
+/** A floating, fully-bordered island rather than a full-width bar — the border
+ *  wraps all four sides and the pill sits inset from the page edges. */
+export function Nav() {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [scrolled, setScrolled] = useState(false)
 
   useEffect(() => {
-    if (!open) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false)
-    }
-    const onPointer = (e: PointerEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener("keydown", onKey)
-    document.addEventListener("pointerdown", onPointer)
+    const onScroll = () => setScrolled(window.scrollY > 24)
+    onScroll()
+    window.addEventListener("scroll", onScroll, { passive: true })
+    return () => window.removeEventListener("scroll", onScroll)
+  }, [])
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = "hidden"
     return () => {
-      document.removeEventListener("keydown", onKey)
-      document.removeEventListener("pointerdown", onPointer)
+      document.body.style.overflow = prev
     }
-  }, [open])
+  }, [menuOpen])
 
   return (
     <div
-      ref={ref}
-      className="relative"
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
+      className={cn(
+        "fixed top-0 right-0 left-0 z-100 px-4 transition-[padding] duration-300 max-[620px]:px-3",
+        scrolled ? "pt-2.5" : "pt-4 max-[620px]:pt-3",
+      )}
     >
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-haspopup="true"
-        onClick={() => setOpen((o) => !o)}
-        className="inline-flex items-center gap-1 text-sm font-medium text-muted transition-colors duration-150 hover:text-text data-[open=true]:text-text"
-        data-open={open}
+      <nav
+        className={cn(
+          "mx-auto max-w-[1140px] overflow-hidden rounded-2xl border transition-all duration-300",
+          scrolled
+            ? "border-white/[0.09] bg-ink-900/80 shadow-[0_8px_32px_-8px_rgba(0,0,0,0.6)] backdrop-blur-2xl backdrop-saturate-150"
+            : "border-white/[0.06] bg-ink-900/45 backdrop-blur-xl",
+        )}
       >
-        {label}
-        <ChevronDown
-          className={cn("size-3.5 transition-transform duration-150", open && "rotate-180")}
-          aria-hidden
-        />
-      </button>
-      {open && (
-        <div className="absolute top-full left-1/2 z-50 -translate-x-1/2 pt-2.5">
-          <div className="min-w-46 rounded-xl border border-border-2 bg-popover p-1.5 shadow-[0_16px_40px_-12px_rgba(0,0,0,0.7)]">
-            {links.map((link) => (
+        <div className="flex h-[58px] items-center px-4 max-[620px]:h-[54px] max-[620px]:px-3">
+          {/* Brand — larger mark with a ring and a soft green bloom on hover */}
+          <a href="#top" className="group/brand flex shrink-0 items-center gap-2.75">
+            <span className="relative grid place-items-center">
+              <span
+                aria-hidden
+                className="absolute inset-0 rounded-[10px] bg-green/25 opacity-0 blur-md transition-opacity duration-300 group-hover/brand:opacity-100"
+              />
+              <img
+                src="/assets/icon-light-64.png"
+                alt="Droidective icon"
+                width={34}
+                height={34}
+                className="relative size-8.5 rounded-[10px] ring-1 ring-white/12 transition-transform duration-300 group-hover/brand:scale-[1.04] max-[620px]:size-8"
+              />
+            </span>
+            <span className="text-[16px] font-bold tracking-[-0.02em] max-[620px]:text-[15px]">Droidective</span>
+          </a>
+
+          {/* Center nav */}
+          <div className="mx-auto hidden items-center gap-0.5 min-[1080px]:flex">
+            {links.map((l) => (
               <a
-                key={link.label}
-                href={link.href}
-                onClick={() => setOpen(false)}
-                className="block rounded-lg px-3 py-2 text-sm font-medium text-muted transition-colors duration-150 hover:bg-white/5 hover:text-text"
+                key={l.label}
+                href={l.href}
+                className="group relative rounded-lg px-3 py-1.5 text-[13.5px] font-medium text-muted/80 transition-colors duration-200 hover:text-text"
               >
-                {link.label}
+                {l.label}
+                <span
+                  aria-hidden
+                  className="absolute bottom-0.5 left-3 h-px w-0 bg-green/60 transition-[width] duration-250 group-hover:w-[calc(100%-24px)] motion-reduce:transition-none"
+                />
               </a>
             ))}
           </div>
-        </div>
-      )}
-    </div>
-  )
-}
 
-export function Nav() {
-  const [menuOpen, setMenuOpen] = useState(false)
-
-  return (
-    <nav className="sticky top-0 z-100 border-b border-border bg-ink-850/72 backdrop-blur-lg backdrop-saturate-150">
-      <div className="mx-auto flex h-[62px] max-w-[1120px] items-center gap-4.5 px-6">
-        <a href="#top" className="flex items-center gap-2.75 text-base font-bold tracking-[-0.01em]">
-          <img src="/assets/icon-64.png" alt="Droidective icon" width={30} height={30} className="size-7.5 rounded-lg" />
-          Droidective
-        </a>
-        <div className="ml-auto flex items-center gap-6.5">
-          <div className="hidden items-center gap-6.5 min-[940px]:flex">
-            <NavDropdown label="Product" links={product} />
-            <a
-              href="#for-you"
-              className="text-sm font-medium text-muted transition-colors duration-150 hover:text-text"
-            >
-              Guides
-            </a>
-            <a
-              href="/blog/"
-              className="text-sm font-medium text-muted transition-colors duration-150 hover:text-text"
-            >
-              Blog
-            </a>
-            <NavDropdown label="Resources" links={resources} />
+          {/* Actions */}
+          <div className="ml-auto flex items-center gap-2 min-[1080px]:ml-0">
             <a
               href={GITHUB_URL}
-              className="text-sm font-medium text-muted transition-colors duration-150 hover:text-text"
+              className="hidden items-center gap-1.75 rounded-lg border border-white/[0.07] px-2.75 py-1.5 text-[12.5px] font-medium text-muted/85 transition-all duration-200 hover:border-white/[0.14] hover:bg-white/[0.05] hover:text-text min-[820px]:inline-flex"
             >
-              GitHub
+              <GithubMark className="size-3.5" />
+              Star on GitHub
+            </a>
+            {/* Compact GitHub affordance below 820px so it never disappears */}
+            <a
+              href={GITHUB_URL}
+              aria-label="Star Droidective on GitHub"
+              className="grid size-9 place-items-center rounded-lg border border-white/[0.07] text-muted/85 transition-colors duration-200 hover:border-white/[0.14] hover:text-text min-[820px]:hidden"
+            >
+              <GithubMark className="size-4" />
+            </a>
+            <Button
+              asChild
+              className="h-auto rounded-xl px-4 py-2 text-[13px] font-bold shadow-glow transition-all duration-200 hover:-translate-y-px hover:bg-green-bright"
+            >
+              <a href={DOWNLOAD_URL} data-dl="nav">
+                <Download className="size-3.5" aria-hidden />
+                Download
+              </a>
+            </Button>
+            <button
+              type="button"
+              aria-label={menuOpen ? "Close menu" : "Open menu"}
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((o) => !o)}
+              className="grid size-9 cursor-pointer place-items-center rounded-lg text-muted transition-colors duration-150 hover:text-text min-[1080px]:hidden"
+            >
+              {menuOpen ? <X className="size-5" aria-hidden /> : <Menu className="size-5" aria-hidden />}
+            </button>
+          </div>
+        </div>
+
+        {/* Drawer lives inside the pill so the border stays continuous */}
+        <div
+          className={cn(
+            "overflow-hidden border-t border-white/[0.06] transition-[max-height,opacity] duration-300 min-[1080px]:hidden",
+            menuOpen ? "max-h-[400px] opacity-100" : "max-h-0 opacity-0",
+          )}
+        >
+          <div className="px-4 py-2">
+            {links.map((l, i) => (
+              <a
+                key={l.label}
+                href={l.href}
+                onClick={() => setMenuOpen(false)}
+                style={{ transitionDelay: menuOpen ? `${i * 40}ms` : "0ms" }}
+                className={cn(
+                  "block border-b border-white/[0.04] py-3.5 text-[15px] font-medium text-muted transition-all duration-300 last:border-0 hover:text-green",
+                  menuOpen ? "translate-y-0 opacity-100" : "-translate-y-1 opacity-0",
+                )}
+              >
+                {l.label}
+              </a>
+            ))}
+            <a
+              href={GITHUB_URL}
+              onClick={() => setMenuOpen(false)}
+              className="mt-2 mb-2 flex items-center justify-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] py-2.5 text-[14px] font-semibold text-muted transition-colors hover:text-text"
+            >
+              <GithubMark className="size-4" />
+              Star on GitHub
             </a>
           </div>
-          <Button
-            asChild
-            className="h-auto rounded-xl px-4 py-2 text-sm font-bold shadow-glow hover:bg-green-bright"
-          >
-            <a href={DOWNLOAD_URL} data-dl="nav">
-              <Download aria-hidden />
-              Download
-            </a>
-          </Button>
-          <button
-            type="button"
-            aria-label={menuOpen ? "Close menu" : "Open menu"}
-            aria-expanded={menuOpen}
-            onClick={() => setMenuOpen((open) => !open)}
-            className="-mr-2 grid size-11 cursor-pointer place-items-center rounded-lg text-muted transition-colors duration-150 hover:text-text min-[940px]:hidden"
-          >
-            {menuOpen ? <X className="size-5.5" aria-hidden /> : <Menu className="size-5.5" aria-hidden />}
-          </button>
         </div>
-      </div>
-      {menuOpen && (
-        <div className="border-t border-border px-6 pt-3 pb-5 min-[940px]:hidden">
-          <MobileGroup label="Product" links={product} onNavigate={() => setMenuOpen(false)} />
-          <a
-            href="#for-you"
-            onClick={() => setMenuOpen(false)}
-            className="block py-2.5 text-[15px] font-medium text-muted transition-colors duration-150 hover:text-text"
-          >
-            Guides
-          </a>
-          <a
-            href="/blog/"
-            onClick={() => setMenuOpen(false)}
-            className="block py-2.5 text-[15px] font-medium text-muted transition-colors duration-150 hover:text-text"
-          >
-            Blog
-          </a>
-          <MobileGroup label="Resources" links={resources} onNavigate={() => setMenuOpen(false)} />
-          <a
-            href={GITHUB_URL}
-            onClick={() => setMenuOpen(false)}
-            className="block py-2.5 text-[15px] font-medium text-muted transition-colors duration-150 hover:text-text"
-          >
-            GitHub
-          </a>
-        </div>
-      )}
-    </nav>
-  )
-}
-
-function MobileGroup({
-  label,
-  links,
-  onNavigate,
-}: {
-  label: string
-  links: NavLink[]
-  onNavigate: () => void
-}) {
-  return (
-    <div className="border-b border-border py-2 first:pt-0">
-      <p className="pb-1 font-mono text-[11.5px] tracking-[0.06em] text-faint uppercase">{label}</p>
-      {links.map((link) => (
-        <a
-          key={link.label}
-          href={link.href}
-          onClick={onNavigate}
-          className="block py-2 text-[15px] font-medium text-muted transition-colors duration-150 hover:text-text"
-        >
-          {link.label}
-        </a>
-      ))}
+      </nav>
     </div>
   )
 }

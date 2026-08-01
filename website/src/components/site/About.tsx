@@ -1,4 +1,5 @@
 import CountUp from "@/components/CountUp"
+import { MagicCard } from "@/components/MagicCard"
 import { Reveal } from "@/components/site/Reveal"
 import { SectionHead } from "@/components/site/SectionHead"
 import { Button } from "@/components/ui/button"
@@ -33,79 +34,83 @@ export function About() {
   const reducedMotion = usePrefersReducedMotion()
 
   return (
-    <section id="about" className="mx-auto max-w-[1120px] px-6 pb-26 max-[620px]:pb-18">
+    <section id="about" className="mx-auto max-w-[1120px] px-6 pb-28 max-[620px]:pb-20">
       <SectionHead center eyebrow="whoami" title="About me." />
-      <div className="grid grid-cols-[1.1fr_0.9fr] gap-6 max-[940px]:grid-cols-1">
+      <div className="grid grid-cols-[1.1fr_0.9fr] gap-4 max-[940px]:grid-cols-1">
         <Reveal>
-          <div className="h-full min-w-0 rounded-2xl border border-border bg-white/2 p-7.5">
-            <p className="mb-1 text-xl font-bold tracking-[-0.01em]">Rohindh R</p>
-            <p className="mb-5 font-mono text-[12.5px] text-green-dim">
-              mobile engineer · React Native / Android / iOS / Swift
-            </p>
-            <p className="mb-4 text-[15px] text-muted">
-              I build and ship production mobile apps for a living — taking them from first commit through app-store
-              review, over-the-air updates, and the crash reports that follow. Along the way I developed a particular
-              interest in mobile security: hardening apps, and understanding how they break.
-            </p>
-            <p className="mb-4 text-[15px] text-muted">
-              Droidective grew out of my own daily debugging loop — the adb incantations, the log tails, the device
-              state I kept faking by hand. I wanted all of it one keystroke away, so I built it.
-            </p>
-            <p className="mb-6 text-[15px] text-muted">
-              It's free and open source by choice: everything I've built in my career stands on open-source software,
-              and this project is my way of giving back to that community.
-            </p>
-            <div className="flex flex-wrap gap-3.25">
-              <Button
-                asChild
-                variant="outline"
-                className="h-auto rounded-xl border-border-2 bg-white/4 px-5 py-3 text-[15px] font-semibold hover:bg-white/8"
-              >
-                <a href={LINKEDIN_URL}>
-                  <LinkedInMark />
-                  Connect on LinkedIn
-                </a>
-              </Button>
-              <Button
-                asChild
-                variant="outline"
-                className="h-auto rounded-xl border-border-2 bg-white/4 px-5 py-3 text-[15px] font-semibold hover:bg-white/8"
-              >
-                <a href={GITHUB_URL}>
-                  <GithubMark />
-                  Follow the project
-                </a>
-              </Button>
-            </div>
-          </div>
-        </Reveal>
-        <Reveal delay={80}>
-          <div className="flex h-full min-w-0 flex-col rounded-2xl border border-border bg-white/2 p-7.5">
-            <ul className="m-0 list-none p-0">
-              {highlights.map((h) => (
-                <li key={h.label} className="flex items-baseline gap-3.5 border-b border-border py-3.5 first:pt-0">
-                  <span className="font-mono text-[26px] font-bold tracking-[-0.02em] text-green">
-                    {reducedMotion ? h.value : <CountUp to={h.value} duration={1.2} />}
-                    {h.suffix}
-                  </span>
-                  <span className="text-sm text-muted">{h.label}</span>
-                </li>
-              ))}
-            </ul>
-            <div className="mt-auto pt-5">
-              <p className="mb-2.5 font-mono text-[11px] text-faint">$ tools of the trade</p>
-              <div className="flex flex-wrap gap-2">
-                {stack.map((item) => (
-                  <span
-                    key={item}
-                    className="rounded-full border border-border-2 bg-white/3 px-3 py-1 font-mono text-xs text-muted"
-                  >
-                    {item}
-                  </span>
-                ))}
+          <MagicCard className="h-full">
+            <div className="flex h-full min-w-0 flex-col p-7">
+              <p className="mb-1 text-xl font-bold tracking-[-0.01em]">Rohindh R</p>
+              <p className="mb-5 font-mono text-[12px] text-green-dim/80">
+                mobile engineer · React Native / Android / iOS / Swift
+              </p>
+              <p className="mb-4 text-[14.5px] leading-relaxed text-muted/90">
+                I build and ship production mobile apps for a living — taking them from first commit through app-store
+                review, over-the-air updates, and the crash reports that follow. Along the way I developed a particular
+                interest in mobile security: hardening apps, and understanding how they break.
+              </p>
+              <p className="mb-4 text-[14.5px] leading-relaxed text-muted/90">
+                Droidective grew out of my own daily debugging loop — the adb incantations, the log tails, the device
+                state I kept faking by hand. I wanted all of it one keystroke away, so I built it.
+              </p>
+              <p className="mb-6 text-[14.5px] leading-relaxed text-muted/90">
+                It's free and open source by choice: everything I've built in my career stands on open-source software,
+                and this project is my way of giving back to that community.
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  asChild
+                  variant="outline"
+                  className="h-auto rounded-xl border-white/[0.08] bg-white/[0.03] px-5 py-2.5 text-[14px] font-semibold hover:bg-white/[0.06]"
+                >
+                  <a href={LINKEDIN_URL}>
+                    <LinkedInMark />
+                    Connect on LinkedIn
+                  </a>
+                </Button>
+                <Button
+                  asChild
+                  variant="outline"
+                  className="h-auto rounded-xl border-white/[0.08] bg-white/[0.03] px-5 py-2.5 text-[14px] font-semibold hover:bg-white/[0.06]"
+                >
+                  <a href={GITHUB_URL}>
+                    <GithubMark />
+                    Follow the project
+                  </a>
+                </Button>
               </div>
             </div>
-          </div>
+          </MagicCard>
+        </Reveal>
+        <Reveal delay={60}>
+          <MagicCard className="h-full">
+            <div className="flex h-full min-w-0 flex-col p-7">
+              <ul className="m-0 list-none p-0">
+                {highlights.map((h) => (
+                  <li key={h.label} className="flex items-baseline gap-3.5 border-b border-white/[0.04] py-3.5 first:pt-0">
+                    <span className="font-mono text-[26px] font-bold tracking-[-0.02em] text-green">
+                      {reducedMotion ? h.value : <CountUp to={h.value} duration={1.2} />}
+                      {h.suffix}
+                    </span>
+                    <span className="text-[13.5px] text-muted/80">{h.label}</span>
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-auto pt-5">
+                <p className="mb-2.5 font-mono text-[11px] text-faint/60">$ tools of the trade</p>
+                <div className="flex flex-wrap gap-2">
+                  {stack.map((item) => (
+                    <span
+                      key={item}
+                      className="rounded-full border border-white/[0.06] bg-white/[0.02] px-3 py-1 font-mono text-[11.5px] text-muted/70"
+                    >
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </MagicCard>
         </Reveal>
       </div>
     </section>

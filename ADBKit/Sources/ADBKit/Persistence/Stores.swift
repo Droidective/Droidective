@@ -473,7 +473,7 @@ public struct Prefs: Codable, Sendable, Equatable {
     }
 }
 
-/// All eight durable stores, built once at app startup.
+/// All durable stores, built once at app startup.
 public struct AppStores: Sendable {
     public let bundles: JSONStore<[AppBundle]>
     public let deepLinks: JSONStore<DeepLinksMap>
@@ -483,6 +483,7 @@ public struct AppStores: Sendable {
     public let overrides: JSONStore<OverridesMap>
     public let prefs: JSONStore<Prefs>
     public let usage: JSONStore<UsageStats>
+    public let apiClient: JSONStore<ApiClientData>
 
     public init(directory: URL = AppPaths.supportDir) {
         bundles = JSONStore(filename: "bundles.json", default: [], directory: directory)
@@ -493,5 +494,6 @@ public struct AppStores: Sendable {
         overrides = JSONStore(filename: "overrides.json", default: [:], directory: directory)
         prefs = JSONStore(filename: "prefs.json", default: Prefs(), directory: directory)
         usage = JSONStore(filename: "usage.json", default: UsageStats(), directory: directory)
+        apiClient = JSONStore(filename: "api-client.json", default: ApiClientData(), directory: directory)
     }
 }
