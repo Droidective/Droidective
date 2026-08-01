@@ -161,6 +161,9 @@ targets:
       - App/Sources/State/LaunchPrompt.swift
       - App/Sources/Theme.swift
       - App/Sources/LogScrollGeometry.swift
+      # The id → detail-pane table FeatureDetailView switches over, so the
+      # tests can check it against the registry.
+      - App/Sources/FeatureDetail/FeatureDetailRoute.swift
       - App/Sources/FeatureDetail/Views/Mirror/MirrorTabPolicy.swift
       - App/Sources/FeatureDetail/Views/TourPaging.swift
       - App/Sources/FeatureDetail/Views/ConsoleLinkSpanMemo.swift

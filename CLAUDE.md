@@ -49,7 +49,8 @@ screen), not loudly.
 ## Adding a feature — the checklist
 
 A feature's string `id` is the contract across several files. Do these in order.
-**[test]** steps fail `swift test` if skipped; **[silent]** steps have *no*
+**[test]** steps fail `swift test` — or the AppTests bundle, which CI runs —
+if skipped; **[silent]** steps have *no*
 automated guard, so the failure mode is a non-working feature you only catch by
 opening it — verify those by hand.
 
@@ -67,7 +68,9 @@ opening it — verify those by hand.
      catches wrong/omitted-quote arguments]**
 3. **If it's a view** (`.view`/`.system`):
    - build the SwiftUI view in `App/Sources/FeatureDetail/Views/`,
-   - add the `id` → view `case` in `FeatureDetailView.detailByKind`,
+   - add the `id` as a `FeatureDetailRoute` case and its view `case` to
+     `FeatureDetailView.pane` (the switch is exhaustive over the enum, so a
+     route with no view is a build error),
    - add the `id` to `implementedIDs`,
    - if it runs adb directly, wrap each user action in
      `CommandLog.userInitiated`,
@@ -75,10 +78,11 @@ opening it — verify those by hand.
      translucency modifiers — an opaque full-pane fill (raw asset Color,
      `Color.black`, default `List`/`Form` material) blocks the window-glass
      appearance (see the translucency convention). **[test:
-     `implementedIDsAreAllRealFeatures` for the id] · [silent: a missing
-     `detailByKind` case renders "Coming Soon"; missing `userInitiated` keeps
-     its commands out of Settings ▸ Command Log; an opaque fill only shows up
-     by eye with opacity < 100%]**
+     `implementedIDsAreAllRealFeatures` for the id; `FeatureDetailRouteTests`
+     (AppTests) catches a missing route — it would render "Coming Soon" — and a
+     route left pointing at a renamed id] · [silent: missing `userInitiated`
+     keeps its commands out of Settings ▸ Command Log; an opaque fill only
+     shows up by eye with opacity < 100%]**
 4. **If it joins a hub** — add it to `FeatureRegistry.absorbedByHub` and fold its
    keywords into the hub's `keywords`. **[test: `hubsStaySearchableByTheirMembersPrimaryKeyword`]**
 5. **Logic lives in ADBKit.** adb/Process/parsing go in an ADBKit service with a
