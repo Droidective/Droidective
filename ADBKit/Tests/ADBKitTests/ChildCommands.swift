@@ -73,7 +73,7 @@ enum ChildCommands {
     static let sleepForever = (executable: "/bin/sleep", arguments: ["30"])
     static let spewForever = (executable: "/usr/bin/yes", arguments: [String]())
     static let sleepThenPrint = (
-        executable: "/bin/sh", arguments: ["-c", "sleep 0.3; echo done"]
+        executable: "/bin/sh", arguments: ["-c", "sleep 1; echo done"]
     )
 
     static let echoOutput = "hello\n"

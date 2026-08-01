@@ -9,10 +9,22 @@ import Testing
 @Suite struct SystemProcessRunnerTests {
     let runner = SystemProcessRunner()
 
+    /// Timeout for the cases that assert a child *completed*, where the value
+    /// is only a safety net rather than the thing under test.
+    ///
+    /// It was 5 s, which a loaded CI container can exceed just spawning
+    /// `/bin/echo` — that produced three false failures in one day (`echo`
+    /// reported `timedOut` with its output already captured). Generous here
+    /// costs nothing: a healthy run finishes in milliseconds and never waits.
+    /// The tests that genuinely measure timing — `timeoutKillsAndFlags` and
+    /// `cancellationKillsChildAndReturnsPromptly` — keep their tight bounds,
+    /// because there the duration *is* the assertion.
+    static let generousTimeout: Duration = .seconds(30)
+
     @Test func capturesStdoutAndExitCode() async {
         let output = await runner.run(
             executable: ChildCommands.echo.executable,
-            arguments: ChildCommands.echo.arguments, timeout: .seconds(5)
+            arguments: ChildCommands.echo.arguments, timeout: Self.generousTimeout
         )
         #expect(output.exitCode == 0)
         #expect(output.stdoutText == ChildCommands.echoOutput)
@@ -22,14 +34,15 @@ import Testing
     @Test func capturesStderrAndNonZeroExit() async {
         let output = await runner.run(
             executable: ChildCommands.stderrAndExit3.executable,
-            arguments: ChildCommands.stderrAndExit3.arguments, timeout: .seconds(5)
+            arguments: ChildCommands.stderrAndExit3.arguments, timeout: Self.generousTimeout
         )
         #expect(output.exitCode == 3)
         #expect(output.stderrText == ChildCommands.stderrOutput)
     }
 
     @Test func launchFailureReportsNilExit() async {
-        let output = await runner.run(executable: "/no/such/binary", arguments: [], timeout: .seconds(5))
+        let output = await runner.run(
+            executable: "/no/such/binary", arguments: [], timeout: Self.generousTimeout)
         #expect(output.exitCode == nil)
         #expect(output.stderrText.contains("failed to launch"))
     }
@@ -51,6 +64,9 @@ import Testing
         // full-pipe deadlock if draining stalls; the cap must also hold.
         let output = await runner.run(
             executable: ChildCommands.spewForever.executable,
+            // Short on purpose, unlike the completion cases above: this child
+            // never exits, so the timeout is what ends the test. Raising it
+            // just adds dead wall-clock to every run.
             arguments: ChildCommands.spewForever.arguments, timeout: .seconds(3),
             maxOutputBytes: 64 * 1024
         )
@@ -73,7 +89,8 @@ import Testing
                 group.addTask {
                     let output = await runner.run(
                         executable: ChildCommands.sleepThenPrint.executable,
-                        arguments: ChildCommands.sleepThenPrint.arguments, timeout: .seconds(10)
+                        arguments: ChildCommands.sleepThenPrint.arguments,
+                        timeout: Self.generousTimeout
                     )
                     return output.exitCode
                 }
