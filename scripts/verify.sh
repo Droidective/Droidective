@@ -83,6 +83,16 @@ tier1_mcp() {
   assert_passed "ReactotronMCP"
 }
 
+# The daemon is its own package too (see droidectived/Package.swift).
+tier1_daemon() {
+  echo "── tier 1: unit (droidectived) ────────────────────────────"
+  if ! (cd "$ROOT/droidectived" && swift test) >"$LOG" 2>&1; then
+    dump_failures
+    die "tier 1: droidectived suite failed"
+  fi
+  assert_passed "droidectived"
+}
+
 tier1_app() {
   echo "── tier 1: unit (AppTests) ────────────────────────────────"
   [[ -d "$ROOT/Droidective.xcodeproj" ]] ||
@@ -120,6 +130,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     tier0_static
     tier1_adbkit
     tier1_mcp
+    tier1_daemon
     tier1_app
     ;;
   *) die "unknown mode '$MODE' (expected 'fast' or 'all')" ;;

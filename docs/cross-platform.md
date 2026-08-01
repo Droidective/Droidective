@@ -112,7 +112,11 @@ stays with the scrcpy desktop app.
 
 ## Follow-ups
 
-- [ ] `droidectived` scaffold + protocol tests (design reviewed first — `droidectived-protocol.md`)
+- [x] `droidectived` scaffold — own package, loopback bind on port 0 with the
+      printed port line, token auth with the Host/Origin checks, and
+      `POST /v1/devices/list`, proven over a real socket (24 tests)
+- [ ] `droidectived` streams: the WebSocket, the `logcat` topic, and the
+      drop-oldest buffer with its gap marker
 - [ ] Portable fake CDP server so the JSConsoleClient wire tests run on Linux
 - [ ] Reactotron listener off Network.framework (SwiftNIO or raw sockets)
 - [ ] Windows: fix the last 3 tests, then flip `build-windows` to `swift test`.

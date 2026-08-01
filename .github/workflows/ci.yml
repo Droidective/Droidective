@@ -23,6 +23,8 @@ jobs:
       # Its own package (Apple-only), so it needs its own run.
       - name: Run ReactotronMCP tests
         run: cd ReactotronMCP && swift test -Xswiftc -warnings-as-errors
+      - name: Run droidectived tests
+        run: cd droidectived && swift test -Xswiftc -warnings-as-errors
       # The release channel policy — which artifacts each channel may publish,
       # and which notes a tag gets. Both failures are invisible until a release
       # is already public and signed, so they are tested on every PR.
@@ -43,6 +45,10 @@ jobs:
         run: apt-get update -q && apt-get install -y -q unzip xz-utils
       - name: Run ADBKit tests (Linux)
         run: cd ADBKit && swift test -Xswiftc -warnings-as-errors
+      # The daemon is the first component whose runtime behaviour matters
+      # off-Apple, so Linux runs its suite too rather than only compiling it.
+      - name: Run droidectived tests (Linux)
+        run: cd droidectived && swift test -Xswiftc -warnings-as-errors
 
   build-windows:
     # windows-2022, not -2025: the 2025 image ships MSVC 14.51, whose STL header

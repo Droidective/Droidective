@@ -29,9 +29,11 @@ it needs its own tests rather than riding on the existing suite.
 
 ## 2. Shape
 
-An `executableTarget` in ADBKit's package. That package now has one dependency
-(`swift-crypto`, off-Apple only), so the daemon builds on all three hosts from a
-lean graph — the reason the MCP split mattered.
+**Its own package** (`droidectived/`), like `ReactotronMCP` — not a target in
+ADBKit's. ADBKit's graph has to stay free of swift-nio, because that leanness is
+what lets `swift test` run on Windows; adding a NIO-dependent target back into
+it would undo the MCP split. `DaemonCore` holds the logic so tests can reach it;
+the executable is a thin `main`.
 
 ```
 Tauri app  ──spawns──▶  droidectived --port 0 --token-file <path>
@@ -89,6 +91,10 @@ browser tab via DNS rebinding, can reach `127.0.0.1`. So, mirroring what
 
 Token in a file rather than argv, because argv is world-readable via `ps` — the
 same reasoning `ApkSigningService` already uses for keystore passwords.
+
+> **Status:** §§2–4 and the guards in §3.2 are implemented and tested
+> (`droidectived/`, 24 tests). §5 streams, and the rest of §4's routes, are
+> not yet built.
 
 ## 4. Request/response
 
