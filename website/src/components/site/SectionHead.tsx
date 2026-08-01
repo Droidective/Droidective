@@ -12,15 +12,15 @@ interface SectionHeadProps {
 
 export function SectionHead({ eyebrow, title, children, center = false }: SectionHeadProps) {
   return (
-    <Reveal className={cn("mb-13 max-w-[62ch]", center && "mx-auto text-center")}>
-      <span className="font-mono text-[12.5px] font-medium tracking-[0.04em] text-green">
-        <span className="mr-2 text-green-dim">&gt;_</span>
+    <Reveal className={cn("mb-14 max-w-[62ch]", center && "mx-auto text-center")}>
+      <span className="font-mono text-[12px] font-medium tracking-[0.06em] text-green/80 uppercase">
+        <span className="mr-2 text-green-dim/60">&gt;_</span>
         {eyebrow}
       </span>
-      <h2 className="mt-3.5 mb-4 text-[clamp(28px,4.2vw,44px)] leading-[1.04] font-extrabold tracking-[-0.03em]">
+      <h2 className="mt-4 mb-4 text-[clamp(28px,4.2vw,46px)] leading-[1.04] font-extrabold tracking-[-0.035em]">
         {title}
       </h2>
-      {children && <p className="text-lg text-muted">{children}</p>}
+      {children && <p className="text-lg leading-relaxed text-muted">{children}</p>}
     </Reveal>
   )
 }

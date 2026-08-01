@@ -68,6 +68,7 @@ public struct FeatureEngine: Sendable {
     public let restrictions: RestrictionsService
     public let developerSettings: DeveloperSettingsService
     public let simulators: SimulatorService
+    public let httpClient: HttpClientService
     let textInput: TextInputService
     let screenCapture: ScreenCaptureService
 
@@ -112,6 +113,7 @@ public struct FeatureEngine: Sendable {
         self.dns = DnsService(client: client)
         self.restrictions = RestrictionsService(client: client)
         self.developerSettings = DeveloperSettingsService(client: client)
+        self.httpClient = HttpClientService()
         self.textInput = TextInputService(client: client)
         self.screenCapture = ScreenCaptureService(client: client)
     }
@@ -134,6 +136,7 @@ public struct FeatureEngine: Sendable {
         "emulators", "performance", "network-speed",
         "root-status", "wifi", "private-dns", "system-restrictions", "dev-settings",
         "reactotron", "js-console",
+        "api-client",
     ]
 
     /// Screenshot with an explicit destination (UI asks the user first).

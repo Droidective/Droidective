@@ -317,4 +317,16 @@ import Testing
         #expect(accepts("fe80::1%2"))
         #expect(!accepts("%en0"), "a zone with no address is not an address")
     }
+
+    /// `Character.isHexDigit` is also true for fullwidth and other non-ASCII
+    /// digit forms, which `inet_pton` — the call this grammar replaced —
+    /// rejects. Differential-tested against `inet_pton` over 200k inputs:
+    /// these were the only divergences, so the hextet check stays ASCII-only.
+    @Test func rejectsNonASCIIHexDigits() {
+        #expect(!accepts("\u{FF11}::1"), "U+FF11 FULLWIDTH DIGIT ONE is not a hex digit")
+        #expect(!accepts("::\u{FF11}"))
+        #expect(!accepts("::\u{FF41}"), "U+FF41 FULLWIDTH LATIN SMALL LETTER A")
+        #expect(!accepts("4ac5::\u{FF11}"))
+        #expect(!accepts("\u{0663}::1"), "Arabic-Indic digit three")
+    }
 }
