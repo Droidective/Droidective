@@ -75,6 +75,11 @@ targets:
         LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
         LSApplicationCategoryType: public.app-category.developer-tools
         NSHumanReadableCopyright: "© 2026 Rohindh R"
+        # Screen recordings can mix in the Mac's microphone (Screen Record ▸
+        # Audio). macOS shows this the first time that's switched on.
+        NSMicrophoneUsageDescription:
+          "Droidective records your microphone into screen recordings when you
+          choose to include it, so you can narrate what the device is doing."
         SentryDSN: $(SENTRY_DSN)
         PostHogKey: $(POSTHOG_KEY)
         SUFeedURL: https://droidective.com/appcast.xml
@@ -170,6 +175,9 @@ targets:
       # tests can check it against the registry.
       - App/Sources/FeatureDetail/FeatureDetailRoute.swift
       - App/Sources/FeatureDetail/Views/Mirror/MirrorTabPolicy.swift
+      # The persisted recording-audio choice, incl. the pre-microphone
+      # single-switch migration.
+      - App/Sources/FeatureDetail/Views/Record/RecordAudioPreference.swift
       - App/Sources/FeatureDetail/Views/TourPaging.swift
       - App/Sources/FeatureDetail/Views/ConsoleLinkSpanMemo.swift
       - App/Sources/FeatureDetail/Views/ConsoleRateBucket.swift

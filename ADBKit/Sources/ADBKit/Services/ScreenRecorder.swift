@@ -38,11 +38,40 @@ public actor ScreenRecorder {
     /// only single-segment (never-paused) recordings are supported.
     private let ffmpegPath: String?
 
+    /// What the recording is capturing right now, for the UI's mute controls
+    /// and level meter.
+    public struct AudioStatus: Sendable, Equatable {
+        public let mode: RecordAudioMode
+        /// What the device half of the recording is: its playback, its own
+        /// microphone, or nothing.
+        public let deviceSource: DeviceAudioSource
+        public let deviceMuted: Bool
+        public let microphoneMuted: Bool
+        /// 0…1 level of the last microphone chunk; 0 when the mic isn't running.
+        public let microphoneLevel: Float
+        /// Why the microphone isn't contributing, if it isn't. The recording
+        /// keeps going without it rather than failing.
+        public let microphoneFailure: String?
+    }
+
     private var session: MirrorSession?
     private var currentURL: URL?
     private var segments: [URL] = []
     private var serial = ""
     private var options = ScreenRecordOptions()
+
+    /// The microphone runs per segment: it starts with a segment and stops on
+    /// pause, so a paused recording doesn't hold the mic open (and doesn't keep
+    /// the system's recording indicator lit).
+    private var microphone: MicrophoneCapture?
+    private var microphonePump: Task<Void, Never>?
+    private var microphoneSink: AsyncStream<MicrophoneChunk>.Continuation?
+    private var microphoneLevel: Float = 0
+    private var microphoneFailure: String?
+    /// Mute state survives pause/resume, so each new segment starts out matching
+    /// what the user last chose.
+    private var deviceMuted = false
+    private var microphoneMuted = false
 
     public init(client: AdbClient, server: ScrcpyServerInfo, ffmpegPath: String? = nil) {
         self.client = client
@@ -62,6 +91,25 @@ public actor ScreenRecorder {
     /// latest without a second device connection or draining the record stream.
     public func previewFrame() async -> MirrorSession.Snapshot? {
         await session?.snapshot()
+    }
+
+    public func audioStatus() -> AudioStatus {
+        AudioStatus(
+            mode: options.audio.mode,
+            deviceSource: options.audio.deviceSource,
+            deviceMuted: deviceMuted,
+            microphoneMuted: microphoneMuted,
+            microphoneLevel: microphoneMuted ? 0 : microphoneLevel,
+            microphoneFailure: microphoneFailure)
+    }
+
+    /// Silence either source mid-recording. The capture keeps running — muted
+    /// samples are written as silence — so unmuting is instant and the audio
+    /// track keeps one continuous timeline.
+    public func setMuted(device: Bool, microphone: Bool) async {
+        deviceMuted = device
+        microphoneMuted = microphone
+        await session?.setAudioMuted(device: device, microphone: microphone)
     }
 
     public func start(serial: String, options: ScreenRecordOptions = ScreenRecordOptions()) async throws {
@@ -114,6 +162,7 @@ public actor ScreenRecorder {
 
     /// Abort and discard everything (view dismissed / app quit).
     public func abort() async {
+        await stopMicrophone()
         if let session { await session.stop() }
         let leftovers = segments + [currentURL].compactMap { $0 }
         session = nil
@@ -127,7 +176,8 @@ public actor ScreenRecorder {
     private func startSegment() async throws {
         let params = ScrcpyServerParams(
             scid: UInt32.random(in: 1 ... 0x7fff_ffff),
-            audio: options.captureAudio,
+            audio: options.audio.deviceSource.isOn,
+            audioSource: options.audio.deviceSource.scrcpySource,
             control: false,
             maxSize: options.maxSize,
             videoBitRate: options.bitRateMbps > 0 ? options.bitRateMbps * 1_000_000 : 0,
@@ -143,22 +193,81 @@ public actor ScreenRecorder {
         let temp = Self.tempURL(ext: "mp4")
         // Arm recording up front; the session creates the recorder when the config
         // packet lands so this segment captures from its first key frame.
-        try await session.startRecording(to: temp)
+        await session.setAudioMuted(device: deviceMuted, microphone: microphoneMuted)
+        try await session.startRecording(to: temp, audio: options.audio.mode)
         guard await Self.waitUntilStreaming(session: session) else {
             await session.stop()
             throw RecordingError.startFailed("Couldn’t get video from the device.")
         }
         self.session = session
         self.currentURL = temp
+        await startMicrophone(feeding: session)
     }
 
     private func finalizeSegment() async {
         guard let session, let currentURL else { return }
         self.session = nil
         self.currentURL = nil
+        await stopMicrophone()
         _ = try? await session.stopRecording(url: currentURL)
         await session.stop()
         segments.append(currentURL)
+    }
+
+    // MARK: - Microphone
+
+    /// Bring the host microphone up for this segment and pump its chunks into
+    /// the session. A microphone that won't start (unplugged, access revoked)
+    /// is reported through `audioStatus()` and the recording continues without
+    /// it — losing the narration is better than losing the take.
+    private func startMicrophone(feeding session: MirrorSession) async {
+        guard options.audio.mode.includesMicrophone else { return }
+        let capture = MicrophoneCapture(deviceID: options.audio.microphoneDeviceID)
+        // A stream rather than a Task per chunk: chunks must reach the writer in
+        // order, and separate Tasks carry no ordering guarantee.
+        let (stream, sink) = AsyncStream.makeStream(
+            of: MicrophoneChunk.self, bufferingPolicy: .bufferingNewest(200))
+        do {
+            try await capture.start { sink.yield($0) }
+        } catch {
+            sink.finish()
+            microphoneFailure = Self.message(for: error)
+            return
+        }
+        microphone = capture
+        microphoneSink = sink
+        microphoneFailure = nil
+        microphonePump = Task { [weak self] in
+            for await chunk in stream {
+                await self?.deliver(chunk, to: session)
+            }
+        }
+    }
+
+    private func deliver(_ chunk: MicrophoneChunk, to session: MirrorSession) async {
+        microphoneLevel = chunk.level
+        await session.appendMicrophoneAudio(chunk.pcm, hostSeconds: chunk.hostSeconds)
+    }
+
+    private func stopMicrophone() async {
+        microphonePump?.cancel()
+        microphonePump = nil
+        microphoneSink?.finish()
+        microphoneSink = nil
+        if let microphone {
+            // A format the graph couldn't deliver only shows up while capturing,
+            // so it's collected on the way out.
+            if microphoneFailure == nil, let failure = await microphone.failure() {
+                microphoneFailure = failure.errorDescription
+            }
+            await microphone.stop()
+        }
+        microphone = nil
+        microphoneLevel = 0
+    }
+
+    private static func message(for error: Error) -> String {
+        (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
     }
 
     private static func waitUntilStreaming(session: MirrorSession) async -> Bool {

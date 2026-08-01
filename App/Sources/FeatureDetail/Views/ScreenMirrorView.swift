@@ -245,6 +245,8 @@ private struct MirrorStage: View {
     @Bindable var model: MirrorViewModel
     @AppStorage(mirrorIncludeAudioKey) private var includeAudio = false
     @AppStorage(mirrorShowTouchesKey) private var showTouches = false
+    /// The recording-audio sheet: pick the combination, hear the mic, start.
+    @State private var showAudioSheet = false
     /// Reconnect the current device in place (the stopped/failed cards' button).
     let onReconnect: () -> Void
     /// Move the mirror to its own window; nil when already hosted in one.
@@ -278,6 +280,11 @@ private struct MirrorStage: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             controlBar
+        }
+        .sheet(isPresented: $showAudioSheet) {
+            RecordAudioSheet(
+                start: { Task { await model.startRecording() } },
+                blockedReason: recordingBlockedReason)
         }
     }
 
@@ -418,11 +425,93 @@ private struct MirrorStage: View {
             navButton("stop.circle.fill", tint: .red, width: buttonWidth, help: "Stop recording") {
                 Task { await model.stopRecording() }
             }
+            liveAudioMenu
         } else {
+            recordControl(buttonWidth: buttonWidth)
+        }
+    }
+
+    /// Record, plus a chevron opening the audio sheet — set the combination,
+    /// hear the microphone, and start the take from there. One control on the
+    /// bar, and the options get a panel of their own instead of a row of icons
+    /// or a menu that can't show what it's doing.
+    private func recordControl(buttonWidth: CGFloat) -> some View {
+        HStack(spacing: 0) {
             navButton("record.circle", width: buttonWidth, help: "Record — keep mirroring") {
                 Task { await model.startRecording() }
             }
+            Button {
+                showAudioSheet = true
+            } label: {
+                Image(systemName: "chevron.down")
+                    .font(.app(.caption2).weight(.semibold))
+                    .frame(width: 16, height: 30)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Recording audio — device playback or mic, plus the Mac's mic")
         }
+    }
+
+    /// Why the sheet's Start Recording can't run, or nil when it can.
+    private var recordingBlockedReason: String? {
+        if model.isRecording { return "A recording is already running." }
+        guard model.status == .streaming else { return "The mirror isn’t streaming yet." }
+        return nil
+    }
+
+    /// Mid-take the sources are fixed (the capture opened on them), so all
+    /// that's left is silencing them.
+    private var liveAudioMenu: some View {
+        Menu {
+            if let status = model.recordAudioStatus, status.mode.hasAudio {
+                if status.mode.includesDevice {
+                    Toggle(
+                        status.deviceSource == .microphone ? "Device microphone" : "Device audio",
+                        isOn: Binding(
+                            get: { !status.deviceMuted },
+                            set: { on in
+                                Task {
+                                    await model.setRecordMuted(
+                                        device: !on, microphone: status.microphoneMuted)
+                                }
+                            }))
+                }
+                if status.mode.includesMicrophone {
+                    Toggle("Microphone", isOn: Binding(
+                        get: { !status.microphoneMuted },
+                        set: { on in
+                            Task {
+                                await model.setRecordMuted(
+                                    device: status.deviceMuted, microphone: !on)
+                            }
+                        }))
+                }
+            } else {
+                Text("This recording has no audio")
+            }
+        } label: {
+            Image(systemName: liveAudioSymbol)
+                .font(.app(.title3))
+                .foregroundStyle(anySourceMuted ? Color.orange : .primary)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("Mute or unmute what's being recorded")
+    }
+
+    private var liveAudioSymbol: String {
+        guard let status = model.recordAudioStatus else { return "waveform" }
+        let device = status.mode.includesDevice && !status.deviceMuted
+        let microphone = status.mode.includesMicrophone && !status.microphoneMuted
+        if !device, !microphone { return "speaker.slash.fill" }
+        return microphone ? "mic.fill" : status.deviceSource.symbolName
+    }
+
+    private var anySourceMuted: Bool {
+        guard let status = model.recordAudioStatus else { return false }
+        return (status.mode.includesDevice && status.deviceMuted)
+            || (status.mode.includesMicrophone && status.microphoneMuted)
     }
 
     private func navButton(

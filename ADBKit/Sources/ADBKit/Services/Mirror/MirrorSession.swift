@@ -58,6 +58,11 @@ public actor MirrorSession {
     /// Set by `startRecording` before the format is known; consumed when the
     /// config packet arrives to create the recorder in time for the first frame.
     private var pendingRecordURL: URL?
+    /// Which sources the armed/active recording mixes, already limited to what
+    /// this session can actually supply.
+    private var recordAudioMode: RecordAudioMode = .muted
+    private var deviceAudioMuted = false
+    private var microphoneMuted = false
 
     public init(adb: AdbClient, config: MirrorTransport.Configuration) {
         transport = MirrorTransport(adb: adb, config: config)
@@ -149,16 +154,44 @@ public actor MirrorSession {
     /// so a fresh session captures from that first frame rather than waiting for
     /// the next periodic key frame (seconds away). Appending always opens on a
     /// key frame so the file starts on a sync sample.
-    public func startRecording(to url: URL) throws {
+    ///
+    /// - Parameter audio: which sources to record. Device audio is dropped from
+    ///   the plan when the session never requested it, so an in-mirror recording
+    ///   can still take the microphone on a silent stream.
+    public func startRecording(to url: URL, audio: RecordAudioMode = .deviceOnly) throws {
         pendingRecordURL = url
+        recordAudioMode = audio.limited(deviceAudioAvailable: recordsAudio)
         if let formatDescription, recorder == nil {
             try activateRecorder(formatDescription: formatDescription, url: url)
         }
     }
 
+    /// What the armed recording ended up capturing — the requested mode after
+    /// the session's own capability is applied.
+    public func recordingAudioMode() -> RecordAudioMode { recordAudioMode }
+
+    /// One chunk of host microphone PCM (s16le, 48 kHz, stereo) stamped on the
+    /// host clock. Ignored unless a recording that wants the microphone is live.
+    public func appendMicrophoneAudio(_ pcm: Data, hostSeconds: Double) {
+        recorder?.appendMicrophoneAudio(pcm, hostSeconds: hostSeconds)
+    }
+
+    /// Silence either source in the file without stopping the capture. Applies
+    /// to the live recorder and is remembered for one created later in this
+    /// session.
+    public func setAudioMuted(device: Bool, microphone: Bool) {
+        deviceAudioMuted = device
+        microphoneMuted = microphone
+        recorder?.setDeviceMuted(device)
+        recorder?.setMicrophoneMuted(microphone)
+    }
+
     private func activateRecorder(formatDescription: CMVideoFormatDescription, url: URL) throws {
-        recorder = try MirrorRecorder(
-            url: url, formatDescription: formatDescription, includeAudio: recordsAudio)
+        let recorder = try MirrorRecorder(
+            url: url, formatDescription: formatDescription, audio: recordAudioMode)
+        recorder.setDeviceMuted(deviceAudioMuted)
+        recorder.setMicrophoneMuted(microphoneMuted)
+        self.recorder = recorder
         recorderStarted = false
         pendingRecordURL = nil
     }
@@ -274,7 +307,7 @@ public actor MirrorSession {
                         // timeline the writer session opened with.
                         if let recorder, recorderStarted {
                             let pts = CMTime(value: CMTimeValue(header.pts), timescale: 1_000_000)
-                            recorder.appendAudio(payload, pts: pts)
+                            recorder.appendDeviceAudio(payload, pts: pts)
                         }
                     }
                 }

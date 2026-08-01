@@ -86,8 +86,8 @@ opening it — verify those by hand.
 ## Build / test / run
 
 ```
-make test          # ADBKit unit tests (cd ADBKit && swift test) — 1157 tests, keep green
-make test-app      # the AppTests logic bundle — 67 tests
+make test          # ADBKit unit tests (cd ADBKit && swift test) — 1491 tests, keep green
+make test-app      # the AppTests logic bundle — 93 tests
 make verify        # tiers 0-1: warnings-as-errors + both test bundles
 make test-linux    # the same suite on Linux (Apple `container` CLI; the port gate)
 make test-emulator # tier 3: the device-dependent suites against a real emulator
@@ -156,7 +156,9 @@ Node 22 in CI; scroll reveals and the hero palette demo must keep their
 - `Services/`: one per domain — TextInput, AppControl, AppInspection (perms/
   info/meminfo/sandbox), AppsExplorer, FileExplorer, Overrides, ScreenCapture,
   ScreenRecorder (records through a headless `MirrorSession` on the bundled
-  scrcpy server — no desktop scrcpy), Crash, BugReport, Connection (wireless),
+  scrcpy server — no desktop scrcpy; it also owns the microphone's
+  per-segment lifecycle — see the recording-audio convention),
+  Crash, BugReport, Connection (wireless),
   CustomCommand (one free-typed line; a leading `adb` token infers the adb
   kind → tokenized argv, never a shell; anything else — multi-line included —
   runs through `zsh -lc`, deliberately not device-scoped — `{serial}` targets
@@ -178,7 +180,7 @@ Node 22 in CI; scroll reveals and the hero palette demo must keep their
   console history on reconnects). No adb path (Metro runs on the Mac); the
   device only needs `adb reverse tcp:<metroPort>` to reach the dev server.
   `ScreenTools` holds the
-  `ScreenRecordOptions` struct. **Bundled binaries** (scrcpy-server, a static
+  `ScreenRecordOptions` struct and `RecordAudioMode`/`RecordAudioOptions`. **Bundled binaries** (scrcpy-server, a static
   GPLv3 ffmpeg, and the Apache-2.0 bundletool + uber-apk-signer jars — the
   jars are factory-seeded into the managed-tool store at launch so
   Settings ▸ Tools can upgrade them) live in `App/Resources/`, resolved by the
@@ -407,6 +409,41 @@ table) is in `docs/reactotron-mcp-analysis.md`.
   `\.windowOpacity` is declared in Theme.swift because the AppTests logic
   bundle compiles that file standalone (and links ADBKit for it). JS Console
   keeps its Chrome-dark hue at the card step; CodeMirror webviews stay opaque.
+- **Recording audio is one AAC track fed by up to two sources.** A recording
+  captures the device's audio, the Mac's microphone, both, or neither —
+  `RecordAudioOptions`/`DeviceAudioSource` in ScreenTools, persisted by the
+  App-layer `RecordAudioPreference` (`recDeviceAudio`/`recHostMic`/
+  `recMicInput`, with migrations from the superseded `recCaptureAudio` and
+  `recAudioMode`). The device side is **playback *or* its own microphone, never
+  both**: scrcpy carries one device stream per session
+  (`ScrcpyServerParams.audioSource` → `audio_source=mic`), so the two
+  checkboxes are mutually exclusive and say so in a line of text rather than
+  silently ignoring one. The same three controls — Device audio, Device
+  microphone, Mac microphone (Off / System default / a named input) — appear on
+  the Screen Record screen inline and in the mirror's `RecordAudioSheet`, which
+  the chevron beside the mirror's record button opens: set the combination,
+  hear the mic on the level meter, and Start Recording from the sheet. Mid-take
+  the mirror bar shows a mute menu and the Screen Record screen its two mute
+  chips.
+  - **Two Picker traps live here.** A `Divider()` inside a `Picker` breaks tag
+    matching and SwiftUI then *writes back* a coerced selection — that silently
+    switched the microphone on at launch. And Core Audio's scratch devices
+    (`CADefaultDeviceAggregate-…`, tap aggregates) show up in
+    `AVCaptureDevice.DiscoverySession` and must be filtered out
+    (`RecordAudioInputs.isSelectable`) or they appear as pickable "microphones".
+  Both sources land in **one** track, never two: players (QuickTime, browsers,
+  chat apps) play only the first audio track, so a second one is silently lost
+  for whoever the clip is sent to. With one source the samples go straight to
+  the writer exactly as before; with two they meet in `PCMMixdown` (pure,
+  portable, tested) on a shared timeline, because the device stamps its audio
+  in the device clock and the mic in the host clock — `AudioTimeline` anchors
+  the two at the frame the file opens on, or narration drifts over a long take.
+  Mute writes *silence* rather than dropping samples, so the track keeps one
+  continuous timeline and unmuting is instant. `MicrophoneCapture` (Apple-gated, its own file) requests access
+  itself when the status is undetermined — recordings start from several places
+  and only one has a picker — and a mic that won't start is surfaced through
+  `ScreenRecorder.audioStatus()` while the recording keeps going: losing the
+  narration beats losing the take.
 - **Sparkle never starts in Debug builds** (`SparkleUpdater.updaterAllowed`).
   Silent staging + install-on-quit replaces the bundle at the app's own path —
   a dev build sharing the release bundle id gets the RELEASE app installed
@@ -710,7 +747,7 @@ jadx/apktool, recompile, and sign — with keystore creation) plus Frida setup, 
 custom accent color, launching emulators from the device bar, per-feature
 connect-a-device empty states, a live-preview hotkey recorder, and a Settings
 split into Appearance/Privacy; managed tools download from GitHub releases into
-Application Support and are sized/removable in Settings); 1157 ADBKit + 67
+Application Support and are sized/removable in Settings); 1491 ADBKit + 93
 AppTests green (macOS — the suite also runs on Linux in CI, minus the
 Darwin-gated files);
 builds clean with zero warnings (enforced as errors in CI). Verified live against a
