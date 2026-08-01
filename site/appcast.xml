@@ -6,9 +6,9 @@
     <description>Most recent Droidective updates.</description>
     <language>en</language>
     <item>
-      <title>Droidective 3.7.1</title>
-      <sparkle:version>625</sparkle:version>
-      <sparkle:shortVersionString>3.7.1</sparkle:shortVersionString>
+      <title>Droidective 3.8.0</title>
+      <sparkle:version>702</sparkle:version>
+      <sparkle:shortVersionString>3.8.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <description><![CDATA[
 <style>
@@ -24,71 +24,123 @@ pre { background: color-mix(in srgb, currentColor 8%, transparent); padding: .6e
 pre code { background: none; padding: 0; }
 a { color: #2f9e44; }
 </style>
-<p>A new Developer Settings panel drives Android's Developer Options over adb,
-the mirror gains a Show touches option, emulators wipe and relaunch as
-separate actions, and the Terminal's collapsed rail keeps every tab
-reachable — with dropped files typing their paths into the shell. Plus
-fixes for a welcome-tour crash, an update pill that could spin forever, and
-JS Console hangs on chatty Metro streams.</p>
-<h3>Developer Settings — the 59th feature</h3>
+<p>API Testing arrives as the 60th tool — a full HTTP client with Postman import
+and export, collections, environments, assertions, and code generation.
+Recordings can now capture microphone audio alongside the device, the Terminal
+scrolls properly in full-screen and streaming programs, and four main-thread
+hangs reported from v3.7.1 are fixed.</p>
+<h3>API Testing — the 60th feature</h3>
 <ul>
 <li>
-<strong>Android's Developer Options over adb</strong> — show taps, pointer location,
-layout bounds, GPU overdraw, GPU profile bars, strict-mode flash, don't
-keep activities, and the three animation scales, all in one panel. Values
-load from the device so the panel shows ground truth, and overlay toggles
-repaint running apps immediately — no app restart.</li>
+<strong>A real HTTP client, in the palette</strong> — all seven methods, six body kinds
+(JSON, form-urlencoded, multipart, raw, GraphQL, binary), and five auth
+kinds (bearer, basic, API key in header or query, OAuth 2). It needs no
+device, so it works with nothing plugged in.</li>
+<li>
+<strong>Postman import and export</strong> — bring collections and environments across,
+and send them back. Import and export failures now report a reason instead
+of failing silently.</li>
+<li>
+<strong>Collections, folders, and environments</strong> — a searchable sidebar with
+nested folders and per-item move, duplicate, and delete; <code>{{variables}}</code>
+resolve from environment and global scopes, and unresolved ones are flagged
+before a request goes out rather than being sent literally.</li>
+<li>
+<strong>Assertions and a collection runner</strong> — assert on status code, response
+time, body size, body text, any header, or a JSON path, and run a whole
+collection in one sheet.</li>
+<li>
+<strong>Generated code</strong> — every request exports as cURL, HTTPie, <code>fetch</code>, axios,
+Python <code>requests</code>, or Swift <code>URLSession</code>. Pasting a cURL command parses it
+back into a request, including <code>-u</code> credentials.</li>
+<li>
+<strong>A response pane that shows the response</strong> — pretty and raw body, image
+preview, headers, cookies, a timing breakdown, the redirect chain, and
+save-to-file. JSON keeps the server's key order; the earlier printer sorted
+keys, which misrepresents the payload you are inspecting.</li>
+</ul>
+<h3>Screen recording</h3>
+<ul>
+<li>
+<strong>Microphone audio</strong> — a recording can capture the device's audio, the Mac's
+microphone, both, or neither. The device side is playback <em>or</em> the device's
+own microphone, never both — scrcpy carries one device stream per session —
+so those two options are mutually exclusive and say so.</li>
+<li>
+<strong>Set it up before you hit record</strong> — the chevron beside the mirror's record
+button opens a sheet with the three controls and a live level meter; the
+Screen Record screen shows the same controls inline. Mid-take, each source
+gets a mute control.</li>
+<li>
+<strong>One audio track, not two</strong> — both sources are mixed onto a single track,
+because players (QuickTime, browsers, chat apps) play only the first audio
+track and silently drop the rest. Muting writes silence rather than dropping
+samples, so the timeline stays continuous and unmuting is instant.</li>
 </ul>
 <h3>Terminal</h3>
 <ul>
 <li>
-<strong>Collapsed rail keeps tabs reachable</strong> — the thin rail now lists every
-open shell as a two-letter badge: click to switch, hover for the full
-name, right-click for the tab menu.</li>
+<strong>The wheel now scrolls full-screen programs</strong> — an agent CLI, <code>htop</code>,
+<code>less --mouse</code>, or vim with <code>mouse=a</code> could not be scrolled at all: those
+programs take the mouse over and run on the alternate screen, where there is
+no viewport to move. The wheel is now reported to the program, or sent as
+cursor keys when the program hasn't taken the mouse (xterm alternate
+scroll), following the scroll's own distance rather than flinging a pager
+pages at a time.</li>
 <li>
-<strong>Dropping files types their paths</strong> — drop Finder files on a shell and
-their paths are typed in (quoted only when needed, trailing space), with
-that pane focused — like dropping onto Terminal.app.</li>
-</ul>
-<h3>Screen Mirror</h3>
-<ul>
+<strong>Scrolling one no longer corrupts the screen</strong> — the alternate screen's
+right margin was left at 0, so a scroll region copied a single column per
+row and left the rest stale, leaving two frames interleaved on screen. The
+margin is repaired when the alternate screen activates, leaving a program's
+own margins alone.</li>
 <li>
-<strong>Show touches</strong> — a new ⋯ options menu (audio lives there too) toggles
-Android's touch dot for the session: it flips instantly, works
-mid-recording, and the device's own setting is restored when the session
-ends. The dot draws only for physical touches on the device — taps
-injected by clicking the mirror don't render it.</li>
-</ul>
-<h3>Emulators</h3>
-<ul>
-<li>
-<strong>Wipe without launching</strong> — "Wipe Data…" on a stopped AVD wipes in place
-(user data, caches, snapshots — the same set Android Studio removes)
-instead of booting the emulator to do it.</li>
-<li>
-<strong>Relaunch</strong> — running AVDs gain a Relaunch button: graceful stop, wait
-for the console port to free, boot the same AVD.</li>
+<strong>Scrollback stays put while output streams</strong> — scrolling back through a
+running command snapped to the newest line on every line written. The view
+now holds where you left it; typing returns to the live output.</li>
 </ul>
 <h3>Fixes</h3>
 <ul>
 <li>
-<strong>Welcome tour crash</strong> — double-activating Next or Back (Return
-auto-repeat, or a double-click racing the render) could step past the
-last page and crash mid-onboarding. Paging is now clamped to the range.</li>
+<strong>Launch hang on a cold font registry</strong> — enumerating installed fonts ran on
+the main thread during launch and could block past the 2-second hang
+threshold. It now runs off the main actor through Core Text (13 ms against
+the previous 91 ms warm, same 245 families).</li>
 <li>
-<strong>Update pill no longer sticks</strong> — cancelling the quit confirmation or an
-interrupted install left the sidebar pill on "Installing update…"
-forever; it now returns to a clickable "Relaunch to update" (or a
-retryable error state).</li>
+<strong>Log tail stalls</strong> — scrolling the log to the bottom forced the text system
+to typeset the entire buffer, so a filter change, an order flip, or a large
+append could freeze the app. The view scrolls to the document height
+instead, with non-contiguous layout enabled.</li>
 <li>
-<strong>JS Console hangs on chatty streams</strong> — a busy Metro feed drove up to 60
-full feed re-renders a second and re-ran link detection on every visible
-row; flushes are now paced and link detection cached, ending the app
-hangs reported with the console open.</li>
+<strong>Opening Settings ▸ General stalled</strong> — it read the launch-at-login status
+with a synchronous launchd round-trip on the main thread.</li>
+<li>
+<strong>Beachball when resizing with a heavyweight tab open</strong> — every mounted tab
+re-laid out on each tick of a divider drag, including hidden ones; a Crash
+Catcher trace of a few thousand lines turned that into a multi-second hang.
+Hidden tabs now pin to their last resting size mid-resize and re-wrap once
+at rest.</li>
+<li>
+<strong>ffmpeg errors were hidden by its own progress output</strong> — ffmpeg separates
+progress updates with carriage returns, so the export and segment-stitching
+error dialogs showed the progress blob instead of the actual error. Both now
+split on all newline forms.</li>
+<li>
+<strong>Stale results from cancelled loads</strong> — navigating away from a view while it
+was still fetching could write the old result into the new state.</li>
+</ul>
+<h3>Under the hood</h3>
+<ul>
+<li>
+<strong>Windows and Linux groundwork</strong> — ADBKit, the layer holding all of
+Droidective's logic, now compiles and runs its test suite on Linux and
+Windows as well as macOS, with a guard test that fails the build on new
+Apple-only code outside an explicit gate. Nothing changes for macOS users;
+this is the foundation for the Windows and Linux builds, which will ship on
+the beta channel (<code>docs/release-channels.md</code>).</li>
 </ul>
 ]]></description>
-      <pubDate>Fri, 24 Jul 2026 11:18:16 +0000</pubDate>
-      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.7.1/Droidective-v3.7.1.dmg" sparkle:edSignature="UDKgaVuFDqqf5NQO62MA7ViO+t6DMln0qwEkgf5l/b55a05otoG4dkDwk+h3vwFbIzcfBdj0+kdJPn3ZFJKLBQ==" length="141267719" type="application/octet-stream" />
+      <pubDate>Sat, 01 Aug 2026 23:30:34 +0000</pubDate>
+      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.8.0/Droidective-v3.8.0.dmg" sparkle:edSignature="mzh6ceqnVGgDVRSu/5coASNBhR8Mb9uFDxuQoFFb+tyuVk6KJSSfzY6zA36JbQEjWNlKD0+1XUJcars7FSitAw==" length="143684841" type="application/octet-stream" />
     </item>
     
   </channel>
