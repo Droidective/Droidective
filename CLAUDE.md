@@ -86,8 +86,8 @@ opening it — verify those by hand.
 ## Build / test / run
 
 ```
-make test          # ADBKit unit tests (cd ADBKit && swift test) — 1491 tests, keep green
-make test-app      # the AppTests logic bundle — 93 tests
+make test          # ADBKit unit tests (cd ADBKit && swift test) — 1503 tests, keep green
+make test-app      # the AppTests logic bundle — 99 tests
 make verify        # tiers 0-1: warnings-as-errors + both test bundles
 make test-linux    # the same suite on Linux (Apple `container` CLI; the port gate)
 make test-emulator # tier 3: the device-dependent suites against a real emulator
@@ -651,7 +651,16 @@ the server's key order), **microphone recording** (the Mac's mic alongside
 the device's audio — mutually exclusive with the device's *own* mic since
 scrcpy carries one device stream — mixed to a single AAC track via
 `PCMMixdown`/`AudioTimeline`, level meter in `RecordAudioSheet`, per-source
-mute writing silence; see the recording-audio convention), and four
+mute writing silence; see the recording-audio convention), **terminal
+scrolling in full-screen and streaming programs** (the wheel is reported to a
+mouse-taking program — or sent as alternate-scroll cursor keys by the event's
+own delta — through ONE shared local monitor for every mounted terminal, since
+SwiftTerm seals `scrollWheel`/`keyDown` as public not open; `TerminalCompat`
+repairs the alternate screen's right margin, which SwiftTerm leaves at 0 so
+`cmdScrollDown` copied one column per row and interleaved two frames, tested
+against real SwiftTerm so a dependency bump surfaces there; `TerminalScrollPin`
+in ADBKit carries the `userScrolling` state — and follows scrollback trims — so
+streaming output no longer snaps the view to the newest line), and four
 main-thread hang fixes from Sentry (`FontCatalog` off the main actor via Core
 Text, the log tail scrolling to document height with non-contiguous layout
 instead of typesetting the buffer, Settings ▸ General's launchd round-trip
@@ -794,7 +803,7 @@ jadx/apktool, recompile, and sign — with keystore creation) plus Frida setup, 
 custom accent color, launching emulators from the device bar, per-feature
 connect-a-device empty states, a live-preview hotkey recorder, and a Settings
 split into Appearance/Privacy; managed tools download from GitHub releases into
-Application Support and are sized/removable in Settings); 1491 ADBKit + 93
+Application Support and are sized/removable in Settings); 1503 ADBKit + 99
 AppTests green (macOS — the suite also runs on Linux in CI, minus the
 Darwin-gated files);
 builds clean with zero warnings (enforced as errors in CI). Verified live against a

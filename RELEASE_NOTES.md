@@ -2,8 +2,9 @@
 
 API Testing arrives as the 60th tool — a full HTTP client with Postman import
 and export, collections, environments, assertions, and code generation.
-Recordings can now capture microphone audio alongside the device, and four
-main-thread hangs reported from v3.7.1 are fixed.
+Recordings can now capture microphone audio alongside the device, the Terminal
+scrolls properly in full-screen and streaming programs, and four main-thread
+hangs reported from v3.7.1 are fixed.
 
 ### API Testing — the 60th feature
 
@@ -43,6 +44,24 @@ main-thread hangs reported from v3.7.1 are fixed.
   because players (QuickTime, browsers, chat apps) play only the first audio
   track and silently drop the rest. Muting writes silence rather than dropping
   samples, so the timeline stays continuous and unmuting is instant.
+
+### Terminal
+
+- **The wheel now scrolls full-screen programs** — an agent CLI, `htop`,
+  `less --mouse`, or vim with `mouse=a` could not be scrolled at all: those
+  programs take the mouse over and run on the alternate screen, where there is
+  no viewport to move. The wheel is now reported to the program, or sent as
+  cursor keys when the program hasn't taken the mouse (xterm alternate
+  scroll), following the scroll's own distance rather than flinging a pager
+  pages at a time.
+- **Scrolling one no longer corrupts the screen** — the alternate screen's
+  right margin was left at 0, so a scroll region copied a single column per
+  row and left the rest stale, leaving two frames interleaved on screen. The
+  margin is repaired when the alternate screen activates, leaving a program's
+  own margins alone.
+- **Scrollback stays put while output streams** — scrolling back through a
+  running command snapped to the newest line on every line written. The view
+  now holds where you left it; typing returns to the live output.
 
 ### Fixes
 
