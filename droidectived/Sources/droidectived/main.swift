@@ -35,10 +35,13 @@ let server = DaemonServer(backend: LiveBackend(monitor: DeviceMonitor(client: cl
 
 do {
     let bound = try await server.start(port: options.port)
-    // The one line the UI parses. Flushed immediately: the parent blocks on it,
-    // so a buffered stdout would look like a hung daemon.
-    print("droidectived listening 127.0.0.1:\(bound.port)")
-    fflush(stdout)
+    // The one line the UI parses. Written through the file handle rather than
+    // `print` + `fflush(stdout)`: `stdout` is a shared mutable global that
+    // Swift 6 strict concurrency rejects on Linux, and a FileHandle write is
+    // unbuffered anyway — which is what matters here, since the parent blocks
+    // on this line and a buffered stdout would look like a hung daemon.
+    FileHandle.standardOutput.write(
+        Data("droidectived listening 127.0.0.1:\(bound.port)\n".utf8))
 } catch {
     FileHandle.standardError.write(Data("droidectived: cannot bind: \(error)\n".utf8))
     exit(1)
