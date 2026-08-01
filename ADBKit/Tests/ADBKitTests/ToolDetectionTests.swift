@@ -58,35 +58,82 @@ import Testing
         }
     }
 
+    /// Counts filesystem probes. On Windows the locator resolves an off-SDK
+    /// tool by scanning `Path` itself rather than shelling out, so "did it
+    /// probe again?" shows up here instead of in `runner.invocations`.
+    final class ProbeCounter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value = 0
+        var count: Int {
+            lock.lock()
+            defer { lock.unlock() }
+            return value
+        }
+        func bump() {
+            lock.lock()
+            value += 1
+            lock.unlock()
+        }
+    }
+
+    /// A single-entry `Path` on Windows, so the fallback scan probes exactly
+    /// once per miss — matching the one login-shell spawn POSIX makes. Empty
+    /// elsewhere, which is what the POSIX cases have always used.
+    static var searchPathEnvironment: [String: String] {
+        #if os(Windows)
+        return ["Path": #"C:\tools"#]
+        #else
+        return [:]
+        #endif
+    }
+
     private func makeLocator(
-        runner: MockProcessRunner, clock: FakeClock, executables: Set<String> = []
+        runner: MockProcessRunner, clock: FakeClock, executables: Set<String> = [],
+        probes: ProbeCounter? = nil
     ) -> ToolLocator {
         ToolLocator(
-            runner: runner, environment: [:],
-            now: { clock.now }, isExecutableFile: { executables.contains($0) }
+            runner: runner, environment: Self.searchPathEnvironment,
+            now: { clock.now },
+            isExecutableFile: { path in
+                probes?.bump()
+                return executables.contains(path)
+            }
         )
     }
 
     @Test func notFoundExpiresSoAMidSessionInstallIsPickedUp() async {
         let runner = MockProcessRunner()  // unscripted login shell → exit 1 → not found
         let clock = FakeClock()
-        let locator = makeLocator(runner: runner, clock: clock)
+        let probes = ProbeCounter()
+        let locator = makeLocator(runner: runner, clock: clock, probes: probes)
+        // One probe per miss on either host: a login-shell spawn on POSIX, a
+        // single-entry Path scan on Windows. Same counts, different signal.
+        func probeCount() -> Int {
+            #if os(Windows)
+            return probes.count
+            #else
+            return runner.invocations.count
+            #endif
+        }
 
         #expect(await locator.resolve(.scrcpy) == nil)
         #expect(await locator.resolve(.scrcpy) == nil)
         // Within the TTL the miss is served from cache — a 2 s poll must not
-        // spawn a login shell on every tick.
-        #expect(runner.invocations.count == 1)
+        // re-probe on every tick.
+        #expect(probeCount() == 1)
 
         clock.advance(by: ToolLocator.notFoundTTL + 1)
         #expect(await locator.resolve(.scrcpy) == nil)
-        #expect(runner.invocations.count == 2)  // TTL elapsed → probed again
+        #expect(probeCount() == 2)  // TTL elapsed → probed again
     }
 
     /// The first probed install-prefix candidate for scrcpy on this host.
     private static var scrcpyCandidate: String {
         #if os(macOS)
         return "/opt/homebrew/bin/scrcpy"
+        #elseif os(Windows)
+        // No install prefixes on Windows — the fallback scans `Path`.
+        return #"C:\tools\scrcpy.exe"#
         #else
         return "/usr/local/bin/scrcpy"
         #endif

@@ -10,18 +10,22 @@ import Testing
     let runner = SystemProcessRunner()
 
     @Test func capturesStdoutAndExitCode() async {
-        let output = await runner.run(executable: "/bin/echo", arguments: ["hello"], timeout: .seconds(5))
+        let output = await runner.run(
+            executable: ChildCommands.echo.executable,
+            arguments: ChildCommands.echo.arguments, timeout: .seconds(5)
+        )
         #expect(output.exitCode == 0)
-        #expect(output.stdoutText == "hello\n")
+        #expect(output.stdoutText == ChildCommands.echoOutput)
         #expect(!output.timedOut)
     }
 
     @Test func capturesStderrAndNonZeroExit() async {
         let output = await runner.run(
-            executable: "/bin/sh", arguments: ["-c", "echo oops >&2; exit 3"], timeout: .seconds(5)
+            executable: ChildCommands.stderrAndExit3.executable,
+            arguments: ChildCommands.stderrAndExit3.arguments, timeout: .seconds(5)
         )
         #expect(output.exitCode == 3)
-        #expect(output.stderrText == "oops\n")
+        #expect(output.stderrText == ChildCommands.stderrOutput)
     }
 
     @Test func launchFailureReportsNilExit() async {
@@ -34,7 +38,8 @@ import Testing
         let clock = ContinuousClock()
         let started = clock.now
         let output = await runner.run(
-            executable: "/bin/sleep", arguments: ["30"], timeout: .milliseconds(300)
+            executable: ChildCommands.sleepForever.executable,
+            arguments: ChildCommands.sleepForever.arguments, timeout: .milliseconds(300)
         )
         #expect(output.timedOut)
         #expect(output.exitCode == nil)
@@ -45,7 +50,9 @@ import Testing
         // 2 MB of output with a 64 KB cap — the old blocking design risks a
         // full-pipe deadlock if draining stalls; the cap must also hold.
         let output = await runner.run(
-            executable: "/usr/bin/yes", arguments: [], timeout: .seconds(3), maxOutputBytes: 64 * 1024
+            executable: ChildCommands.spewForever.executable,
+            arguments: ChildCommands.spewForever.arguments, timeout: .seconds(3),
+            maxOutputBytes: 64 * 1024
         )
         #expect(output.stdout.count == 64 * 1024)
     }
@@ -65,7 +72,8 @@ import Testing
             for _ in 0..<16 {
                 group.addTask {
                     let output = await runner.run(
-                        executable: "/bin/sh", arguments: ["-c", "sleep 0.3; echo done"], timeout: .seconds(10)
+                        executable: ChildCommands.sleepThenPrint.executable,
+                        arguments: ChildCommands.sleepThenPrint.arguments, timeout: .seconds(10)
                     )
                     return output.exitCode
                 }
@@ -84,7 +92,10 @@ import Testing
         let clock = ContinuousClock()
         let started = clock.now
         let task = Task {
-            await runner.run(executable: "/bin/sleep", arguments: ["30"], timeout: .seconds(60))
+await runner.run(
+                executable: ChildCommands.sleepForever.executable,
+                arguments: ChildCommands.sleepForever.arguments, timeout: .seconds(60)
+            )
         }
         try? await Task.sleep(for: .milliseconds(200))
         task.cancel()

@@ -7,6 +7,17 @@ import Foundation
 import Testing
 @testable import ADBKit
 
+/// Host-extraction tooling differs enough on Windows that two fixtures below
+/// cannot be built or decoded there; `.enabled(if:)` reports them as skipped
+/// rather than silently compiling them out.
+private let isWindows: Bool = {
+    #if os(Windows)
+    return true
+    #else
+    return false
+    #endif
+}()
+
 @Suite struct ManagedToolStoreTests {
     /// Canned network: every `data(from:)` returns the same release JSON, every
     /// download writes the same asset bytes. Extraction uses the real runner.
@@ -112,7 +123,8 @@ import Testing
         #expect(await store.resolve(.apktool) == nil)
     }
 
-    @Test func installsTarGzAndFindsTheNestedRunnable() async throws {
+    // Not on Windows: the fixture builder shells out to POSIX `tar` to create the archive.
+    @Test(.enabled(if: !isWindows)) func installsTarGzAndFindsTheNestedRunnable() async throws {
         // Real .tar.gz fixture, extracted by the real runner — exercises the
         // tar path and the recursive runnable search (Temurin's java is nested).
         let tgz = try Self.makeTarGz(runnableRelPath: "Contents/Home/bin/java")
@@ -148,7 +160,9 @@ import Testing
         #expect(try await upgraded.upgradeAvailable(.apktool) == nil)
     }
 
-    @Test func decompressesXzAssetIntoTheRunnableBinary() async throws {
+    // Not on Windows: `.xz` decoding is deliberately unimplemented on Windows (see the follow-up
+    // in docs/cross-platform.md), so the store throws rather than extracting.
+    @Test(.enabled(if: !isWindows)) func decompressesXzAssetIntoTheRunnableBinary() async throws {
         // frida ships bare .xz; round-trip a payload through the same coder the
         // store decodes with on this platform, then confirm it lands as an
         // executable frida-server.
