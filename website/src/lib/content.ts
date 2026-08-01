@@ -1,15 +1,13 @@
 import {
   Activity,
-  Apple,
   Atom,
-  Bug,
+  Boxes,
   Cast,
   Folder,
   LayoutGrid,
   ScrollText,
-  Search,
-  ShieldCheck,
   SlidersHorizontal,
+  Sparkles,
   Wifi,
   type LucideIcon,
 } from "lucide-react"
@@ -44,160 +42,156 @@ export const paletteCommands: PaletteCommand[] = [
 
 export const paletteQueries = ["logcat", "scrcpy", "battery", "fps", "wifi", "react"]
 
-export interface Feature {
+/** A major workflow category for the "Built for how you debug" explorer.
+ *  `visual` is either a real asset or a CSS mock (no screenshot exists for
+ *  APK Studio or the MCP flow, and an unrelated shot would mislead). */
+export interface Workflow {
+  id: string
+  num: string
+  tab: string
   icon: LucideIcon
   title: string
-  body: string
-  shell: string
-}
-
-export const features: Feature[] = [
-  { icon: Search, title: "Command palette", body: "Fuzzy-search every tool and run it instantly. Pin favorites, bind global hotkeys, and stop looking up adb flags.", shell: "⌘T → run anything" },
-  { icon: Cast, title: "Screen mirror & record", body: "A friendly GUI for scrcpy — mirror and control the device, tune bitrate, FPS and crop, record to file or GIF.", shell: "scrcpy --max-size 1920" },
-  { icon: ScrollText, title: "Logcat & crash catcher", body: "Stream logs with level, tag and per-app filters, follow an app across restarts, grab the last crash for Slack or Jira.", shell: "adb logcat -v color" },
-  { icon: Folder, title: "Device file explorer", body: "Browse shared storage — or the whole filesystem on rooted devices — copy, move, delete, and push/pull to your Mac.", shell: "adb pull /sdcard/..." },
-  { icon: LayoutGrid, title: "App management", body: "Drag in an APK to install on every device, uninstall, force-stop, clear data, toggle runtime permissions, pull APKs, and browse a debug app's sandbox.", shell: "adb install app.apk" },
-  { icon: Activity, title: "Performance monitor", body: "Live per-core CPU, RAM, FPS & jank, and network throughput — charted, recordable, exportable to JSON & CSV.", shell: "dumpsys gfxinfo" },
-  { icon: Atom, title: "React Native tools", body: "Open the dev menu, reload the JS bundle, reverse the Metro port, and point the app at any dev server.", shell: "adb reverse tcp:8081" },
-  { icon: Bug, title: "Reactotron, built in", body: "A full Reactotron debugger with no desktop app — Droidective runs the server itself. Live timeline of logs & API calls, a store browser, custom commands, and a REPL.", shell: "no Reactotron install" },
-  { icon: Wifi, title: "Wireless ADB & connection", body: "Connect over Wi-Fi (with Android 11 pairing), manage Wi-Fi and private DNS, check root status, fan out to every device.", shell: "adb tcpip 5555" },
-  { icon: SlidersHorizontal, title: "State simulation", body: "Fake the battery, force dark mode, change locale, scale fonts and density, set a proxy — every override is reset-tracked.", shell: "cmd uimode night yes" },
-]
-
-export interface Guide {
-  icon: LucideIcon
-  title: string
-  body: string
-  cta: string
-  href: string
-}
-
-export const guides: Guide[] = [
-  { icon: Atom, title: "React Native debugging", body: "Built-in Reactotron, the dev menu, JS reload, and Metro port forwarding — one RN hub, no terminal.", cta: "Open the RN guide →", href: "/react-native-debugger.html" },
-  { icon: Search, title: "Android developers", body: "Tail logcat, watch performance, browse device files, and drive apps — every adb command behind ⌘T.", cta: "For Android developers →", href: "/for-android-developers.html" },
-  { icon: Apple, title: "iOS developers", body: "Booted iOS Simulators in the same device bar — send test pushes, fake state, fire deep links, and capture screenshots.", cta: "For iOS developers →", href: "/for-ios-developers.html" },
-  { icon: Bug, title: "QA & testers", body: "Reproduce, capture, and report bugs in minutes — fake state, mark up a screenshot, pull a full bug report.", cta: "For QA & testers →", href: "/for-qa-and-testers.html" },
-  { icon: Activity, title: "Support teams", body: "See the device, pull the diagnostics, close the ticket — mirror the screen and grab logs, no adb needed.", cta: "For support teams →", href: "/for-support-teams.html" },
-  { icon: ShieldCheck, title: "Security & pentest", body: "Inspect, decompile and re-sign APKs, set up Frida, browse app data, and route traffic through Burp — one pipeline.", cta: "For security testers →", href: "/for-security-testers.html" },
-]
-
-export interface Showcase {
-  eyebrow: string
-  title: string
-  body: string
-  ticks: { lead: string; rest: string }[]
-  image: string
-  alt: string
-  flip: boolean
+  blurb: string
+  features: string[]
+  image?: string
   video?: string
+  mock?: "apk" | "mcp"
+  alt?: string
 }
 
-export const showcases: Showcase[] = [
+export const workflows: Workflow[] = [
   {
-    eyebrow: "the palette",
-    title: "One keystroke to everything",
-    body: "Hit ⌘T from any screen and fuzzy-search all 59 tools. The device bar follows you, so every command targets the device you mean.",
-    ticks: [
-      { lead: "Pin favorites", rest: " and bind global hotkeys" },
-      { lead: "Target one device", rest: " or fan out to all of them" },
-      { lead: "Every run is logged", rest: " with the exact adb command" },
-    ],
-    image: "/assets/screenshot-palette.webp",
-    alt: "Droidective ⌘T command palette filtering features for the query 'screen' — Screenshot, Screen Record, Mirror Screen and more",
-    flip: false,
+    id: "react-native",
+    num: "01",
+    tab: "React Native",
+    icon: Atom,
+    title: "Understand what your app does while it runs",
+    blurb:
+      "Reactotron is built in — no desktop app to install. Point your client at Droidective and a live timeline of logs, actions, state, and network requests streams in beside a Hermes JS console.",
+    features: ["Reactotron timeline", "Hermes JS console", "Redux & state browser", "Network inspector", "Reload JS & dev menu", "Metro port forwarding"],
+    image: "/assets/screenshot-react.webp",
+    alt: "Droidective's React Native hub with quick-action cards for reload JS, dev menu and process death, plus a Metro bundler section",
   },
   {
-    eyebrow: "tabs & split panes",
-    title: "A workspace, not a single screen",
-    body: "Open features in tabs and keep them running while hidden, then split the window in two — tail logcat beside a live screen mirror, or watch performance next to the app it's profiling.",
-    ticks: [
-      { lead: "Open everything in tabs", rest: " — ⌘T opens, ⌃1–9 jump between them" },
-      { lead: "Split into two panes", rest: " and drag a tab across the divide" },
-      { lead: "Tabs keep running", rest: " in the background while you work elsewhere" },
-    ],
-    image: "/assets/poster-tabs.webp",
-    alt: "Screen recording of Droidective opening features in tabs and dragging a tab across the divider to split the window into two panes",
-    flip: true,
+    id: "device",
+    num: "02",
+    tab: "Device",
+    icon: Cast,
+    title: "Drive the device without touching a terminal",
+    blurb:
+      "Mirror and control the screen, browse the filesystem, manage every installed app, and pair over Wi-Fi — in tabs that keep running while you work elsewhere, or split side by side.",
+    features: ["Screen mirror & control", "Screen recording", "File explorer", "App management", "Wireless ADB pairing", "Tabs & split panes"],
     video: "/assets/tour-tabs.mp4",
+    image: "/assets/poster-tabs.webp",
+    alt: "Droidective opening features in tabs and dragging a tab across the divider to split the window into two panes",
   },
   {
-    eyebrow: "quick actions",
-    title: "Debug without leaving your app",
-    body: "A Raycast-style panel on a global hotkey, summoned over whatever you're working in — run any adb action, manage apps, boot emulators, or install an APK without switching to the main window.",
-    ticks: [
-      { lead: "Every action in one grid", rest: " — toggles, forms, and your custom commands" },
-      { lead: "Pick a device per action", rest: ", or ⌘⏎ to run on all of them" },
-      { lead: "Closes out of your way", rest: " — it never steals focus from your app" },
-    ],
-    image: "/assets/poster-quick-actions.webp",
-    alt: "Screen recording of the Droidective Quick Actions panel summoned over a browser window and running a device action",
-    flip: false,
-    video: "/assets/tour-quick-actions.mp4",
-  },
-  {
-    eyebrow: "logs & diagnostics",
-    title: "Tail logs, not terminal tabs",
-    body: "A live logcat with the filters you actually reach for — and a crash catcher that formats the last crash for Slack or Jira.",
-    ticks: [
-      { lead: "Filter", rest: " by level, app, tag, or text" },
-      { lead: "Follow an app", rest: " across restarts" },
-      { lead: "Export", rest: " the buffer to a file" },
-    ],
-    image: "/assets/screenshot-logcat.webp",
-    alt: "Droidective live logcat streaming color-coded log lines with level, app, tag and text filters",
-    flip: true,
-  },
-  {
-    eyebrow: "performance",
-    title: "Watch performance live",
-    body: "Per-core CPU, system RAM, app FPS & jank, and network throughput — charted as they happen, with a hover crosshair.",
-    ticks: [
-      { lead: "Record a session", rest: ", export to JSON & CSV" },
-      { lead: "Per-process", rest: " CPU and memory" },
-      { lead: "Dynamic axes", rest: " that track the live range" },
-    ],
+    id: "performance",
+    num: "03",
+    tab: "Performance",
+    icon: Activity,
+    title: "Watch the numbers move in real time",
+    blurb:
+      "Per-core CPU, system RAM, app FPS and jank, and network throughput — charted as they happen with a hover crosshair. Record a session and export it to JSON or CSV.",
+    features: ["Per-core CPU", "System & per-process RAM", "FPS & jank", "Network throughput", "Session recording", "JSON & CSV export"],
     image: "/assets/screenshot-performance.webp",
     alt: "Droidective performance monitor charting per-core CPU, system RAM and network throughput live during a recording",
-    flip: false,
   },
   {
-    eyebrow: "react native",
-    title: "Made for React Native",
-    body: "The RN essentials in one hub — no more remembering adb incantations to reload a bundle or reach Metro.",
-    ticks: [
-      { lead: "Reload JS", rest: ", open the dev menu, force process death" },
-      { lead: "Reverse the Metro port", rest: " in a click" },
-      { lead: "Set the dev-server host", rest: "; save deep links per app" },
-    ],
-    image: "/assets/screenshot-react.webp",
-    alt: "Droidective React Native hub — quick-action cards for reload JS, dev menu and process death, with a Metro bundler section for port forwarding and the dev-server host",
-    flip: true,
+    id: "apk",
+    num: "04",
+    tab: "APK",
+    icon: Boxes,
+    title: "Open an APK and see everything inside it",
+    blurb:
+      "One workspace over a single loaded APK — inspect the manifest and signing certs, decompile with jadx or apktool, recompile, and re-sign. AAB bundles convert to installable APKs too.",
+    features: ["Manifest & cert inspection", "jadx + apktool decompile", "Recompile & re-sign", "AAB → APK conversion", "Keystore creation", "Frida server setup"],
+    mock: "apk",
   },
   {
-    eyebrow: "reactotron",
-    title: "Reactotron, built in",
-    body: "Droidective is the Reactotron server — point your app's client at it and a live timeline of logs, actions, and network requests streams in. No separate Reactotron app to install or keep open.",
-    ticks: [
-      { lead: "Split the timeline", rest: " and give each pane its own filter" },
-      { lead: "Filter network traffic", rest: " by HTTP method and status class" },
-      { lead: "Disconnects explained", rest: " right in the timeline, with the app's name" },
-    ],
-    image: "/assets/poster-reactotron.webp",
-    alt: "Screen recording of Droidective's built-in Reactotron timeline split into two panes, each filtered to a different event type",
-    flip: false,
-    video: "/assets/tour-reactotron.mp4",
+    id: "ai",
+    num: "05",
+    tab: "AI / MCP",
+    icon: Sparkles,
+    title: "Let your AI agent read the running app",
+    blurb:
+      "An opt-in MCP server exposes Reactotron's timeline, state, and network data to Claude Code, Cursor, and any MCP client — 10 tools and 8 resources over loopback HTTP, redacted by default.",
+    features: ["10 MCP tools", "8 MCP resources", "Live timeline access", "State & network context", "Redaction on by default", "127.0.0.1 only"],
+    mock: "mcp",
+  },
+  {
+    id: "report",
+    num: "06",
+    tab: "Logs & QA",
+    icon: ScrollText,
+    title: "Capture exactly what went wrong",
+    blurb:
+      "A columnar logcat with level, tag, and per-app filters that holds the tail while you read. The crash catcher splits Java, native, RN, and ANR crashes into a filterable, copy-ready list.",
+    features: ["Columnar logcat", "Level & tag filters", "Crash catcher", "Annotated screenshots", "Full bug reports", "State simulation"],
+    image: "/assets/screenshot-logcat.webp",
+    alt: "Droidective live logcat streaming color-coded log lines with level, app, tag and text filters",
   },
 ]
 
-export const galleryShots = [
-  { image: "/assets/screenshot-terminal.webp", alt: "Droidective's built-in terminal split into two panes with ⌘D, each running adb commands against the connected emulator", title: "Terminal with split panes", caption: "Login shells in tabs — ⌘D splits the pane, and every shell targets the selected device." },
-  { image: "/assets/screenshot-connection.webp", alt: "Droidective connection hub showing the device's Wi-Fi network and IP, reverse port forwarding, wireless ADB, and pairing", title: "Wireless & connection", caption: "The device's live Wi-Fi network & IP, one-click adb reverse, and wireless debugging." },
-  { image: "/assets/screenshot-apps.webp", alt: "Droidective apps explorer listing installed and system apps with a selected app's info, permissions, and controls", title: "Apps explorer", caption: "Every installed & system app — info, permissions, force-stop, pull APK." },
-  { image: "/assets/screenshot-files.webp", alt: "Droidective file explorer browsing the device's /sdcard directory", title: "File explorer", caption: "Browse, push & pull device files with a real progress bar." },
-  { image: "/assets/screenshot-device.webp", alt: "Droidective device info showing RAM, storage, battery health and CPU for the connected device", title: "Device info", caption: "RAM, storage, battery health, CPU, and every getprop — searchable." },
-  { image: "/assets/screenshot-hotkeys.webp", alt: "Droidective hotkeys settings — record a global shortcut to show the app, and a per-feature shortcut for any tool", title: "Global hotkeys", caption: "Bind a global shortcut to summon the app, and one per feature." },
-  { image: "/assets/screenshot-tabs.webp", alt: "Droidective home screen with a multi-tab strip across the top — File Explorer, Device Info, Connection, Performance Monitor, Apps, and Terminal behind a permanent Home icon", title: "Tabbed home", caption: "Your most-used tools front and center, each a tab away." },
-  { image: "/assets/screenshot-catalog.webp", alt: "Droidective feature catalog listing all 59 tools with on/off toggles", title: "Feature catalog", caption: "Toggle, reorder, and pin any of the 59 tools." },
+/** The "old workflow vs Droidective" comparison. Category-level, never a
+ *  claim that a named competitor is worse. */
+export const comparisonRows: { workflow: string; old: string; nu: string }[] = [
+  { workflow: "Device management", old: "adb one-liners you re-look-up", nu: "A device bar and a searchable UI" },
+  { workflow: "Screen mirroring", old: "scrcpy in its own window", nu: "Mirrored in a tab or split pane" },
+  { workflow: "Logs", old: "A terminal tail you scroll past", nu: "Columnar logcat with filters" },
+  { workflow: "React Native", old: "Reactotron desktop + Metro + CLI", nu: "One built-in RN hub" },
+  { workflow: "Performance", old: "dumpsys output you parse by eye", nu: "Live charts you can record" },
+  { workflow: "APK work", old: "jadx, apktool, apksigner by hand", nu: "APK Studio over one file" },
+  { workflow: "AI context", old: "Paste logs into a chat window", nu: "MCP reads the live app" },
+  { workflow: "Price", old: "Varies per tool", nu: "Free · MIT · no tiers" },
+]
+
+/** Grouped feature explorer — collapsed by default so the page stays calm. */
+export const featureGroups: { name: string; icon: LucideIcon; count: string; items: string[] }[] = [
+  {
+    name: "React Native",
+    icon: Atom,
+    count: "6 tools",
+    items: ["Reactotron (built in)", "Hermes JS console", "Reactotron MCP server", "Reload JS & dev menu", "Metro port forwarding", "Dev-server host override"],
+  },
+  {
+    name: "Device control",
+    icon: Cast,
+    count: "12 tools",
+    items: ["Screen mirror & control", "Screen recording", "Screenshot editor", "File explorer", "Apps explorer", "Install APK", "Deep links", "Send text", "Wireless ADB & pairing", "Private DNS", "Root status", "Emulator manager"],
+  },
+  {
+    name: "Logs & diagnostics",
+    icon: ScrollText,
+    count: "7 tools",
+    items: ["Live logcat", "iOS unified logs", "Crash catcher", "Bug report", "Device info & getprop", "Terminal (split panes)", "Custom commands"],
+  },
+  {
+    name: "Performance",
+    icon: Activity,
+    count: "4 tools",
+    items: ["Per-core CPU & RAM", "FPS & jank monitor", "Per-process stats", "Network throughput"],
+  },
+  {
+    name: "APK & security",
+    icon: Boxes,
+    count: "6 tools",
+    items: ["APK Studio", "APK inspector", "Decompile (jadx / apktool)", "Sign & zipalign", "AAB → APK converter", "Frida server setup"],
+  },
+  {
+    name: "State simulation",
+    icon: SlidersHorizontal,
+    count: "10 tools",
+    items: ["Fake battery", "Dark mode", "Demo mode", "Locale override", "Font & density scale", "Proxy override", "Developer settings", "Push notifications (iOS)", "Sandbox browser", "System restrictions"],
+  },
+]
+
+/** Human-framed moments, not feature names. */
+export const useCaseMoments: { quote: string; answer: string; href: string }[] = [
+  { quote: "“The app is crashing.”", answer: "Open the crash catcher, read the split-out trace, and copy it Slack-ready.", href: "/for-qa-and-testers.html" },
+  { quote: "“The app feels slow.”", answer: "Chart CPU, RAM, FPS and jank live, then record the session and export it.", href: "/for-android-developers.html" },
+  { quote: "“I need to inspect this APK.”", answer: "Drop it into APK Studio — manifest, certs, decompiled source, re-sign.", href: "/for-security-testers.html" },
+  { quote: "“What is my RN app doing?”", answer: "Reactotron streams the timeline; MCP hands the same context to your AI.", href: "/react-native-debugger.html" },
 ]
 
 export const releases: { version: string; date: string; latest?: boolean; html: string }[] = [

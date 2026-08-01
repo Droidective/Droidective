@@ -560,6 +560,23 @@ public enum FeatureRegistry {
             category: .logs, icon: "chart.line.uptrend.xyaxis", kind: .view
         ),
 
+        // ── Tool UX ──────────────────────────────────────────────────────
+        FeatureDef(
+            id: "api-client", title: "API Testing",
+            subtitle: "Send HTTP requests, import Postman collections, assert on responses",
+            keywords: [
+                "api", "http", "https", "rest", "postman", "request", "curl", "endpoint",
+                "json", "xml", "graphql", "get", "post", "put", "delete", "patch",
+                "response", "header", "body", "url", "query", "collection", "folder",
+                "environment", "variable", "globals", "auth", "bearer", "basic",
+                "oauth", "token", "apikey", "cookie", "redirect", "multipart",
+                "form", "upload", "assert", "test", "runner", "history", "code",
+                "fetch", "axios", "requests", "httpie", "insomnia",
+            ],
+            category: .toolUX, icon: "arrow.up.arrow.down.circle", kind: .view,
+            needsDevice: false
+        ),
+
         // ── Tool UX (system) ─────────────────────────────────────────────
         FeatureDef(
             id: "terminal", title: "Terminal",
@@ -645,7 +662,7 @@ public enum FeatureRegistry {
             "dev-settings",
             "scrcpy", "screenshot", "send-text", "monkey",
             "emulators", "connection",
-            "terminal", "custom-commands",
+            "api-client", "terminal", "custom-commands",
         ],
         // RN-specific tools first, then the shared debug loop (logs — both
         // platforms' — crash, perf, network), app management, device/capture
@@ -658,7 +675,7 @@ public enum FeatureRegistry {
             "apps", "install-app", "apk-studio", "aab-convert",
             "device-info", "simulate", "scrcpy", "screenshot", "send-text",
             "emulators", "connection",
-            "terminal", "custom-commands",
+            "api-client", "terminal", "custom-commands",
         ],
         // Simulator-first loop: boot sims → simulate state (push, battery,
         // appearance via the Simulate hub) → capture/polish. Deep links live
@@ -667,7 +684,7 @@ public enum FeatureRegistry {
         .iosDeveloper: [
             "emulators", "ios-logs", "simulate", "demo-mode",
             "screenshot", "video-editor",
-            "terminal", "custom-commands",
+            "api-client", "terminal", "custom-commands",
         ],
         // Capture first (the QA staple), then repro/report, state simulation,
         // perf/fuzz, app install, and device context.
@@ -677,7 +694,7 @@ public enum FeatureRegistry {
             "simulate", "performance", "monkey",
             "apps", "install-app", "send-text", "demo-mode",
             "device-info", "connection",
-            "terminal", "custom-commands",
+            "api-client", "terminal", "custom-commands",
         ],
         // Identify the device, get it connected, run health checks, observe,
         // then collect diagnostics.
@@ -686,7 +703,7 @@ public enum FeatureRegistry {
             "root-status", "system-restrictions",
             "apps", "scrcpy", "screenshot",
             "bug-report", "logcat", "emulators",
-            "terminal", "custom-commands",
+            "api-client", "terminal", "custom-commands",
         ],
         // Ordered by the assessment workflow: recon/static analysis, then
         // dynamic instrumentation, then on-device data, then traffic
@@ -698,7 +715,7 @@ public enum FeatureRegistry {
             "sandbox-browser", "file-explorer",
             "simulate", "connection", "install-app",
             "scrcpy", "screenshot",
-            "terminal", "custom-commands",
+            "api-client", "terminal", "custom-commands",
         ],
     ]
 

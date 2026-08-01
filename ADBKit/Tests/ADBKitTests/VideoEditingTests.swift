@@ -213,6 +213,93 @@ import Testing
         #expect(complex?.contains("scale=320:-1:flags=lanczos") == true)
     }
 
+    // MARK: stderr tail
+
+    /// ffmpeg's progress updates are `\r`-separated so they overwrite one
+    /// terminal line — the error that follows them must still be what surfaces.
+    @Test func stderrTailKeepsTheErrorAfterCarriageReturnProgress() {
+        let stderr = """
+        ffmpeg version 6.1.1 Copyright (c) 2000-2023 the FFmpeg developers
+          Stream #0:0: Video: h264 (avc1 / 0x31637661), yuv420p, 1080x2400
+
+        """
+            + "frame=   12 fps=0.0 q=28.0 size=     0kB time=00:00:00.00 bitrate=N/A speed=   0x\r"
+            + "frame=   48 fps= 47 q=28.0 size=     0kB time=00:00:01.16 bitrate=0.3kbits/s\r"
+            + "frame=   96 fps= 63 q=28.0 size=   256kB time=00:00:02.76 bitrate=759.0kbits/s\r"
+            + """
+            [out#0/mp4 @ 0x14e004a80] Error muxing a packet
+            [out#0/mp4 @ 0x14e004a80] Error writing trailer: No space left on device
+            Conversion failed!
+
+            """
+
+        #expect(VideoEditing.stderrTail(stderr) == """
+        [out#0/mp4 @ 0x14e004a80] Error muxing a packet
+        [out#0/mp4 @ 0x14e004a80] Error writing trailer: No space left on device
+        Conversion failed!
+        """)
+        #expect(!VideoEditing.stderrTail(stderr).contains("frame="))
+    }
+
+    /// Progress alone still yields the last updates rather than one giant blob.
+    @Test func stderrTailSplitsCarriageReturnOnlyOutput() {
+        let stderr = "frame=  1 fps=0.0\rframe= 30 fps=29\rframe= 60 fps=30\rframe= 90 fps=31\r"
+        #expect(VideoEditing.stderrTail(stderr) == """
+        frame= 30 fps=29
+        frame= 60 fps=30
+        frame= 90 fps=31
+        """)
+    }
+
+    /// `"\r\n"` is one Swift Character, so `split(separator: "\n")` never fires
+    /// on CRLF — the Windows/Linux port's ffmpeg writes it.
+    @Test func stderrTailHandlesCRLF() {
+        let stderr = "ffmpeg version 6.1.1\r\nInput #0, mp4\r\n  Duration: 00:00:12.34\r\n"
+            + "Error opening output file /out.mp4.\r\n"
+        #expect(VideoEditing.stderrTail(stderr) == """
+        Input #0, mp4
+          Duration: 00:00:12.34
+        Error opening output file /out.mp4.
+        """)
+    }
+
+    @Test func stderrTailHandlesLF() {
+        let stderr = "ffmpeg version 6.1.1\nInput #0, mp4\n  Duration: 00:00:12.34\n"
+            + "Error opening output file /out.mp4."
+        #expect(VideoEditing.stderrTail(stderr) == """
+        Input #0, mp4
+          Duration: 00:00:12.34
+        Error opening output file /out.mp4.
+        """)
+    }
+
+    /// The call sites fall back to a generic message on an empty tail.
+    @Test func stderrTailOfBlankOutputIsEmpty() {
+        #expect(VideoEditing.stderrTail("").isEmpty)
+        #expect(VideoEditing.stderrTail("\n\n\n").isEmpty)
+        #expect(VideoEditing.stderrTail("\r\n\r\n").isEmpty)
+        #expect(VideoEditing.stderrTail("   \n\t\n").isEmpty)
+    }
+
+    @Test func stderrTailReturnsEverythingBelowTheLimit() {
+        #expect(VideoEditing.stderrTail("only line") == "only line")
+        #expect(VideoEditing.stderrTail("first\nsecond") == "first\nsecond")
+    }
+
+    /// A trailing newline must not push a real line out of the tail, nor leave a
+    /// blank line at the end of the message.
+    @Test func stderrTailIgnoresATrailingNewline() {
+        #expect(VideoEditing.stderrTail("one\ntwo\nthree\n") == "one\ntwo\nthree")
+        #expect(VideoEditing.stderrTail("one\ntwo\nthree\r\n") == "one\ntwo\nthree")
+    }
+
+    @Test func stderrTailHonoursTheLineLimit() {
+        let stderr = "one\ntwo\nthree\nfour"
+        #expect(VideoEditing.stderrTail(stderr, lines: 1) == "four")
+        #expect(VideoEditing.stderrTail(stderr, lines: 2) == "three\nfour")
+        #expect(VideoEditing.stderrTail(stderr, lines: 10) == stderr)
+    }
+
     // MARK: combined ordering
 
     @Test func filterChainOrderIsCropRotateFlipScaleSpeed() {

@@ -81,7 +81,7 @@ public actor VideoEditService {
 
     private func failureMessage(_ output: ProcessOutput) -> String {
         if output.timedOut { return "Export timed out." }
-        let tail = output.stderrText.split(separator: "\n").suffix(3).joined(separator: "\n")
+        let tail = VideoEditing.stderrTail(output.stderrText)
         return tail.isEmpty ? "ffmpeg export failed." : "ffmpeg export failed:\n\(tail)"
     }
 }
