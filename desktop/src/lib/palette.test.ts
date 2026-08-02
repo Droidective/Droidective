@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import raw from "@/lib/__fixtures__/features.json"
-import { categoryLabel, groupByCategory, relevance, searchActions } from "@/lib/palette"
+import { rankFeatures, relevance } from "@/lib/palette"
 import type { FeatureSummary } from "@/lib/wire"
 
 // Real daemon output, captured from `POST /v1/features/list` rather than
@@ -54,58 +54,25 @@ describe("relevance", () => {
   })
 })
 
-describe("searchActions", () => {
-  it("lists only implemented action features", () => {
-    const results = searchActions(features, "")
-    expect(results.length).toBeGreaterThan(0)
-    for (const feature of results) {
-      expect(feature.implemented).toBe(true)
-      expect(["instantAction", "formAction", "toggleAction"]).toContain(feature.kind)
-    }
-    // Hubs and full-screen views are not runnable from this app yet.
-    expect(results.map((feature) => feature.id)).not.toContain("simulate")
-    expect(results.map((feature) => feature.id)).not.toContain("logcat")
-  })
-
-  it("keeps hub members reachable", () => {
-    // They are most of the runnable surface: hiding them the way the Mac's
-    // catalog does would leave this app with almost nothing to run, because
-    // it has no hub screens to reach them through.
-    const results = searchActions(features, "")
-    const absorbed = results.filter((feature) => feature.isAbsorbedByHub)
-    expect(absorbed.length).toBeGreaterThan(results.length / 2)
-    expect(results.map((feature) => feature.id)).toContain("fake-battery")
-  })
-
+describe("rankFeatures", () => {
   it("puts the best match first", () => {
-    const results = searchActions(features, "battery")
-    expect(results[0]?.id).toBe("fake-battery")
+    expect(rankFeatures(features, "battery")[0]?.id).toBe("fake-battery")
   })
 
-  it("preserves registry order for equal scores", () => {
-    const all = searchActions(features, "")
-    const registryOrder = features
-      .filter((feature) => all.some((match) => match.id === feature.id))
-      .map((feature) => feature.id)
-    expect(all.map((feature) => feature.id)).toEqual(registryOrder)
+  it("preserves the incoming order for equal scores", () => {
+    // Callers hand this the registry order, and a stable list is what keeps
+    // rows from reshuffling under the cursor as someone types.
+    const all = rankFeatures(features, "")
+    expect(all.map((feature) => feature.id)).toEqual(features.map((feature) => feature.id))
   })
 
-  it("returns nothing for a query that matches nothing", () => {
-    expect(searchActions(features, "zzzzz-no-such-thing")).toEqual([])
-  })
-})
-
-describe("groupByCategory", () => {
-  it("groups without reordering within a group", () => {
-    const groups = groupByCategory(searchActions(features, ""))
-    expect(groups.length).toBeGreaterThan(1)
-    const flattened = groups.flatMap((group) => group.features.map((feature) => feature.id))
-    expect(new Set(flattened).size).toBe(flattened.length)
+  it("drops what scores nothing", () => {
+    expect(rankFeatures(features, "zzzzz-no-such-thing")).toEqual([])
   })
 
-  it("turns a wire case name into something readable", () => {
-    expect(categoryLabel("deviceState")).toBe("Device State")
-    expect(categoryLabel("input")).toBe("Input")
-    expect(categoryLabel("reactNative")).toBe("React Native")
+  it("leaves the choice of what to offer to its caller", () => {
+    // Deliberately not filtered here: the sidebar wants views as well as
+    // actions, and a palette over commands would choose differently again.
+    expect(rankFeatures(features, "").map((feature) => feature.id)).toContain("logcat")
   })
 })

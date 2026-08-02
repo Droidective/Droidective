@@ -28,6 +28,10 @@ its own.
 | `src/lib/wire.ts` | the daemon's JSON shapes, mirrored |
 | `src/lib/daemon.ts` | the typed `invoke()` surface — the only way to reach the daemon |
 | `src/lib/palette.ts` | search ranking, ported from ADBKit's `PaletteSearch` |
+| `src/lib/sidebar.ts` | which features the sidebar lists, grouped and ordered |
+| `src/lib/tabs.ts` | the open tabs and what gets focus on close — ADBKit's `TabState` |
+| `src/lib/ordering.ts` | drag-reorder math — ADBKit's `SidebarOrdering` |
+| `src/lib/layout.ts` | what the window remembers between launches |
 | `src/lib/logbuffer.ts` | the log feed's ring buffer and its gap markers |
 | `src/lib/fields.ts` | form values → run parameters |
 | `src-tauri/src/daemon/` | spawning, the HTTP client, and the stream socket |
@@ -52,26 +56,49 @@ resolves. It is gitignored — build it, do not commit it.
 
 ## What works so far
 
-Device picker, the action palette (search, forms, toggles, destructive
-confirmation), the installed-app browser with its verbs, and live logcat with
+A device picker, a grouped sidebar over every feature the engine implements,
+and a tab strip: clicking a feature opens it in its own tab, tabs drag to
+reorder, and Home leads the strip permanently. An action feature renders from
+its registry fields — forms, toggles, destructive confirmation — which is why
+most of the registry works with no per-feature code. The screens built by hand
+so far are the installed-app browser with its verbs, and live logcat with
 visible gap markers.
 
-The app chosen in **Apps** is the app the palette acts on: a `needsBundle`
+Open tabs stay mounted while they are in the background rather than
+unmounting, so a backgrounded tab keeps its log stream and its loaded lists.
+The sidebar arrangement and the open tabs are saved to `localStorage` and
+restored on launch; a saved tab naming a feature this build no longer has is
+dropped rather than restored as a blank pane.
+
+The app chosen in **Apps** is the app other features act on: a `needsBundle`
 feature (Monkey) is disabled until one is picked, and every other action gets
 it as optional context — the rule `AppState.run` applies on the Mac. The
 choice is owned by `App.tsx`, not the Apps pane, so switching tabs keeps it
 and switching *device* drops it.
 
-Rough edge: the app list is re-fetched whenever the Apps tab is opened, since
-the pane remounts. It is a `dumpsys package packages` parse, so that is a
-second or two each time — worth lifting into shared state if it starts to
-grate.
+Hub members are listed standalone, unlike the Mac's sidebar: this app has no
+hub screens, so hiding them would make them unreachable rather than merely
+relocated.
 
-Not yet: the remaining full-screen view features (file explorer, crash
-catcher, performance…), which are `kind: "view"` in the registry and need
-whole panels rather than a form. They are filtered out of the palette rather than shown as
-dead rows. Hub members *are* listed standalone — this app has no hub screens,
-and they are most of the runnable surface.
+Not yet: split panes, the command palette, hotkeys, and most of the
+full-screen views (file explorer, crash catcher, performance…), which are
+`kind: "view"` in the registry and need whole panels. They are listed in the
+sidebar and open a tab that says so, rather than being hidden — a feature the
+Mac has and this app does not is worth knowing about.
+`docs/desktop-parity.md` is the tracker.
+
+## Two platform requirements for drag and drop
+
+Both are needed before HTML5 drag works at all, and both fail silently:
+
+- **`"dragDropEnabled": false`** in `tauri.conf.json`. Tauri's native
+  drag-and-drop handler is on by default and swallows the webview's own drag
+  events. Turning it off means a future drop-an-APK-on-the-window feature has
+  to handle the drop in the webview rather than in Rust.
+- **`-webkit-user-drag: element`** on `[draggable="true"]` (`index.css`).
+  The app sets `user-select: none` — it is a desktop chrome, not a document —
+  and WebKit refuses to start a drag on unselectable content. Chromium
+  (WebView2, Windows) does not care; WebKitGTK on Linux does.
 
 ## Parity with the Mac app
 

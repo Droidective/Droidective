@@ -52,6 +52,10 @@ split panes and no palette produces something that looks like Droidective in a
 screenshot and does not feel like it in use — and every screen ported before
 the shell exists will need reworking to live inside it.
 
+The sidebar and the tab strip have landed; split panes, the palette and hotkeys
+have not. Screens ported now open in a tab, so they will not need reworking for
+that — but a screen is still not finished until it behaves in a split pane.
+
 1. **Shell parity** (below) — tabs, split panes, sidebar, palette, hotkeys.
 2. **The screens people open every day** — logcat, file explorer, device info,
    apps, crash catcher.
@@ -68,15 +72,26 @@ Sourced from `CLAUDE.md` and the App sources.
 
 ### Navigation and layout
 
-- [ ] **Grouped sidebar** of features by category, with per-category collapse
-      (`LayoutState.collapsedCategories`).
-- [ ] **Drag to reorder** — a feature drags within its group, a category header
-      drags the whole group, with an insertion guideline between rows and only
-      at group boundaries for groups. Custom `.onDrag`/`.onDrop`, deliberately
-      not `List.onMove` (it raced the row tap gestures).
+- [x] **Grouped sidebar** of features by category, with per-category collapse
+      (`LayoutState.collapsedCategories`). Category order and headings are held
+      in `desktop/src/lib/sidebar.ts`, not sent over the wire — the daemon
+      serves registry order, which is not display order. A test fails if the
+      daemon starts serving a category that table has never heard of.
+- [x] **Drag to reorder** — a feature drags within its group, a category header
+      drags the whole group, with an accent insertion guideline. A feature may
+      not leave its category, and a drop past the last row of a group lands at
+      the end of *that group*, not the end of everything (`applyDrop`).
+      Two platform requirements make this work at all: Tauri's
+      `dragDropEnabled` must be `false` (its native handler otherwise swallows
+      HTML5 drag) and WebKit needs `-webkit-user-drag: element`, because the
+      app sets `user-select: none` and WebKit will not drag unselectable
+      content.
 - [ ] **Auto-hiding sidebar** (Dock-style).
-- [ ] **Feature tabs** — a permanent Home tab leading the strip, `+` to open
-      another, drag to reorder.
+- [x] **Feature tabs** — a permanent Home tab leading the strip, drag to
+      reorder, ⌘W / Ctrl+W to close, ⌘1–⌘9 to jump. Open tabs stay mounted and
+      hidden rather than unmounted, so a background tab keeps its log stream and
+      its loaded lists. Ported from ADBKit's `TabState`, close-focus rules
+      included. Still missing: the `+` button, which needs the palette below.
 - [ ] **Split panes** — ⌘D / ⇧⌘D, clamped 30–70% (`PaneSplit`), the pure
       `TerminalSplitTree` model already in ADBKit and tested.
 - [ ] **Drop-to-split** — dragging a tab onto a pane edge splits there.
@@ -141,8 +156,10 @@ Found by driving the app against a live emulator, not by reading it.
       back is a tab switch or a device change.
 - [ ] **Logcat has no level or app filter** — the Mac has both, plus a
       find-vs-filter split, export, clear, and tag-filter chips.
-- [ ] **The app list re-fetches on every tab switch**, because the pane
-      remounts and the data is not lifted.
+- [x] ~~**The app list re-fetches on every tab switch**, because the pane
+      remounts and the data is not lifted.~~ Fixed by the tab shell: an open
+      tab stays mounted while it is in the background, so the pane no longer
+      remounts and nothing re-fetches.
 
 ---
 
