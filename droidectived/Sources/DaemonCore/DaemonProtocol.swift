@@ -11,6 +11,8 @@ public enum DaemonProtocol {
         case devicesList = "/v1/devices/list"
         case featuresList = "/v1/features/list"
         case actionsRun = "/v1/actions/run"
+        case appsList = "/v1/apps/list"
+        case appsControl = "/v1/apps/control"
     }
 
     /// The multiplexed stream socket. Not a `Route`: it is a WebSocket upgrade

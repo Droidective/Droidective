@@ -22,6 +22,19 @@ import FoundationNetworking
         var count: Int { calls.count }
         var last: (id: String, serial: String, platform: DevicePlatform,
                    params: [String: FeatureValue])? { calls.last }
+
+        private(set) var appCalls: [(serial: String, packageId: String,
+                                     action: AppControlService.AppAction)] = []
+        func recordApp(
+            _ serial: String, _ packageId: String, _ action: AppControlService.AppAction
+        ) {
+            appCalls.append((serial, packageId, action))
+        }
+        var lastApp: (serial: String, packageId: String,
+                      action: AppControlService.AppAction)? { appCalls.last }
+
+        private(set) var listedSerials: [String] = []
+        func recordList(_ serial: String) { listedSerials.append(serial) }
     }
 
     private struct RecordingBackend: DaemonBackend {
@@ -35,6 +48,21 @@ import FoundationNetworking
             params: [String: FeatureValue]
         ) async -> FeatureResult {
             await log.record(featureID, serial, platform, params)
+            return result
+        }
+
+        func listApps(serial: String) async throws -> [AppListing] {
+            await log.recordList(serial)
+            return [
+                AppListing(packageId: "com.example.weather", versionName: "2.1", isSystem: false),
+                AppListing(packageId: "com.android.settings", versionName: nil, isSystem: true),
+            ]
+        }
+
+        func controlApp(
+            serial: String, packageId: String, action: AppControlService.AppAction
+        ) async throws -> FeatureResult {
+            await log.recordApp(serial, packageId, action)
             return result
         }
     }
@@ -167,6 +195,75 @@ import FoundationNetworking
                 #expect(call.id == toggle.id)
                 #expect(call.params["on"] == .bool(true), "the on parameter for \(toggle.id)")
             }
+        }
+    }
+
+    // MARK: apps
+
+    @Test func listsInstalledAppsWithTheirDisplayNames() async throws {
+        try await withServer { port, token, log in
+            let (status, body) = try await self.post(
+                port: port, path: "/v1/apps/list", token: token,
+                json: #"{"serial":"emulator-5554"}"#)
+            #expect(status == 200)
+            let decoded = try JSONDecoder().decode(
+                AppProtocol.ListResponse.self, from: Data(body.utf8))
+            #expect(await log.listedSerials == ["emulator-5554"])
+            #expect(decoded.apps.count == 2)
+
+            let weather = try #require(decoded.apps.first)
+            #expect(weather.packageId == "com.example.weather")
+            #expect(weather.versionName == "2.1")
+            #expect(!weather.isSystem)
+            // The package-id -> title rule is a computed property on
+            // `AppListing`, so it only survives the wire because the DTO sends
+            // it; otherwise every client reimplements it and they drift.
+            #expect(weather.displayName == "Weather")
+            #expect(decoded.apps.last?.isSystem == true)
+        }
+    }
+
+    @Test func runsAnAppVerbThroughTheService() async throws {
+        try await withServer { port, token, log in
+            let (status, body) = try await self.post(
+                port: port, path: "/v1/apps/control", token: token,
+                json: #"{"serial":"S1","packageId":"com.x","action":"clearData"}"#)
+            #expect(status == 200)
+            #expect(body.contains(#""ok":true"#))
+
+            let call = try #require(await log.lastApp)
+            #expect(call.serial == "S1")
+            #expect(call.packageId == "com.x")
+            #expect(call.action == .clearData)
+        }
+    }
+
+    /// Every verb the daemon advertises has to be one it will actually accept,
+    /// or a UI built from that list offers buttons that 400.
+    @Test func acceptsEveryAdvertisedAppAction() async throws {
+        try await withServer { port, token, log in
+            #expect(!AppProtocol.actions.isEmpty)
+            for action in AppProtocol.actions {
+                let (status, _) = try await self.post(
+                    port: port, path: "/v1/apps/control", token: token,
+                    json: #"{"serial":"S1","packageId":"com.x","action":"\#(action.id)"}"#)
+                #expect(status == 200, "action \(action.id)")
+                #expect(await log.lastApp?.action.rawValue == action.id)
+                #expect(
+                    await log.lastApp?.action.isDestructive == action.isDestructive,
+                    "the advertised destructive flag must be the runner's own")
+            }
+        }
+    }
+
+    @Test func rejectsAnUnknownAppActionWithoutTouchingTheDevice() async throws {
+        try await withServer { port, token, log in
+            let (status, body) = try await self.post(
+                port: port, path: "/v1/apps/control", token: token,
+                json: #"{"serial":"S1","packageId":"com.x","action":"detonate"}"#)
+            #expect(status == 400)
+            #expect(body.contains("unknown_action"))
+            #expect(await log.lastApp == nil, "an unknown verb must not reach the device")
         }
     }
 

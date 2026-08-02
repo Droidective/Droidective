@@ -17,16 +17,26 @@ public protocol DaemonBackend: Sendable {
         featureID: String, serial: String, platform: DevicePlatform,
         params: [String: FeatureValue]
     ) async -> FeatureResult
+    /// Every installed app on the device, user and system.
+    func listApps(serial: String) async throws -> [AppListing]
+    /// One verb against one package.
+    func controlApp(
+        serial: String, packageId: String, action: AppControlService.AppAction
+    ) async throws -> FeatureResult
 }
 
 /// `DeviceMonitor` in production.
 public struct LiveBackend: DaemonBackend {
     private let monitor: DeviceMonitor
     private let engine: FeatureEngine
+    /// The app services are cheap value types over this, so they are built per
+    /// call rather than held — there is no state to keep.
+    private let client: AdbClient
 
-    public init(monitor: DeviceMonitor, engine: FeatureEngine) {
+    public init(monitor: DeviceMonitor, engine: FeatureEngine, client: AdbClient) {
         self.monitor = monitor
         self.engine = engine
+        self.client = client
     }
 
     public func listDevices() async -> [Device] { await monitor.list(force: true) }
@@ -37,6 +47,17 @@ public struct LiveBackend: DaemonBackend {
     ) async -> FeatureResult {
         await engine.run(
             featureID: featureID, serial: serial, platform: platform, params: params)
+    }
+
+    public func listApps(serial: String) async throws -> [AppListing] {
+        try await AppsExplorerService(client: client).listAll(serial: serial)
+    }
+
+    public func controlApp(
+        serial: String, packageId: String, action: AppControlService.AppAction
+    ) async throws -> FeatureResult {
+        try await AppControlService(client: client)
+            .control(serial: serial, packageId: packageId, action: action)
     }
 }
 
@@ -298,6 +319,42 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
             // daemon broke", which is the distinction `AdbClient` exists to
             // preserve.
             return (.ok, encoded(ActionProtocol.RunResponse(result)))
+
+        case .appsList:
+            let raw = Data(body.readableBytesView)
+            guard let request = try? JSONDecoder().decode(
+                AppProtocol.ListRequest.self, from: raw)
+            else { return (.badRequest, encoded(DaemonProtocol.badRequest)) }
+            do {
+                let apps = try await backend.listApps(serial: request.serial)
+                return (.ok, encoded(AppProtocol.ListResponse(
+                    apps: apps.map(AppProtocol.AppSummary.init))))
+            } catch {
+                // adb refused: the device went away, or is unauthorised. That
+                // is the device's answer rather than a daemon fault, so it
+                // goes out as a 502 carrying adb's own words.
+                return (.badGateway, encoded(DaemonProtocol.ErrorBody(
+                    code: "adb_failed", message: "Could not list apps.",
+                    detail: "\(error)")))
+            }
+
+        case .appsControl:
+            let raw = Data(body.readableBytesView)
+            guard let request = try? JSONDecoder().decode(
+                AppProtocol.ControlRequest.self, from: raw)
+            else { return (.badRequest, encoded(DaemonProtocol.badRequest)) }
+            guard let action = request.resolvedAction else {
+                return (.badRequest, encoded(AppProtocol.unknownAction))
+            }
+            do {
+                let result = try await backend.controlApp(
+                    serial: request.serial, packageId: request.packageId, action: action)
+                return (.ok, encoded(ActionProtocol.RunResponse(result)))
+            } catch {
+                return (.badGateway, encoded(DaemonProtocol.ErrorBody(
+                    code: "adb_failed", message: "The app action failed.",
+                    detail: "\(error)")))
+            }
         }
     }
 
