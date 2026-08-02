@@ -536,11 +536,8 @@ struct ApiRequestEditor: View {
                 .labelsHidden()
                 .frame(maxWidth: 220)
                 Spacer()
-                Button {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(model.code(for: codeTarget), forType: .string)
-                } label: {
-                    Label("Copy", systemImage: "doc.on.doc")
+                ApiCopyButton(help: "Copy the generated snippet", title: "Copy") {
+                    model.code(for: codeTarget)
                 }
                 .buttonStyle(.bordered)
             }

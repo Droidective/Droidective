@@ -21,6 +21,9 @@ struct ApiResponsePane: View {
     @State private var showRaw = false
     @AppStorage("apiBodyWraps") private var wraps = true
     @State private var findToken = 0
+    /// Names what a menu-driven copy just put on the clipboard. Inline buttons
+    /// acknowledge themselves; a menu has closed by the time it could.
+    @State private var copyToastMessage: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -39,6 +42,7 @@ struct ApiResponsePane: View {
             }
         }
         .background(.bgSurface.opacity(0.3))
+        .apiCopyToast($copyToastMessage)
     }
 
     // MARK: - Status
@@ -69,7 +73,9 @@ struct ApiResponsePane: View {
             Menu {
                 Button("Save Body to File…") { saveBody(response) }
                 Divider()
-                Button("Copy Everything") { copy(everythingText(response)) }
+                Button("Copy Everything") {
+                    copy(everythingText(response), acknowledging: "Copied the whole response")
+                }
             } label: {
                 Image(systemName: "square.and.arrow.down")
             }
@@ -103,11 +109,10 @@ struct ApiResponsePane: View {
     }
 
     /// The copy button every section carries, so the thing on screen is always
-    /// one click from the clipboard.
+    /// one click from the clipboard — and says so once it is.
     private func copyButton(_ help: String, _ text: @escaping () -> String) -> some View {
-        Button { copy(text()) } label: { Image(systemName: "doc.on.doc") }
+        ApiCopyButton(help: help, text: text)
             .buttonStyle(.borderless)
-            .help(help)
     }
 
     /// A section's own header strip: a title, its copy button, and whatever else
@@ -270,9 +275,18 @@ struct ApiResponsePane: View {
                             .textSelection(.enabled)
                     }
                     .contextMenu {
-                        Button("Copy Value") { copy(header.value) }
-                        Button("Copy Name") { copy(header.key) }
-                        Button("Copy Line") { copy("\(header.key): \(header.value)") }
+                        Button("Copy Value") {
+                            copy(header.value, acknowledging: "Copied \(header.key)")
+                        }
+                        Button("Copy Name") {
+                            copy(header.key, acknowledging: "Copied the header name")
+                        }
+                        Button("Copy Line") {
+                            copy(
+                                "\(header.key): \(header.value)",
+                                acknowledging: "Copied \(header.key)"
+                            )
+                        }
                     }
                 }
                 .listStyle(.plain)
@@ -317,9 +331,14 @@ struct ApiResponsePane: View {
                             .foregroundStyle(.textMuted)
                     }
                     .contextMenu {
-                        Button("Copy Value") { copy(cookie.value) }
+                        Button("Copy Value") {
+                            copy(cookie.value, acknowledging: "Copied \(cookie.name)")
+                        }
                         Button("Copy as Cookie Header") {
-                            copy("\(cookie.name)=\(cookie.value)")
+                            copy(
+                                "\(cookie.name)=\(cookie.value)",
+                                acknowledging: "Copied \(cookie.name)"
+                            )
                         }
                     }
                 }
@@ -497,10 +516,15 @@ struct ApiResponsePane: View {
         response.headers.map { "\($0.key): \($0.value)" }.joined(separator: "\n")
     }
 
-    private func copy(_ text: String) {
-        guard !text.isEmpty else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
+    /// Copies and raises the capsule. Nothing on the clipboard means nothing
+    /// to announce, so an empty section stays quiet instead of claiming success.
+    private func copy(_ text: String, acknowledging message: String) {
+        guard copyApiText(text) else { return }
+        copyToastMessage = message
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.6))
+            if copyToastMessage == message { copyToastMessage = nil }
+        }
     }
 
     private func saveBody(_ response: ApiResponse) {
