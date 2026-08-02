@@ -49,7 +49,7 @@ import Testing
 
     @Test func aZeroWidthPaneDoesNotProduceNaN() {
         #expect(ApiPaneLayout.leadingLength(total: 0, fraction: 0.5) == 0)
-        #expect(ApiPaneLayout.fraction(forLeading: 100, total: 0) == 0.5)
+        #expect(ApiPaneLayout.fraction(from: 0.5, movedBy: 100, total: 0) == 0.5)
         #expect(ApiPaneLayout.pointRange(total: 0) == 0...0)
     }
 
@@ -67,14 +67,28 @@ import Testing
         }
     }
 
-    @Test func pointsRoundTripBackToAFraction() {
-        let total = 1000.0
-        let points = ApiPaneLayout.leadingLength(total: total, fraction: 0.4)
-        #expect(ApiPaneLayout.fraction(forLeading: points, total: total) == 0.4)
+    @Test func aDragMovesTheFractionByItsShareOfTheTotal() {
+        #expect(ApiPaneLayout.fraction(from: 0.5, movedBy: 100, total: 1000) == 0.6)
+        #expect(ApiPaneLayout.fraction(from: 0.5, movedBy: -100, total: 1000) == 0.4)
+    }
+
+    @Test func aDragThatDidNotMoveLeavesTheFractionAlone() {
+        #expect(ApiPaneLayout.fraction(from: 0.42, movedBy: 0, total: 1000) == 0.42)
     }
 
     @Test func aDragBeyondTheEdgeStillStoresAValidFraction() {
-        let fraction = ApiPaneLayout.fraction(forLeading: 5000, total: 1000)
-        #expect(ApiPaneLayout.fractionRange.contains(fraction))
+        let far = ApiPaneLayout.fraction(from: 0.5, movedBy: 5000, total: 1000)
+        #expect(ApiPaneLayout.fractionRange.contains(far))
+        let back = ApiPaneLayout.fraction(from: 0.5, movedBy: -5000, total: 1000)
+        #expect(ApiPaneLayout.fractionRange.contains(back))
+    }
+
+    /// The bug this replaced: converting points to a fraction through one total
+    /// and back through another moved the seam on a gesture nobody made.
+    @Test func aDragIsMeasuredEntirelyAgainstOneTotal() {
+        let start = 0.5
+        for total in [400.0, 900.0, 1251.0, 3000.0] {
+            #expect(ApiPaneLayout.fraction(from: start, movedBy: 0, total: total) == start)
+        }
     }
 }

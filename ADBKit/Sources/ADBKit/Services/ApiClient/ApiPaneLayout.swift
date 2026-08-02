@@ -53,10 +53,12 @@ public enum ApiPaneLayout {
         return low...max(low, high)
     }
 
-    /// Points back to a stored fraction.
-    public static func fraction(forLeading length: Double, total: Double) -> Double {
-        guard total > 0 else { return 0.5 }
-        return clampedFraction(length / total)
+    /// The fraction a drag lands on: where it started, plus how far it moved as
+    /// a share of the current total. Both halves come from the same `total`, so
+    /// the seam can't be converted through one width and back through another.
+    public static func fraction(from start: Double, movedBy delta: Double, total: Double) -> Double {
+        guard total > 0 else { return clampedFraction(start) }
+        return clampedFraction(start + delta / total)
     }
 
     private static func paneFloor(total: Double) -> Double {

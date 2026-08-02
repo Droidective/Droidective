@@ -42,7 +42,7 @@ struct ApiClientView: View {
     @AppStorage("apiSidebarWidth") private var sidebarWidth = 260.0
     @State private var liveSidebarWidth: Double?
     @AppStorage("apiSplitFraction") private var splitFraction = 0.5
-    @State private var liveSplitPoints: Double?
+    @State private var liveSplitFraction: Double?
 
     @State private var sheet: ApiClientSheet?
     @State private var alertMessage: String?
@@ -143,12 +143,13 @@ struct ApiClientView: View {
             // Stacked when narrow, so the seam runs the other way and the
             // fraction is of height rather than width.
             let total = isNarrow ? geometry.size.height : geometry.size.width
-            let leading = liveSplitPoints
-                ?? ApiPaneLayout.leadingLength(total: total, fraction: splitFraction)
-            let handle = ResizeHandle(
-                value: splitPoints(over: total),
-                live: $liveSplitPoints,
-                range: ApiPaneLayout.pointRange(total: total),
+            let leading = ApiPaneLayout.leadingLength(
+                total: total, fraction: liveSplitFraction ?? splitFraction
+            )
+            let handle = ApiSplitHandle(
+                fraction: $splitFraction,
+                live: $liveSplitFraction,
+                total: total,
                 axis: isNarrow ? .vertical : .horizontal
             )
 
@@ -166,16 +167,6 @@ struct ApiClientView: View {
                 }
             }
         }
-    }
-
-    /// `ResizeHandle` drags in points; the split is stored as a fraction so a
-    /// window resize keeps it. This is the adapter between the two — reads the
-    /// stored fraction as points, writes points back as a fraction.
-    private func splitPoints(over total: CGFloat) -> Binding<Double> {
-        Binding(
-            get: { ApiPaneLayout.leadingLength(total: total, fraction: splitFraction) },
-            set: { splitFraction = ApiPaneLayout.fraction(forLeading: $0, total: total) }
-        )
     }
 
     private var editor: some View {
