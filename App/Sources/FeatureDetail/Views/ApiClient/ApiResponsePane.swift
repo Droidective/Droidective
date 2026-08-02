@@ -195,9 +195,13 @@ struct ApiResponsePane: View {
                 .buttonStyle(.borderless)
                 .help(wraps ? "Wrap long lines (on)" : "Wrap long lines (off)")
 
+                // Deliberately not bound to ⌘F: this pane can sit in a hidden
+                // keep-alive tab, and a shortcut declared there would take ⌘F
+                // app-wide. AppKit's own ⌘F still opens the find bar once the
+                // body has focus; this button is the path that always works.
                 Button { findToken += 1 } label: { Image(systemName: "magnifyingglass") }
                     .buttonStyle(.borderless)
-                    .help("Find in body (⌘F)")
+                    .help("Find in body")
 
                 copyButton("Copy the body as shown") { bodyText(response) }
 
