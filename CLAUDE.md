@@ -17,7 +17,8 @@ stubbed; the portable seams (`HostArchive` extraction, `FileHandleLines`,
 per-OS `ToolLocator`, swift-crypto digests off-Apple) carry everything else.
 Phase 2 landed `droidectived/`, a local daemon over ADBKit
 (`docs/droidectived-protocol.md`); phase 3 is `desktop/`, the Tauri 2 + React
-UI over it for Windows/Linux (`desktop/README.md`). **macOS never talks to the
+UI over it for Windows/Linux (`desktop/README.md`; the feature-by-feature
+parity tracker is `docs/desktop-parity.md`). **macOS never talks to the
 daemon** — the Mac app keeps linking ADBKit directly, by decision, so no daemon
 or desktop work can reach the shipping Mac flow. An iOS companion can't run
 `Process` at all, so it would ride the same daemon protocol. Keep the seams (`ProcessRunning`, injected
