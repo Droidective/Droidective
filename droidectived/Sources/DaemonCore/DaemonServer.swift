@@ -4,6 +4,7 @@ import NIOConcurrencyHelpers
 import NIOCore
 import NIOHTTP1
 import NIOPosix
+import NIOWebSocket
 
 /// What a route needs from the rest of the app. A protocol so the socket tests
 /// drive the real HTTP stack against a scripted device list instead of
@@ -28,13 +29,29 @@ public actor DaemonServer {
         public let port: Int
     }
 
+    /// Named so the WebSocket upgrade can take it back out of the pipeline.
+    fileprivate static let routesHandlerName = "droidectived.routes"
+
+
     private let backend: any DaemonBackend
+    private let streamSource: (any StreamSource)?
     private let token: String
     private var group: MultiThreadedEventLoopGroup?
     private var channel: (any Channel)?
+    /// Live client connections.
+    ///
+    /// `shutdownGracefully` waits for every channel to close, and a stream
+    /// socket stays open until its client goes away — so without closing these
+    /// first, stopping the daemon while anything is subscribed never returns.
+    /// The UI kills the daemon on quit, so a stop that hangs is a stop that
+    /// gets SIGKILLed with adb children still running.
+    private let connections = ConnectionRegistry()
 
-    public init(backend: any DaemonBackend, token: String) {
+    public init(
+        backend: any DaemonBackend, token: String, streamSource: (any StreamSource)? = nil
+    ) {
         self.backend = backend
+        self.streamSource = streamSource
         self.token = token
     }
 
@@ -43,6 +60,7 @@ public actor DaemonServer {
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         self.group = group
         let backend = self.backend
+        let streamSource = self.streamSource
         let token = self.token
         // Captured by the handler so `Host` can be pinned to the live port,
         // which is only known after bind.
@@ -51,10 +69,55 @@ public actor DaemonServer {
         let bootstrap = ServerBootstrap(group: group)
             .serverChannelOption(.backlog, value: 32)
             .serverChannelOption(.socketOption(.so_reuseaddr), value: 1)
-            .childChannelInitializer { channel in
-                channel.pipeline.configureHTTPServerPipeline().flatMapThrowing {
+            .childChannelInitializer { [connections] channel in
+                connections.add(channel)
+                channel.closeFuture.whenComplete { _ in connections.remove(channel) }
+                // The stream socket rides the same listener as the routes, so
+                // there is one port, one token and one origin policy rather
+                // than two things to keep in agreement.
+                let upgrader = NIOWebSocketServerUpgrader(
+                    shouldUpgrade: { channel, head in
+                        // Auth on the *upgrade* request. Checking after the
+                        // handshake would leave an authenticated-looking socket
+                        // open to anything that can reach the port.
+                        let port = boundPort.withLockedValue { $0 }
+                        let refused = DaemonGuards.check(
+                            authorization: head.headers.first(name: "Authorization"),
+                            host: head.headers.first(name: "Host"),
+                            origin: head.headers.first(name: "Origin"),
+                            port: port, expectedToken: token)
+                        guard refused == nil, head.uri == DaemonProtocol.streamPath,
+                              streamSource != nil
+                        else { return channel.eventLoop.makeSucceededFuture(nil) }
+                        return channel.eventLoop.makeSucceededFuture(HTTPHeaders())
+                    },
+                    upgradePipelineHandler: { channel, _ in
+                        guard let streamSource else {
+                            return channel.eventLoop.makeSucceededFuture(())
+                        }
+                        // The route handler sits after the HTTP codec, which
+                        // NIO removes on upgrade — but not handlers added
+                        // behind it. Left in place it would be handed
+                        // WebSocket frames and trap trying to read them as
+                        // HTTP.
+                        return channel.pipeline.removeHandler(name: Self.routesHandlerName)
+                            .recover { _ in }
+                            .flatMap { _ -> EventLoopFuture<Void> in
+                                let session = StreamSession(
+                                    sink: WebSocketSink(channel: channel), source: streamSource)
+                                return channel.eventLoop.makeCompletedFuture {
+                                    try channel.pipeline.syncOperations.addHandler(
+                                        WebSocketHandler(session: session))
+                                }
+                            }
+                    })
+
+                return channel.pipeline.configureHTTPServerPipeline(
+                    withServerUpgrade: (upgraders: [upgrader], completionHandler: { _ in })
+                ).flatMapThrowing {
                     try channel.pipeline.syncOperations.addHandler(
-                        RequestHandler(backend: backend, token: token, port: boundPort))
+                        RequestHandler(backend: backend, token: token, port: boundPort),
+                        name: Self.routesHandlerName)
                 }
             }
 
@@ -68,16 +131,53 @@ public actor DaemonServer {
     }
 
     public func stop() async {
+        // Stop accepting first, then hang up on everyone still connected, then
+        // shut the loops down. Any other order either races new connections in
+        // or waits forever on old ones.
         try? await channel?.close().get()
         channel = nil
+        for connection in connections.drain() {
+            try? await connection.close().get()
+        }
         try? await group?.shutdownGracefully()
         group = nil
     }
 }
 
+/// Thread-safe set of open child channels. Identity-keyed, since `Channel` is
+/// a reference type with no useful equality of its own.
+private final class ConnectionRegistry: @unchecked Sendable {
+    private let lock = NSLock()
+    private var channels: [ObjectIdentifier: any Channel] = [:]
+
+    func add(_ channel: any Channel) {
+        lock.lock()
+        channels[ObjectIdentifier(channel)] = channel
+        lock.unlock()
+    }
+
+    func remove(_ channel: any Channel) {
+        lock.lock()
+        channels[ObjectIdentifier(channel)] = nil
+        lock.unlock()
+    }
+
+    /// Everything currently open, clearing the registry.
+    func drain() -> [any Channel] {
+        lock.lock()
+        defer {
+            channels.removeAll()
+            lock.unlock()
+        }
+        return Array(channels.values)
+    }
+}
+
 /// One request at a time per connection: collect the head, ignore the body
 /// (every route takes its arguments in the path for this slice), answer.
-private final class RequestHandler: ChannelInboundHandler, @unchecked Sendable {
+private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandler,
+    @unchecked Sendable
+{
     typealias InboundIn = HTTPServerRequestPart
     typealias OutboundOut = HTTPServerResponsePart
 
@@ -154,6 +254,12 @@ private final class RequestHandler: ChannelInboundHandler, @unchecked Sendable {
         var headers = HTTPHeaders()
         headers.add(name: "Content-Type", value: "application/json")
         headers.add(name: "Content-Length", value: String(body.count))
+        // This handler closes the connection after every response, so say so.
+        // Without it a client pools the socket, reuses one the server has
+        // already dropped, and sees a lost connection instead of its answer —
+        // intermittent by nature, which is the worst kind of bug to ship in a
+        // tool people debug with.
+        headers.add(name: "Connection", value: "close")
         // No CORS headers, deliberately: nothing browser-based should be
         // reaching this, and advertising otherwise would undo the Origin check.
         context.write(
