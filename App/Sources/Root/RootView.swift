@@ -107,6 +107,10 @@ struct RootView: View {
         let showExitDialog = state.pendingExit.map { !$0.saving } ?? false
         return zoomedContent
             .overlay(alignment: .topTrailing) { devMetricsOverlay }
+            // Above everything, sidebar included, and outside the ⌘= zoom —
+            // it's window chrome, like the traffic lights it sits beside.
+            // macOS 26 would otherwise put the title against them.
+            .modifier(CenteredWindowTitle(title: activeTitle))
             .modifier(PostTourCelebration(state: state))
             .modifier(WindowTranslucencyModifier(state: state))
             .modifier(
@@ -567,9 +571,6 @@ struct RootView: View {
                         .clipped()
                 }
             }
-            // macOS 26 puts a window's title beside the traffic lights; this
-            // draws it centered instead, and owns `window.title` itself.
-            .modifier(CenteredWindowTitle(title: activeTitle))
             // The deferred fixed-sidebar hide: fires when the drag ends
             // (splitDragFraction → nil); a fresh drag re-arms cleanly.
             .onChange(of: splitDragFraction == nil) { _, dragEnded in

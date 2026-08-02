@@ -388,11 +388,15 @@ table) is in `docs/reactotron-mcp-analysis.md`.
     Finder opens and update toasts route through `AppCore.frontmost` (the last
     key window). Poll-rate activation comes from `NSApplication`, never a
     per-window `scenePhase` — those fire independently and fight.
-  - **The window title is centered by a toolbar principal item**
-    (`CenteredWindowTitle`), which also writes `window.title` itself —
-    macOS 26 lays a plain title out leading, and `.navigationTitle` there
-    renders a *second* leading one. Only the windows after the first tint
-    their device icon (`DeviceTint`); the app keeps one accent.
+  - **The window title is a toolbar principal item** (`CenteredWindowTitle`),
+    the only placement macOS centers. macOS 26 lays a plain title out leading;
+    `.navigationTitle` renders a *second* leading one (so `window.title` is
+    written directly instead), `.fullSizeContentView` content is collapsed by
+    SwiftUI, and a titlebar accessory is re-sized and clipped by AppKit — all
+    three were tried. Its glass capsule needs the macOS 26-only
+    `sharedBackgroundVisibility`, which a `macos-15` release runner can't
+    compile. Only the windows after the first tint their device icon
+    (`DeviceTint`); the app keeps one accent.
   - **A feature that can't run twice on one device** goes in
     `WorkspaceRegistry.exclusiveFeatureIDs` (scrcpy/screen-record share the
     encoder, `js-console` loses the CDP target to the newest client,
