@@ -199,6 +199,10 @@ struct ScreenMirrorView: View {
     /// which connects its own session to the selected device — and close this
     /// tab so the same device isn't encoded twice.
     private func popOut() {
+        // There's one pop-out window, so it belongs to whichever workspace
+        // opened it — otherwise it would swap devices every time the user
+        // clicked between windows.
+        state.core.mirrorWindowOwner = state.id
         openWindow(id: MirrorWindow.windowID)
         state.closeTab(tabFeatureID)
     }

@@ -23,25 +23,41 @@ final class ResizeActivity {
     var isActive: Bool { seamDragging || windowResizing }
 
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
+    /// Windows currently inside a live resize. A set, not a flag: with several
+    /// windows open, one finishing its resize must not clear the state for
+    /// another that is still being dragged.
+    @ObservationIgnored private var resizing: Set<ObjectIdentifier> = []
 
-    /// Follow `window`'s live-resize lifecycle. Re-entrant: tracking a new
-    /// window (the main window was closed and reopened) drops the previous
-    /// observers first.
-    func track(_ window: NSWindow) {
+    private init() {
+        // Observed app-wide (`object: nil`) rather than per window — windows
+        // come and go, and every one of them should freeze heavyweight panes
+        // while it's being dragged.
         let center = NotificationCenter.default
-        observers.forEach(center.removeObserver)
         observers = [
             center.addObserver(
-                forName: NSWindow.willStartLiveResizeNotification, object: window, queue: .main
-            ) { _ in
-                MainActor.assumeIsolated { ResizeActivity.shared.windowResizing = true }
+                forName: NSWindow.willStartLiveResizeNotification, object: nil, queue: .main
+            ) { note in
+                let window = note.object as? NSWindow
+                MainActor.assumeIsolated { ResizeActivity.shared.setResizing(true, window) }
             },
             center.addObserver(
-                forName: NSWindow.didEndLiveResizeNotification, object: window, queue: .main
-            ) { _ in
-                MainActor.assumeIsolated { ResizeActivity.shared.windowResizing = false }
+                forName: NSWindow.didEndLiveResizeNotification, object: nil, queue: .main
+            ) { note in
+                let window = note.object as? NSWindow
+                MainActor.assumeIsolated { ResizeActivity.shared.setResizing(false, window) }
             },
         ]
+    }
+
+    private func setResizing(_ active: Bool, _ window: NSWindow?) {
+        guard let window else { return }
+        let key = ObjectIdentifier(window)
+        if active {
+            resizing.insert(key)
+        } else {
+            resizing.remove(key)
+        }
+        windowResizing = !resizing.isEmpty
     }
 }
 

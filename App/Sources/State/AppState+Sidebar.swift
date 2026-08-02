@@ -349,15 +349,10 @@ extension AppState {
         .map(presented)
     }
 
-    func persistLayout() {
-        // Until bootstrap has loaded the persisted layout, `layout` is still the
-        // default — writing it would overwrite the user's saved data.
-        guard didLoadLayout else { return }
-        let snapshot = layout
-        Task {
-            try? await env.stores.layout.save(snapshot)
-        }
-    }
+    /// The layout is shared by every window (it holds the feature curation), so
+    /// the write lives on the core, which also gates it on the load having
+    /// finished — writing before that would overwrite the user's saved data.
+    func persistLayout() { core.persistLayout() }
 
     // MARK: - Menu bar
 

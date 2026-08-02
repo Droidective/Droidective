@@ -28,9 +28,15 @@ gate. Its allowlist is empty, and a companion test fails on a stale entry.
   (feature icons are SF Symbol *name strings*). Actors for stateful services,
   `Sendable` value types, strict concurrency complete. Test with
   `cd ADBKit && swift test` — no Xcode, no device needed.
-- **`App/`** — thin SwiftUI shell. `@Observable @MainActor AppState` consumes
-  ADBKit. Built via XcodeGen (`project.yml`) + xcodebuild; `.xcodeproj` is
-  gitignored and regenerated.
+- **`App/`** — thin SwiftUI shell, split in two `@Observable @MainActor` halves:
+  **`AppCore`** is the app (one `adb devices` poll, tool caches, the persisted
+  feature curation, the Reactotron/MCP listeners, the window registry), and
+  **`AppState`** is *one window's workspace* (device, tabs, terminals, JS
+  console). The app is multi-window — one window per device — and `AppState`
+  forwards everything app-wide, so a feature view reads `state.devices` /
+  `state.layout` without knowing which window it's in. See the multi-window
+  convention below and `docs/multi-window.md`. Built via XcodeGen
+  (`project.yml`) + xcodebuild; `.xcodeproj` is gitignored and regenerated.
 
 When adding a feature: logic + a parser test go in ADBKit; the view goes in
 `App/Sources/FeatureDetail/Views/`. Never put adb/Process logic in a SwiftUI view.
@@ -143,7 +149,10 @@ Node 22 in CI; scroll reveals and the hero palette demo must keep their
   `FeatureEngine` (runner dispatch +
   `implementedIDs` + every sub-service), `SidebarOrdering`
   (pure `reorder`/`move`/`moveToEnd` helpers for the sidebar, unit-tested
-  without UI), `WindowEffects` (pure math for the translucent-window
+  without UI), `WorkspaceRegistry` (the multi-window model: `WorkspaceID`,
+  which window owns which device, `exclusiveFeatureIDs` + the conflict
+  queries behind the Focus / Take Over banner, and the per-device window
+  tint index), `WindowEffects` (pure math for the translucent-window
   appearance — opacity clamp/range, `cardAlpha`, blur radius, grain strength;
   the App-layer plumbing is `App/Sources/Root/WindowTranslucency.swift` +
   the dynamic `.bgRoot`/`.bgSurface` tokens in `Theme.swift` — see the
@@ -204,7 +213,13 @@ Node 22 in CI; scroll reveals and the hero palette demo must keep their
 - `Persistence/`: `JSONStore<T>` (actor, atomic write, sets aside corrupt
   files as `.corrupt`), `Stores` (Bundles, DeepLinks, CustomCommands,
   LayoutState, Presets, OverridesMap, Prefs) in
-  `~/Library/Application Support/Droidective/`.
+  `~/Library/Application Support/Droidective/`. `LayoutState.windows`
+  (`[WindowState]`) is the per-window half — device, bundle, tabs, focused
+  pane, terminal-resume dirs, one entry per workspace window, restored in
+  order; `adoptWindows` folds a pre-multi-window layout's single workspace
+  into one entry and clears the legacy fields. Everything else on
+  `LayoutState` (enabled set, order, favorites, role) is shared by every
+  window.
 - `Tools/` + APK services: `ManagedTool`/`ManagedToolStore` (actor) download jadx,
   apktool, uber-apk-signer, frida-server/-gadget, and a Temurin JRE from their
   GitHub releases into `Application Support/tools`, verify the asset digest,
@@ -345,6 +360,39 @@ The full design analysis (upstream ground truth, decisions, failure-mode
 table) is in `docs/reactotron-mcp-analysis.md`.
 
 ## Conventions / gotchas learned the hard way
+
+- **Multi-window: a workspace becomes real only when an `NSWindow` binds to
+  it.** One window per device; `AppCore` owns the workspaces, `AppState` is
+  one of them. Rules for new code:
+  - **App-wide state goes on `AppCore`, per-window state on `AppState`**, with
+    a forwarding property so views keep reading `state.…`. Getting this wrong
+    is silent: a per-window concept written to the shared `layout` (the
+    terminal-resume directories did exactly this) gets clobbered by the other
+    window.
+  - **Never trust SwiftUI's presented `WorkspaceID` as window identity.**
+    `WindowGroup(for:)` persists presented values across launches, re-presents
+    stale ones *into an existing window*, and asks for content for windows it
+    never shows — and a *closing* window re-renders too. So
+    `workspace(claiming:)` hands back a **provisional** workspace that owns
+    nothing (no registry entry, no restore, no write), and `AppCore.bind`
+    promotes it, or has the window adopt one that's waiting for a window
+    (launch restore, or a workspace parked by a background-mode close).
+    `bind` also enforces one-NSWindow-one-workspace and refuses a closing one.
+    AppKit's own restoration is off (`window.isRestorable = false`) —
+    Droidective restores from `LayoutState.windows` and two restorers fight.
+  - **App-wide singletons must track *every* window.** `WindowMinSizeGuard`
+    and `ResizeActivity` used to re-point at the newest window on each attach,
+    which silently dropped the size floor and the resize-freeze for the
+    others. Observe with `object: nil` and keep a set.
+  - **Anything "the app" does needs a window**: menu bar, global hotkeys,
+    Finder opens and update toasts route through `AppCore.frontmost` (the last
+    key window). Poll-rate activation comes from `NSApplication`, never a
+    per-window `scenePhase` — those fire independently and fight.
+  - **A feature that can't run twice on one device** goes in
+    `WorkspaceRegistry.exclusiveFeatureIDs` (scrcpy/screen-record share the
+    encoder, `js-console` loses the CDP target to the newest client,
+    `frida-console` owns a port). It then gets the Focus / Take Over banner
+    instead of racing. A test asserts every id there is a real feature.
 
 - **Process runner must never block a cooperative thread.** `SystemProcessRunner`
   uses `terminationHandler` + `readabilityHandler`, not `waitUntilExit`. A

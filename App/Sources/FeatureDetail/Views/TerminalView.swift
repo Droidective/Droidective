@@ -370,15 +370,17 @@ extension AppState {
     /// (⌘W / × / `exit`) already left the rail, so they're forgotten by
     /// construction — closing a tab means done with it.
     func rememberTerminalDirectories() {
-        layout.terminalResumeDirs = TerminalResume.snapshot(terminals.openTabDirectories)
-        persistLayout()
+        // Per window: each one's shells are its own, so the resume belongs to
+        // this window's record, not to the shared layout.
+        terminalResumeDirs = TerminalResume.snapshot(terminals.openTabDirectories)
+        persistWindowState()
     }
 
     /// First shell(s) for a Terminal showing an empty rail: resume the
     /// directories remembered at the last implicit teardown, or a single
     /// fresh shell when there's nothing to resume.
     func openTerminalResumingWork() {
-        let remembered = TerminalResume.snapshot(layout.terminalResumeDirs ?? [])
+        let remembered = TerminalResume.snapshot(terminalResumeDirs ?? [])
         if remembered.isEmpty {
             terminals.newTab()
         } else {

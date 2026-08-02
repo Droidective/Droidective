@@ -78,12 +78,12 @@ struct WindowTranslucencyModifier: ViewModifier {
             }
             .environment(\.windowOpacity, WindowEffects.clamped(windowOpacity))
             .onChange(of: windowOpacity) { _, value in
-                if let window = state.mainWindow {
+                if let window = state.nsWindow {
                     applyWindowTranslucency(window, opacity: value, blurAmount: windowBlur)
                 }
             }
             .onChange(of: windowBlur) { _, value in
-                if let window = state.mainWindow {
+                if let window = state.nsWindow {
                     applyWindowTranslucency(window, opacity: windowOpacity, blurAmount: value)
                 }
             }

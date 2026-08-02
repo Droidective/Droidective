@@ -115,21 +115,33 @@ struct RootView: View {
             .environment(\.colorScheme, injectedColorScheme)
             .preferredColorScheme(preferredScheme)
             .background(WindowAccessor { window in
-                // Track the main window by reference — the ⌘W monitor and
+                // Reported on every update, so a window whose presented value
+                // SwiftUI swapped gets rebound; everything below runs once per
+                // (window, workspace) pair.
+                guard state.nsWindow !== window else { return }
+                // Binding a real window is what makes a workspace real: it
+                // registers, restores its tabs, and becomes frontmost. The
+                // window is tracked by reference — the ⌘W monitor and
                 // `activateMainWindow` need to tell it apart from Settings /
                 // panels, and identifiers don't survive a close (SwiftUI
                 // re-stamps `main-AppWindow-1` over any tag).
-                state.mainWindow = window
-                // Restore the user's saved window frame; only fill the screen's
-                // usable area on the very first launch (nothing to restore), so
-                // a resized window survives relaunch instead of being maximized.
-                let autosaveName = NSWindow.FrameAutosaveName(RootView.mainWindowFrameAutosaveName)
+                state.core.bind(window, to: state)
+                // Restore the saved frame; only fill the screen's usable area
+                // when there's nothing to restore, so a resized window survives
+                // relaunch instead of being maximized. Each window position has
+                // its own slot, cascaded so a second window doesn't land
+                // exactly on top of the first.
+                let autosaveName = RootView.frameAutosaveName(
+                    ordinal: state.core.registry.ordinal(of: state.id) ?? 1)
                 if !window.setFrameUsingName(autosaveName), let screen = window.screen ?? NSScreen.main {
                     window.setFrame(screen.visibleFrame, display: true)
+                    if let ordinal = state.core.registry.ordinal(of: state.id), ordinal > 1 {
+                        window.setFrame(
+                            RootView.cascaded(screen.visibleFrame, step: ordinal - 1), display: true)
+                    }
                 }
                 window.setFrameAutosaveName(autosaveName)
                 WindowMinSizeGuard.shared.attach(to: window)
-                ResizeActivity.shared.track(window)
                 applyWindowTranslucency(window, opacity: windowOpacity, blurAmount: windowBlur)
             })
             .overlay {
@@ -192,7 +204,6 @@ struct RootView: View {
     /// stored prefs/theme/hotkeys, and shows the first due launch prompt. Kept
     /// out of `body` so the view-builder expression stays cheap to type-check.
     private func performLaunchSetup() {
-        state.openMainWindow = { openWindow(id: "main") }
         state.openPalette = {
             FloatingPanelController.palette.show { close in
                 PaletteWindowView(onClose: close)
@@ -200,6 +211,14 @@ struct RootView: View {
                     .tint(.brandAccent)
             }
         }
+        // Every window can open another; refreshed each time because a
+        // SwiftUI action captured from a closed window is not worth trusting.
+        state.core.windowOpenerReady { id in
+            openWindow(id: "main", value: id)
+        }
+        applyStoredTheme()
+        // Anything below is app-wide and must run once, not once per window.
+        guard state.core.claimLaunchSetup() else { return }
         // A double-clicked APK opens the in-window opened-APK screen (install
         // with live status / APK Studio); a double-clicked AAB opens the AAB
         // to APK converter with the bundle staged. Anything else handed to
@@ -208,19 +227,23 @@ struct RootView: View {
         // so the AAB converter works offline with no first-use download.
         Task { await BundledTools.seed(into: state.env.engine.managedTools) }
         InstallInbox.shared.onReceive = { urls in
+            // Finder opens land in whichever window is in front.
+            guard let target = AppCore.shared.frontmost else { return }
             let apks = urls.filter { $0.pathExtension.lowercased() == "apk" }
             let aabs = urls.filter { $0.pathExtension.lowercased() == "aab" }
             for other in urls where !["apk", "aab"].contains(other.pathExtension.lowercased()) {
-                state.showToast(Toast(message: "Not an APK or AAB: \(other.lastPathComponent)", ok: false))
+                target.showToast(Toast(message: "Not an APK or AAB: \(other.lastPathComponent)", ok: false))
             }
-            if !apks.isEmpty { state.openAPKs(apks) }
-            if !aabs.isEmpty { state.openAABs(aabs) }
+            if !apks.isEmpty { target.openAPKs(apks) }
+            if !aabs.isEmpty { target.openAABs(aabs) }
         }
         #if !APPSTORE
         // Update toasts ("available" / "ready — relaunch" / "up to date")
         // originate in the updater; route them through the app's toast +
         // notification-history pipeline.
-        SparkleUpdater.shared.notify = { [weak state] toast in state?.showToast(toast) }
+        SparkleUpdater.shared.notify = { toast in
+            AppCore.shared.frontmost?.showToast(toast)
+        }
         // First launch of a version the updater installed: announce it with
         // a "What's New" notification whose button opens the changelog
         // modal. `take` consumes the stash, so reopening the window (this
@@ -234,20 +257,20 @@ struct RootView: View {
         }
         #endif
         migrateDefaultsIfNeeded()
-        applyStoredTheme()
         // Enumerate installed font families now so the Settings ▸ Appearance
         // font picker opens instantly — off the main actor, since the walk
         // itself is what stalled launch (DROIDECTIVE-MAC-55).
         Task { await FontCatalog.preload() }
         // Watch the app's own CPU/RAM and report sustained spikes to telemetry
         // with the features open at the time (consent-gated in Telemetry).
-        PerformanceMonitor.shared.start { [state] in
-            PerformanceMonitor.FeatureContext(
-                activeFeature: state.activeTabID,
-                openFeatures: state.openFeatureIDs
+        PerformanceMonitor.shared.start {
+            let front = AppCore.shared.frontmost
+            return PerformanceMonitor.FeatureContext(
+                activeFeature: front?.activeTabID,
+                openFeatures: AppCore.shared.allWorkspaces.flatMap(\.openFeatureIDs)
             )
         }
-        HotkeyManager.install(state: state)
+        HotkeyManager.install(core: state.core)
         Telemetry.shared.applyRole(state.selectedRole?.rawValue)
         Telemetry.shared.trackAppLaunched(launchCount: launchCount)
         Telemetry.shared.featureBecameActive(state.activeTabID)
@@ -281,53 +304,61 @@ struct RootView: View {
         }
     }
 
-    /// The main window's frame-autosave name — the value must stay
-    /// "droidective-main" so existing users' saved frames survive.
-    /// (Recognizing the window itself goes through `AppState.mainWindow` by
+    /// Frame-autosave slot per window position. The first window keeps
+    /// "droidective-main" so existing users' saved frames survive; later
+    /// windows get their own slot so they don't all fight over one frame.
+    /// (Recognizing a window itself goes through `AppState.nsWindow` by
     /// reference; identifiers don't survive a close.)
-    fileprivate static let mainWindowFrameAutosaveName = "droidective-main"
-    private static var closeTabMonitorInstalled = false
+    fileprivate static func frameAutosaveName(ordinal: Int) -> NSWindow.FrameAutosaveName {
+        ordinal <= 1 ? "droidective-main" : "droidective-main-\(ordinal)"
+    }
+
+    /// Offset a fresh window so it doesn't sit exactly on the one before it.
+    /// Inset rather than translated, so it can't walk off the screen.
+    private static func cascaded(_ frame: NSRect, step: Int) -> NSRect {
+        let offset = CGFloat(min(step, 6)) * 32
+        return NSRect(
+            x: frame.minX + offset, y: frame.minY,
+            width: max(760, frame.width - offset * 2),
+            height: max(480, frame.height - offset)
+        )
+    }
 
     /// ⌘W closes the active tab, not the window. A local key-down monitor
-    /// intercepts ⌘W for the main window before AppKit's default Close-Window
-    /// runs (local monitors see the event first and can swallow it); the red
-    /// traffic-light button still closes the whole window. Installed once.
+    /// intercepts ⌘W for a workspace window before AppKit's default
+    /// Close-Window runs (local monitors see the event first and can swallow
+    /// it); the red traffic-light button still closes the whole window.
+    /// Installed once for the app, resolving the key window's workspace at
+    /// fire time so every window gets the behavior.
     private func installCloseTabMonitor() {
-        guard !RootView.closeTabMonitorInstalled else { return }
-        RootView.closeTabMonitorInstalled = true
-        let state = self.state
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             guard event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
                   event.charactersIgnoringModifiers == "w",
-                  let keyWindow = NSApp.keyWindow, keyWindow === state.mainWindow
+                  let target = AppCore.shared.workspace(for: NSApp.keyWindow)
             else { return event }
-            state.closeActiveTab()
+            target.closeActiveTab()
             return nil
         }
     }
-
-    private static var dragJanitorInstalled = false
 
     /// A drag has no "ended without a drop" callback: releasing a dragged tab
     /// (or a terminal rail row) outside any drop target fires no delegate, so
     /// the drag state — and the insertion guideline keyed off it — stayed
     /// stuck. Normal mouse events don't flow while a drag session runs, so the
     /// first one arriving with drag state still set means exactly that ending;
-    /// clear it there. Installed once. This is also what lets the Terminal
+    /// clear it there. Installed once, sweeping every window: a drag can start
+    /// in one and be released over another. This is also what lets the Terminal
     /// drop its whole-view cleanup catch, which blocked the pane's tab drops
     /// (drops route to the deepest region by geometry, not type).
     private func installDragJanitor() {
-        guard !RootView.dragJanitorInstalled else { return }
-        RootView.dragJanitorInstalled = true
-        let state = self.state
         NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDown]) { event in
-            if state.draggingTabID != nil { state.draggingTabID = nil }
-            if state.terminals.railDragActive { state.terminals.clearRailDrag() }
+            for state in AppCore.shared.allWorkspaces {
+                if state.draggingTabID != nil { state.draggingTabID = nil }
+                if state.terminals.railDragActive { state.terminals.clearRailDrag() }
+            }
             return event
         }
     }
-
-    private static var focusReleaseInstalled = false
 
     /// Clicking outside the active text field should end its editing. macOS
     /// keeps an `NSTextField`'s field editor first responder until something
@@ -340,8 +371,6 @@ struct RootView: View {
     /// once. Multi-line `TextEditor`s aren't field editors, so they're left
     /// alone (their own click handling manages focus).
     private func installFocusRelease() {
-        guard !RootView.focusReleaseInstalled else { return }
-        RootView.focusReleaseInstalled = true
         NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown]) { event in
             guard let window = event.window,
                   let editor = window.firstResponder as? NSTextView, editor.isFieldEditor
@@ -571,12 +600,24 @@ struct RootView: View {
         CGFloat(PaneSplit.leftWidth(total: totalW, fraction: splitDragFraction ?? splitFraction))
     }
 
-    /// Window title for the focused pane's active tab. The chrome screens
-    /// (Home / Manage Features / About) aren't registry features, so they're
-    /// named here — this is the only `.navigationTitle` in the main window
-    /// (every tab stays mounted, so a per-view title from a hidden tab would
-    /// override the active one's).
+    /// Window title: the focused pane's active tab, prefixed with the device
+    /// once more than one window is open — that's what tells two windows apart
+    /// in the Window menu, Mission Control and the ⌘` cycle. A lone window
+    /// keeps the plain tab title it has always had.
     private var activeTitle: String {
+        guard state.core.workspaceCount > 1, let device = state.selectedDevice else {
+            return tabTitle
+        }
+        let tab = tabTitle
+        let name = state.deviceDisplayName(device)
+        return tab.isEmpty ? name : "\(name) — \(tab)"
+    }
+
+    /// The active tab's name. The chrome screens (Home / Manage Features /
+    /// About) aren't registry features, so they're named here — this is the
+    /// only `.navigationTitle` in a workspace window (every tab stays mounted,
+    /// so a per-view title from a hidden tab would override the active one's).
+    private var tabTitle: String {
         switch state.activeTabID {
         case nil: return ""
         case "home": return "Home"
@@ -867,12 +908,16 @@ private struct SplitDivider: View {
 /// actor with the window in place — no async hop, so it stays Swift-6 clean.
 private final class WindowReaderView: NSView {
     var onWindow: ((NSWindow) -> Void)?
-    private var resolved = false
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        guard !resolved, let window else { return }
-        resolved = true
+        reportWindow()
+    }
+
+    /// Report the hosting window if there is one. Safe to call repeatedly —
+    /// the callback returns immediately once the window is already bound.
+    func reportWindow() {
+        guard let window else { return }
         onWindow?(window)
     }
 }
@@ -886,29 +931,56 @@ private final class WindowReaderView: NSView {
 final class WindowMinSizeGuard {
     static let shared = WindowMinSizeGuard()
     static let screenFraction = 0.85
-    private weak var window: NSWindow?
+    /// Every guarded window. Weak, so a closed one drops out on its own; each
+    /// gets its own floor, since two windows can sit on different screens.
+    private var windows: [WeakWindow] = []
     private var observers: [NSObjectProtocol] = []
 
-    func attach(to window: NSWindow) {
-        self.window = window
-        let center = NotificationCenter.default
-        observers.forEach(center.removeObserver)
-        let reapply: @Sendable (Notification) -> Void = { _ in
-            MainActor.assumeIsolated { WindowMinSizeGuard.shared.apply() }
-        }
-        observers = [
-            center.addObserver(
-                forName: NSWindow.didChangeScreenNotification, object: window, queue: .main,
-                using: reapply),
-            center.addObserver(
-                forName: NSApplication.didChangeScreenParametersNotification, object: nil,
-                queue: .main, using: reapply),
-        ]
-        apply()
+    private struct WeakWindow {
+        weak var value: NSWindow?
     }
 
-    private func apply() {
-        guard let window, let screen = window.screen ?? NSScreen.main else { return }
+    private init() {
+        // App-wide observers (`object: nil`) installed once, rather than
+        // per-window ones replaced on each attach — the latter silently left
+        // every window but the newest unguarded.
+        let center = NotificationCenter.default
+        observers = [
+            center.addObserver(
+                forName: NSWindow.didChangeScreenNotification, object: nil, queue: .main
+            ) { note in
+                let window = note.object as? NSWindow
+                MainActor.assumeIsolated {
+                    if let window { WindowMinSizeGuard.shared.apply(to: window) }
+                }
+            },
+            center.addObserver(
+                forName: NSApplication.didChangeScreenParametersNotification, object: nil,
+                queue: .main
+            ) { _ in
+                MainActor.assumeIsolated { WindowMinSizeGuard.shared.applyToAll() }
+            },
+        ]
+    }
+
+    func attach(to window: NSWindow) {
+        windows.removeAll { $0.value == nil || $0.value === window }
+        windows.append(WeakWindow(value: window))
+        apply(to: window)
+    }
+
+    private func applyToAll() {
+        windows.removeAll { $0.value == nil }
+        for entry in windows {
+            if let window = entry.value { apply(to: window) }
+        }
+    }
+
+    private func apply(to window: NSWindow) {
+        // Only windows this guard was handed — Settings and the mirror pop-out
+        // are deliberately small.
+        guard windows.contains(where: { $0.value === window }),
+              let screen = window.screen ?? NSScreen.main else { return }
         let visible = screen.visibleFrame
         let floor = NSSize(
             width: (visible.width * Self.screenFraction).rounded(),
@@ -936,7 +1008,16 @@ private struct WindowAccessor: NSViewRepresentable {
         return view
     }
 
-    func updateNSView(_ nsView: WindowReaderView, context: Context) {}
+    /// SwiftUI can change *which* workspace a window presents without
+    /// rebuilding this view — `WindowGroup(for:)` hands the content closure a
+    /// binding, and scene restoration writes through it. The closure captured
+    /// at `makeNSView` would then still point at the previous workspace, so
+    /// refresh it and re-report; `onResolve` is written to no-op when the
+    /// window is already bound to the workspace it names.
+    func updateNSView(_ nsView: WindowReaderView, context: Context) {
+        nsView.onWindow = onResolve
+        nsView.reportWindow()
+    }
 }
 
 /// A draggable divider that resizes an adjacent pane. Drag ticks write `live`
