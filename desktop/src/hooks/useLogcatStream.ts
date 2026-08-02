@@ -10,6 +10,10 @@ export interface LogcatStream {
   /** Why the daemon stopped sending, if it did. */
   ended: string | null
   stop: () => Promise<void>
+  /** Subscribe again after a stop. Keeps whatever is already buffered. */
+  restart: () => void
+  /** Throw away what has been buffered, without touching the subscription. */
+  clear: () => void
 }
 
 /**
@@ -24,6 +28,9 @@ export function useLogcatStream(serial: string | null): LogcatStream {
   const [streaming, setStreaming] = useState(false)
   const [error, setError] = useState<DaemonError | null>(null)
   const [ended, setEnded] = useState<string | null>(null)
+  // Bumping this re-runs the effect, which is the whole restart: Stop used to
+  // be a one-way door, with a tab switch the only way back.
+  const [generation, setGeneration] = useState(0)
   const subscription = useRef<Subscription | null>(null)
 
   const stop = useCallback(async () => {
@@ -33,12 +40,24 @@ export function useLogcatStream(serial: string | null): LogcatStream {
     await live?.stop()
   }, [])
 
+  const restart = useCallback(() => {
+    setGeneration((current) => current + 1)
+  }, [])
+
+  const clear = useCallback(() => {
+    setBuffer(emptyBuffer())
+  }, [])
+
+  // A different device is a different log; a restart is the same one.
+  useEffect(() => {
+    setBuffer(emptyBuffer())
+  }, [serial])
+
   useEffect(() => {
     if (serial === null) return
     // StrictMode runs this twice in development; without the flag the second
     // run's subscription replaces the first, which is then never stopped.
     let cancelled = false
-    setBuffer(emptyBuffer())
     setEnded(null)
     setError(null)
 
@@ -83,7 +102,7 @@ export function useLogcatStream(serial: string | null): LogcatStream {
       cancelled = true
       void stop()
     }
-  }, [serial, stop])
+  }, [serial, generation, stop])
 
-  return { buffer, streaming, error, ended, stop }
+  return { buffer, streaming, error, ended, stop, restart, clear }
 }

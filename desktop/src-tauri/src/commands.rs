@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use tauri::ipc::Channel;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_opener::OpenerExt;
 
@@ -147,6 +147,36 @@ pub fn reveal_path(app: AppHandle, path: String) -> Result<(), DaemonError> {
     app.opener()
         .reveal_item_in_dir(&path)
         .map_err(|error| DaemonError::Host(format!("could not open {path}: {error}")))
+}
+
+/// Writes text into `~/Downloads/Droidective/<name>` and returns the path.
+///
+/// The Mac exports there too, so someone moving between the two finds their
+/// files in the same place. A fixed folder rather than a save dialog: it is one
+/// fewer plugin, one fewer capability, and the path comes back for the Show in
+/// folder button to use.
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "tauri's command macro hands AppHandle in by value"
+)]
+pub fn export_text(app: AppHandle, name: String, contents: String) -> Result<String, DaemonError> {
+    // A name is built from a feature id and a timestamp, never from device
+    // output — but it ends up in a path, so it is checked rather than trusted.
+    if name.contains('/') || name.contains('\\') || name.contains("..") {
+        return Err(DaemonError::Host(format!("refusing to write {name}")));
+    }
+    let folder = app
+        .path()
+        .download_dir()
+        .map_err(|error| DaemonError::Host(format!("no Downloads folder: {error}")))?
+        .join("Droidective");
+    std::fs::create_dir_all(&folder)
+        .map_err(|error| DaemonError::Host(format!("could not create {}: {error}", folder.display())))?;
+    let path = folder.join(name);
+    std::fs::write(&path, contents)
+        .map_err(|error| DaemonError::Host(format!("could not write {}: {error}", path.display())))?;
+    Ok(path.to_string_lossy().into_owned())
 }
 
 /// Subscribes to the device list. Returns the id to pass to `stop_watching`.

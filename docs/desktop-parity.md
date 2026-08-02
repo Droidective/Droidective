@@ -174,10 +174,12 @@ Found by driving the app against a live emulator, not by reading it.
       (`lib/confirm.ts`). A Cancel button appears while armed, the window
       losing focus disarms, and an arming on one app never authorises the same
       verb on another.
-- [ ] **Logcat cannot be restarted.** Stop disables the button and the only way
-      back is a tab switch or a device change.
-- [ ] **Logcat has no level or app filter** — the Mac has both, plus a
-      find-vs-filter split, export, clear, and tag-filter chips.
+- [x] ~~**Logcat cannot be restarted.**~~ Stop becomes Start, and the
+      subscription comes back with the buffer intact.
+- [~] **Logcat has no level or app filter.** The level picker, the
+      find-vs-filter split, export, clear and tag chips have landed. The *app*
+      filter has not: it needs a pid → package map the daemon does not serve
+      yet, and matching on the tag would be a filter that quietly misses lines.
 - [x] ~~**The app list re-fetches on every tab switch**, because the pane
       remounts and the data is not lifted.~~ Fixed by the tab shell: an open
       tab stays mounted while it is in the background, so the pane no longer
@@ -547,22 +549,22 @@ Legend: ⬜ not started · 🟡 partial · ⛔ not applicable off-Apple.
 #### `logcat` — Logcat  ·  🟡 partial
 > Live log stream with search and filters
 - **Kind** `view`
-- **Note** A pane exists; the checklist below is what it is missing.
+- **Note** A pane exists; the app filter is what it is still missing.
 - **macOS view** `LogcatView` — `App/Sources/FeatureDetail/Views/LogcatView.swift`
 - **Must replicate**
-  - [ ] picker: Level
-  - [ ] field: Filter lines…
+  - [x] picker: Level
+  - [x] field: Filter lines…
   - [ ] label: All apps
   - [ ] label: Add from installed apps
   - [ ] label: Use app on device screen
   - [ ] label: Add manually / manage…
-  - [ ] tooltip: Show only the lines containing this text
-  - [ ] tooltip: Find & highlight in the log without hiding lines (⌘F)
-  - [ ] tooltip: Export buffer to ~/Downloads/Droidective
-  - [ ] tooltip: Clear
+  - [x] tooltip: Show only the lines containing this text
+  - [x] tooltip: Find & highlight in the log without hiding lines
+  - [x] tooltip: Export buffer to ~/Downloads/Droidective
+  - [x] tooltip: Clear
   - [ ] tooltip: Stream one app's logs — pick a saved bundle or add a new one
-  - [ ] tooltip: Remove tag filter
-  - [ ] export: save/export to a file
+  - [x] tooltip: Remove tag filter
+  - [x] export: save/export to a file
 
 #### `performance` — Performance Monitor  ·  ⬜ todo
 > Live CPU, RAM & FPS with recording and export
