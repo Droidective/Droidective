@@ -16,12 +16,12 @@ set -euo pipefail
 
 # Which cross-platform artifacts a beta actually carries today.
 #
-# Stage 0 ships none: the portable ADBKit core is on main, but droidectived's
-# protocol is unimplemented, so there is no Windows or Linux binary worth
-# publishing. Raising this to 1 turns the daemon artifacts on — the tests cover
-# both values, so the flip is a one-line change with its guard already written.
+# Stage 1 ships the daemon: droidectived serves devices, the feature registry,
+# action dispatch and the log stream, and builds on all three hosts. It is
+# headless — no GUI — so a beta carries it for people driving the daemon
+# directly while the Tauri app is built on top.
 # Stage 2 (the Tauri app) adds its own entries here.
-CROSS_PLATFORM_STAGE="${CROSS_PLATFORM_STAGE:-0}"
+CROSS_PLATFORM_STAGE="${CROSS_PLATFORM_STAGE:-1}"
 
 # vX.Y.Z, optionally with a pre-release suffix. Anything else is a typo'd tag
 # and must not reach a signing step.
