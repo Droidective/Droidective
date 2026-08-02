@@ -1,5 +1,4 @@
 import type { FeatureSummary } from "@/lib/wire"
-import { isRunnable } from "@/lib/wire"
 
 /**
  * The palette's ordering, ported from ADBKit's `FeatureDef.relevance` and
@@ -39,40 +38,26 @@ export function relevance(feature: FeatureSummary, query: string): number {
 }
 
 /**
- * The runnable features a query matches, best first.
+ * The features a query matches, best first — the ones that score nothing are
+ * dropped.
  *
- * Registry order breaks ties — it is a curated order, and falling back to it
- * keeps the list stable as someone types rather than reshuffling equal-scoring
- * rows. Hub members are included: a hub is a whole screen this app does not
- * have yet, and hiding its members would make them unreachable rather than
- * merely relocated.
+ * The incoming order breaks ties. Callers hand this the registry order (or
+ * their own arrangement of it), which is curated, and falling back to it keeps
+ * the list stable as someone types rather than reshuffling equal-scoring rows.
+ *
+ * *Which* features to offer is the caller's decision, not this function's: the
+ * sidebar lists everything the engine implements, and a palette over commands
+ * would choose differently again.
  */
-export function searchActions(features: FeatureSummary[], query: string): FeatureSummary[] {
+export function rankFeatures(
+  features: readonly FeatureSummary[],
+  query: string,
+): FeatureSummary[] {
   const scored: { feature: FeatureSummary; score: number; order: number }[] = []
   features.forEach((feature, order) => {
-    if (!isRunnable(feature)) return
     const score = relevance(feature, query)
     if (score > 0) scored.push({ feature, score, order })
   })
   scored.sort((a, b) => (a.score === b.score ? a.order - b.order : b.score - a.score))
   return scored.map((entry) => entry.feature)
-}
-
-/** Groups a ranked list by category, preserving rank order within each group. */
-export function groupByCategory(
-  features: FeatureSummary[],
-): { category: string; features: FeatureSummary[] }[] {
-  const groups: { category: string; features: FeatureSummary[] }[] = []
-  for (const feature of features) {
-    const existing = groups.find((group) => group.category === feature.category)
-    if (existing) existing.features.push(feature)
-    else groups.push({ category: feature.category, features: [feature] })
-  }
-  return groups
-}
-
-/** "deviceState" → "Device State". The wire sends case names, not labels. */
-export function categoryLabel(category: string): string {
-  const spaced = category.replaceAll(/([a-z\d])([A-Z])/gu, "$1 $2")
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1)
 }

@@ -52,6 +52,14 @@ select,
   user-select: text;
 }
 
+/* WebKit — the webview on Linux and on macOS during development — will not
+   start a drag on an element inside `user-select: none` content. It ignores
+   `draggable="true"` silently, so the sidebar and the tab strip simply would
+   not reorder there, while Chromium (WebView2, Windows) was fine. */
+[draggable="true"] {
+  -webkit-user-drag: element;
+}
+
 ::-webkit-scrollbar {
   width: 11px;
   height: 11px;
