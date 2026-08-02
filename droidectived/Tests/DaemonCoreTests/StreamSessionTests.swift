@@ -184,6 +184,50 @@ import Testing
         #expect(delivered < 1000, "a slow client should not have received everything")
     }
 
+    /// "Nothing is connected" is a state a client has to be able to reach.
+    ///
+    /// The device list is a snapshot, so an empty one is not "no news" — it is
+    /// the only way to say the last device went away. Swallowing it as an
+    /// empty batch left a UI showing a phone that had already been unplugged,
+    /// and made a first subscribe with nothing attached indistinguishable from
+    /// one that was still loading.
+    @Test func anEmptyDeviceListIsDeliveredRatherThanSwallowed() async {
+        let sink = RecordingSink()
+        let source = ScriptedSource(deviceBatches: [[Self.device("emulator-5554")], []])
+        let session = StreamSession(sink: sink, source: source)
+
+        await session.handle(text: #"{"op":"subscribe","id":1,"topic":"devices"}"#)
+        #expect(await eventually { await sink.events().contains("ended") })
+
+        let batches = await sink.rawFrames(ofEvent: "batch")
+        #expect(batches.count == 2, "both the populated list and the empty one")
+        #expect(batches.map(itemCount) == [1, 0])
+    }
+
+    /// A snapshot topic never reports a gap, and always ends on the truth.
+    ///
+    /// The drop-oldest policy is built for logcat, where a discarded line is
+    /// genuinely lost and the client deserves to be told. A device list is not
+    /// like that: the older snapshots are worthless the moment a newer one
+    /// exists, so discarding them is free — and a "you missed 16 device lists"
+    /// marker is something no client can act on. More lists than the buffer's
+    /// capacity must therefore still produce zero `dropped` frames.
+    @Test func theDeviceListNeverReportsAGapAndEndsCurrent() async {
+        let sink = RecordingSink()
+        let batches = (0..<20).map { [Self.device("emulator-\(5554 + $0)")] }
+        let source = ScriptedSource(deviceBatches: batches)
+        // Far below the number of snapshots: on the buffered path this is
+        // exactly the shape that produces gap markers.
+        let session = StreamSession(sink: sink, source: source, capacity: 4)
+
+        await session.handle(text: #"{"op":"subscribe","id":1,"topic":"devices"}"#)
+        #expect(await eventually { await sink.events().contains("ended") })
+
+        #expect(await sink.rawFrames(ofEvent: "dropped").isEmpty, "a gap marker means nothing here")
+        let last = try! #require(await sink.rawFrames(ofEvent: "batch").last)
+        #expect(last.contains("emulator-5573"), "the last snapshot is the current one")
+    }
+
     @Test func unsubscribeStopsTheDeviceSideWork() async {
         let sink = RecordingSink()
         // A stream that never finishes, so only the unsubscribe can end it.
