@@ -142,8 +142,10 @@ final class AppCore {
         // Restore the windows that already came up while this was loading
         // (always at least the first one), then ask for the rest.
         for id in awaitingRestore {
-            workspaces[id]?.restore(from: claimPendingRestore())
+            let saved = freshWorkspaces.contains(id) ? nil : claimPendingRestore()
+            workspaces[id]?.restore(from: saved)
         }
+        freshWorkspaces.removeAll()
         awaitingRestore = []
         openPendingRestoredWindowsOnce()
         if changed || roleChosenThisSession { persistLayout(force: true) }
@@ -253,12 +255,22 @@ final class AppCore {
     /// exists — `openWindow` creates one synchronously per call, and binds are
     /// serialised on the main actor, so first-asked is first-bound.
     private var pendingFreshWindows: [String?] = []
+    /// Workspaces opened by an explicit request while the layout was still
+    /// loading. `bootstrap`'s restore must not hand them a persisted window —
+    /// the user asked for a *new* one, on a device they may have named.
+    private var freshWorkspaces: Set<WorkspaceID> = []
 
     /// A real `NSWindow` came up. This is where a workspace becomes real:
     /// either the window steps into one that has been waiting for a window
     /// (last session's, at launch — or one parked by a background-mode close),
     /// or the provisional it was handed is promoted.
     func bind(_ window: NSWindow, to state: AppState) {
+        // Drop identifiers of windows that are already gone. `ObjectIdentifier`
+        // is the address, so a freshly allocated window can land on a closed
+        // one's — and without this, the guard below would silently refuse to
+        // bind it. A window that is genuinely mid-close is still in
+        // `NSApp.windows`, so it survives the prune.
+        closingWindows.formIntersection(Set(NSApp.windows.map(ObjectIdentifier.init)))
         // A window on its way out still gets re-rendered, and that render asks
         // for content — which would mint a workspace for a window nobody will
         // ever see, and (worse) make it look like a live window for the
@@ -270,12 +282,10 @@ final class AppCore {
         // exactly one restorer. (Frame autosave is separate and still
         // remembers each window's position.)
         window.isRestorable = false
-        // One window, one workspace. SwiftUI can point an existing window at a
-        // different presented value (scene restoration writes through the
-        // content binding), which would otherwise leave two workspaces
-        // claiming the same window — and the displaced one still marked as
-        // "has a window", so nothing would ever adopt it back. Releasing it
-        // here is what lets the adoption below hand it straight back.
+        // One window, one workspace. If this window was showing another
+        // workspace, leaving that one marked as "has a window" would mean
+        // nothing ever adopts it back; releasing it here is what lets the
+        // adoption below hand it straight back.
         for other in workspaces.values where other !== state && other.nsWindow === window {
             other.nsWindow = nil
         }
@@ -291,13 +301,16 @@ final class AppCore {
             wantsFresh = true
             requestedSerial = pendingFreshWindows.removeFirst()
         }
-        let presented = claims.first { $0.value == state.id }?.key
-        if !wantsFresh, let adopted = firstWindowlessWorkspace() {
+        let hostToken = claims.first { $0.value == state.id }?.key
+        // Adoption has to be able to repoint the host, or it would keep
+        // resolving to the workspace just dropped and mint a new provisional
+        // on every render.
+        if !wantsFresh, let hostToken, let adopted = firstWindowlessWorkspace() {
             // Hand this window the workspace that was waiting for one and drop
             // the provisional. `claims` is observed, so the host view
             // re-renders onto the adopted workspace.
             workspaces[state.id] = nil
-            if let presented { claims[presented] = adopted.id }
+            claims[hostToken] = adopted.id
             attach(window, to: adopted)
             return
         }
@@ -305,8 +318,9 @@ final class AppCore {
         if let requestedSerial {
             pendingWindowTargets[state.id] = requestedSerial
         }
+        if wantsFresh { freshWorkspaces.insert(state.id) }
         if didLoadLayout {
-            state.restore(from: claimPendingRestore())
+            state.restore(from: wantsFresh ? nil : claimPendingRestore())
         } else {
             // The layout is still loading; `bootstrap` restores this workspace
             // once the persisted entries are known.
