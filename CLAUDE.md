@@ -8,8 +8,8 @@ pane per feature. Swift 6 + SwiftUI, macOS 14+.
 
 Two layers, strictly separated so a second **Apple** UI (iPad/visionOS) could
 reuse ADBKit almost as-is. The Windows/Linux port is now scheduled and staged
-(strategy + phases in `docs/cross-platform.md`): ADBKit compiles and tests on
-Linux (CI `test-linux`; `make test-linux` locally) and build-verifies on
+(strategy + phases in `docs/cross-platform.md`): ADBKit compiles and runs its
+whole suite on Linux (CI `test-linux`; `make test-linux` locally) and on
 Windows (CI `build-windows`). The Apple-bound subsystems — the Mirror media
 stack, the Network.framework servers (Reactotron, the JS-console test fake),
 `NSDataDetector`, `proc_pid_rusage` — are `#if canImport`-gated out rather than
