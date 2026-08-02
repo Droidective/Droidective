@@ -17,6 +17,8 @@ struct AdaptiveTabBar<Tab: Hashable & Identifiable>: View {
     /// with something else and should sit against the edge.
     var alignment: HorizontalAlignment = .leading
 
+    @Environment(\.colorScheme) private var colorScheme
+
     private static var spacing: CGFloat { 2 }
     private static var overflowWidth: CGFloat { 34 }
 
@@ -54,7 +56,13 @@ struct AdaptiveTabBar<Tab: Hashable & Identifiable>: View {
         } label: {
             Text(label(tab))
                 .font(.app(.callout))
-                .foregroundStyle(isSelected ? Color.black : Color.textMain)
+                // The accent is user-chosen; a hardcoded black label goes
+                // unreadable the moment someone picks a dark one.
+                .foregroundStyle(
+                    isSelected
+                        ? Color.brandAccent.contrastingForeground(for: colorScheme)
+                        : Color.textMain
+                )
                 .lineLimit(1)
                 .frame(width: width, height: Self.chipHeight)
                 .background(
@@ -90,17 +98,57 @@ struct AdaptiveTabBar<Tab: Hashable & Identifiable>: View {
 
     // MARK: - Measurement
 
-    static var chipHeight: CGFloat { 22 }
-    static var rowHeight: CGFloat { 22 }
+    static var chipHeight: CGFloat { TabLabelMetrics.chipHeight }
+    static var rowHeight: CGFloat { TabLabelMetrics.chipHeight }
 
-    /// Rendered width of a chip. Measured with the same font the chip draws in
-    /// (`Font.app(.callout)` resolves to the system font at the user's text
-    /// scale) so the fit decision matches what lands on screen.
+    static func width(of text: String) -> CGFloat { TabLabelMetrics.width(of: text) }
+}
+
+/// Chip sizing, kept out of the generic view so the memo can be a stored static.
+@MainActor
+enum TabLabelMetrics {
+
+    static let chipHeight: CGFloat = 22
+    /// Horizontal padding inside a chip, on top of the measured text.
+    private static let horizontalPadding: CGFloat = 20
+
+    private struct Key: Hashable {
+        let text: String
+        let family: String?
+        let size: CGFloat
+    }
+
+    private static var cache: [Key: CGFloat] = [:]
+
+    /// Rendered width of a chip.
+    ///
+    /// Measured in the font the chip actually draws in, family included:
+    /// `Font.app(.callout)` honours Settings ▸ Appearance ▸ Font, so measuring
+    /// the system font would under-measure a wider family and clip the last
+    /// chip — the one thing this control exists to prevent.
+    ///
+    /// Memoised because this runs for every tab on every layout pass, and a
+    /// pane-divider drag issues a great many of those.
     static func width(of text: String) -> CGFloat {
-        let font = NSFont.systemFont(
-            ofSize: AppFontPrefs.pointSize(for: .callout) * AppFontPrefs.sizeScale
-        )
-        let measured = (text as NSString).size(withAttributes: [.font: font]).width
-        return ceil(measured) + 20
+        let size = AppFontPrefs.pointSize(for: .callout) * AppFontPrefs.sizeScale
+        let family = AppFontPrefs.family
+        let key = Key(text: text, family: family, size: size)
+        if let cached = cache[key] { return cached }
+
+        let measured = (text as NSString)
+            .size(withAttributes: [.font: font(family: family, size: size)])
+            .width
+        let width = ceil(measured) + horizontalPadding
+        // A pane only ever shows a handful of distinct labels; the cap is just
+        // so a pathological run of label changes can't grow this unbounded.
+        if cache.count > 256 { cache.removeAll() }
+        cache[key] = width
+        return width
+    }
+
+    private static func font(family: String?, size: CGFloat) -> NSFont {
+        guard let family else { return .systemFont(ofSize: size) }
+        let descriptor = NSFontDescriptor(fontAttributes: [.family: family])
+        return NSFont(descriptor: descriptor, size: size) ?? .systemFont(ofSize: size)
     }
 }

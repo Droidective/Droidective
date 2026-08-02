@@ -696,8 +696,8 @@ public enum XMLFormatter: Sendable {
         var out: [String] = []
         for row in rows {
             let stripped = String(row.dropFirst(min(common, row.prefix(while: { $0 == " " }).count)))
-            let trailingTrimmed = stripped.replacingOccurrences(
-                of: "[ ]+$", with: "", options: .regularExpression
+            let trailingTrimmed = String(
+                stripped.reversed().drop(while: { $0 == " " }).reversed()
             )
             if trailingTrimmed.isEmpty {
                 // Keep blank lines the author wrote, but never trailing padding.

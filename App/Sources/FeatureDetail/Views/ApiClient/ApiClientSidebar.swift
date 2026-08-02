@@ -86,7 +86,7 @@ struct ApiClientSidebar: View {
 
     private var expandedFolders: Binding<Set<String>> {
         Binding(
-            get: { Set(expandedFolderList.components(separatedBy: "\n").filter { !$0.isEmpty }) },
+            get: { Set(expandedFolderList.components(separatedBy: .newlines).filter { !$0.isEmpty }) },
             set: { expandedFolderList = $0.sorted().joined(separator: "\n") }
         )
     }
