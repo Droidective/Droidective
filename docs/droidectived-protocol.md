@@ -92,9 +92,10 @@ browser tab via DNS rebinding, can reach `127.0.0.1`. So, mirroring what
 Token in a file rather than argv, because argv is world-readable via `ps` — the
 same reasoning `ApkSigningService` already uses for keystore passwords.
 
-> **Status:** §§2–4 and the guards in §3.2 are implemented and tested
-> (`droidectived/`, 24 tests). §5 streams, and the rest of §4's routes, are
-> not yet built.
+> **Status:** §§2–6 are implemented and tested (`droidectived/`, 70 tests),
+> and `desktop/` is the first client driving them. Of §4's routes, `devices`,
+> `features` and `actions` exist; file transfer and tool downloads (§8) do
+> not. Of §5's topics, `devices` and `logcat` exist.
 
 ## 4. Request/response
 
@@ -120,6 +121,20 @@ Actions route through `FeatureEngine.dispatch`, so **the daemon adds no
 feature knowledge**. A new registry action is reachable over HTTP the day it
 lands, with no daemon change — the same property `implementedIDs` already
 gives the Mac app. An unknown `featureId` is a 404, not a 500.
+
+`/v1/features/list` carries what a client needs to *render* a feature, not
+merely to name one: `keywords` (the vocabulary `FeatureDef.relevance` ranks
+on — without it a palette can only match titles, and searching "battery" stops
+finding the Simulate hub), `isAbsorbedByHub`, `isDestructive`, and per-field
+`description`, `defaultValue`, `min`/`max`/`step` plus both halves of every
+choice (`ar-EG` is not a label). `icon` stays out: SF Symbol names mean
+nothing off Apple.
+
+**Toggle actions take one implicit boolean named `on`.** It is a registry-wide
+convention rather than a declared field — a `.toggleAction` has an empty
+`fields` array — so a client has to know it. `FeatureEngine` reads
+`params["on"]`, the Mac's `ToggleActionView` sends it, and
+`aToggleActionIsDrivenByAnOnParameter` is what fails if it is ever renamed.
 
 ### 4.1 Errors
 
@@ -183,6 +198,26 @@ already had to solve:
   task cancellation (`SystemProcessRunner.withTaskCancellationHandler`); the
   subscription must hold that task so closing the socket kills `adb logcat`
   rather than orphaning it.
+
+### 5.1 Snapshot topics vs increment topics
+
+`StreamProtocol.Topic.isSnapshot` splits the two, and a new topic has to answer
+the question. A `logcat` batch is what just arrived and **appends**; a
+`devices` batch is the whole current list and **replaces**.
+
+For a snapshot topic the drop-oldest policy above is simply wrong, in two ways
+that the first Tauri client hit immediately:
+
+- **An empty batch is meaningful and must be sent.** `items: []` is the only
+  way to say "nothing is connected". Skipping it — which the buffered path did,
+  since it had nothing to enqueue — left a UI showing a device that had already
+  been unplugged, and made a first subscribe with nothing attached
+  indistinguishable from one still loading. Fixed: a snapshot is delivered even
+  when empty.
+- **An unsent snapshot is replaced, not queued.** An older device list is
+  worthless once a newer one exists, so a snapshot topic can never emit
+  `dropped`. Handing a client stale state plus a "you missed 16 device lists"
+  marker would be worse than useless: there is nothing to do with the gap.
 
 ## 6. Lifecycle
 
