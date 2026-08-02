@@ -30,10 +30,19 @@ struct ApiClientView: View {
     @Environment(AppState.self) private var state
     @State private var model = ApiClientModel()
 
-    @State private var sidebarSection: ApiSidebarSection = .collections
-    @State private var requestTab: ApiRequestTab = .params
-    @State private var showSidebar = true
+    @AppStorage("apiSidebarSection") private var sidebarSection: ApiSidebarSection = .collections
+    @AppStorage("apiRequestTab") private var requestTab: ApiRequestTab = .params
+    @AppStorage("apiSidebarVisible") private var showSidebar = true
     @State private var paneWidth: CGFloat = 900
+
+    /// Both seams persist: the sidebar as a width, the editor/response split as
+    /// a fraction of the area left over, so it survives a window resize. The
+    /// `live` value carries the in-flight drag and the commit happens once, on
+    /// release — the same two-binding shape `RootView` uses for its own seams.
+    @AppStorage("apiSidebarWidth") private var sidebarWidth = 260.0
+    @State private var liveSidebarWidth: Double?
+    @AppStorage("apiSplitFraction") private var splitFraction = 0.5
+    @State private var liveSplitPoints: Double?
 
     @State private var sheet: ApiClientSheet?
     @State private var alertMessage: String?
@@ -51,8 +60,14 @@ struct ApiClientView: View {
                         sheet: $sheet,
                         alertMessage: $alertMessage
                     )
-                    .frame(width: max(220, min(320, geometry.size.width * 0.24)))
-                    Divider()
+                    .frame(width: ApiPaneLayout.sidebarWidth(
+                        stored: liveSidebarWidth ?? sidebarWidth, total: geometry.size.width
+                    ))
+                    ResizeHandle(
+                        value: $sidebarWidth,
+                        live: $liveSidebarWidth,
+                        range: ApiPaneLayout.sidebarRange
+                    )
                 }
                 mainColumn
             }
@@ -112,19 +127,43 @@ struct ApiClientView: View {
 
     @ViewBuilder
     private var splitBody: some View {
-        if isNarrow {
-            VStack(spacing: 0) {
-                editor
-                Divider()
-                responsePane
-            }
-        } else {
-            HStack(spacing: 0) {
-                editor.frame(maxWidth: .infinity)
-                Divider()
-                responsePane.frame(maxWidth: .infinity)
+        GeometryReader { geometry in
+            // Stacked when narrow, so the seam runs the other way and the
+            // fraction is of height rather than width.
+            let total = isNarrow ? geometry.size.height : geometry.size.width
+            let leading = liveSplitPoints
+                ?? ApiPaneLayout.leadingLength(total: total, fraction: splitFraction)
+            let handle = ResizeHandle(
+                value: splitPoints(over: total),
+                live: $liveSplitPoints,
+                range: ApiPaneLayout.pointRange(total: total),
+                axis: isNarrow ? .vertical : .horizontal
+            )
+
+            if isNarrow {
+                VStack(spacing: 0) {
+                    editor.frame(height: leading)
+                    handle
+                    responsePane.frame(maxHeight: .infinity)
+                }
+            } else {
+                HStack(spacing: 0) {
+                    editor.frame(width: leading)
+                    handle
+                    responsePane.frame(maxWidth: .infinity)
+                }
             }
         }
+    }
+
+    /// `ResizeHandle` drags in points; the split is stored as a fraction so a
+    /// window resize keeps it. This is the adapter between the two — reads the
+    /// stored fraction as points, writes points back as a fraction.
+    private func splitPoints(over total: CGFloat) -> Binding<Double> {
+        Binding(
+            get: { ApiPaneLayout.leadingLength(total: total, fraction: splitFraction) },
+            set: { splitFraction = ApiPaneLayout.fraction(forLeading: $0, total: total) }
+        )
     }
 
     private var editor: some View {
@@ -142,15 +181,16 @@ struct ApiClientView: View {
     private var requestBar: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                if isNarrow {
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.2)) { showSidebar.toggle() }
-                    } label: {
-                        Image(systemName: "sidebar.left")
-                    }
-                    .buttonStyle(.borderless)
-                    .help("Toggle sidebar")
+                // Shown at every width: the sidebar is hideable in wide layouts
+                // too, and without this button there was no way back once it
+                // was hidden.
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { showSidebar.toggle() }
+                } label: {
+                    Image(systemName: showSidebar ? "sidebar.left" : "sidebar.leading")
                 }
+                .buttonStyle(.borderless)
+                .help(showSidebar ? "Hide sidebar" : "Show sidebar")
 
                 Picker("", selection: $model.current.method) {
                     ForEach(HttpMethod.allCases) { method in

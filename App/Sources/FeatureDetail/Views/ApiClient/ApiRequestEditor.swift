@@ -523,13 +523,10 @@ struct ApiRequestEditor: View {
             .padding(.horizontal, 12)
             .padding(.top, 8)
 
-            ScrollView([.horizontal, .vertical]) {
-                Text(model.code(for: codeTarget))
-                    .font(.app(.body, design: .monospaced))
-                    .textSelection(.enabled)
-                    .padding(8)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            }
+            // Same viewer as the response body — a generated snippet is long
+            // enough to hit the blank-until-clicked layout problem too.
+            ApiBodyTextView(text: model.code(for: codeTarget), format: .text, wraps: true)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 

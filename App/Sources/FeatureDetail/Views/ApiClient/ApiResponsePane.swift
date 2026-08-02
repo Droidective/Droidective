@@ -19,6 +19,8 @@ struct ApiResponsePane: View {
 
     @State private var tab: Tab = .body
     @State private var showRaw = false
+    @AppStorage("apiBodyWraps") private var wraps = true
+    @State private var findToken = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -133,8 +135,19 @@ struct ApiResponsePane: View {
     @ViewBuilder
     private func bodyTab(_ response: ApiResponse) -> some View {
         VStack(spacing: 0) {
-            if response.prettyBody != nil {
-                HStack {
+            bodyToolbar(response)
+            bodyContent(response)
+        }
+    }
+
+    /// The bar above the body. It stays put for every textual body — not only
+    /// the ones with a pretty form — so wrapping and Find don't come and go
+    /// with the content type.
+    @ViewBuilder
+    private func bodyToolbar(_ response: ApiResponse) -> some View {
+        if response.format.isTextual, !response.body.isEmpty {
+            HStack(spacing: 8) {
+                if response.prettyBody != nil {
                     Picker("", selection: $showRaw) {
                         Text("Pretty").tag(false)
                         Text("Raw").tag(true)
@@ -142,15 +155,25 @@ struct ApiResponsePane: View {
                     .labelsHidden()
                     .pickerStyle(.segmented)
                     .frame(width: 150)
-                    Spacer()
-                    Text(response.mediaType.isEmpty ? response.format.rawValue : response.mediaType)
-                        .font(.app(.caption2, design: .monospaced))
-                        .foregroundStyle(.textMuted)
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
+
+                Button { wraps.toggle() } label: {
+                    Image(systemName: wraps ? "text.alignleft" : "arrow.left.and.right")
+                }
+                .buttonStyle(.borderless)
+                .help(wraps ? "Wrap long lines (on)" : "Wrap long lines (off)")
+
+                Button { findToken += 1 } label: { Image(systemName: "magnifyingglass") }
+                    .buttonStyle(.borderless)
+                    .help("Find in body (⌘F)")
+
+                Spacer()
+                Text(response.mediaType.isEmpty ? response.format.rawValue : response.mediaType)
+                    .font(.app(.caption2, design: .monospaced))
+                    .foregroundStyle(.textMuted)
             }
-            bodyContent(response)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
         }
     }
 
@@ -170,13 +193,10 @@ struct ApiResponsePane: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
         } else if let text = displayText(response) {
-            ScrollView([.horizontal, .vertical]) {
-                Text(text)
-                    .font(.app(.body, design: .monospaced))
-                    .textSelection(.enabled)
-                    .padding(8)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            }
+            ApiBodyTextView(
+                text: text, format: response.format, wraps: wraps, findToken: findToken
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             VStack(spacing: 6) {
                 Image(systemName: "doc.zipper").font(.largeTitle).foregroundStyle(.textMuted)
