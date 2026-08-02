@@ -61,6 +61,33 @@ export interface FeatureSummary {
   fields: FeatureField[]
 }
 
+export interface AppSummary {
+  packageId: string
+  /** Derived by the daemon from the package id, so clients do not drift. */
+  displayName: string
+  versionName: string | null
+  isSystem: boolean
+}
+
+/** A verb the daemon accepts, with the runner's own destructive flag. */
+export interface AppActionDescriptor {
+  id: string
+  isDestructive: boolean
+}
+
+export interface AppsResponse {
+  apps: AppSummary[]
+  actions: AppActionDescriptor[]
+}
+
+/**
+ * How a selected app reaches a feature runner.
+ *
+ * `needsBundle` features are given it as a required parameter and the rest as
+ * optional context — the same rule `AppState` applies on the Mac.
+ */
+export const PACKAGE_PARAM = "packageId"
+
 export interface RunResponse {
   ok: boolean
   message: string

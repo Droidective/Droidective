@@ -5,6 +5,15 @@ public struct AppListing: Sendable, Equatable, Identifiable {
     public let versionName: String?
     public let isSystem: Bool
 
+    /// The memberwise initialiser is internal to this package, so callers
+    /// outside it — `droidectived`'s tests build listings with no device —
+    /// need one that is not.
+    public init(packageId: String, versionName: String?, isSystem: Bool) {
+        self.packageId = packageId
+        self.versionName = versionName
+        self.isSystem = isSystem
+    }
+
     public var id: String { packageId }
     /// Display name derived from the package id ("weather" → "Weather").
     public var displayName: String { Self.displayName(for: packageId) }

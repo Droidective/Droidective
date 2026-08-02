@@ -1,5 +1,5 @@
 import type { FeatureField, FeatureSummary, FieldValue } from "@/lib/wire"
-import { TOGGLE_PARAM } from "@/lib/wire"
+import { PACKAGE_PARAM, TOGGLE_PARAM } from "@/lib/wire"
 
 /**
  * Turning a rendered form into the parameters a runner expects.
@@ -84,15 +84,22 @@ export function runFields(
   feature: FeatureSummary,
   values: FormValues,
   toggleOn?: boolean,
+  packageId?: string | null,
 ): FormValues | undefined {
-  if (feature.kind === "toggleAction") {
-    return { [TOGGLE_PARAM]: toggleOn ?? false }
-  }
   const fields: FormValues = {}
-  for (const field of feature.fields) {
-    const value = values[field.name]
-    if (isBlank(value) || value === undefined) continue
-    fields[field.name] = value
+  if (feature.kind === "toggleAction") {
+    fields[TOGGLE_PARAM] = toggleOn ?? false
+  } else {
+    for (const field of feature.fields) {
+      const value = values[field.name]
+      if (isBlank(value) || value === undefined) continue
+      fields[field.name] = value
+    }
+  }
+  // Required for a `needsBundle` feature and harmless context for the rest —
+  // the same rule `AppState.run` applies on the Mac.
+  if (packageId !== undefined && packageId !== null && packageId !== "") {
+    fields[PACKAGE_PARAM] = packageId
   }
   return Object.keys(fields).length > 0 ? fields : undefined
 }

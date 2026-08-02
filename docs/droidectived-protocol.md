@@ -136,6 +136,15 @@ convention rather than a declared field — a `.toggleAction` has an empty
 `params["on"]`, the Mac's `ToggleActionView` sends it, and
 `aToggleActionIsDrivenByAnOnParameter` is what fails if it is ever renamed.
 
+`/v1/apps/list` and `/v1/apps/control` are the same kind of pass-through, over
+`AppsExplorerService` and `AppControlService`. The list response carries the
+**verb table** alongside the apps (`actions: [{id, isDestructive}]`) rather
+than leaving a client to keep its own copy: the two are always wanted
+together, and a client with a private list of which verbs are dangerous will
+eventually disagree with the runner about it. An unknown verb is a 400 that
+never reaches the device. adb refusing — device gone, unauthorised — is a 502
+carrying adb's own words, not a 500.
+
 ### 4.1 Errors
 
 One shape everywhere, so the UI has one error path:

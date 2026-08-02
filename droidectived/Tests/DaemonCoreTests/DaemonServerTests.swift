@@ -23,6 +23,13 @@ import FoundationNetworking
             FeatureResult(ok: true, message: "stub")
         }
 
+        func listApps(serial: String) async throws -> [AppListing] { [] }
+
+        func controlApp(
+            serial: String, packageId: String, action: AppControlService.AppAction
+        ) async throws -> FeatureResult {
+            FeatureResult(ok: true, message: "stub")
+        }
     }
 
     private static func device(_ serial: String) -> Device {

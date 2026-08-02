@@ -114,6 +114,52 @@ pub struct RunResponse {
     pub needs_adb_keyboard: bool,
 }
 
+/// One installed app, as `/v1/apps/list` sends it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppSummary {
+    #[serde(rename = "packageId")]
+    pub package_id: String,
+    /// Derived from the package id by the daemon, so this client does not
+    /// reimplement the rule and then drift from it.
+    #[serde(rename = "displayName")]
+    pub display_name: String,
+    #[serde(rename = "versionName")]
+    pub version_name: Option<String>,
+    #[serde(rename = "isSystem")]
+    pub is_system: bool,
+}
+
+/// A verb the daemon accepts, with its own destructive flag.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppActionDescriptor {
+    pub id: String,
+    #[serde(rename = "isDestructive")]
+    pub is_destructive: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppsResponse {
+    pub apps: Vec<AppSummary>,
+    /// Sent with the list, so the UI offers exactly the verbs the daemon runs.
+    pub actions: Vec<AppActionDescriptor>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct AppsListRequest {
+    pub serial: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct AppControlRequest {
+    pub serial: String,
+    #[serde(rename = "packageId")]
+    pub package_id: String,
+    /// An `AppControlService.AppAction` raw value. A string rather than an
+    /// enum: the daemon owns the verb list and rejects an unknown one, so
+    /// mirroring it here would only add a place to fall behind.
+    pub action: String,
+}
+
 /// `{"error":{"code":…,"message":…,"detail":…}}`.
 #[derive(Debug, Clone, Deserialize)]
 pub struct ErrorEnvelope {

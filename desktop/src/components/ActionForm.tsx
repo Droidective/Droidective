@@ -6,7 +6,16 @@ import { coerce, initialValues, missingRequired, runFields, type FormValues } fr
 import type { DaemonError, Device, FeatureField, FeatureSummary, RunResponse } from "@/lib/wire"
 
 /** The detail pane: a feature's parameters, a Run button, and what came back. */
-export function ActionForm({ feature, device }: { feature: FeatureSummary; device: Device | null }) {
+export function ActionForm({
+  feature,
+  device,
+  packageId,
+}: {
+  feature: FeatureSummary
+  device: Device | null
+  /** The app chosen in the Apps tab, if any. */
+  packageId: string | null
+}) {
   // Re-keyed by feature id from the parent, so state resets when the
   // selection changes rather than leaking one feature's input into the next.
   const [values, setValues] = useState<FormValues>(() => initialValues(feature))
@@ -18,7 +27,8 @@ export function ActionForm({ feature, device }: { feature: FeatureSummary; devic
 
   const missing = useMemo(() => missingRequired(feature, values), [feature, values])
   const ready = device?.state === "device"
-  const Icon = iconForCategory(feature.category)
+  // The registry says this one acts on an app, and nothing has been chosen.
+  const needsApp = feature.needsBundle && packageId === null
 
   const run = async () => {
     if (feature.isDestructive && !confirming) {
@@ -31,7 +41,7 @@ export function ActionForm({ feature, device }: { feature: FeatureSummary; devic
     setResult(null)
     setError(null)
     try {
-      const fields = runFields(feature, values, toggleOn)
+      const fields = runFields(feature, values, toggleOn, packageId)
       setResult(
         await runAction({
           featureId: feature.id,
@@ -49,19 +59,7 @@ export function ActionForm({ feature, device }: { feature: FeatureSummary; devic
 
   return (
     <div className="flex h-full flex-col gap-4 overflow-y-auto p-6">
-      <header className="flex items-start gap-3">
-        <Icon size={22} className="mt-0.5 shrink-0 text-accent" />
-        <div className="min-w-0">
-          <h2 className="text-[17px] font-semibold text-text-primary" data-selectable>
-            {feature.title}
-          </h2>
-          {feature.subtitle ? (
-            <p className="mt-0.5 text-text-secondary" data-selectable>
-              {feature.subtitle}
-            </p>
-          ) : null}
-        </div>
-      </header>
+      <FeatureHeader feature={feature} />
 
       {feature.kind === "toggleAction" || feature.fields.length > 0 ? (
         <div className="flex flex-col gap-4 rounded-lg border border-border-subtle bg-bg-surface p-4">
@@ -84,10 +82,11 @@ export function ActionForm({ feature, device }: { feature: FeatureSummary; devic
       <RunControls
         label={running ? "Running…" : confirming ? "Really run it?" : "Run"}
         tone={feature.isDestructive ? "danger" : "primary"}
-        disabled={running || !ready || missing.length > 0}
+        disabled={running || !ready || needsApp || missing.length > 0}
         device={device}
         ready={ready}
         missing={missing}
+        needsApp={needsApp}
         confirming={confirming}
         onRun={() => void run()}
         onCancel={() => {
@@ -100,6 +99,25 @@ export function ActionForm({ feature, device }: { feature: FeatureSummary; devic
   )
 }
 
+function FeatureHeader({ feature }: { feature: FeatureSummary }) {
+  const Icon = iconForCategory(feature.category)
+  return (
+    <header className="flex items-start gap-3">
+      <Icon size={22} className="mt-0.5 shrink-0 text-accent" />
+      <div className="min-w-0">
+        <h2 className="text-[17px] font-semibold text-text-primary" data-selectable>
+          {feature.title}
+        </h2>
+        {feature.subtitle ? (
+          <p className="mt-0.5 text-text-secondary" data-selectable>
+            {feature.subtitle}
+          </p>
+        ) : null}
+      </div>
+    </header>
+  )
+}
+
 function RunControls({
   label,
   tone,
@@ -107,6 +125,7 @@ function RunControls({
   device,
   ready,
   missing,
+  needsApp,
   confirming,
   onRun,
   onCancel,
@@ -117,6 +136,7 @@ function RunControls({
   device: Device | null
   ready: boolean
   missing: string[]
+  needsApp: boolean
   confirming: boolean
   onRun: () => void
   onCancel: () => void
@@ -132,6 +152,9 @@ function RunControls({
         {label}
       </Button>
       {confirming ? <Button onClick={onCancel}>Cancel</Button> : null}
+      {needsApp ? (
+        <span className="text-text-tertiary">Pick an app in the Apps tab first</span>
+      ) : null}
       {missing.length > 0 ? (
         <span className="text-text-tertiary">Fill in {missing.join(", ")}</span>
       ) : null}

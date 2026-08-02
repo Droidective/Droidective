@@ -107,9 +107,10 @@ and then quietly forgotten.
 
 `desktop/` — Tauri 2 + React 19 + Vite + Tailwind v4 over `droidectived`; see
 `desktop/README.md`. Working today: the device picker, the action palette
-(search, forms, toggles, destructive confirmation) and live logcat with
-visible gap markers. Still to come: the full-screen view features, apps and
-files, then the terminal via xterm.js against a daemon PTY endpoint.
+(search, forms, toggles, destructive confirmation), the installed-app browser
+with its verbs, and live logcat with visible gap markers. Still to come: the
+remaining full-screen view features and files, then the terminal via xterm.js
+against a daemon PTY endpoint.
 Mirroring stays with the scrcpy desktop app.
 
 Two decisions worth keeping:
