@@ -9,6 +9,7 @@ enum ApiClientSheet: Identifiable {
     case newFolder(collectionId: String, parent: String?)
     case renameFolder(collectionId: String, folderId: String)
     case collectionAuth(id: String)
+    case collectionVariables(id: String)
     case newEnvironment
     case environment(id: String)
     case globals
@@ -24,6 +25,7 @@ enum ApiClientSheet: Identifiable {
             return "newFolder-\(collectionId)-\(parent ?? "root")"
         case .renameFolder(_, let folderId): return "renameFolder-\(folderId)"
         case .collectionAuth(let id): return "collectionAuth-\(id)"
+        case .collectionVariables(let id): return "collectionVariables-\(id)"
         case .newEnvironment: return "newEnvironment"
         case .environment(let id): return "environment-\(id)"
         case .globals: return "globals"
@@ -67,6 +69,16 @@ struct ApiClientSheetView: View {
             }
         case .collectionAuth(let id):
             CollectionAuthSheet(model: model, collectionId: id)
+        case .collectionVariables(let id):
+            // Collection variables already resolve (they're the third scope
+            // layer) and Postman import fills them in — there was just no way
+            // to see or edit them.
+            VariablesSheet(
+                title: "Collection Variables",
+                variables: model.data.collections.first { $0.id == id }?.variables ?? [],
+                name: nil,
+                onSave: { _, variables in model.setCollectionVariables(variables, for: id) }
+            )
         case .newEnvironment:
             NameSheet(title: "New Environment", placeholder: "Name", action: "Create") { name in
                 _ = model.addEnvironment(named: name)

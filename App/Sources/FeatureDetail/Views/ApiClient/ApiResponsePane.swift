@@ -19,6 +19,11 @@ struct ApiResponsePane: View {
 
     @State private var tab: Tab = .body
     @State private var showRaw = false
+    @AppStorage("apiBodyWraps") private var wraps = true
+    @State private var findToken = 0
+    /// Names what a menu-driven copy just put on the clipboard. Inline buttons
+    /// acknowledge themselves; a menu has closed by the time it could.
+    @State private var copyToastMessage: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -37,6 +42,7 @@ struct ApiResponsePane: View {
             }
         }
         .background(.bgSurface.opacity(0.3))
+        .apiCopyToast($copyToastMessage)
     }
 
     // MARK: - Status
@@ -64,13 +70,12 @@ struct ApiResponsePane: View {
                     .help("The body was larger than the per-request limit in Settings.")
             }
 
-            Spacer()
-
             Menu {
-                Button("Copy Body") { copy(bodyText(response)) }
-                Button("Copy Response Headers") { copy(headerText(response)) }
-                Divider()
                 Button("Save Body to File…") { saveBody(response) }
+                Divider()
+                Button("Copy Everything") {
+                    copy(everythingText(response), acknowledging: "Copied the whole response")
+                }
             } label: {
                 Image(systemName: "square.and.arrow.down")
             }
@@ -78,23 +83,52 @@ struct ApiResponsePane: View {
             .menuIndicator(.hidden)
             .fixedSize()
 
-            ViewThatFits(in: .horizontal) {
-                tabPicker(.segmented)
-                tabPicker(.menu)
-            }
+            // Takes the width left over from the status metrics and sits against
+            // the trailing edge, dropping tabs into a menu only once they truly
+            // stop fitting.
+            AdaptiveTabBar(
+                tabs: Tab.allCases, label: \.label, selection: $tab, alignment: .trailing
+            )
         }
         .padding(8)
     }
 
-    private func tabPicker(_ style: some PickerStyle) -> some View {
-        Picker("", selection: $tab) {
-            ForEach(Tab.allCases) { value in
-                Text(value.label).tag(value)
-            }
+    /// One clipboard-friendly dump of the whole exchange, for pasting into an
+    /// issue: status line, headers, then the body as shown.
+    private func everythingText(_ response: ApiResponse) -> String {
+        var parts = [
+            "\(response.statusCode) \(response.statusText) · "
+                + String(format: "%.0f ms", response.elapsedMs) + " · \(response.sizeText)"
+        ]
+        if !response.finalURL.isEmpty { parts.append(response.finalURL) }
+        let headers = headerText(response)
+        if !headers.isEmpty { parts.append(headers) }
+        let body = bodyText(response)
+        if !body.isEmpty { parts.append(body) }
+        return parts.joined(separator: "\n\n")
+    }
+
+    /// The copy button every section carries, so the thing on screen is always
+    /// one click from the clipboard — and says so once it is.
+    private func copyButton(_ help: String, _ text: @escaping () -> String) -> some View {
+        ApiCopyButton(help: help, text: text)
+            .buttonStyle(.borderless)
+    }
+
+    /// A section's own header strip: a title, its copy button, and whatever else
+    /// that section needs on the right.
+    private func sectionBar(
+        _ title: String, copyHelp: String, copying text: @escaping () -> String
+    ) -> some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .font(.app(.caption))
+                .foregroundStyle(.textMuted)
+            copyButton(copyHelp, text)
+            Spacer()
         }
-        .labelsHidden()
-        .pickerStyle(style)
-        .frame(maxWidth: 240)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
     }
 
     private var assertionStrip: some View {
@@ -133,8 +167,19 @@ struct ApiResponsePane: View {
     @ViewBuilder
     private func bodyTab(_ response: ApiResponse) -> some View {
         VStack(spacing: 0) {
-            if response.prettyBody != nil {
-                HStack {
+            bodyToolbar(response)
+            bodyContent(response)
+        }
+    }
+
+    /// The bar above the body. It stays put for every textual body — not only
+    /// the ones with a pretty form — so wrapping and Find don't come and go
+    /// with the content type.
+    @ViewBuilder
+    private func bodyToolbar(_ response: ApiResponse) -> some View {
+        if response.format.isTextual, !response.body.isEmpty {
+            HStack(spacing: 8) {
+                if response.prettyBody != nil {
                     Picker("", selection: $showRaw) {
                         Text("Pretty").tag(false)
                         Text("Raw").tag(true)
@@ -142,15 +187,31 @@ struct ApiResponsePane: View {
                     .labelsHidden()
                     .pickerStyle(.segmented)
                     .frame(width: 150)
-                    Spacer()
-                    Text(response.mediaType.isEmpty ? response.format.rawValue : response.mediaType)
-                        .font(.app(.caption2, design: .monospaced))
-                        .foregroundStyle(.textMuted)
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
+
+                Button { wraps.toggle() } label: {
+                    Image(systemName: wraps ? "text.alignleft" : "arrow.left.and.right")
+                }
+                .buttonStyle(.borderless)
+                .help(wraps ? "Wrap long lines (on)" : "Wrap long lines (off)")
+
+                // Deliberately not bound to ⌘F: this pane can sit in a hidden
+                // keep-alive tab, and a shortcut declared there would take ⌘F
+                // app-wide. AppKit's own ⌘F still opens the find bar once the
+                // body has focus; this button is the path that always works.
+                Button { findToken += 1 } label: { Image(systemName: "magnifyingglass") }
+                    .buttonStyle(.borderless)
+                    .help("Find in body")
+
+                copyButton("Copy the body as shown") { bodyText(response) }
+
+                Spacer()
+                Text(response.mediaType.isEmpty ? response.format.rawValue : response.mediaType)
+                    .font(.app(.caption2, design: .monospaced))
+                    .foregroundStyle(.textMuted)
             }
-            bodyContent(response)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
         }
     }
 
@@ -170,13 +231,10 @@ struct ApiResponsePane: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
         } else if let text = displayText(response) {
-            ScrollView([.horizontal, .vertical]) {
-                Text(text)
-                    .font(.app(.body, design: .monospaced))
-                    .textSelection(.enabled)
-                    .padding(8)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            }
+            ApiBodyTextView(
+                text: text, format: response.format, wraps: wraps, findToken: findToken
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             VStack(spacing: 6) {
                 Image(systemName: "doc.zipper").font(.largeTitle).foregroundStyle(.textMuted)
@@ -198,20 +256,46 @@ struct ApiResponsePane: View {
                     .foregroundStyle(.textMuted)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
+                VStack(spacing: 0) {
+                    sectionBar(
+                        "\(response.headers.count) headers",
+                        copyHelp: "Copy all response headers"
+                    ) { headerText(response) }
+                    Divider()
                 List(Array(response.headers.enumerated()), id: \.offset) { _, header in
                     HStack(alignment: .top, spacing: 8) {
+                        // A fixed column truncated the long names that matter
+                        // (`strict-transport-security`, `content-security-policy`);
+                        // this holds the column but lets a long name have more.
                         Text(header.key)
                             .font(.app(.caption, design: .monospaced))
                             .bold()
-                            .frame(width: 170, alignment: .leading)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(minWidth: 170, alignment: .leading)
                         Text(header.value)
                             .font(.app(.caption, design: .monospaced))
                             .foregroundStyle(.textMuted)
                             .textSelection(.enabled)
                     }
+                    .contextMenu {
+                        Button("Copy Value") {
+                            copy(header.value, acknowledging: "Copied \(header.key)")
+                        }
+                        Button("Copy Name") {
+                            copy(header.key, acknowledging: "Copied the header name")
+                        }
+                        Button("Copy Line") {
+                            copy(
+                                "\(header.key): \(header.value)",
+                                acknowledging: "Copied \(header.key)"
+                            )
+                        }
+                    }
                 }
                 .listStyle(.plain)
                 .translucentListBackground()
+                }
             }
         }
     }
@@ -225,6 +309,12 @@ struct ApiResponsePane: View {
                     .foregroundStyle(.textMuted)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
+                VStack(spacing: 0) {
+                    sectionBar(
+                        cookies.count == 1 ? "1 cookie" : "\(cookies.count) cookies",
+                        copyHelp: "Copy every cookie this response set"
+                    ) { cookieText(cookies) }
+                    Divider()
                 List(cookies) { cookie in
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 6) {
@@ -244,11 +334,32 @@ struct ApiResponsePane: View {
                             .font(.app(.caption2))
                             .foregroundStyle(.textMuted)
                     }
+                    .contextMenu {
+                        Button("Copy Value") {
+                            copy(cookie.value, acknowledging: "Copied \(cookie.name)")
+                        }
+                        Button("Copy as Cookie Header") {
+                            copy(
+                                "\(cookie.name)=\(cookie.value)",
+                                acknowledging: "Copied \(cookie.name)"
+                            )
+                        }
+                    }
                 }
                 .listStyle(.plain)
                 .translucentListBackground()
+                }
             }
         }
+    }
+
+    private func cookieText(_ cookies: [ApiCookie]) -> String {
+        cookies.map { cookie in
+            let detail = cookieDetail(cookie)
+            let line = "\(cookie.name)=\(cookie.value)"
+            return detail.isEmpty ? line : "\(line) · \(detail)"
+        }
+        .joined(separator: "\n")
     }
 
     private func cookieDetail(_ cookie: ApiCookie) -> String {
@@ -269,6 +380,41 @@ struct ApiResponsePane: View {
     }
 
     private func timingTab(_ response: ApiResponse) -> some View {
+        VStack(spacing: 0) {
+            sectionBar("Timing", copyHelp: "Copy the timing breakdown") {
+                timingText(response)
+            }
+            Divider()
+            timingForm(response)
+        }
+    }
+
+    private func timingText(_ response: ApiResponse) -> String {
+        var lines: [String] = []
+        if let timing = response.timing {
+            let phases: [(String, Double?)] = [
+                ("DNS lookup", timing.dns), ("Connect", timing.connect),
+                ("TLS handshake", timing.tls), ("First byte", timing.firstByte),
+                ("Total", timing.total),
+            ]
+            for (name, value) in phases {
+                guard let value else { continue }
+                lines.append(String(format: "%@: %.0f ms", name, value))
+            }
+        } else {
+            lines.append(String(format: "Total: %.0f ms", response.elapsedMs))
+        }
+        if !response.finalURL.isEmpty { lines.append("Final URL: \(response.finalURL)") }
+        if let prepared = model.prepared {
+            lines.append("Sent bytes: \(ApiResponse.formatBytes(prepared.body?.count ?? 0))")
+        }
+        for hop in response.redirects {
+            lines.append("\(hop.statusCode) \(hop.from) -> \(hop.to)")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private func timingForm(_ response: ApiResponse) -> some View {
         Form {
             Section("Timing") {
                 if let timing = response.timing {
@@ -374,10 +520,15 @@ struct ApiResponsePane: View {
         response.headers.map { "\($0.key): \($0.value)" }.joined(separator: "\n")
     }
 
-    private func copy(_ text: String) {
-        guard !text.isEmpty else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
+    /// Copies and raises the capsule. Nothing on the clipboard means nothing
+    /// to announce, so an empty section stays quiet instead of claiming success.
+    private func copy(_ text: String, acknowledging message: String) {
+        guard copyApiText(text) else { return }
+        copyToastMessage = message
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.6))
+            if copyToastMessage == message { copyToastMessage = nil }
+        }
     }
 
     private func saveBody(_ response: ApiResponse) {

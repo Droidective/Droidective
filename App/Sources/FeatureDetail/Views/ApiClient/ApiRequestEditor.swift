@@ -11,25 +11,13 @@ struct ApiRequestEditor: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ViewThatFits(in: .horizontal) {
-                tabPicker(.segmented)
-                tabPicker(.menu)
-            }
+            AdaptiveTabBar(tabs: ApiRequestTab.allCases, label: label(for:), selection: $tab)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
             Divider()
             content
         }
         .background(.bgSurface.opacity(0.5))
-    }
-
-    private func tabPicker(_ style: some PickerStyle) -> some View {
-        Picker("", selection: $tab) {
-            ForEach(ApiRequestTab.allCases) { value in
-                Text(label(for: value)).tag(value)
-            }
-        }
-        .labelsHidden()
-        .pickerStyle(style)
-        .padding(8)
     }
 
     private func label(for tab: ApiRequestTab) -> String {
@@ -71,9 +59,10 @@ struct ApiRequestEditor: View {
 
     private var paramsTab: some View {
         VStack(spacing: 0) {
+            if ApiQueryString.hasQuery(model.current.url) { urlQueryStrip }
             ApiKeyValueEditor(
                 title: "Query Parameters",
-                placeholder: "No parameters. Anything after ? in the URL shows up here.",
+                placeholder: "No parameters. These are appended to the URL when the request is sent.",
                 items: $model.current.queryParams
             )
             if !pathVariableNames.isEmpty {
@@ -81,6 +70,41 @@ struct ApiRequestEditor: View {
                 pathVariables
             }
         }
+    }
+
+    /// The URL bar and this table are both sent — the builder merges them — so
+    /// a query typed into the bar is *not* silently mirrored here. This offers
+    /// the move explicitly rather than leaving people to wonder why pasting a
+    /// URL with `?a=1` left the table empty.
+    private var urlQueryStrip: some View {
+        let found = ApiQueryString.parameters(in: model.current.url)
+        return HStack(spacing: 8) {
+            Image(systemName: "arrow.down.to.line.compact")
+                .foregroundStyle(.textMuted)
+                .font(.app(.caption))
+            Text(
+                found.count == 1
+                    ? "The URL carries 1 parameter."
+                    : "The URL carries \(found.count) parameters."
+            )
+            .font(.app(.caption))
+            .foregroundStyle(.textMuted)
+            Spacer()
+            Button("Move Into Table") { extractQueryFromURL() }
+                .buttonStyle(.link)
+                .font(.app(.caption))
+                .help("Take them out of the URL and list them here, where they can be toggled")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(Color.brandAccent.opacity(0.08))
+    }
+
+    private func extractQueryFromURL() {
+        let found = ApiQueryString.parameters(in: model.current.url)
+        guard !found.isEmpty else { return }
+        model.current.queryParams.append(contentsOf: found)
+        model.current.url = ApiQueryString.removingQuery(from: model.current.url)
     }
 
     /// `:name` placeholders present in the URL path.
@@ -512,24 +536,18 @@ struct ApiRequestEditor: View {
                 .labelsHidden()
                 .frame(maxWidth: 220)
                 Spacer()
-                Button {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(model.code(for: codeTarget), forType: .string)
-                } label: {
-                    Label("Copy", systemImage: "doc.on.doc")
+                ApiCopyButton(help: "Copy the generated snippet", title: "Copy") {
+                    model.code(for: codeTarget)
                 }
                 .buttonStyle(.bordered)
             }
             .padding(.horizontal, 12)
             .padding(.top, 8)
 
-            ScrollView([.horizontal, .vertical]) {
-                Text(model.code(for: codeTarget))
-                    .font(.app(.body, design: .monospaced))
-                    .textSelection(.enabled)
-                    .padding(8)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            }
+            // Same viewer as the response body — a generated snippet is long
+            // enough to hit the blank-until-clicked layout problem too.
+            ApiBodyTextView(text: model.code(for: codeTarget), format: .text, wraps: true)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
@@ -811,9 +829,12 @@ enum ApiClientFilePanels {
         return panel.runModal() == .OK ? panel.url : nil
     }
 
+    /// The one save panel this feature uses, defaulting to the same folder
+    /// every other save in the app opens in.
     static func askSave(suggestedName: String) -> URL? {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = suggestedName
+        panel.directoryURL = try? ScreenCaptureService.ensureCaptureDir()
         panel.canCreateDirectories = true
         NSApp?.activate(ignoringOtherApps: true)
         return panel.runModal() == .OK ? panel.url : nil

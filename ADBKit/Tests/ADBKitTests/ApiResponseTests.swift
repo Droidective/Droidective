@@ -416,6 +416,202 @@ private func jsonResponse(_ text: String, status: Int = 200) -> ApiResponse {
     }
 }
 
+// MARK: - Raw-text elements and malformed HTML
+
+@Suite struct XMLFormatterRawTextTests {
+
+    @Test func scriptBodiesAreNotParsedAsMarkup() throws {
+        // `c<a.length` is a comparison, not a tag. Parsing it as one used to
+        // both mangle the source and run the indent depth away.
+        let pretty = try #require(
+            XMLFormatter.prettyPrint(
+                "<head><script>\nfor (var c = 0; c < a.length; c++) {\n  f(c);\n}\n</script></head>"
+            )
+        )
+        #expect(pretty == """
+            <head>
+              <script>
+                for (var c = 0; c < a.length; c++) {
+                  f(c);
+                }
+              </script>
+            </head>
+            """)
+    }
+
+    @Test func aScriptDoesNotDisturbTheDepthOfWhatFollows() throws {
+        let pretty = try #require(
+            XMLFormatter.prettyPrint("<body><script>if (a<b) {}</script><p>after</p></body>")
+        )
+        #expect(pretty == """
+            <body>
+              <script>if (a<b) {}</script>
+              <p>after</p>
+            </body>
+            """)
+    }
+
+    @Test func styleBodiesKeepTheirOwnIndentation() throws {
+        let pretty = try #require(
+            XMLFormatter.prettyPrint("<style>\n.a {\n    color: red;\n}\n</style>")
+        )
+        #expect(pretty == """
+            <style>
+              .a {
+                  color: red;
+              }
+            </style>
+            """)
+    }
+
+    @Test func everyLineOfAMultiLineScriptIsIndented() throws {
+        let pretty = try #require(XMLFormatter.prettyPrint("<div><script>\na();\nb();\n</script></div>"))
+        let scriptLines = pretty.components(separatedBy: .newlines).filter {
+            $0.contains("a();") || $0.contains("b();")
+        }
+        #expect(scriptLines.count == 2)
+        #expect(scriptLines.allSatisfy { $0.hasPrefix("    ") })
+    }
+
+    @Test func anUnclosedScriptTakesTheRestOfTheDocument() throws {
+        let pretty = try #require(XMLFormatter.prettyPrint("<div><script>\nvar a = 1;\n"))
+        #expect(pretty.contains("var a = 1;"))
+        #expect(!pretty.contains("</script>"))
+    }
+
+    @Test func aCloseTagUnwindsToTheElementItActuallyCloses() throws {
+        // `<p>` never closes in real HTML; without unwinding, everything after
+        // `</div>` would keep drifting right.
+        let pretty = try #require(
+            XMLFormatter.prettyPrint("<div><p>one<p>two</div><footer>end</footer>")
+        )
+        #expect(pretty.hasSuffix("<footer>end</footer>"))
+    }
+
+    @Test func siblingListItemsStayAtOneLevel() throws {
+        let pretty = try #require(XMLFormatter.prettyPrint("<ul><li>a<li>b<li>c</ul>"))
+        #expect(pretty == """
+            <ul>
+              <li>
+                a
+              <li>
+                b
+              <li>
+                c
+            </ul>
+            """)
+    }
+
+    @Test func tableRowsUnwindTheirCells() throws {
+        let pretty = try #require(
+            XMLFormatter.prettyPrint("<table><tr><td>a<td>b<tr><td>c</table>")
+        )
+        #expect(pretty == """
+            <table>
+              <tr>
+                <td>
+                  a
+                <td>
+                  b
+              <tr>
+                <td>
+                  c
+            </table>
+            """)
+    }
+
+    @Test func aStrayCloseTagDoesNotPullTheDocumentLeft() throws {
+        let pretty = try #require(XMLFormatter.prettyPrint("<div></span><p>x</p></div>"))
+        #expect(pretty == """
+            <div>
+              </span>
+              <p>x</p>
+            </div>
+            """)
+    }
+
+    @Test func aOneLineScriptStaysBesideItsTags() throws {
+        #expect(XMLFormatter.prettyPrint("<script>var a=1;</script>") == "<script>var a=1;</script>")
+    }
+
+    @Test func anEmptyScriptElementSurvives() throws {
+        let pretty = try #require(XMLFormatter.prettyPrint("<div><script></script></div>"))
+        #expect(pretty == "<div>\n  <script></script>\n</div>")
+    }
+
+    @Test func theClosingScriptTagIsMatchedCaseInsensitively() throws {
+        let pretty = try #require(XMLFormatter.prettyPrint("<div><SCRIPT>\na();\n</SCRIPT></div>"))
+        #expect(pretty.contains("</SCRIPT>"))
+        #expect(pretty.contains("  a();"))
+    }
+}
+
+// MARK: - Plain-text and NDJSON bodies
+
+@Suite struct PlainTextFormatterTests {
+
+    @Test func mislabelledJSONStillGetsAPrettyForm() throws {
+        let body = response(
+            headers: [(key: "Content-Type", value: "text/plain")],
+            body: Data(#"{"a":1}"#.utf8)
+        )
+        // Sniffing already calls this JSON; the point is the toggle appears.
+        #expect(body.prettyBody == "{\n  \"a\": 1\n}")
+    }
+
+    @Test func jsonLinesArePrettyPrintedDocumentByDocument() throws {
+        let pretty = try #require(JSONFormatter.prettyPrintLines("{\"a\":1}\n{\"b\":2}"))
+        #expect(pretty == "{\n  \"a\": 1\n}\n{\n  \"b\": 2\n}")
+    }
+
+    @Test func ndjsonServedAsJSONFallsBackToTheLineFormatter() throws {
+        let body = response(
+            headers: [(key: "Content-Type", value: "application/x-ndjson")],
+            body: Data("{\"a\":1}\n{\"b\":2}".utf8)
+        )
+        #expect(body.prettyBody == "{\n  \"a\": 1\n}\n{\n  \"b\": 2\n}")
+    }
+
+    @Test func oneBadLineRejectsTheWholeNDJSONBody() {
+        #expect(JSONFormatter.prettyPrintLines("{\"a\":1}\nnot json") == nil)
+    }
+
+    @Test func aColumnOfNumbersIsNotNDJSON() {
+        #expect(JSONFormatter.prettyPrintLines("1\n2\n3") == nil)
+    }
+
+    @Test func aSingleJSONLineIsLeftToThePlainFormatter() {
+        #expect(JSONFormatter.prettyPrintLines("{\"a\":1}") == nil)
+    }
+
+    @Test func formEncodedBodiesBecomeOnePairPerLine() throws {
+        #expect(FormFormatter.prettyPrint("a=1&b=hello%20world") == "a = 1\nb = hello world")
+    }
+
+    @Test func formEncodedPlusSignsDecodeAsSpaces() throws {
+        #expect(FormFormatter.prettyPrint("q=two+words") == "q = two words")
+    }
+
+    @Test func formEncodedEmptyValuesSurvive() throws {
+        #expect(FormFormatter.prettyPrint("a=&b=2") == "a = \nb = 2")
+    }
+
+    @Test func proseIsNotMistakenForAFormBody() {
+        #expect(FormFormatter.prettyPrint("the answer = 42") == nil)
+        #expect(FormFormatter.prettyPrint("no separator here") == nil)
+        #expect(FormFormatter.prettyPrint("line one\nline two") == nil)
+        #expect(FormFormatter.prettyPrint("") == nil)
+    }
+
+    @Test func ordinaryProseHasNoPrettyForm() {
+        let body = response(
+            headers: [(key: "Content-Type", value: "text/plain")],
+            body: Data("just some words".utf8)
+        )
+        #expect(body.prettyBody == nil)
+    }
+}
+
 // MARK: - JSON path probe
 
 @Suite struct JSONProbeTests {

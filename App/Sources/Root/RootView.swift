@@ -985,7 +985,11 @@ struct ResizeHandle: View {
                                 live = min(max(next, range.lowerBound), range.upperBound)
                             }
                             .onEnded { _ in
-                                if let live { value = live }
+                                // A press that never moved is not a resize.
+                                // AppKit reports some clicks as zero-distance
+                                // drags, and committing those wrote a clamped
+                                // value back over the stored one.
+                                if let live, live != startValue { value = live }
                                 live = nil
                                 startValue = nil
                             }

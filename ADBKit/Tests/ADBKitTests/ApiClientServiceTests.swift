@@ -864,3 +864,69 @@ private final class Progress: @unchecked Sendable {
         }
     }
 }
+
+// MARK: - Sidebar rows
+
+@Suite struct ApiCollectionRowsTests {
+
+    private func tree() -> [ApiItem] {
+        [
+            .request(SavedRequest(id: "r1", name: "One")),
+            .folder(
+                ApiFolder(
+                    id: "f1",
+                    name: "Folder",
+                    items: [
+                        .request(SavedRequest(id: "r2", name: "Two")),
+                        .folder(
+                            ApiFolder(
+                                id: "f2", name: "Inner",
+                                items: [.request(SavedRequest(id: "r3", name: "Three"))]
+                            )
+                        ),
+                    ]
+                )
+            ),
+            .request(SavedRequest(id: "r4", name: "Four")),
+        ]
+    }
+
+    @Test func aCollapsedTreeShowsOnlyTheTopLevel() {
+        let rows = ApiCollectionTree.rows(tree(), expanded: [])
+        #expect(rows.map(\.id) == ["r1", "f1", "r4"])
+        #expect(rows.allSatisfy { $0.depth == 0 })
+    }
+
+    @Test func anExpandedFolderContributesItsChildrenOneLevelDeeper() {
+        let rows = ApiCollectionTree.rows(tree(), expanded: ["f1"])
+        #expect(rows.map(\.id) == ["r1", "f1", "r2", "f2", "r4"])
+        #expect(rows.map(\.depth) == [0, 0, 1, 1, 0])
+    }
+
+    @Test func nestingGoesAsDeepAsItIsExpanded() {
+        let rows = ApiCollectionTree.rows(tree(), expanded: ["f1", "f2"])
+        #expect(rows.map(\.id) == ["r1", "f1", "r2", "f2", "r3", "r4"])
+        #expect(rows.map(\.depth) == [0, 0, 1, 1, 2, 0])
+    }
+
+    @Test func expandingAnInnerFolderWhoseParentIsClosedChangesNothing() {
+        let rows = ApiCollectionTree.rows(tree(), expanded: ["f2"])
+        #expect(rows.map(\.id) == ["r1", "f1", "r4"])
+    }
+
+    @Test func anEmptyTreeHasNoRows() {
+        #expect(ApiCollectionTree.rows([], expanded: ["f1"]).isEmpty)
+    }
+
+    @Test func anExpandedEmptyFolderStillShowsItself() {
+        let rows = ApiCollectionTree.rows(
+            [.folder(ApiFolder(id: "f1", name: "Empty", items: []))], expanded: ["f1"]
+        )
+        #expect(rows.map(\.id) == ["f1"])
+    }
+
+    @Test func everyRowIsUniquelyIdentified() {
+        let rows = ApiCollectionTree.rows(tree(), expanded: ["f1", "f2"])
+        #expect(Set(rows.map(\.id)).count == rows.count)
+    }
+}

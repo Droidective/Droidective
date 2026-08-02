@@ -372,10 +372,21 @@ public struct ApiResponse: Sendable {
     public var prettyBody: String? {
         guard let text = bodyString, !text.isEmpty else { return nil }
         switch format {
-        case .json: return JSONFormatter.prettyPrint(text)
+        case .json: return JSONFormatter.prettyPrint(text) ?? JSONFormatter.prettyPrintLines(text)
         case .xml, .html: return XMLFormatter.prettyPrint(text)
-        case .text, .image, .binary: return nil
+        case .text: return ApiResponse.prettyPlainText(text)
+        case .image, .binary: return nil
         }
+    }
+
+    /// `text/plain` covers a lot of ground: servers mislabel JSON, stream
+    /// JSON Lines, and answer form posts in kind. Recognising those is what
+    /// puts the Pretty toggle in front of a body that can use it — anything
+    /// genuinely unstructured returns nil and shows as-is.
+    static func prettyPlainText(_ text: String) -> String? {
+        if let json = JSONFormatter.prettyPrint(text) { return json }
+        if let lines = JSONFormatter.prettyPrintLines(text) { return lines }
+        return FormFormatter.prettyPrint(text)
     }
 
     /// Kept for the response pane's "Pretty" toggle on JSON specifically.
@@ -496,6 +507,26 @@ public enum JSONFormatter: Sendable {
         return out
     }
 
+    /// Pretty-prints JSON Lines / NDJSON — one document per line, as log and
+    /// streaming endpoints emit. Returns nil unless *every* non-empty line
+    /// parses, so a stray line of prose doesn't get a half-formatted body.
+    public static func prettyPrintLines(_ text: String, indent: String = "  ") -> String? {
+        let rows = text.components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        guard rows.count > 1 else { return nil }
+        var out: [String] = []
+        for row in rows {
+            // Objects and arrays only — a column of bare numbers is a text
+            // file, and "prettifying" it would just be a toggle that does
+            // nothing.
+            guard row.hasPrefix("{") || row.hasPrefix("[") else { return nil }
+            guard let pretty = prettyPrint(row, indent: indent) else { return nil }
+            out.append(pretty)
+        }
+        return out.joined(separator: "\n")
+    }
+
     public static func isValidJSON(_ text: String) -> Bool {
         let data = Data(text.utf8)
         guard !data.isEmpty else { return false }
@@ -507,18 +538,56 @@ extension Character {
     var isJSONWhitespace: Bool { self == " " || self == "\n" || self == "\r" || self == "\t" }
 }
 
+// MARK: - Form-encoded formatting
+
+public enum FormFormatter: Sendable {
+
+    /// Breaks `a=1&b=hello%20world` into one decoded `name = value` per line.
+    /// Returns nil for anything that isn't a single line of `&`-joined pairs,
+    /// so ordinary prose never gets sliced up on a stray `=`.
+    public static func prettyPrint(_ text: String) -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !trimmed.contains(where: \.isNewline) else { return nil }
+        let pairs = trimmed.components(separatedBy: "&")
+        guard pairs.count > 1 || trimmed.contains("=") else { return nil }
+
+        var rows: [String] = []
+        for pair in pairs {
+            guard let separator = pair.firstIndex(of: "=") else { return nil }
+            let name = String(pair[pair.startIndex..<separator])
+            let value = String(pair[pair.index(after: separator)...])
+            guard !name.isEmpty, !name.contains(" ") else { return nil }
+            rows.append("\(decode(name)) = \(decode(value))")
+        }
+        return rows.isEmpty ? nil : rows.joined(separator: "\n")
+    }
+
+    private static func decode(_ text: String) -> String {
+        let plus = text.replacingOccurrences(of: "+", with: " ")
+        return plus.removingPercentEncoding ?? plus
+    }
+}
+
 // MARK: - XML / HTML formatting
 
 public enum XMLFormatter: Sendable {
 
     /// Indents markup one element per line. Text-only elements stay on a single
     /// line, and declarations, comments and CDATA are passed through intact.
+    ///
+    /// Real pages are not well-formed XML, so two rules keep the indentation
+    /// honest on them. A raw-text element (`<script>`, `<style>`) has its body
+    /// taken verbatim to the matching close tag — minified JS is full of `<`,
+    /// and parsing it as markup both mangles the source and runs the depth
+    /// away. And a close tag unwinds to the element it actually closes rather
+    /// than assuming the innermost one, so the unclosed `<p>`/`<li>` that HTML
+    /// permits can't leave the rest of the document drifting right.
     public static func prettyPrint(_ text: String, indent: String = "  ") -> String? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.hasPrefix("<") else { return nil }
 
         var lines: [String] = []
-        var depth = 0
+        var open: [String] = []
         var index = trimmed.startIndex
 
         func append(_ content: String, at level: Int) {
@@ -529,37 +598,116 @@ public enum XMLFormatter: Sendable {
         while index < trimmed.endIndex {
             if trimmed[index] == "<" {
                 guard let close = closingBracket(of: trimmed, from: index) else {
-                    append(String(trimmed[index...]).trimmingCharacters(in: .whitespaces), at: depth)
+                    append(String(trimmed[index...]).trimmingCharacters(in: .whitespaces), at: open.count)
                     break
                 }
                 let tag = String(trimmed[index...close])
-                let kind = classify(tag)
-                switch kind {
+                let name = elementName(tag)?.lowercased()
+                switch classify(tag) {
                 case .closing:
-                    depth -= 1
-                    append(tag, at: depth)
+                    // Unwind to the element this tag closes. A stray close with
+                    // nothing matching it stays where it is rather than pulling
+                    // the whole document a level left.
+                    if let name, let match = open.lastIndex(of: name) {
+                        open.removeSubrange(match...)
+                        append(tag, at: open.count)
+                    } else {
+                        append(tag, at: open.count)
+                    }
                 case .opening:
+                    if let name, rawTextElements.contains(name) {
+                        index = appendRawTextElement(
+                            trimmed, tagStart: index, tagEnd: close, name: name,
+                            depth: open.count, indent: indent, into: &lines
+                        )
+                        continue
+                    }
                     // An element whose entire content is text collapses onto one line.
                     let afterTag = trimmed.index(after: close)
                     if let inlineEnd = inlineTextElementEnd(trimmed, contentStart: afterTag, tag: tag) {
-                        append(String(trimmed[index..<inlineEnd]), at: depth)
+                        append(String(trimmed[index..<inlineEnd]), at: open.count)
                         index = inlineEnd
                         continue
                     }
-                    append(tag, at: depth)
-                    depth += 1
+                    // HTML lets a sibling stand in for the close tag this
+                    // element never got (`<li>a<li>b`, `<tr>` after an open
+                    // `<td>` — which unwinds the cell and then the row).
+                    if let name, let closedBy = implicitlyClosedBy[name] {
+                        while let last = open.last, closedBy.contains(last) { open.removeLast() }
+                    }
+                    append(tag, at: open.count)
+                    if let name { open.append(name) }
                 case .selfContained:
-                    append(tag, at: depth)
+                    append(tag, at: open.count)
                 }
                 index = trimmed.index(after: close)
             } else {
                 let textEnd = trimmed[index...].firstIndex(of: "<") ?? trimmed.endIndex
                 let content = String(trimmed[index..<textEnd]).trimmingCharacters(in: .whitespacesAndNewlines)
-                append(content, at: depth)
+                append(content, at: open.count)
                 index = textEnd
             }
         }
         return lines.isEmpty ? nil : lines.joined(separator: "\n")
+    }
+
+    /// Emits `<script>…</script>` with its body untouched apart from indentation,
+    /// and answers where parsing resumes. An unterminated element takes the rest
+    /// of the document, which is what a truncated response looks like.
+    private static func appendRawTextElement(
+        _ text: String, tagStart: String.Index, tagEnd: String.Index, name: String,
+        depth: Int, indent: String, into lines: inout [String]
+    ) -> String.Index {
+        let pad = String(repeating: indent, count: max(0, depth))
+        let contentStart = text.index(after: tagEnd)
+        let terminator = text.range(
+            of: "</\(name)", options: [.caseInsensitive], range: contentStart..<text.endIndex
+        )
+        let contentEnd = terminator?.lowerBound ?? text.endIndex
+        let body = String(text[contentStart..<contentEnd])
+
+        // A one-line body reads better beside its tags, exactly as
+        // `inlineTextElementEnd` treats an ordinary text-only element.
+        guard body.contains(where: \.isNewline) else {
+            let closeTag = terminator.flatMap { closingBracket(of: text, from: $0.lowerBound) }
+            let end = closeTag.map(text.index(after:)) ?? text.endIndex
+            lines.append(pad + String(text[tagStart..<end]))
+            return end
+        }
+
+        lines.append(pad + String(text[tagStart...tagEnd]))
+        lines.append(contentsOf: dedented(body, to: pad + indent))
+        guard let terminator, let closeTag = closingBracket(of: text, from: terminator.lowerBound)
+        else { return text.endIndex }
+        lines.append(pad + String(text[terminator.lowerBound...closeTag]))
+        return text.index(after: closeTag)
+    }
+
+    /// Re-indents a raw-text body under `pad`, preserving the relative shape the
+    /// author wrote by stripping the block's own common indentation first.
+    private static func dedented(_ body: String, to pad: String) -> [String] {
+        let rows = body.components(separatedBy: .newlines)
+            .map { $0.replacingOccurrences(of: "\t", with: "    ") }
+        let common =
+            rows
+            .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+            .map { $0.prefix(while: { $0 == " " }).count }
+            .min() ?? 0
+        var out: [String] = []
+        for row in rows {
+            let stripped = String(row.dropFirst(min(common, row.prefix(while: { $0 == " " }).count)))
+            let trailingTrimmed = String(
+                stripped.reversed().drop(while: { $0 == " " }).reversed()
+            )
+            if trailingTrimmed.isEmpty {
+                // Keep blank lines the author wrote, but never trailing padding.
+                if !out.isEmpty { out.append("") }
+            } else {
+                out.append(pad + trailingTrimmed)
+            }
+        }
+        while out.last?.isEmpty == true { out.removeLast() }
+        return out
     }
 
     private enum TagKind {
@@ -641,5 +789,25 @@ public enum XMLFormatter: Sendable {
     static let voidElements: Set<String> = [
         "area", "base", "br", "col", "embed", "hr", "img", "input",
         "link", "meta", "param", "source", "track", "wbr",
+    ]
+
+    /// Elements whose content is character data rather than markup. Anything
+    /// between the tags belongs to the script/stylesheet, `<` included.
+    static let rawTextElements: Set<String> = ["script", "style", "textarea"]
+
+    /// The open elements an HTML start tag is allowed to close on its own. Only
+    /// the cases that actually appear without close tags in the wild — enough
+    /// to keep a list or a table from stair-stepping off the right edge.
+    static let implicitlyClosedBy: [String: Set<String>] = [
+        "li": ["li"],
+        "dt": ["dt", "dd"],
+        "dd": ["dt", "dd"],
+        "p": ["p"],
+        "tr": ["td", "th", "tr"],
+        "td": ["td", "th"],
+        "th": ["td", "th"],
+        "option": ["option"],
+        "thead": ["td", "th", "tr"],
+        "tbody": ["td", "th", "tr"],
     ]
 }

@@ -30,13 +30,23 @@ struct ApiClientView: View {
     @Environment(AppState.self) private var state
     @State private var model = ApiClientModel()
 
-    @State private var sidebarSection: ApiSidebarSection = .collections
-    @State private var requestTab: ApiRequestTab = .params
-    @State private var showSidebar = true
+    @AppStorage("apiSidebarSection") private var sidebarSection: ApiSidebarSection = .collections
+    @AppStorage("apiRequestTab") private var requestTab: ApiRequestTab = .params
+    @AppStorage("apiSidebarVisible") private var showSidebar = true
     @State private var paneWidth: CGFloat = 900
+
+    /// Both seams persist: the sidebar as a width, the editor/response split as
+    /// a fraction of the area left over, so it survives a window resize. The
+    /// `live` value carries the in-flight drag and the commit happens once, on
+    /// release — the same two-binding shape `RootView` uses for its own seams.
+    @AppStorage("apiSidebarWidth") private var sidebarWidth = 260.0
+    @State private var liveSidebarWidth: Double?
+    @AppStorage("apiSplitFraction") private var splitFraction = 0.5
+    @State private var liveSplitFraction: Double?
 
     @State private var sheet: ApiClientSheet?
     @State private var alertMessage: String?
+    @State private var pendingNewRequest = false
 
     private var isNarrow: Bool { paneWidth < 760 }
     private var isCompact: Bool { paneWidth < 620 }
@@ -51,8 +61,14 @@ struct ApiClientView: View {
                         sheet: $sheet,
                         alertMessage: $alertMessage
                     )
-                    .frame(width: max(220, min(320, geometry.size.width * 0.24)))
-                    Divider()
+                    .frame(width: ApiPaneLayout.sidebarWidth(
+                        stored: liveSidebarWidth ?? sidebarWidth, total: geometry.size.width
+                    ))
+                    ResizeHandle(
+                        value: $sidebarWidth,
+                        live: $liveSidebarWidth,
+                        range: ApiPaneLayout.sidebarRange
+                    )
                 }
                 mainColumn
             }
@@ -74,6 +90,16 @@ struct ApiClientView: View {
             actions: { Button("OK") { alertMessage = nil } },
             message: { Text(alertMessage ?? "") }
         )
+        .confirmationDialog(
+            "Discard unsaved changes?",
+            isPresented: $pendingNewRequest
+        ) {
+            Button("Discard and Start New", role: .destructive) { model.newRequest() }
+            Button("Save First…") { sheet = .saveRequest }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("“\(model.current.name)” has edits that aren't saved to a collection.")
+        }
     }
 
     @ViewBuilder
@@ -105,6 +131,7 @@ struct ApiClientView: View {
         VStack(spacing: 0) {
             requestBar
             Divider()
+            if let failure = model.persistFailure { persistFailureStrip(failure) }
             if !model.warnings.isEmpty { warningStrip }
             splitBody
         }
@@ -112,17 +139,32 @@ struct ApiClientView: View {
 
     @ViewBuilder
     private var splitBody: some View {
-        if isNarrow {
-            VStack(spacing: 0) {
-                editor
-                Divider()
-                responsePane
-            }
-        } else {
-            HStack(spacing: 0) {
-                editor.frame(maxWidth: .infinity)
-                Divider()
-                responsePane.frame(maxWidth: .infinity)
+        GeometryReader { geometry in
+            // Stacked when narrow, so the seam runs the other way and the
+            // fraction is of height rather than width.
+            let total = isNarrow ? geometry.size.height : geometry.size.width
+            let leading = ApiPaneLayout.leadingLength(
+                total: total, fraction: liveSplitFraction ?? splitFraction
+            )
+            let handle = ApiSplitHandle(
+                fraction: $splitFraction,
+                live: $liveSplitFraction,
+                total: total,
+                axis: isNarrow ? .vertical : .horizontal
+            )
+
+            if isNarrow {
+                VStack(spacing: 0) {
+                    editor.frame(height: leading)
+                    handle
+                    responsePane.frame(maxHeight: .infinity)
+                }
+            } else {
+                HStack(spacing: 0) {
+                    editor.frame(width: leading)
+                    handle
+                    responsePane.frame(maxWidth: .infinity)
+                }
             }
         }
     }
@@ -142,15 +184,16 @@ struct ApiClientView: View {
     private var requestBar: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                if isNarrow {
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.2)) { showSidebar.toggle() }
-                    } label: {
-                        Image(systemName: "sidebar.left")
-                    }
-                    .buttonStyle(.borderless)
-                    .help("Toggle sidebar")
+                // Shown at every width: the sidebar is hideable in wide layouts
+                // too, and without this button there was no way back once it
+                // was hidden.
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { showSidebar.toggle() }
+                } label: {
+                    Image(systemName: showSidebar ? "sidebar.left" : "sidebar.leading")
                 }
+                .buttonStyle(.borderless)
+                .help(showSidebar ? "Hide sidebar" : "Show sidebar")
 
                 Picker("", selection: $model.current.method) {
                     ForEach(HttpMethod.allCases) { method in
@@ -228,12 +271,15 @@ struct ApiClientView: View {
                 .buttonStyle(.borderless)
                 .help("Import a cURL command")
 
-            Button { sheet = .saveRequest } label: { Image(systemName: "square.and.arrow.down") }
+            // `tray.and.arrow.down` reads as Save; the plain download glyph is
+            // what the response pane uses for an actual download, and having
+            // both mean different things was the confusing part.
+            Button { sheet = .saveRequest } label: { Image(systemName: "tray.and.arrow.down") }
                 .buttonStyle(.borderless)
                 .keyboardShortcut("s", modifiers: .command)
                 .help("Save this request (⌘S)")
 
-            Button { model.newRequest() } label: { Image(systemName: "plus.square") }
+            Button { newRequest() } label: { Image(systemName: "plus.square") }
                 .buttonStyle(.borderless)
                 .help("New request")
 
@@ -241,14 +287,15 @@ struct ApiClientView: View {
 
             Menu {
                 Button("Import Postman Collection or Environment…") { importFile() }
-                if let id = model.currentCollectionId {
-                    Button("Export Collection…") { exportCollection(id, includeSecrets: false) }
-                    Button("Export Collection with Secrets…") {
-                        exportCollection(id, includeSecrets: true)
-                    }
-                    Divider()
-                    Button("Run Collection…") { sheet = .runner(collectionId: id) }
+                Divider()
+                // Every collection is reachable here, not only the one the open
+                // request happens to belong to — with nothing open these were
+                // simply absent.
+                collectionMenu("Export Collection…") { exportCollection($0, includeSecrets: false) }
+                collectionMenu("Export Collection with Secrets…") {
+                    exportCollection($0, includeSecrets: true)
                 }
+                collectionMenu("Run Collection…") { sheet = .runner(collectionId: $0) }
                 Divider()
                 Button("Export Everything…") { exportWorkspace() }
                 Button("Edit Global Variables…") { sheet = .globals }
@@ -258,6 +305,31 @@ struct ApiClientView: View {
             .menuStyle(.borderlessButton)
             .fixedSize()
             .help("Import, export, and run")
+        }
+    }
+
+    /// One collection: a plain item. Several: a submenu. None: nothing, since
+    /// there is nothing to act on.
+    @ViewBuilder
+    private func collectionMenu(_ title: String, action: @escaping (String) -> Void) -> some View {
+        if model.data.collections.count == 1, let only = model.data.collections.first {
+            Button(title) { action(only.id) }
+        } else if model.data.collections.count > 1 {
+            Menu(title) {
+                ForEach(model.data.collections) { collection in
+                    Button(collection.name) { action(collection.id) }
+                }
+            }
+        }
+    }
+
+    /// New Request threw the editor away without asking; an unsaved request is
+    /// often several minutes of typing.
+    private func newRequest() {
+        if model.hasUnsavedChanges {
+            pendingNewRequest = true
+        } else {
+            model.newRequest()
         }
     }
 
@@ -275,6 +347,27 @@ struct ApiClientView: View {
     }
 
     // MARK: - Strips
+
+    /// A failed save used to be swallowed, so collections and history would
+    /// quietly not be there at the next launch.
+    private func persistFailureStrip(_ message: String) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Image(systemName: "exclamationmark.octagon.fill")
+                .foregroundStyle(.red)
+                .font(.app(.caption2))
+            Text(message)
+                .font(.app(.caption))
+                .textSelection(.enabled)
+            Spacer()
+            Button("Retry") { model.persist() }
+                .buttonStyle(.link)
+                .font(.app(.caption))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(Color.red.opacity(0.12))
+    }
 
     private var warningStrip: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -331,15 +424,17 @@ struct ApiClientView: View {
 
     private func exportCollection(_ id: String, includeSecrets: Bool) {
         guard let collection = model.data.collections.first(where: { $0.id == id }) else { return }
-        guard let url = state.askSaveLocation(suggestedName: "\(collection.name).postman_collection.json")
-        else { return }
+        guard let url = ApiClientFilePanels.askSave(
+            suggestedName: "\(collection.name).postman_collection.json"
+        ) else { return }
         if let failure = model.exportCollection(id, to: url, includeSecrets: includeSecrets) {
             alertMessage = failure
         }
     }
 
     private func exportWorkspace() {
-        guard let url = state.askSaveLocation(suggestedName: "droidective-api.json") else { return }
+        guard let url = ApiClientFilePanels.askSave(suggestedName: "droidective-api.json")
+        else { return }
         if let failure = model.exportWorkspace(to: url, includeSecrets: false) {
             alertMessage = failure
         }
