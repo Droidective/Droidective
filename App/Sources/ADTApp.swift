@@ -150,16 +150,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 /// SwiftUI re-initializing this view — which it does freely — rebinds the same
 /// window instead of handing the user a blank one.
 struct WorkspaceHost: View {
-    let workspaceID: WorkspaceID
+    /// The real app delegate (the adaptor instance) — on macOS `NSApp.delegate`
+    /// is SwiftUI's own wrapper, so casting it to `AppDelegate` fails silently.
+    let appDelegate: AppDelegate
+    /// This host's own identity. A plain object created with the view's
+    /// `@State`, so it lives exactly as long as the window does — and, unlike
+    /// a `WindowGroup` presented value, SwiftUI can neither persist it across
+    /// launches nor re-present a stale one into an existing window.
+    @State private var token = WorkspaceToken()
     @State private var core = AppCore.shared
     @AppStorage("sidebarWidth") private var sidebarWidth = 300.0
     @AppStorage(sidebarAutoHideDefaultsKey) private var sidebarAutoHide = false
 
-    /// Resolved per render rather than captured in `@State`: the answer is a
-    /// stable dictionary lookup (`AppCore.claims`), and resolving late is what
-    /// lets a window that comes up unasked adopt a workspace whose window was
-    /// closed instead of starting an empty one.
-    private var state: AppState { core.workspace(claiming: workspaceID) }
+    /// Resolved per render rather than captured: the answer is a stable
+    /// dictionary lookup, and resolving late is what lets a window that comes
+    /// up unasked adopt a workspace whose window was closed.
+    private var state: AppState { core.workspace(claiming: token.id) }
 
     /// The sidebar and notifications panel are fixed-width, so opening the
     /// notifications panel on a narrow window would otherwise crush the detail
@@ -187,7 +193,14 @@ struct WorkspaceHost: View {
         RootView()
             .environment(state)
             .frame(minWidth: minWindowWidth, minHeight: 480)
+            .onAppear { state.appDelegate = appDelegate }
     }
+}
+
+/// A window host's identity token. Reference type so `@State` keeps one per
+/// window for the window's lifetime.
+final class WorkspaceToken {
+    let id = WorkspaceID.generate()
 }
 
 @main
@@ -256,8 +269,8 @@ struct ADTApp: App {
         // One window per device-scoped workspace. The presented `WorkspaceID`
         // is what binds a window to its selection, tabs and sessions; a fresh
         // one means a new workspace, a parked one reopens where it left off.
-        WindowGroup(id: "main", for: WorkspaceID.self) { $id in
-            WorkspaceHost(workspaceID: id)
+        WindowGroup(id: "main") {
+            WorkspaceHost(appDelegate: appDelegate)
                 // Force the brand accent on standard controls (prominent
                 // buttons, switches, sliders) so they stay green regardless of
                 // the Mac's system accent color, which otherwise overrides the
@@ -268,16 +281,6 @@ struct ADTApp: App {
                 // re-resolves. The workspace is owned by AppCore, not by this
                 // view, so the rebuild preserves every window's tabs.
                 .id(appearanceKey)
-                .onAppear {
-                    // Wire the delegate reference through the adaptor
-                    // instance: on macOS `NSApp.delegate` is SwiftUI's own
-                    // wrapper, so casting it to `AppDelegate` fails silently.
-                    AppCore.shared.workspace(claiming: id).appDelegate = appDelegate
-                }
-        } defaultValue: {
-            // Every window without an explicit value is a new workspace.
-            // Launch-time restore hands ids out explicitly instead.
-            WorkspaceID.generate()
         }
         // File opens (double-clicked .apk/.aab) are handled by
         // `AppDelegate.application(_:open:)`; without this, every open event

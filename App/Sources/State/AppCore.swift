@@ -94,7 +94,7 @@ final class AppCore {
     /// hotkeys and Finder opens land.
     private(set) var frontmostID: WorkspaceID?
     /// Set by `RootView`: opens another window of the main `WindowGroup`.
-    var openWorkspaceWindow: ((WorkspaceID) -> Void)?
+    var openWorkspaceWindow: (() -> Void)?
     /// Persisted windows waiting to be claimed by a workspace as its windows
     /// come up. Claimed in order, so window 2 restores window 2's tabs.
     private var pendingRestores: [WindowState] = []
@@ -246,9 +246,13 @@ final class AppCore {
     /// Workspaces handed to a view but not yet backed by a window. They own
     /// nothing — no registry entry, no persisted record — until they bind.
     private var provisional: Set<WorkspaceID> = []
-    /// Presented ids the user explicitly asked to be *new* workspaces (⇧⌘N,
-    /// "New Window for Device"), so they never adopt a windowless one.
-    private var pendingFreshIDs: Set<WorkspaceID> = []
+    /// Windows the user explicitly asked for (⇧⌘N, "New Window for Device"),
+    /// oldest first: each starts a *new* workspace instead of adopting a
+    /// windowless one, and carries the device it was opened for. A queue
+    /// rather than a keyed lookup because the window has no identity until it
+    /// exists — `openWindow` creates one synchronously per call, and binds are
+    /// serialised on the main actor, so first-asked is first-bound.
+    private var pendingFreshWindows: [String?] = []
 
     /// A real `NSWindow` came up. This is where a workspace becomes real:
     /// either the window steps into one that has been waiting for a window
@@ -281,8 +285,13 @@ final class AppCore {
             return
         }
         provisional.remove(state.id)
+        var requestedSerial: String?
+        var wantsFresh = false
+        if !pendingFreshWindows.isEmpty {
+            wantsFresh = true
+            requestedSerial = pendingFreshWindows.removeFirst()
+        }
         let presented = claims.first { $0.value == state.id }?.key
-        let wantsFresh = presented.map { pendingFreshIDs.remove($0) != nil } ?? false
         if !wantsFresh, let adopted = firstWindowlessWorkspace() {
             // Hand this window the workspace that was waiting for one and drop
             // the provisional. `claims` is observed, so the host view
@@ -293,8 +302,8 @@ final class AppCore {
             return
         }
         registry.register(state.id)
-        if let presented, let serial = pendingWindowTargets.removeValue(forKey: presented) {
-            pendingWindowTargets[state.id] = serial
+        if let requestedSerial {
+            pendingWindowTargets[state.id] = requestedSerial
         }
         if didLoadLayout {
             state.restore(from: claimPendingRestore())
@@ -348,14 +357,14 @@ final class AppCore {
         // Not marked fresh: each of these windows adopts the next workspace
         // waiting for one.
         for _ in 0..<pendingRestores.count {
-            open(WorkspaceID.generate())
+            open()
         }
     }
 
     /// Called by every `RootView` as it appears. The opener is refreshed each
     /// time (a SwiftUI `openWindow` action captured from a window that has
     /// since closed is not a safe thing to keep).
-    func windowOpenerReady(_ open: @escaping (WorkspaceID) -> Void) {
+    func windowOpenerReady(_ open: @escaping () -> Void) {
         openWorkspaceWindow = open
         openPendingRestoredWindowsOnce()
     }
@@ -447,19 +456,19 @@ final class AppCore {
     /// workspace is found by adoption, so this works even when SwiftUI ignores
     /// the value and opens a window of its own.
     func reopenWindow(for id: WorkspaceID) {
-        openWorkspaceWindow?(.generate())
+        openWorkspaceWindow?()
     }
 
     /// Open another window, optionally pointed at a specific device. Marked
     /// explicitly fresh, so it starts a new workspace rather than adopting a
     /// parked one; the new workspace picks the device up in `restore`.
     func openNewWindow(targeting serial: String? = nil) {
-        let id = WorkspaceID.generate()
-        pendingFreshIDs.insert(id)
-        if let serial {
-            pendingWindowTargets[id] = serial
+        pendingFreshWindows.append(serial)
+        guard let openWorkspaceWindow else {
+            pendingFreshWindows.removeLast()
+            return
         }
-        openWorkspaceWindow?(id)
+        openWorkspaceWindow()
     }
 
     /// Device a not-yet-created window should open on (see `openNewWindow`).

@@ -44,11 +44,13 @@ final design exists to be immune to all of them:
 1. **AppKit restores windows** from its saved state, with stale ids, before the
    layout has loaded. → `window.isRestorable = false` at bind. Droidective
    restores its own windows from `LayoutState.windows`; two restorers fight.
-2. **SwiftUI persists presented values** across launches and asks for content
-   for windows it never shows, and it re-presents a stale value *into an
-   existing window*. → A workspace handed to a view is **provisional**: no
-   registry entry, no restore, nothing written to disk. It becomes real only
-   when an `NSWindow` binds to it.
+2. **SwiftUI persists presented values** across launches, asks for content for
+   windows it never shows, and re-presents a stale value *into an existing
+   window*. → The `WindowGroup` carries **no value type** at all; each host
+   holds a `WorkspaceToken` in its own `@State`, which SwiftUI can neither
+   persist nor re-present. On top of that, a workspace handed to a view is
+   **provisional** — no registry entry, no restore, nothing written to disk —
+   and becomes real only when an `NSWindow` binds to it.
 3. **A closing window still re-renders**, which asks for content again. → The
    closing window's identifier is remembered and `bind` refuses it.
 
@@ -58,7 +60,7 @@ and the adoption below hands it straight back.
 
 ```
                     ┌──────────────────────────────────────┐
-  SwiftUI asks for  │  workspace(claiming: presentedID)    │
+  SwiftUI asks for  │  workspace(claiming: hostToken)      │
   content ─────────►│  → memoized, else a PROVISIONAL      │
                     │    (owns nothing)                    │
                     └──────────────┬───────────────────────┘
@@ -152,24 +154,20 @@ The window title is the active tab, prefixed with the device once more than one
 window is open ("Medium Tablet — Logcat"), which is what names them in the
 Window menu and Mission Control.
 
-It is drawn **centered in the titlebar** — the same row as the traffic lights,
-costing no extra height — as a toolbar principal item, the only placement macOS
-centers. `window.title` is written directly for the Window menu and Mission
-Control.
+The title placement is the system's — a plain `.navigationTitle`, exactly as
+before multi-window.
 
-macOS 26 lays a window title out leading by default, and three other routes to
-move it all fail:
-
-| Route | Why not |
-| --- | --- |
-| `.navigationTitle` | renders its own leading item — position unchanged, and it duplicates anything else drawn |
-| `.fullSizeContentView` + a strip in the content | SwiftUI collapses a view that `ignoresSafeArea`s into the titlebar; nothing renders there |
-| `NSTitlebarAccessoryViewController` | the titlebar sizes the accessory itself — ignoring `intrinsicContentSize`, a width constraint and an overridden `setFrameSize` — and clips past those bounds, so the label can't reach the window's midpoint |
-
-**Open cosmetic gap:** macOS 26 draws its glass capsule behind toolbar items.
-`sharedBackgroundVisibility(.hidden)` removes it in one line, but it's a
-macOS 26-only API and release builds come from a `macos-15` runner whose SDK
-lacks it. Moving CI to `macos-26` is what unlocks it.
+> **If it looks left-aligned in your dev build, that's the SDK, not the app.**
+> macOS 26 moves window titles beside the traffic lights for apps *linked
+> against the macOS 26 SDK*. Xcode 26 links local builds that way; CI's
+> `macos-15` runner links against the 15.x SDK, so shipped builds keep the
+> centered title. Verified with `otool -l`: released v3.8 is `sdk 15.5`, a local
+> debug build is `sdk 26.2`, same source. Don't "fix" this in app code — the
+> routes all end badly (`.navigationTitle` renders a second leading item, a
+> toolbar principal item gets macOS 26's glass capsule with no
+> macOS 15-compilable way to remove it, and content drawn into the titlebar via
+> `.fullSizeContentView` or an `NSTitlebarAccessoryViewController` is collapsed
+> or clipped).
 
 **Only the extra windows are tinted.** The app has one accent, so the first
 window's device icon is always `.brandAccent` — a single-window session looks

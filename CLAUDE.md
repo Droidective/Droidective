@@ -388,14 +388,17 @@ table) is in `docs/reactotron-mcp-analysis.md`.
     Finder opens and update toasts route through `AppCore.frontmost` (the last
     key window). Poll-rate activation comes from `NSApplication`, never a
     per-window `scenePhase` — those fire independently and fight.
-  - **The window title is a toolbar principal item** (`CenteredWindowTitle`),
-    the only placement macOS centers. macOS 26 lays a plain title out leading;
-    `.navigationTitle` renders a *second* leading one (so `window.title` is
-    written directly instead), `.fullSizeContentView` content is collapsed by
-    SwiftUI, and a titlebar accessory is re-sized and clipped by AppKit — all
-    three were tried. Its glass capsule needs the macOS 26-only
-    `sharedBackgroundVisibility`, which a `macos-15` release runner can't
-    compile. Only the windows after the first tint their device icon
+  - **A left-aligned window title in a dev build is the SDK, not a bug.**
+    macOS 26 moves titles beside the traffic lights for apps linked against
+    the macOS 26 SDK; Xcode 26 links local builds that way, CI's `macos-15`
+    runner doesn't, so shipped builds stay centered (`otool -l`: v3.8 release
+    = `sdk 15.5`, local debug = `sdk 26.2`). Don't chase it in app code —
+    `.navigationTitle` adds a *second* leading item, a toolbar principal item
+    gets macOS 26's glass capsule (removable only via the macOS 26-only
+    `sharedBackgroundVisibility`), and titlebar content via
+    `.fullSizeContentView` or `NSTitlebarAccessoryViewController` is collapsed
+    or clipped. All four were tried.
+  - **Only the windows after the first tint their device icon**
     (`DeviceTint`); the app keeps one accent.
   - **A feature that can't run twice on one device** goes in
     `WorkspaceRegistry.exclusiveFeatureIDs` (scrcpy/screen-record share the

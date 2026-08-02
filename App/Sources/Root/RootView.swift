@@ -107,10 +107,6 @@ struct RootView: View {
         let showExitDialog = state.pendingExit.map { !$0.saving } ?? false
         return zoomedContent
             .overlay(alignment: .topTrailing) { devMetricsOverlay }
-            // Above everything, sidebar included, and outside the ⌘= zoom —
-            // it's window chrome, like the traffic lights it sits beside.
-            // macOS 26 would otherwise put the title against them.
-            .modifier(CenteredWindowTitle(title: activeTitle))
             .modifier(PostTourCelebration(state: state))
             .modifier(WindowTranslucencyModifier(state: state))
             .modifier(
@@ -145,7 +141,6 @@ struct RootView: View {
                     }
                 }
                 window.setFrameAutosaveName(autosaveName)
-                CenteredWindowTitle.configure(window)
                 WindowMinSizeGuard.shared.attach(to: window)
                 applyWindowTranslucency(window, opacity: windowOpacity, blurAmount: windowBlur)
             })
@@ -218,8 +213,8 @@ struct RootView: View {
         }
         // Every window can open another; refreshed each time because a
         // SwiftUI action captured from a closed window is not worth trusting.
-        state.core.windowOpenerReady { id in
-            openWindow(id: "main", value: id)
+        state.core.windowOpenerReady {
+            openWindow(id: "main")
         }
         applyStoredTheme()
         // Anything below is app-wide and must run once, not once per window.
@@ -571,6 +566,7 @@ struct RootView: View {
                         .clipped()
                 }
             }
+            .navigationTitle(activeTitle)
             // The deferred fixed-sidebar hide: fires when the drag ends
             // (splitDragFraction → nil); a fresh drag re-arms cleanly.
             .onChange(of: splitDragFraction == nil) { _, dragEnded in
