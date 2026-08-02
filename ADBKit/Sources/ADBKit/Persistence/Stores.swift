@@ -123,6 +123,45 @@ public struct TabGroupState: Codable, Sendable, Equatable {
     }
 }
 
+/// One workspace window's persisted state: which device it's pointed at and
+/// what it had open. The app restores one window per entry, in this order.
+///
+/// Everything here is per-window; app-wide preferences (the enabled feature
+/// set, sidebar order, role) stay on `LayoutState` itself and are shared by
+/// every window.
+public struct WindowState: Codable, Sendable, Equatable, Identifiable {
+    public var id: WorkspaceID
+    /// The device serial this window targets, nil when it had none. A serial
+    /// that isn't connected at restore keeps the window — it opens on the
+    /// "connect a device" state rather than silently retargeting.
+    public var serial: String?
+    /// The app bundle picked in this window's device bar. Per-window so two
+    /// devices can be driven against different apps.
+    public var bundleId: String?
+    /// Open editor groups (one = no split, two = a left/right split).
+    public var tabGroups: [TabGroupState]?
+    public var focusedGroup: Int?
+    /// Working directories of this window's terminal tabs at the last implicit
+    /// teardown (see `TerminalResume`).
+    public var terminalResumeDirs: [String]?
+
+    public init(
+        id: WorkspaceID,
+        serial: String? = nil,
+        bundleId: String? = nil,
+        tabGroups: [TabGroupState]? = nil,
+        focusedGroup: Int? = nil,
+        terminalResumeDirs: [String]? = nil
+    ) {
+        self.id = id
+        self.serial = serial
+        self.bundleId = bundleId
+        self.tabGroups = tabGroups
+        self.focusedGroup = focusedGroup
+        self.terminalResumeDirs = terminalResumeDirs
+    }
+}
+
 /// Feature customization. Hotkey bindings are persisted by the
 /// KeyboardShortcuts library itself, so they don't live here.
 public struct LayoutState: Codable, Sendable, Equatable {
@@ -172,25 +211,23 @@ public struct LayoutState: Codable, Sendable, Equatable {
     /// the user's role turns on for them without re-running the picker. Optional
     /// so older files decode.
     public var seededRoleIds: [String]?
-    /// Open editor groups (VS Code-style split panes), each with its own tabs
-    /// and active tab: one group = no split, two = a left/right split. Restored
-    /// on launch; live sessions (recordings/streams) don't resume — a reopened
-    /// tab is idle. Optional so older files decode (they seed a single Home tab).
+    /// Legacy single-workspace tabs, read once by `adoptWindows()` and cleared.
+    /// Tabs now live per window in `windows`; nothing writes this any more.
     public var tabGroups: [TabGroupState]?
-    /// Which group holds keyboard focus (index into `tabGroups`). Optional so
-    /// older files decode.
+    /// Legacy single-workspace focused pane — migration source, see `tabGroups`.
     public var focusedGroup: Int?
     /// Feature ids hidden from the Quick Actions panel's action grid (its
     /// tiles' right-click Hide, and the Settings ▸ General toggles). nil/empty
     /// = everything eligible shows. Optional so older files decode.
     public var quickPanelHiddenIds: [String]?
-    /// Working directories of the terminal tabs alive at the last *implicit*
-    /// teardown — app quit, the Terminal feature tab closed, a background-mode
-    /// window close — in display order (see `TerminalResume`). The next
-    /// Terminal open resumes one shell per directory. Tabs closed explicitly
-    /// (⌘W / × / `exit`) are absent by construction: they left the rail before
-    /// the snapshot. Optional so older files decode.
+    /// Legacy single-workspace terminal-resume directories — migration source,
+    /// see `tabGroups`. Per-window now (`WindowState.terminalResumeDirs`).
     public var terminalResumeDirs: [String]?
+    /// The workspace windows to restore, in order. nil on a layout written
+    /// before multi-window; `adoptWindows()` synthesizes the single entry.
+    /// Never empty after that — a layout with no windows would restore to
+    /// nothing.
+    public var windows: [WindowState]?
 
     public init(
         enabledIds: [String]? = nil,
@@ -208,7 +245,8 @@ public struct LayoutState: Codable, Sendable, Equatable {
         tabGroups: [TabGroupState]? = nil,
         focusedGroup: Int? = nil,
         quickPanelHiddenIds: [String]? = nil,
-        terminalResumeDirs: [String]? = nil
+        terminalResumeDirs: [String]? = nil,
+        windows: [WindowState]? = nil
     ) {
         self.enabledIds = enabledIds
         self.favorites = favorites
@@ -226,6 +264,7 @@ public struct LayoutState: Codable, Sendable, Equatable {
         self.focusedGroup = focusedGroup
         self.quickPanelHiddenIds = quickPanelHiddenIds
         self.terminalResumeDirs = terminalResumeDirs
+        self.windows = windows
     }
 
     /// The effective enabled set: explicit user choice or registry defaults,
@@ -329,6 +368,76 @@ public struct LayoutState: Codable, Sendable, Equatable {
         if sidebarOrder != nil { sidebarOrder?.append(contentsOf: additions) }
         seededRoleIds = roleIDs
         return true
+    }
+
+    // MARK: - Windows
+
+    /// One-time migration to per-window state: fold the legacy single-workspace
+    /// fields into one `WindowState` and clear them, so from here on tabs and
+    /// terminal-resume directories are only ever read and written per window.
+    ///
+    /// Also repairs a layout that somehow reached zero windows (a crash between
+    /// closing the last window and writing the replacement), because restoring
+    /// no windows would leave the user staring at an empty Dock icon. Returns
+    /// true when something changed (caller persists).
+    ///
+    /// - Parameter serial: the device selected at the time of the migration
+    ///   (the app's single global selection), inherited by the one window.
+    /// - Parameter bundleId: likewise the globally selected app bundle.
+    public mutating func adoptWindows(serial: String?, bundleId: String?) -> Bool {
+        if let windows, !windows.isEmpty {
+            // Already migrated. Legacy fields may still linger on a layout
+            // written by an older build after this one ran; drop them so they
+            // can't be re-adopted over newer per-window state.
+            guard tabGroups != nil || focusedGroup != nil || terminalResumeDirs != nil else {
+                return false
+            }
+            clearLegacyWorkspaceFields()
+            return true
+        }
+        windows = [
+            WindowState(
+                id: .generate(),
+                serial: serial,
+                bundleId: bundleId,
+                tabGroups: tabGroups,
+                focusedGroup: focusedGroup,
+                terminalResumeDirs: terminalResumeDirs
+            )
+        ]
+        clearLegacyWorkspaceFields()
+        return true
+    }
+
+    private mutating func clearLegacyWorkspaceFields() {
+        tabGroups = nil
+        focusedGroup = nil
+        terminalResumeDirs = nil
+    }
+
+    /// Insert or replace one window's persisted state, preserving order.
+    /// Appends when the id is new, so a window opened mid-session lands last —
+    /// the order windows are restored in.
+    public mutating func upsertWindow(_ window: WindowState) {
+        var list = windows ?? []
+        if let index = list.firstIndex(where: { $0.id == window.id }) {
+            list[index] = window
+        } else {
+            list.append(window)
+        }
+        windows = list
+    }
+
+    /// Forget a closed window. The last one is kept: its tabs are what a
+    /// relaunch reopens, and dropping it would restore an empty app.
+    public mutating func removeWindow(_ id: WorkspaceID) {
+        guard var list = windows, list.count > 1 else { return }
+        list.removeAll { $0.id == id }
+        windows = list
+    }
+
+    public func window(_ id: WorkspaceID) -> WindowState? {
+        windows?.first { $0.id == id }
     }
 }
 
