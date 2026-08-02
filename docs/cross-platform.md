@@ -115,7 +115,13 @@ stays with the scrcpy desktop app.
 - [x] `droidectived` scaffold — own package, loopback bind on port 0 with the
       printed port line, token auth with the Host/Origin checks, and
       `POST /v1/devices/list`, proven over a real socket (24 tests)
-- [ ] `droidectived` streams: the WebSocket, the `logcat` topic, and the
+- [ ] Portable WebSocket client for tests, so the stream socket's own suite
+      runs off-Darwin. corelibs-Foundation has no `URLSessionWebSocketTask`
+      ("WebSockets not supported by libcurl"), so those four tests are
+      Apple-scoped today. The *server* is portable NIO and runs everywhere —
+      only the harness is missing. The raw-socket probe that caught the frame
+      masking bug is the obvious basis for one.
+- [x] `droidectived` streams: the WebSocket, the topic subscriptions, and the
       drop-oldest buffer with its gap marker
 - [ ] Portable fake CDP server so the JSConsoleClient wire tests run on Linux
 - [ ] Reactotron listener off Network.framework (SwiftNIO or raw sockets)

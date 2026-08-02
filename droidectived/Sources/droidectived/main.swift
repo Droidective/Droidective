@@ -31,7 +31,10 @@ if let path = options.tokenFile {
 
 let locator = ToolLocator()
 let client = AdbClient(locator: locator)
-let server = DaemonServer(backend: LiveBackend(monitor: DeviceMonitor(client: client)), token: token)
+let monitor = DeviceMonitor(client: client)
+let server = DaemonServer(
+    backend: LiveBackend(monitor: monitor), token: token,
+    streamSource: LiveStreamSource(monitor: monitor, streamer: LogcatStreamer(client: client)))
 
 do {
     let bound = try await server.start(port: options.port)

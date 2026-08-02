@@ -11,6 +11,11 @@ public enum DaemonProtocol {
         case devicesList = "/v1/devices/list"
     }
 
+    /// The multiplexed stream socket. Not a `Route`: it is a WebSocket upgrade
+    /// rather than a POST, and folding it into the route table would make
+    /// `everyRouteIsReachable` assert something untrue about it.
+    public static let streamPath = "/v1/stream"
+
     public struct DevicesResponse: Codable, Equatable, Sendable {
         public let devices: [Device]
         public init(devices: [Device]) { self.devices = devices }
