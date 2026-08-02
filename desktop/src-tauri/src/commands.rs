@@ -8,7 +8,9 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use tauri::ipc::Channel;
-use tauri::State;
+use tauri::{AppHandle, State};
+use tauri_plugin_clipboard_manager::ClipboardExt;
+use tauri_plugin_opener::OpenerExt;
 
 use crate::daemon::stream::StreamMessage;
 use crate::daemon::wire::{
@@ -115,6 +117,36 @@ pub async fn control_app(
             action,
         })
         .await
+}
+
+/// Puts an action's `copyText` on the system clipboard.
+///
+/// Here rather than `navigator.clipboard` in the webview: that needs a secure
+/// context and a user gesture the browser agrees was one, and on `WebKitGTK` it
+/// can fail silently — which is the exact defect this replaces. A command
+/// either works or returns an error the UI can show.
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "tauri's command macro hands AppHandle in by value"
+)]
+pub fn copy_text(app: AppHandle, text: String) -> Result<(), DaemonError> {
+    app.clipboard()
+        .write_text(text)
+        .map_err(|error| DaemonError::Host(format!("could not copy to the clipboard: {error}")))
+}
+
+/// Shows a file in the system file manager — the affordance behind an action
+/// that reports where it saved something.
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "tauri's command macro hands AppHandle in by value"
+)]
+pub fn reveal_path(app: AppHandle, path: String) -> Result<(), DaemonError> {
+    app.opener()
+        .reveal_item_in_dir(&path)
+        .map_err(|error| DaemonError::Host(format!("could not open {path}: {error}")))
 }
 
 /// Subscribes to the device list. Returns the id to pass to `stop_watching`.

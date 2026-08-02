@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react"
 import { Banner, Button, Select, Slider, Switch, TextInput } from "@/components/Controls"
+import { ResultActions } from "@/components/ResultActions"
+import { useArmedConfirm } from "@/hooks/useArmedConfirm"
 import { asDaemonError, runAction } from "@/lib/daemon"
 import { iconForFeature } from "@/lib/icons"
 import { coerce, initialValues, missingRequired, runFields, type FormValues } from "@/lib/fields"
@@ -23,20 +25,24 @@ export function ActionForm({
   const [running, setRunning] = useState(false)
   const [result, setResult] = useState<RunResponse | null>(null)
   const [error, setError] = useState<DaemonError | null>(null)
-  const [confirming, setConfirming] = useState(false)
+  const confirm = useArmedConfirm()
 
   const missing = useMemo(() => missingRequired(feature, values), [feature, values])
   const ready = device?.state === "device"
   // The registry says this one acts on an app, and nothing has been chosen.
   const needsApp = feature.needsBundle && packageId === null
+  // Scoped to this feature on this device, so switching either expires the
+  // arming instead of carrying it across.
+  const target = device?.serial ?? ""
+  const confirming = feature.isDestructive && confirm.isArmed(feature.id, target)
 
   const run = async () => {
     if (feature.isDestructive && !confirming) {
-      setConfirming(true)
+      confirm.arm(feature.id, target)
       return
     }
     if (!device) return
-    setConfirming(false)
+    confirm.disarm()
     setRunning(true)
     setResult(null)
     setError(null)
@@ -89,9 +95,7 @@ export function ActionForm({
         needsApp={needsApp}
         confirming={confirming}
         onRun={() => void run()}
-        onCancel={() => {
-          setConfirming(false)
-        }}
+        onCancel={confirm.disarm}
       />
 
       <Outcome error={error} result={result} />
@@ -192,6 +196,7 @@ function Outcome({ error, result }: { error: DaemonError | null; result: RunResp
               Needs the ADBKeyboard IME installed on the device.
             </div>
           ) : null}
+          <ResultActions result={result} />
         </Banner>
       ) : null}
     </>

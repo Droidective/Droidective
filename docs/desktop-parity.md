@@ -149,15 +149,20 @@ Sourced from `CLAUDE.md` and the App sources.
 
 Found by driving the app against a live emulator, not by reading it.
 
-- [ ] **`copyText` never reaches the clipboard.** "Copy Device IP" runs, prints
-      `10.0.2.16`, and copies nothing — the action's name is a promise the UI
-      does not keep. Every action returning `copyText` has this.
-- [ ] **`revealPath` has no affordance.** Screenshot and friends report where
-      the file went with no way to open the folder.
-- [ ] **The destructive confirmation is sticky.** Clicking Clear Data arms
-      "Really clear data?" with no Cancel, no timeout and no disarm on blur, so
-      a stray click minutes later wipes app data. The Mac's second-⏎ rule is
-      modal and momentary; this is not.
+- [x] ~~**`copyText` never reaches the clipboard.**~~ A result carrying
+      `copyText` now lands on the clipboard the moment it arrives, as
+      `AppState.show` does on the Mac, and says so. Through a Rust command
+      (`tauri-plugin-clipboard-manager`), not `navigator.clipboard`, which
+      needs a gesture the browser agrees was one and can fail silently on
+      WebKitGTK — the same failure in a new place.
+- [x] ~~**`revealPath` has no affordance.**~~ A "Show in folder" button, via
+      `tauri-plugin-opener`. Both plugins are registered for their Rust APIs
+      only, so the webview's capability file stays at `core:default`.
+- [x] ~~**The destructive confirmation is sticky.**~~ An arming now records
+      *which* button on *which* target, and expires after five seconds
+      (`lib/confirm.ts`). A Cancel button appears while armed, the window
+      losing focus disarms, and an arming on one app never authorises the same
+      verb on another.
 - [ ] **Logcat cannot be restarted.** Stop disables the button and the only way
       back is a tab switch or a device change.
 - [ ] **Logcat has no level or app filter** — the Mac has both, plus a

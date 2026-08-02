@@ -63,6 +63,19 @@ export function controlApp(args: {
   return invoke<RunResponse>("control_app", args)
 }
 
+/**
+ * Host capabilities, not daemon calls — but they arrive the same way and fail
+ * the same way, so they live beside the rest rather than in a second module
+ * with its own error shape.
+ */
+export function copyText(text: string): Promise<void> {
+  return invoke("copy_text", { text })
+}
+
+export function revealPath(path: string): Promise<void> {
+  return invoke("reveal_path", { path })
+}
+
 /** A live subscription. Always `stop()` it when the view goes away. */
 export interface Subscription {
   id: number

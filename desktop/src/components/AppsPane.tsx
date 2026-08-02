@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Boxes, RefreshCw, Search } from "lucide-react"
 import { Banner, Button, Switch } from "@/components/Controls"
+import { ResultActions } from "@/components/ResultActions"
+import { useArmedConfirm } from "@/hooks/useArmedConfirm"
 import { actionLabel, searchApps, sortApps } from "@/lib/apps"
 import { asDaemonError, controlApp, listApps } from "@/lib/daemon"
 import { cn } from "@/lib/cn"
@@ -202,18 +204,20 @@ function AppDetail({
   serial: string
 }) {
   const [running, setRunning] = useState<string | null>(null)
-  const [confirming, setConfirming] = useState<string | null>(null)
   const [result, setResult] = useState<RunResponse | null>(null)
   const [error, setError] = useState<DaemonError | null>(null)
+  const confirm = useArmedConfirm()
 
   const run = async (action: AppActionDescriptor) => {
     // A second press for the destructive ones, matching the Quick Actions
-    // panel's second-⏎ rule. The daemon says which those are.
-    if (action.isDestructive && confirming !== action.id) {
-      setConfirming(action.id)
+    // panel's second-⏎ rule. The daemon says which those are. The arming is
+    // scoped to this verb on this package and expires on its own, so a stray
+    // click later — or on a different app — cannot clear anyone's data.
+    if (action.isDestructive && !confirm.isArmed(action.id, app.packageId)) {
+      confirm.arm(action.id, app.packageId)
       return
     }
-    setConfirming(null)
+    confirm.disarm()
     setRunning(action.id)
     setResult(null)
     setError(null)
@@ -242,7 +246,7 @@ function AppDetail({
         </div>
       </header>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {actions.map((action) => (
           <Button
             key={action.id}
@@ -252,11 +256,14 @@ function AppDetail({
           >
             {running === action.id
               ? "Running…"
-              : confirming === action.id
+              : confirm.isArmed(action.id, app.packageId)
                 ? `Really ${actionLabel(action).toLowerCase()}?`
                 : actionLabel(action)}
           </Button>
         ))}
+        {actions.some((action) => confirm.isArmed(action.id, app.packageId)) ? (
+          <Button onClick={confirm.disarm}>Cancel</Button>
+        ) : null}
       </div>
 
       {error ? (
@@ -265,7 +272,12 @@ function AppDetail({
           {error.detail ? <div className="mt-1 opacity-70">{error.detail}</div> : null}
         </Banner>
       ) : null}
-      {result ? <Banner tone={result.ok ? "ok" : "error"}>{result.message}</Banner> : null}
+      {result ? (
+        <Banner tone={result.ok ? "ok" : "error"}>
+          {result.message}
+          <ResultActions result={result} />
+        </Banner>
+      ) : null}
     </div>
   )
 }
