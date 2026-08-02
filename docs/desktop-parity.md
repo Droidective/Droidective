@@ -92,9 +92,15 @@ Sourced from `CLAUDE.md` and the App sources.
       hidden rather than unmounted, so a background tab keeps its log stream and
       its loaded lists. Ported from ADBKit's `TabState`, close-focus rules
       included. Still missing: the `+` button, which needs the palette below.
-- [ ] **Split panes** — ⌘D / ⇧⌘D, clamped 30–70% (`PaneSplit`), the pure
-      `TerminalSplitTree` model already in ADBKit and tested.
-- [ ] **Drop-to-split** — dragging a tab onto a pane edge splits there.
+- [x] **Split panes** — two panes, clamped 30–70% with the same absolute
+      per-pane floor (`PaneSplit`, ported to `lib/panes.ts`), a draggable
+      divider that persists, and the pane rules ported from ADBKit's
+      `Workspace`. A tab's right-click menu splits, moves it across, or closes
+      it and its neighbours. The shortcut is **Ctrl/⌘ + \\**, not ⌘D: Ctrl+D is
+      end-of-input in every Linux shell, and it is the split-editor binding
+      people already have from VS Code.
+- [x] **Drop-to-split** — dragging a tab onto the trailing edge of the only
+      pane splits there; dropping it on the other pane's strip moves it.
 - [ ] **Multi-window** (`docs/multi-window.md`).
 - [ ] **⌘= / ⌘- zoom** of the whole UI.
 

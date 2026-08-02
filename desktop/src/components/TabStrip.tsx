@@ -10,54 +10,82 @@ import type { TabState } from "@/lib/tabs"
 import type { FeatureSummary } from "@/lib/wire"
 
 export interface TabStripProps {
+  /** Which pane this strip drives. */
+  pane: number
   tabs: TabState
+  /** True when this pane has keyboard focus — its strip is the lit one. */
+  focused: boolean
   /** Feature lookup for a tab's title and icon. */
   featureByID: (id: string) => FeatureSummary | null
   onSelect: (id: string) => void
   onClose: (id: string) => void
-  onReorder: (id: string, before: string | null) => void
+  /** A drop landing in this pane, before `target` (null = the end). */
+  onDrop: (id: string, pane: number, target: string | null) => void
+  onContextMenu: (id: string, x: number, y: number) => void
+  /** The tab being dragged anywhere in the window, so a strip can accept it. */
+  dragging: string | null
+  onDragState: (id: string | null) => void
 }
 
 /**
- * The open tabs, left to right.
+ * One pane's open tabs, left to right.
  *
- * Home leads the strip as a permanent icon button rather than a chip, the way
- * it does on the Mac: it is where a closed last tab lands, so it cannot itself
- * be closed away.
+ * Home leads the first pane as a permanent icon button rather than a chip, the
+ * way it does on the Mac: it is where a closed last tab lands, so it cannot be
+ * closed away.
  */
 export function TabStrip(props: TabStripProps) {
-  const [dragging, setDragging] = useState<string | null>(null)
   const [slot, setSlot] = useState<{ id: string; after: boolean } | null>(null)
 
   const chips = props.tabs.openTabs.filter((id) => id !== HOME_TAB)
   const endDrag = () => {
-    setDragging(null)
+    props.onDragState(null)
     setSlot(null)
   }
 
   return (
     <div
-      className="flex h-9 shrink-0 items-center border-b border-border-subtle bg-bg-surface px-1.5"
+      className={cn(
+        "flex h-9 shrink-0 items-center border-b border-border-subtle px-1.5",
+        props.focused ? "bg-bg-surface" : "bg-bg-chrome",
+      )}
       onDragEnd={endDrag}
+      // The dead space past the last chip accepts a drop too: it is the
+      // natural way to drag a tab into the other pane.
+      onDragOver={(event) => {
+        if (props.dragging === null) return
+        event.preventDefault()
+      }}
+      onDrop={(event) => {
+        if (props.dragging === null) return
+        event.preventDefault()
+        const dragged = props.dragging
+        endDrag()
+        props.onDrop(dragged, props.pane, null)
+      }}
     >
-      <button
-        type="button"
-        onClick={() => {
-          props.onSelect(HOME_TAB)
-        }}
-        title="Home"
-        aria-label="Home"
-        aria-current={props.tabs.activeTab === HOME_TAB}
-        className={cn(
-          "flex size-7 shrink-0 items-center justify-center rounded-md transition-colors",
-          props.tabs.activeTab === HOME_TAB
-            ? "bg-accent/15 text-accent"
-            : "text-text-secondary hover:bg-white/[0.05] hover:text-text-primary",
-        )}
-      >
-        <House size={14} />
-      </button>
-      <span className="mx-1.5 h-5 w-px shrink-0 bg-border-subtle" />
+      {props.pane === 0 ? (
+        <>
+          <button
+            type="button"
+            onClick={() => {
+              props.onSelect(HOME_TAB)
+            }}
+            title="Home"
+            aria-label="Home"
+            aria-current={props.tabs.activeTab === HOME_TAB}
+            className={cn(
+              "flex size-7 shrink-0 items-center justify-center rounded-md transition-colors",
+              props.tabs.activeTab === HOME_TAB
+                ? "bg-accent/15 text-accent"
+                : "text-text-secondary hover:bg-white/[0.05] hover:text-text-primary",
+            )}
+          >
+            <House size={14} />
+          </button>
+          <span className="mx-1.5 h-5 w-px shrink-0 bg-border-subtle" />
+        </>
+      ) : null}
 
       <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
         {chips.map((id) => (
@@ -66,7 +94,7 @@ export function TabStrip(props: TabStripProps) {
             id={id}
             feature={props.featureByID(id)}
             active={id === props.tabs.activeTab}
-            faded={dragging === id}
+            faded={props.dragging === id}
             slot={slot?.id === id ? slot.after : null}
             onSelect={() => {
               props.onSelect(id)
@@ -74,23 +102,28 @@ export function TabStrip(props: TabStripProps) {
             onClose={() => {
               props.onClose(id)
             }}
+            onContextMenu={(event) => {
+              event.preventDefault()
+              props.onContextMenu(id, event.clientX, event.clientY)
+            }}
             onDragStart={(event) => {
               startDrag(event)
-              setDragging(id)
+              props.onDragState(id)
             }}
             onDragOver={(event) => {
-              if (dragging === null) return
+              if (props.dragging === null) return
               event.preventDefault()
               setSlot({ id, after: pastMidpointX(event) })
             }}
             onDrop={(event) => {
-              if (dragging === null) return
+              if (props.dragging === null) return
               event.preventDefault()
+              event.stopPropagation()
               const after = pastMidpointX(event)
-              const dragged = dragging
+              const dragged = props.dragging
               endDrag()
               if (dragged === id && !after) return
-              props.onReorder(dragged, dropTarget(id, after, chips))
+              props.onDrop(dragged, props.pane, dropTarget(id, after, chips))
             }}
           />
         ))}
@@ -107,6 +140,7 @@ function Chip({
   slot,
   onSelect,
   onClose,
+  onContextMenu,
   onDragStart,
   onDragOver,
   onDrop,
@@ -118,6 +152,7 @@ function Chip({
   slot: boolean | null
   onSelect: () => void
   onClose: () => void
+  onContextMenu: (event: React.MouseEvent<HTMLElement>) => void
   onDragStart: (event: React.DragEvent<HTMLElement>) => void
   onDragOver: (event: React.DragEvent<HTMLElement>) => void
   onDrop: (event: React.DragEvent<HTMLElement>) => void
@@ -131,6 +166,7 @@ function Chip({
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDrop={onDrop}
+      onContextMenu={onContextMenu}
       className={cn(
         "relative flex h-7 max-w-[190px] shrink-0 items-center gap-1.5 rounded-md pl-2.5 pr-1",
         active ? "bg-accent/15" : "hover:bg-white/[0.05]",

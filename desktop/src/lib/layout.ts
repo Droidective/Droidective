@@ -1,4 +1,4 @@
-import { tabState, type TabState } from "@/lib/tabs"
+import { restoreWorkspace, type Workspace } from "@/lib/workspace"
 
 /**
  * What the window remembers between launches: how the sidebar is arranged and
@@ -13,13 +13,22 @@ import { tabState, type TabState } from "@/lib/tabs"
 /** The permanent first tab, and what a closed last tab falls back to. */
 export const HOME_TAB = "home"
 
+/** One pane's worth of saved tabs. */
+export interface SavedPane {
+  tabs: string[]
+  activeTab: string | null
+}
+
 export interface LayoutState {
   /** The user's feature order. Empty until something is actually dragged. */
   sidebarOrder: string[]
   categoryOrder: string[]
   collapsedCategories: string[]
-  openTabs: string[]
-  activeTab: string | null
+  /** One entry per open pane, left to right. */
+  panes: SavedPane[]
+  focusedPane: number
+  /** Where the divider sits when split, as a fraction of the split area. */
+  splitFraction: number
 }
 
 const STORAGE_KEY = "droidective.layout"
@@ -29,8 +38,9 @@ export function emptyLayout(): LayoutState {
     sidebarOrder: [],
     categoryOrder: [],
     collapsedCategories: [],
-    openTabs: [HOME_TAB],
-    activeTab: HOME_TAB,
+    panes: [{ tabs: [HOME_TAB], activeTab: HOME_TAB }],
+    focusedPane: 0,
+    splitFraction: 0.5,
   }
 }
 
@@ -53,15 +63,28 @@ export function loadLayout(storage: Pick<Storage, "getItem">): LayoutState {
   }
   if (typeof parsed !== "object" || parsed === null) return emptyLayout()
   const saved = parsed as Partial<Record<keyof LayoutState, unknown>>
-  const openTabs = stringArray(saved.openTabs)
-  const activeTab = typeof saved.activeTab === "string" ? saved.activeTab : null
+  const panes = savedPanes(saved.panes)
   return {
     sidebarOrder: stringArray(saved.sidebarOrder),
     categoryOrder: stringArray(saved.categoryOrder),
     collapsedCategories: stringArray(saved.collapsedCategories),
-    openTabs: openTabs.length === 0 ? [HOME_TAB] : openTabs,
-    activeTab,
+    panes: panes.length === 0 ? emptyLayout().panes : panes,
+    focusedPane: typeof saved.focusedPane === "number" ? saved.focusedPane : 0,
+    splitFraction: typeof saved.splitFraction === "number" ? saved.splitFraction : 0.5,
   }
+}
+
+function savedPanes(value: unknown): SavedPane[] {
+  if (!Array.isArray(value)) return []
+  const panes: SavedPane[] = []
+  for (const entry of value) {
+    if (typeof entry !== "object" || entry === null) continue
+    const pane = entry as Partial<Record<keyof SavedPane, unknown>>
+    const tabs = stringArray(pane.tabs)
+    if (tabs.length === 0) continue
+    panes.push({ tabs, activeTab: typeof pane.activeTab === "string" ? pane.activeTab : null })
+  }
+  return panes
 }
 
 /**
@@ -78,15 +101,22 @@ export function saveLayout(storage: Pick<Storage, "setItem">, layout: LayoutStat
 }
 
 /**
- * The tab strip a saved layout restores to.
+ * The workspace a saved layout restores to.
  *
- * A persisted id is only opened if it still names a feature this build has:
+ * A persisted id is only reopened if it still names a feature this build has:
  * one that was removed, or renamed, would otherwise come back as a tab that
- * renders nothing. Home always leads the strip, whatever was saved.
+ * renders nothing. Home always leads the first pane, whatever was saved — it is
+ * where a closed last tab lands, so it cannot be missing.
  */
-export function restoreTabs(layout: LayoutState, isKnownTab: (id: string) => boolean): TabState {
-  const restored = layout.openTabs.filter((id) => id !== HOME_TAB && isKnownTab(id))
-  return tabState([HOME_TAB, ...restored], layout.activeTab)
+export function restoreWorkspaceFrom(
+  layout: LayoutState,
+  isKnownTab: (id: string) => boolean,
+): Workspace {
+  const panes = layout.panes.map((pane, index) => ({
+    tabs: index === 0 ? [HOME_TAB, ...pane.tabs.filter((id) => id !== HOME_TAB)] : pane.tabs,
+    activeTab: pane.activeTab,
+  }))
+  return restoreWorkspace(panes, layout.focusedPane, HOME_TAB, (id) => id === HOME_TAB || isKnownTab(id))
 }
 
 function stringArray(value: unknown): string[] {

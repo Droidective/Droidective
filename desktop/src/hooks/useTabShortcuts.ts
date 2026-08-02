@@ -11,10 +11,12 @@ export function useTabShortcuts({
   activeTab,
   onClose,
   onActivateIndex,
+  onSplit,
 }: {
   activeTab: string | null
   onClose: (id: string) => void
   onActivateIndex: (index: number) => void
+  onSplit: (id: string) => void
 }): void {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -22,6 +24,15 @@ export function useTabShortcuts({
       if (event.key === "w") {
         event.preventDefault()
         if (activeTab !== null) onClose(activeTab)
+        return
+      }
+      // Backslash, not D. Ctrl+D is end-of-input in every Linux shell, and a
+      // Terminal feature is on the way; this is the split editor binding
+      // people already have in their fingers from VS Code, and it is the same
+      // physical key on all three platforms.
+      if (event.key === "\\") {
+        event.preventDefault()
+        if (activeTab !== null) onSplit(activeTab)
         return
       }
       // ⌘1–⌘9 / Ctrl+1–9. Read as a single character rather than parsed, so a
@@ -34,5 +45,5 @@ export function useTabShortcuts({
     return () => {
       globalThis.removeEventListener("keydown", onKeyDown)
     }
-  }, [activeTab, onClose, onActivateIndex])
+  }, [activeTab, onClose, onActivateIndex, onSplit])
 }

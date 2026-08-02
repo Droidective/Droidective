@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { emptyLayout, HOME_TAB, loadLayout, restoreTabs, saveLayout } from "@/lib/layout"
+import { emptyLayout, HOME_TAB, loadLayout, restoreWorkspaceFrom, saveLayout } from "@/lib/layout"
 
 /** Enough of `Storage` for the two calls the layout makes. */
 function fakeStorage(initial: string | null = null) {
@@ -24,8 +24,12 @@ describe("loadLayout", () => {
       sidebarOrder: ["logcat", "apps"],
       categoryOrder: ["logs"],
       collapsedCategories: ["input"],
-      openTabs: [HOME_TAB, "logcat"],
-      activeTab: "logcat",
+      panes: [
+        { tabs: [HOME_TAB, "logcat"], activeTab: "logcat" },
+        { tabs: ["apps"], activeTab: "apps" },
+      ],
+      focusedPane: 1,
+      splitFraction: 0.42,
     }
     saveLayout(storage, layout)
     expect(loadLayout(storage)).toEqual(layout)
@@ -45,21 +49,23 @@ describe("loadLayout", () => {
       sidebarOrder: ["logcat", 7, null],
       categoryOrder: "logs",
       collapsedCategories: [{ nope: true }],
-      openTabs: [HOME_TAB],
-      activeTab: 3,
+      panes: [{ tabs: [HOME_TAB, 3], activeTab: 9 }, "not a pane", { tabs: [] }],
+      focusedPane: "second",
+      splitFraction: "half",
     })
     expect(loadLayout(fakeStorage(stored))).toEqual({
       sidebarOrder: ["logcat"],
       categoryOrder: [],
       collapsedCategories: [],
-      openTabs: [HOME_TAB],
-      activeTab: null,
+      panes: [{ tabs: [HOME_TAB], activeTab: null }],
+      focusedPane: 0,
+      splitFraction: 0.5,
     })
   })
 
-  it("never restores an empty tab strip", () => {
-    const stored = JSON.stringify({ ...emptyLayout(), openTabs: [] })
-    expect(loadLayout(fakeStorage(stored)).openTabs).toEqual([HOME_TAB])
+  it("never restores an empty workspace", () => {
+    const stored = JSON.stringify({ ...emptyLayout(), panes: [] })
+    expect(loadLayout(fakeStorage(stored)).panes).toEqual(emptyLayout().panes)
   })
 })
 
@@ -78,30 +84,43 @@ describe("saveLayout", () => {
 
 const known = (id: string) => id === "logcat" || id === "apps"
 
-describe("restoreTabs", () => {
-  it("reopens the saved tabs, with Home leading", () => {
-    const state = restoreTabs(
-      { ...emptyLayout(), openTabs: ["apps", HOME_TAB, "logcat"], activeTab: "logcat" },
+describe("restoreWorkspaceFrom", () => {
+  it("reopens the saved panes, with Home leading the first", () => {
+    const workspace = restoreWorkspaceFrom(
+      {
+        ...emptyLayout(),
+        panes: [
+          { tabs: ["apps", HOME_TAB], activeTab: "apps" },
+          { tabs: ["logcat"], activeTab: "logcat" },
+        ],
+        focusedPane: 1,
+      },
       known,
     )
-    expect(state.openTabs).toEqual([HOME_TAB, "apps", "logcat"])
-    expect(state.activeTab).toBe("logcat")
+    expect(workspace.groups.map((group) => [...group.openTabs])).toEqual([
+      [HOME_TAB, "apps"],
+      ["logcat"],
+    ])
+    expect(workspace.focusedGroup).toBe(1)
   })
 
   it("drops a saved tab this build no longer has", () => {
-    // A feature that was renamed or removed would otherwise come back as a tab
-    // that renders nothing.
-    const state = restoreTabs(
-      { ...emptyLayout(), openTabs: [HOME_TAB, "gone", "apps"], activeTab: "gone" },
+    // A feature that was renamed or removed would otherwise come back as a
+    // tab that renders nothing.
+    const workspace = restoreWorkspaceFrom(
+      { ...emptyLayout(), panes: [{ tabs: [HOME_TAB, "gone", "apps"], activeTab: "gone" }] },
       known,
     )
-    expect(state.openTabs).toEqual([HOME_TAB, "apps"])
-    expect(state.activeTab).toBe(HOME_TAB)
+    expect([...(workspace.groups[0]?.openTabs ?? [])]).toEqual([HOME_TAB, "apps"])
+    expect(workspace.groups[0]?.activeTab).toBe(HOME_TAB)
   })
 
   it("adds Home even when it was not saved", () => {
-    const state = restoreTabs({ ...emptyLayout(), openTabs: ["apps"], activeTab: "apps" }, known)
-    expect(state.openTabs).toEqual([HOME_TAB, "apps"])
-    expect(state.activeTab).toBe("apps")
+    const workspace = restoreWorkspaceFrom(
+      { ...emptyLayout(), panes: [{ tabs: ["apps"], activeTab: "apps" }] },
+      known,
+    )
+    expect([...(workspace.groups[0]?.openTabs ?? [])]).toEqual([HOME_TAB, "apps"])
+    expect(workspace.groups[0]?.activeTab).toBe("apps")
   })
 })
