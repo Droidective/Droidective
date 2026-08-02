@@ -6,9 +6,9 @@ The port strategy, what is already true on `main`, and what comes next.
 
 Three layers; the top one is per-platform, everything under it is shared Swift:
 
-1. **ADBKit** (the existing core) — compiles and tests on macOS and Linux, and
-   build-verifies on Windows. All adb logic, parsers, and services live here.
-2. **`droidectived`** (phase 2, not yet built) — a small local daemon target
+1. **ADBKit** (the existing core) — compiles and tests on macOS, Linux and
+   Windows. All adb logic, parsers, and services live here.
+2. **`droidectived`** (phase 2, landed) — a small local daemon target
    exposing ADBKit over localhost HTTP + WebSocket JSON so a non-Swift UI can
    drive it. It doubles as the remote-host protocol an iOS companion would
    need someday.
@@ -25,9 +25,9 @@ stack is mature. Rewriting the core in another language would throw away the
 ## Phase 1 (landed): a portable core
 
 `cd ADBKit && swift test` passes on Linux — CI runs the same suite in a
-`swift:6.2` container (`test-linux`) — and Windows compiles the library and
-test target (`build-windows`; running the tests there waits on a Windows audit
-of the process-spawning tests, which hardcode POSIX paths).
+`swift:6.2` container (`test-linux`) — and on Windows, where `build-windows`
+now runs it rather than only compiling it. All three hosts run the same
+suite.
 
 Apple-only subsystems are compile-gated with `#if canImport(...)`, not
 stubbed — a platform that can't mirror simply doesn't expose the type:
@@ -89,10 +89,9 @@ any that is not inside a matching `#if canImport(...)` gate. Its allowlist is
 empty, and a companion test fails on a stale entry, so debt cannot be excused
 and then quietly forgotten.
 
-## Phase 2: `droidectived`
+## Phase 2 (landed): `droidectived`
 
-**Full protocol design: `droidectived-protocol.md`** (written, not implemented —
-review it before any code lands). Sketch:
+**Full protocol design and current state: `droidectived-protocol.md`.** Shape:
 
 - An executable target in ADBKit's package; `swift build` produces it on
   Linux/Windows (static-musl is an option on Linux).
@@ -157,20 +156,21 @@ sidecar, then `cargo fmt`/`clippy`/`test` on Linux).
       drop-oldest buffer with its gap marker
 - [ ] Portable fake CDP server so the JSConsoleClient wire tests run on Linux
 - [ ] Reactotron listener off Network.framework (SwiftNIO or raw sockets)
-- [ ] Windows: fix the last 3 tests, then flip `build-windows` to `swift test`.
-      The suite runs there now (1375 discovered); failures went 14 → 3.
-      Remaining, with the leading hypothesis for each:
-      (1) `capturesStderrAndNonZeroExit` — the child still fails to launch.
-      `ChildCommands` writes a temp `.cmd` and passes `url.path`, but Foundation
-      on Windows renders `URL.path` POSIX-style (`/C:/Users/…`), which cmd
-      cannot open. Build the path as a `String` with backslashes from `%TEMP%`
-      instead of going through `URL`.
-      (2)+(3) `ApkInspectionServiceTests` / `ApkSigningServiceTests` still
-      report `toolMissing` even though `buildToolBinary` now appends `.exe` and
-      the fixtures create `.exe` files. Next thing to check is
-      `FileManager.isExecutableFile` on Windows — the fixtures write shell-script
-      text into a file named `.exe`, and it may validate the PE image (or
-      consult PATHEXT) rather than just testing for readability.
+- [x] Windows: the last 3 tests, and `build-windows` flipped to `swift test`.
+      Both causes turned out to be different from the standing hypotheses, and
+      both were found by running the suite there and reading the output rather
+      than reasoning about it:
+      (1) `capturesStderrAndNonZeroExit` was not a launch failure — the child
+      ran and its stderr arrived intact. `SystemProcessRunner` nils the exit
+      code unless `terminationReason == .exit`, and corelibs reports a
+      non-`.exit` reason on Windows for an ordinary non-zero exit as readily as
+      for a TerminateProcess kill. Since Windows has no signals, the reason
+      cannot separate the two; the runner now trusts the flags it already sets
+      before killing a child. Gated, so POSIX is untouched.
+      (2)+(3) The APK suites' seeded tools never resolved, because
+      `isExecutableFile` on Windows asks what kind of binary a file is and a
+      shell script named `aapt2.exe` is not one. The fixtures now copy a real
+      system binary there, which keeps the production predicate under test.
 - [ ] Windows: xz decode for frida assets; `HostNetwork` via GetAdaptersAddresses
 - [ ] Linux: interface ranking in `HostNetwork.pickPrimary` (en*/eth*/wl* over docker0/veth)
 - [ ] API client: portable expectations for `URLSessionTransport` so
