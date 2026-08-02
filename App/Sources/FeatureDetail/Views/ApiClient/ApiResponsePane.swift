@@ -66,13 +66,10 @@ struct ApiResponsePane: View {
                     .help("The body was larger than the per-request limit in Settings.")
             }
 
-            Spacer()
-
             Menu {
-                Button("Copy Body") { copy(bodyText(response)) }
-                Button("Copy Response Headers") { copy(headerText(response)) }
-                Divider()
                 Button("Save Body to File…") { saveBody(response) }
+                Divider()
+                Button("Copy Everything") { copy(everythingText(response)) }
             } label: {
                 Image(systemName: "square.and.arrow.down")
             }
@@ -80,23 +77,53 @@ struct ApiResponsePane: View {
             .menuIndicator(.hidden)
             .fixedSize()
 
-            ViewThatFits(in: .horizontal) {
-                tabPicker(.segmented)
-                tabPicker(.menu)
-            }
+            // Takes the width left over from the status metrics and sits against
+            // the trailing edge, dropping tabs into a menu only once they truly
+            // stop fitting.
+            AdaptiveTabBar(
+                tabs: Tab.allCases, label: \.label, selection: $tab, alignment: .trailing
+            )
         }
         .padding(8)
     }
 
-    private func tabPicker(_ style: some PickerStyle) -> some View {
-        Picker("", selection: $tab) {
-            ForEach(Tab.allCases) { value in
-                Text(value.label).tag(value)
-            }
+    /// One clipboard-friendly dump of the whole exchange, for pasting into an
+    /// issue: status line, headers, then the body as shown.
+    private func everythingText(_ response: ApiResponse) -> String {
+        var parts = [
+            "\(response.statusCode) \(response.statusText) · "
+                + String(format: "%.0f ms", response.elapsedMs) + " · \(response.sizeText)"
+        ]
+        if !response.finalURL.isEmpty { parts.append(response.finalURL) }
+        let headers = headerText(response)
+        if !headers.isEmpty { parts.append(headers) }
+        let body = bodyText(response)
+        if !body.isEmpty { parts.append(body) }
+        return parts.joined(separator: "\n\n")
+    }
+
+    /// The copy button every section carries, so the thing on screen is always
+    /// one click from the clipboard.
+    private func copyButton(_ help: String, _ text: @escaping () -> String) -> some View {
+        Button { copy(text()) } label: { Image(systemName: "doc.on.doc") }
+            .buttonStyle(.borderless)
+            .help(help)
+    }
+
+    /// A section's own header strip: a title, its copy button, and whatever else
+    /// that section needs on the right.
+    private func sectionBar(
+        _ title: String, copyHelp: String, copying text: @escaping () -> String
+    ) -> some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .font(.app(.caption))
+                .foregroundStyle(.textMuted)
+            copyButton(copyHelp, text)
+            Spacer()
         }
-        .labelsHidden()
-        .pickerStyle(style)
-        .frame(maxWidth: 240)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
     }
 
     private var assertionStrip: some View {
@@ -167,6 +194,8 @@ struct ApiResponsePane: View {
                     .buttonStyle(.borderless)
                     .help("Find in body (⌘F)")
 
+                copyButton("Copy the body as shown") { bodyText(response) }
+
                 Spacer()
                 Text(response.mediaType.isEmpty ? response.format.rawValue : response.mediaType)
                     .font(.app(.caption2, design: .monospaced))
@@ -218,6 +247,12 @@ struct ApiResponsePane: View {
                     .foregroundStyle(.textMuted)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
+                VStack(spacing: 0) {
+                    sectionBar(
+                        "\(response.headers.count) headers",
+                        copyHelp: "Copy all response headers"
+                    ) { headerText(response) }
+                    Divider()
                 List(Array(response.headers.enumerated()), id: \.offset) { _, header in
                     HStack(alignment: .top, spacing: 8) {
                         // A fixed column truncated the long names that matter
@@ -234,9 +269,15 @@ struct ApiResponsePane: View {
                             .foregroundStyle(.textMuted)
                             .textSelection(.enabled)
                     }
+                    .contextMenu {
+                        Button("Copy Value") { copy(header.value) }
+                        Button("Copy Name") { copy(header.key) }
+                        Button("Copy Line") { copy("\(header.key): \(header.value)") }
+                    }
                 }
                 .listStyle(.plain)
                 .translucentListBackground()
+                }
             }
         }
     }
@@ -250,6 +291,12 @@ struct ApiResponsePane: View {
                     .foregroundStyle(.textMuted)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
+                VStack(spacing: 0) {
+                    sectionBar(
+                        cookies.count == 1 ? "1 cookie" : "\(cookies.count) cookies",
+                        copyHelp: "Copy every cookie this response set"
+                    ) { cookieText(cookies) }
+                    Divider()
                 List(cookies) { cookie in
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 6) {
@@ -269,11 +316,27 @@ struct ApiResponsePane: View {
                             .font(.app(.caption2))
                             .foregroundStyle(.textMuted)
                     }
+                    .contextMenu {
+                        Button("Copy Value") { copy(cookie.value) }
+                        Button("Copy as Cookie Header") {
+                            copy("\(cookie.name)=\(cookie.value)")
+                        }
+                    }
                 }
                 .listStyle(.plain)
                 .translucentListBackground()
+                }
             }
         }
+    }
+
+    private func cookieText(_ cookies: [ApiCookie]) -> String {
+        cookies.map { cookie in
+            let detail = cookieDetail(cookie)
+            let line = "\(cookie.name)=\(cookie.value)"
+            return detail.isEmpty ? line : "\(line) · \(detail)"
+        }
+        .joined(separator: "\n")
     }
 
     private func cookieDetail(_ cookie: ApiCookie) -> String {
@@ -294,6 +357,41 @@ struct ApiResponsePane: View {
     }
 
     private func timingTab(_ response: ApiResponse) -> some View {
+        VStack(spacing: 0) {
+            sectionBar("Timing", copyHelp: "Copy the timing breakdown") {
+                timingText(response)
+            }
+            Divider()
+            timingForm(response)
+        }
+    }
+
+    private func timingText(_ response: ApiResponse) -> String {
+        var lines: [String] = []
+        if let timing = response.timing {
+            let phases: [(String, Double?)] = [
+                ("DNS lookup", timing.dns), ("Connect", timing.connect),
+                ("TLS handshake", timing.tls), ("First byte", timing.firstByte),
+                ("Total", timing.total),
+            ]
+            for (name, value) in phases {
+                guard let value else { continue }
+                lines.append(String(format: "%@: %.0f ms", name, value))
+            }
+        } else {
+            lines.append(String(format: "Total: %.0f ms", response.elapsedMs))
+        }
+        if !response.finalURL.isEmpty { lines.append("Final URL: \(response.finalURL)") }
+        if let prepared = model.prepared {
+            lines.append("Sent bytes: \(ApiResponse.formatBytes(prepared.body?.count ?? 0))")
+        }
+        for hop in response.redirects {
+            lines.append("\(hop.statusCode) \(hop.from) -> \(hop.to)")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private func timingForm(_ response: ApiResponse) -> some View {
         Form {
             Section("Timing") {
                 if let timing = response.timing {

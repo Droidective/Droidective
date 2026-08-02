@@ -200,25 +200,36 @@ struct ApiClientSidebar: View {
         }
     }
 
+    /// Every item is its own `List` row — folders included — so all rows share
+    /// one set of insets. Nesting children inside their parent's row gave a
+    /// folder's contents different spacing from the requests above them.
     private var collectionTree: some View {
         List {
             ForEach(model.data.collections) { collection in
                 Section {
-                    ApiItemList(
-                        items: collection.items,
-                        collection: collection,
-                        model: model,
-                        sheet: $sheet,
-                        expandedFolders: expandedFolders,
-                        pendingDeletion: $pendingDeletion,
-                        depth: 0
-                    )
+                    ForEach(
+                        ApiCollectionTree.rows(collection.items, expanded: expandedFolders.wrappedValue)
+                    ) { row in
+                        ApiItemRow(
+                            row: row,
+                            collection: collection,
+                            model: model,
+                            sheet: $sheet,
+                            expandedFolders: expandedFolders,
+                            pendingDeletion: $pendingDeletion
+                        )
+                        .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
+                        .listRowSeparator(.hidden)
+                    }
                 } header: {
                     collectionHeader(collection)
                 }
             }
         }
-        .listStyle(.sidebar)
+        // Plain, not `.sidebar`: the sidebar style pads every row, which on a
+        // one-line request row reads as a gap rather than breathing room.
+        .listStyle(.plain)
+        .environment(\.defaultMinListRowHeight, 24)
         .translucentListBackground()
     }
 
@@ -462,42 +473,50 @@ struct ApiClientSidebar: View {
     }
 }
 
-// MARK: - Recursive tree rows
+// MARK: - Tree rows
 
-/// Folders nest arbitrarily deep, so the rows recurse. Split out of the sidebar
-/// to keep each `body` small enough for the type checker.
-private struct ApiItemList: View {
-    let items: [ApiItem]
+/// One row of the collection tree. Requests and folders are drawn to the same
+/// grid — the disclosure column is always reserved, so a request's method badge
+/// lines up with the folder names above it instead of hanging a few points off.
+private struct ApiItemRow: View {
+    let row: ApiCollectionTree.Row
     let collection: ApiCollection
     let model: ApiClientModel
     @Binding var sheet: ApiClientSheet?
     @Binding var expandedFolders: Set<String>
     @Binding var pendingDeletion: ApiDeletion?
-    let depth: Int
+
+    /// Width of the disclosure triangle column, reserved on every row.
+    private static let discloseWidth: CGFloat = 12
+    /// Width of the method badge, so names start on one line.
+    private static let methodWidth: CGFloat = 38
+    private static let indentPerLevel: CGFloat = 12
+    /// macOS's compact source-list row. Anything taller reads as a gap
+    /// between one-line rows rather than breathing room.
+    static let rowHeight: CGFloat = 24
 
     var body: some View {
-        ForEach(items) { item in
-            switch item {
-            case .request(let request):
-                requestRow(request)
-            case .folder(let folder):
-                folderRow(folder)
-            }
+        switch row.item {
+        case .request(let request): requestRow(request)
+        case .folder(let folder): folderRow(folder)
         }
     }
+
+    private var indent: CGFloat { CGFloat(row.depth) * Self.indentPerLevel }
 
     private func requestRow(_ request: SavedRequest) -> some View {
         Button {
             model.open(request, in: collection.id)
         } label: {
             HStack(spacing: 6) {
+                Color.clear.frame(width: Self.discloseWidth, height: 1)
                 Text(request.method.rawValue)
                     .font(.app(.caption2, design: .monospaced))
                     .bold()
                     .foregroundStyle(ApiStatusStyle.color(for: request.method))
-                    .frame(width: 44, alignment: .leading)
+                    .frame(width: Self.methodWidth, alignment: .leading)
                 Text(request.name).font(.app(.caption)).lineLimit(1)
-                Spacer()
+                Spacer(minLength: 4)
                 if !request.assertions.isEmpty {
                     Image(systemName: "checkmark.seal")
                         .font(.app(.caption2))
@@ -505,7 +524,8 @@ private struct ApiItemList: View {
                         .help("\(request.assertions.count) test(s)")
                 }
             }
-            .padding(.leading, CGFloat(depth) * 12)
+            .padding(.leading, indent)
+            .frame(minHeight: Self.rowHeight)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -514,54 +534,41 @@ private struct ApiItemList: View {
 
     private func folderRow(_ folder: ApiFolder) -> some View {
         let isOpen = expandedFolders.contains(folder.id)
-        return VStack(alignment: .leading, spacing: 0) {
-            Button {
-                if isOpen {
-                    expandedFolders.remove(folder.id)
-                } else {
-                    expandedFolders.insert(folder.id)
-                }
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: isOpen ? "chevron.down" : "chevron.right")
-                        .font(.app(.caption2))
-                        .foregroundStyle(.textMuted)
-                        .frame(width: 10)
-                    Image(systemName: "folder")
-                        .font(.app(.caption2))
-                        .foregroundStyle(.textMuted)
-                    Text(folder.name).font(.app(.caption)).bold().lineLimit(1)
-                    Spacer()
-                    Text("\(ApiCollectionTree.requestCount(in: folder.items))")
-                        .font(.app(.caption2))
-                        .foregroundStyle(.textMuted)
-                }
-                .padding(.leading, CGFloat(depth) * 12)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .contextMenu {
-                Button("New Folder Inside…") {
-                    sheet = .newFolder(collectionId: collection.id, parent: folder.id)
-                }
-                Button("Rename…") {
-                    sheet = .renameFolder(collectionId: collection.id, folderId: folder.id)
-                }
-                Divider()
-                itemMenu(id: folder.id, deletion: .folder(folder, in: collection.id))
-            }
-
+        return Button {
             if isOpen {
-                ApiItemList(
-                    items: folder.items,
-                    collection: collection,
-                    model: model,
-                    sheet: $sheet,
-                    expandedFolders: $expandedFolders,
-                    pendingDeletion: $pendingDeletion,
-                    depth: depth + 1
-                )
+                expandedFolders.remove(folder.id)
+            } else {
+                expandedFolders.insert(folder.id)
             }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: isOpen ? "chevron.down" : "chevron.right")
+                    .font(.app(.caption2))
+                    .foregroundStyle(.textMuted)
+                    .frame(width: Self.discloseWidth)
+                Image(systemName: isOpen ? "folder.fill" : "folder")
+                    .font(.app(.caption2))
+                    .foregroundStyle(.textMuted)
+                Text(folder.name).font(.app(.caption)).bold().lineLimit(1)
+                Spacer(minLength: 4)
+                Text("\(ApiCollectionTree.requestCount(in: folder.items))")
+                    .font(.app(.caption2))
+                    .foregroundStyle(.textMuted)
+            }
+            .padding(.leading, indent)
+            .frame(minHeight: Self.rowHeight)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button("New Folder Inside…") {
+                sheet = .newFolder(collectionId: collection.id, parent: folder.id)
+            }
+            Button("Rename…") {
+                sheet = .renameFolder(collectionId: collection.id, folderId: folder.id)
+            }
+            Divider()
+            itemMenu(id: folder.id, deletion: .folder(folder, in: collection.id))
         }
     }
 

@@ -192,6 +192,36 @@ public enum ApiCollectionTree: Sendable {
     /// Items whose name, URL, or method matches `query`, flattened with the
     /// folder path that leads to each one. An empty query matches nothing —
     /// the caller shows the normal tree instead.
+    /// One row of the sidebar tree: an item and how deep it sits.
+    public struct Row: Identifiable, Sendable, Equatable {
+        public let item: ApiItem
+        public let depth: Int
+
+        public var id: String { item.id }
+
+        public init(item: ApiItem, depth: Int) {
+            self.item = item
+            self.depth = depth
+        }
+    }
+
+    /// Flattens the tree to the rows currently on screen — a collapsed folder
+    /// contributes itself and nothing under it.
+    ///
+    /// The sidebar draws these as sibling `List` rows rather than nesting a
+    /// folder's children inside their parent's row. Nesting meant a folder and
+    /// its contents shared one row's insets while top-level requests each got
+    /// their own, so the gaps between rows were visibly uneven.
+    public static func rows(_ items: [ApiItem], expanded: Set<String>, depth: Int = 0) -> [Row] {
+        var out: [Row] = []
+        for item in items {
+            out.append(Row(item: item, depth: depth))
+            guard case .folder(let folder) = item, expanded.contains(folder.id) else { continue }
+            out.append(contentsOf: rows(folder.items, expanded: expanded, depth: depth + 1))
+        }
+        return out
+    }
+
     public static func search(_ query: String, in items: [ApiItem]) -> [(path: [String], request: SavedRequest)] {
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !needle.isEmpty else { return [] }

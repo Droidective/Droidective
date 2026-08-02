@@ -11,25 +11,13 @@ struct ApiRequestEditor: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ViewThatFits(in: .horizontal) {
-                tabPicker(.segmented)
-                tabPicker(.menu)
-            }
+            AdaptiveTabBar(tabs: ApiRequestTab.allCases, label: label(for:), selection: $tab)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
             Divider()
             content
         }
         .background(.bgSurface.opacity(0.5))
-    }
-
-    private func tabPicker(_ style: some PickerStyle) -> some View {
-        Picker("", selection: $tab) {
-            ForEach(ApiRequestTab.allCases) { value in
-                Text(label(for: value)).tag(value)
-            }
-        }
-        .labelsHidden()
-        .pickerStyle(style)
-        .padding(8)
     }
 
     private func label(for tab: ApiRequestTab) -> String {
