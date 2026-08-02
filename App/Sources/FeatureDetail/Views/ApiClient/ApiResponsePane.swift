@@ -220,10 +220,15 @@ struct ApiResponsePane: View {
             } else {
                 List(Array(response.headers.enumerated()), id: \.offset) { _, header in
                     HStack(alignment: .top, spacing: 8) {
+                        // A fixed column truncated the long names that matter
+                        // (`strict-transport-security`, `content-security-policy`);
+                        // this holds the column but lets a long name have more.
                         Text(header.key)
                             .font(.app(.caption, design: .monospaced))
                             .bold()
-                            .frame(width: 170, alignment: .leading)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(minWidth: 170, alignment: .leading)
                         Text(header.value)
                             .font(.app(.caption, design: .monospaced))
                             .foregroundStyle(.textMuted)

@@ -1,6 +1,77 @@
 import ADBKit
 import SwiftUI
 
+/// A destructive action waiting on a confirmation. Deleting a collection or a
+/// folder takes everything inside it, and clearing history can't be undone —
+/// all of these used to happen on a single menu click.
+struct ApiDeletion: Identifiable {
+
+    enum Target {
+        case collection(String)
+        case item(id: String, collectionId: String)
+        case environment(String)
+        case history
+    }
+
+    let id = UUID()
+    let target: Target
+    let title: String
+    let message: String
+    let confirmLabel: String
+
+    static func collection(_ collection: ApiCollection) -> ApiDeletion {
+        let count = ApiCollectionTree.requestCount(in: collection.items)
+        return ApiDeletion(
+            target: .collection(collection.id),
+            title: "Delete “\(collection.name)”?",
+            message: count == 1
+                ? "Its 1 request is deleted with it. This can't be undone."
+                : "Its \(count) requests are deleted with it. This can't be undone.",
+            confirmLabel: "Delete Collection"
+        )
+    }
+
+    static func request(_ request: SavedRequest, in collectionId: String) -> ApiDeletion {
+        ApiDeletion(
+            target: .item(id: request.id, collectionId: collectionId),
+            title: "Delete “\(request.name)”?",
+            message: "This can't be undone.",
+            confirmLabel: "Delete Request"
+        )
+    }
+
+    static func folder(_ folder: ApiFolder, in collectionId: String) -> ApiDeletion {
+        let count = ApiCollectionTree.requestCount(in: folder.items)
+        return ApiDeletion(
+            target: .item(id: folder.id, collectionId: collectionId),
+            title: "Delete “\(folder.name)”?",
+            message: count == 0
+                ? "The folder is empty. This can't be undone."
+                : "Its \(count) request\(count == 1 ? "" : "s") are deleted with it. "
+                    + "This can't be undone.",
+            confirmLabel: "Delete Folder"
+        )
+    }
+
+    static func environment(_ environment: ApiEnvironment) -> ApiDeletion {
+        ApiDeletion(
+            target: .environment(environment.id),
+            title: "Delete “\(environment.name)”?",
+            message: "Requests using its variables will have nothing to resolve them to.",
+            confirmLabel: "Delete Environment"
+        )
+    }
+
+    static func history(count: Int) -> ApiDeletion {
+        ApiDeletion(
+            target: .history,
+            title: "Clear history?",
+            message: "\(count) entr\(count == 1 ? "y" : "ies") are removed. This can't be undone.",
+            confirmLabel: "Clear History"
+        )
+    }
+}
+
 struct ApiClientSidebar: View {
     let model: ApiClientModel
     @Binding var section: ApiSidebarSection
@@ -8,7 +79,17 @@ struct ApiClientSidebar: View {
     @Binding var alertMessage: String?
 
     @State private var query = ""
-    @State private var expandedFolders: Set<String> = []
+    /// Persisted so a collection doesn't re-collapse every time the pane is
+    /// reopened — the tree is navigation, and navigation should stay put.
+    @AppStorage("apiExpandedFolders") private var expandedFolderList = ""
+    @State private var pendingDeletion: ApiDeletion?
+
+    private var expandedFolders: Binding<Set<String>> {
+        Binding(
+            get: { Set(expandedFolderList.components(separatedBy: "\n").filter { !$0.isEmpty }) },
+            set: { expandedFolderList = $0.sorted().joined(separator: "\n") }
+        )
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -24,6 +105,29 @@ struct ApiClientSidebar: View {
             }
         }
         .background(.bgSurface)
+        .confirmationDialog(
+            pendingDeletion?.title ?? "",
+            isPresented: Binding(
+                get: { pendingDeletion != nil },
+                set: { if !$0 { pendingDeletion = nil } }
+            ),
+            presenting: pendingDeletion
+        ) { deletion in
+            Button(deletion.confirmLabel, role: .destructive) { perform(deletion) }
+            Button("Cancel", role: .cancel) {}
+        } message: { deletion in
+            Text(deletion.message)
+        }
+    }
+
+    private func perform(_ deletion: ApiDeletion) {
+        switch deletion.target {
+        case .collection(let id): model.deleteCollection(id)
+        case .item(let id, let collectionId): model.deleteItem(id, from: collectionId)
+        case .environment(let id): model.deleteEnvironment(id)
+        case .history: model.clearHistory()
+        }
+        pendingDeletion = nil
     }
 
     private func sectionPicker(_ style: some PickerStyle) -> some View {
@@ -105,7 +209,8 @@ struct ApiClientSidebar: View {
                         collection: collection,
                         model: model,
                         sheet: $sheet,
-                        expandedFolders: $expandedFolders,
+                        expandedFolders: expandedFolders,
+                        pendingDeletion: $pendingDeletion,
                         depth: 0
                     )
                 } header: {
@@ -137,11 +242,13 @@ struct ApiClientSidebar: View {
                 Button("New Folder…") { sheet = .newFolder(collectionId: collection.id, parent: nil) }
                 Button("Rename…") { sheet = .renameCollection(id: collection.id) }
                 Button("Collection Auth…") { sheet = .collectionAuth(id: collection.id) }
+                Button("Collection Variables…") { sheet = .collectionVariables(id: collection.id) }
+                Button("Export…") { exportCollection(collection) }
                 Divider()
                 Button("Run Collection…") { sheet = .runner(collectionId: collection.id) }
                 Divider()
-                Button("Delete Collection", role: .destructive) {
-                    model.deleteCollection(collection.id)
+                Button("Delete Collection…", role: .destructive) {
+                    pendingDeletion = .collection(collection)
                 }
             } label: {
                 Image(systemName: "ellipsis")
@@ -158,9 +265,11 @@ struct ApiClientSidebar: View {
         VStack(spacing: 0) {
             header("History") {
                 if !model.data.history.isEmpty {
-                    Button("Clear") { model.clearHistory() }
-                        .buttonStyle(.borderless)
-                        .font(.app(.caption))
+                    Button("Clear") {
+                        pendingDeletion = .history(count: model.data.history.count)
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.app(.caption))
                 }
             }
             if model.data.history.isEmpty {
@@ -281,13 +390,24 @@ struct ApiClientSidebar: View {
                 Button("Edit…") { sheet = .environment(id: environment.id) }
                 Button("Export…") { exportEnvironment(environment) }
                 Divider()
-                Button("Delete", role: .destructive) { model.deleteEnvironment(environment.id) }
+                Button("Delete…", role: .destructive) {
+                    pendingDeletion = .environment(environment)
+                }
             } label: {
                 Image(systemName: "ellipsis")
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .fixedSize()
+        }
+    }
+
+    private func exportCollection(_ collection: ApiCollection) {
+        guard let url = ApiClientFilePanels.askSave(
+            suggestedName: "\(collection.name).postman_collection.json"
+        ) else { return }
+        if let failure = model.exportCollection(collection.id, to: url, includeSecrets: false) {
+            alertMessage = failure
         }
     }
 
@@ -352,6 +472,7 @@ private struct ApiItemList: View {
     let model: ApiClientModel
     @Binding var sheet: ApiClientSheet?
     @Binding var expandedFolders: Set<String>
+    @Binding var pendingDeletion: ApiDeletion?
     let depth: Int
 
     var body: some View {
@@ -388,7 +509,7 @@ private struct ApiItemList: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .contextMenu { itemMenu(id: request.id, isFolder: false) }
+        .contextMenu { itemMenu(id: request.id, deletion: .request(request, in: collection.id)) }
     }
 
     private func folderRow(_ folder: ApiFolder) -> some View {
@@ -427,7 +548,7 @@ private struct ApiItemList: View {
                     sheet = .renameFolder(collectionId: collection.id, folderId: folder.id)
                 }
                 Divider()
-                itemMenu(id: folder.id, isFolder: true)
+                itemMenu(id: folder.id, deletion: .folder(folder, in: collection.id))
             }
 
             if isOpen {
@@ -437,6 +558,7 @@ private struct ApiItemList: View {
                     model: model,
                     sheet: $sheet,
                     expandedFolders: $expandedFolders,
+                    pendingDeletion: $pendingDeletion,
                     depth: depth + 1
                 )
             }
@@ -444,7 +566,7 @@ private struct ApiItemList: View {
     }
 
     @ViewBuilder
-    private func itemMenu(id: String, isFolder: Bool) -> some View {
+    private func itemMenu(id: String, deletion: ApiDeletion) -> some View {
         Button("Duplicate") { model.duplicateItem(id, in: collection.id) }
         Menu("Move To") {
             Button("Top level") { model.move(id, toFolder: nil, in: collection.id) }
@@ -453,9 +575,7 @@ private struct ApiItemList: View {
             }
         }
         Divider()
-        Button(isFolder ? "Delete Folder" : "Delete", role: .destructive) {
-            model.deleteItem(id, from: collection.id)
-        }
+        Button(deletion.confirmLabel + "…", role: .destructive) { pendingDeletion = deletion }
     }
 
     /// Every folder in the collection except the moving item and its own

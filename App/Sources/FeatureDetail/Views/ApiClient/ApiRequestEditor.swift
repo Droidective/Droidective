@@ -71,9 +71,10 @@ struct ApiRequestEditor: View {
 
     private var paramsTab: some View {
         VStack(spacing: 0) {
+            if ApiQueryString.hasQuery(model.current.url) { urlQueryStrip }
             ApiKeyValueEditor(
                 title: "Query Parameters",
-                placeholder: "No parameters. Anything after ? in the URL shows up here.",
+                placeholder: "No parameters. These are appended to the URL when the request is sent.",
                 items: $model.current.queryParams
             )
             if !pathVariableNames.isEmpty {
@@ -81,6 +82,41 @@ struct ApiRequestEditor: View {
                 pathVariables
             }
         }
+    }
+
+    /// The URL bar and this table are both sent — the builder merges them — so
+    /// a query typed into the bar is *not* silently mirrored here. This offers
+    /// the move explicitly rather than leaving people to wonder why pasting a
+    /// URL with `?a=1` left the table empty.
+    private var urlQueryStrip: some View {
+        let found = ApiQueryString.parameters(in: model.current.url)
+        return HStack(spacing: 8) {
+            Image(systemName: "arrow.down.to.line.compact")
+                .foregroundStyle(.textMuted)
+                .font(.app(.caption))
+            Text(
+                found.count == 1
+                    ? "The URL carries 1 parameter."
+                    : "The URL carries \(found.count) parameters."
+            )
+            .font(.app(.caption))
+            .foregroundStyle(.textMuted)
+            Spacer()
+            Button("Move Into Table") { extractQueryFromURL() }
+                .buttonStyle(.link)
+                .font(.app(.caption))
+                .help("Take them out of the URL and list them here, where they can be toggled")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(Color.brandAccent.opacity(0.08))
+    }
+
+    private func extractQueryFromURL() {
+        let found = ApiQueryString.parameters(in: model.current.url)
+        guard !found.isEmpty else { return }
+        model.current.queryParams.append(contentsOf: found)
+        model.current.url = ApiQueryString.removingQuery(from: model.current.url)
     }
 
     /// `:name` placeholders present in the URL path.
@@ -808,9 +844,12 @@ enum ApiClientFilePanels {
         return panel.runModal() == .OK ? panel.url : nil
     }
 
+    /// The one save panel this feature uses, defaulting to the same folder
+    /// every other save in the app opens in.
     static func askSave(suggestedName: String) -> URL? {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = suggestedName
+        panel.directoryURL = try? ScreenCaptureService.ensureCaptureDir()
         panel.canCreateDirectories = true
         NSApp?.activate(ignoringOtherApps: true)
         return panel.runModal() == .OK ? panel.url : nil

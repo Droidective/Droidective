@@ -46,6 +46,7 @@ struct ApiClientView: View {
 
     @State private var sheet: ApiClientSheet?
     @State private var alertMessage: String?
+    @State private var pendingNewRequest = false
 
     private var isNarrow: Bool { paneWidth < 760 }
     private var isCompact: Bool { paneWidth < 620 }
@@ -89,6 +90,16 @@ struct ApiClientView: View {
             actions: { Button("OK") { alertMessage = nil } },
             message: { Text(alertMessage ?? "") }
         )
+        .confirmationDialog(
+            "Discard unsaved changes?",
+            isPresented: $pendingNewRequest
+        ) {
+            Button("Discard and Start New", role: .destructive) { model.newRequest() }
+            Button("Save First…") { sheet = .saveRequest }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("“\(model.current.name)” has edits that aren't saved to a collection.")
+        }
     }
 
     @ViewBuilder
@@ -120,6 +131,7 @@ struct ApiClientView: View {
         VStack(spacing: 0) {
             requestBar
             Divider()
+            if let failure = model.persistFailure { persistFailureStrip(failure) }
             if !model.warnings.isEmpty { warningStrip }
             splitBody
         }
@@ -268,12 +280,15 @@ struct ApiClientView: View {
                 .buttonStyle(.borderless)
                 .help("Import a cURL command")
 
-            Button { sheet = .saveRequest } label: { Image(systemName: "square.and.arrow.down") }
+            // `tray.and.arrow.down` reads as Save; the plain download glyph is
+            // what the response pane uses for an actual download, and having
+            // both mean different things was the confusing part.
+            Button { sheet = .saveRequest } label: { Image(systemName: "tray.and.arrow.down") }
                 .buttonStyle(.borderless)
                 .keyboardShortcut("s", modifiers: .command)
                 .help("Save this request (⌘S)")
 
-            Button { model.newRequest() } label: { Image(systemName: "plus.square") }
+            Button { newRequest() } label: { Image(systemName: "plus.square") }
                 .buttonStyle(.borderless)
                 .help("New request")
 
@@ -281,14 +296,15 @@ struct ApiClientView: View {
 
             Menu {
                 Button("Import Postman Collection or Environment…") { importFile() }
-                if let id = model.currentCollectionId {
-                    Button("Export Collection…") { exportCollection(id, includeSecrets: false) }
-                    Button("Export Collection with Secrets…") {
-                        exportCollection(id, includeSecrets: true)
-                    }
-                    Divider()
-                    Button("Run Collection…") { sheet = .runner(collectionId: id) }
+                Divider()
+                // Every collection is reachable here, not only the one the open
+                // request happens to belong to — with nothing open these were
+                // simply absent.
+                collectionMenu("Export Collection…") { exportCollection($0, includeSecrets: false) }
+                collectionMenu("Export Collection with Secrets…") {
+                    exportCollection($0, includeSecrets: true)
                 }
+                collectionMenu("Run Collection…") { sheet = .runner(collectionId: $0) }
                 Divider()
                 Button("Export Everything…") { exportWorkspace() }
                 Button("Edit Global Variables…") { sheet = .globals }
@@ -298,6 +314,31 @@ struct ApiClientView: View {
             .menuStyle(.borderlessButton)
             .fixedSize()
             .help("Import, export, and run")
+        }
+    }
+
+    /// One collection: a plain item. Several: a submenu. None: nothing, since
+    /// there is nothing to act on.
+    @ViewBuilder
+    private func collectionMenu(_ title: String, action: @escaping (String) -> Void) -> some View {
+        if model.data.collections.count == 1, let only = model.data.collections.first {
+            Button(title) { action(only.id) }
+        } else if model.data.collections.count > 1 {
+            Menu(title) {
+                ForEach(model.data.collections) { collection in
+                    Button(collection.name) { action(collection.id) }
+                }
+            }
+        }
+    }
+
+    /// New Request threw the editor away without asking; an unsaved request is
+    /// often several minutes of typing.
+    private func newRequest() {
+        if model.hasUnsavedChanges {
+            pendingNewRequest = true
+        } else {
+            model.newRequest()
         }
     }
 
@@ -315,6 +356,27 @@ struct ApiClientView: View {
     }
 
     // MARK: - Strips
+
+    /// A failed save used to be swallowed, so collections and history would
+    /// quietly not be there at the next launch.
+    private func persistFailureStrip(_ message: String) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Image(systemName: "exclamationmark.octagon.fill")
+                .foregroundStyle(.red)
+                .font(.app(.caption2))
+            Text(message)
+                .font(.app(.caption))
+                .textSelection(.enabled)
+            Spacer()
+            Button("Retry") { model.persist() }
+                .buttonStyle(.link)
+                .font(.app(.caption))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(Color.red.opacity(0.12))
+    }
 
     private var warningStrip: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -371,15 +433,17 @@ struct ApiClientView: View {
 
     private func exportCollection(_ id: String, includeSecrets: Bool) {
         guard let collection = model.data.collections.first(where: { $0.id == id }) else { return }
-        guard let url = state.askSaveLocation(suggestedName: "\(collection.name).postman_collection.json")
-        else { return }
+        guard let url = ApiClientFilePanels.askSave(
+            suggestedName: "\(collection.name).postman_collection.json"
+        ) else { return }
         if let failure = model.exportCollection(id, to: url, includeSecrets: includeSecrets) {
             alertMessage = failure
         }
     }
 
     private func exportWorkspace() {
-        guard let url = state.askSaveLocation(suggestedName: "droidective-api.json") else { return }
+        guard let url = ApiClientFilePanels.askSave(suggestedName: "droidective-api.json")
+        else { return }
         if let failure = model.exportWorkspace(to: url, includeSecrets: false) {
             alertMessage = failure
         }

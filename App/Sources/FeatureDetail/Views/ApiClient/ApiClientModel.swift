@@ -33,9 +33,10 @@ final class ApiClientModel {
     var runningCollectionId: String?
     var runProgress: [RunResult] = []
 
-    // MARK: Import feedback
-
-    var importReport: String?
+    /// Set when a background save fails. Collections and history live in one
+    /// JSON document; losing a write silently means work disappears at the next
+    /// launch with nothing having said so.
+    var persistFailure: String?
 
     private var engine: FeatureEngine?
     private var store: JSONStore<ApiClientData>?
@@ -64,7 +65,15 @@ final class ApiClientModel {
     func persist() {
         guard let store else { return }
         let snapshot = data
-        Task { try? await store.save(snapshot) }
+        Task { [weak self] in
+            do {
+                try await store.save(snapshot)
+                self?.persistFailure = nil
+            } catch {
+                self?.persistFailure =
+                    "Couldn't save your API workspace: \(error.localizedDescription)"
+            }
+        }
     }
 
     // MARK: - Scope
@@ -179,15 +188,32 @@ final class ApiClientModel {
         open(SavedRequest(), in: currentCollectionId)
     }
 
+    /// True when the open request differs from what's stored — either edits to
+    /// a saved request, or an unsaved one someone has started filling in. Drives
+    /// the confirmation on New Request and on opening something else, both of
+    /// which used to discard the editor without a word.
+    var hasUnsavedChanges: Bool {
+        guard let collectionId = currentCollectionId,
+            let collection = data.collections.first(where: { $0.id == collectionId }),
+            case .request(let saved)? = ApiCollectionTree.find(current.id, in: collection.items)
+        else {
+            // Never saved: only worth protecting once there's something in it.
+            return !current.url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        // `modifiedAt` moves on every save, so comparing it would call an
+        // untouched request dirty.
+        var stored = saved
+        var open = current
+        stored.modifiedAt = 0
+        open.modifiedAt = 0
+        return stored != open
+    }
+
     func loadCurl(_ text: String) -> [String] {
         guard let result = CurlParser.parseWithWarnings(text) else { return [] }
         open(result.request, in: currentCollectionId)
         warnings = result.warnings
         return result.warnings
-    }
-
-    var curlPreview: String {
-        CodeGenerator.generate(.curl, for: current, scope: scope)
     }
 
     func code(for target: CodeTarget) -> String {
@@ -269,6 +295,12 @@ final class ApiClientModel {
     func setCollectionAuth(_ auth: AuthSpec, for collectionId: String) {
         guard let index = data.collections.firstIndex(where: { $0.id == collectionId }) else { return }
         data.collections[index].auth = auth
+        persist()
+    }
+
+    func setCollectionVariables(_ variables: [ApiKeyValue], for collectionId: String) {
+        guard let index = data.collections.firstIndex(where: { $0.id == collectionId }) else { return }
+        data.collections[index].variables = variables
         persist()
     }
 
