@@ -653,11 +653,13 @@ struct QuickActionsView: View {
             ))
         }
         if enabled.contains("install-app"),
-           matchesNative(title: "Install APK", keywords: ["install", "apk", "sideload", "package"]) {
+           matchesNative(
+               title: "Install APK",
+               keywords: ["install", "apk", "apks", "xapk", "apkm", "sideload", "package", "split"]) {
             rows.append(QuickRow(
                 id: "native:install", icon: "arrow.down.app",
                 title: "Install APK",
-                subtitle: "Pick .apk files and install them",
+                subtitle: "Pick APK, APKS, XAPK, or APKM files and install them",
                 action: .installAPK
             ))
         }
@@ -1557,13 +1559,13 @@ struct QuickActionsView: View {
         }
     }
 
-    /// Pick .apk files, then install them. The file dialog takes key focus,
-    /// so the panel holds itself open across it.
+    /// Pick app packages (APK or a split bundle), then install them. The file
+    /// dialog takes key focus, so the panel holds itself open across it.
     private func pickAndInstallAPKs() {
         let picker = NSOpenPanel()
-        picker.allowedContentTypes = [UTType(filenameExtension: "apk")].compactMap { $0 }
+        picker.allowedContentTypes = InstallablePackage.contentTypes
         picker.allowsMultipleSelection = true
-        picker.message = "Choose APKs to install"
+        picker.message = "Choose app packages to install"
         let controller = FloatingPanelController.quickActions
         controller.holdsThroughResign = true
         NSApp.activate(ignoringOtherApps: true)

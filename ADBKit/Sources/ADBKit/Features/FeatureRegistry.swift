@@ -385,10 +385,12 @@ public enum FeatureRegistry {
         ),
         FeatureDef(
             id: "install-app", title: "Install App",
-            subtitle: "Install an APK — drag and drop or pick a file",
+            subtitle: "Install an APK, APKS, XAPK, or APKM — drag and drop or pick a file",
             keywords: [
                 "install", "apk", "sideload", "side load", "drag", "drop",
                 "install app", "add app", "package",
+                "apks", "xapk", "apkm", "split", "split apk", "splits", "obb",
+                "expansion", "apkpure", "apkmirror",
             ],
             category: .appManagement, icon: "arrow.down.app", kind: .view,
             supportsRunAll: true

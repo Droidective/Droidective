@@ -219,22 +219,25 @@ struct RootView: View {
         applyStoredTheme()
         // Anything below is app-wide and must run once, not once per window.
         guard state.core.claimLaunchSetup() else { return }
-        // A double-clicked APK opens the in-window opened-APK screen (install
-        // with live status / APK Studio); a double-clicked AAB opens the AAB
-        // to APK converter with the bundle staged. Anything else handed to
-        // "Open With → Droidective" gets a toast instead of silence.
+        // A double-clicked APK — or a split bundle (.apks/.xapk/.apkm) — opens
+        // the in-window opened-package screen (install with live status / APK
+        // Studio); a double-clicked AAB opens the AAB to APK converter with the
+        // bundle staged. Anything else handed to "Open With → Droidective" gets
+        // a toast instead of silence.
         // Factory-seed the bundled tools into the managed store (idempotent)
         // so the AAB converter works offline with no first-use download.
         Task { await BundledTools.seed(into: state.env.engine.managedTools) }
         InstallInbox.shared.onReceive = { urls in
             // Finder opens land in whichever window is in front.
             guard let target = AppCore.shared.frontmost else { return }
-            let apks = urls.filter { $0.pathExtension.lowercased() == "apk" }
+            let packages = InstallablePackage.filter(urls)
             let aabs = urls.filter { $0.pathExtension.lowercased() == "aab" }
-            for other in urls where !["apk", "aab"].contains(other.pathExtension.lowercased()) {
-                target.showToast(Toast(message: "Not an APK or AAB: \(other.lastPathComponent)", ok: false))
+            let handled = Set(AppPackageFormat.fileExtensions + ["aab"])
+            for other in urls where !handled.contains(other.pathExtension.lowercased()) {
+                target.showToast(Toast(
+                    message: "Not an installable package: \(other.lastPathComponent)", ok: false))
             }
-            if !apks.isEmpty { target.openAPKs(apks) }
+            if !packages.isEmpty { target.openPackages(packages) }
             if !aabs.isEmpty { target.openAABs(aabs) }
         }
         #if !APPSTORE

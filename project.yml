@@ -107,6 +107,32 @@ targets:
             UTTypeTagSpecification:
               public.filename-extension:
                 - aab
+          # The split-app containers. None of the three has a UTI published by
+          # its producer, so these are the conventional identifiers — declared
+          # as imported (the formats are theirs, not ours) and conforming to
+          # public.data like the APK entry above, so they don't get swept up by
+          # every app that accepts a zip.
+          - UTTypeIdentifier: com.android.apks
+            UTTypeDescription: Android APK Set
+            UTTypeConformsTo:
+              - public.data
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - apks
+          - UTTypeIdentifier: com.apkpure.xapk
+            UTTypeDescription: XAPK Package
+            UTTypeConformsTo:
+              - public.data
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - xapk
+          - UTTypeIdentifier: com.apkmirror.apkm
+            UTTypeDescription: APKM Package
+            UTTypeConformsTo:
+              - public.data
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - apkm
         # The app's private drag types (DragTypes.swift). macOS only writes a
         # custom UTI to the drag pasteboard when the app declares it, so an
         # undeclared type makes every .onDrag with it die silently — no drop
@@ -131,6 +157,13 @@ targets:
             LSHandlerRank: Owner
             LSItemContentTypes:
               - com.android.app-bundle
+          - CFBundleTypeName: Android Split App Package
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Owner
+            LSItemContentTypes:
+              - com.android.apks
+              - com.apkpure.xapk
+              - com.apkmirror.apkm
     settings:
       base:
         PRODUCT_NAME: Droidective

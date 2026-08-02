@@ -92,7 +92,7 @@ opening it — verify those by hand.
 ## Build / test / run
 
 ```
-make test          # ADBKit unit tests (cd ADBKit && swift test) — 1503 tests, keep green
+make test          # ADBKit unit tests (cd ADBKit && swift test) — 1699 tests, keep green
 make test-app      # the AppTests logic bundle — 99 tests
 make verify        # tiers 0-1: warnings-as-errors + both test bundles
 make test-linux    # the same suite on Linux (Apple `container` CLI; the port gate)
@@ -178,7 +178,22 @@ Node 22 in CI; scroll reveals and the hero palette demo must keep their
   backs the cross-platform runners and the Emulators screen's simulator
   section), AppIcon,
   Performance (per-core CPU/RAM/FPS/per-process), NetworkSpeed (`/proc/net/dev`
-  throughput), VideoEditService (ffmpeg export). The **`JSConsole/`** trio backs
+  throughput), VideoEditService (ffmpeg export). The **`AppBundle/`** quartet
+  backs installing every Android package format (`install-app`, the drop zones,
+  and the Finder-opened `apk-open` tab): `AppPackageFormat` (the one list of
+  installable extensions — apk/apks/xapk/apkm — that every drop filter and open
+  panel derives from), `SplitApkSelector` (pure: `DeviceSpec.parse` off getprop
+  + which splits of a bundle belong on *this* device — one ABI, the nearest
+  density bucket, its languages, every base/feature module), `AppBundleManifest`
+  (lenient parsers for APKPure's `manifest.json` and APKMirror's `info.json`,
+  with archive paths sanitised against `../` traversal — an untrusted
+  `install_path` is concatenated onto a device path), and
+  `AppBundleInstallService` (the orchestrator: a plain `.apk` goes straight to
+  `AppInstallService`; `.apks` goes back to bundletool's `install-apks`, which
+  reads the archive's own `toc.pb` targeting table — so it needs Java, and says
+  so; `.xapk`/`.apkm` unpack to a temp dir, narrow to the device's splits, and
+  land in one `adb install-multiple -r` transaction, then push any OBB
+  expansions). The **`JSConsole/`** trio backs
   the `js-console` feature — a Hermes Chrome-DevTools-Protocol JS console for RN:
   `MetroInspector` (host-localhost `GET /json/list` + a pure `parseTargets`),
   `CDPProtocol` (pure CDP framing + `Runtime.evaluate`/`getProperties`/

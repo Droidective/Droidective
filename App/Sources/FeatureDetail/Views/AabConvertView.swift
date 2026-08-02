@@ -423,7 +423,7 @@ struct AabConvertView: View {
     }
 
     private func installRunning(_ result: AabConvertService.ConvertedApk) -> Bool {
-        state.installJobs.contains { $0.apkURL == result.url && $0.isRunning }
+        state.installJobs.contains { $0.packageURL == result.url && $0.isRunning }
     }
 
     private func install(_ result: AabConvertService.ConvertedApk) {

@@ -3,18 +3,20 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The Finder-opened APKs backing the `apk-open` tab. In-memory like the APK
-/// Studio session; the tab itself may be restored empty after a relaunch, so
-/// the view keeps a drop-zone empty state.
+/// The Finder-opened packages backing the `apk-open` tab. In-memory like the
+/// APK Studio session; the tab itself may be restored empty after a relaunch,
+/// so the view keeps a drop-zone empty state.
 @MainActor @Observable
 final class ApkOpenSession {
     var urls: [URL] = []
 }
 
-/// The screen a double-clicked (or "Open With") APK lands on — a workspace
-/// tab, deliberately not a registry feature: it exists only when a file
-/// arrives. Shows what each APK is (aapt2 badging), installs on the selected
-/// device(s) with live per-device status, and hands single APKs to APK Studio.
+/// The screen a double-clicked (or "Open With") app package lands on — a
+/// workspace tab, deliberately not a registry feature: it exists only when a
+/// file arrives. Shows what each package is (aapt2 badging for a plain APK,
+/// name and size for a split bundle), installs on the selected device(s) with
+/// live per-device status, and hands plain APKs to APK Studio, which works on
+/// one APK and can't read a bundle container.
 struct ApkOpenView: View {
     @Environment(AppState.self) private var state
     @State private var apkInfos: [URL: ApkInfo] = [:]
@@ -73,7 +75,9 @@ struct ApkOpenView: View {
                 Button("Install") { install([url]) }
                     .buttonStyle(.borderedProminent)
                     .disabled(targets.isEmpty || installing(url))
-                Button("Open in APK Studio") { openStudio(url, tab: .inspect) }
+                if AppPackageFormat.detect(fileName: url.lastPathComponent) == .apk {
+                    Button("Open in APK Studio") { openStudio(url, tab: .inspect) }
+                }
                 Button("Reveal in Finder") {
                     NSWorkspace.shared.activateFileViewerSelecting([url])
                 }
@@ -90,7 +94,7 @@ struct ApkOpenView: View {
     }
 
     private var installAll: some View {
-        Button("Install all \(urls.count) APKs") { install(urls) }
+        Button("Install all \(urls.count) packages") { install(urls) }
             .buttonStyle(.borderedProminent)
             .disabled(targets.isEmpty || urls.contains(where: installing))
     }
@@ -115,9 +119,9 @@ struct ApkOpenView: View {
             Image(systemName: "arrow.down.app")
                 .font(.app(size: 46))
                 .foregroundStyle(.brandAccent)
-            Text("Drop an APK here")
+            Text("Drop an app package here")
                 .font(.app(.title3).weight(.medium))
-            Text("Double-clicking an .apk in Finder lands on this screen too.")
+            Text("APK, APKS, XAPK, or APKM — double-clicking one in Finder lands here too.")
                 .font(.app(.callout))
                 .foregroundStyle(.textMuted)
         }
@@ -132,9 +136,9 @@ struct ApkOpenView: View {
                 .padding(20)
         }
         .dropDestination(for: URL.self) { dropped, _ in
-            let apks = dropped.filter { $0.pathExtension.lowercased() == "apk" }
-            guard !apks.isEmpty else { return false }
-            state.apkOpen.urls = apks
+            let packages = InstallablePackage.filter(dropped)
+            guard !packages.isEmpty else { return false }
+            state.apkOpen.urls = packages
             return true
         } isTargeted: { dropTargeted = $0 }
     }
@@ -142,7 +146,7 @@ struct ApkOpenView: View {
     // MARK: - Actions
 
     private func installing(_ url: URL) -> Bool {
-        state.installJobs.contains { $0.apkURL == url && $0.isRunning }
+        state.installJobs.contains { $0.packageURL == url && $0.isRunning }
     }
 
     private func install(_ urls: [URL]) {
