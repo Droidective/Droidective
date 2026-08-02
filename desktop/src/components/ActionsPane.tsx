@@ -13,9 +13,11 @@ import type { Device, FeatureSummary } from "@/lib/wire"
 export function ActionsPane({
   features,
   device,
+  packageId,
 }: {
   features: FeatureSummary[]
   device: Device | null
+  packageId: string | null
 }) {
   const [query, setQuery] = useState("")
   const [selectedID, setSelectedID] = useState<string | null>(null)
@@ -62,7 +64,12 @@ export function ActionsPane({
         {selected ? (
           // Keyed by id so each feature's form starts from its own defaults
           // instead of inheriting the previous one's state.
-          <ActionForm key={selected.id} feature={selected} device={device} />
+          <ActionForm
+            key={selected.id}
+            feature={selected}
+            device={device}
+            packageId={packageId}
+          />
         ) : (
           <p className="p-6 text-text-tertiary">Pick an action.</p>
         )}

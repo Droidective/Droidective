@@ -107,4 +107,30 @@ describe("runFields", () => {
   it("sends no fields map at all for an action with no parameters", () => {
     expect(runFields(byID("screenshot"), {})).toBeUndefined()
   })
+
+  it("passes the selected app to a feature that needs one", () => {
+    // `monkey` is the runnable action with needsBundle; without this it ran
+    // with no package at all.
+    const monkey = byID("monkey")
+    expect(monkey.needsBundle).toBe(true)
+    expect(runFields(monkey, {}, undefined, "com.x")).toMatchObject({ packageId: "com.x" })
+  })
+
+  it("passes the selected app as context to features that do not need one", () => {
+    // The Mac supplies it the same way, for features like bug-report that
+    // include app detail when a bundle happens to be selected.
+    expect(runFields(byID("screenshot"), {}, undefined, "com.x")).toEqual({ packageId: "com.x" })
+  })
+
+  it("omits the app when none is selected", () => {
+    expect(runFields(byID("screenshot"), {}, undefined, null)).toBeUndefined()
+    expect(runFields(byID("screenshot"), {}, undefined, "")).toBeUndefined()
+  })
+
+  it("keeps a toggle's `on` alongside the selected app", () => {
+    expect(runFields(byID("dark-mode"), {}, true, "com.x")).toEqual({
+      on: true,
+      packageId: "com.x",
+    })
+  })
 })

@@ -1,6 +1,7 @@
 import { Channel, invoke } from "@tauri-apps/api/core"
 import { listen, type UnlistenFn } from "@tauri-apps/api/event"
 import type {
+  AppsResponse,
   DaemonError,
   DaemonStatus,
   Device,
@@ -48,6 +49,18 @@ export function runAction(args: {
   fields?: Record<string, FieldValue>
 }): Promise<RunResponse> {
   return invoke<RunResponse>("run_action", { args })
+}
+
+export function listApps(serial: string): Promise<AppsResponse> {
+  return invoke<AppsResponse>("list_apps", { serial })
+}
+
+export function controlApp(args: {
+  serial: string
+  packageId: string
+  action: string
+}): Promise<RunResponse> {
+  return invoke<RunResponse>("control_app", args)
 }
 
 /** A live subscription. Always `stop()` it when the view goes away. */

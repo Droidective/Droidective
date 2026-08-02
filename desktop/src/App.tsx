@@ -1,17 +1,29 @@
-import { useState } from "react"
-import { ScrollText, Zap, type LucideIcon } from "lucide-react"
+import { useEffect, useState } from "react"
+import { Boxes, ScrollText, Zap, type LucideIcon } from "lucide-react"
 import { ActionsPane } from "@/components/ActionsPane"
+import { AppsPane } from "@/components/AppsPane"
 import { Banner } from "@/components/Controls"
 import { DeviceBar } from "@/components/DeviceBar"
 import { LogcatPane } from "@/components/LogcatPane"
 import { useSession } from "@/hooks/useSession"
 import { cn } from "@/lib/cn"
 
-type Tab = "actions" | "logcat"
+type Tab = "actions" | "apps" | "logcat"
 
 export function App() {
   const session = useSession()
   const [tab, setTab] = useState<Tab>("actions")
+  // Lifted out of the Apps pane: a `needsBundle` action in the palette needs
+  // the same choice, so it cannot live inside one tab.
+  const [packageId, setPackageId] = useState<string | null>(null)
+
+  // A package id means nothing on a different device, so the choice is
+  // dropped when the selection changes — here, where it is owned, rather than
+  // in the pane that happens to set it.
+  const serial = session.selected?.serial ?? null
+  useEffect(() => {
+    setPackageId(null)
+  }, [serial])
 
   if (session.status.state === "starting") {
     return <Splash>Starting droidectived…</Splash>
@@ -47,6 +59,15 @@ export function App() {
           Actions
         </TabButton>
         <TabButton
+          active={tab === "apps"}
+          icon={Boxes}
+          onClick={() => {
+            setTab("apps")
+          }}
+        >
+          Apps
+        </TabButton>
+        <TabButton
           active={tab === "logcat"}
           icon={ScrollText}
           onClick={() => {
@@ -64,7 +85,13 @@ export function App() {
       ) : null}
 
       {tab === "actions" ? (
-        <ActionsPane features={session.features} device={session.selected} />
+        <ActionsPane
+          features={session.features}
+          device={session.selected}
+          packageId={packageId}
+        />
+      ) : tab === "apps" ? (
+        <AppsPane device={session.selected} selected={packageId} onSelect={setPackageId} />
       ) : (
         <LogcatPane device={session.selected} />
       )}

@@ -53,11 +53,23 @@ resolves. It is gitignored — build it, do not commit it.
 ## What works so far
 
 Device picker, the action palette (search, forms, toggles, destructive
-confirmation), and live logcat with visible gap markers.
+confirmation), the installed-app browser with its verbs, and live logcat with
+visible gap markers.
 
-Not yet: the full-screen view features (file explorer, apps, crash catcher,
-performance…), which are `kind: "view"` in the registry and need whole panels
-rather than a form. They are filtered out of the palette rather than shown as
+The app chosen in **Apps** is the app the palette acts on: a `needsBundle`
+feature (Monkey) is disabled until one is picked, and every other action gets
+it as optional context — the rule `AppState.run` applies on the Mac. The
+choice is owned by `App.tsx`, not the Apps pane, so switching tabs keeps it
+and switching *device* drops it.
+
+Rough edge: the app list is re-fetched whenever the Apps tab is opened, since
+the pane remounts. It is a `dumpsys package packages` parse, so that is a
+second or two each time — worth lifting into shared state if it starts to
+grate.
+
+Not yet: the remaining full-screen view features (file explorer, crash
+catcher, performance…), which are `kind: "view"` in the registry and need
+whole panels rather than a form. They are filtered out of the palette rather than shown as
 dead rows. Hub members *are* listed standalone — this app has no hub screens,
 and they are most of the runnable surface.
 

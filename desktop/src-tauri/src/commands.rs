@@ -11,7 +11,10 @@ use tauri::ipc::Channel;
 use tauri::State;
 
 use crate::daemon::stream::StreamMessage;
-use crate::daemon::wire::{Device, FeatureSummary, RunRequest, RunResponse, SubscribeParams};
+use crate::daemon::wire::{
+    AppControlRequest, AppsResponse, Device, FeatureSummary, RunRequest, RunResponse,
+    SubscribeParams,
+};
 use crate::daemon::{DaemonStatus, Supervisor};
 use crate::error::DaemonError;
 
@@ -84,6 +87,32 @@ pub async fn run_action(
             serial: args.serial,
             platform: args.platform,
             fields: args.fields,
+        })
+        .await
+}
+
+#[tauri::command]
+pub async fn list_apps(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+) -> Result<AppsResponse, DaemonError> {
+    supervisor.client().await?.list_apps(serial).await
+}
+
+#[tauri::command]
+pub async fn control_app(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    package_id: String,
+    action: String,
+) -> Result<RunResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .control_app(&AppControlRequest {
+            serial,
+            package_id,
+            action,
         })
         .await
 }
