@@ -73,6 +73,14 @@ whole panels rather than a form. They are filtered out of the palette rather tha
 dead rows. Hub members *are* listed standalone — this app has no hub screens,
 and they are most of the runnable surface.
 
+## Parity with the Mac app
+
+`docs/desktop-parity.md` is the tracker: every registry feature, what its
+macOS view actually offers, and how far this app has got. The shell items at
+the top (tabs, split panes, sidebar, palette, hotkeys) come before the
+screens — porting a screen into a window with no tabs means reworking it once
+the tabs arrive.
+
 ## Conventions
 
 - **Test the pure modules, not the components.** Same rule as ADBKit: if a
