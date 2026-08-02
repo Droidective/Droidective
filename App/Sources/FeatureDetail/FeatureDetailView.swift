@@ -31,11 +31,24 @@ struct FeatureDetailView: View {
         if let device = state.selectedDevice, device.isReady,
            feature.needsDevice, !feature.platforms.contains(device.platform) {
             PlatformUnsupportedView(feature: feature, device: device)
+        } else if let owner = busyElsewhereOwner(feature) {
+            // Another window already runs this against the same device, and
+            // the device side only has one of whatever it needs (see
+            // `WorkspaceRegistry.exclusiveFeatureIDs`). Offer the two honest
+            // choices instead of racing it.
+            FeatureBusyElsewhereView(feature: feature, owner: owner)
         } else if feature.id == "screenshot" {
             ScreenshotView()
         } else {
             detailByKind(for: feature)
         }
+    }
+
+    private func busyElsewhereOwner(_ feature: FeatureDef) -> WorkspaceID? {
+        guard case .featureOwnedElsewhere(let owner, _) =
+            state.core.registry.conflict(opening: feature.id, in: state.id)
+        else { return nil }
+        return owner
     }
 
     @ViewBuilder
@@ -169,6 +182,56 @@ struct ComingSoonView: View {
             systemImage: feature.icon,
             description: Text("\(feature.subtitle ?? "")\n\nThis feature arrives in a later milestone.")
         )
+    }
+}
+
+/// Shown when another window already runs this feature against the same
+/// device and the device can only serve one — a second scrcpy session is a
+/// second encoder, and a second Hermes CDP client silently kills the first.
+///
+/// Deliberately not an error: both ways out are one click. Focus goes to where
+/// it's already running; Take Over stops it there first, so there's never a
+/// moment with two live sessions.
+struct FeatureBusyElsewhereView: View {
+    @Environment(AppState.self) private var state
+    let feature: FeatureDef
+    let owner: WorkspaceID
+
+    var body: some View {
+        ContentUnavailableView {
+            Label(feature.title, systemImage: feature.icon)
+        } description: {
+            Text(explanation)
+        } actions: {
+            HStack {
+                Button("Focus \(state.core.registry.label(of: owner))") {
+                    state.core.focusWindow(owner)
+                }
+                Button("Take Over Here") {
+                    state.core.takeOverFeature(feature.id, from: owner)
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        }
+    }
+
+    private var explanation: String {
+        let deviceName = state.selectedDevice.map(state.deviceDisplayName) ?? "this device"
+        return """
+        \(state.core.registry.label(of: owner)) is already running \(feature.title) \
+        for \(deviceName). \(reason)
+        """
+    }
+
+    private var reason: String {
+        switch feature.id {
+        case "scrcpy", "screen-record":
+            return "Two sessions would fight over the device's video encoder."
+        case "js-console":
+            return "The React Native inspector hands the target to one client at a time."
+        default:
+            return "The device can only serve one at a time."
+        }
     }
 }
 

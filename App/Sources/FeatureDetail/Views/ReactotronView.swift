@@ -69,7 +69,12 @@ final class ReactotronSession {
 
     private let client: AdbClient
     /// Back-reference for toasts and save dialogs; set right after init.
+    /// The window the relay reports through (toasts, save panels) — the
+    /// frontmost one, kept up to date by `AppCore.noteFrontmost`.
     weak var app: AppState?
+    /// The app-wide state, for facts that outlive any window: the device
+    /// list and the MCP coordinator.
+    weak var core: AppCore?
     private var service: ReactotronService?
     private var consumeTask: Task<Void, Never>?
     /// Every serial a reverse tunnel was opened on this session — what stop()
@@ -134,7 +139,7 @@ final class ReactotronSession {
     /// Simulators share the Mac's loopback and need no tunnel — and feeding
     /// their UDIDs to adb just produces "device not found" noise.
     var readyAndroidSerials: [String] {
-        (app?.devices ?? [])
+        (core?.devices ?? [])
             .filter { $0.isReady && $0.platform == .android }
             .map(\.serial)
     }
@@ -172,7 +177,7 @@ final class ReactotronSession {
         }
         // The MCP layer (if enabled) taps the fresh server — additive only,
         // never this session's stream.
-        app?.mcp.reactotronServerChanged()
+        core?.mcp.reactotronServerChanged()
     }
 
     /// MCP attachment: an independent event tap plus the outbound sender,
@@ -246,7 +251,7 @@ final class ReactotronSession {
         service = nil
         await stopping?.stop(serials: serials)
         reset()
-        app?.mcp.reactotronServerChanged()
+        core?.mcp.reactotronServerChanged()
     }
 
     /// Stop on app termination, bounded so a hung adb can't freeze quit. The

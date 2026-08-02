@@ -5,16 +5,11 @@ import Foundation
 /// installed and boot one. The booted device joins `devices` through normal
 /// polling, so these only kick it off and report the result.
 extension AppState {
-    /// Refresh `availableAvds` from `emulator -list-avds`, tagging which are
-    /// already running. A no-op (clears the list) when the SDK emulator is absent.
-    func refreshAvds() async {
-        guard FeatureRegistry.visiblePlatforms(for: selectedRole).contains(.android),
-              await env.engine.emulators.emulatorInstalled() else {
-            availableAvds = []
-            return
-        }
-        availableAvds = await env.engine.emulators.listAvds(devices: devices)
-    }
+    /// The lists themselves are app-wide (one `emulator -list-avds` however
+    /// many windows ask); the launch/stop verbs stay here so their toasts land
+    /// in the window the user acted from.
+    func refreshAvds() async { await core.refreshAvds() }
+    func refreshSimulators() async { await core.refreshSimulators() }
 
     /// Boot `avd` detached; it appears in the device list once it comes online.
     func launchEmulator(_ avd: Avd) {
@@ -22,17 +17,6 @@ extension AppState {
             let result = await env.engine.emulators.launch(avd: avd.name)
             showToast(Toast(message: result.message, ok: result.ok))
         }
-    }
-
-    /// Refresh `availableSimulators` — the short recently-used list for the
-    /// device-bar menu (Xcode installs ~30 sims; the Emulators screen lists
-    /// them all). Empty without Xcode.
-    func refreshSimulators() async {
-        guard FeatureRegistry.visiblePlatforms(for: selectedRole).contains(.iosSimulator) else {
-            availableSimulators = []
-            return
-        }
-        availableSimulators = SimulatorListParser.quickPicks(await env.simulatorMonitor.list())
     }
 
     /// Boot a simulator; it joins the device bar once simctl reports it Booted.

@@ -33,7 +33,10 @@ final class McpCoordinator {
     private(set) var status: DisplayStatus = .off
 
     @ObservationIgnored private let controller = McpServerController()
-    @ObservationIgnored weak var app: AppState?
+    /// The app-wide state. MCP only ever needs the shared Reactotron
+    /// relay, which is app-wide too — so this never depends on a window
+    /// being open, which matters because the relay outlives every window.
+    @ObservationIgnored weak var core: AppCore?
     /// True when enabling MCP is what started the relay — so disabling MCP
     /// can put it back down without killing a user-started session.
     @ObservationIgnored private var startedRelay = false
@@ -123,8 +126,8 @@ final class McpCoordinator {
     /// agents see `no_apps_connected` instead of ghosts — deliberately NOT
     /// restarting a relay the user just stopped.
     func reactotronServerChanged() {
-        guard isEnabled, let app else { return }
-        if app.reactotronSession.isRunning {
+        guard isEnabled, let core else { return }
+        if core.reactotronSession.isRunning {
             applySettings()
         } else {
             startedRelay = false
@@ -154,12 +157,12 @@ final class McpCoordinator {
     // MARK: - Reconcile
 
     private func reconcile() async {
-        guard let app else { return }
+        guard let core else { return }
         guard isEnabled else {
             await controller.stop()
-            if startedRelay, app.reactotronSession.isRunning,
-               !app.reactotronSession.hasLiveConnection {
-                await app.reactotronSession.stop()
+            if startedRelay, core.reactotronSession.isRunning,
+               !core.reactotronSession.hasLiveConnection {
+                await core.reactotronSession.stop()
             }
             startedRelay = false
             status = .off
@@ -167,11 +170,11 @@ final class McpCoordinator {
         }
 
         status = .starting
-        if !app.reactotronSession.isRunning {
-            await app.reactotronSession.start(serials: app.reactotronSession.readyAndroidSerials)
-            if app.reactotronSession.isRunning { startedRelay = true }
+        if !core.reactotronSession.isRunning {
+            await core.reactotronSession.start(serials: core.reactotronSession.readyAndroidSerials)
+            if core.reactotronSession.isRunning { startedRelay = true }
         }
-        guard let (events, sender) = await app.reactotronSession.mcpAttachment() else {
+        guard let (events, sender) = await core.reactotronSession.mcpAttachment() else {
             await controller.stop()
             status = .failed("The Reactotron server isn't running — open the Reactotron "
                 + "feature and start it, then retry.")

@@ -19,9 +19,9 @@ let quickPanelCloseAfterRunKey = "quickPanelCloseAfterRun"
 /// Routes APKs opened from Finder (double-click / "Open With") into the install
 /// inbox, which surfaces the device picker once the UI is ready.
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
-    /// Wired in `ADTApp.body` (the adaptor instance is the real delegate), so
-    /// quit and window-close can tear down kept-alive sessions.
-    weak var appState: AppState?
+    /// The app-wide state, so quit and window-close can tear down the right
+    /// window's kept-alive sessions.
+    @MainActor var core: AppCore { AppCore.shared }
 
     /// True from the moment termination is requested until it's cancelled, so
     /// the window-close observer doesn't mistake quit's window teardown for
@@ -55,32 +55,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         )
     }
 
-    /// Background mode: closing the main window (not quitting) stops running
-    /// feature work and — once no primary window is left — removes the Dock
-    /// icon. The app stays resident for the menu bar icon, global hotkeys, and
-    /// the Quick Actions panel; quit still exits fully.
+    /// A workspace window closed: tear down *that* window's sessions. Once no
+    /// primary window is left, background mode also drops the Dock icon — the
+    /// app stays resident for the menu bar icon, global hotkeys, and the Quick
+    /// Actions panel; quit still exits fully.
     @MainActor @objc private func windowWillClose(_ notification: Notification) {
-        guard !isQuitting, let appState else { return }
-        // Structural identification, not identifiers: SwiftUI re-stamps the
-        // main window's identifier (`main-AppWindow-1`) by close time, so the
-        // `droidective-main` tag can't be trusted here. Background mode starts
-        // when the last *primary* window closes — panels don't count, and
+        guard !isQuitting else { return }
+        // Structural identification, not identifiers: SwiftUI re-stamps a
+        // window's identifier (`main-AppWindow-1`) by close time, so the
+        // `droidective-main` tag can't be trusted here. Panels don't count, and
         // Settings does (an accessory app's visible windows lose the menu bar).
         guard let closing = notification.object as? NSWindow,
               closing.canBecomeMain, !(closing is NSPanel)
         else { return }
-        // Minimized windows count — a main window in the Dock is still the
-        // user's workspace, not a cue to kill sessions and go accessory.
+        // Sessions must never run behind a closed window, so the workspace
+        // tears down whether or not other windows remain.
+        core.closeWindow(closing)
+        // Minimized windows count — a window in the Dock is still the user's
+        // workspace, not a cue to go accessory.
         let remaining = NSApp.windows.contains {
             $0 !== closing && ($0.isVisible || $0.isMiniaturized)
                 && $0.canBecomeMain && !($0 is NSPanel)
         }
         guard !remaining else { return }
-        // Feature work always stops with the last window — sessions must not
-        // run behind a closed window in either mode. The background pref only
-        // decides whether the app then goes accessory (menu bar / hotkeys /
-        // Quick Actions) or stays a regular Dock app.
-        appState.enterBackground()
         if UserDefaults.standard.object(forKey: keepRunningInBackgroundKey) as? Bool ?? true,
            NSApp.activationPolicy() == .regular {
             NSApp.setActivationPolicy(.accessory)
@@ -99,8 +96,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             let hasPrimary = NSApp.windows.contains {
                 ($0.isVisible || $0.isMiniaturized) && $0.canBecomeMain && !($0 is NSPanel)
             }
-            guard !hasPrimary, let appState else { return true }
-            appState.activateMainWindow()
+            guard !hasPrimary else { return true }
+            core.activateAnyWindow()
             return false
         }
     }
@@ -113,8 +110,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        let appState = appState
-        Task { @MainActor in appState?.activateMainWindow() }
+        Task { @MainActor in AppCore.shared.activateAnyWindow() }
         completionHandler()
     }
 
@@ -123,24 +119,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     /// session so we don't orphan the listener or the reverse tunnel. Both defer
     /// termination and reply once resolved.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard let appState else { return .terminateNow }
-        return MainActor.assumeIsolated {
+        MainActor.assumeIsolated {
             // From here on, window closes belong to quit teardown, not
             // background mode. Cleared again if the quit gets cancelled
-            // (`AppState.cancelDeferredQuit`).
+            // (`AppCore.cancelQuit`).
             isQuitting = true
-            // The leave prompt's resolution (quit / cancel) drives termination.
-            if !appState.requestQuit() { return .terminateLater }
-            guard appState.reactotronSession.isRunning || appState.mcp.isEnabled else {
-                return .terminateNow
-            }
-            Task { @MainActor in
-                await appState.mcp.stopForQuit()
-                if appState.reactotronSession.isRunning {
-                    await appState.reactotronSession.stopForQuit()
-                }
-                NSApp.reply(toApplicationShouldTerminate: true)
-            }
+            // Each window with work at stake gets its confirmation in turn;
+            // the last resolution drives termination.
+            guard core.requestQuit() else { return .terminateLater }
+            core.finishQuitNow()
             return .terminateLater
         }
     }
@@ -158,10 +145,69 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 }
 
+/// One window of the main `WindowGroup`. The workspace itself is owned by
+/// `AppCore`'s registry, keyed by the window's presented `WorkspaceID`, so
+/// SwiftUI re-initializing this view — which it does freely — rebinds the same
+/// window instead of handing the user a blank one.
+struct WorkspaceHost: View {
+    /// The real app delegate (the adaptor instance) — on macOS `NSApp.delegate`
+    /// is SwiftUI's own wrapper, so casting it to `AppDelegate` fails silently.
+    let appDelegate: AppDelegate
+    /// This host's own identity. A plain object created with the view's
+    /// `@State`, so it lives exactly as long as the window does — and, unlike
+    /// a `WindowGroup` presented value, SwiftUI can neither persist it across
+    /// launches nor re-present a stale one into an existing window.
+    @State private var token = WorkspaceToken()
+    @State private var core = AppCore.shared
+    @AppStorage("sidebarWidth") private var sidebarWidth = 300.0
+    @AppStorage(sidebarAutoHideDefaultsKey) private var sidebarAutoHide = false
+
+    /// Resolved per render rather than captured: the answer is a stable
+    /// dictionary lookup, and resolving late is what lets a window that comes
+    /// up unasked adopt a workspace whose window was closed.
+    private var state: AppState { core.workspace(claiming: token.id) }
+
+    /// The sidebar and notifications panel are fixed-width, so opening the
+    /// notifications panel on a narrow window would otherwise crush the detail
+    /// pane to uselessness (the welcome title wrapping one letter per line).
+    /// Grow the window's minimum width with whichever side panels are showing,
+    /// so the detail pane always keeps at least `detailMinWidth`. Per-window:
+    /// a split in one window must not widen another's minimum.
+    private var minWindowWidth: CGFloat {
+        // A split needs room for two usable panes side by side (2 × 320 + the
+        // seam); a single pane needs one. Without this the split overflows when
+        // the window is small.
+        let detailMinWidth: CGFloat = state.isSplit ? 648 : 360
+        let notifications: CGFloat = state.showNotifications ? 321 : 0
+        // An auto-hidden sidebar overlays the content, so it costs no width.
+        let sidebar: CGFloat = state.sidebarVisible && !sidebarAutoHide
+            ? CGFloat(min(max(sidebarWidth, 300), 460))
+            : 0
+        // The content is laid out at window ÷ fontScale then scaled up, so the
+        // window must be fontScale× wider to give the layout the same logical
+        // room — otherwise zooming in (⌘=) crushes the panes.
+        return max(760, sidebar + detailMinWidth + notifications) * state.fontScale
+    }
+
+    var body: some View {
+        RootView()
+            .environment(state)
+            .frame(minWidth: minWindowWidth, minHeight: 480)
+            .onAppear { state.appDelegate = appDelegate }
+    }
+}
+
+/// A window host's identity token. Reference type so `@State` keeps one per
+/// window for the window's lifetime.
+final class WorkspaceToken {
+    let id = WorkspaceID.generate()
+}
+
 @main
 struct ADTApp: App {
-    @State private var appState: AppState
-    @Environment(\.scenePhase) private var scenePhase
+    /// The app-wide half of the state. Windows get their own `AppState` from
+    /// it; this reference exists so the menus and scenes can reach it.
+    @State private var core = AppCore.shared
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @AppStorage("showMenuBarExtra") private var showMenuBarExtra = true
     @AppStorage("sidebarWidth") private var sidebarWidth = 300.0
@@ -186,37 +232,22 @@ struct ADTApp: App {
     /// ⌘1…⌘9 then ⌘0 — the first ten sidebar rows, app-wide (the Go menu).
     private static let sidebarDigitKeys: [KeyEquivalent] = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]
 
-    /// The sidebar and notifications panel are fixed-width, so opening the
-    /// notifications panel on a narrow window would otherwise crush the detail
-    /// pane to uselessness (the welcome title wrapping one letter per line).
-    /// Grow the window's minimum width with whichever side panels are showing,
-    /// so the detail pane always keeps at least `detailMinWidth`.
-    private var minWindowWidth: CGFloat {
-        // A split needs room for two usable panes side by side (2 × 320 + the
-        // seam); a single pane needs one. Without this the split overflows when
-        // the window is small.
-        let detailMinWidth: CGFloat = appState.isSplit ? 648 : 360
-        let notifications: CGFloat = appState.showNotifications ? 321 : 0
-        // An auto-hidden sidebar overlays the content, so it costs no width.
-        let sidebar: CGFloat = appState.sidebarVisible && !sidebarAutoHide
-            ? CGFloat(min(max(sidebarWidth, 300), 460))
-            : 0
-        // The content is laid out at window ÷ fontScale then scaled up, so the
-        // window must be fontScale× wider to give the layout the same logical
-        // room — otherwise zooming in (⌘=) crushes the panes.
-        return max(760, sidebar + detailMinWidth + notifications) * appState.fontScale
-    }
+    /// The window the menu commands act on: whichever was last key. nil only
+    /// while the app is resident with every window closed, where the commands
+    /// that need one reopen it first.
+    private var appState: AppState? { core.frontmost }
 
     /// Menu title for the Go menu's n-th slot — the live feature name so the
     /// menu doubles as a legend for the ⌘-digit shortcuts.
     /// Terminal-tab commands act on the visible terminal strip, so they enable
     /// only while the Terminal feature is the active tab and has a shell open.
     private var terminalCommandsEnabled: Bool {
-        appState.activeTabID == "terminal" && !appState.terminals.tabs.isEmpty
+        guard let appState else { return false }
+        return appState.activeTabID == "terminal" && !appState.terminals.tabs.isEmpty
     }
 
     private func sidebarShortcutTitle(_ rank: Int) -> String {
-        let features = appState.orderedSidebarMatches
+        let features = appState?.orderedSidebarMatches ?? []
         guard features.indices.contains(rank) else { return "Sidebar Item \(rank + 1)" }
         return "Open \(features[rank].title)"
     }
@@ -224,8 +255,9 @@ struct ADTApp: App {
     init() {
         // HotkeyManager.install is deferred to RootView.onAppear — Carbon
         // hot-key registration needs a running event loop, which App.init
-        // predates.
-        _appState = State(initialValue: AppState(env: AppEnvironment()))
+        // predates. Touching the core here starts its async bootstrap (device
+        // polling, the persisted layout) before the first window renders.
+        _ = AppCore.shared
         // Count this launch for the star-nudge threshold (gated in RootView).
         // Telemetry is anonymous and on by default; start it as early as possible.
         let defaults = UserDefaults.standard
@@ -234,10 +266,11 @@ struct ADTApp: App {
     }
 
     var body: some Scene {
+        // One window per device-scoped workspace. The presented `WorkspaceID`
+        // is what binds a window to its selection, tabs and sessions; a fresh
+        // one means a new workspace, a parked one reopens where it left off.
         WindowGroup(id: "main") {
-            RootView()
-                .environment(appState)
-                .frame(minWidth: minWindowWidth, minHeight: 480)
+            WorkspaceHost(appDelegate: appDelegate)
                 // Force the brand accent on standard controls (prominent
                 // buttons, switches, sliders) so they stay green regardless of
                 // the Mac's system accent color, which otherwise overrides the
@@ -245,34 +278,47 @@ struct ADTApp: App {
                 .tint(.brandAccent)
                 // Re-key on the appearance prefs so changing the accent or font
                 // rebuilds the tree and every `.brandAccent`/`Font.app`
-                // re-resolves. AppState (and its device list) is owned above
-                // this view, so the rebuild preserves it.
+                // re-resolves. The workspace is owned by AppCore, not by this
+                // view, so the rebuild preserves every window's tabs.
                 .id(appearanceKey)
-                .onAppear {
-                    // Wire the delegate ↔ state references through the adaptor
-                    // instance: on macOS `NSApp.delegate` is SwiftUI's own
-                    // wrapper, so casting it to `AppDelegate` fails silently.
-                    appDelegate.appState = appState
-                    appState.appDelegate = appDelegate
-                }
-                .onChange(of: scenePhase) { _, phase in
-                    appState.setForeground(phase == .active)
-                }
         }
         // File opens (double-clicked .apk/.aab) are handled by
         // `AppDelegate.application(_:open:)`; without this, every open event
-        // also makes the WindowGroup spawn a duplicate main window — which
+        // also makes the WindowGroup spawn a duplicate window — which
         // scene restoration then multiplies across launches.
         .handlesExternalEvents(matching: [])
         .windowStyle(.automatic)
         .commands {
             ScreenshotEditCommandsMenu()
 
-            // ⌘N belongs to the Terminal, not "New Window" — a second window of
-            // this single-workspace app was never useful. Replacing .newItem
-            // removes the stock New Window item and its shortcut.
+            // ⌘N stays the Terminal's. Replacing .newItem removes the stock
+            // New Window item, so the workspace window lands on ⇧⌘N — with a
+            // device submenu, since a new window almost always means "and put
+            // this other device in it".
             CommandGroup(replacing: .newItem) {
+                Button("New Window") { core.openNewWindow() }
+                    .keyboardShortcut("n", modifiers: [.command, .shift])
+
+                Menu("New Window for Device") {
+                    let claimed = Set(core.registry.entries.compactMap(\.serial))
+                    ForEach(core.readyDevices) { device in
+                        Button(core.deviceTitle(device)) {
+                            core.openNewWindow(targeting: device.serial)
+                        }
+                        // A device that already has a window would just make a
+                        // duplicate workspace; the picker in that window is the
+                        // way to do it deliberately.
+                        .disabled(claimed.contains(device.serial))
+                    }
+                    if core.readyDevices.isEmpty {
+                        Text("No devices connected")
+                    }
+                }
+
+                Divider()
+
                 Button("New Terminal") {
+                    guard let appState else { return }
                     appState.activateMainWindow()
                     appState.requestFeature("terminal")
                     // An empty rail resumes the remembered session instead of
@@ -289,35 +335,35 @@ struct ADTApp: App {
                 // ⌘D/⇧⌘D split the focused pane, iTerm-style; the new shell
                 // starts in that pane's working directory.
                 Button("Split Terminal Vertically") {
-                    appState.terminals.splitActivePane(.vertical)
+                    appState?.terminals.splitActivePane(.vertical)
                 }
                 .keyboardShortcut("d", modifiers: .command)
                 .disabled(!terminalCommandsEnabled)
 
                 Button("Split Terminal Horizontally") {
-                    appState.terminals.splitActivePane(.horizontal)
+                    appState?.terminals.splitActivePane(.horizontal)
                 }
                 .keyboardShortcut("d", modifiers: [.command, .shift])
                 .disabled(!terminalCommandsEnabled)
 
                 Button("Close Terminal") {
-                    if let id = appState.terminals.activeID { appState.closeTerminalShell(id) }
+                    if let id = appState?.terminals.activeID { appState?.closeTerminalShell(id) }
                 }
                 .keyboardShortcut("w", modifiers: [.command, .shift])
                 .disabled(!terminalCommandsEnabled)
 
                 Button("Rename Terminal…") {
-                    appState.terminals.requestRenameActiveTab()
+                    appState?.terminals.requestRenameActiveTab()
                 }
                 .keyboardShortcut("r", modifiers: [.command, .shift])
                 .disabled(!terminalCommandsEnabled)
 
                 Divider()
 
-                Button("Next Terminal") { appState.terminals.cycle(by: 1) }
+                Button("Next Terminal") { appState?.terminals.cycle(by: 1) }
                     .keyboardShortcut("]", modifiers: [.command, .shift])
                     .disabled(!terminalCommandsEnabled)
-                Button("Previous Terminal") { appState.terminals.cycle(by: -1) }
+                Button("Previous Terminal") { appState?.terminals.cycle(by: -1) }
                     .keyboardShortcut("[", modifiers: [.command, .shift])
                     .disabled(!terminalCommandsEnabled)
             }
@@ -326,27 +372,27 @@ struct ADTApp: App {
                 // ⌘T opens the search palette; the chosen feature opens in a
                 // tab (a new one, or refocuses it if already open).
                 Button("New Tab") {
-                    appState.activateMainWindow()
-                    appState.openPalette?()
+                    appState?.activateMainWindow()
+                    appState?.openPalette?()
                 }
                 .keyboardShortcut("t", modifiers: .command)
 
-                Button("Close Tab") { appState.closeActiveTab() }
+                Button("Close Tab") { appState?.closeActiveTab() }
                     .keyboardShortcut("w", modifiers: .command)
 
                 Divider()
 
                 // Control-based so they don't fight the form fields' Tab focus
                 // traversal or the palette's ⌘1–9 result jumps.
-                Button("Next Tab") { appState.selectNextTab() }
+                Button("Next Tab") { appState?.selectNextTab() }
                     .keyboardShortcut(.tab, modifiers: .control)
-                Button("Previous Tab") { appState.selectPreviousTab() }
+                Button("Previous Tab") { appState?.selectPreviousTab() }
                     .keyboardShortcut(.tab, modifiers: [.control, .shift])
 
                 Divider()
 
                 ForEach(Array(Self.tabDigitKeys.enumerated()), id: \.offset) { index, key in
-                    Button("Show Tab \(index + 1)") { appState.selectTab(index: index) }
+                    Button("Show Tab \(index + 1)") { appState?.selectTab(index: index) }
                         .keyboardShortcut(key, modifiers: .control)
                 }
             }
@@ -356,8 +402,8 @@ struct ADTApp: App {
             CommandMenu("Go") {
                 ForEach(Array(Self.sidebarDigitKeys.enumerated()), id: \.offset) { rank, key in
                     Button(sidebarShortcutTitle(rank)) {
-                        appState.activateMainWindow()
-                        appState.openSidebarFeature(rank: rank)
+                        appState?.activateMainWindow()
+                        appState?.openSidebarFeature(rank: rank)
                     }
                     .keyboardShortcut(key, modifiers: .command)
                 }
@@ -365,8 +411,8 @@ struct ADTApp: App {
 
             CommandGroup(replacing: .appInfo) {
                 Button("About Droidective") {
-                    appState.activateMainWindow()
-                    appState.requestFeature("about")
+                    appState?.activateMainWindow()
+                    appState?.requestFeature("about")
                 }
                 #if !APPSTORE
                 CheckForUpdatesCommand(updater: SparkleUpdater.shared)
@@ -374,21 +420,21 @@ struct ADTApp: App {
             }
 
             CommandGroup(replacing: .help) {
-                Button("Report an Issue…") { appState.reportBug() }
-                Button("Request a Feature…") { appState.requestFeature() }
+                Button("Report an Issue…") { appState?.reportBug() }
+                Button("Request a Feature…") { appState?.requestFeature() }
                 Divider()
-                Button("Droidective on GitHub") { appState.openRepository() }
-                Button("Release Notes") { appState.openReleases() }
+                Button("Droidective on GitHub") { appState?.openRepository() }
+                Button("Release Notes") { appState?.openReleases() }
             }
 
             CommandGroup(after: .textEditing) {
                 Button("Find Feature") {
-                    appState.openPalette?()
+                    appState?.openPalette?()
                 }
 
                 Button("Manage Features") {
-                    appState.activateMainWindow()
-                    appState.requestFeature("catalog")
+                    appState?.activateMainWindow()
+                    appState?.requestFeature("catalog")
                 }
                 .keyboardShortcut(".", modifiers: .command)
 
@@ -399,19 +445,19 @@ struct ADTApp: App {
                 // Disabled outside the Terminal so ⌘F falls through to views
                 // with their own find (e.g. the JS console's filter).
                 Button("Find in Terminal…") {
-                    appState.terminals.activeSession?.showFindBar()
+                    appState?.terminals.activeSession?.showFindBar()
                 }
                 .keyboardShortcut("f", modifiers: .command)
                 .disabled(!terminalCommandsEnabled)
 
                 Button("Find Next") {
-                    appState.terminals.activeSession?.findNext()
+                    appState?.terminals.activeSession?.findNext()
                 }
                 .keyboardShortcut("g", modifiers: .command)
                 .disabled(!terminalCommandsEnabled)
 
                 Button("Find Previous") {
-                    appState.terminals.activeSession?.findPrevious()
+                    appState?.terminals.activeSession?.findPrevious()
                 }
                 .keyboardShortcut("g", modifiers: [.command, .shift])
                 .disabled(!terminalCommandsEnabled)
@@ -419,43 +465,42 @@ struct ADTApp: App {
 
             CommandGroup(after: .sidebar) {
                 Button("Toggle Sidebar") {
-                    appState.toggleSidebar()
+                    appState?.toggleSidebar()
                 }
                 .keyboardShortcut("b", modifiers: .command)
             }
 
             CommandGroup(after: .toolbar) {
                 Button("Increase Font Size") {
-                    appState.increaseFontSize()
+                    appState?.increaseFontSize()
                 }
                 .keyboardShortcut("=", modifiers: .command)
 
                 Button("Decrease Font Size") {
-                    appState.decreaseFontSize()
+                    appState?.decreaseFontSize()
                 }
                 .keyboardShortcut("-", modifiers: .command)
 
                 // ⇧⌘0 — plain ⌘0 belongs to the Go menu's tenth sidebar row.
                 Button("Actual Size") {
-                    appState.resetFontSize()
+                    appState?.resetFontSize()
                 }
                 .keyboardShortcut("0", modifiers: [.command, .shift])
             }
         }
 
         // The pop-out screen mirror (the mirror control bar's window button,
-        // also listed in the Window menu). Sized like a phone by default.
+        // also listed in the Window menu). Sized like a phone by default. It
+        // follows the window that opened it — one pop-out, one owner.
         Window("Screen Mirror", id: MirrorWindow.windowID) {
-            MirrorWindowView()
-                .environment(appState)
+            WorkspaceScopedView(owner: core.mirrorWindowOwner) { MirrorWindowView() }
                 .tint(.brandAccent)
                 .id(appearanceKey)
         }
         .defaultSize(width: 420, height: 850)
 
         Settings {
-            SettingsView()
-                .environment(appState)
+            WorkspaceScopedView { SettingsView() }
                 .tint(.brandAccent)
                 .id(appearanceKey)
                 // The stock ⌘, opens Settings without bringing the app
@@ -471,8 +516,27 @@ struct ADTApp: App {
         }
 
         MenuBarExtra("Droidective", systemImage: "iphone.gen3", isInserted: $showMenuBarExtra) {
-            MenuBarView()
-                .environment(appState)
+            WorkspaceScopedView { MenuBarView() }
+        }
+    }
+}
+
+/// Hosts a view that wants an `AppState` in a scene that isn't a workspace
+/// window — Settings, the mirror pop-out, the menu-bar extra. They act on the
+/// frontmost window and follow it as the user switches, which is why the
+/// environment value is resolved here rather than captured once.
+struct WorkspaceScopedView<Content: View>: View {
+    /// Pin to one workspace instead of following the front. The mirror pop-out
+    /// uses this: there's a single pop-out window, and it should keep showing
+    /// the device of the window that opened it rather than swapping every time
+    /// the user clicks between windows.
+    var owner: WorkspaceID?
+    @State private var core = AppCore.shared
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        if let state = owner.flatMap({ core.workspace(id: $0) }) ?? core.frontmost {
+            content.environment(state)
         }
     }
 }

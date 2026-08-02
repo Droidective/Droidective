@@ -123,6 +123,43 @@ struct DeviceBarView: View {
         state.devices.first { $0.serial == state.selectedSerial }
     }
 
+    // MARK: - Devices in other windows
+
+    /// Ready devices no window is currently showing — what "New Window for…"
+    /// offers, so the common case opens a genuinely new workspace.
+    private var freeDevices: [Device] {
+        let free = Set(state.core.registry.unclaimed(from: state.core.readyDevices.map(\.serial)))
+        return state.core.readyDevices.filter { free.contains($0.serial) }
+    }
+
+    /// One row of the device list. A device another window already shows is
+    /// not stolen on click: it focuses that window instead, which is almost
+    /// always what "where's my Pixel?" means. ⌥-click opens it here anyway,
+    /// for the times two views of one device are the point.
+    @ViewBuilder
+    private func deviceMenuItem(_ device: Device) -> some View {
+        let owner = state.core.registry.owner(ofDevice: device.serial, excluding: state.id)
+        Button {
+            if let owner, !NSEvent.modifierFlags.contains(.option) {
+                state.core.focusWindow(owner)
+            } else {
+                state.requestDevice(device.serial, force: true)
+            }
+        } label: {
+            if device.serial == state.selectedSerial {
+                Label(state.deviceTitle(device), systemImage: "checkmark")
+            } else if let owner {
+                // The window's own name, so the destination is unambiguous
+                // with three windows open.
+                Label(
+                    "\(state.deviceTitle(device))  —  in \(state.core.registry.label(of: owner))",
+                    systemImage: "macwindow")
+            } else {
+                Text(state.deviceTitle(device))
+            }
+        }
+    }
+
     // MARK: - Mirror shortcut
 
     /// Quick jump to Mirror Screen for the selected device. Android only
@@ -154,13 +191,23 @@ struct DeviceBarView: View {
                 Text("No devices connected")
             }
             ForEach(state.devices) { device in
+                deviceMenuItem(device)
+            }
+            Section("Windows") {
                 Button {
-                    state.requestDevice(device.serial)
+                    state.core.openNewWindow()
                 } label: {
-                    if device.serial == state.selectedSerial {
-                        Label(state.deviceTitle(device), systemImage: "checkmark")
-                    } else {
-                        Text(state.deviceTitle(device))
+                    Label("New Window", systemImage: "macwindow.badge.plus")
+                }
+                // Only worth offering while something is actually unclaimed —
+                // otherwise it's a menu of disabled rows.
+                ForEach(freeDevices) { device in
+                    Button {
+                        state.core.openNewWindow(targeting: device.serial)
+                    } label: {
+                        Label(
+                            "New Window for \(state.deviceDisplayName(device))",
+                            systemImage: "macwindow.on.rectangle")
                     }
                 }
             }
@@ -256,9 +303,10 @@ struct DeviceBarView: View {
 
     private var deviceStatusColor: Color {
         guard let device = selectedDevice else { return .textMuted }
-        // Ready rides the accent (it doubles as the bar's active marker);
-        // trouble states keep their semaphore colors.
-        if device.isReady { return .brandAccent }
+        // Trouble states keep their semaphore colors. A healthy device rides
+        // the accent — except with several windows open, where it takes the
+        // device's own tint so two bars aren't identical green at a glance.
+        if device.isReady { return state.deviceTint ?? .brandAccent }
         if device.state == "unauthorized" { return .orange }
         return .red
     }

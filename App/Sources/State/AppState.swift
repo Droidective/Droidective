@@ -83,10 +83,23 @@ struct AppNotification: Identifiable, Equatable {
     let date: Date
 }
 
+/// One window's workspace: its device, its tabs, its terminals and consoles.
+///
+/// The app can have several — see `AppCore`, which owns whatever must exist
+/// once (the device poll, the tool caches, the feature curation, the Reactotron
+/// and MCP listeners) and hands each window an instance of this. Everything
+/// app-wide is forwarded below, so a feature view reads `state.devices` or
+/// `state.layout` without knowing which window it's in.
 @MainActor
 @Observable
 final class AppState {
-    let env: AppEnvironment
+    /// The app-wide half. Every window shares one.
+    let core: AppCore
+    /// This window's stable identity for the session — the key into
+    /// `AppCore`'s registry and the persisted `WindowState`.
+    let id: WorkspaceID
+
+    var env: AppEnvironment { core.env }
 
     /// APK Studio's loaded-APK session. In-memory, so it resumes across
     /// navigation within a run and is cleared when the app quits (the decompiled
@@ -98,22 +111,9 @@ final class AppState {
     /// arrives). In-memory like the studio session.
     let apkOpen = ApkOpenSession()
 
-    /// Everything connected, both platforms: adb devices first, then booted
-    /// iOS Simulators. Rebuilt whenever either monitor publishes.
-    var devices: [Device] = []
-    /// The two platform streams, merged into `devices` — kept separately so
-    /// one monitor's update never drops the other's list.
-    private var androidDevices: [Device] = []
-    private var simulatorDevices: [Device] = []
-    /// Android Studio AVDs, for launching an emulator straight from the device
-    /// bar. Refreshed when the connected set changes (see `refreshAvds`); ones
-    /// with a `runningSerial` are already in `devices`.
-    var availableAvds: [Avd] = []
-    /// Xcode iOS Simulators not currently booted, for the device-bar "Start a
-    /// simulator" section — the AVD list's simctl twin.
-    var availableSimulators: [Simulator] = []
     /// Switch via `requestDevice(_:)`, not direct assignment — that routes the
-    /// change through the leave guard so an active recording isn't lost.
+    /// change through the leave guard so an active recording isn't lost, and
+    /// keeps the core's registry (which window owns which device) in step.
     private(set) var selectedSerial: String?
     var runOnAll = false
     var searchText = ""
@@ -150,10 +150,6 @@ final class AppState {
     var openFeatureIDs: [String] { workspace.groups.flatMap(\.openTabs) }
     /// The active tab of pane `index`.
     func activeTab(inGroup index: Int) -> String? { workspace.activeTab(inGroup: index) }
-    var layout = LayoutState()
-    /// Per-feature usage tally (persisted), used to re-rank the launchpad's
-    /// curated feature order by how the user actually works.
-    var usageStats = UsageStats()
     var toasts: [Toast] = []
     /// History of important notifications (errors, warnings, key wins), newest
     /// first. Routine success toasts are not kept.
@@ -233,12 +229,6 @@ final class AppState {
     /// A navigation deferred until the user resolves the relevant `exitGuards`
     /// entry (close a guarded tab, switch device, or quit with work in flight).
     private(set) var pendingExit: PendingExit?
-    /// The Reactotron server + timeline, owned here (not by the view) so leaving
-    /// the feature can keep the connection alive and return to an intact session.
-    let reactotronSession: ReactotronSession
-    /// Settings ▸ MCP: serves the Reactotron relay's data to AI agents over
-    /// localhost Streamable HTTP. Strictly downstream of the relay.
-    let mcp = McpCoordinator()
 
     /// The JS Console (Hermes CDP) session — owned here so its log buffer and
     /// connection survive leaving the feature, like the Reactotron session.
@@ -325,22 +315,21 @@ final class AppState {
         UserDefaults.standard.set(fontScaleStep, forKey: "fontScaleStep")
     }
 
-    var bundles: [AppBundle] = []
+    /// The app bundle this window targets. Per-window, so two devices can be
+    /// driven against different apps; a new window inherits the last choice.
     var selectedBundleId: String?
-    var adbStatus: ToolStatus?
     /// An `.aab` opened from Finder (double-click / Open With), staged for the
     /// AAB to APK feature. The view consumes (clears) it once shown.
     var pendingConvertAAB: URL?
-    /// Set by RootView so hotkeys/menu bar can reopen a closed main window.
-    var openMainWindow: (() -> Void)?
     /// The real app delegate (the adaptor instance, wired in `ADTApp.body`) —
     /// `NSApp.delegate` is SwiftUI's wrapper on macOS, so casting it fails.
     weak var appDelegate: AppDelegate?
-    /// The main window, resolved by RootView's `WindowAccessor`. Held by
+    /// This window, resolved by RootView's `WindowAccessor`. Held by
     /// *reference* because identifiers can't be trusted across a close:
-    /// SwiftUI re-stamps its own (`main-AppWindow-1`) over our tag, which
-    /// broke the ⌘W tab-close monitor after a close → reopen cycle.
-    weak var mainWindow: NSWindow?
+    /// SwiftUI re-stamps its own (`main-AppWindow-1`) over any tag, which
+    /// broke the ⌘W tab-close monitor after a close → reopen cycle. It's also
+    /// how the app-wide event monitors map a key window back to its workspace.
+    weak var nsWindow: NSWindow?
     /// Set by RootView; opens the floating ⌘T search palette.
     var openPalette: (() -> Void)?
     struct OperationStatus: Equatable {
@@ -463,13 +452,8 @@ final class AppState {
     }
     /// Last result per feature id, shown inline in the detail pane.
     var lastResults: [String: (result: FeatureResult, at: Date)] = [:]
-    /// Per-serial enrichment for the device picker (version, battery).
-    var deviceDetails: [String: DeviceDetails] = [:]
-    /// Serials already reported to analytics this session, so `device_connected`
-    /// fires once per device (the serial is used only locally, never sent).
-    private var reportedDeviceSerials: Set<String> = []
 
-    /// Bring the app forward, reopening the main window if it was closed. When
+    /// Bring the app forward, reopening this window if it was closed. When
     /// resident in the background (no Dock icon — see `AppDelegate`), rejoin
     /// the Dock first; that policy flip needs a runloop turn before activation
     /// reliably fronts the window, so that path hops once.
@@ -500,124 +484,98 @@ final class AppState {
         // The tracked reference first (identifiers are unreliable across a
         // close); the structural fallback excludes panels, whose KeyablePanel
         // overrides `canBecomeMain` to true.
-        let window = mainWindow
-            ?? NSApp.windows.first { $0.canBecomeMain && !($0 is NSPanel) }
-        if let window {
-            window.makeKeyAndOrderFront(nil)
+        if let nsWindow {
+            nsWindow.makeKeyAndOrderFront(nil)
         } else {
-            openMainWindow?()
+            // Parked by a background-mode close: reopen with *this* id so the
+            // window comes back to its own tabs, not a blank workspace.
+            core.reopenWindow(for: id)
         }
         setForeground(true)
     }
 
-    var adbMissing: Bool { adbStatus?.installed == false }
-
-    private var deviceStreamTask: Task<Void, Never>?
-    private var simulatorStreamTask: Task<Void, Never>?
-    /// Set the moment the user picks a role this session, so `bootstrap`'s
-    /// async layout load can't overwrite the just-seeded curation.
-    private var roleChosenThisSession = false
-
-    /// False until `bootstrap` has loaded the persisted layout. Until then the
-    /// in-memory `layout` is still the default, so persisting it would clobber
-    /// the user's saved layout — `persistLayout` no-ops while this is false.
-    private(set) var didLoadLayout = false
     /// Feature opens that arrived before the layout finished loading (e.g. an
     /// APK double-clicked in Finder on cold launch). Replayed after restore.
     private var pendingFeatureOpens: [String] = []
+    /// False until this window has taken its persisted state (or been told
+    /// there is none). Guards tab persistence the same way `didLoadLayout`
+    /// does app-wide — writing before the restore would clobber the file.
+    private(set) var didRestore = false
+    /// False until a real `NSWindow` has bound to this workspace. Nothing is
+    /// written to disk before that, so a workspace SwiftUI asks for but never
+    /// shows can't leave a ghost window behind for the next launch.
+    private(set) var didBind = false
 
-    init(env: AppEnvironment) {
-        self.env = env
+    /// Called by `AppCore.bind` once this workspace has a window on screen.
+    func noteBound() {
+        guard !didBind else { return }
+        didBind = true
+        persistWindowState()
+    }
+
+    init(core: AppCore, id: WorkspaceID) {
+        self.core = core
+        self.id = id
         let savedStep = UserDefaults.standard.object(forKey: "fontScaleStep") as? Int ?? Self.defaultScaleIndex
         fontScaleStep = min(max(savedStep, 0), Self.scales.count - 1)
-        reactotronSession = ReactotronSession(client: env.client)
-        jsConsoleSession = JSConsoleSession(adb: env.client)
-        reactotronSession.app = self
+        jsConsoleSession = JSConsoleSession(adb: core.env.client)
         jsConsoleSession.app = self
-        mcp.app = self
         // Typing `exit` (or a shell crash) closes that tab like the × does.
         // The contains-check drops late callbacks racing a killAll teardown.
         terminals.onShellExited = { [weak self] id in
             guard let self, self.terminals.tabs.contains(where: { $0.id == id }) else { return }
             self.closeTerminalShell(id)
         }
-        Task { await bootstrap() }
     }
 
-    private func bootstrap() async {
-        let prefs = await env.stores.prefs.load()
-        selectedSerial = prefs.selectedSerial
-        runOnAll = prefs.runOnAll
-        selectedBundleId = prefs.selectedBundleId
-        let loadedLayout = await env.stores.layout.load()
-        // A brand-new user can pick a role — which seeds `layout` — while these
-        // async store loads are still in flight; don't clobber that seed.
-        var layoutChanged = false
-        if !roleChosenThisSession {
-            layout = loadedLayout
-            layoutChanged = layout.adoptNewDefaults()
-            layoutChanged = layout.adoptAllEnabled() || layoutChanged
-            layoutChanged = layout.adoptNewRoleFeatures() || layoutChanged
+    /// Adopt this window's persisted state, or start fresh when `saved` is nil
+    /// (a window the user opened rather than one being reopened at launch).
+    /// Called once, by `AppCore`, as soon as the layout has loaded.
+    func restore(from saved: WindowState?) {
+        guard !didRestore else { return }
+        didRestore = true
+        if let saved {
+            selectedSerial = saved.serial
+            selectedBundleId = saved.bundleId
+            terminalResumeDirs = saved.terminalResumeDirs
             // Reopen the tabs from the last session (idle — recordings/streams
-            // don't resume). Falls back to a single Home tab for a new user or a
-            // layout written before tabs existed.
-            restoreTabs(from: layout)
+            // don't resume). Falls back to a single Home tab for a new user or
+            // a layout written before tabs existed.
+            workspace = Workspace(
+                restoring: saved.tabGroups ?? [],
+                focusedGroup: saved.focusedGroup,
+                fallback: "home",
+                isValidID: Self.isValidTabID
+            )
+        } else {
+            // A new window: target the device it was opened for (or the first
+            // one no other window is showing) and inherit the last app bundle.
+            selectedBundleId = core.lastSelectedBundleId
+            selectedSerial = core.takeWindowTarget(id) ?? firstFreeSerial()
         }
-        didLoadLayout = true
-        // MCP enabled in a previous run comes back up with the app.
-        if mcp.isEnabled { mcp.applySettings() }
-        // Replay feature opens that raced the load (e.g. openAPKs from Finder),
-        // then persist for the first time now that `layout` is authoritative.
-        for id in pendingFeatureOpens {
-            workspace.open(id)
-        }
-        // Persist if defaults were adopted, an open raced the load, or a role was
-        // seeded while loading (chooseRole's persistTabs no-op'd before load).
-        if layoutChanged || !pendingFeatureOpens.isEmpty || roleChosenThisSession {
-            persistTabs()
+        // Replay feature opens that raced the load (e.g. openAPKs from Finder).
+        for pending in pendingFeatureOpens {
+            workspace.open(pending)
         }
         pendingFeatureOpens = []
-        usageStats = await env.stores.usage.load()
-        bundles = await env.stores.bundles.load()
-
-        // Subscribe both device streams before the tool probe: adb detection
-        // can spend seconds in the login shell, and the bar shouldn't sit
-        // empty that long (the simulator poll doesn't need adb at all).
-        deviceStreamTask = Task { [weak self, monitor = env.monitor] in
-            // This Task inherits AppState's @MainActor isolation, so the loop
-            // body already runs on the main actor — no extra hop needed.
-            for await devices in await monitor.updates() {
-                guard let self else { break }
-                self.androidDevices = devices
-                self.devicesChanged(self.androidDevices + self.simulatorDevices)
-            }
-        }
-        simulatorStreamTask = Task { [weak self, monitor = env.simulatorMonitor] in
-            for await simulators in await monitor.updates() {
-                guard let self else { break }
-                self.simulatorDevices = simulators
-                self.devicesChanged(self.androidDevices + self.simulatorDevices)
-            }
-        }
-        await refreshToolStatus()
+        core.noteSelection(selectedSerial, in: id)
+        core.noteOpenFeatures(Set(openFeatureIDs), in: id)
+        persistWindowState()
+        if selectedSerial != nil { Task { await refreshOverrides() } }
     }
 
-    func refreshToolStatus() async {
-        adbStatus = await env.engine.toolDetection.detectAdb()
+    /// A ready device no other window is showing — what a brand-new window
+    /// lands on, so opening a second window usually needs no further clicks.
+    /// Falls back to any ready device when every one is already claimed.
+    private func firstFreeSerial() -> String? {
+        let ready = core.readyDevices.map(\.serial)
+        return core.registry.unclaimed(from: ready).first ?? ready.first
     }
 
-    private func devicesChanged(_ devices: [Device]) {
-        // The role scopes which platforms exist for this user: iOS Developer
-        // sees only simulators, the Android-first roles only adb devices, and
-        // "all features" both. Filter here — the single merge point — so the
-        // bar, pickers, and run targets all agree.
-        let platforms = FeatureRegistry.visiblePlatforms(for: selectedRole)
-        let devices = devices.filter { platforms.contains($0.platform) }
-        self.devices = devices
-        // The Reactotron session outlives its view ("keep connection alive"),
-        // so tunnel recovery for (re)appearing devices must hook in here, not
-        // in the view.
-        reactotronSession.deviceListChanged()
+    /// Reconcile this window's selection against a new device list: drop a
+    /// device that left, adopt one when we had none, and refetch overrides
+    /// when either happened.
+    func reconcileSelection(among devices: [Device]) {
         let ready = devices.filter(\.isReady)
         // "Run on all" only makes sense with more than one device.
         if ready.count <= 1, runOnAll {
@@ -626,9 +584,16 @@ final class AppState {
         }
         let before = selectedSerial
         if let selectedSerial, !devices.contains(where: { $0.serial == selectedSerial }) {
-            self.selectedSerial = ready.first?.serial
-        } else if selectedSerial == nil {
-            selectedSerial = ready.first?.serial
+            // Prefer a device no other window has taken, so two windows don't
+            // collapse onto the same device when one unplugs.
+            self.selectedSerial = core.registry.unclaimed(from: ready.map(\.serial))
+                .first { $0 != selectedSerial } ?? ready.first?.serial
+        } else if selectedSerial == nil, didRestore {
+            selectedSerial = firstFreeSerial()
+        }
+        if selectedSerial != before {
+            core.noteSelection(selectedSerial, in: id)
+            persistWindowState()
         }
         // Refetch overrides when the selection changed, or once when the
         // selected device becomes ready — not on every unrelated device-list
@@ -638,68 +603,6 @@ final class AppState {
         if selectedSerial != before || (readySelected && overridesFetchedForSerial != selectedSerial) {
             Task { await refreshOverrides() }
         }
-        // Picker enrichment reads getprop over adb — Android only; a
-        // simulator's runtime label already rides in `Device.product`.
-        for device in ready
-        where device.platform == .android && deviceDetails[device.serial] == nil
-            && !deviceDetailsFetching.contains(device.serial) {
-            deviceDetailsFetching.insert(device.serial)
-            Task {
-                let details = await DeviceDetails.fetch(client: env.client, serial: device.serial)
-                deviceDetails[device.serial] = details
-                deviceDetailsFetching.remove(device.serial)
-                reportDeviceConnected(device)
-            }
-        }
-    }
-
-    /// Serials with a `DeviceDetails.fetch` in flight, so a device-list change
-    /// mid-fetch doesn't spawn a duplicate getprop probe.
-    private var deviceDetailsFetching: Set<String> = []
-
-    /// Emit an anonymous `device_connected` once per device this session (no
-    /// serial leaves the machine — it's only the local dedup key). Android
-    /// only — simulators skip the details fetch that triggers it.
-    private func reportDeviceConnected(_ device: Device) {
-        guard reportedDeviceSerials.insert(device.serial).inserted else { return }
-        Telemetry.shared.trackDeviceConnected(
-            isEmulator: device.serial.hasPrefix("emulator-"),
-            isWireless: device.isWireless
-        )
-    }
-
-    /// The device's human name: a running emulator shows its AVD name
-    /// ("Medium Tablet") — every emulator otherwise carries the same generic
-    /// system-image model ("sdk gphone64 arm64") — and everything else keeps
-    /// its adb label.
-    func deviceDisplayName(_ device: Device) -> String {
-        if device.serial.hasPrefix("emulator-"),
-           let avd = availableAvds.first(where: { $0.runningSerial == device.serial }) {
-            return avd.displayName
-        }
-        return device.label
-    }
-
-    /// Picker label with enrichment: "Pixel 7 (005F) · Android 14 · 82%",
-    /// or "iPhone 16 Pro · iOS 18.2 · Simulator" for a booted simulator.
-    func deviceTitle(_ device: Device) -> String {
-        guard device.isReady else {
-            return device.state == "unauthorized"
-                ? "\(deviceDisplayName(device)) — accept the prompt on the device"
-                : "\(deviceDisplayName(device)) — \(device.state)"
-        }
-        var parts = [deviceDisplayName(device)]
-        switch device.platform {
-        case .android:
-            if let details = deviceDetails[device.serial] {
-                if let version = details.androidVersion { parts.append("Android \(version)") }
-                if let battery = details.batteryLevel { parts.append("\(battery)%") }
-            }
-        case .iosSimulator:
-            if let runtime = device.product { parts.append(runtime) }
-            parts.append("Simulator")
-        }
-        return parts.joined(separator: " · ")
     }
 
     // MARK: - Overrides
@@ -764,13 +667,6 @@ final class AppState {
         }
     }
 
-    /// Toolchain for a serial in the current device set — Android when unknown
-    /// (a device that just disconnected mid-run was adb-backed in every
-    /// existing flow).
-    func platform(for serial: String) -> DevicePlatform {
-        devices.first { $0.serial == serial }?.platform ?? .android
-    }
-
     var selectedDevice: Device? {
         devices.first { $0.serial == selectedSerial }
     }
@@ -805,11 +701,6 @@ final class AppState {
     /// single-device one.
     var effectiveRunOnAll: Bool { runOnAll && activeFeatureSupportsRunAll }
 
-    func refreshDevices() {
-        Task { await env.monitor.invalidate() }
-        Task { await env.simulatorMonitor.invalidate() }
-    }
-
     /// Drop a wireless adb connection (one device, or all when `target` is nil).
     /// USB/emulator devices can't be disconnected this way — the device bar
     /// only offers this for wireless devices.
@@ -825,16 +716,6 @@ final class AppState {
                 }
             }
         }
-    }
-
-    /// Ready devices that are wireless (serial is ip:port) — eligible for
-    /// the device bar's Disconnect control.
-    var readyWirelessDevices: [Device] {
-        devices.filter { $0.isReady && $0.isWireless }
-    }
-
-    var readyDeviceCount: Int {
-        devices.filter(\.isReady).count
     }
 
     // MARK: - Leave guard (protect in-flight recordings / unsaved edits)
@@ -907,14 +788,22 @@ final class AppState {
     /// stay mounted), so there's no leave guard.
     func requestFeature(_ id: String) {
         Telemetry.shared.trackFeatureUsed(id, kind: FeatureRegistry.byID[id]?.kind.rawValue ?? "view")
-        workspace.open(id)
-        if didLoadLayout {
-            persistTabs()
-        } else {
-            // The layout hasn't finished loading; record the open so bootstrap
-            // can replay and persist it without a default layout clobbering disk.
+        guard didRestore else {
+            // This window hasn't taken its persisted state yet; record the open
+            // so `restore` can replay it without a default clobbering disk.
             pendingFeatureOpens.append(id)
+            return
         }
+        workspace.open(id)
+        persistTabs()
+    }
+
+    /// This window's device-icon color, or nil to use the app accent. Only the
+    /// windows *after* the first take one, so a single-window session and the
+    /// original window both keep the accent the rest of the app uses.
+    var deviceTint: Color? {
+        guard let ordinal = core.registry.ordinal(of: id) else { return nil }
+        return DeviceTint.color(forWindow: ordinal)
     }
 
     /// What put the "close all terminals?" prompt on screen: closing the
@@ -959,9 +848,9 @@ final class AppState {
             if confirmed {
                 rememberTerminalDirectories()
                 terminals.killAll()
-                quitNow()
+                core.resumeQuit()
             } else {
-                cancelDeferredQuit()
+                core.cancelQuit()
             }
         }
     }
@@ -1053,7 +942,11 @@ final class AppState {
     private func stopBackgroundWork(for id: String) {
         // With MCP on, the relay must survive tab/window close — agents keep
         // querying while the user isn't looking (Settings ▸ MCP turns it off).
-        if id == "reactotron", reactotronSession.isRunning, !mcp.keepsRelayAlive {
+        // The relay is app-wide, so another window still showing it keeps it
+        // up too: this window's close must not pull the timeline out from
+        // under the other one.
+        if id == "reactotron", reactotronSession.isRunning, !mcp.keepsRelayAlive,
+           !core.featureIsOpenElsewhere("reactotron", excluding: self.id) {
             Task { await reactotronSession.stop() }
         }
         if id == "js-console" {
@@ -1069,23 +962,33 @@ final class AppState {
         }
     }
 
+    /// Save this window's tabs into the shared layout's per-window record.
     private func persistTabs() {
-        layout.tabGroups = workspace.groups.map { TabGroupState(tabs: $0.openTabs, activeTab: $0.activeTab) }
-        layout.focusedGroup = workspace.focusedGroup
-        persistLayout()
+        core.noteOpenFeatures(Set(openFeatureIDs), in: id)
+        persistWindowState()
     }
 
-    /// Reopen persisted panes (idle — live sessions don't resume). All the
-    /// trimming/validation invariants live in `Workspace`; this just supplies the
-    /// registry validity check and the Home fallback.
-    private func restoreTabs(from layout: LayoutState) {
-        workspace = Workspace(
-            restoring: layout.tabGroups ?? [],
-            focusedGroup: layout.focusedGroup,
-            fallback: "home",
-            isValidID: Self.isValidTabID
-        )
+    /// Write this window's whole record (device, bundle, tabs, terminal-resume
+    /// directories) into the shared layout and flush it. No-ops until the
+    /// window has restored, so an empty default can't clobber the saved file.
+    func persistWindowState() {
+        guard didRestore, didBind else { return }
+        core.layout.upsertWindow(WindowState(
+            id: id,
+            serial: selectedSerial,
+            bundleId: selectedBundleId,
+            tabGroups: workspace.groups.map {
+                TabGroupState(tabs: $0.openTabs, activeTab: $0.activeTab)
+            },
+            focusedGroup: workspace.focusedGroup,
+            terminalResumeDirs: terminalResumeDirs
+        ))
+        core.persistLayout()
     }
+
+    /// Working directories of this window's terminal tabs at the last implicit
+    /// teardown — the next Terminal open in *this* window resumes them.
+    var terminalResumeDirs: [String]?
 
     /// Ids that can back a tab: every registry feature plus the standalone
     /// Home / About / Catalog screens and the Finder-opened-APK screen.
@@ -1093,79 +996,80 @@ final class AppState {
         FeatureRegistry.byID[id] != nil || ["home", "about", "catalog", "apk-open"].contains(id)
     }
 
-    private var isForeground = true
-    private var quickPanelOpen = false
-
-    /// Widen device polling while the app is backgrounded so an idle, hidden
-    /// window stops spawning `adb devices` / `simctl list` every few seconds;
-    /// restore it on foreground.
-    func setForeground(_ active: Bool) {
-        isForeground = active
-        applyPollInterval()
-    }
-
-    /// An open Quick Actions panel needs a fresh device list even while the
-    /// app is backgrounded, so it counts as foreground for the poll rate.
-    func setQuickPanelOpen(_ open: Bool) {
-        quickPanelOpen = open
-        applyPollInterval()
-        // The panel's device rows name emulators by their AVD
-        // (`deviceDisplayName`) — refresh the AVD↔serial mapping on open, so
-        // it's right even when the main window (whose device bar usually
-        // keeps it fresh) has been closed all along.
-        if open {
-            Task { await refreshAvds() }
-        }
-    }
-
-    private func applyPollInterval() {
-        let active = isForeground || quickPanelOpen
-        let interval: Duration = active ? .seconds(2) : .seconds(10)
-        Task { [monitor = env.monitor] in await monitor.setPollInterval(interval) }
-        let simInterval: Duration = active ? .seconds(3) : .seconds(15)
-        Task { [monitor = env.simulatorMonitor] in await monitor.setPollInterval(simInterval) }
-    }
-
-    /// The main window closed with background mode on (Settings ▸ General).
-    /// Stop the kept-alive sessions — terminal shells, the Reactotron server,
-    /// JS-console reverse tunnels — so no feature process outlives the UI
+    /// This window closed. Stop the sessions it owns — terminal shells,
+    /// JS-console reverse tunnels, and the shared Reactotron relay when no
+    /// other window still shows it — so no feature process outlives the UI
     /// (view-owned work like recordings and log streams already dies with its
-    /// view), and widen device polling. The tabs stay in the workspace, so
-    /// reopening the window restores them idle.
+    /// view). The tabs stay in the persisted record, so reopening restores them
+    /// idle.
     func enterBackground() {
-        for id in openFeatureIDs {
-            stopBackgroundWork(for: id)
+        for featureID in openFeatureIDs {
+            stopBackgroundWork(for: featureID)
         }
-        setForeground(false)
+    }
+
+    /// `AppCore` calls this when the window is gone for good: same teardown as
+    /// backgrounding, plus a final write of what the tabs looked like.
+    func tearDownForWindowClose() {
+        enterBackground()
+        persistWindowState()
+    }
+
+    /// Role change: back to a single Home tab. The reset drops every open tab
+    /// without routing through `performClose`, so stop each one's background
+    /// work explicitly — otherwise kept-alive sessions (terminal shells, the
+    /// Reactotron server) leak with no UI left to reach them.
+    func resetForRoleChange() {
+        for featureID in workspace.groups.flatMap(\.openTabs) {
+            stopBackgroundWork(for: featureID)
+        }
+        workspace.reset()
+        persistTabs()
+        presentRolePicker = false
     }
 
     /// Switch the active device, or hold it behind a confirmation when a guard
     /// is active.
-    func requestDevice(_ serial: String) {
+    ///
+    /// A device another window already shows is not stolen by default: the
+    /// picker focuses that window instead (`DeviceBarView`), and only an
+    /// explicit "open it here anyway" reaches this with `force`.
+    func requestDevice(_ serial: String, force: Bool = false) {
         guard serial != selectedSerial else { return }
+        if !force, let owner = core.registry.owner(ofDevice: serial, excluding: id) {
+            core.focusWindow(owner)
+            return
+        }
         if exitGuards.isEmpty {
-            selectedSerial = serial
-            persistSelection()
+            applySelection(serial)
         } else {
             pendingExit = PendingExit(target: .device(serial))
         }
     }
 
-    /// Called from `applicationShouldTerminate`. Returns true to quit now; false
-    /// means losable work is in flight — the leave prompt is shown and the
-    /// resolution drives termination (see `quitNow` / `cancelExit`).
-    func requestQuit() -> Bool {
+    /// Commit a device switch: update the registry (so the other windows'
+    /// pickers reflect it immediately), refetch overrides, and persist.
+    private func applySelection(_ serial: String?) {
+        selectedSerial = serial
+        core.noteSelection(serial, in: id)
+        persistSelection()
+        Task { await refreshOverrides() }
+    }
+
+    /// Whether quitting would destroy work in *this* window — an active
+    /// recording / unsaved edit, or live terminal shells. `AppCore` walks every
+    /// window and prompts them one at a time.
+    var blocksQuit: Bool { !exitGuards.isEmpty || !terminals.tabs.isEmpty }
+
+    /// Put this window's quit confirmation on screen. Guards come first: a
+    /// recording is the more destructive loss, and `performPendingExit`
+    /// resumes the chain either way.
+    func beginQuitPrompt() {
         if !exitGuards.isEmpty {
             pendingExit = PendingExit(target: .quit)
-            return false
-        }
-        // Live shells are losable work too: quitting kills them all, so it
-        // gets the same confirmation closing the Terminal tab does.
-        if !terminals.tabs.isEmpty {
+        } else if !terminals.tabs.isEmpty {
             terminalClosePrompt = .quit
-            return false
         }
-        return true
     }
 
     /// "Discard" / "Discard changes": drop the at-risk work and run the deferred
@@ -1185,21 +1089,7 @@ final class AppState {
     func cancelExit() {
         let wasQuit = pendingExit?.target == .quit
         pendingExit = nil
-        if wasQuit { cancelDeferredQuit() }
-    }
-
-    /// Abandon a quit `applicationShouldTerminate` deferred: clear the
-    /// delegate's in-quit flag first, so a later window close still routes
-    /// through background mode instead of being mistaken for quit teardown.
-    /// The updater must hear about it too — a quit it requested that got
-    /// cancelled here would otherwise leave its pill on "Installing…"
-    /// forever (that phase's only exit was this quit).
-    private func cancelDeferredQuit() {
-        appDelegate?.isQuitting = false
-        #if !APPSTORE
-            SparkleUpdater.shared.noteQuitDeclined()
-        #endif
-        NSApp.reply(toApplicationShouldTerminate: false)
+        if wasQuit { core.cancelQuit() }
     }
 
     /// "Stop & save": ask the active view to save (it observes `pendingExit`),
@@ -1214,34 +1104,22 @@ final class AppState {
         pendingExit = nil
         switch pending.target {
         case .closeTab(let id): performClose(id)
-        case .device(let serial): selectedSerial = serial; persistSelection()
-        case .quit: quitNow()
+        case .device(let serial): applySelection(serial)
+        // This window is clear; the next one with work at stake gets its turn.
+        case .quit: core.resumeQuit()
         }
     }
 
-    /// Finish a deferred quit: tear down a kept-alive Reactotron session (as the
-    /// normal quit path does), then let termination proceed.
-    private func quitNow() {
-        // A quit deferred by an exit guard skips the terminal prompt entirely
-        // (`requestQuit` checks guards first), so shells can still be alive
-        // here — remember their directories before the process takes them
-        // down. The prompt-confirmed path already snapshotted and killed them,
-        // leaving the rail empty, so this doesn't overwrite that snapshot.
+    /// Snapshot the shells' directories on the way out of a quit, so the next
+    /// launch resumes them. A quit deferred by an exit guard skips the terminal
+    /// prompt entirely, so shells can still be alive here; the prompt-confirmed
+    /// path already snapshotted and killed them, leaving the rail empty, so
+    /// this doesn't overwrite that snapshot.
+    func snapshotTerminalsForQuit() {
         if !terminals.tabs.isEmpty {
             rememberTerminalDirectories()
         }
-        Task {
-            await mcp.stopForQuit()
-            if reactotronSession.isRunning { await reactotronSession.stopForQuit() }
-            // Flush the layout store before termination proceeds —
-            // `persistLayout` saves through a fire-and-forget Task, and the
-            // write racing process exit would lose whatever this quit just
-            // recorded (the terminal-resume snapshot above included).
-            if didLoadLayout {
-                try? await env.stores.layout.save(layout)
-            }
-            NSApp.reply(toApplicationShouldTerminate: true)
-        }
+        persistWindowState()
     }
 
     // MARK: - Feature running
@@ -1442,64 +1320,6 @@ final class AppState {
         #endif
     }
 
-    // MARK: - Role
-
-    /// Apply the user's role choice (first-run or "Change role"): curate the
-    /// enabled set + sidebar order to that role, or keep everything on for
-    /// `nil` ("show me everything"). Persists and lands on the launchpad.
-    func chooseRole(_ role: UserRole?, includeReactNativeStack: Bool = false) {
-        let isChange = layout.selectedRole != nil
-        Telemetry.shared.trackRoleChosen(role?.rawValue ?? "all", isChange: isChange)
-        Telemetry.shared.applyRole(role?.rawValue)
-        if let role {
-            layout.seedRole(role, includeReactNativeStack: includeReactNativeStack)
-        } else {
-            layout.seedEverything()
-        }
-        roleChosenThisSession = true
-        // Re-apply the role's platform visibility: drop devices the new role
-        // can't see and refresh the device-bar launch lists (a hidden
-        // platform's list empties, which removes its menu section).
-        devicesChanged(androidDevices + simulatorDevices)
-        Task {
-            await refreshAvds()
-            await refreshSimulators()
-        }
-        // Start the freshly-chosen role on a single Home tab, no split. The
-        // reset drops every open tab without routing through performClose, so
-        // stop each one's background work explicitly — otherwise kept-alive
-        // sessions (terminal shells, the Reactotron server) leak with no UI
-        // left to reach them.
-        // A role without Reactotron also loses the Settings ▸ MCP tab — a
-        // running MCP server would have no visible off-switch, so turn it
-        // off with the role switch (re-enable any time from a role that has
-        // the feature). Before the stop loop below: with the pref cleared,
-        // `keepsRelayAlive` no longer exempts the Reactotron session.
-        if mcp.isEnabled, role != nil, role != .reactNativeDeveloper,
-           !enabledFeatures.contains(where: { $0.id == "reactotron" }) {
-            UserDefaults.standard.set(false, forKey: mcpEnabledKey)
-            mcp.applySettings()
-        }
-        for id in workspace.groups.flatMap(\.openTabs) {
-            stopBackgroundWork(for: id)
-        }
-        workspace.reset()
-        persistTabs()
-        presentRolePicker = false
-    }
-
-    /// The user's current role, nil when they chose "show me everything".
-    var selectedRole: UserRole? {
-        layout.selectedRole.flatMap(UserRole.init(rawValue:))
-    }
-
-    private func persistUsage() {
-        let snapshot = usageStats
-        Task {
-            try? await env.stores.usage.save(snapshot)
-        }
-    }
-
     // MARK: - Bundles
 
     var selectedBundle: AppBundle? {
@@ -1507,42 +1327,15 @@ final class AppState {
     }
 
     func addBundle(nickname: String, packageId: String) {
-        let bundle = AppBundle(
-            nickname: nickname.isEmpty ? packageId : nickname,
-            packageId: packageId,
-            createdAt: Date().timeIntervalSince1970 * 1000
-        )
-        bundles.append(bundle)
-        selectBundle(bundle.id)
-        persistBundles()
+        selectBundle(core.addBundle(nickname: nickname, packageId: packageId).id)
     }
 
-    func updateBundle(_ bundle: AppBundle) {
-        guard let index = bundles.firstIndex(where: { $0.id == bundle.id }) else { return }
-        bundles[index] = bundle
-        persistBundles()
-    }
-
-    func removeBundle(id: String) {
-        bundles.removeAll { $0.id == id }
-        if selectedBundleId == id {
-            selectBundle(bundles.first?.id)
-        }
-        persistBundles()
-    }
-
+    /// Pick this window's target app. The choice is per-window; the core also
+    /// records it as the default a newly opened window starts on.
     func selectBundle(_ id: String?) {
         selectedBundleId = id
-        Task {
-            try? await env.stores.prefs.update { $0.selectedBundleId = id }
-        }
-    }
-
-    private func persistBundles() {
-        let snapshot = bundles
-        Task {
-            try? await env.stores.bundles.save(snapshot)
-        }
+        core.noteBundleSelected(id)
+        persistWindowState()
     }
 
     /// Quick capture (sidebar ⏎, global hotkey, menu bar): grab and save
@@ -1644,14 +1437,63 @@ final class AppState {
 
     // MARK: - Persistence
 
+    /// Persist this window's device choice. `runOnAll` rides the shared prefs
+    /// (it's a single flag with no per-window meaning); the device itself is
+    /// part of the window's record.
     func persistSelection() {
-        let serial = selectedSerial
         let all = runOnAll
-        Task {
-            try? await env.stores.prefs.update {
-                $0.selectedSerial = serial
-                $0.runOnAll = all
-            }
-        }
+        Task { try? await env.stores.prefs.update { $0.runOnAll = all } }
+        persistWindowState()
+    }
+
+    // MARK: - Forwarded to AppCore
+    //
+    // These keep `AppState`'s API whole so feature views never learn that the
+    // app grew a second window. `@Observable` registers the read inside the
+    // getter, so a change on the core re-renders every window.
+
+    var devices: [Device] { core.devices }
+    var availableAvds: [Avd] {
+        get { core.availableAvds }
+        set { core.availableAvds = newValue }
+    }
+    var availableSimulators: [Simulator] {
+        get { core.availableSimulators }
+        set { core.availableSimulators = newValue }
+    }
+    var deviceDetails: [String: DeviceDetails] { core.deviceDetails }
+    var adbStatus: ToolStatus? { core.adbStatus }
+    var adbMissing: Bool { core.adbMissing }
+    var readyWirelessDevices: [Device] { core.readyWirelessDevices }
+    var readyDeviceCount: Int { core.readyDeviceCount }
+
+    var layout: LayoutState {
+        get { core.layout }
+        set { core.layout = newValue }
+    }
+    var didLoadLayout: Bool { core.didLoadLayout }
+    var usageStats: UsageStats {
+        get { core.usageStats }
+        set { core.usageStats = newValue }
+    }
+    var bundles: [AppBundle] { core.bundles }
+    var selectedRole: UserRole? { core.selectedRole }
+
+    var reactotronSession: ReactotronSession { core.reactotronSession }
+    var mcp: McpCoordinator { core.mcp }
+
+    func deviceDisplayName(_ device: Device) -> String { core.deviceDisplayName(device) }
+    func deviceTitle(_ device: Device) -> String { core.deviceTitle(device) }
+    func platform(for serial: String) -> DevicePlatform { core.platform(for: serial) }
+    func refreshDevices() { core.refreshDevices() }
+    func refreshToolStatus() async { await core.refreshToolStatus() }
+    func setForeground(_ active: Bool) { core.setForeground(active) }
+    func setQuickPanelOpen(_ open: Bool) { core.setQuickPanelOpen(open) }
+    func persistUsage() { core.persistUsage() }
+    func updateBundle(_ bundle: AppBundle) { core.updateBundle(bundle) }
+    func removeBundle(id: String) { core.removeBundle(id: id) }
+
+    func chooseRole(_ role: UserRole?, includeReactNativeStack: Bool = false) {
+        core.chooseRole(role, includeReactNativeStack: includeReactNativeStack)
     }
 }
