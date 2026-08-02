@@ -87,6 +87,68 @@ jobs:
           cd droidectived
           swift build -c release --product droidectived
 
+  # The Windows/Linux app (desktop/ — see docs/cross-platform.md phase 3).
+  # Split in two so a failure says which half broke: the web half needs only
+  # Node, while the native half needs Swift, Rust and a webview toolchain.
+  desktop-web:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      # No npm cache: this job builds the artifact the app ships, and a
+      # poisoned cache could inject code into it (zizmor: cache-poisoning).
+      # The same call the pages job already makes.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - name: Install
+        working-directory: desktop
+        run: npm ci
+      - name: Typecheck, lint, and test
+        working-directory: desktop
+        run: |
+          npm run typecheck
+          npm run lint
+          npm run test
+      - name: Build the frontend
+        working-directory: desktop
+        run: npx vite build
+
+  desktop-native:
+    runs-on: ubuntu-24.04
+    # The same image test-linux uses, so the daemon the app bundles is built
+    # by the compiler its own suite ran under.
+    container: swift:6.2-noble
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Install the Tauri build dependencies
+        run: |
+          apt-get update -q
+          apt-get install -y -q libwebkit2gtk-4.1-dev build-essential curl wget file \
+            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+      - name: Install Rust
+        # Ubuntu's packaged toolchain is older than Tauri 2 needs, so this
+        # comes from rustup rather than apt.
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+            | sh -s -- -y --profile minimal --component clippy,rustfmt
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      # Tauri resolves `externalBin` at build time, so the daemon has to exist
+      # before cargo runs. Building it here also proves the sidecar compiles on
+      # the platform the app ships to.
+      - name: Build the droidectived sidecar
+        run: ./scripts/build-daemon-sidecar.sh debug
+      - name: Check the Rust crate
+        working-directory: desktop/src-tauri
+        run: |
+          cargo fmt --check
+          cargo clippy --all-targets -- -D warnings
+          cargo test
+
   build:
     runs-on: macos-15
     steps:

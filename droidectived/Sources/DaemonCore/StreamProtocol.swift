@@ -148,4 +148,27 @@ extension StreamProtocol.Topic {
         case .logcat: return true
         }
     }
+
+    /// Whether each batch is the complete current state rather than what is
+    /// new since the last one.
+    ///
+    /// `devices` republishes the whole list; `logcat` publishes the lines that
+    /// just arrived. Two things follow, and both are wrong if the distinction
+    /// is ignored:
+    ///
+    /// - **An empty batch is meaningful for a snapshot.** "No devices are
+    ///   connected" is a state a client has to be able to reach, and it is
+    ///   the only way to say a device went away. For an increment, an empty
+    ///   batch says nothing and is not worth a frame.
+    /// - **A snapshot supersedes rather than queues.** An older device list is
+    ///   worthless once a newer one exists, so an unsent one is replaced, not
+    ///   buffered — which also means a snapshot topic can never emit a
+    ///   `dropped` marker. A gap in a stream of complete states is not
+    ///   something any client could act on.
+    public var isSnapshot: Bool {
+        switch self {
+        case .devices: return true
+        case .logcat: return false
+        }
+    }
 }

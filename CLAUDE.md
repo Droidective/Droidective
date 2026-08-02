@@ -15,9 +15,12 @@ stack, the Network.framework servers (Reactotron, the JS-console test fake),
 `NSDataDetector`, `proc_pid_rusage` — are `#if canImport`-gated out rather than
 stubbed; the portable seams (`HostArchive` extraction, `FileHandleLines`,
 per-OS `ToolLocator`, swift-crypto digests off-Apple) carry everything else.
-Next phases: a `droidectived` local daemon over ADBKit, then a Tauri/React UI
-for Windows/Linux; an iOS companion can't run `Process` at all, so it would
-ride the same daemon protocol. Keep the seams (`ProcessRunning`, injected
+Phase 2 landed `droidectived/`, a local daemon over ADBKit
+(`docs/droidectived-protocol.md`); phase 3 is `desktop/`, the Tauri 2 + React
+UI over it for Windows/Linux (`desktop/README.md`). **macOS never talks to the
+daemon** — the Mac app keeps linking ADBKit directly, by decision, so no daemon
+or desktop work can reach the shipping Mac flow. An iOS companion can't run
+`Process` at all, so it would ride the same daemon protocol. Keep the seams (`ProcessRunning`, injected
 directories) intact, and keep new ADBKit code portable — no new Apple-only
 framework use outside the gated subsystems. The rule is **enforced, not just
 documented**: `PortabilityGuardTests` scans ADBKit and fails on an Apple-only
@@ -101,6 +104,8 @@ make test-smoke    # tier 4a: launch the built app and confirm it comes up
 make test-mutation # tier 6: break real code, assert the suite catches it
 make build         # xcodegen generate + xcodebuild Debug
 make run           # build + open the .app
+make desktop-test  # the Windows/Linux app: typecheck, oxlint, vitest, clippy, cargo test
+make desktop-dev   # build the daemon sidecar, then run the Tauri app
 ```
 
 The agent loop I use: edit → `cd ADBKit && swift test` → `xcodegen generate` →

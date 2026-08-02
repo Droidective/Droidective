@@ -104,11 +104,43 @@ review it before any code lands). Sketch:
 - Lifecycle: the Tauri app spawns the daemon as a sidecar and owns its
   lifetime; `--port 0` plus a printed port line avoids collisions.
 
-## Phase 3: the Windows/Linux app
+## Phase 3 (started): the Windows/Linux app
 
-Tauri 2 + React, starting with the palette, actions, logcat, apps, and files;
-the terminal later via xterm.js against a daemon PTY endpoint; mirroring
-stays with the scrcpy desktop app.
+`desktop/` — Tauri 2 + React 19 + Vite + Tailwind v4 over `droidectived`; see
+`desktop/README.md`. Working today: the device picker, the action palette
+(search, forms, toggles, destructive confirmation) and live logcat with
+visible gap markers. Still to come: the full-screen view features, apps and
+files, then the terminal via xterm.js against a daemon PTY endpoint.
+Mirroring stays with the scrcpy desktop app.
+
+Two decisions worth keeping:
+
+- **The webview never talks to the daemon; Rust does.** The daemon refuses a
+  request whose `Origin` is not loopback and sends no CORS headers, so a
+  webview origin (`tauri://localhost`, `http://tauri.localhost`) gets a 403.
+  That is the rebinding guard working as designed, not something to route
+  around — so every call goes through a Tauri command, the bearer token never
+  leaves the Rust process, and `capabilities/default.json` grants the webview
+  no shell, filesystem or HTTP permission of its own.
+- **Hub members are listed standalone.** The Mac catalog hides the features a
+  hub screen absorbs, because the hub is how you reach them. This app has no
+  hub screens yet and 13 of its 20 runnable actions are absorbed, so hiding
+  them would remove most of the app.
+
+The daemon ships as a **sidecar**: `scripts/build-daemon-sidecar.sh` builds it
+with `swift build` and names it for the host triple, which is what Tauri's
+`externalBin` resolves. Tauri checks for it at *build* time, so a missing
+daemon fails the Rust build rather than the app.
+
+Building the UI turned up two gaps in the phase-2 wire contract, both now
+fixed and tested: the feature summary was missing everything a form or a
+search needs (`keywords`, field bounds, choice labels — protocol doc §4), and
+the `devices` topic silently swallowed an empty device list, so an unplugged
+device never disappeared (§5.1).
+
+`make desktop-test` is the gate; CI runs it as `desktop-web` (typecheck,
+oxlint, vitest, a production frontend build) and `desktop-native` (the Swift
+sidecar, then `cargo fmt`/`clippy`/`test` on Linux).
 
 ## Follow-ups
 
