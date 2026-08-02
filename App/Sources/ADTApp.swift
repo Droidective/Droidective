@@ -16,8 +16,8 @@ let quickPanelResumeMinutesKey = "quickPanelResumeMinutes"
 /// readable.
 let quickPanelCloseAfterRunKey = "quickPanelCloseAfterRun"
 
-/// Routes APKs opened from Finder (double-click / "Open With") into the install
-/// inbox, which surfaces the device picker once the UI is ready.
+/// Routes app packages opened from Finder (double-click / "Open With") into
+/// the install inbox, which surfaces the device picker once the UI is ready.
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     /// The app-wide state, so quit and window-close can tear down the right
     /// window's kept-alive sessions.
@@ -29,8 +29,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     @MainActor var isQuitting = false
 
     func application(_ application: NSApplication, open urls: [URL]) {
-        // Non-APKs ride along so the receiver can say "Not an APK" once the
-        // UI is up, instead of the open being silently ignored.
+        // Files we can't install ride along so the receiver can say so once
+        // the UI is up, instead of the open being silently ignored.
         guard !urls.isEmpty else { return }
         InstallInbox.shared.receive(urls)
     }
@@ -282,7 +282,7 @@ struct ADTApp: App {
                 // view, so the rebuild preserves every window's tabs.
                 .id(appearanceKey)
         }
-        // File opens (double-clicked .apk/.aab) are handled by
+        // File opens (double-clicked .apk/.apks/.xapk/.apkm/.aab) are handled by
         // `AppDelegate.application(_:open:)`; without this, every open event
         // also makes the WindowGroup spawn a duplicate window — which
         // scene restoration then multiplies across launches.
