@@ -49,6 +49,10 @@ jobs:
       # off-Apple, so Linux runs its suite too rather than only compiling it.
       - name: Run droidectived tests (Linux)
         run: cd droidectived && swift test -Xswiftc -warnings-as-errors
+      # The shipped artifact, not just the tests: a release build is a
+      # different compile and must be proven before a tag depends on it.
+      - name: Build droidectived (Linux, release)
+        run: cd droidectived && swift build -c release --product droidectived
 
   build-windows:
     # windows-2022, not -2025: the 2025 image ships MSVC 14.51, whose STL header
@@ -66,16 +70,78 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
         with:
           persist-credentials: false
-      # Compile-only, but only 3 tests short of running. Moving MCP to its own
-      # package (#231) let `swift test` discover and run all 1375 tests here;
-      # successive passes took the failures from 14 to 3. The remainder is
-      # tracked in docs/cross-platform.md. Flip this to `swift test` in the
-      # change that clears them, so the job never lands red.
-      - name: Build ADBKit and its tests (Windows)
+      - name: Run ADBKit tests (Windows)
         run: |
           cd ADBKit
-          swift build --target ADBKit -Xswiftc -warnings-as-errors
-          swift build --target ADBKitTests -Xswiftc -warnings-as-errors
+          swift test -Xswiftc -warnings-as-errors
+      # The shipped artifact, not just the library: the beta channel publishes
+      # a Windows daemon, so a tag depends on this compiling.
+      - name: Build droidectived (Windows, release)
+        run: |
+          cd droidectived
+          swift build -c release --product droidectived
+
+  # The Windows/Linux app (desktop/ — see docs/cross-platform.md phase 3).
+  # Split in two so a failure says which half broke: the web half needs only
+  # Node, while the native half needs Swift, Rust and a webview toolchain.
+  desktop-web:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      # No npm cache: this job builds the artifact the app ships, and a
+      # poisoned cache could inject code into it (zizmor: cache-poisoning).
+      # The same call the pages job already makes.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - name: Install
+        working-directory: desktop
+        run: npm ci
+      - name: Typecheck, lint, and test
+        working-directory: desktop
+        run: |
+          npm run typecheck
+          npm run lint
+          npm run test
+      - name: Build the frontend
+        working-directory: desktop
+        run: npx vite build
+
+  desktop-native:
+    runs-on: ubuntu-24.04
+    # The same image test-linux uses, so the daemon the app bundles is built
+    # by the compiler its own suite ran under.
+    container: swift:6.2-noble
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Install the Tauri build dependencies
+        run: |
+          apt-get update -q
+          apt-get install -y -q libwebkit2gtk-4.1-dev build-essential curl wget file \
+            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+      - name: Install Rust
+        # Ubuntu's packaged toolchain is older than Tauri 2 needs, so this
+        # comes from rustup rather than apt.
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+            | sh -s -- -y --profile minimal --component clippy,rustfmt
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      # Tauri resolves `externalBin` at build time, so the daemon has to exist
+      # before cargo runs. Building it here also proves the sidecar compiles on
+      # the platform the app ships to.
+      - name: Build the droidectived sidecar
+        run: ./scripts/build-daemon-sidecar.sh debug
+      - name: Check the Rust crate
+        working-directory: desktop/src-tauri
+        run: |
+          cargo fmt --check
+          cargo clippy --all-targets -- -D warnings
+          cargo test
 
   build:
     runs-on: macos-15
@@ -146,9 +212,53 @@ jobs:
       - id: deploy
         uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128  # v5.0.0
 
+  # The beta channel's daemon artifacts. Their own job because Linux and
+  # Windows binaries cannot be produced on the macOS release runner; the release
+  # job downloads what this uploads.
+  daemon-artifacts:
+    if: startsWith(github.ref, 'refs/tags/v')
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          # The same image test-linux already uses, rather than a third-party
+          # toolchain action: one less thing in the supply chain, and the
+          # release binary is built by the compiler the tests ran under.
+          - os: ubuntu-24.04
+            container: swift:6.2-noble
+            platform: linux-x86_64
+          - os: windows-2022
+            container: ''
+            platform: windows-x86_64
+    runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - if: matrix.platform == 'windows-x86_64'
+        uses: compnerd/gha-setup-swift@eeda069c5bc95ac8a9ac5cea7d4f588ae5420ca5  # v0.4.0
+        with:
+          branch: swift-6.2.4-release
+          tag: 6.2.4-RELEASE
+      - name: Build and package droidectived
+        shell: bash
+        run: |
+          command -v zip >/dev/null || (apt-get update -q && apt-get install -y -q zip)
+          VERSION="${GITHUB_REF_NAME#v}"
+          (cd droidectived && swift build -c release --product droidectived)
+          BIN="droidectived/.build/release/droidectived"
+          [[ "${{ matrix.platform }}" == windows-x86_64 ]] && BIN="$BIN.exe"
+          ./scripts/package-daemon.sh "$VERSION" "${{ matrix.platform }}" "$BIN" dist
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: daemon-${{ matrix.platform }}
+          path: dist/*
+          if-no-files-found: error
+
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [test, build]
+    needs: [test, build, daemon-artifacts]
     runs-on: macos-15
     permissions:
       contents: write
@@ -244,6 +354,28 @@ jobs:
       # behind by an ungated job fails the stable release instead of shipping on
       # it — and the publish step can glob `dist/*` without
       # fail_on_unmatched_files breaking on the set that varies.
+      # Universal, like the app: the daemon is a sidecar next to it, and an
+      # arm64-only binary would break Intel Macs that the app itself supports.
+      - name: Build and package droidectived (macOS universal)
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          (cd droidectived && swift build -c release --arch arm64 --arch x86_64 \
+            --product droidectived)
+          ./scripts/package-daemon.sh "$VERSION" macos-universal \
+            droidectived/.build/apple/Products/Release/droidectived \
+            DerivedData/Build/Products/Release
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+        with:
+          pattern: daemon-*
+          merge-multiple: true
+          path: DerivedData/Build/Products/Release
+      # Checksums cover exactly what ships, so they are generated after every
+      # artifact is in place and before staging asserts the set.
+      - name: Checksum the daemon archives
+        run: |
+          cd DerivedData/Build/Products/Release
+          shasum -a 256 droidectived-* > SHA256SUMS
+          cat SHA256SUMS
       - name: Stage the artifacts this channel publishes
         run: ./scripts/stage-release-artifacts.sh "$GITHUB_REF_NAME" DerivedData/Build/Products/Release dist
       # A hyphen in the tag (v3.3.0-beta.1) marks a beta: the GitHub release is

@@ -58,3 +58,40 @@ func makeTempOverridesStore() -> JSONStore<OverridesMap> {
         .appendingPathComponent("adbkit-overrides-\(UUID().uuidString)")
     return JSONStore(filename: "overrides.json", default: [:], directory: dir)
 }
+
+/// A stub binary at `url` that the host's own `isExecutableFile` will accept.
+///
+/// On Windows that has to be a real PE image. `isExecutableFile` there asks
+/// Windows what kind of binary the file is, so a shell script named `.exe` is
+/// not executable and every SDK tool "resolves" as missing — which surfaces
+/// far away, as a nil package name rather than as a missing tool. Copying a
+/// system binary keeps the real predicate (the one production uses) under
+/// test instead of stubbing out the resolution the test exists to exercise;
+/// `MockProcessRunner` intercepts the spawn, so the stub is never run.
+func createExecutableStub(at url: URL) throws {
+    let fm = FileManager.default
+    #if os(Windows)
+    let source = ProcessInfo.processInfo.environment["ComSpec"]
+        ?? #"C:\Windows\System32\cmd.exe"#
+    try? fm.removeItem(at: url)
+    try fm.copyItem(atPath: source, toPath: url.path)
+    #else
+    _ = fm.createFile(
+        atPath: url.path, contents: Data("#!/bin/sh\n".utf8),
+        attributes: [.posixPermissions: 0o755])
+    #endif
+    // Checked rather than assumed: a stub the host declines to call
+    // executable makes the tool resolve as missing, and the resulting failure
+    // names neither the stub nor the tool.
+    guard fm.isExecutableFile(atPath: url.path) else {
+        throw StubNotExecutable(path: url.path, exists: fm.fileExists(atPath: url.path))
+    }
+}
+
+struct StubNotExecutable: Error, CustomStringConvertible {
+    let path: String
+    let exists: Bool
+    var description: String {
+        "the host does not consider \(path) executable (file exists: \(exists))"
+    }
+}

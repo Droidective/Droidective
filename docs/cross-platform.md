@@ -6,9 +6,9 @@ The port strategy, what is already true on `main`, and what comes next.
 
 Three layers; the top one is per-platform, everything under it is shared Swift:
 
-1. **ADBKit** (the existing core) — compiles and tests on macOS and Linux, and
-   build-verifies on Windows. All adb logic, parsers, and services live here.
-2. **`droidectived`** (phase 2, not yet built) — a small local daemon target
+1. **ADBKit** (the existing core) — compiles and tests on macOS, Linux and
+   Windows. All adb logic, parsers, and services live here.
+2. **`droidectived`** (phase 2, landed) — a small local daemon target
    exposing ADBKit over localhost HTTP + WebSocket JSON so a non-Swift UI can
    drive it. It doubles as the remote-host protocol an iOS companion would
    need someday.
@@ -25,9 +25,9 @@ stack is mature. Rewriting the core in another language would throw away the
 ## Phase 1 (landed): a portable core
 
 `cd ADBKit && swift test` passes on Linux — CI runs the same suite in a
-`swift:6.2` container (`test-linux`) — and Windows compiles the library and
-test target (`build-windows`; running the tests there waits on a Windows audit
-of the process-spawning tests, which hardcode POSIX paths).
+`swift:6.2` container (`test-linux`) — and on Windows, where `build-windows`
+now runs it rather than only compiling it. All three hosts run the same
+suite.
 
 Apple-only subsystems are compile-gated with `#if canImport(...)`, not
 stubbed — a platform that can't mirror simply doesn't expose the type:
@@ -89,10 +89,9 @@ any that is not inside a matching `#if canImport(...)` gate. Its allowlist is
 empty, and a companion test fails on a stale entry, so debt cannot be excused
 and then quietly forgotten.
 
-## Phase 2: `droidectived`
+## Phase 2 (landed): `droidectived`
 
-**Full protocol design: `droidectived-protocol.md`** (written, not implemented —
-review it before any code lands). Sketch:
+**Full protocol design and current state: `droidectived-protocol.md`.** Shape:
 
 - An executable target in ADBKit's package; `swift build` produces it on
   Linux/Windows (static-musl is an option on Linux).
@@ -104,11 +103,43 @@ review it before any code lands). Sketch:
 - Lifecycle: the Tauri app spawns the daemon as a sidecar and owns its
   lifetime; `--port 0` plus a printed port line avoids collisions.
 
-## Phase 3: the Windows/Linux app
+## Phase 3 (started): the Windows/Linux app
 
-Tauri 2 + React, starting with the palette, actions, logcat, apps, and files;
-the terminal later via xterm.js against a daemon PTY endpoint; mirroring
-stays with the scrcpy desktop app.
+`desktop/` — Tauri 2 + React 19 + Vite + Tailwind v4 over `droidectived`; see
+`desktop/README.md`. Working today: the device picker, the action palette
+(search, forms, toggles, destructive confirmation) and live logcat with
+visible gap markers. Still to come: the full-screen view features, apps and
+files, then the terminal via xterm.js against a daemon PTY endpoint.
+Mirroring stays with the scrcpy desktop app.
+
+Two decisions worth keeping:
+
+- **The webview never talks to the daemon; Rust does.** The daemon refuses a
+  request whose `Origin` is not loopback and sends no CORS headers, so a
+  webview origin (`tauri://localhost`, `http://tauri.localhost`) gets a 403.
+  That is the rebinding guard working as designed, not something to route
+  around — so every call goes through a Tauri command, the bearer token never
+  leaves the Rust process, and `capabilities/default.json` grants the webview
+  no shell, filesystem or HTTP permission of its own.
+- **Hub members are listed standalone.** The Mac catalog hides the features a
+  hub screen absorbs, because the hub is how you reach them. This app has no
+  hub screens yet and 13 of its 20 runnable actions are absorbed, so hiding
+  them would remove most of the app.
+
+The daemon ships as a **sidecar**: `scripts/build-daemon-sidecar.sh` builds it
+with `swift build` and names it for the host triple, which is what Tauri's
+`externalBin` resolves. Tauri checks for it at *build* time, so a missing
+daemon fails the Rust build rather than the app.
+
+Building the UI turned up two gaps in the phase-2 wire contract, both now
+fixed and tested: the feature summary was missing everything a form or a
+search needs (`keywords`, field bounds, choice labels — protocol doc §4), and
+the `devices` topic silently swallowed an empty device list, so an unplugged
+device never disappeared (§5.1).
+
+`make desktop-test` is the gate; CI runs it as `desktop-web` (typecheck,
+oxlint, vitest, a production frontend build) and `desktop-native` (the Swift
+sidecar, then `cargo fmt`/`clippy`/`test` on Linux).
 
 ## Follow-ups
 
@@ -125,20 +156,21 @@ stays with the scrcpy desktop app.
       drop-oldest buffer with its gap marker
 - [ ] Portable fake CDP server so the JSConsoleClient wire tests run on Linux
 - [ ] Reactotron listener off Network.framework (SwiftNIO or raw sockets)
-- [ ] Windows: fix the last 3 tests, then flip `build-windows` to `swift test`.
-      The suite runs there now (1375 discovered); failures went 14 → 3.
-      Remaining, with the leading hypothesis for each:
-      (1) `capturesStderrAndNonZeroExit` — the child still fails to launch.
-      `ChildCommands` writes a temp `.cmd` and passes `url.path`, but Foundation
-      on Windows renders `URL.path` POSIX-style (`/C:/Users/…`), which cmd
-      cannot open. Build the path as a `String` with backslashes from `%TEMP%`
-      instead of going through `URL`.
-      (2)+(3) `ApkInspectionServiceTests` / `ApkSigningServiceTests` still
-      report `toolMissing` even though `buildToolBinary` now appends `.exe` and
-      the fixtures create `.exe` files. Next thing to check is
-      `FileManager.isExecutableFile` on Windows — the fixtures write shell-script
-      text into a file named `.exe`, and it may validate the PE image (or
-      consult PATHEXT) rather than just testing for readability.
+- [x] Windows: the last 3 tests, and `build-windows` flipped to `swift test`.
+      Both causes turned out to be different from the standing hypotheses, and
+      both were found by running the suite there and reading the output rather
+      than reasoning about it:
+      (1) `capturesStderrAndNonZeroExit` was not a launch failure — the child
+      ran and its stderr arrived intact. `SystemProcessRunner` nils the exit
+      code unless `terminationReason == .exit`, and corelibs reports a
+      non-`.exit` reason on Windows for an ordinary non-zero exit as readily as
+      for a TerminateProcess kill. Since Windows has no signals, the reason
+      cannot separate the two; the runner now trusts the flags it already sets
+      before killing a child. Gated, so POSIX is untouched.
+      (2)+(3) The APK suites' seeded tools never resolved, because
+      `isExecutableFile` on Windows asks what kind of binary a file is and a
+      shell script named `aapt2.exe` is not one. The fixtures now copy a real
+      system binary there, which keeps the production predicate under test.
 - [ ] Windows: xz decode for frida assets; `HostNetwork` via GetAdaptersAddresses
 - [ ] Linux: interface ranking in `HostNetwork.pickPrimary` (en*/eth*/wl* over docker0/veth)
 - [ ] API client: portable expectations for `URLSessionTransport` so

@@ -35,8 +35,16 @@ public actor StreamSession {
         let topic: StreamProtocol.Topic
         let serial: String?
         var buffer: StreamBuffer<Data>
+        /// The newest unsent snapshot, for a `isSnapshot` topic. Kept apart
+        /// from `buffer` because a snapshot replaces rather than accumulates —
+        /// and because an *empty* one still has to be sent.
+        var pendingSnapshot: [Data]?
         var pump: Task<Void, Never>?
         var flushing = false
+
+        var hasWork: Bool {
+            topic.isSnapshot ? pendingSnapshot != nil : !buffer.isEmpty
+        }
     }
 
     private let sink: any StreamSink
@@ -161,8 +169,15 @@ public actor StreamSession {
     // MARK: the drop-oldest path
 
     private func enqueue(id: Int, items: [Data]) async {
-        guard subscriptions[id] != nil, !items.isEmpty else { return }
-        subscriptions[id]?.buffer.append(contentsOf: items)
+        guard let subscription = subscriptions[id] else { return }
+        if subscription.topic.isSnapshot {
+            // Replace, and allow empty: the newest list is the only one worth
+            // sending, and an empty one is how "everything unplugged" is said.
+            subscriptions[id]?.pendingSnapshot = items
+        } else {
+            guard !items.isEmpty else { return }
+            subscriptions[id]?.buffer.append(contentsOf: items)
+        }
         await flushIfIdle(id)
     }
 
@@ -175,7 +190,14 @@ public actor StreamSession {
         subscriptions[id]?.flushing = true
         defer { subscriptions[id]?.flushing = false }
 
-        while let current = subscriptions[id], !current.buffer.isEmpty {
+        while let current = subscriptions[id], current.hasWork {
+            if current.topic.isSnapshot {
+                guard let snapshot = current.pendingSnapshot else { break }
+                subscriptions[id]?.pendingSnapshot = nil
+                await sink.send(StreamFrame.batch(id: id, items: snapshot))
+                continue
+            }
+
             var buffer = current.buffer
             let (items, dropped) = buffer.drain()
             subscriptions[id]?.buffer = buffer

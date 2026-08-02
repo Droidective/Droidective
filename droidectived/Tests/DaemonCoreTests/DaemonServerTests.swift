@@ -16,6 +16,13 @@ import FoundationNetworking
     private struct StubBackend: DaemonBackend {
         let devices: [Device]
         func listDevices() async -> [Device] { devices }
+        func runAction(
+            featureID: String, serial: String, platform: DevicePlatform,
+            params: [String: FeatureValue]
+        ) async -> FeatureResult {
+            FeatureResult(ok: true, message: "stub")
+        }
+
     }
 
     private static func device(_ serial: String) -> Device {
@@ -120,7 +127,13 @@ import FoundationNetworking
         try await withServer { port, token in
             for route in DaemonProtocol.Route.allCases {
                 let (status, _) = try await send(port: port, path: route.rawValue, token: token)
-                #expect(status == 200, "\(route.rawValue) is in the table but not routed")
+                // Reachable, not necessarily satisfied: routes that need a body
+                // answer 400 to this empty probe, and that still proves they
+                // are wired. Only 404/405 mean the table and the handler have
+                // drifted apart, which is what this guards.
+                #expect(
+                    status != 404 && status != 405,
+                    "\(route.rawValue) is in the table but not routed (\(status))")
             }
         }
     }

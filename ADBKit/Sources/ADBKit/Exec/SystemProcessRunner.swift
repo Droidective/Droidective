@@ -86,8 +86,24 @@ public struct SystemProcessRunner: ProcessRunning {
                 let resumed = LockedBox(false)
                 process.terminationHandler = { finished in
                     guard !resumed.swap(true) else { return }
+                    #if os(Windows)
+                    // Windows has no signals, so `.uncaughtSignal` is not a
+                    // state a child can reach — and corelibs reports a
+                    // non-`.exit` reason for an ordinary non-zero exit just as
+                    // it does for a TerminateProcess kill, so the reason
+                    // cannot tell those apart. (`exit /b 3` came back with no
+                    // exit code at all, while its stderr arrived intact.)
+                    //
+                    // We already know which kills are ours: the watchdog and
+                    // the cancellation handler each raise a flag before
+                    // terminating. Trust those, and take the status at face
+                    // value otherwise.
+                    let killed = timedOut.get() || cancelled.get()
+                    continuation.resume(returning: killed ? nil : finished.terminationStatus)
+                    #else
                     let exited = finished.terminationReason == .exit
                     continuation.resume(returning: exited ? finished.terminationStatus : nil)
+                    #endif
                 }
                 do {
                     try process.run()

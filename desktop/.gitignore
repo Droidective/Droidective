@@ -1,0 +1,8 @@
+dist/
+node_modules/
+
+# The Swift daemon, built into place by scripts/build-daemon-sidecar.sh.
+src-tauri/binaries/
+src-tauri/target/
+# Tauri regenerates the capability schemas from tauri.conf.json.
+src-tauri/gen/schemas/

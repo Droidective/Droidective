@@ -1,0 +1,55 @@
+[package]
+name = "droidective-desktop"
+version = "0.1.0"
+description = "Droidective for Windows and Linux"
+authors = ["Droidective"]
+license = "MIT"
+edition = "2021"
+
+# Standalone, not a member of anything above it: the repo's other packages are
+# SwiftPM, and an inherited workspace would only be a surprise.
+[workspace]
+
+[lib]
+# The `_lib` suffix keeps the library name distinct from the binary's, which
+# Windows otherwise rejects (rust-lang/cargo#8519).
+name = "droidective_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
+
+[dependencies]
+tauri = { version = "2.11.5", features = [] }
+# The supported way to spawn a bundled sidecar and own its lifetime: it
+# resolves the per-platform binary location that a hand-rolled path would get
+# wrong on at least one of the three targets.
+tauri-plugin-shell = "2.3.5"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+# Loopback plain HTTP only — no TLS features, so no rustls/openssl in the tree.
+reqwest = { version = "0.13.4", default-features = false, features = ["json"] }
+tokio = { version = "1.53.1", features = ["macros", "rt", "sync", "time", "io-util", "net"] }
+# Hand-rolling WebSocket framing (masking, continuation frames, close
+# handshake) is the part of this protocol most likely to be subtly wrong.
+tokio-tungstenite = "0.30.0"
+futures-util = { version = "0.3.33", default-features = false, features = ["sink", "std"] }
+thiserror = "2.0.19"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "warn"
+panic = "deny"
+panic_in_result_fn = "deny"
+unimplemented = "deny"
+allow_attributes = "deny"
+dbg_macro = "deny"
+todo = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+await_holding_lock = "deny"
+exit = "deny"
+mem_forget = "deny"
+module_name_repetitions = "allow"
+similar_names = "allow"

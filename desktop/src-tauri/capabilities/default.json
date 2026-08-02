@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The main window. Deliberately minimal: the webview gets no shell, filesystem, or HTTP permission of its own — every daemon call goes through a Rust command, so the daemon's bearer token never enters the webview and a compromised page cannot reach 127.0.0.1 directly.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

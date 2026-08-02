@@ -1,0 +1,20 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "import", "unicorn", "react", "react-perf", "jsx-a11y"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "pedantic": "warn"
+  },
+  "env": { "browser": true, "es2024": true },
+  "ignorePatterns": ["dist", "src-tauri", "src/lib/__fixtures__"],
+  "rules": {
+    "no-console": "error",
+    "eqeqeq": "error",
+    // The automatic JSX runtime is on (tsconfig "jsx": "react-jsx"), so React
+    // does not need to be in scope.
+    "react/react-in-jsx-scope": "off",
+    // The project's own limit, rather than oxlint's stricter default.
+    "max-lines-per-function": ["warn", { "max": 100 }]
+  }
+}

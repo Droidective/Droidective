@@ -1,6 +1,7 @@
 .PHONY: generate build test test-app test-linux run dmg clean site-dev site-build \
 	verify verify-fast verify-self \
-	test-emulator test-emulator-rooted test-emulator-mirror test-mutation test-smoke
+	test-emulator test-emulator-rooted test-emulator-mirror test-mutation test-smoke \
+	desktop-dev desktop-test desktop-build
 
 # Optional telemetry keys for local builds. Create .env.telemetry (gitignored)
 # with SENTRY_DSN=... and POSTHOG_KEY=... to enable crash/analytics locally.
@@ -102,6 +103,27 @@ dmg: generate
 
 clean:
 	rm -rf DerivedData ADBKit/.build *.xcodeproj
+
+# The Windows/Linux app (desktop/ — Tauri 2 + React over droidectived; see
+# docs/cross-platform.md phase 3). macOS keeps its native app and never talks
+# to the daemon, so nothing here can reach the shipping Mac flow.
+#
+# The sidecar is built first in every target: Tauri resolves `externalBin` at
+# build time, so a missing daemon fails the Rust build with a complaint about
+# a binary rather than about the daemon not having been built yet.
+desktop-dev:
+	./scripts/build-daemon-sidecar.sh debug
+	cd desktop && npm install && npm run tauri dev
+
+desktop-test:
+	./scripts/build-daemon-sidecar.sh debug
+	cd desktop && npm ci && npm run typecheck && npm run lint && npm run test
+	cd desktop/src-tauri && cargo fmt --check \
+	  && cargo clippy --all-targets -- -D warnings && cargo test
+
+desktop-build:
+	./scripts/build-daemon-sidecar.sh release
+	cd desktop && npm ci && npm run tauri build
 
 # Marketing site (website/ — React + Vite; site/ is the static passthrough
 # copied into the build via Vite's publicDir)
