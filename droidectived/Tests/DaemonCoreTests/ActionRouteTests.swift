@@ -95,6 +95,89 @@ import FoundationNetworking
         }
     }
 
+    /// The palette's ranking lives in `FeatureDef.relevance`, which reads
+    /// keywords. A client that never receives them can only match titles, so
+    /// searching "battery" would stop finding the Simulate hub — the exact
+    /// discoverability the hub design depends on.
+    @Test func carriesTheSearchVocabularyTheRegistryRanksOn() async throws {
+        try await withServer { port, token, _ in
+            let summaries = try await self.features(port: port, token: token)
+            let byID = Dictionary(uniqueKeysWithValues: summaries.map { ($0.id, $0) })
+            for def in FeatureRegistry.all {
+                #expect(byID[def.id]?.keywords == def.keywords, "keywords for \(def.id)")
+            }
+            let simulate = try #require(byID["simulate"])
+            #expect(simulate.keywords.contains("battery"))
+        }
+    }
+
+    /// Hub membership and destructiveness are registry facts a client cannot
+    /// re-derive: one decides whether a feature is a standalone row, the other
+    /// whether it gets a confirmation step.
+    @Test func carriesHubMembershipAndDestructiveness() async throws {
+        try await withServer { port, token, _ in
+            let summaries = try await self.features(port: port, token: token)
+            let absorbed = Set(summaries.filter(\.isAbsorbedByHub).map(\.id))
+            #expect(absorbed == FeatureRegistry.absorbedFeatureIDs)
+
+            let destructive = Set(summaries.filter(\.isDestructive).map(\.id))
+            let expected = Set(FeatureRegistry.all.filter(\.isDestructive).map(\.id))
+            #expect(destructive == expected)
+            #expect(!destructive.isEmpty, "the registry has destructive actions to mark")
+        }
+    }
+
+    /// A form is only renderable if the wire carries what each control needs:
+    /// bounds for a slider, and both halves of every choice.
+    @Test func carriesEnoughOfAFieldToRenderIt() async throws {
+        try await withServer { port, token, _ in
+            let summaries = try await self.features(port: port, token: token)
+            let fields = summaries.flatMap(\.fields)
+
+            let sliders = fields.filter { $0.control == "slider" }
+            #expect(!sliders.isEmpty, "the registry has sliders to check")
+            for slider in sliders {
+                #expect(slider.min != nil && slider.max != nil, "bounds for \(slider.name)")
+            }
+
+            let locale = try #require(
+                summaries.first { $0.id == "locale" }?.fields.first { $0.name == "locale" })
+            let arabic = try #require(locale.options.first { $0.value == "ar-EG" })
+            #expect(
+                arabic.label != arabic.value,
+                "the readable half of a choice must survive the wire")
+        }
+    }
+
+    /// Every `toggleAction` is driven by one implicit boolean named `on` (see
+    /// `FeatureEngine`, and `ToggleActionView` on the Mac). It is a convention
+    /// rather than a declared field, so a client has to know it — and this is
+    /// what fails if the engine ever renames it.
+    @Test func aToggleActionIsDrivenByAnOnParameter() async throws {
+        let toggles = FeatureRegistry.all.filter {
+            $0.kind == .toggleAction && FeatureEngine.implementedIDs.contains($0.id)
+        }
+        #expect(!toggles.isEmpty, "the registry has toggle actions to check")
+        try await withServer { port, token, log in
+            for toggle in toggles {
+                _ = try await self.post(
+                    port: port, path: "/v1/actions/run", token: token,
+                    json: #"{"featureId":"\#(toggle.id)","serial":"s","fields":{"on":true}}"#)
+                let call = try #require(await log.last)
+                #expect(call.id == toggle.id)
+                #expect(call.params["on"] == .bool(true), "the on parameter for \(toggle.id)")
+            }
+        }
+    }
+
+    private func features(
+        port: Int, token: String
+    ) async throws -> [ActionProtocol.FeatureSummary] {
+        let (_, body) = try await post(port: port, path: "/v1/features/list", token: token)
+        return try JSONDecoder()
+            .decode(ActionProtocol.FeaturesResponse.self, from: Data(body.utf8)).features
+    }
+
     // MARK: actions
 
     @Test func runsAnActionThroughTheEngineUntouched() async throws {
