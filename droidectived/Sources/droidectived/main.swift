@@ -61,7 +61,7 @@ if let parent = options.parentPID {
     Task {
         while true {
             try? await Task.sleep(for: .seconds(2))
-            if kill(parent, 0) != 0 {
+            if !ParentWatch.isAlive(parent) {
                 await server.stop()
                 exit(0)
             }

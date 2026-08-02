@@ -49,6 +49,10 @@ jobs:
       # off-Apple, so Linux runs its suite too rather than only compiling it.
       - name: Run droidectived tests (Linux)
         run: cd droidectived && swift test -Xswiftc -warnings-as-errors
+      # The shipped artifact, not just the tests: a release build is a
+      # different compile and must be proven before a tag depends on it.
+      - name: Build droidectived (Linux, release)
+        run: cd droidectived && swift build -c release --product droidectived
 
   build-windows:
     # windows-2022, not -2025: the 2025 image ships MSVC 14.51, whose STL header
@@ -76,6 +80,12 @@ jobs:
           cd ADBKit
           swift build --target ADBKit -Xswiftc -warnings-as-errors
           swift build --target ADBKitTests -Xswiftc -warnings-as-errors
+      # The shipped artifact, not just the library: the beta channel publishes
+      # a Windows daemon, so a tag depends on this compiling.
+      - name: Build droidectived (Windows, release)
+        run: |
+          cd droidectived
+          swift build -c release --product droidectived
 
   build:
     runs-on: macos-15
@@ -146,9 +156,53 @@ jobs:
       - id: deploy
         uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128  # v5.0.0
 
+  # The beta channel's daemon artifacts. Their own job because Linux and
+  # Windows binaries cannot be produced on the macOS release runner; the release
+  # job downloads what this uploads.
+  daemon-artifacts:
+    if: startsWith(github.ref, 'refs/tags/v')
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          # The same image test-linux already uses, rather than a third-party
+          # toolchain action: one less thing in the supply chain, and the
+          # release binary is built by the compiler the tests ran under.
+          - os: ubuntu-24.04
+            container: swift:6.2-noble
+            platform: linux-x86_64
+          - os: windows-2022
+            container: ''
+            platform: windows-x86_64
+    runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - if: matrix.platform == 'windows-x86_64'
+        uses: compnerd/gha-setup-swift@eeda069c5bc95ac8a9ac5cea7d4f588ae5420ca5  # v0.4.0
+        with:
+          branch: swift-6.2.4-release
+          tag: 6.2.4-RELEASE
+      - name: Build and package droidectived
+        shell: bash
+        run: |
+          command -v zip >/dev/null || (apt-get update -q && apt-get install -y -q zip)
+          VERSION="${GITHUB_REF_NAME#v}"
+          (cd droidectived && swift build -c release --product droidectived)
+          BIN="droidectived/.build/release/droidectived"
+          [[ "${{ matrix.platform }}" == windows-x86_64 ]] && BIN="$BIN.exe"
+          ./scripts/package-daemon.sh "$VERSION" "${{ matrix.platform }}" "$BIN" dist
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: daemon-${{ matrix.platform }}
+          path: dist/*
+          if-no-files-found: error
+
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [test, build]
+    needs: [test, build, daemon-artifacts]
     runs-on: macos-15
     permissions:
       contents: write
@@ -244,6 +298,28 @@ jobs:
       # behind by an ungated job fails the stable release instead of shipping on
       # it — and the publish step can glob `dist/*` without
       # fail_on_unmatched_files breaking on the set that varies.
+      # Universal, like the app: the daemon is a sidecar next to it, and an
+      # arm64-only binary would break Intel Macs that the app itself supports.
+      - name: Build and package droidectived (macOS universal)
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          (cd droidectived && swift build -c release --arch arm64 --arch x86_64 \
+            --product droidectived)
+          ./scripts/package-daemon.sh "$VERSION" macos-universal \
+            droidectived/.build/apple/Products/Release/droidectived \
+            DerivedData/Build/Products/Release
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+        with:
+          pattern: daemon-*
+          merge-multiple: true
+          path: DerivedData/Build/Products/Release
+      # Checksums cover exactly what ships, so they are generated after every
+      # artifact is in place and before staging asserts the set.
+      - name: Checksum the daemon archives
+        run: |
+          cd DerivedData/Build/Products/Release
+          shasum -a 256 droidectived-* > SHA256SUMS
+          cat SHA256SUMS
       - name: Stage the artifacts this channel publishes
         run: ./scripts/stage-release-artifacts.sh "$GITHUB_REF_NAME" DerivedData/Build/Products/Release dist
       # A hyphen in the tag (v3.3.0-beta.1) marks a beta: the GitHub release is

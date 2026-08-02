@@ -165,3 +165,16 @@ import Testing
         try? FileManager.default.removeItem(atPath: path)
     }
 }
+
+@Suite struct ParentWatchTests {
+    @Test func seesItsOwnProcessAsAlive() {
+        #expect(ParentWatch.isAlive(ProcessInfo.processInfo.processIdentifier))
+    }
+
+    @Test func reportsAnImpossiblePIDAsGone() {
+        // Nothing is ever pid 0 in the sense we mean, and a huge id will not
+        // exist. Either way the daemon must decide "parent gone" and exit
+        // rather than linger holding adb children.
+        #expect(!ParentWatch.isAlive(Int32.max))
+    }
+}
