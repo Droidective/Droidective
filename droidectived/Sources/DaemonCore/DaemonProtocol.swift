@@ -9,6 +9,8 @@ public enum DaemonProtocol {
     /// `McpToolRegistry` and `FeatureRegistry` are tables.
     public enum Route: String, CaseIterable, Sendable {
         case devicesList = "/v1/devices/list"
+        case featuresList = "/v1/features/list"
+        case actionsRun = "/v1/actions/run"
     }
 
     /// The multiplexed stream socket. Not a `Route`: it is a WebSocket upgrade
@@ -64,6 +66,13 @@ public enum DaemonProtocol {
 
     public static let notFound = ErrorBody(
         code: "unknown_route", message: "No such endpoint.")
+    public static let badRequest = ErrorBody(
+        code: "bad_request", message: "The request body could not be read.")
+    public static let unknownFeature = ErrorBody(
+        code: "unknown_feature", message: "No such feature, or it has no runner.")
+    public static let unknownPlatform = ErrorBody(
+        code: "unknown_platform", message: "platform must be android or iosSimulator.")
+
     public static let methodNotAllowed = ErrorBody(
         code: "method_not_allowed", message: "Endpoints are POST.")
 

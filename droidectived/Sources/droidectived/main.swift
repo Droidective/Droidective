@@ -32,8 +32,14 @@ if let path = options.tokenFile {
 let locator = ToolLocator()
 let client = AdbClient(locator: locator)
 let monitor = DeviceMonitor(client: client)
+// Same on-disk home as the Mac app, via ADBKit's own path helper — so a
+// developer running both does not end up with two divergent overrides files.
+let engine = FeatureEngine(
+    client: client, locator: locator, monitor: monitor,
+    overridesStore: JSONStore<OverridesMap>(filename: "overrides.json", default: [:]),
+    toolsDirectory: AppPaths.supportDir.appendingPathComponent("tools"))
 let server = DaemonServer(
-    backend: LiveBackend(monitor: monitor), token: token,
+    backend: LiveBackend(monitor: monitor, engine: engine), token: token,
     streamSource: LiveStreamSource(monitor: monitor, streamer: LogcatStreamer(client: client)))
 
 do {
