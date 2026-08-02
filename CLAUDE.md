@@ -151,8 +151,8 @@ Node 22 in CI; scroll reveals and the hero palette demo must keep their
   (pure `reorder`/`move`/`moveToEnd` helpers for the sidebar, unit-tested
   without UI), `WorkspaceRegistry` (the multi-window model: `WorkspaceID`,
   which window owns which device, `exclusiveFeatureIDs` + the conflict
-  queries behind the Focus / Take Over banner, and the per-device window
-  tint index), `WindowEffects` (pure math for the translucent-window
+  queries behind the Focus / Take Over banner, and the window tint slot —
+  nil for the first window, which keeps the app accent), `WindowEffects` (pure math for the translucent-window
   appearance — opacity clamp/range, `cardAlpha`, blur radius, grain strength;
   the App-layer plumbing is `App/Sources/Root/WindowTranslucency.swift` +
   the dynamic `.bgRoot`/`.bgSurface` tokens in `Theme.swift` — see the
@@ -388,6 +388,11 @@ table) is in `docs/reactotron-mcp-analysis.md`.
     Finder opens and update toasts route through `AppCore.frontmost` (the last
     key window). Poll-rate activation comes from `NSApplication`, never a
     per-window `scenePhase` — those fire independently and fight.
+  - **The window title is centered by a toolbar principal item**
+    (`CenteredWindowTitle`), which also writes `window.title` itself —
+    macOS 26 lays a plain title out leading, and `.navigationTitle` there
+    renders a *second* leading one. Only the windows after the first tint
+    their device icon (`DeviceTint`); the app keeps one accent.
   - **A feature that can't run twice on one device** goes in
     `WorkspaceRegistry.exclusiveFeatureIDs` (scrcpy/screen-record share the
     encoder, `js-console` loses the CDP target to the newest client,

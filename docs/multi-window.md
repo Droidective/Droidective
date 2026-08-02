@@ -150,9 +150,25 @@ size floor and its resize-freeze. Both now observe app-wide and track a set.
 
 The window title is the active tab, prefixed with the device once more than one
 window is open ("Medium Tablet — Logcat"), which is what names them in the
-Window menu and Mission Control. The device-status dot takes a stable
-per-device tint (`DeviceTint`, index from `WorkspaceRegistry.tintIndex`) — only
-with several windows open, since the cue is pointless with one.
+Window menu and Mission Control.
+
+It is drawn **centered**. macOS 26 lays a window title out leading, against the
+traffic lights (confirmed at runtime: no toolbar, `titleVisibility == .visible`,
+still left) — and the only placement the system centers is a toolbar's
+principal item. So `CenteredWindowTitle` puts the title there and writes
+`window.title` itself. Deliberately not `.navigationTitle`: on macOS 26 that
+renders as *another* leading item, duplicating the centered one. On macOS 26 the
+item carries the system's own glass capsule; removing that needs
+`sharedBackgroundVisibility`, which is macOS 26-only and would not compile on
+CI's macOS 15 SDK.
+
+**Only the extra windows are tinted.** The app has one accent, so the first
+window's device icon is always `.brandAccent` — a single-window session looks
+exactly as it did before multi-window, and opening a second window never
+repaints the first. Each additional window takes a color from `DeviceTint`'s
+palette (slot by window position via
+`WorkspaceRegistry.tintIndex(ofWindow:paletteSize:)`, so two can't collide), and
+only on the device-status icon — never the rest of the interface.
 
 ## Verified live
 

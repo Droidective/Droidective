@@ -1,22 +1,27 @@
 import ADBKit
 import SwiftUI
 
-/// A stable color per device, so two windows side by side are told apart at a
-/// glance instead of by reading their titles. Only ever a *hint*: it accents
-/// the device pill and the window's status dot, never the whole chrome, so the
-/// user's chosen accent still owns the interface.
+/// The color of a window's device icon.
 ///
-/// The index math is `WorkspaceRegistry.tintIndex` (pure, tested) — djb2 over
-/// the serial, so a device keeps its color across relaunches.
+/// The app has one accent, and it stays that way: the first window's icon is
+/// always `.brandAccent`, so a single-window session looks exactly as it did
+/// before multi-window, and opening a second window never repaints the first.
+/// Each *additional* window takes a color from this palette instead, on the
+/// device-status icon alone — enough to tell two bars apart at a glance,
+/// without turning the interface a different color.
+///
+/// The slot is `WorkspaceRegistry.tintIndex(ofWindow:paletteSize:)` (pure,
+/// tested): by window position, so two windows can't collide.
 enum DeviceTint {
-    /// Deliberately not including green: that's the brand accent, and a device
-    /// tinted the same as every prominent button would read as "selected"
-    /// rather than "this device".
+    /// Deliberately excludes green: that's the brand accent the first window
+    /// uses, and a second window tinted the same would defeat the point.
     private static let palette: [Color] = [
         .blue, .orange, .purple, .pink, .teal, .indigo,
     ]
 
-    static func color(for serial: String) -> Color {
-        palette[WorkspaceRegistry.tintIndex(for: serial, paletteSize: palette.count)]
+    /// nil for the first window — the caller falls back to the app accent.
+    static func color(forWindow ordinal: Int) -> Color? {
+        WorkspaceRegistry.tintIndex(ofWindow: ordinal, paletteSize: palette.count)
+            .map { palette[$0] }
     }
 }

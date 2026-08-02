@@ -798,13 +798,12 @@ final class AppState {
         persistTabs()
     }
 
-    /// A stable per-device tint so two windows are distinguishable at a glance
-    /// without reading their titles. nil (the brand accent) for a window with
-    /// no device, and for the only window — the cue is only useful when
-    /// there's something to tell apart.
+    /// This window's device-icon color, or nil to use the app accent. Only the
+    /// windows *after* the first take one, so a single-window session and the
+    /// original window both keep the accent the rest of the app uses.
     var deviceTint: Color? {
-        guard core.workspaceCount > 1, let serial = selectedSerial else { return nil }
-        return DeviceTint.color(for: serial)
+        guard let ordinal = core.registry.ordinal(of: id) else { return nil }
+        return DeviceTint.color(forWindow: ordinal)
     }
 
     /// What put the "close all terminals?" prompt on screen: closing the

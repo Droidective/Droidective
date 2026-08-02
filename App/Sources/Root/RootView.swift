@@ -141,6 +141,7 @@ struct RootView: View {
                     }
                 }
                 window.setFrameAutosaveName(autosaveName)
+                CenteredWindowTitle.configure(window)
                 WindowMinSizeGuard.shared.attach(to: window)
                 applyWindowTranslucency(window, opacity: windowOpacity, blurAmount: windowBlur)
             })
@@ -566,7 +567,9 @@ struct RootView: View {
                         .clipped()
                 }
             }
-            .navigationTitle(activeTitle)
+            // macOS 26 puts a window's title beside the traffic lights; this
+            // draws it centered instead, and owns `window.title` itself.
+            .modifier(CenteredWindowTitle(title: activeTitle))
             // The deferred fixed-sidebar hide: fires when the drag ends
             // (splitDragFraction → nil); a fresh drag re-arms cleanly.
             .onChange(of: splitDragFraction == nil) { _, dragEnded in

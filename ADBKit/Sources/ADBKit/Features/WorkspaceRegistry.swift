@@ -108,15 +108,16 @@ public struct WorkspaceRegistry: Sendable, Equatable {
 
     // MARK: - Window tint
 
-    /// Index into the App layer's tint palette for a device, so each window
-    /// carries a stable color and two windows are distinguishable at a glance.
-    /// djb2 over the serial — `String.hashValue` reseeds per launch, which
-    /// would repaint every window on relaunch.
-    public static func tintIndex(for serial: String, paletteSize: Int) -> Int {
-        guard paletteSize > 0 else { return 0 }
-        var hash: UInt64 = 5381
-        for byte in serial.utf8 { hash = hash &* 33 &+ UInt64(byte) }
-        return Int(hash % UInt64(paletteSize))
+    /// Palette slot for a window's device icon, or nil to use the app accent.
+    ///
+    /// The first window always gets nil: the app has one accent, and a lone
+    /// window has nothing to be told apart from. Only the *additional* windows
+    /// take a color, so opening a second one never repaints the first.
+    /// Assigned by position rather than hashed from the serial, so two windows
+    /// can't land on the same color.
+    public static func tintIndex(ofWindow ordinal: Int, paletteSize: Int) -> Int? {
+        guard ordinal > 1, paletteSize > 0 else { return nil }
+        return (ordinal - 2) % paletteSize
     }
 
     // MARK: - Queries

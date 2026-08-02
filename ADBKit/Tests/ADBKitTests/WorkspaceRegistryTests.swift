@@ -169,21 +169,24 @@ import Testing
 
     // MARK: - Window tint
 
-    @Test func tintIsStableForASerialAndInRange() {
-        let a = WorkspaceRegistry.tintIndex(for: "emulator-5554", paletteSize: 6)
-        #expect(a == WorkspaceRegistry.tintIndex(for: "emulator-5554", paletteSize: 6))
-        #expect((0..<6).contains(a))
+    /// The app has one accent; only the *extra* windows take a color, so
+    /// opening a second window never repaints the first.
+    @Test func theFirstWindowKeepsTheAppAccent() {
+        #expect(WorkspaceRegistry.tintIndex(ofWindow: 1, paletteSize: 6) == nil)
+        #expect(WorkspaceRegistry.tintIndex(ofWindow: 2, paletteSize: 6) == 0)
+        #expect(WorkspaceRegistry.tintIndex(ofWindow: 3, paletteSize: 6) == 1)
     }
 
-    @Test func differentDevicesUsuallyGetDifferentTints() {
-        let serials = ["emulator-5554", "emulator-5556", "1A2B3C4D", "192.168.1.7:5555"]
-        let indexes = serials.map { WorkspaceRegistry.tintIndex(for: $0, paletteSize: 6) }
-        #expect(Set(indexes).count >= 3, "\(indexes) collides too much for a 6-color palette")
+    @Test func extraWindowsGetDistinctTintsUntilThePaletteWraps() {
+        let indexes = (2...7).map { WorkspaceRegistry.tintIndex(ofWindow: $0, paletteSize: 6) }
+        #expect(indexes == [0, 1, 2, 3, 4, 5])
+        // The seventh window is the first to reuse a color.
+        #expect(WorkspaceRegistry.tintIndex(ofWindow: 8, paletteSize: 6) == 0)
     }
 
-    @Test func tintHandlesADegenerateOrEmptyPalette() {
-        #expect(WorkspaceRegistry.tintIndex(for: "abc", paletteSize: 0) == 0)
-        #expect(WorkspaceRegistry.tintIndex(for: "", paletteSize: 4) == 5381 % 4)
+    @Test func tintHandlesADegenerateOrdinalOrPalette() {
+        #expect(WorkspaceRegistry.tintIndex(ofWindow: 2, paletteSize: 0) == nil)
+        #expect(WorkspaceRegistry.tintIndex(ofWindow: 0, paletteSize: 6) == nil)
     }
 
     // MARK: - WorkspaceID
