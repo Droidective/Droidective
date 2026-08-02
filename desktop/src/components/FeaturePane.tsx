@@ -16,6 +16,7 @@ export interface FeaturePaneProps {
   onOpen: (id: string) => void
   sidebarOrder: string[]
   categoryOrder: string[]
+  favorites: string[]
 }
 
 /**
@@ -33,6 +34,7 @@ export function FeaturePane(props: FeaturePaneProps) {
         features={props.features}
         sidebarOrder={props.sidebarOrder}
         categoryOrder={props.categoryOrder}
+        favorites={props.favorites}
         onOpen={props.onOpen}
       />
     )

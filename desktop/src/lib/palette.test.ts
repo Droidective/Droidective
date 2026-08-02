@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import raw from "@/lib/__fixtures__/features.json"
-import { rankFeatures, relevance } from "@/lib/palette"
+import { moveHighlight, paletteResults, rankFeatures, relevance, togglePinned } from "@/lib/palette"
 import type { FeatureSummary } from "@/lib/wire"
 
 // Real daemon output, captured from `POST /v1/features/list` rather than
@@ -74,5 +74,51 @@ describe("rankFeatures", () => {
     // Deliberately not filtered here: the sidebar wants views as well as
     // actions, and a palette over commands would choose differently again.
     expect(rankFeatures(features, "").map((feature) => feature.id)).toContain("logcat")
+  })
+})
+
+describe("paletteResults", () => {
+  it("opens on what you pinned, in the order you pinned it", () => {
+    const results = paletteResults(features, "", ["logcat", "screenshot"])
+    expect(results.slice(0, 2).map((feature) => feature.id)).toEqual(["logcat", "screenshot"])
+  })
+
+  it("lists a pinned feature once, not twice", () => {
+    const ids = paletteResults(features, "", ["logcat"]).map((feature) => feature.id)
+    expect(ids.filter((id) => id === "logcat")).toHaveLength(1)
+    expect(ids).toHaveLength(features.length)
+  })
+
+  it("lets relevance decide once there is a query", () => {
+    // A weakly-matching pin sitting above an exact match would make the
+    // ranking a lie, so pins are not promoted here.
+    const results = paletteResults(features, "battery", ["logcat"])
+    expect(results[0]?.id).toBe("fake-battery")
+    expect(results.map((feature) => feature.id)).not.toContain("logcat")
+  })
+
+  it("ignores a pinned id that is no longer served", () => {
+    const ids = paletteResults(features, "", ["gone-feature"]).map((feature) => feature.id)
+    expect(ids).toHaveLength(features.length)
+  })
+})
+
+describe("moveHighlight", () => {
+  it("wraps at both ends", () => {
+    expect(moveHighlight(3, 2, 1)).toBe(0)
+    expect(moveHighlight(3, 0, -1)).toBe(2)
+    expect(moveHighlight(3, 0, 1)).toBe(1)
+  })
+
+  it("stays put with nothing to highlight", () => {
+    expect(moveHighlight(0, 0, 1)).toBe(0)
+  })
+})
+
+describe("togglePinned", () => {
+  it("appends then removes, keeping the pinning order", () => {
+    expect(togglePinned([], "logcat")).toEqual(["logcat"])
+    expect(togglePinned(["apps"], "logcat")).toEqual(["apps", "logcat"])
+    expect(togglePinned(["apps", "logcat"], "apps")).toEqual(["logcat"])
   })
 })

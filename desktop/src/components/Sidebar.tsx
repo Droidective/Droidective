@@ -16,6 +16,8 @@ export interface SidebarProps {
   sidebarOrder: string[]
   categoryOrder: string[]
   collapsedCategories: string[]
+  favorites: string[]
+  onTogglePinned: (id: string) => void
   onSidebarOrder: (order: string[]) => void
   onCategoryOrder: (order: string[]) => void
   onToggleCollapsed: (category: string) => void
@@ -44,8 +46,16 @@ export function Sidebar(props: SidebarProps) {
         sidebarOrder: props.sidebarOrder,
         categoryOrder: props.categoryOrder,
         collapsedCategories: props.collapsedCategories,
+        favorites: props.favorites,
       }),
-    [props.features, props.sidebarOrder, props.categoryOrder, props.collapsedCategories, query],
+    [
+      props.features,
+      props.sidebarOrder,
+      props.categoryOrder,
+      props.collapsedCategories,
+      props.favorites,
+      query,
+    ],
   )
 
   const endDrag = () => {
@@ -99,6 +109,8 @@ export function Sidebar(props: SidebarProps) {
               key={section.category}
               section={section}
               activeID={props.activeID}
+              favorites={props.favorites}
+              onTogglePinned={props.onTogglePinned}
               dragging={dragging}
               slot={slot}
               draggable={!searching}

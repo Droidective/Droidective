@@ -12,15 +12,22 @@ export function useTabShortcuts({
   onClose,
   onActivateIndex,
   onSplit,
+  onPalette,
 }: {
   activeTab: string | null
   onClose: (id: string) => void
   onActivateIndex: (index: number) => void
   onSplit: (id: string) => void
+  onPalette: () => void
 }): void {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!hasModifier(event) || event.altKey) return
+      if (event.key === "k" || event.key === "t") {
+        event.preventDefault()
+        onPalette()
+        return
+      }
       if (event.key === "w") {
         event.preventDefault()
         if (activeTab !== null) onClose(activeTab)
@@ -45,5 +52,5 @@ export function useTabShortcuts({
     return () => {
       globalThis.removeEventListener("keydown", onKeyDown)
     }
-  }, [activeTab, onClose, onActivateIndex, onSplit])
+  }, [activeTab, onClose, onActivateIndex, onSplit, onPalette])
 }

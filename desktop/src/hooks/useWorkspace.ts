@@ -7,6 +7,7 @@ import {
   type LayoutState,
 } from "@/lib/layout"
 import { clampedFraction } from "@/lib/panes"
+import { togglePinned } from "@/lib/palette"
 import { toggleCollapsed } from "@/lib/sidebar"
 import type { FeatureSummary } from "@/lib/wire"
 import {
@@ -37,6 +38,7 @@ export interface WorkspaceController {
   setSidebarOrder: (order: string[]) => void
   setCategoryOrder: (order: string[]) => void
   toggleCategory: (category: string) => void
+  togglePin: (id: string) => void
 }
 
 /**
@@ -119,6 +121,9 @@ export function useWorkspace(features: FeatureSummary[]): WorkspaceController {
     }, []),
     setCategoryOrder: useCallback((categoryOrder: string[]) => {
       setLayout((current) => ({ ...current, categoryOrder }))
+    }, []),
+    togglePin: useCallback((id: string) => {
+      setLayout((current) => ({ ...current, favorites: togglePinned(current.favorites, id) }))
     }, []),
     toggleCategory: useCallback((category: string) => {
       setLayout((current) => ({

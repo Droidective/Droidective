@@ -69,7 +69,12 @@ export interface SidebarLayout {
   sidebarOrder: readonly string[]
   categoryOrder: readonly string[]
   collapsedCategories: readonly string[]
+  /** Pinned feature ids, in the order they were pinned. */
+  favorites: readonly string[]
 }
+
+/** The pseudo-category the Pinned section uses. Never a real wire value. */
+export const PINNED_SECTION = "pinned"
 
 /**
  * The sections the sidebar renders.
@@ -87,10 +92,23 @@ export function sidebarSections(
   if (layout.query.trim() !== "") return searchSections(ordered, layout.query)
 
   const collapsed = new Set(layout.collapsedCategories)
-  const categories = rankBy(orderedCategoryIDs(ordered), layout.categoryOrder, (id) => id)
   const sections: SidebarSection[] = []
-  for (const category of categories) {
-    const matching = ordered.filter((feature) => feature.category === category)
+
+  // Pinned leads, and its members are lifted out of their categories rather
+  // than listed twice — the same call the Mac's `enabledFeatures(in:)` makes.
+  const pinned = layout.favorites.flatMap((id) => ordered.filter((feature) => feature.id === id))
+  if (pinned.length > 0) {
+    sections.push({
+      category: PINNED_SECTION,
+      label: "Pinned",
+      features: pinned,
+      collapsed: collapsed.has(PINNED_SECTION),
+    })
+  }
+
+  const rest = ordered.filter((feature) => !layout.favorites.includes(feature.id))
+  for (const category of rankBy(orderedCategoryIDs(rest), layout.categoryOrder, (id) => id)) {
+    const matching = rest.filter((feature) => feature.category === category)
     if (matching.length === 0) continue
     sections.push({
       category,

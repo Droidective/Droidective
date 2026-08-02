@@ -24,6 +24,8 @@ export interface LayoutState {
   sidebarOrder: string[]
   categoryOrder: string[]
   collapsedCategories: string[]
+  /** Pinned feature ids, in the order they were pinned. */
+  favorites: string[]
   /** One entry per open pane, left to right. */
   panes: SavedPane[]
   focusedPane: number
@@ -38,6 +40,7 @@ export function emptyLayout(): LayoutState {
     sidebarOrder: [],
     categoryOrder: [],
     collapsedCategories: [],
+    favorites: [],
     panes: [{ tabs: [HOME_TAB], activeTab: HOME_TAB }],
     focusedPane: 0,
     splitFraction: 0.5,
@@ -68,6 +71,7 @@ export function loadLayout(storage: Pick<Storage, "getItem">): LayoutState {
     sidebarOrder: stringArray(saved.sidebarOrder),
     categoryOrder: stringArray(saved.categoryOrder),
     collapsedCategories: stringArray(saved.collapsedCategories),
+    favorites: stringArray(saved.favorites),
     panes: panes.length === 0 ? emptyLayout().panes : panes,
     focusedPane: typeof saved.focusedPane === "number" ? saved.focusedPane : 0,
     splitFraction: typeof saved.splitFraction === "number" ? saved.splitFraction : 0.5,

@@ -19,6 +19,7 @@ const plain = {
   sidebarOrder: [],
   categoryOrder: [],
   collapsedCategories: [],
+  favorites: [],
 }
 
 describe("categories", () => {
@@ -122,6 +123,27 @@ describe("sidebarSections", () => {
       collapsedCategories: [...CATEGORY_ORDER],
     })
     expect(visibleFeatures(sections).map((feature) => feature.id)).toContain("fake-battery")
+  })
+
+  it("puts a Pinned section first and lifts its members out of their groups", () => {
+    const sections = sidebarSections(features, { ...plain, favorites: ["logcat", "screenshot"] })
+    expect(sections[0]?.label).toBe("Pinned")
+    expect(sections[0]?.features.map((feature) => feature.id)).toEqual(["logcat", "screenshot"])
+    // Listed once, not in both places.
+    const elsewhere = sections
+      .slice(1)
+      .flatMap((section) => section.features.map((feature) => feature.id))
+    expect(elsewhere).not.toContain("logcat")
+    expect(elsewhere).not.toContain("screenshot")
+  })
+
+  it("has no Pinned section when nothing is pinned", () => {
+    expect(sidebarSections(features, plain).map((section) => section.label)).not.toContain("Pinned")
+  })
+
+  it("does not pin-order a search", () => {
+    const sections = sidebarSections(features, { ...plain, query: "battery", favorites: ["logcat"] })
+    expect(sections[0]?.features[0]?.id).toBe("fake-battery")
   })
 
   it("returns nothing for a query that matches nothing", () => {

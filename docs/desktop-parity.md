@@ -52,9 +52,9 @@ split panes and no palette produces something that looks like Droidective in a
 screenshot and does not feel like it in use — and every screen ported before
 the shell exists will need reworking to live inside it.
 
-The sidebar and the tab strip have landed; split panes, the palette and hotkeys
-have not. Screens ported now open in a tab, so they will not need reworking for
-that — but a screen is still not finished until it behaves in a split pane.
+The sidebar, the tab strip, split panes and the palette have landed, so a screen
+ported now opens in a tab, splits, and is reachable from the palette without
+being reworked for any of it. Hotkeys and the chrome are still outstanding.
 
 1. **Shell parity** (below) — tabs, split panes, sidebar, palette, hotkeys.
 2. **The screens people open every day** — logcat, file explorer, device info,
@@ -66,9 +66,8 @@ that — but a screen is still not finished until it behaves in a split pane.
 
 ## Cross-cutting shell
 
-None of this is in `desktop/` yet. It is most of what "does not match the
-macOS version" actually means — the current app is three tabs and a list.
-Sourced from `CLAUDE.md` and the App sources.
+Sourced from `CLAUDE.md` and the App sources. The navigation half has landed;
+the chrome and the device bar have not.
 
 ### Navigation and layout
 
@@ -91,7 +90,7 @@ Sourced from `CLAUDE.md` and the App sources.
       reorder, ⌘W / Ctrl+W to close, ⌘1–⌘9 to jump. Open tabs stay mounted and
       hidden rather than unmounted, so a background tab keeps its log stream and
       its loaded lists. Ported from ADBKit's `TabState`, close-focus rules
-      included. Still missing: the `+` button, which needs the palette below.
+      included.
 - [x] **Split panes** — two panes, clamped 30–70% with the same absolute
       per-pane floor (`PaneSplit`, ported to `lib/panes.ts`), a draggable
       divider that persists, and the pane rules ported from ADBKit's
@@ -106,13 +105,19 @@ Sourced from `CLAUDE.md` and the App sources.
 
 ### Finding things
 
-- [ ] **Command palette** (⌘T / ⌘K) over features *and* commands, using the
-      ranking already ported to `desktop/src/lib/palette.ts`.
+- [x] **Command palette** — Ctrl/⌘ + K or T, and the tab strip's `+`, which
+      focuses its pane first so the choice lands there. Arrows move, Enter
+      opens, Ctrl/⌘ + P pins. With no query it opens on the pinned list; with
+      one, relevance decides and pins are not promoted. Commands are not in it
+      yet — this app has no custom commands to offer.
 - [ ] **Per-feature hotkeys**, recordable, with a live-preview recorder.
 - [ ] **Global hotkey → Quick Actions panel** — the non-activating mini app:
       grid of every runnable action, pinned first, custom commands, pick-device
       interstitial, ⌘⏎ run-on-all.
-- [ ] **Pinned / favourites**, shared between the palette and Quick Actions.
+- [x] **Pinned / favourites** — a Pinned section leading the sidebar and the
+      palette's empty-query list, pinned from either. Members are lifted out of
+      their categories rather than listed twice, as `enabledFeatures(in:)` does
+      on the Mac. Quick Actions does not exist here yet to share them with.
 - [ ] **Manage features catalog** — turn features off; everything is on by
       default.
 

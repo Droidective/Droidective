@@ -1,4 +1,4 @@
-import { ChevronRight } from "lucide-react"
+import { ChevronRight, Pin, PinOff } from "lucide-react"
 import { pastMidpointY, startDrag } from "@/components/dnd"
 import { cn } from "@/lib/cn"
 import { iconForFeature } from "@/lib/icons"
@@ -22,6 +22,8 @@ export interface DropSlot {
 export interface SectionProps {
   section: Section
   activeID: string | null
+  favorites: readonly string[]
+  onTogglePinned: (id: string) => void
   dragging: Dragging | null
   slot: DropSlot | null
   /** Off while searching: relevance order is not an order worth persisting. */
@@ -90,6 +92,10 @@ export function SidebarSection(props: SectionProps) {
               key={feature.id}
               feature={feature}
               active={feature.id === props.activeID}
+              pinned={props.favorites.includes(feature.id)}
+              onTogglePinned={() => {
+                props.onTogglePinned(feature.id)
+              }}
               slot={takesFeature && slot?.id === feature.id ? slot.after : null}
               faded={dragging?.kind === "feature" && dragging.id === feature.id}
               draggable={props.draggable}
@@ -124,6 +130,8 @@ export function SidebarSection(props: SectionProps) {
 function Row({
   feature,
   active,
+  pinned,
+  onTogglePinned,
   slot,
   faded,
   draggable,
@@ -134,6 +142,8 @@ function Row({
 }: {
   feature: FeatureSummary
   active: boolean
+  pinned: boolean
+  onTogglePinned: () => void
   /** Null for no guideline, else which side of the row it sits on. */
   slot: boolean | null
   faded: boolean
@@ -145,32 +155,52 @@ function Row({
 }) {
   const Icon = iconForFeature(feature.id, feature.category)
   return (
-    <button
-      type="button"
+    <div
       draggable={draggable}
-      onClick={onOpen}
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDrop={onDrop}
-      title={feature.subtitle ?? feature.title}
       className={cn(
-        "relative flex w-full items-start gap-2.5 px-3 py-1.5 text-left transition-colors",
+        "group relative flex w-full items-start gap-2.5 px-3 py-1.5 transition-colors",
         active ? "bg-accent/12" : "hover:bg-white/[0.04]",
         faded ? "opacity-30" : "",
       )}
     >
-      <Icon
-        size={16}
-        className={cn("mt-[3px] shrink-0", active ? "text-accent" : "text-accent/80")}
-      />
-      <span className="min-w-0">
-        <span className="block truncate text-[13px] text-text-primary">{feature.title}</span>
-        {feature.subtitle ? (
-          <span className="block truncate text-[11px] text-text-secondary">{feature.subtitle}</span>
-        ) : null}
-      </span>
+      <button
+        type="button"
+        onClick={onOpen}
+        title={feature.subtitle ?? feature.title}
+        className="flex min-w-0 flex-1 items-start gap-2.5 text-left"
+      >
+        <Icon
+          size={16}
+          className={cn("mt-[3px] shrink-0", active ? "text-accent" : "text-accent/80")}
+        />
+        <span className="min-w-0">
+          <span className="block truncate text-[13px] text-text-primary">{feature.title}</span>
+          {feature.subtitle ? (
+            <span className="block truncate text-[11px] text-text-secondary">
+              {feature.subtitle}
+            </span>
+          ) : null}
+        </span>
+      </button>
+      <button
+        type="button"
+        onClick={onTogglePinned}
+        title={pinned ? "Unpin" : "Pin to the top"}
+        aria-label={pinned ? `Unpin ${feature.title}` : `Pin ${feature.title}`}
+        className={cn(
+          "mt-[2px] shrink-0 rounded p-0.5 text-text-tertiary hover:text-text-primary",
+          // Reserved space either way, so a row does not shift under the
+          // pointer as it arrives.
+          pinned ? "text-accent" : "opacity-0 group-hover:opacity-100",
+        )}
+      >
+        {pinned ? <Pin size={12} /> : <PinOff size={12} />}
+      </button>
       {slot === null ? null : <Guideline after={slot} />}
-    </button>
+    </div>
   )
 }
 
