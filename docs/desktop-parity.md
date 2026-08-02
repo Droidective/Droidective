@@ -121,6 +121,12 @@ Sourced from `CLAUDE.md` and the App sources.
 
 ### Chrome and feel
 
+- [x] **Per-feature icons.** The daemon drops `FeatureDef.icon` on purpose —
+      those are SF Symbol names, which mean nothing off Apple — so
+      `desktop/src/lib/icons.ts` pairs each registry id with a lucide glyph
+      chosen to read as the same thing the Mac's symbol does. A test fails if
+      the daemon serves a feature the table has no entry for, so a new feature
+      cannot quietly inherit its neighbour's icon.
 - [ ] **Settings** — Appearance (accent colour, custom background/text,
       window opacity / blur / grain), General, Hotkeys, Tools, Privacy, MCP.
 - [ ] **Window translucency** — the `.bgRoot`/`.bgSurface` token system, with

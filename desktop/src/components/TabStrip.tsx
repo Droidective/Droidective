@@ -2,7 +2,7 @@ import { useState } from "react"
 import { House, X } from "lucide-react"
 import { pastMidpointX, startDrag } from "@/components/dnd"
 import { cn } from "@/lib/cn"
-import { iconForCategory } from "@/lib/icons"
+import { iconForFeature } from "@/lib/icons"
 import { HOME_TAB } from "@/lib/layout"
 import { dropTarget } from "@/lib/ordering"
 import { IS_MAC, shortcutLabel } from "@/lib/platform"
@@ -124,7 +124,7 @@ function Chip({
 }) {
   // A tab whose feature has gone is still closable: showing its id beats
   // rendering a blank chip nobody can get rid of.
-  const Icon = iconForCategory(feature?.category ?? "")
+  const Icon = iconForFeature(id, feature?.category ?? "")
   return (
     <div
       draggable
