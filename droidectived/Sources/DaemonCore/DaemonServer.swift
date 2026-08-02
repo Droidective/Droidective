@@ -11,13 +11,33 @@ import NIOWebSocket
 /// requiring adb on the test host.
 public protocol DaemonBackend: Sendable {
     func listDevices() async -> [Device]
+    /// Runs a registry feature. The daemon holds no feature knowledge of its
+    /// own — this is a straight pass-through to `FeatureEngine`.
+    func runAction(
+        featureID: String, serial: String, platform: DevicePlatform,
+        params: [String: FeatureValue]
+    ) async -> FeatureResult
 }
 
 /// `DeviceMonitor` in production.
 public struct LiveBackend: DaemonBackend {
     private let monitor: DeviceMonitor
-    public init(monitor: DeviceMonitor) { self.monitor = monitor }
+    private let engine: FeatureEngine
+
+    public init(monitor: DeviceMonitor, engine: FeatureEngine) {
+        self.monitor = monitor
+        self.engine = engine
+    }
+
     public func listDevices() async -> [Device] { await monitor.list(force: true) }
+
+    public func runAction(
+        featureID: String, serial: String, platform: DevicePlatform,
+        params: [String: FeatureValue]
+    ) async -> FeatureResult {
+        await engine.run(
+            featureID: featureID, serial: serial, platform: platform, params: params)
+    }
 }
 
 /// Loopback HTTP for the request/response half of the protocol.
@@ -185,6 +205,7 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
     private let token: String
     private let port: NIOLockedValueBox<Int>
     private var head: HTTPRequestHead?
+    private var body = ByteBufferAllocator().buffer(capacity: 0)
 
     init(backend: any DaemonBackend, token: String, port: NIOLockedValueBox<Int>) {
         self.backend = backend
@@ -196,11 +217,13 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
         switch unwrapInboundIn(data) {
         case .head(let head):
             self.head = head
-        case .body:
-            break
+        case .body(var buffer):
+            body.writeBuffer(&buffer)
         case .end:
             guard let head else { return }
             self.head = nil
+            let body = self.body
+            self.body = ByteBufferAllocator().buffer(capacity: 0)
             let loop = context.eventLoop
             let boxedContext = NIOLoopBound(context, eventLoop: loop)
             let port = self.port.withLockedValue { $0 }
@@ -208,10 +231,10 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
             let token = self.token
             // The route is async; hop the answer back onto the event loop.
             Task { [self] in
-                let (status, body) = await Self.respond(
-                    head: head, port: port, token: token, backend: backend)
+                let (status, responseBody) = await Self.respond(
+                    head: head, body: body, port: port, token: token, backend: backend)
                 loop.execute {
-                    self.write(context: boxedContext.value, status: status, body: body)
+                    self.write(context: boxedContext.value, status: status, body: responseBody)
                 }
             }
         }
@@ -220,7 +243,8 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
     /// Pure-ish routing: guards, then the route. Split out so the socket tests
     /// and any future unit test exercise the same decision path.
     static func respond(
-        head: HTTPRequestHead, port: Int, token: String, backend: any DaemonBackend
+        head: HTTPRequestHead, body: ByteBuffer, port: Int, token: String,
+        backend: any DaemonBackend
     ) async -> (HTTPResponseStatus, Data) {
         func encoded(_ body: some Encodable) -> Data {
             (try? DaemonProtocol.encode(body)) ?? Data("{}".utf8)
@@ -247,6 +271,33 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
         case .devicesList:
             let devices = await backend.listDevices()
             return (.ok, encoded(DaemonProtocol.DevicesResponse(devices: devices)))
+
+        case .featuresList:
+            return (.ok, encoded(ActionProtocol.features()))
+
+        case .actionsRun:
+            let raw = Data(body.readableBytesView)
+            guard let request = try? JSONDecoder().decode(
+                ActionProtocol.RunRequest.self, from: raw)
+            else { return (.badRequest, encoded(DaemonProtocol.badRequest)) }
+            guard let platform = request.resolvedPlatform else {
+                return (.badRequest, encoded(DaemonProtocol.unknownPlatform))
+            }
+            // Unknown ids are a 404 rather than a 500: asking for a feature
+            // that does not exist is the client's mistake, not a daemon fault,
+            // and `run` would otherwise answer with a generic failure that a
+            // UI cannot distinguish from a device problem.
+            guard FeatureEngine.implementedIDs.contains(request.featureId) else {
+                return (.notFound, encoded(DaemonProtocol.unknownFeature))
+            }
+            let result = await backend.runAction(
+                featureID: request.featureId, serial: request.serial,
+                platform: platform, params: request.featureValues)
+            // A failed action is a *successful* request: 200 with ok=false.
+            // Mapping it to 5xx would conflate "the device said no" with "the
+            // daemon broke", which is the distinction `AdbClient` exists to
+            // preserve.
+            return (.ok, encoded(ActionProtocol.RunResponse(result)))
         }
     }
 

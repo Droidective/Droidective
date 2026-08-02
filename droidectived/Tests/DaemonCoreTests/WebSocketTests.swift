@@ -34,6 +34,13 @@ private let hasWebSocketClient: Bool = {
 @Suite(.timeLimit(.minutes(1)), .enabled(if: hasWebSocketClient)) struct WebSocketTests {
     private struct StubBackend: DaemonBackend {
         func listDevices() async -> [Device] { [] }
+        func runAction(
+            featureID: String, serial: String, platform: DevicePlatform,
+            params: [String: FeatureValue]
+        ) async -> FeatureResult {
+            FeatureResult(ok: true, message: "stub")
+        }
+
     }
 
     private struct FixedSource: StreamSource {
