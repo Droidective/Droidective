@@ -49,6 +49,10 @@ jobs:
       # off-Apple, so Linux runs its suite too rather than only compiling it.
       - name: Run droidectived tests (Linux)
         run: cd droidectived && swift test -Xswiftc -warnings-as-errors
+      # The shipped artifact, not just the tests: a release build is a
+      # different compile and must be proven before a tag depends on it.
+      - name: Build droidectived (Linux, release)
+        run: cd droidectived && swift build -c release --product droidectived
 
   build-windows:
     # windows-2022, not -2025: the 2025 image ships MSVC 14.51, whose STL header
@@ -76,6 +80,14 @@ jobs:
           cd ADBKit
           swift build --target ADBKit -Xswiftc -warnings-as-errors
           swift build --target ADBKitTests -Xswiftc -warnings-as-errors
+      # Does the daemon build here at all? The release policy lists a Windows
+      # daemon artifact, and that promise has never been tested. Non-fatal for
+      # now so this run reports the answer instead of just going red.
+      - name: Probe droidectived (Windows)
+        continue-on-error: true
+        run: |
+          cd droidectived
+          swift build -c release --product droidectived 2>&1 | Select-Object -Last 30
 
   build:
     runs-on: macos-15
