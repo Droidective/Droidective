@@ -117,13 +117,12 @@ import Testing
         try fm.createDirectory(at: buildTools.appendingPathComponent("lib"), withIntermediateDirectories: true)
         // `executableName` appends `.exe` on Windows, which is what the real
         // SDK ships and what the locator looks for; a no-op on POSIX.
-        let exec: [FileAttributeKey: Any] = [.posixPermissions: 0o755]
         let aapt2 = buildTools.appendingPathComponent(ToolLocator.executableName("aapt2"))
-        _ = fm.createFile(atPath: aapt2.path, contents: Data("#!/bin/sh\n".utf8), attributes: exec)
+        try createExecutableStub(at: aapt2)
         let jar = buildTools.appendingPathComponent("lib/apksigner.jar")
         _ = fm.createFile(atPath: jar.path, contents: Data())
         let java = base.appendingPathComponent(ToolLocator.executableName("java"))
-        _ = fm.createFile(atPath: java.path, contents: Data("#!/bin/sh\n".utf8), attributes: exec)
+        try createExecutableStub(at: java)
         return (buildTools.path, aapt2.path, jar.path, java.path)
     }
 }
