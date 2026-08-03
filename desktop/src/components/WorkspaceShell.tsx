@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
+import { CommandPalette } from "@/components/CommandPalette"
 import { PaneArea } from "@/components/PaneArea"
 import { Sidebar } from "@/components/Sidebar"
 import { TabContextMenu } from "@/components/TabContextMenu"
@@ -23,6 +24,7 @@ export function WorkspaceShell({
 }) {
   const workspace = useWorkspace(features)
   const [menu, setMenu] = useState<TabMenuTarget | null>(null)
+  const [paletteOpen, setPaletteOpen] = useState(false)
   // Lifted out of the Apps pane: a `needsBundle` action needs the same choice,
   // so it cannot live inside one tab. A package id means nothing on a different
   // device, so the choice is dropped when the selection changes.
@@ -37,12 +39,25 @@ export function WorkspaceShell({
     [features],
   )
 
+  // Focus the pane first, so whatever is chosen opens in the one that asked.
+  const { focusPane } = workspace
+  const onNewTab = useCallback(
+    (pane: number) => {
+      focusPane(pane)
+      setPaletteOpen(true)
+    },
+    [focusPane],
+  )
+
   const focused = activeTab(workspace.workspace)
   useTabShortcuts({
     activeTab: focused,
     onClose: workspace.close,
     onActivateIndex: workspace.activateIndex,
     onSplit: workspace.split,
+    onPalette: () => {
+      setPaletteOpen(true)
+    },
   })
 
   return (
@@ -54,6 +69,8 @@ export function WorkspaceShell({
         sidebarOrder={workspace.layout.sidebarOrder}
         categoryOrder={workspace.layout.categoryOrder}
         collapsedCategories={workspace.layout.collapsedCategories}
+        favorites={workspace.layout.favorites}
+        onTogglePinned={workspace.togglePin}
         onSidebarOrder={workspace.setSidebarOrder}
         onCategoryOrder={workspace.setCategoryOrder}
         onToggleCollapsed={workspace.toggleCategory}
@@ -74,21 +91,60 @@ export function WorkspaceShell({
         onContextMenu={(id, x, y) => {
           setMenu({ id, x, y })
         }}
+        onNewTab={onNewTab}
         sidebarOrder={workspace.layout.sidebarOrder}
         categoryOrder={workspace.layout.categoryOrder}
+        favorites={workspace.layout.favorites}
         splitFraction={workspace.layout.splitFraction}
         onSplitFraction={workspace.setSplitFraction}
       />
 
-      {menu === null ? null : (
-        <TabContextMenu
-          target={menu}
-          workspace={workspace}
-          onDismiss={() => {
-            setMenu(null)
-          }}
-        />
-      )}
+      <Overlays
+        palette={paletteOpen}
+        menu={menu}
+        features={features}
+        workspace={workspace}
+        onDismissPalette={() => {
+          setPaletteOpen(false)
+        }}
+        onDismissMenu={() => {
+          setMenu(null)
+        }}
+      />
     </div>
+  )
+}
+
+/** The two things that float over the panes. */
+function Overlays({
+  palette,
+  menu,
+  features,
+  workspace,
+  onDismissPalette,
+  onDismissMenu,
+}: {
+  palette: boolean
+  menu: TabMenuTarget | null
+  features: FeatureSummary[]
+  workspace: ReturnType<typeof useWorkspace>
+  onDismissPalette: () => void
+  onDismissMenu: () => void
+}) {
+  return (
+    <>
+      {palette ? (
+        <CommandPalette
+          features={features}
+          favorites={workspace.layout.favorites}
+          onOpen={workspace.open}
+          onTogglePinned={workspace.togglePin}
+          onDismiss={onDismissPalette}
+        />
+      ) : null}
+      {menu === null ? null : (
+        <TabContextMenu target={menu} workspace={workspace} onDismiss={onDismissMenu} />
+      )}
+    </>
   )
 }

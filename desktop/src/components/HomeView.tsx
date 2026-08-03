@@ -13,11 +13,13 @@ export function HomeView({
   features,
   sidebarOrder,
   categoryOrder,
+  favorites,
   onOpen,
 }: {
   features: FeatureSummary[]
   sidebarOrder: string[]
   categoryOrder: string[]
+  favorites: string[]
   onOpen: (id: string) => void
 }) {
   const sections = sidebarSections(features, {
@@ -27,6 +29,7 @@ export function HomeView({
     // Collapsing is a sidebar-space affordance, not a preference against the
     // feature, so Home shows a collapsed group's contents anyway.
     collapsedCategories: [],
+    favorites,
   })
   const total = sections.reduce((count, section) => count + section.features.length, 0)
 

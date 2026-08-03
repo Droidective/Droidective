@@ -150,6 +150,18 @@ pub struct AppsListRequest {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct DeviceRequest {
+    pub serial: String,
+}
+
+/// Everything `getprop` printed. Passed through as a map rather than reshaped:
+/// which property matters is the reader's question, not this layer's.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct DevicePropsResponse {
+    pub properties: std::collections::HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct AppControlRequest {
     pub serial: String,
     #[serde(rename = "packageId")]

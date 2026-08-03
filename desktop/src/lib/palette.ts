@@ -58,6 +58,39 @@ export function rankFeatures(
     const score = relevance(feature, query)
     if (score > 0) scored.push({ feature, score, order })
   })
-  scored.sort((a, b) => (a.score === b.score ? a.order - b.order : b.score - a.score))
-  return scored.map((entry) => entry.feature)
+  return scored
+    .toSorted((a, b) => (a.score === b.score ? a.order - b.order : b.score - a.score))
+    .map((entry) => entry.feature)
+}
+
+/**
+ * What the palette lists.
+ *
+ * With no query, pinned features lead, in the order they were pinned — the
+ * palette opens on what you actually use. With one, relevance decides and
+ * nothing is promoted: a weakly-matching pin sitting above an exact match
+ * would make the ranking a lie.
+ */
+export function paletteResults(
+  features: readonly FeatureSummary[],
+  query: string,
+  favorites: readonly string[],
+): FeatureSummary[] {
+  if (query.trim() !== "") return rankFeatures(features, query)
+  const pinned = favorites.flatMap((id) => features.filter((feature) => feature.id === id))
+  const rest = features.filter((feature) => !favorites.includes(feature.id))
+  return [...pinned, ...rest]
+}
+
+/** Move a highlighted row by `delta`, wrapping at both ends. */
+export function moveHighlight(count: number, current: number, delta: number): number {
+  if (count <= 0) return 0
+  return (current + delta + count) % count
+}
+
+/** Add or remove `id` from the pinned list. */
+export function togglePinned(favorites: readonly string[], id: string): string[] {
+  return favorites.includes(id)
+    ? favorites.filter((entry) => entry !== id)
+    : [...favorites, id]
 }

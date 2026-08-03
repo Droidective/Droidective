@@ -24,6 +24,7 @@ describe("loadLayout", () => {
       sidebarOrder: ["logcat", "apps"],
       categoryOrder: ["logs"],
       collapsedCategories: ["input"],
+      favorites: ["logcat"],
       panes: [
         { tabs: [HOME_TAB, "logcat"], activeTab: "logcat" },
         { tabs: ["apps"], activeTab: "apps" },
@@ -49,6 +50,7 @@ describe("loadLayout", () => {
       sidebarOrder: ["logcat", 7, null],
       categoryOrder: "logs",
       collapsedCategories: [{ nope: true }],
+      favorites: null,
       panes: [{ tabs: [HOME_TAB, 3], activeTab: 9 }, "not a pane", { tabs: [] }],
       focusedPane: "second",
       splitFraction: "half",
@@ -57,6 +59,7 @@ describe("loadLayout", () => {
       sidebarOrder: ["logcat"],
       categoryOrder: [],
       collapsedCategories: [],
+      favorites: [],
       panes: [{ tabs: [HOME_TAB], activeTab: null }],
       focusedPane: 0,
       splitFraction: 0.5,

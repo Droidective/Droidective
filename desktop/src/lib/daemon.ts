@@ -55,6 +55,11 @@ export function listApps(serial: string): Promise<AppsResponse> {
   return invoke<AppsResponse>("list_apps", { serial })
 }
 
+/** Everything `getprop` printed, as the daemon passed it through. */
+export function deviceProps(serial: string): Promise<{ properties: Record<string, string> }> {
+  return invoke<{ properties: Record<string, string> }>("device_props", { serial })
+}
+
 export function controlApp(args: {
   serial: string
   packageId: string
@@ -74,6 +79,11 @@ export function copyText(text: string): Promise<void> {
 
 export function revealPath(path: string): Promise<void> {
   return invoke("reveal_path", { path })
+}
+
+/** Writes into ~/Downloads/Droidective and returns where it landed. */
+export function exportText(name: string, contents: string): Promise<string> {
+  return invoke<string>("export_text", { name, contents })
 }
 
 /** A live subscription. Always `stop()` it when the view goes away. */

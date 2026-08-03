@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { House, X } from "lucide-react"
+import { House, Plus, X } from "lucide-react"
 import { pastMidpointX, startDrag } from "@/components/dnd"
 import { cn } from "@/lib/cn"
 import { iconForFeature } from "@/lib/icons"
@@ -22,6 +22,8 @@ export interface TabStripProps {
   /** A drop landing in this pane, before `target` (null = the end). */
   onDrop: (id: string, pane: number, target: string | null) => void
   onContextMenu: (id: string, x: number, y: number) => void
+  /** Open the palette with this pane focused, so the choice lands here. */
+  onNewTab: (pane: number) => void
   /** The tab being dragged anywhere in the window, so a strip can accept it. */
   dragging: string | null
   onDragState: (id: string | null) => void
@@ -65,26 +67,12 @@ export function TabStrip(props: TabStripProps) {
       }}
     >
       {props.pane === 0 ? (
-        <>
-          <button
-            type="button"
-            onClick={() => {
-              props.onSelect(HOME_TAB)
-            }}
-            title="Home"
-            aria-label="Home"
-            aria-current={props.tabs.activeTab === HOME_TAB}
-            className={cn(
-              "flex size-7 shrink-0 items-center justify-center rounded-md transition-colors",
-              props.tabs.activeTab === HOME_TAB
-                ? "bg-accent/15 text-accent"
-                : "text-text-secondary hover:bg-white/[0.05] hover:text-text-primary",
-            )}
-          >
-            <House size={14} />
-          </button>
-          <span className="mx-1.5 h-5 w-px shrink-0 bg-border-subtle" />
-        </>
+        <HomeButton
+          active={props.tabs.activeTab === HOME_TAB}
+          onSelect={() => {
+            props.onSelect(HOME_TAB)
+          }}
+        />
       ) : null}
 
       <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
@@ -127,8 +115,44 @@ export function TabStrip(props: TabStripProps) {
             }}
           />
         ))}
+        <button
+          type="button"
+          onClick={() => {
+            props.onNewTab(props.pane)
+          }}
+          title={`New tab (${shortcutLabel("t", IS_MAC)})`}
+          aria-label="New tab"
+          className="flex size-7 shrink-0 items-center justify-center rounded-md text-text-tertiary transition-colors hover:bg-white/[0.05] hover:text-text-primary"
+        >
+          <Plus size={14} />
+        </button>
       </div>
     </div>
+  )
+}
+
+/** Home rides a permanent button, so it cannot be closed away or lost in the
+ *  tab overflow — the same place it sits on the Mac. */
+function HomeButton({ active, onSelect }: { active: boolean; onSelect: () => void }) {
+  return (
+    <>
+      <button
+        type="button"
+        onClick={onSelect}
+        title="Home"
+        aria-label="Home"
+        aria-current={active}
+        className={cn(
+          "flex size-7 shrink-0 items-center justify-center rounded-md transition-colors",
+          active
+            ? "bg-accent/15 text-accent"
+            : "text-text-secondary hover:bg-white/[0.05] hover:text-text-primary",
+        )}
+      >
+        <House size={14} />
+      </button>
+      <span className="mx-1.5 h-5 w-px shrink-0 bg-border-subtle" />
+    </>
   )
 }
 

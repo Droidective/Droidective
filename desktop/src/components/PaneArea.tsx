@@ -20,8 +20,10 @@ export interface PaneAreaProps {
   onSplit: (id: string) => void
   onFocusPane: (pane: number) => void
   onContextMenu: (id: string, x: number, y: number) => void
+  onNewTab: (pane: number) => void
   sidebarOrder: string[]
   categoryOrder: string[]
+  favorites: string[]
   splitFraction: number
   onSplitFraction: (fraction: number) => void
 }
@@ -100,6 +102,7 @@ export function PaneArea(props: PaneAreaProps) {
             onClose={props.onClose}
             onDrop={props.onDrop}
             onContextMenu={props.onContextMenu}
+            onNewTab={props.onNewTab}
             dragging={dragging}
             onDragState={setDragging}
           />
@@ -187,6 +190,7 @@ function PaneBody({
             onOpen={props.onOpen}
             sidebarOrder={props.sidebarOrder}
             categoryOrder={props.categoryOrder}
+            favorites={props.favorites}
           />
         </div>
       ))}

@@ -52,9 +52,9 @@ split panes and no palette produces something that looks like Droidective in a
 screenshot and does not feel like it in use — and every screen ported before
 the shell exists will need reworking to live inside it.
 
-The sidebar and the tab strip have landed; split panes, the palette and hotkeys
-have not. Screens ported now open in a tab, so they will not need reworking for
-that — but a screen is still not finished until it behaves in a split pane.
+The sidebar, the tab strip, split panes and the palette have landed, so a screen
+ported now opens in a tab, splits, and is reachable from the palette without
+being reworked for any of it. Hotkeys and the chrome are still outstanding.
 
 1. **Shell parity** (below) — tabs, split panes, sidebar, palette, hotkeys.
 2. **The screens people open every day** — logcat, file explorer, device info,
@@ -66,9 +66,8 @@ that — but a screen is still not finished until it behaves in a split pane.
 
 ## Cross-cutting shell
 
-None of this is in `desktop/` yet. It is most of what "does not match the
-macOS version" actually means — the current app is three tabs and a list.
-Sourced from `CLAUDE.md` and the App sources.
+Sourced from `CLAUDE.md` and the App sources. The navigation half has landed;
+the chrome and the device bar have not.
 
 ### Navigation and layout
 
@@ -91,7 +90,7 @@ Sourced from `CLAUDE.md` and the App sources.
       reorder, ⌘W / Ctrl+W to close, ⌘1–⌘9 to jump. Open tabs stay mounted and
       hidden rather than unmounted, so a background tab keeps its log stream and
       its loaded lists. Ported from ADBKit's `TabState`, close-focus rules
-      included. Still missing: the `+` button, which needs the palette below.
+      included.
 - [x] **Split panes** — two panes, clamped 30–70% with the same absolute
       per-pane floor (`PaneSplit`, ported to `lib/panes.ts`), a draggable
       divider that persists, and the pane rules ported from ADBKit's
@@ -106,13 +105,19 @@ Sourced from `CLAUDE.md` and the App sources.
 
 ### Finding things
 
-- [ ] **Command palette** (⌘T / ⌘K) over features *and* commands, using the
-      ranking already ported to `desktop/src/lib/palette.ts`.
+- [x] **Command palette** — Ctrl/⌘ + K or T, and the tab strip's `+`, which
+      focuses its pane first so the choice lands there. Arrows move, Enter
+      opens, Ctrl/⌘ + P pins. With no query it opens on the pinned list; with
+      one, relevance decides and pins are not promoted. Commands are not in it
+      yet — this app has no custom commands to offer.
 - [ ] **Per-feature hotkeys**, recordable, with a live-preview recorder.
 - [ ] **Global hotkey → Quick Actions panel** — the non-activating mini app:
       grid of every runnable action, pinned first, custom commands, pick-device
       interstitial, ⌘⏎ run-on-all.
-- [ ] **Pinned / favourites**, shared between the palette and Quick Actions.
+- [x] **Pinned / favourites** — a Pinned section leading the sidebar and the
+      palette's empty-query list, pinned from either. Members are lifted out of
+      their categories rather than listed twice, as `enabledFeatures(in:)` does
+      on the Mac. Quick Actions does not exist here yet to share them with.
 - [ ] **Manage features catalog** — turn features off; everything is on by
       default.
 
@@ -169,14 +174,90 @@ Found by driving the app against a live emulator, not by reading it.
       (`lib/confirm.ts`). A Cancel button appears while armed, the window
       losing focus disarms, and an arming on one app never authorises the same
       verb on another.
-- [ ] **Logcat cannot be restarted.** Stop disables the button and the only way
-      back is a tab switch or a device change.
-- [ ] **Logcat has no level or app filter** — the Mac has both, plus a
-      find-vs-filter split, export, clear, and tag-filter chips.
+- [x] ~~**Logcat cannot be restarted.**~~ Stop becomes Start, and the
+      subscription comes back with the buffer intact.
+- [~] **Logcat has no level or app filter.** The level picker, the
+      find-vs-filter split, export, clear and tag chips have landed. The *app*
+      filter has not: it needs a pid → package map the daemon does not serve
+      yet, and matching on the tag would be a filter that quietly misses lines.
 - [x] ~~**The app list re-fetches on every tab switch**, because the pane
       remounts and the data is not lifted.~~ Fixed by the tab shell: an open
       tab stays mounted while it is in the background, so the pane no longer
       remounts and nothing re-fetches.
+
+---
+
+## Backlog
+
+The order the remaining work is planned in, and what each item actually costs.
+Tick an item here when its PR merges; the detail stays in the sections above.
+
+**Done.**
+
+| | Goal | Landed in |
+| --- | --- | --- |
+| ✅ | Grouped sidebar and feature tabs | #252 |
+| ✅ | A glyph per feature | #253 |
+| ✅ | The three action-result defects | #254 |
+| ✅ | Split panes | #255 |
+| ✅ | Command palette and pinned features | #256 |
+| ✅ | Logcat: level, find-vs-filter, tags, export, restart | #257 |
+
+**Next, in order.** Everything from *File explorer* down needs four layers, not
+one — a daemon route in Swift, a Rust command, a pane, and tests at both ends.
+The daemon serves devices, features, apps and logcat today and nothing else, so
+that is the real cost of each screen, and it is why they are ordered by how
+often someone opens them rather than by how hard they look.
+
+1. ~~**Device info.**~~ Landed — and it is the worked example of the four
+   layers: `DaemonProtocol.Route.deviceProps` + a `DaemonBackend` method, a
+   Rust `device_props` command, `lib/deviceinfo.ts` for the arranging, and a
+   pane. Copy that shape for the rest.
+2. **File explorer** — browse, copy/move/delete, pull, root toggle, new folder,
+   context menu. The first screen that *writes* to the device, so its route
+   needs the same `shellQuote` care ADBKit applies.
+3. **Crash catcher** — a route over ADBKit's `CrashParser`, then a multi-crash
+   browser: kind/process filters, watch mode, copy-for-Slack, clear buffer.
+4. **Performance monitor** — a *stream*, not a request: live CPU/RAM/FPS with a
+   per-process list, recording, and export.
+5. **Per-feature hotkeys** with a live-preview recorder. Client-side, and the
+   only shell item left that people will miss daily.
+6. **Device bar parity** — wireless pair and connect, run-on-all for
+   `supportsRunAll`, launch an emulator, the pull-progress strip.
+7. **Toasts and the Command Log** — action results as toasts instead of a banner
+   per screen, and every user-initiated adb call recorded the way
+   `CommandLog.userInitiated` records it.
+8. **Settings** — Appearance (accent colour, light theme), General, Hotkeys,
+   Privacy. The light theme is a second set of tokens the asset catalog already
+   has.
+9. **Manage-features catalog** and per-feature "connect a device" empty states.
+10. **The device-state screens** — dev-settings, root-status,
+    system-restrictions. Toggle tables over one route each.
+11. **The connection screens** — wifi, private-dns, network-speed.
+12. **The per-app screens** — app-info, permissions, meminfo, sandbox-browser,
+    manage-app. All hang off the bundle already chosen in Apps.
+13. **Emulators and install-app.**
+14. **Deep links and bug report.**
+15. **Auto-hiding sidebar, UI zoom, window translucency** — `WindowEffects` is
+    already pure-tested in ADBKit; blur needs a per-platform answer.
+
+**Known gaps inside work already called done.**
+
+- **Logcat's per-app filter.** Needs a pid → package map the daemon does not
+  serve. Matching on the tag instead would be a filter that quietly misses
+  lines, which is worse than not having one.
+- **The palette lists features, not commands.** There are no custom commands in
+  this app yet for it to offer.
+- **Drop-to-split is unverified by automation.** Synthetic mouse events do not
+  start an HTML5 drag in WKWebView, so every drag path in this app is checked by
+  hand. Keep the *decision* a drop makes in `lib/` where it can be tested, and
+  only the event wiring uncovered.
+
+**Not planned.** Multi-window, the Quick Actions panel, the welcome tour, and
+the update pill. Each is a whole subsystem, and none of them is why anyone opens
+this app. Reactotron stays blocked until the relay's `Network.framework`
+listener is ported to NIO; mirror, screen-record and the video editor are
+Apple-only by design.
 
 ---
 
@@ -409,13 +490,15 @@ Legend: ⬜ not started · 🟡 partial · ⛔ not applicable off-Apple.
 - **Must replicate**
   - [ ] tooltip: Refresh from the device
 
-#### `device-info` — Device Info  ·  ⬜ todo
+#### `device-info` — Device Info  ·  🟡 partial
 > Browse and search every device property
 - **Kind** `view`
-- **Note** Not started on Windows/Linux.
+- **Note** Built. `/v1/device/props` passes `getprop` through untouched; the
+  pane adds a summary header, two-segment grouping, search over key and value,
+  copy and export.
 - **macOS view** `DeviceInfoView` — `App/Sources/FeatureDetail/Views/DeviceInfoView.swift`
 - **Must replicate**
-  - [ ] field: Filter properties…
+  - [x] field: Filter properties…
 
 #### `fake-battery` — Fake Battery  ·  🟡 partial
 > Set a fake battery level and unplugged state
@@ -542,22 +625,22 @@ Legend: ⬜ not started · 🟡 partial · ⛔ not applicable off-Apple.
 #### `logcat` — Logcat  ·  🟡 partial
 > Live log stream with search and filters
 - **Kind** `view`
-- **Note** A pane exists; the checklist below is what it is missing.
+- **Note** A pane exists; the app filter is what it is still missing.
 - **macOS view** `LogcatView` — `App/Sources/FeatureDetail/Views/LogcatView.swift`
 - **Must replicate**
-  - [ ] picker: Level
-  - [ ] field: Filter lines…
+  - [x] picker: Level
+  - [x] field: Filter lines…
   - [ ] label: All apps
   - [ ] label: Add from installed apps
   - [ ] label: Use app on device screen
   - [ ] label: Add manually / manage…
-  - [ ] tooltip: Show only the lines containing this text
-  - [ ] tooltip: Find & highlight in the log without hiding lines (⌘F)
-  - [ ] tooltip: Export buffer to ~/Downloads/Droidective
-  - [ ] tooltip: Clear
+  - [x] tooltip: Show only the lines containing this text
+  - [x] tooltip: Find & highlight in the log without hiding lines
+  - [x] tooltip: Export buffer to ~/Downloads/Droidective
+  - [x] tooltip: Clear
   - [ ] tooltip: Stream one app's logs — pick a saved bundle or add a new one
-  - [ ] tooltip: Remove tag filter
-  - [ ] export: save/export to a file
+  - [x] tooltip: Remove tag filter
+  - [x] export: save/export to a file
 
 #### `performance` — Performance Monitor  ·  ⬜ todo
 > Live CPU, RAM & FPS with recording and export
