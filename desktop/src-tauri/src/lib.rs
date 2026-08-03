@@ -24,6 +24,11 @@ const STATUS_EVENT: &str = "daemon://status";
 pub fn run() -> tauri::Result<()> {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        // Registered for their Rust APIs only. The capability file grants the
+        // webview neither, so the clipboard and the file manager are reachable
+        // through our own commands and nowhere else.
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_opener::init())
         .manage(Supervisor::default())
         .invoke_handler(tauri::generate_handler![
             commands::daemon_status,
@@ -35,6 +40,8 @@ pub fn run() -> tauri::Result<()> {
             commands::watch_devices,
             commands::watch_logcat,
             commands::stop_watching,
+            commands::copy_text,
+            commands::reveal_path,
         ])
         .setup(|app| {
             // Off the setup path: spawning the sidecar and waiting for its

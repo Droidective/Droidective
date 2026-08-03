@@ -25,6 +25,13 @@ tauri = { version = "2.11.5", features = [] }
 # resolves the per-platform binary location that a hand-rolled path would get
 # wrong on at least one of the three targets.
 tauri-plugin-shell = "2.3.5"
+# The two host capabilities an action result promises: "Copy Device IP" has to
+# reach the clipboard, and "saved to …" has to be openable. Both are reached
+# through our own commands rather than the plugins' JS APIs, so the webview's
+# capability file stays at `core:default` and gains nothing it could be
+# tricked into using.
+tauri-plugin-clipboard-manager = "2.3.2"
+tauri-plugin-opener = "2.5.4"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 # Loopback plain HTTP only — no TLS features, so no rustls/openssl in the tree.

@@ -24,6 +24,11 @@ pub enum DaemonError {
     Transport(String),
     #[error("droidectived sent a reply this build cannot read: {0}")]
     Decode(String),
+    /// A host capability refused — the clipboard, or revealing a file. Nothing
+    /// to do with the daemon, but the UI already has one error path and a
+    /// second shape would only be one more thing to branch on.
+    #[error("{0}")]
+    Host(String),
 }
 
 impl DaemonError {
@@ -35,6 +40,7 @@ impl DaemonError {
             Self::Refused { code, .. } => code,
             Self::Transport(_) => "transport_failed",
             Self::Decode(_) => "decode_failed",
+            Self::Host(_) => "host_action_failed",
         }
     }
 
