@@ -42,6 +42,7 @@ pub fn run() -> tauri::Result<()> {
             commands::stop_watching,
             commands::copy_text,
             commands::reveal_path,
+            commands::export_text,
         ])
         .setup(|app| {
             // Off the setup path: spawning the sidecar and waiting for its

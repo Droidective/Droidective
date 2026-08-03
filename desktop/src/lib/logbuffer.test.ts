@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest"
-import { emptyBuffer, matchesFilter, withGap, withLines } from "@/lib/logbuffer"
+import {
+  emptyBuffer,
+  emptyFilter,
+  logText,
+  matchesFind,
+  matchesLogFilter,
+  tagsByFrequency,
+  withGap,
+  withLines,
+} from "@/lib/logbuffer"
 import type { LogRow } from "@/lib/logbuffer"
 import type { LogLine } from "@/lib/wire"
 
@@ -87,24 +96,107 @@ describe("withGap", () => {
   })
 })
 
-describe("matchesFilter", () => {
-  const row: LogRow = { kind: "line", key: 0, line: line("Boot completed", { tag: "ActivityManager" }) }
+const text = (value: string) => ({ ...emptyFilter(), text: value })
 
+describe("matchesLogFilter", () => {
+  const row: LogRow = {
+    kind: "line",
+    key: 0,
+    line: line("Boot completed", { tag: "ActivityManager" }),
+  }
   it("matches the tag and the message, case-insensitively", () => {
-    expect(matchesFilter(row, "activitymanager")).toBe(true)
-    expect(matchesFilter(row, "BOOT")).toBe(true)
-    expect(matchesFilter(row, "nope")).toBe(false)
+    expect(matchesLogFilter(row, text("activitymanager"))).toBe(true)
+    expect(matchesLogFilter(row, text("BOOT"))).toBe(true)
+    expect(matchesLogFilter(row, text("nope"))).toBe(false)
   })
 
   it("matches everything for an empty filter", () => {
-    expect(matchesFilter(row, "")).toBe(true)
-    expect(matchesFilter(row, "  ")).toBe(true)
+    expect(matchesLogFilter(row, emptyFilter())).toBe(true)
+    expect(matchesLogFilter(row, text("  "))).toBe(true)
   })
 
   it("never filters out a gap", () => {
     // Hiding the marker would turn a visible interruption back into a silent
     // one, which is exactly what it exists to prevent.
     const gap: LogRow = { kind: "gap", key: 1, count: 9 }
-    expect(matchesFilter(gap, "activitymanager")).toBe(true)
+    expect(matchesLogFilter(gap, text("activitymanager"))).toBe(true)
+    expect(matchesLogFilter(gap, { ...emptyFilter(), minLevel: "E", tags: ["Other"] })).toBe(true)
+  })
+
+  it("hides everything quieter than the chosen level", () => {
+    const warn: LogRow = { kind: "line", key: 2, line: line("careful", { level: "W" }) }
+    const debug: LogRow = { kind: "line", key: 3, line: line("chatter", { level: "D" }) }
+    const atWarn = { ...emptyFilter(), minLevel: "W" as const }
+    expect(matchesLogFilter(warn, atWarn)).toBe(true)
+    expect(matchesLogFilter(debug, atWarn)).toBe(false)
+    // Verbose is the floor, so it hides nothing.
+    expect(matchesLogFilter(debug, emptyFilter())).toBe(true)
+  })
+
+  it("shows only the chosen tags, and all of them when none is chosen", () => {
+    const other: LogRow = { kind: "line", key: 4, line: line("hello", { tag: "Zygote" }) }
+    const chosen = { ...emptyFilter(), tags: ["ActivityManager"] }
+    expect(matchesLogFilter(row, chosen)).toBe(true)
+    expect(matchesLogFilter(other, chosen)).toBe(false)
+    expect(matchesLogFilter(other, emptyFilter())).toBe(true)
+  })
+
+  it("applies every part of the filter at once", () => {
+    const loud: LogRow = { kind: "line", key: 5, line: line("boom", { tag: "Zygote", level: "E" }) }
+    expect(
+      matchesLogFilter(loud, { text: "boom", minLevel: "W", tags: ["Zygote"] }),
+    ).toBe(true)
+    expect(
+      matchesLogFilter(loud, { text: "boom", minLevel: "W", tags: ["ActivityManager"] }),
+    ).toBe(false)
+  })
+})
+
+describe("matchesFind", () => {
+  const row: LogRow = {
+    kind: "line",
+    key: 0,
+    line: line("Boot completed", { tag: "ActivityManager" }),
+  }
+
+  it("hits on the tag and the message", () => {
+    expect(matchesFind(row, "boot")).toBe(true)
+    expect(matchesFind(row, "activity")).toBe(true)
+    expect(matchesFind(row, "nope")).toBe(false)
+  })
+
+  it("hits nothing for an empty query, and never a gap", () => {
+    // Find highlights; an empty query highlighting every row would be noise.
+    expect(matchesFind(row, "")).toBe(false)
+    expect(matchesFind({ kind: "gap", key: 1, count: 3 }, "boot")).toBe(false)
+  })
+})
+
+describe("logText", () => {
+  it("writes the shape adb prints, with gaps called out", () => {
+    const rows: LogRow[] = [
+      { kind: "line", key: 0, line: line("up", { tag: "Boot", level: "I" }) },
+      { kind: "gap", key: 1, count: 12 },
+    ]
+    const lines = logText(rows).split("\n")
+    expect(lines[0]).toContain("I/Boot: up")
+    expect(lines[1]).toBe("--- 12 lines dropped ---")
+  })
+
+  it("is empty for nothing", () => {
+    expect(logText([])).toBe("")
+  })
+})
+
+describe("tagsByFrequency", () => {
+  it("puts the loudest tag first, and breaks ties by name", () => {
+    const rows: LogRow[] = [
+      { kind: "line", key: 0, line: line("a", { tag: "Zygote" }) },
+      { kind: "line", key: 1, line: line("b", { tag: "Boot" }) },
+      { kind: "line", key: 2, line: line("c", { tag: "Boot" }) },
+      { kind: "line", key: 3, line: line("d", { tag: "Alarm" }) },
+      { kind: "gap", key: 4, count: 2 },
+    ]
+    expect(tagsByFrequency(rows)).toEqual(["Boot", "Alarm", "Zygote"])
   })
 })

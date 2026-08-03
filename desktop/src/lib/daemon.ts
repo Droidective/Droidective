@@ -76,6 +76,11 @@ export function revealPath(path: string): Promise<void> {
   return invoke("reveal_path", { path })
 }
 
+/** Writes into ~/Downloads/Droidective and returns where it landed. */
+export function exportText(name: string, contents: string): Promise<string> {
+  return invoke<string>("export_text", { name, contents })
+}
+
 /** A live subscription. Always `stop()` it when the view goes away. */
 export interface Subscription {
   id: number
