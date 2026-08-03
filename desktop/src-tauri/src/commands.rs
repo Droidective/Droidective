@@ -171,11 +171,13 @@ pub fn export_text(app: AppHandle, name: String, contents: String) -> Result<Str
         .download_dir()
         .map_err(|error| DaemonError::Host(format!("no Downloads folder: {error}")))?
         .join("Droidective");
-    std::fs::create_dir_all(&folder)
-        .map_err(|error| DaemonError::Host(format!("could not create {}: {error}", folder.display())))?;
+    std::fs::create_dir_all(&folder).map_err(|error| {
+        DaemonError::Host(format!("could not create {}: {error}", folder.display()))
+    })?;
     let path = folder.join(name);
-    std::fs::write(&path, contents)
-        .map_err(|error| DaemonError::Host(format!("could not write {}: {error}", path.display())))?;
+    std::fs::write(&path, contents).map_err(|error| {
+        DaemonError::Host(format!("could not write {}: {error}", path.display()))
+    })?;
     Ok(path.to_string_lossy().into_owned())
 }
 
