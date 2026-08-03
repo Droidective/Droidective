@@ -1,7 +1,7 @@
 import { ChevronRight } from "lucide-react"
 import { pastMidpointY, startDrag } from "@/components/dnd"
 import { cn } from "@/lib/cn"
-import { iconForCategory } from "@/lib/icons"
+import { iconForFeature } from "@/lib/icons"
 import type { SidebarSection as Section } from "@/lib/sidebar"
 import type { FeatureSummary } from "@/lib/wire"
 
@@ -143,7 +143,7 @@ function Row({
   onDragOver: (event: React.DragEvent<HTMLElement>) => void
   onDrop: (event: React.DragEvent<HTMLElement>) => void
 }) {
-  const Icon = iconForCategory(feature.category)
+  const Icon = iconForFeature(feature.id, feature.category)
   return (
     <button
       type="button"

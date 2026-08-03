@@ -60,6 +60,18 @@ select,
   -webkit-user-drag: element;
 }
 
+/* The webview's default focus ring is the system blue, which is the one colour
+   in the window that belongs to no theme. Keyboard focus still shows — this
+   only drops the ring a plain click leaves behind, and recolours the rest. */
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
 ::-webkit-scrollbar {
   width: 11px;
   height: 11px;

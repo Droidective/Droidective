@@ -1,4 +1,4 @@
-import { iconForCategory } from "@/lib/icons"
+import { iconForFeature } from "@/lib/icons"
 import { categoryLabel, sidebarSections } from "@/lib/sidebar"
 import type { FeatureSummary } from "@/lib/wire"
 
@@ -62,7 +62,7 @@ export function HomeView({
 }
 
 function Tile({ feature, onOpen }: { feature: FeatureSummary; onOpen: () => void }) {
-  const Icon = iconForCategory(feature.category)
+  const Icon = iconForFeature(feature.id, feature.category)
   return (
     <button
       type="button"

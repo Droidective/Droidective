@@ -1,22 +1,165 @@
 import {
+  AppWindow,
+  ArrowLeftRight,
   Atom,
+  BatteryLow,
+  BellRing,
   Boxes,
+  Braces,
+  Camera,
+  ChartLine,
+  CodeXml,
+  Crosshair,
+  Dices,
+  FastForward,
+  FileArchive,
+  FileSearch,
+  Film,
+  FolderOpen,
+  Gauge,
+  Globe,
+  HardDrive,
+  Info,
   Keyboard,
+  Languages,
+  Layers,
+  LayoutGrid,
+  Link,
+  LockKeyhole,
+  LockOpen,
+  MemoryStick,
+  Monitor,
+  MonitorPlay,
   MonitorSmartphone,
+  Moon,
+  Network,
+  OctagonX,
+  Package,
+  PackageOpen,
+  PackagePlus,
+  Radio,
+  RadioTower,
+  RefreshCw,
+  Ruler,
   ScrollText,
+  Send,
+  Server,
+  Settings2,
+  Shield,
+  ShieldCheck,
+  Signal,
+  Signature,
   SlidersHorizontal,
-  Wrench,
+  Smartphone,
+  SquareMenu,
+  SquareTerminal,
+  Syringe,
+  Terminal,
+  TriangleAlert,
+  Video,
+  WandSparkles,
+  Waypoints,
   Wifi,
+  Wrench,
   type LucideIcon,
 } from "lucide-react"
 
 /**
- * A glyph per category, standing in for the Mac app's per-feature icons.
+ * A glyph per feature.
  *
  * The daemon deliberately drops `FeatureDef.icon` — those are SF Symbol names,
- * which mean nothing off Apple. Category icons keep the sidebar's visual
- * rhythm without inventing a second icon registry to drift from the first.
- * The pairings mirror `FeatureCategory.icon` in ADBKit.
+ * which mean nothing off Apple — so the pairing is made here instead, one
+ * lucide icon per registry id, chosen to read as the same thing the Mac's
+ * symbol does. Held client-side for the same reason as the category order:
+ * it is a rendering choice, and shipping SF Symbol names to a web UI would
+ * only invite it to depend on something it cannot draw.
+ *
+ * `icons.test.ts` fails if the daemon serves a feature this table has no entry
+ * for, so a new feature shows up as a failing test rather than as a row
+ * wearing its neighbour's icon.
+ */
+const BY_FEATURE: Record<string, LucideIcon> = {
+  // Input & Clipboard
+  "send-text": Keyboard,
+
+  // Connection
+  "get-ip": Globe,
+  connection: Network,
+  "reverse-port": ArrowLeftRight,
+  "wireless-adb": RadioTower,
+  emulators: MonitorPlay,
+  "network-speed": Gauge,
+  wifi: Wifi,
+  "private-dns": LockKeyhole,
+
+  // React Native
+  "react-native": Atom,
+  "open-dev-menu": SquareMenu,
+  "reload-js": RefreshCw,
+  "deep-link": Link,
+  "process-death": OctagonX,
+  "rn-dev-host": Server,
+  reactotron: Radio,
+  "js-console": CodeXml,
+
+  // Screen & Capture
+  scrcpy: Monitor,
+  screenshot: Camera,
+  "screen-record": Video,
+  "video-editor": Film,
+  "demo-mode": WandSparkles,
+
+  // Device State
+  "file-explorer": HardDrive,
+  "device-info": Info,
+  "root-status": Shield,
+  "system-restrictions": LockOpen,
+  "dev-settings": Settings2,
+  simulate: SlidersHorizontal,
+  "fake-battery": BatteryLow,
+  "dark-mode": Moon,
+  "push-notification": BellRing,
+  "layout-overrides": Ruler,
+  "animation-scale": FastForward,
+  locale: Languages,
+  "network-toggles": Signal,
+  "http-proxy": Waypoints,
+
+  // App Management
+  apps: LayoutGrid,
+  "install-app": PackagePlus,
+  "apk-studio": Wrench,
+  "apk-inspector": FileSearch,
+  "apk-sign": Signature,
+  "apk-decompile": Braces,
+  "aab-convert": PackageOpen,
+  "frida-console": Syringe,
+  "app-management": AppWindow,
+  permissions: ShieldCheck,
+  "app-info": Package,
+  "current-activity": Layers,
+  "foreground-package": Crosshair,
+  meminfo: MemoryStick,
+  "sandbox-browser": FolderOpen,
+  monkey: Dices,
+
+  // Logs & Diagnostics
+  logcat: ScrollText,
+  "ios-logs": Smartphone,
+  "crash-catcher": TriangleAlert,
+  "bug-report": FileArchive,
+  performance: ChartLine,
+
+  // Tool UX
+  "api-client": Send,
+  terminal: SquareTerminal,
+  "custom-commands": Terminal,
+}
+
+/**
+ * The fallback when a feature has no glyph of its own — a category still says
+ * roughly what a thing is, which beats a generic square. The pairings mirror
+ * `FeatureCategory.icon` in ADBKit.
  */
 const BY_CATEGORY: Record<string, LucideIcon> = {
   input: Keyboard,
@@ -29,6 +172,12 @@ const BY_CATEGORY: Record<string, LucideIcon> = {
   toolUX: Wrench,
 }
 
-export function iconForCategory(category: string): LucideIcon {
-  return BY_CATEGORY[category] ?? Wrench
+/** The glyph for a feature, falling back to its category and then to a tool. */
+export function iconForFeature(id: string, category: string): LucideIcon {
+  return BY_FEATURE[id] ?? BY_CATEGORY[category] ?? Wrench
+}
+
+/** Every registry id this build has a glyph for. */
+export function featuresWithIcons(): string[] {
+  return Object.keys(BY_FEATURE)
 }

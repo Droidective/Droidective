@@ -32,6 +32,7 @@ its own.
 | `src/lib/tabs.ts` | the open tabs and what gets focus on close — ADBKit's `TabState` |
 | `src/lib/ordering.ts` | drag-reorder math — ADBKit's `SidebarOrdering` |
 | `src/lib/layout.ts` | what the window remembers between launches |
+| `src/lib/icons.ts` | one lucide glyph per registry id — the wire carries none |
 | `src/lib/logbuffer.ts` | the log feed's ring buffer and its gap markers |
 | `src/lib/fields.ts` | form values → run parameters |
 | `src-tauri/src/daemon/` | spawning, the HTTP client, and the stream socket |
@@ -119,5 +120,9 @@ the tabs arrive.
 - **No component library.** `clsx` + `tailwind-merge` and a handful of
   hand-written controls in `src/components/Controls.tsx`. Worth revisiting when
   the surface grows past a few forms.
+- **Icons are lucide, one per registry id**, listed in `src/lib/icons.ts`. The
+  daemon deliberately does not send `FeatureDef.icon` — SF Symbol names mean
+  nothing off Apple — so the pairing is made here, and a test fails if a
+  feature arrives without one rather than letting it inherit a category glyph.
 - Exact dependency versions, no `^`. A desktop app that builds differently next
   month is a support problem.

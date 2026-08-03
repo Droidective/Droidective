@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react"
 import { Banner, Button, Select, Slider, Switch, TextInput } from "@/components/Controls"
 import { asDaemonError, runAction } from "@/lib/daemon"
-import { iconForCategory } from "@/lib/icons"
+import { iconForFeature } from "@/lib/icons"
 import { coerce, initialValues, missingRequired, runFields, type FormValues } from "@/lib/fields"
 import type { DaemonError, Device, FeatureField, FeatureSummary, RunResponse } from "@/lib/wire"
 
@@ -100,7 +100,7 @@ export function ActionForm({
 }
 
 function FeatureHeader({ feature }: { feature: FeatureSummary }) {
-  const Icon = iconForCategory(feature.category)
+  const Icon = iconForFeature(feature.id, feature.category)
   return (
     <header className="flex items-start gap-3">
       <Icon size={22} className="mt-0.5 shrink-0 text-accent" />
