@@ -53,7 +53,8 @@ impl DaemonClient {
     }
 
     pub async fn device_props(&self, serial: String) -> Result<DevicePropsResponse, DaemonError> {
-        self.post("/v1/device/props", &DeviceRequest { serial }).await
+        self.post("/v1/device/props", &DeviceRequest { serial })
+            .await
     }
 
     pub async fn control_app(
