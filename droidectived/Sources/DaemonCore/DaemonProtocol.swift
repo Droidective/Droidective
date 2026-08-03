@@ -13,6 +13,7 @@ public enum DaemonProtocol {
         case actionsRun = "/v1/actions/run"
         case appsList = "/v1/apps/list"
         case appsControl = "/v1/apps/control"
+        case deviceProps = "/v1/device/props"
     }
 
     /// The multiplexed stream socket. Not a `Route`: it is a WebSocket upgrade
@@ -23,6 +24,22 @@ public enum DaemonProtocol {
     public struct DevicesResponse: Codable, Equatable, Sendable {
         public let devices: [Device]
         public init(devices: [Device]) { self.devices = devices }
+    }
+
+    public struct DeviceRequest: Codable, Equatable, Sendable {
+        public let serial: String
+        public init(serial: String) { self.serial = serial }
+    }
+
+    /// Everything `getprop` printed, unparsed.
+    ///
+    /// The dictionary is passed through rather than reshaped into named
+    /// fields: which properties matter is the reader's question, and a daemon
+    /// that picked a subset would be deciding it for them — the Mac's Device
+    /// Info screen is a search box over the same raw set.
+    public struct DevicePropsResponse: Codable, Equatable, Sendable {
+        public let properties: [String: String]
+        public init(properties: [String: String]) { self.properties = properties }
     }
 
     /// One error shape everywhere, so the UI has exactly one error path.

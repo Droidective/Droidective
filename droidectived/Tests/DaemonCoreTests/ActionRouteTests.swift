@@ -65,6 +65,10 @@ import FoundationNetworking
             await log.recordApp(serial, packageId, action)
             return result
         }
+
+        func deviceProperties(serial: String) async throws -> [String: String] {
+            ["ro.product.model": "Pixel", "ro.build.version.release": "14"]
+        }
     }
 
     private func withServer(

@@ -14,8 +14,8 @@ use tauri_plugin_opener::OpenerExt;
 
 use crate::daemon::stream::StreamMessage;
 use crate::daemon::wire::{
-    AppControlRequest, AppsResponse, Device, FeatureSummary, RunRequest, RunResponse,
-    SubscribeParams,
+    AppControlRequest, AppsResponse, Device, DevicePropsResponse, FeatureSummary, RunRequest,
+    RunResponse, SubscribeParams,
 };
 use crate::daemon::{DaemonStatus, Supervisor};
 use crate::error::DaemonError;
@@ -117,6 +117,14 @@ pub async fn control_app(
             action,
         })
         .await
+}
+
+#[tauri::command]
+pub async fn device_props(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+) -> Result<DevicePropsResponse, DaemonError> {
+    supervisor.client().await?.device_props(serial).await
 }
 
 /// Puts an action's `copyText` on the system clipboard.
