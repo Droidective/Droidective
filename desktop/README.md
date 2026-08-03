@@ -30,6 +30,8 @@ its own.
 | `src/lib/palette.ts` | search ranking, ported from ADBKit's `PaletteSearch` |
 | `src/lib/sidebar.ts` | which features the sidebar lists, grouped and ordered |
 | `src/lib/tabs.ts` | the open tabs and what gets focus on close — ADBKit's `TabState` |
+| `src/lib/workspace.ts` | one or two panes and the rules between them — ADBKit's `Workspace` |
+| `src/lib/panes.ts` | the split's clamp and divider geometry — ADBKit's `PaneSplit` |
 | `src/lib/ordering.ts` | drag-reorder math — ADBKit's `SidebarOrdering` |
 | `src/lib/layout.ts` | what the window remembers between launches |
 | `src/lib/icons.ts` | one lucide glyph per registry id — the wire carries none |
@@ -81,7 +83,12 @@ Hub members are listed standalone, unlike the Mac's sidebar: this app has no
 hub screens, so hiding them would make them unreachable rather than merely
 relocated.
 
-Not yet: split panes, the command palette, hotkeys, and most of the
+Panes split with **Ctrl/⌘ + \\** (not ⌘D — Ctrl+D is end-of-input in a Linux
+shell, and this is the binding VS Code already trained everyone on), by a tab's
+right-click menu, or by dragging a tab onto the trailing edge of the pane. The
+divider clamps to 30–70% and its position is saved.
+
+Not yet: the command palette, hotkeys, and most of the
 full-screen views (file explorer, crash catcher, performance…), which are
 `kind: "view"` in the registry and need whole panels. They are listed in the
 sidebar and open a tab that says so, rather than being hidden — a feature the

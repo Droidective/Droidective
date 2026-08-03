@@ -40,37 +40,38 @@ describe("openTab", () => {
 
 describe("closeTab", () => {
   it("gives focus to the tab that slid into the slot", () => {
-    const state = closeTab(tabState(["home", "apps", "logcat"], "apps"), "apps", "home")
+    const state = closeTab(tabState(["home", "apps", "logcat"], "apps"), "apps")
     expect(state.openTabs).toEqual(["home", "logcat"])
     expect(state.activeTab).toBe("logcat")
   })
 
   it("falls back to the new last tab when the rightmost closes", () => {
-    const state = closeTab(tabState(["home", "apps", "logcat"], "logcat"), "logcat", "home")
-    expect(state.activeTab).toBe("apps")
+    expect(closeTab(tabState(["home", "apps", "logcat"], "logcat"), "logcat").activeTab).toBe("apps")
   })
 
   it("leaves focus alone when closing a background tab", () => {
-    const state = closeTab(tabState(["home", "apps", "logcat"], "logcat"), "apps", "home")
+    const state = closeTab(tabState(["home", "apps", "logcat"], "logcat"), "apps")
     expect(state.openTabs).toEqual(["home", "logcat"])
     expect(state.activeTab).toBe("logcat")
   })
 
-  it("reseeds the fallback rather than leaving an empty window", () => {
-    expect(closeTab(tabState(["logcat"], "logcat"), "logcat", "home")).toEqual({
-      openTabs: ["home"],
-      activeTab: "home",
+  it("will empty a pane, and leaves what to do about that to the workspace", () => {
+    // Deliberately not reseeding here: an emptied pane collapses into its
+    // neighbour when there is one, which only `Workspace` can know.
+    expect(closeTab(tabState(["logcat"], "logcat"), "logcat")).toEqual({
+      openTabs: [],
+      activeTab: null,
     })
   })
 
   it("ignores a tab that is not open", () => {
     const before = tabState(["home"], "home")
-    expect(closeTab(before, "logcat", "home")).toBe(before)
+    expect(closeTab(before, "logcat")).toBe(before)
   })
 })
 
 describe("closeOtherTabs", () => {
-  it("keeps the target and the permanent fallback", () => {
+  it("keeps the target and the permanent tab", () => {
     const state = closeOtherTabs(tabState(["home", "apps", "logcat"], "home"), "logcat", "home")
     expect(state.openTabs).toEqual(["home", "logcat"])
     expect(state.activeTab).toBe("logcat")

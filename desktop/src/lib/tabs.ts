@@ -40,23 +40,24 @@ export function openTab(state: TabState, id: string): TabState {
  * Close `id`.
  *
  * If it held focus, the neighbour that slid into its slot takes it — its old
- * right neighbour, or the new last tab when the rightmost closed. Closing the
- * last tab reseeds `fallback` rather than leaving an empty window, which is
- * what `Workspace.fallback` does on the Mac.
+ * right neighbour, or the new last tab when the rightmost closed. A pane can be
+ * left empty: what to do about that is the workspace's decision, not this one's
+ * — the same division `TabState` and `Workspace` keep on the Mac.
  */
-export function closeTab(state: TabState, id: string, fallback: string): TabState {
+export function closeTab(state: TabState, id: string): TabState {
   const index = state.openTabs.indexOf(id)
   if (index === -1) return state
   const openTabs = state.openTabs.filter((tab) => tab !== id)
-  if (openTabs.length === 0) return { openTabs: [fallback], activeTab: fallback }
   if (state.activeTab !== id) return { openTabs, activeTab: state.activeTab }
   return { openTabs, activeTab: openTabs[Math.min(index, openTabs.length - 1)] ?? null }
 }
 
-/** Close everything in the strip except `id` (and the permanent `fallback`). */
-export function closeOtherTabs(state: TabState, id: string, fallback: string): TabState {
-  const openTabs = state.openTabs.filter((tab) => tab === id || tab === fallback)
-  return tabState(openTabs, id)
+/** Close everything in the pane except `id` and the permanent `keep`. */
+export function closeOtherTabs(state: TabState, id: string, keep: string): TabState {
+  return tabState(
+    state.openTabs.filter((tab) => tab === id || tab === keep),
+    id,
+  )
 }
 
 /** Activate the next tab to the right, wrapping to the first. */

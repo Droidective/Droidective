@@ -1,103 +1,130 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { HOME_TAB, loadLayout, restoreTabs, saveLayout, type LayoutState } from "@/lib/layout"
-import { toggleCollapsed } from "@/lib/sidebar"
 import {
-  activateIndex,
-  closeTab,
-  openTab,
-  reorderTabs,
-  tabState,
-  type TabState,
-} from "@/lib/tabs"
+  HOME_TAB,
+  loadLayout,
+  restoreWorkspaceFrom,
+  saveLayout,
+  type LayoutState,
+} from "@/lib/layout"
+import { clampedFraction } from "@/lib/panes"
+import { toggleCollapsed } from "@/lib/sidebar"
 import type { FeatureSummary } from "@/lib/wire"
+import {
+  activateAt,
+  close,
+  closeOthers,
+  drop,
+  focus,
+  move,
+  newWorkspace,
+  open,
+  split,
+  type Workspace,
+} from "@/lib/workspace"
 
-export interface Workspace {
-  tabs: TabState
+export interface WorkspaceController {
+  workspace: Workspace
   layout: LayoutState
   open: (id: string) => void
   close: (id: string) => void
-  reorder: (id: string, before: string | null) => void
+  closeOthers: (id: string) => void
+  drop: (id: string, pane: number, before: string | null) => void
+  split: (id: string) => void
+  moveToOtherPane: (id: string) => void
+  focusPane: (pane: number) => void
   activateIndex: (index: number) => void
+  setSplitFraction: (fraction: number) => void
   setSidebarOrder: (order: string[]) => void
   setCategoryOrder: (order: string[]) => void
   toggleCategory: (category: string) => void
 }
 
 /**
- * The window's arrangement: which tabs are open and how the sidebar is sorted,
- * restored on launch and saved as it changes.
+ * The window's arrangement: which tabs are open in which pane, and how the
+ * sidebar is sorted — restored on launch and saved as it changes.
  *
- * The decisions all live in `lib/` — this only sequences them, which is the
- * same split the Mac keeps between `AppState` and `TabState`/`SidebarOrdering`.
+ * The decisions all live in `lib/` and this only sequences them, the same split
+ * the Mac keeps between `AppState` and `Workspace`/`SidebarOrdering`.
  */
-export function useWorkspace(features: FeatureSummary[]): Workspace {
+export function useWorkspace(features: FeatureSummary[]): WorkspaceController {
   const [layout, setLayout] = useState<LayoutState>(() => loadLayout(globalThis.localStorage))
-  const [tabs, setTabs] = useState<TabState>(() => tabState([HOME_TAB], HOME_TAB))
+  const [workspace, setWorkspace] = useState<Workspace>(() => newWorkspace(HOME_TAB))
 
   // Saved tabs name features, so they cannot be validated until the registry
-  // has arrived. Once only: after this, the tab strip is the user's to change.
+  // has arrived. Once only: after this, the strip is the user's to change.
   const restored = useRef(false)
   useEffect(() => {
     if (restored.current || features.length === 0) return
     restored.current = true
     const known = new Set(features.map((feature) => feature.id))
-    setTabs(restoreTabs(layout, (id) => known.has(id)))
+    setWorkspace(restoreWorkspaceFrom(layout, (id) => known.has(id)))
   }, [features, layout])
 
-  // Writing before the restore would save the placeholder strip over the real
-  // one — the first launch of a session would forget every tab.
+  // Writing before the restore would save the placeholder over the real thing
+  // — the first launch of a session would forget every tab.
   useEffect(() => {
     if (!restored.current) return
     saveLayout(globalThis.localStorage, {
       ...layout,
-      openTabs: [...tabs.openTabs],
-      activeTab: tabs.activeTab,
+      panes: workspace.groups.map((group) => ({
+        tabs: [...group.openTabs],
+        activeTab: group.activeTab,
+      })),
+      focusedPane: workspace.focusedGroup,
     })
-  }, [layout, tabs])
+  }, [layout, workspace])
 
-  const open = useCallback((id: string) => {
-    setTabs((current) => openTab(current, id))
-  }, [])
-
-  const close = useCallback((id: string) => {
-    // Home is permanent: it is where a closed last tab lands, so closing it
-    // would be a move with nowhere to go.
-    if (id === HOME_TAB) return
-    setTabs((current) => closeTab(current, id, HOME_TAB))
-  }, [])
-
-  const reorder = useCallback((id: string, before: string | null) => {
-    setTabs((current) => reorderTabs(current, id, before))
-  }, [])
-
-  const jump = useCallback((index: number) => {
-    setTabs((current) => activateIndex(current, index))
-  }, [])
-
-  const setSidebarOrder = useCallback((sidebarOrder: string[]) => {
-    setLayout((current) => ({ ...current, sidebarOrder }))
-  }, [])
-
-  const setCategoryOrder = useCallback((categoryOrder: string[]) => {
-    setLayout((current) => ({ ...current, categoryOrder }))
-  }, [])
-
-  const toggleCategory = useCallback((category: string) => {
-    setLayout((current) => ({
-      ...current,
-      collapsedCategories: toggleCollapsed(current.collapsedCategories, category),
-    }))
-  }, [])
+  const edit = useCallback(
+    (transform: (current: Workspace) => Workspace) => {
+      setWorkspace(transform)
+    },
+    [],
+  )
 
   return {
-    tabs,
+    workspace,
     layout,
-    open,
-    close,
-    reorder,
-    activateIndex: jump,
-    setSidebarOrder,
-    setCategoryOrder,
-    toggleCategory,
+    open: useCallback((id: string) => {
+      edit((current) => open(current, id))
+    }, [edit]),
+    // Home is permanent: it is where a closed last tab lands, so closing it
+    // would be a move with nowhere to go.
+    close: useCallback((id: string) => {
+      if (id === HOME_TAB) return
+      edit((current) => close(current, id, HOME_TAB))
+    }, [edit]),
+    closeOthers: useCallback((id: string) => {
+      edit((current) => closeOthers(current, id, HOME_TAB))
+    }, [edit]),
+    drop: useCallback((id: string, pane: number, before: string | null) => {
+      edit((current) => drop(current, id, pane, before))
+    }, [edit]),
+    split: useCallback((id: string) => {
+      edit((current) => split(current, id))
+    }, [edit]),
+    moveToOtherPane: useCallback((id: string) => {
+      edit((current) => move(current, id, current.focusedGroup === 0 ? 1 : 0))
+    }, [edit]),
+    focusPane: useCallback((pane: number) => {
+      edit((current) => focus(current, pane))
+    }, [edit]),
+    activateIndex: useCallback((index: number) => {
+      edit((current) => activateAt(current, index))
+    }, [edit]),
+    setSplitFraction: useCallback((splitFraction: number) => {
+      setLayout((current) => ({ ...current, splitFraction: clampedFraction(splitFraction) }))
+    }, []),
+    setSidebarOrder: useCallback((sidebarOrder: string[]) => {
+      setLayout((current) => ({ ...current, sidebarOrder }))
+    }, []),
+    setCategoryOrder: useCallback((categoryOrder: string[]) => {
+      setLayout((current) => ({ ...current, categoryOrder }))
+    }, []),
+    toggleCategory: useCallback((category: string) => {
+      setLayout((current) => ({
+        ...current,
+        collapsedCategories: toggleCollapsed(current.collapsedCategories, category),
+      }))
+    }, []),
   }
 }
