@@ -187,6 +187,79 @@ Found by driving the app against a live emulator, not by reading it.
 
 ---
 
+## Backlog
+
+The order the remaining work is planned in, and what each item actually costs.
+Tick an item here when its PR merges; the detail stays in the sections above.
+
+**Done.**
+
+| | Goal | Landed in |
+| --- | --- | --- |
+| ✅ | Grouped sidebar and feature tabs | #252 |
+| ✅ | A glyph per feature | #253 |
+| ✅ | The three action-result defects | #254 |
+| ✅ | Split panes | #255 |
+| ✅ | Command palette and pinned features | #256 |
+| ✅ | Logcat: level, find-vs-filter, tags, export, restart | #257 |
+
+**Next, in order.** Everything from *File explorer* down needs four layers, not
+one — a daemon route in Swift, a Rust command, a pane, and tests at both ends.
+The daemon serves devices, features, apps and logcat today and nothing else, so
+that is the real cost of each screen, and it is why they are ordered by how
+often someone opens them rather than by how hard they look.
+
+1. **Device info** — the smallest of the four-layer screens, so it is where the
+   pattern gets established: a route over `DeviceProps`/`DeviceOverview` and a
+   searchable property browser.
+2. **File explorer** — browse, copy/move/delete, pull, root toggle, new folder,
+   context menu. The first screen that *writes* to the device, so its route
+   needs the same `shellQuote` care ADBKit applies.
+3. **Crash catcher** — a route over ADBKit's `CrashParser`, then a multi-crash
+   browser: kind/process filters, watch mode, copy-for-Slack, clear buffer.
+4. **Performance monitor** — a *stream*, not a request: live CPU/RAM/FPS with a
+   per-process list, recording, and export.
+5. **Per-feature hotkeys** with a live-preview recorder. Client-side, and the
+   only shell item left that people will miss daily.
+6. **Device bar parity** — wireless pair and connect, run-on-all for
+   `supportsRunAll`, launch an emulator, the pull-progress strip.
+7. **Toasts and the Command Log** — action results as toasts instead of a banner
+   per screen, and every user-initiated adb call recorded the way
+   `CommandLog.userInitiated` records it.
+8. **Settings** — Appearance (accent colour, light theme), General, Hotkeys,
+   Privacy. The light theme is a second set of tokens the asset catalog already
+   has.
+9. **Manage-features catalog** and per-feature "connect a device" empty states.
+10. **The device-state screens** — dev-settings, root-status,
+    system-restrictions. Toggle tables over one route each.
+11. **The connection screens** — wifi, private-dns, network-speed.
+12. **The per-app screens** — app-info, permissions, meminfo, sandbox-browser,
+    manage-app. All hang off the bundle already chosen in Apps.
+13. **Emulators and install-app.**
+14. **Deep links and bug report.**
+15. **Auto-hiding sidebar, UI zoom, window translucency** — `WindowEffects` is
+    already pure-tested in ADBKit; blur needs a per-platform answer.
+
+**Known gaps inside work already called done.**
+
+- **Logcat's per-app filter.** Needs a pid → package map the daemon does not
+  serve. Matching on the tag instead would be a filter that quietly misses
+  lines, which is worse than not having one.
+- **The palette lists features, not commands.** There are no custom commands in
+  this app yet for it to offer.
+- **Drop-to-split is unverified by automation.** Synthetic mouse events do not
+  start an HTML5 drag in WKWebView, so every drag path in this app is checked by
+  hand. Keep the *decision* a drop makes in `lib/` where it can be tested, and
+  only the event wiring uncovered.
+
+**Not planned.** Multi-window, the Quick Actions panel, the welcome tour, and
+the update pill. Each is a whole subsystem, and none of them is why anyone opens
+this app. Reactotron stays blocked until the relay's `Network.framework`
+listener is ported to NIO; mirror, screen-record and the video editor are
+Apple-only by design.
+
+---
+
 ## Per-feature checklists
 
 Legend: ⬜ not started · 🟡 partial · ⛔ not applicable off-Apple.
