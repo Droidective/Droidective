@@ -55,6 +55,11 @@ export function listApps(serial: string): Promise<AppsResponse> {
   return invoke<AppsResponse>("list_apps", { serial })
 }
 
+/** Everything `getprop` printed, as the daemon passed it through. */
+export function deviceProps(serial: string): Promise<{ properties: Record<string, string> }> {
+  return invoke<{ properties: Record<string, string> }>("device_props", { serial })
+}
+
 export function controlApp(args: {
   serial: string
   packageId: string

@@ -30,6 +30,10 @@ import FoundationNetworking
         ) async throws -> FeatureResult {
             FeatureResult(ok: true, message: "stub")
         }
+
+        func deviceProperties(serial: String) async throws -> [String: String] {
+            ["ro.product.model": "Pixel", "ro.build.version.release": "14"]
+        }
     }
 
     private static func device(_ serial: String) -> Device {
@@ -58,10 +62,12 @@ import FoundationNetworking
 
     private func send(
         port: Int, path: String = DaemonProtocol.Route.devicesList.rawValue,
-        method: String = "POST", token: String?, host: String? = nil, origin: String? = nil
+        method: String = "POST", token: String?, host: String? = nil, origin: String? = nil,
+        body: String? = nil
     ) async throws -> (status: Int, body: Data) {
         var request = URLRequest(url: URL(string: "http://127.0.0.1:\(port)\(path)")!)
         request.httpMethod = method
+        if let body { request.httpBody = Data(body.utf8) }
         if let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         if let host { request.setValue(host, forHTTPHeaderField: "Host") }
         if let origin { request.setValue(origin, forHTTPHeaderField: "Origin") }
@@ -125,6 +131,30 @@ import FoundationNetworking
 
             let wrongMethod = try await send(port: port, method: "GET", token: token)
             #expect(wrongMethod.status == 405)
+        }
+    }
+
+    @Test func devicePropsPassesGetpropStraightThrough() async throws {
+        // The daemon picks no subset: which property matters is the reader's
+        // question, and a client that got a curated list could not ask it.
+        try await withServer { port, token in
+            let (status, body) = try await send(
+                port: port, path: DaemonProtocol.Route.deviceProps.rawValue, token: token,
+                body: #"{"serial":"emulator-5554"}"#)
+            #expect(status == 200)
+            let decoded = try JSONDecoder().decode(
+                DaemonProtocol.DevicePropsResponse.self, from: body)
+            #expect(decoded.properties["ro.product.model"] == "Pixel")
+            #expect(decoded.properties["ro.build.version.release"] == "14")
+        }
+    }
+
+    @Test func devicePropsRefusesABodyItCannotRead() async throws {
+        try await withServer { port, token in
+            let (status, _) = try await send(
+                port: port, path: DaemonProtocol.Route.deviceProps.rawValue, token: token,
+                body: "not json")
+            #expect(status == 400)
         }
     }
 

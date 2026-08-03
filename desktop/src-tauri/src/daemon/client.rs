@@ -4,8 +4,8 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 
 use crate::daemon::wire::{
-    AppControlRequest, AppsListRequest, AppsResponse, Device, DevicesResponse, ErrorEnvelope,
-    FeatureSummary, FeaturesResponse, RunRequest, RunResponse,
+    AppControlRequest, AppsListRequest, AppsResponse, Device, DevicePropsResponse, DeviceRequest,
+    DevicesResponse, ErrorEnvelope, FeatureSummary, FeaturesResponse, RunRequest, RunResponse,
 };
 use crate::error::DaemonError;
 
@@ -49,6 +49,11 @@ impl DaemonClient {
 
     pub async fn list_apps(&self, serial: String) -> Result<AppsResponse, DaemonError> {
         self.post("/v1/apps/list", &AppsListRequest { serial })
+            .await
+    }
+
+    pub async fn device_props(&self, serial: String) -> Result<DevicePropsResponse, DaemonError> {
+        self.post("/v1/device/props", &DeviceRequest { serial })
             .await
     }
 

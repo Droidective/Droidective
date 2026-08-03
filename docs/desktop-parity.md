@@ -209,9 +209,10 @@ The daemon serves devices, features, apps and logcat today and nothing else, so
 that is the real cost of each screen, and it is why they are ordered by how
 often someone opens them rather than by how hard they look.
 
-1. **Device info** — the smallest of the four-layer screens, so it is where the
-   pattern gets established: a route over `DeviceProps`/`DeviceOverview` and a
-   searchable property browser.
+1. ~~**Device info.**~~ Landed — and it is the worked example of the four
+   layers: `DaemonProtocol.Route.deviceProps` + a `DaemonBackend` method, a
+   Rust `device_props` command, `lib/deviceinfo.ts` for the arranging, and a
+   pane. Copy that shape for the rest.
 2. **File explorer** — browse, copy/move/delete, pull, root toggle, new folder,
    context menu. The first screen that *writes* to the device, so its route
    needs the same `shellQuote` care ADBKit applies.
@@ -489,13 +490,15 @@ Legend: ⬜ not started · 🟡 partial · ⛔ not applicable off-Apple.
 - **Must replicate**
   - [ ] tooltip: Refresh from the device
 
-#### `device-info` — Device Info  ·  ⬜ todo
+#### `device-info` — Device Info  ·  🟡 partial
 > Browse and search every device property
 - **Kind** `view`
-- **Note** Not started on Windows/Linux.
+- **Note** Built. `/v1/device/props` passes `getprop` through untouched; the
+  pane adds a summary header, two-segment grouping, search over key and value,
+  copy and export.
 - **macOS view** `DeviceInfoView` — `App/Sources/FeatureDetail/Views/DeviceInfoView.swift`
 - **Must replicate**
-  - [ ] field: Filter properties…
+  - [x] field: Filter properties…
 
 #### `fake-battery` — Fake Battery  ·  🟡 partial
 > Set a fake battery level and unplugged state

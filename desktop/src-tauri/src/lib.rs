@@ -37,6 +37,7 @@ pub fn run() -> tauri::Result<()> {
             commands::run_action,
             commands::list_apps,
             commands::control_app,
+            commands::device_props,
             commands::watch_devices,
             commands::watch_logcat,
             commands::stop_watching,

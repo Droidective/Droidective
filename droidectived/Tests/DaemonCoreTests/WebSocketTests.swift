@@ -48,6 +48,10 @@ private let hasWebSocketClient: Bool = {
         ) async throws -> FeatureResult {
             FeatureResult(ok: true, message: "stub")
         }
+
+        func deviceProperties(serial: String) async throws -> [String: String] {
+            ["ro.product.model": "Pixel", "ro.build.version.release": "14"]
+        }
     }
 
     private struct FixedSource: StreamSource {

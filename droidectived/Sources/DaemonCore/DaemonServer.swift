@@ -23,6 +23,8 @@ public protocol DaemonBackend: Sendable {
     func controlApp(
         serial: String, packageId: String, action: AppControlService.AppAction
     ) async throws -> FeatureResult
+    /// Every `getprop` key and value on the device.
+    func deviceProperties(serial: String) async throws -> [String: String]
 }
 
 /// `DeviceMonitor` in production.
@@ -58,6 +60,10 @@ public struct LiveBackend: DaemonBackend {
     ) async throws -> FeatureResult {
         try await AppControlService(client: client)
             .control(serial: serial, packageId: packageId, action: action)
+    }
+
+    public func deviceProperties(serial: String) async throws -> [String: String] {
+        try await DeviceProps.all(client: client, serial: serial)
     }
 }
 
@@ -295,6 +301,22 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
 
         case .featuresList:
             return (.ok, encoded(ActionProtocol.features()))
+
+        case .deviceProps:
+            let raw = Data(body.readableBytesView)
+            guard let request = try? JSONDecoder().decode(
+                DaemonProtocol.DeviceRequest.self, from: raw)
+            else { return (.badRequest, encoded(DaemonProtocol.badRequest)) }
+            do {
+                let properties = try await backend.deviceProperties(serial: request.serial)
+                return (.ok, encoded(DaemonProtocol.DevicePropsResponse(properties: properties)))
+            } catch {
+                // adb's answer, not a daemon fault — the same 502 the app
+                // list uses, carrying adb's own words.
+                return (.badGateway, encoded(DaemonProtocol.ErrorBody(
+                    code: "adb_failed", message: "Could not read the device properties.",
+                    detail: "\(error)")))
+            }
 
         case .actionsRun:
             let raw = Data(body.readableBytesView)
