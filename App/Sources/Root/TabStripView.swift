@@ -23,9 +23,8 @@ struct TabStripView: View {
     /// Where the insertion guideline shows during a reorder drag (nil = none).
     @State private var dropSlot: TabDropSlot?
 
-    /// Home never renders as a chip — it rides the permanent house button at
-    /// the strip's start instead, so it can't be closed away or lost in the
-    /// tab overflow.
+    /// Home lives in the sidebar footer — exclude it from tab chips so it
+    /// can't be closed away.
     private var tabIDs: [String] { state.openTabIDs(inGroup: group).filter { $0 != "home" } }
     private var activeID: String? { state.activeTab(inGroup: group) }
     /// The tabs are wider than the visible strip — show the ‹ › scroll arrows.
@@ -34,11 +33,7 @@ struct TabStripView: View {
     var body: some View {
         ScrollViewReader { proxy in
             HStack(spacing: 0) {
-                if group == 0 {
-                    homeButton
-                        .padding(.horizontal, 6)
-                    Divider().frame(height: 20)
-                }
+                // Home moved to the sidebar footer's navigation row.
                 if overflowing {
                     scrollArrow("chevron.left", by: -1, help: "Scroll tabs left", proxy)
                     Divider().frame(height: 20)
@@ -203,29 +198,6 @@ struct TabStripView: View {
         Button("Close Tab") { state.closeTab(id) }
         Button("Close Other Tabs") { state.closeOtherTabs(than: id, inGroup: group) }
             .disabled(tabIDs.count < 2)
-    }
-
-    /// The fixed Home entry leading the strip — an icon-only chip that opens
-    /// (or re-focuses) Home; accented while Home is the active tab anywhere.
-    private var homeButton: some View {
-        Button {
-            state.requestFeature("home")
-        } label: {
-            Image(systemName: "house")
-                .font(.app(.callout).weight(.medium))
-                .foregroundStyle(state.activeTabID == "home"
-                    ? AnyShapeStyle(.brandAccent) : AnyShapeStyle(.textMuted))
-                .frame(width: 28, height: 28)
-                .background(
-                    RoundedRectangle(cornerRadius: 7)
-                        .fill(state.activeTabID == "home"
-                            ? AnyShapeStyle(.brandAccent.opacity(0.14)) : AnyShapeStyle(.clear))
-                )
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help("Home — overview & getting started")
-        .accessibilityLabel("Home")
     }
 
     private var newTabButton: some View {

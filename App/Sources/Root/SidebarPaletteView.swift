@@ -233,6 +233,7 @@ struct SidebarPaletteView: View {
             }
             .listStyle(.sidebar)
             .scrollContentBackground(.hidden)
+            .contentMargins(.vertical, 8)
             .onChange(of: state.searchHighlightID) { _, id in
                 if let id { proxy.scrollTo(id, anchor: .center) }
             }
@@ -284,46 +285,63 @@ struct SidebarPaletteView: View {
     }
 
     private var bottomBar: some View {
-        HStack(spacing: 16) {
-            Button {
-                state.requestFeature("catalog")
-            } label: {
-                Label(
-                    state.hiddenFeatureCount > 0 ? "+ \(state.hiddenFeatureCount) more features" : "Manage features",
-                    systemImage: "square.grid.2x2"
-                )
-                .font(.app(.body))
-                .lineLimit(1)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(state.activeTabID == "catalog" ? AnyShapeStyle(.brandAccent) : AnyShapeStyle(.textMuted))
+        VStack(spacing: 0) {
+            // ── Navigation row: Home + Manage Features ──
+            HStack {
+                SidebarNavButton(
+                    title: "Home",
+                    systemImage: "house",
+                    isActive: state.activeTabID == "home"
+                ) {
+                    state.requestFeature("home")
+                }
 
-            Spacer()
+                Spacer()
 
-            Button {
-                state.requestFeature("about")
-            } label: {
-                Image(systemName: "info.circle")
-                    .font(.app(.title2))
-                    .frame(height: 22)
-                    .contentShape(Rectangle())
+                SidebarNavButton(
+                    title: state.hiddenFeatureCount > 0
+                        ? "+ \(state.hiddenFeatureCount) more features"
+                        : "Manage features",
+                    systemImage: "square.grid.2x2",
+                    isActive: state.activeTabID == "catalog"
+                ) {
+                    state.requestFeature("catalog")
+                }
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(state.activeTabID == "about" ? AnyShapeStyle(.brandAccent) : AnyShapeStyle(.textMuted))
-            .help("About & Feedback — version, report an issue, star on GitHub")
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
 
-            SettingsLink {
-                Image(systemName: "gearshape")
-                    .font(.app(.title2))
-                    .frame(height: 22)
-                    .contentShape(Rectangle())
+            Divider()
+                .padding(.horizontal, 10)
+
+            // ── Utility row: version + Info + Settings ──
+            HStack(spacing: 0) {
+                Text("v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—")")
+                    .font(.app(size: 11, weight: .regular))
+                    .foregroundStyle(.textMuted)
+                    .monospacedDigit()
+
+                Spacer()
+
+                Button {
+                    state.requestFeature("about")
+                } label: {
+                    Image(systemName: "info.circle")
+                }
+                .buttonStyle(IconButtonStyle(size: .small))
+                .foregroundStyle(state.activeTabID == "about" ? .brandAccent : .textMuted)
+                .help("About & Feedback — version, report an issue, star on GitHub")
+
+                SettingsLink {
+                    Image(systemName: "gearshape")
+                }
+                .buttonStyle(IconButtonStyle(size: .small))
+                .foregroundStyle(.textMuted)
+                .help("Settings (⌘,)")
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(.textMuted)
-            .help("Settings (⌘,)")
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
     }
 
     /// ⌘1–⌘9/⌘0 hints: id → 0-based rank while ⌘ is held in the key window
@@ -763,5 +781,36 @@ private struct HotkeyPopover: View {
         }
         .padding(14)
         .frame(width: 300)
+    }
+}
+
+/// A labeled sidebar-footer button with a rounded-rect hover/press wash,
+/// matching ``IconButtonStyle``'s interaction feel for icon+text buttons.
+private struct SidebarNavButton: View {
+    let title: String
+    let systemImage: String
+    let isActive: Bool
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .font(.app(.body))
+                .lineLimit(1)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(isActive ? .brandAccent : .textMuted)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(isActive
+                    ? Color.brandAccent.opacity(0.12)
+                    : Color.primary.opacity(hovering ? 0.07 : 0))
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .onHover { hovering = $0 }
+        .animation(.easeOut(duration: 0.12), value: hovering)
     }
 }
