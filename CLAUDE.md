@@ -20,7 +20,24 @@ Phase 2 landed `droidectived/`, a local daemon over ADBKit
 UI over it for Windows/Linux (`desktop/README.md`; the feature-by-feature
 parity tracker is `docs/desktop-parity.md`). **macOS never talks to the
 daemon** — the Mac app keeps linking ADBKit directly, by decision, so no daemon
-or desktop work can reach the shipping Mac flow. An iOS companion can't run
+or desktop work can reach the shipping Mac flow.
+
+**The desktop UI is the Mac's UI.** The Mac app is the proven one; the point of
+the port is that someone moving between the two does not have to relearn
+anything. So where a control exists on both, it looks and behaves the way
+`App/Sources/` makes it behave — same wording, same icon, same confirmation
+shape, same gesture (a double-click to open stays a double-click; a
+`confirmationDialog` stays a dialog and does not become an armed button). A
+nicer idea for Windows and Linux is still a difference someone has to relearn:
+if it is genuinely better it goes into the Mac app *first*, and the port
+follows. Two standing exceptions, and they are named where they occur: a
+keyboard shortcut whose modifier has no Windows/Linux equivalent (⌘\ became
+Ctrl+\, and the split is Ctrl+\ not Ctrl+D because Ctrl+D is end-of-input in
+every Linux shell), and a label that names a platform. **Every** feature is in
+scope, chrome included — Settings, the notification panel, toasts, the role
+picker, the catalog, the menu bar, drag and drop. Only `ios-logs` and
+`push-notification` are out, and only because `xcrun simctl` is a macOS
+toolchain rather than anything about a device. An iOS companion can't run
 `Process` at all, so it would ride the same daemon protocol. Keep the seams (`ProcessRunning`, injected
 directories) intact, and keep new ADBKit code portable — no new Apple-only
 framework use outside the gated subsystems. The rule is **enforced, not just

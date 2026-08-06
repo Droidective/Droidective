@@ -155,25 +155,108 @@ the chrome and the device bar have not.
 
 ### Chrome and feel
 
+Every window, panel, sheet and menu the Mac has. Sourced by reading
+`App/Sources/Root/`, `App/Sources/Settings/` and `ADTApp.swift`, not from
+memory — the file each item names is the thing to replicate.
+
 - [x] **Per-feature icons.** The daemon drops `FeatureDef.icon` on purpose —
       those are SF Symbol names, which mean nothing off Apple — so
       `desktop/src/lib/icons.ts` pairs each registry id with a lucide glyph
       chosen to read as the same thing the Mac's symbol does. A test fails if
       the daemon serves a feature the table has no entry for, so a new feature
       cannot quietly inherit its neighbour's icon.
-- [ ] **Settings** — Appearance (accent colour, custom background/text,
-      window opacity / blur / grain), General, Hotkeys, Tools, Privacy, MCP.
+
+#### The sidebar footer (`SidebarPaletteView`)
+
+Three controls the port has none of, and they are the way into most of what
+follows:
+
+- [ ] **Manage Features** — opens the `catalog` tab.
+- [ ] **About & Feedback** (ⓘ) — opens the `about` tab: version, report an
+      issue, star on GitHub.
+- [ ] **Settings** (gear) — opens the Settings window.
+
+#### Settings (`SettingsView`, 969 lines, seven tabs)
+
+- [ ] **General** — Role picker plus "Open the role picker…"; Startup ▸ Open at
+      login; Background ▸ Keep running in the background; Quick Actions ▸
+      "Resume where I left off" (a minutes picker) and "Close the panel after
+      running an action"; Updates ▸ automatic download, beta channel, and the
+      Check / Update Now / Relaunch to Update button that changes with state;
+      Menu bar ▸ Show menu bar icon.
+- [ ] **Appearance** — Theme (light/dark/system); Accent as presets *and* a
+      colour well *and* a hex field with Reset; Background the same three ways;
+      Text ▸ Font family, Text size, Colour (well + hex + Reset); Window ▸
+      opacity, blur and grain sliders; Developer ▸ self-metrics overlay.
+- [ ] **Privacy** — Telemetry ▸ crash reports and usage analytics; Network ▸
+      accept Reactotron connections from the LAN; Data & Storage ▸ the captures
+      and pulls folder (Change… / Reset / Open in Finder) and the Command Log
+      (View… / Clear, with a confirmation).
+- [ ] **Doctor** — the toolchain check, with the install source for anything
+      missing. The app never installs a tool itself.
+- [ ] **Tools** — the managed-tool store: download, size, remove, upgrade.
+- [ ] **Hotkeys** — the Global section plus a per-feature recorder.
+- [ ] **MCP** — shown conditionally on the Mac; the Reactotron MCP server's
+      switches. Follows Reactotron (backlog 23).
+
+#### Panels and sheets
+
+- [ ] **Notification panel** (`NotificationPanelView`) — a persistent right
+      column of the important notifications (errors, warnings, key wins),
+      toggled by the **bell in the device bar**, with its own empty state. This
+      is history, and separate from the transient toasts below.
+- [ ] **Toasts** (`ToastOverlay`) — top-trailing, per action result, with a
+      level and an optional Show in folder. Replaces the inline banner every
+      ported screen currently uses.
+- [ ] **Command Log** (`CommandLogView`) — every `CommandLog.userInitiated`
+      adb call, opened from Privacy.
+- [ ] **Role picker** (`RolePickerView`) — shown on first launch before the
+      tour (`LaunchPrompt.rolePicker`), and re-openable from General. A role
+      curates which features the sidebar lists.
+- [ ] **Manage Features catalog** (`CatalogView`) — everything on by default;
+      this is for turning things off.
+- [ ] **About & Feedback** — the `about` tab: version, Report an Issue, Request
+      a Feature, GitHub, Release Notes.
+- [ ] **Welcome tour** (`TourView` + `TourDemos`) — skippable, ending on the
+      two Quick Actions pages and the confetti finale.
+- [ ] **What's New** (`WhatsNewPresenter`) — on first launch of a new version.
+- [ ] **Star prompt** (`StarPromptView`) — the recurring, capped GitHub nudge.
+- [ ] **Wireless connect sheet** (`WirelessConnectSheet`) — the three-tab
+      pairing / connect / tcpip bootstrap.
+- [ ] **Installed-apps picker** (`InstalledAppsPickerView`) and the **bundle
+      manager** (`BundleManagerView`).
+- [ ] **Overrides pill** (`OverridesPillView`) — the standing reminder that a
+      device override is in effect.
+- [ ] **Install inbox** (`InstallInbox`) — an APK opened from the file manager
+      before the window exists has to be buffered, not dropped.
+- [ ] **Self-metrics overlay** (`DevOverlay`), behind the Appearance switch.
+
+#### The menu bar (`ADTApp.swift`)
+
+A webview has no menu bar of its own, so this is a real port: Tauri's native
+menu plus the accelerators. Every item here is also a keyboard shortcut
+somebody already has in their fingers.
+
+- [ ] **File** ▸ New Window.
+- [ ] **Terminal** ▸ New, Split Vertically, Split Horizontally, Close, Rename…,
+      Next, Previous.
+- [ ] **Tab** ▸ New Tab, Close Tab, Next, Previous, Show Tab 1–9.
+- [ ] **Go**, **View** ▸ the sidebar commands, and the zoom pair.
+- [ ] **Edit** ▸ Find Feature, Manage Features, Find in Terminal…, Find Next,
+      Find Previous.
+- [ ] **Help** ▸ Report an Issue…, Request a Feature…, Droidective on GitHub,
+      Release Notes. **About Droidective** in the app menu.
+
+#### Look
+
 - [ ] **Window translucency** — the `.bgRoot`/`.bgSurface` token system, with
       `WindowEffects` already pure-tested in ADBKit. Note the Mac's blur is a
       private CoreGraphics call; Windows and Linux need their own (Mica /
       compositor blur) or the slider limits to opacity.
 - [ ] **Light theme** — the asset catalog has both; `desktop/` ported dark only.
-- [ ] **Toasts** for action results, instead of an inline banner per screen.
-- [ ] **Command Log** — every user-initiated adb call, as
-      `CommandLog.userInitiated` records it.
-- [ ] **Welcome tour** on first run.
-- [ ] **Update pill + What's New** — Sparkle is macOS-only, so this needs its
-      own updater on Windows/Linux.
+- [ ] **Custom accent, background and text colour**, including the
+      luminance-following scheme and the low-contrast warning.
+- [ ] **Font family and text-size scale**, and the ⌘= / ⌘- zoom.
 - [ ] **Empty states per feature** ("connect a device") rather than one global
       message.
 - [ ] **Native notifications** — a finished background install, a crash caught
@@ -182,6 +265,7 @@ the chrome and the device bar have not.
 - [ ] **Background mode and a tray icon** — closing the window keeps the app
       resident, stops the kept-alive sessions, and leaves the global hotkey
       working.
+
 
 ---
 
@@ -264,13 +348,20 @@ often someone opens them rather than by how hard they look.
    only shell item left that people will miss daily.
 6. **Device bar parity** — wireless pair and connect, run-on-all for
    `supportsRunAll`, launch an emulator, the pull-progress strip.
-7. **Toasts and the Command Log** — action results as toasts instead of a banner
-   per screen, and every user-initiated adb call recorded the way
-   `CommandLog.userInitiated` records it.
-8. **Settings** — Appearance (accent colour, light theme), General, Hotkeys,
-   Privacy. The light theme is a second set of tokens the asset catalog already
-   has.
-9. **Manage-features catalog** and per-feature "connect a device" empty states.
+7. **The notification surfaces** — `ToastOverlay` for an action result and
+   `NotificationPanelView` for the history behind the device bar's bell, plus
+   the Command Log sheet. These come before Settings because every ported
+   screen currently reports into an inline banner it should not have, and each
+   one built before this is one more to convert.
+8. **Settings**, all seven tabs — General, Appearance, Privacy, Doctor, Tools,
+   Hotkeys, and MCP when Reactotron lands. The Appearance tab is the biggest:
+   theme, accent, background and text each as presets *and* a colour well *and*
+   a hex field, plus the window sliders. It also unlocks the light theme, which
+   is a second set of tokens the asset catalog already has.
+9. **The sidebar footer and what it opens** — Manage Features (`CatalogView`),
+   About & Feedback (the `about` tab), and the gear. Plus the role picker
+   (`RolePickerView`, shown on first launch before the tour) and per-feature
+   "connect a device" empty states.
 10. **The device-state screens** — dev-settings, root-status,
     system-restrictions. Toggle tables over one route each. `root-status` now
     has its route: `/v1/device/root` already carries every signal, not just the
@@ -282,6 +373,10 @@ often someone opens them rather than by how hard they look.
 14. **Deep links and bug report.**
 15. **Auto-hiding sidebar, UI zoom, window translucency** — `WindowEffects` is
     already pure-tested in ADBKit; blur needs a per-platform answer.
+16. **The menu bar** — Tauri's native menu and its accelerators, over the same
+    File / Terminal / Tab / Go / View / Edit / Help commands `ADTApp.swift`
+    declares. A webview has no menu of its own, and every item there is a
+    shortcut somebody already has in their fingers.
 
 **Known gaps inside work already called done.**
 
@@ -327,7 +422,7 @@ have to relearn anything, and "this one is missing a whole subsystem" fails that
 just as badly as a missing button. Each is a release of its own, so they come
 after the screens rather than instead of them.
 
-16. **Drag and drop, everywhere the Mac has it.** The shell's tab and sidebar
+17. **Drag and drop, everywhere the Mac has it.** The shell's tab and sidebar
     drags already work. Still missing: dropping a file from the file manager
     onto the File Explorer to `adb push` it, and dropping an APK/AAB on the
     window to install it. Both need `dragDropEnabled: true`-style handling the
@@ -335,28 +430,28 @@ after the screens rather than instead of them.
     so this needs Tauri's native drop **and** HTML5 drag to coexist rather than
     one being turned off for the other. That is the actual engineering problem;
     it is not a reason to skip the feature.
-17. **Notifications and their settings.** The Mac posts a native notification
+18. **Notifications and their settings.** The Mac posts a native notification
     when a background install finishes, when a watched crash lands, and when an
     update is staged, with a Settings ▸ General switch behind it.
     `tauri-plugin-notification` is the equivalent; the settings pane is item 8.
-18. **The Quick Actions panel** — the non-activating global-hotkey mini app:
+19. **The Quick Actions panel** — the non-activating global-hotkey mini app:
     the grid of every runnable action, pinned first, custom commands, the
     pick-device interstitial, ⌘⏎ run-on-all. Needs a second Tauri window with
     `alwaysOnTop` + no focus steal, and a global shortcut.
-19. **Background mode and the menu bar** — closing the window keeps the app
+20. **Background mode and the menu bar** — closing the window keeps the app
     resident behind a tray icon, stops the kept-alive sessions, and the global
     hotkey still opens Quick Actions. `tauri-plugin-global-shortcut` plus a
     tray icon.
-20. **Multi-window** (`docs/multi-window.md`) — one window per device, the
+21. **Multi-window** (`docs/multi-window.md`) — one window per device, the
     per-window workspace split, the Focus / Take Over banner for the exclusive
     features, and the window tint.
-21. **The welcome tour** on first run.
-22. **The updater** — Sparkle is macOS-only, so this is `tauri-plugin-updater`
+22. **The welcome tour** on first run.
+23. **The updater** — Sparkle is macOS-only, so this is `tauri-plugin-updater`
     behind the same "Relaunch to update" pill and What's New sheet.
-23. **Reactotron** — blocked only on the relay's `Network.framework` listener
+24. **Reactotron** — blocked only on the relay's `Network.framework` listener
     being ported to NIO. `ReactotronMCP` already proves the NIO listener works;
     this is the same job for the relay socket.
-24. **Mirror, screen record, and the video editor.** The Mac's pipeline is
+25. **Mirror, screen record, and the video editor.** The Mac's pipeline is
     VideoToolbox + AVFoundation + a `Network.framework` socket, none of which
     exists off Apple — but the *capability* is not Apple-only. scrcpy's own
     server speaks the same protocol to any host, and the bundled ffmpeg already
@@ -540,7 +635,7 @@ Legend: ⬜ not started · 🟡 partial · ⛔ not applicable off-Apple.
 #### `reactotron` — Reactotron  ·  ⬜ todo
 > Live React Native inspector — logs, network, state, custom display
 - **Kind** `view`
-- **Note** Not started — blocked on porting the relay's Network.framework listener to NIO, which ReactotronMCP already proves out. Backlog 23.
+- **Note** Not started — blocked on porting the relay's Network.framework listener to NIO, which ReactotronMCP already proves out. Backlog 24.
 
 #### `reload-js` — Reload JS  ·  🟡 partial
 > Reload the JS bundle (double-tap R)
@@ -563,12 +658,12 @@ Legend: ⬜ not started · 🟡 partial · ⛔ not applicable off-Apple.
 #### `scrcpy` — Mirror Screen  ·  ⬜ todo
 > Mirror and control the device with scrcpy
 - **Kind** `view`
-- **Note** Not started — the decode/render stack needs writing off Apple (scrcpy's server is portable; VideoToolbox/AVFoundation are not). Backlog 24.
+- **Note** Not started — the decode/render stack needs writing off Apple (scrcpy's server is portable; VideoToolbox/AVFoundation are not). Backlog 25.
 
 #### `screen-record` — Screen Record  ·  ⬜ todo
 > Record via scrcpy — no time limit, with audio
 - **Kind** `view`
-- **Note** Not started — rides the mirror session, so it follows the mirror. Backlog 24.
+- **Note** Not started — rides the mirror session, so it follows the mirror. Backlog 25.
 
 #### `screenshot` — Screenshot  ·  🟡 partial
 > Capture the screen and save it to your Mac
@@ -578,7 +673,7 @@ Legend: ⬜ not started · 🟡 partial · ⛔ not applicable off-Apple.
 #### `video-editor` — Video Editor  ·  ⬜ todo
 > Trim, rotate, crop, convert & compress video
 - **Kind** `view`
-- **Note** Not started — needs the mirror pipeline plus the bundled ffmpeg. Backlog 24.
+- **Note** Not started — needs the mirror pipeline plus the bundled ffmpeg. Backlog 25.
 
 
 ### Device State

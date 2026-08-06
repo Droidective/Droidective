@@ -94,11 +94,11 @@ GATED = {
 # note says what each actually needs so the entry is a plan, not a shrug.
 BLOCKED = {
     "scrcpy": "Not started — the decode/render stack needs writing off Apple "
-              "(scrcpy's server is portable; VideoToolbox/AVFoundation are not). Backlog 24.",
-    "screen-record": "Not started — rides the mirror session, so it follows the mirror. Backlog 24.",
-    "video-editor": "Not started — needs the mirror pipeline plus the bundled ffmpeg. Backlog 24.",
+              "(scrcpy's server is portable; VideoToolbox/AVFoundation are not). Backlog 25.",
+    "screen-record": "Not started — rides the mirror session, so it follows the mirror. Backlog 25.",
+    "video-editor": "Not started — needs the mirror pipeline plus the bundled ffmpeg. Backlog 25.",
     "reactotron": "Not started — blocked on porting the relay's Network.framework "
-                  "listener to NIO, which ReactotronMCP already proves out. Backlog 23.",
+                  "listener to NIO, which ReactotronMCP already proves out. Backlog 24.",
 }
 
 by_category = {}
