@@ -203,7 +203,7 @@ Tick an item here when its PR merges; the detail stays in the sections above.
 | ✅ | Command palette and pinned features | #256 |
 | ✅ | Logcat: level, find-vs-filter, tags, export, restart | #257 |
 | ✅ | Device info | #260 |
-| ✅ | File explorer | #261 |
+| ✅ | File explorer | #263 |
 
 **Next, in order.** Everything from *File explorer* down needs four layers, not
 one — a daemon route in Swift, a Rust command, a pane, and tests at both ends.
