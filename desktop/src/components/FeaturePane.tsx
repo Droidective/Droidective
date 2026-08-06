@@ -1,6 +1,7 @@
 import { Construction } from "lucide-react"
 import { ActionForm } from "@/components/ActionForm"
 import { AppsPane } from "@/components/AppsPane"
+import { CrashPane } from "@/components/CrashPane"
 import { DeviceInfoPane } from "@/components/DeviceInfoPane"
 import { FileExplorerPane } from "@/components/FileExplorerPane"
 import { HomeView } from "@/components/HomeView"
@@ -58,6 +59,8 @@ export function FeaturePane(props: FeaturePaneProps) {
       return <DeviceInfoPane device={props.device} />
     case "file-explorer":
       return <FileExplorerPane device={props.device} />
+    case "crash-catcher":
+      return <CrashPane device={props.device} />
     default:
       return isRunnable(props.feature) ? (
         <ActionForm

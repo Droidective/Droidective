@@ -268,6 +268,40 @@ pub struct FilePullResponse {
     pub path: String,
 }
 
+// MARK: - the crash buffer
+
+#[derive(Debug, Clone, Serialize)]
+pub struct CrashListRequest {
+    pub serial: String,
+}
+
+/// One crash, as `CrashParser` split it.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CrashReport {
+    /// Stable across refetches, so a watch poll does not move the selection.
+    pub id: String,
+    /// A `CrashReport.Kind` raw value: java, native, reactNative, anr, unknown.
+    pub kind: String,
+    /// Sent rather than derived here, so the two UIs name a kind the same way.
+    #[serde(rename = "kindLabel")]
+    pub kind_label: String,
+    /// Logcat's own timestamp. A string: logcat prints no year.
+    pub timestamp: Option<String>,
+    pub process: Option<String>,
+    pub pid: Option<i64>,
+    pub title: String,
+    /// The block as logcat printed it.
+    pub raw: String,
+    /// The block with the threadtime prefixes stripped.
+    pub body: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CrashListResponse {
+    /// Newest first.
+    pub crashes: Vec<CrashReport>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct AppControlRequest {
     pub serial: String,

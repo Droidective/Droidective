@@ -72,6 +72,10 @@ private let hasWebSocketClient: Bool = {
         func pullFile(
             serial: String, path: String, to destination: String, asRoot: Bool
         ) async throws -> String { destination }
+
+        func crashes(serial: String) async throws -> [CrashReport] { [] }
+
+        func clearCrashBuffer(serial: String) async throws {}
     }
 
     private struct FixedSource: StreamSource {

@@ -43,6 +43,10 @@ public protocol DaemonBackend: Sendable {
     func pullFile(
         serial: String, path: String, to destination: String, asRoot: Bool
     ) async throws -> String
+    /// Every crash the device has recorded, newest first.
+    func crashes(serial: String) async throws -> [CrashReport]
+    /// Empties the device's crash buffer.
+    func clearCrashBuffer(serial: String) async throws
 }
 
 /// `DeviceMonitor` in production.
@@ -123,6 +127,14 @@ public struct LiveBackend: DaemonBackend {
         try await FileExplorerService(client: client).pull(
             serial: serial, path: path, to: URL(fileURLWithPath: destination), asRoot: asRoot
         ).path
+    }
+
+    public func crashes(serial: String) async throws -> [CrashReport] {
+        try await CrashExtractor(client: client).crashes(serial: serial)
+    }
+
+    public func clearCrashBuffer(serial: String) async throws {
+        try await CrashExtractor(client: client).clearCrashBuffer(serial: serial)
     }
 }
 
@@ -400,6 +412,13 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
             return Self.answer(
                 await FileRoutes.pull(body: Data(body.readableBytesView), backend: backend))
 
+        case .crashesList:
+            return Self.answer(
+                await CrashRoutes.list(body: Data(body.readableBytesView), backend: backend))
+        case .crashesClear:
+            return Self.answer(
+                await CrashRoutes.clear(body: Data(body.readableBytesView), backend: backend))
+
         case .actionsRun:
             let raw = Data(body.readableBytesView)
             guard let request = try? JSONDecoder().decode(
@@ -464,7 +483,7 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
 
     /// A `FileRoutes` answer as NIO wants it. Those handlers deal in a plain
     /// status code so they can be tested without a socket.
-    private static func answer(_ answer: FileRoutes.Answer) -> (HTTPResponseStatus, Data) {
+    private static func answer(_ answer: DaemonProtocol.Answer) -> (HTTPResponseStatus, Data) {
         (HTTPResponseStatus(statusCode: answer.status), answer.body)
     }
 

@@ -15,9 +15,10 @@ use tauri_plugin_opener::OpenerExt;
 
 use crate::daemon::stream::StreamMessage;
 use crate::daemon::wire::{
-    AppControlRequest, AppsResponse, Device, DevicePropsResponse, FeatureSummary, FileInfoRequest,
-    FileInfoResponse, FileOperationRequest, FilePullRequest, FilePullResponse, FilesListRequest,
-    FilesListResponse, RootStatusResponse, RunRequest, RunResponse, SubscribeParams,
+    AppControlRequest, AppsResponse, CrashListResponse, Device, DevicePropsResponse,
+    FeatureSummary, FileInfoRequest, FileInfoResponse, FileOperationRequest, FilePullRequest,
+    FilePullResponse, FilesListRequest, FilesListResponse, RootStatusResponse, RunRequest,
+    RunResponse, SubscribeParams,
 };
 use crate::daemon::{DaemonStatus, Supervisor};
 use crate::error::DaemonError;
@@ -232,6 +233,23 @@ pub async fn pull_file(
             as_root,
         })
         .await
+}
+
+/// Every crash the device has recorded, newest first.
+#[tauri::command]
+pub async fn list_crashes(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+) -> Result<CrashListResponse, DaemonError> {
+    supervisor.client().await?.list_crashes(serial).await
+}
+
+#[tauri::command]
+pub async fn clear_crashes(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+) -> Result<RunResponse, DaemonError> {
+    supervisor.client().await?.clear_crashes(serial).await
 }
 
 /// Puts an action's `copyText` on the system clipboard.

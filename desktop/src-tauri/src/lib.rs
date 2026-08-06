@@ -43,6 +43,8 @@ pub fn run() -> tauri::Result<()> {
             commands::file_operation,
             commands::file_info,
             commands::pull_file,
+            commands::list_crashes,
+            commands::clear_crashes,
             commands::watch_devices,
             commands::watch_logcat,
             commands::stop_watching,

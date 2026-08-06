@@ -4,10 +4,11 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 
 use crate::daemon::wire::{
-    AppControlRequest, AppsListRequest, AppsResponse, Device, DevicePropsResponse, DeviceRequest,
-    DevicesResponse, ErrorEnvelope, FeatureSummary, FeaturesResponse, FileInfoRequest,
-    FileInfoResponse, FileOperationRequest, FilePullRequest, FilePullResponse, FilesListRequest,
-    FilesListResponse, RootStatusResponse, RunRequest, RunResponse,
+    AppControlRequest, AppsListRequest, AppsResponse, CrashListRequest, CrashListResponse, Device,
+    DevicePropsResponse, DeviceRequest, DevicesResponse, ErrorEnvelope, FeatureSummary,
+    FeaturesResponse, FileInfoRequest, FileInfoResponse, FileOperationRequest, FilePullRequest,
+    FilePullResponse, FilesListRequest, FilesListResponse, RootStatusResponse, RunRequest,
+    RunResponse,
 };
 use crate::error::DaemonError;
 
@@ -97,6 +98,16 @@ impl DaemonClient {
         request: &FilePullRequest,
     ) -> Result<FilePullResponse, DaemonError> {
         self.post("/v1/files/pull", request).await
+    }
+
+    pub async fn list_crashes(&self, serial: String) -> Result<CrashListResponse, DaemonError> {
+        self.post("/v1/crashes/list", &CrashListRequest { serial })
+            .await
+    }
+
+    pub async fn clear_crashes(&self, serial: String) -> Result<RunResponse, DaemonError> {
+        self.post("/v1/crashes/clear", &CrashListRequest { serial })
+            .await
     }
 
     /// One request path, so every route shares one error contract.

@@ -11,15 +11,16 @@ rewriting one when something turns out to be more work than it looked.
 
 | | Count |
 | --- | --- |
-| ⬜ Not started | 32 |
-| 🟡 Partial | 22 |
+| ⬜ Not started | 31 |
+| 🟡 Partial | 23 |
 | ⛔ Not applicable off-Apple | 6 |
 | **Total registry features** | **60** |
 
-"Partial" is doing a lot of work in that table: 19 of the 22 are actions that
-run from the palette but have no screen of their own, and the three that do
-have screens (Apps, Logcat, File Explorer) are each missing something the Mac
-version offers. Read it as *nothing is finished*, not as *a third is done*.
+"Partial" is doing a lot of work in that table: 19 of the 23 are actions that
+run from the palette but have no screen of their own, and the four that do have
+screens (Apps, Logcat, File Explorer, Crash Catcher) are each missing something
+the Mac version offers. Read it as *nothing is finished*, not as *a third is
+done*.
 
 ## How this was built
 
@@ -204,6 +205,7 @@ Tick an item here when its PR merges; the detail stays in the sections above.
 | ✅ | Logcat: level, find-vs-filter, tags, export, restart | #257 |
 | ✅ | Device info | #260 |
 | ✅ | File explorer | #263 |
+| ✅ | Crash catcher | #264 |
 
 **Next, in order.** Everything from *File explorer* down needs four layers, not
 one — a daemon route in Swift, a Rust command, a pane, and tests at both ends.
@@ -220,8 +222,11 @@ often someone opens them rather than by how hard they look.
    filesystem routes plus `/v1/device/root`. It is the worked example for a
    screen that *writes*: paths travel verbatim and are quoted once, in
    `FileExplorerService`. Gaps below.
-3. **Crash catcher** — a route over ADBKit's `CrashParser`, then a multi-crash
-   browser: kind/process filters, watch mode, copy-for-Slack, clear buffer.
+3. ~~**Crash catcher.**~~ Landed — two routes over `CrashExtractor`, then the
+   browser: kind and process filters that list only what is present, a search,
+   Watch on a 5 s poll that announces an arrival, Raw log, copy for
+   Slack/Jira/plain, save to a file, and a Clear Buffer that keeps its
+   watermark so the main-buffer fallback cannot resurface what it cleared.
 4. **Performance monitor** — a *stream*, not a request: live CPU/RAM/FPS with a
    per-process list, recording, and export.
 5. **Per-feature hotkeys** with a live-preview recorder. Client-side, and the
@@ -272,7 +277,18 @@ often someone opens them rather than by how hard they look.
 
 - **A pull overwrites a same-named file** in `~/Downloads/Droidective` without
   asking, as `export_text` already does. The Mac asks for a save location; a
-  save dialog here is a plugin and a capability for one button.
+  save dialog here is a plugin and a capability for one button. The Crash
+  Catcher's Save writes to the same folder under the same rule.
+
+- **The Crash Catcher announces an arrival in a banner, not a toast.** The Mac
+  raises one; this app has no toasts yet (item 7), so Watch reports into the
+  same banner strip every other screen uses. It stays until dismissed rather
+  than fading, which is the one behaviour a banner can offer that a toast
+  cannot.
+
+- **The Crash Catcher's failed empty state has no Try Again button.** Refresh
+  sits in the toolbar above it and is never hidden, so a second button beside
+  it would be two names for one action.
 
 **Not planned.** Multi-window, the Quick Actions panel, the welcome tour, and
 the update pill. Each is a whole subsystem, and none of them is why anyone opens
@@ -614,10 +630,10 @@ Legend: ⬜ not started · 🟡 partial · ⛔ not applicable off-Apple.
   - [ ] button: Open in Finder
   - [ ] label: Generate bug report
 
-#### `crash-catcher` — Crash Catcher  ·  ⬜ todo
+#### `crash-catcher` — Crash Catcher  ·  🟡 partial
 > Browse device crashes — watch, filter, copy for Slack/Jira
 - **Kind** `view`
-- **Note** Not started on Windows/Linux.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `CrashView` — `App/Sources/FeatureDetail/Views/CrashView.swift`
 - **Must replicate**
   - [ ] button: Clear Buffer

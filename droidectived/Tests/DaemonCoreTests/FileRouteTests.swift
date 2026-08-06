@@ -89,6 +89,10 @@ import Testing
             if let refusal { throw refusal }
             return destination
         }
+
+        func crashes(serial: String) async throws -> [CrashReport] { [] }
+
+        func clearCrashBuffer(serial: String) async throws {}
     }
 
     private func backend(
@@ -272,5 +276,7 @@ import Testing
         func pullFile(
             serial: String, path: String, to destination: String, asRoot: Bool
         ) async throws -> String { destination }
+        func crashes(serial: String) async throws -> [CrashReport] { [] }
+        func clearCrashBuffer(serial: String) async throws {}
     }
 }

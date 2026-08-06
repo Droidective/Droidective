@@ -2,6 +2,7 @@ import { Channel, invoke } from "@tauri-apps/api/core"
 import { listen, type UnlistenFn } from "@tauri-apps/api/event"
 import type {
   AppsResponse,
+  CrashListResponse,
   DaemonError,
   DaemonStatus,
   Device,
@@ -112,6 +113,16 @@ export function fileInfo(args: {
   asRoot: boolean
 }): Promise<FileInfoResponse> {
   return invoke<FileInfoResponse>("file_info", args)
+}
+
+/** Every crash the device has recorded, newest first. */
+export function listCrashes(serial: string): Promise<CrashListResponse> {
+  return invoke<CrashListResponse>("list_crashes", { serial })
+}
+
+/** Empties `logcat -b crash` on the device. */
+export function clearCrashes(serial: string): Promise<RunResponse> {
+  return invoke<RunResponse>("clear_crashes", { serial })
 }
 
 /** Pulls into ~/Downloads/Droidective and answers where it landed. */

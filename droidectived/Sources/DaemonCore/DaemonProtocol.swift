@@ -23,12 +23,21 @@ public enum DaemonProtocol {
         case filesOp = "/v1/files/op"
         case filesInfo = "/v1/files/info"
         case filesPull = "/v1/files/pull"
+        case crashesList = "/v1/crashes/list"
+        case crashesClear = "/v1/crashes/clear"
     }
 
     /// The multiplexed stream socket. Not a `Route`: it is a WebSocket upgrade
     /// rather than a POST, and folding it into the route table would make
     /// `everyRouteIsReachable` assert something untrue about it.
     public static let streamPath = "/v1/stream"
+
+    /// A route's answer before it meets NIO.
+    ///
+    /// The route groups that live outside `DaemonServer` deal in a plain status
+    /// code rather than an `HTTPResponseStatus`, which is what lets them be
+    /// tested without standing up a socket.
+    public typealias Answer = (status: Int, body: Data)
 
     public struct DevicesResponse: Codable, Equatable, Sendable {
         public let devices: [Device]
