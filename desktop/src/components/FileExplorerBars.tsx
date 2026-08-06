@@ -1,10 +1,9 @@
 import { useState } from "react"
-import { ChevronRight, FolderPlus, RefreshCw, ShieldCheck, X } from "lucide-react"
-import { Banner, Button, Switch, TextInput } from "@/components/Controls"
-import { useArmedConfirm } from "@/hooks/useArmedConfirm"
+import { ChevronRight, FolderPlus, RefreshCw, X } from "lucide-react"
+import { Banner, Button, TextInput } from "@/components/Controls"
 import type { FileNotice } from "@/hooks/useFileActions"
 import { asDaemonError, revealPath } from "@/lib/daemon"
-import { breadcrumbs, deletePrompt, pasteLabel, type FileClipboard } from "@/lib/files"
+import { breadcrumbs, pasteLabel, type FileClipboard } from "@/lib/files"
 import type { DaemonError, FileEntry } from "@/lib/wire"
 
 /** The path, the clipboard, and everything that acts on the whole folder. */
@@ -85,14 +84,18 @@ export function FileToolbar({
         </span>
       </Button>
 
+      {/* A button-style toggle, which is what `Toggle(...).toggleStyle(.button)`
+          draws on the Mac — not a switch. */}
       {rooted ? (
-        <span
-          className="flex items-center gap-1.5 rounded-md bg-bg-raised px-2.5 py-1.5"
+        <Button
+          tone={rootMode ? "primary" : "default"}
+          onClick={() => {
+            onRootMode(!rootMode)
+          }}
           title="Browse the whole filesystem as root"
         >
-          <ShieldCheck size={13} className={rootMode ? "text-accent" : "text-text-tertiary"} />
-          <Switch checked={rootMode} onChange={onRootMode} label="Root" />
-        </span>
+          Root
+        </Button>
       ) : null}
 
       <Button onClick={onRefresh} disabled={busy} title="Refresh">
@@ -116,15 +119,12 @@ export function FileSelectionBar({
   onCopy: () => void
   onCut: () => void
   onPull: () => void
+  /** Opens the confirmation; the pane owns it, as the Mac's view does. */
   onDelete: () => void
 }) {
-  const confirm = useArmedConfirm()
-  const armed = confirm.isArmed("delete", "selection")
   return (
     <div className="flex shrink-0 items-center gap-2 border-b border-border-subtle bg-bg-surface px-3 py-1.5">
-      <span className={armed ? "text-danger" : "text-text-secondary"}>
-        {armed ? deletePrompt(targets) : `${String(targets.length)} selected`}
-      </span>
+      <span className="text-text-secondary">{targets.length} selected</span>
       <span className="flex-1" />
       <Button onClick={onCopy} disabled={busy}>
         Copy
@@ -135,28 +135,18 @@ export function FileSelectionBar({
       <Button onClick={onPull} disabled={busy}>
         Pull to this computer
       </Button>
-      <Button
-        tone="danger"
-        disabled={busy}
-        onClick={() => {
-          // A second press, the rule the Apps pane's destructive verbs use.
-          if (!armed) {
-            confirm.arm("delete", "selection")
-            return
-          }
-          confirm.disarm()
-          onDelete()
-        }}
-      >
-        {armed ? "Really delete?" : "Delete"}
+      <Button tone="danger" disabled={busy} onClick={onDelete}>
+        Delete
       </Button>
-      {armed ? <Button onClick={confirm.disarm}>Cancel</Button> : null}
     </div>
   )
 }
 
-/** An inline row rather than a modal: it is one field and two buttons. */
-export function NewFolderRow({
+/**
+ * The Mac's `.alert("New Folder")` — a titled sheet with one field, Create and
+ * Cancel — rather than an inline row.
+ */
+export function NewFolderDialog({
   onCreate,
   onCancel,
 }: {
@@ -165,15 +155,26 @@ export function NewFolderRow({
 }) {
   const [name, setName] = useState("")
   return (
-    <div className="flex shrink-0 items-center gap-2 border-b border-border-subtle bg-bg-surface px-3 py-2">
-      <span className="shrink-0 text-text-secondary">New Folder</span>
-      <span className="min-w-0 flex-1">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-8">
+      <button
+        type="button"
+        aria-label="Cancel"
+        onClick={onCancel}
+        className="absolute inset-0 cursor-default"
+      />
+      <dialog
+        open
+        aria-label="New Folder"
+        className="relative w-[380px] max-w-full rounded-xl border border-border-subtle bg-bg-raised p-5 text-text-primary shadow-2xl"
+      >
+        <h2 className="mb-3 text-[14px] font-medium text-text-primary">New Folder</h2>
         <TextInput
           value={name}
           onChange={setName}
           placeholder="Folder name"
-          // The row appears because someone asked for it; landing anywhere
-          // else would cost a click every time.
+          // The sheet opened because someone asked for it; landing anywhere
+          // else would cost a click every time, and the Mac's alert focuses
+          // its field too.
           // oxlint-disable-next-line jsx-a11y/no-autofocus
           autoFocus
           onKeyDown={(event) => {
@@ -181,16 +182,18 @@ export function NewFolderRow({
             if (event.key === "Escape") onCancel()
           }}
         />
-      </span>
-      <Button
-        tone="primary"
-        onClick={() => {
-          onCreate(name)
-        }}
-      >
-        Create
-      </Button>
-      <Button onClick={onCancel}>Cancel</Button>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button onClick={onCancel}>Cancel</Button>
+          <Button
+            tone="primary"
+            onClick={() => {
+              onCreate(name)
+            }}
+          >
+            Create
+          </Button>
+        </div>
+      </dialog>
     </div>
   )
 }

@@ -1,25 +1,27 @@
 import { useState } from "react"
+import { ConfirmDialog } from "@/components/ConfirmDialog"
 import {
   FileNotices,
   FileSelectionBar,
   FileToolbar,
-  NewFolderRow,
+  NewFolderDialog,
 } from "@/components/FileExplorerBars"
 import { FileInfoSheet } from "@/components/FileInfoSheet"
 import { FileList } from "@/components/FileList"
 import { FileRowMenu, type FileMenuTarget } from "@/components/FileRowMenu"
 import { useFileActions, type FileActions } from "@/hooks/useFileActions"
 import { useFileListing, type FileListing } from "@/hooks/useFileListing"
-import { childPath, targetsFor } from "@/lib/files"
-import type { Device } from "@/lib/wire"
+import { childPath, deletePrompt, targetsFor } from "@/lib/files"
+import type { Device, FileEntry } from "@/lib/wire"
 
 /**
  * The device's storage — the Mac's File Explorer.
  *
- * The first screen here that *writes* to a device, so Delete is armed twice
- * before it runs, the way the Apps pane's destructive verbs are. Nothing is
- * decided in this file: navigation and the listing are `useFileListing`, the
- * verbs are `useFileActions`, and the rules both lean on are `lib/files.ts`.
+ * The first screen here that *writes* to a device, so Delete asks first — the
+ * same `confirmationDialog` `FileExplorerView` raises, naming what is about to
+ * go. Nothing is decided in this file: navigation and the listing are
+ * `useFileListing`, the verbs are `useFileActions`, and the rules both lean on
+ * are `lib/files.ts`.
  */
 export function FileExplorerPane({ device }: { device: Device | null }) {
   const serial = device?.serial ?? null
@@ -31,6 +33,7 @@ export function FileExplorerPane({ device }: { device: Device | null }) {
     reload: listing.reload,
   })
   const [creating, setCreating] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState<FileEntry[] | null>(null)
 
   if (!device) {
     return <p className="p-6 text-text-tertiary">Connect a device to browse its storage.</p>
@@ -73,22 +76,23 @@ export function FileExplorerPane({ device }: { device: Device | null }) {
             actions.pull(listing.selected)
           }}
           onDelete={() => {
-            actions.remove(listing.selected)
+            setConfirmingDelete(listing.selected)
           }}
         />
       )}
 
-      {creating ? (
-        <NewFolderRow
-          onCreate={(name) => {
-            setCreating(false)
-            actions.createFolder(name)
-          }}
-          onCancel={() => {
-            setCreating(false)
-          }}
-        />
-      ) : null}
+      <Dialogs
+        creating={creating}
+        onCreated={(name) => {
+          setCreating(false)
+          if (name !== null) actions.createFolder(name)
+        }}
+        deleting={confirmingDelete}
+        onDeleted={(targets) => {
+          setConfirmingDelete(null)
+          if (targets !== null) actions.remove(targets)
+        }}
+      />
 
       <FileNotices
         busy={actions.busy}
@@ -97,8 +101,56 @@ export function FileExplorerPane({ device }: { device: Device | null }) {
         onDismiss={actions.dismissNotice}
       />
 
-      <Contents listing={listing} actions={actions} serial={device.serial} />
+      <Contents
+        listing={listing}
+        actions={actions}
+        serial={device.serial}
+        onConfirmDelete={setConfirmingDelete}
+      />
     </div>
+  )
+}
+
+/**
+ * The two sheets. Both are the Mac's: an alert to name a folder, and a
+ * `confirmationDialog` naming what a Delete is about to remove.
+ */
+function Dialogs({
+  creating,
+  onCreated,
+  deleting,
+  onDeleted,
+}: {
+  creating: boolean
+  /** null when cancelled. */
+  onCreated: (name: string | null) => void
+  deleting: FileEntry[] | null
+  onDeleted: (targets: FileEntry[] | null) => void
+}) {
+  return (
+    <>
+      {creating ? (
+        <NewFolderDialog
+          onCreate={onCreated}
+          onCancel={() => {
+            onCreated(null)
+          }}
+        />
+      ) : null}
+      {deleting === null ? null : (
+        <ConfirmDialog
+          title={deletePrompt(deleting)}
+          message="Removing a file from the device cannot be undone."
+          confirmLabel="Delete"
+          onConfirm={() => {
+            onDeleted(deleting)
+          }}
+          onCancel={() => {
+            onDeleted(null)
+          }}
+        />
+      )}
+    </>
   )
 }
 
@@ -107,10 +159,12 @@ function Contents({
   listing,
   actions,
   serial,
+  onConfirmDelete,
 }: {
   listing: FileListing
   actions: FileActions
   serial: string
+  onConfirmDelete: (targets: FileEntry[]) => void
 }) {
   const [menu, setMenu] = useState<FileMenuTarget | null>(null)
   const [infoPath, setInfoPath] = useState<string | null>(null)
@@ -146,7 +200,7 @@ function Contents({
             actions.remember(targets, true)
           }}
           onPull={actions.pull}
-          onDelete={actions.remove}
+          onDelete={onConfirmDelete}
         />
       )}
 

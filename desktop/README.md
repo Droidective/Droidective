@@ -119,11 +119,30 @@ Both are needed before HTML5 drag works at all, and both fail silently:
 
 ## Parity with the Mac app
 
-`docs/desktop-parity.md` is the tracker: every registry feature, what its
-macOS view actually offers, and how far this app has got. The shell items at
-the top (tabs, split panes, sidebar, palette, hotkeys) come before the
-screens — porting a screen into a window with no tabs means reworking it once
-the tabs arrive.
+**The Mac's UI is this app's UI.** The Mac app is the proven one, and the point
+of the port is that someone moving between the two does not have to relearn
+anything. Where a control exists on both it looks and behaves the way
+`App/Sources/` makes it behave: same wording, same icon, same confirmation
+shape, same gesture. A double-click to open a folder stays a double-click even
+though single-click is the better web idiom; a `confirmationDialog` stays a
+dialog and does not become a button that arms itself. If an idea really is
+better, it goes into the Mac app first and this one follows.
+
+Two standing exceptions, both named where they occur: a keyboard shortcut whose
+modifier has no equivalent here (the split is **Ctrl/⌘ + \\**, because Ctrl+D
+is end-of-input in every Linux shell), and a label that names a platform.
+
+`docs/desktop-parity.md` is the tracker: every registry feature, every window
+and panel and menu the Mac has, what each actually offers, and how far this app
+has got. **Everything is in scope** — Settings and its seven tabs, the
+notification panel behind the device bar's bell, toasts, the Command Log, the
+role picker, the Manage Features catalog, About & Feedback, the menu bar, drag
+and drop. Only `ios-logs` and `push-notification` are out, and only because
+`xcrun simctl` is a macOS toolchain rather than anything about a device.
+
+The shell items come before the screens: porting a screen into a window with no
+tabs means reworking it once the tabs arrive, and the same is true of a screen
+that reports into an inline banner before the toasts exist.
 
 ## Conventions
 
