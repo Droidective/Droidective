@@ -197,6 +197,24 @@ export interface CrashListResponse {
   crashes: CrashReport[]
 }
 
+/** One performance sample, from `/v1/stream`'s `performance` topic. */
+export interface PerfSample {
+  /**
+   * Empty on the first sample: a CPU percentage is a delta and there is
+   * nothing yet to subtract from. `-1` is the all-cores aggregate.
+   */
+  cores: { core: number; label: string; usagePercent: number }[]
+  ramTotalKb: number | null
+  ramUsedKb: number | null
+  appFps: number | null
+  /** Percent of frames that missed the deadline, when any were drawn. */
+  appJankPercent: number | null
+  appPssKb: number | null
+  downloadBytesPerSec: number | null
+  uploadBytesPerSec: number | null
+  processes: { pid: number; name: string; cpuPercent: number | null; pssKb: number | null }[]
+}
+
 export type DaemonStatus =
   | { state: "starting" }
   | { state: "ready"; port: number }

@@ -372,6 +372,29 @@ pub async fn watch_logcat(
         Some(SubscribeParams {
             serial: Some(serial),
             filter,
+            ..SubscribeParams::default()
+        }),
+        forward(on_event),
+    )
+}
+
+/// Live performance samples, one a second, until `stop_watching`.
+#[tauri::command]
+pub async fn watch_performance(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    package_id: Option<String>,
+    processes: bool,
+    on_event: Channel<StreamUpdate>,
+) -> Result<i64, DaemonError> {
+    let stream = supervisor.stream().await?;
+    stream.subscribe(
+        "performance",
+        Some(SubscribeParams {
+            serial: Some(serial),
+            package_id,
+            processes: Some(processes),
+            ..SubscribeParams::default()
         }),
         forward(on_event),
     )

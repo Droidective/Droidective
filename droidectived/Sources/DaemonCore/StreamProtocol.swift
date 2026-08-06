@@ -9,6 +9,7 @@ public enum StreamProtocol {
     public enum Topic: String, Codable, CaseIterable, Sendable {
         case devices
         case logcat
+        case performance
     }
 
     // MARK: client → server
@@ -30,10 +31,25 @@ public enum StreamProtocol {
         public struct Params: Codable, Equatable, Sendable {
             public let serial: String?
             public let filter: String?
-            public init(serial: String? = nil, filter: String? = nil) {
+            /// The app whose FPS and memory to sample, for `performance`.
+            /// Absent means device-wide figures only.
+            public let packageId: String?
+            /// Whether to add the per-process CPU/RAM table. Two extra
+            /// `dumpsys` calls per sample, so it is asked for rather than
+            /// assumed.
+            public let processes: Bool?
+
+            public init(
+                serial: String? = nil, filter: String? = nil,
+                packageId: String? = nil, processes: Bool? = nil
+            ) {
                 self.serial = serial
                 self.filter = filter
+                self.packageId = packageId
+                self.processes = processes
             }
+
+            public var wantsProcesses: Bool { processes ?? false }
         }
 
         public init(op: Operation, id: Int, topic: Topic? = nil, params: Params? = nil) {
@@ -145,7 +161,7 @@ extension StreamProtocol.Topic {
     public var needsSerial: Bool {
         switch self {
         case .devices: return false
-        case .logcat: return true
+        case .logcat, .performance: return true
         }
     }
 
@@ -165,10 +181,14 @@ extension StreamProtocol.Topic {
     ///   buffered — which also means a snapshot topic can never emit a
     ///   `dropped` marker. A gap in a stream of complete states is not
     ///   something any client could act on.
+    /// `performance` is an increment for the same reason `logcat` is: each
+    /// sample is a point on a chart, and a client accumulating a history needs
+    /// every one of them. Treating it as a snapshot would silently drop the
+    /// middle of a graph, which is the one thing a graph must not do.
     public var isSnapshot: Bool {
         switch self {
         case .devices: return true
-        case .logcat: return false
+        case .logcat, .performance: return false
         }
     }
 }

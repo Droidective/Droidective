@@ -13,6 +13,7 @@ import type {
   FilePullResponse,
   FilesListResponse,
   LogLine,
+  PerfSample,
   RootStatusResponse,
   RunResponse,
   StreamUpdate,
@@ -159,7 +160,7 @@ export interface Subscription {
 }
 
 async function subscribe<Item>(
-  command: "watch_devices" | "watch_logcat",
+  command: "watch_devices" | "watch_logcat" | "watch_performance",
   args: Record<string, unknown>,
   onUpdate: (update: StreamUpdate<Item>) => void,
 ): Promise<Subscription> {
@@ -192,6 +193,19 @@ export function watchLogcat(
   onUpdate: (update: StreamUpdate<LogLine>) => void,
 ): Promise<Subscription> {
   return subscribe("watch_logcat", { serial, filter: null }, onUpdate)
+}
+
+/**
+ * One performance sample a second until stopped.
+ *
+ * `processes` is opt-in because it costs two extra `dumpsys` calls per sample
+ * — enough that leaving it on would show up in the numbers being measured.
+ */
+export function watchPerformance(
+  args: { serial: string; packageId: string | null; processes: boolean },
+  onUpdate: (update: StreamUpdate<PerfSample>) => void,
+): Promise<Subscription> {
+  return subscribe("watch_performance", args, onUpdate)
 }
 
 /**

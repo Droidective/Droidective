@@ -47,6 +47,7 @@ pub fn run() -> tauri::Result<()> {
             commands::clear_crashes,
             commands::watch_devices,
             commands::watch_logcat,
+            commands::watch_performance,
             commands::stop_watching,
             commands::copy_text,
             commands::reveal_path,

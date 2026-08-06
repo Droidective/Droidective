@@ -91,6 +91,11 @@ private let hasWebSocketClient: Bool = {
             AsyncStream { $0.finish() }
         }
         func stopLogcat(serial: String) async {}
+        func performance(
+            serial: String, packageId: String?, includeProcesses: Bool
+        ) async -> AsyncStream<PerformanceService.PerfPoll> {
+            AsyncStream { $0.finish() }
+        }
     }
 
     private static func device(_ serial: String) -> Device {

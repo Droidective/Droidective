@@ -338,12 +338,19 @@ pub struct SubscribeCommand {
     pub params: Option<SubscribeParams>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Default, Serialize)]
 pub struct SubscribeParams {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub serial: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub filter: Option<String>,
+    /// The app whose FPS and memory to sample, for `performance`.
+    #[serde(rename = "packageId", skip_serializing_if = "Option::is_none")]
+    pub package_id: Option<String>,
+    /// Whether to add the per-process table — two extra `dumpsys` calls a
+    /// sample, so it is asked for rather than assumed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processes: Option<bool>,
 }
 
 impl SubscribeCommand {

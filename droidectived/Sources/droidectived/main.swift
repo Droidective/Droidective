@@ -40,7 +40,9 @@ let engine = FeatureEngine(
     toolsDirectory: AppPaths.supportDir.appendingPathComponent("tools"))
 let server = DaemonServer(
     backend: LiveBackend(monitor: monitor, engine: engine, client: client), token: token,
-    streamSource: LiveStreamSource(monitor: monitor, streamer: LogcatStreamer(client: client)))
+    streamSource: LiveStreamSource(
+        monitor: monitor, streamer: LogcatStreamer(client: client),
+        performance: PerformanceService(client: client)))
 
 do {
     let bound = try await server.start(port: options.port)

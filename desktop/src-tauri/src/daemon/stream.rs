@@ -291,7 +291,7 @@ mod tests {
             "logcat",
             Some(SubscribeParams {
                 serial: Some("emulator-5554".into()),
-                filter: None,
+                ..SubscribeParams::default()
             }),
             sink,
         )?;
