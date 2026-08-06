@@ -11,9 +11,9 @@ rewriting one when something turns out to be more work than it looked.
 
 | | Count |
 | --- | --- |
-| ⬜ Not started | 31 |
+| ⬜ Not started | 35 |
 | 🟡 Partial | 23 |
-| ⛔ Not applicable off-Apple | 6 |
+| ⛔ Not applicable off-Apple | 2 |
 | **Total registry features** | **60** |
 
 "Partial" is doing a lot of work in that table: 19 of the 23 are actions that
@@ -21,6 +21,23 @@ run from the palette but have no screen of their own, and the four that do have
 screens (Apps, Logcat, File Explorer, Crash Catcher) are each missing something
 the Mac version offers. Read it as *nothing is finished*, not as *a third is
 done*.
+
+**Only two features are out of scope**, and only because they drive an Apple
+toolchain rather than a device: `ios-logs` and `push-notification` are `xcrun
+simctl` against an iOS Simulator. Everything else — the mirror, screen record,
+the video editor, Reactotron, multi-window, Quick Actions, the tour, the
+updater, notifications, every drag-and-drop path — is a porting job with an
+entry in the backlog. Hard is not the same as impossible, and a ⛔ that means
+"hard" is a decision nobody goes back to revisit.
+
+**The UI is the Mac's UI.** Where a control exists on both, it looks and
+behaves the way `App/Sources/FeatureDetail/Views/` makes it behave — same
+wording, same icon, same confirmation shape, same gesture. A nicer idea for
+Windows and Linux is still a difference someone has to relearn, so it does not
+belong here; if it is genuinely better, it goes in the Mac app first. The two
+standing exceptions are named where they occur: a keyboard shortcut whose
+modifier has no Windows/Linux equivalent, and a label that names a platform
+("Pull to Mac").
 
 ## How this was built
 
@@ -101,6 +118,11 @@ the chrome and the device bar have not.
       people already have from VS Code.
 - [x] **Drop-to-split** — dragging a tab onto the trailing edge of the only
       pane splits there; dropping it on the other pane's strip moves it.
+- [ ] **Drops from outside the app** — a file dragged from the file manager
+      onto the File Explorer (`adb push`), and an APK or AAB dropped on the
+      window to install it. The blocker is that `dragDropEnabled: false` is
+      what makes the *tab* drags work at all, so the two have to coexist rather
+      than one being switched off for the other.
 - [ ] **Multi-window** (`docs/multi-window.md`).
 - [ ] **⌘= / ⌘- zoom** of the whole UI.
 
@@ -154,6 +176,12 @@ the chrome and the device bar have not.
       own updater on Windows/Linux.
 - [ ] **Empty states per feature** ("connect a device") rather than one global
       message.
+- [ ] **Native notifications** — a finished background install, a crash caught
+      while watching, an update staged. `tauri-plugin-notification`, behind the
+      same Settings ▸ General switch the Mac puts it behind.
+- [ ] **Background mode and a tray icon** — closing the window keeps the app
+      resident, stops the kept-alive sessions, and leaves the global hotkey
+      working.
 
 ---
 
@@ -227,8 +255,11 @@ often someone opens them rather than by how hard they look.
    Watch on a 5 s poll that announces an arrival, Raw log, copy for
    Slack/Jira/plain, save to a file, and a Clear Buffer that keeps its
    watermark so the main-buffer fallback cannot resurface what it cleared.
-4. **Performance monitor** — a *stream*, not a request: live CPU/RAM/FPS with a
-   per-process list, recording, and export.
+4. **Performance monitor** — record-first, exactly as `PerformanceView` is:
+   Record / Pause / Resume, a Stop that asks whether to export first, and
+   Export as JSON *and* CSV. Sampling happens while recording, not
+   continuously. The process table has its own name filter and sort picker;
+   the charts carry a seconds x-axis.
 5. **Per-feature hotkeys** with a live-preview recorder. Client-side, and the
    only shell item left that people will miss daily.
 6. **Device bar parity** — wireless pair and connect, run-on-all for
@@ -290,11 +321,53 @@ often someone opens them rather than by how hard they look.
   sits in the toolbar above it and is never hidden, so a second button beside
   it would be two names for one action.
 
-**Not planned.** Multi-window, the Quick Actions panel, the welcome tour, and
-the update pill. Each is a whole subsystem, and none of them is why anyone opens
-this app. Reactotron stays blocked until the relay's `Network.framework`
-listener is ported to NIO; mirror, screen-record and the video editor are
-Apple-only by design.
+**The subsystems, after the screens.** These were once listed as "not planned".
+They are planned: the goal is that someone moving between the two apps does not
+have to relearn anything, and "this one is missing a whole subsystem" fails that
+just as badly as a missing button. Each is a release of its own, so they come
+after the screens rather than instead of them.
+
+16. **Drag and drop, everywhere the Mac has it.** The shell's tab and sidebar
+    drags already work. Still missing: dropping a file from the file manager
+    onto the File Explorer to `adb push` it, and dropping an APK/AAB on the
+    window to install it. Both need `dragDropEnabled: true`-style handling the
+    webview can use — the current `false` is what makes the *tab* drags work,
+    so this needs Tauri's native drop **and** HTML5 drag to coexist rather than
+    one being turned off for the other. That is the actual engineering problem;
+    it is not a reason to skip the feature.
+17. **Notifications and their settings.** The Mac posts a native notification
+    when a background install finishes, when a watched crash lands, and when an
+    update is staged, with a Settings ▸ General switch behind it.
+    `tauri-plugin-notification` is the equivalent; the settings pane is item 8.
+18. **The Quick Actions panel** — the non-activating global-hotkey mini app:
+    the grid of every runnable action, pinned first, custom commands, the
+    pick-device interstitial, ⌘⏎ run-on-all. Needs a second Tauri window with
+    `alwaysOnTop` + no focus steal, and a global shortcut.
+19. **Background mode and the menu bar** — closing the window keeps the app
+    resident behind a tray icon, stops the kept-alive sessions, and the global
+    hotkey still opens Quick Actions. `tauri-plugin-global-shortcut` plus a
+    tray icon.
+20. **Multi-window** (`docs/multi-window.md`) — one window per device, the
+    per-window workspace split, the Focus / Take Over banner for the exclusive
+    features, and the window tint.
+21. **The welcome tour** on first run.
+22. **The updater** — Sparkle is macOS-only, so this is `tauri-plugin-updater`
+    behind the same "Relaunch to update" pill and What's New sheet.
+23. **Reactotron** — blocked only on the relay's `Network.framework` listener
+    being ported to NIO. `ReactotronMCP` already proves the NIO listener works;
+    this is the same job for the relay socket.
+24. **Mirror, screen record, and the video editor.** The Mac's pipeline is
+    VideoToolbox + AVFoundation + a `Network.framework` socket, none of which
+    exists off Apple — but the *capability* is not Apple-only. scrcpy's own
+    server speaks the same protocol to any host, and the bundled ffmpeg already
+    builds for Windows and Linux. This is a decode/render stack to write, not a
+    feature to drop.
+
+**What genuinely cannot be ported.** Two features, and only for the reason
+that they drive an Apple toolchain rather than a device: `ios-logs` and
+`push-notification` are `xcrun simctl` against an iOS Simulator, which does not
+exist on Windows or Linux. Everything else on the ⛔ list above is a porting
+job, and the checklist now says which.
 
 ---
 
@@ -464,10 +537,10 @@ Legend: ⬜ not started · 🟡 partial · ⛔ not applicable off-Apple.
   - [ ] button: Forward
   - [ ] button: Set
 
-#### `reactotron` — Reactotron  ·  ⛔ n/a
+#### `reactotron` — Reactotron  ·  ⬜ todo
 > Live React Native inspector — logs, network, state, custom display
 - **Kind** `view`
-- **Note** ReactotronServer is a Network.framework listener; needs a portable NIO listener first.
+- **Note** Not started — blocked on porting the relay's Network.framework listener to NIO, which ReactotronMCP already proves out. Backlog 23.
 
 #### `reload-js` — Reload JS  ·  🟡 partial
 > Reload the JS bundle (double-tap R)
@@ -487,25 +560,25 @@ Legend: ⬜ not started · 🟡 partial · ⛔ not applicable off-Apple.
 - **Kind** `toggleAction`
 - **Note** Runs from the palette; no dedicated screen.
 
-#### `scrcpy` — Mirror Screen  ·  ⛔ n/a
+#### `scrcpy` — Mirror Screen  ·  ⬜ todo
 > Mirror and control the device with scrcpy
 - **Kind** `view`
-- **Note** Mirror pipeline is Apple-only (VideoToolbox/AVFoundation); other hosts drive the scrcpy desktop app.
+- **Note** Not started — the decode/render stack needs writing off Apple (scrcpy's server is portable; VideoToolbox/AVFoundation are not). Backlog 24.
 
-#### `screen-record` — Screen Record  ·  ⛔ n/a
+#### `screen-record` — Screen Record  ·  ⬜ todo
 > Record via scrcpy — no time limit, with audio
 - **Kind** `view`
-- **Note** Records through the mirror session, which is Apple-only.
+- **Note** Not started — rides the mirror session, so it follows the mirror. Backlog 24.
 
 #### `screenshot` — Screenshot  ·  🟡 partial
 > Capture the screen and save it to your Mac
 - **Kind** `instantAction`
 - **Note** Runs from the palette; no dedicated screen.
 
-#### `video-editor` — Video Editor  ·  ⛔ n/a
+#### `video-editor` — Video Editor  ·  ⬜ todo
 > Trim, rotate, crop, convert & compress video
 - **Kind** `view`
-- **Note** Rides the mirror/ffmpeg export path built on the Apple media stack.
+- **Note** Not started — needs the mirror pipeline plus the bundled ffmpeg. Backlog 24.
 
 
 ### Device State

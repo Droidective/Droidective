@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef } from "react"
 import { Info } from "lucide-react"
 import { cn } from "@/lib/cn"
 import { batchLabel } from "@/lib/files"
@@ -37,7 +37,6 @@ export function FileRowMenu({
   onPull: (targets: FileEntry[]) => void
   onDelete: (targets: FileEntry[]) => void
 }) {
-  const [armed, setArmed] = useState(false)
   const only = targets.length === 1 ? (targets[0] ?? null) : null
   const dismiss = useRef(onDismiss)
   dismiss.current = onDismiss
@@ -92,20 +91,10 @@ export function FileRowMenu({
         <Item onSelect={choose(onCut)}>Cut</Item>
         <Item onSelect={choose(onPull)}>Pull to this computer</Item>
         <Separator />
-        <Item
-          danger
-          onSelect={() => {
-            // The menu stays open for the second press, so a mis-click on
-            // Delete cannot delete anything.
-            if (!armed) {
-              setArmed(true)
-              return
-            }
-            onDelete(targets)
-            onDismiss()
-          }}
-        >
-          {armed ? `Really delete ${batchLabel(names(targets))}?` : "Delete"}
+        {/* Opens the pane's confirmation, the way the Mac's context menu
+            raises `confirmationDialog` rather than confirming in the menu. */}
+        <Item danger onSelect={choose(onDelete)}>
+          Delete
         </Item>
       </div>
     </>

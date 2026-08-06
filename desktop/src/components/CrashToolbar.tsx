@@ -1,9 +1,10 @@
-import { Copy, Download, Eye, RefreshCw, Search, Trash2 } from "lucide-react"
-import { Button, Select } from "@/components/Controls"
-import { useArmedConfirm } from "@/hooks/useArmedConfirm"
-import { cn } from "@/lib/cn"
+import { useState } from "react"
+import { Copy, Download, Eye, RefreshCw, Search, Trash2, X } from "lucide-react"
+import { Banner, Button, Select } from "@/components/Controls"
 import { CRASH_FORMATS, presentKinds, presentProcesses, type CrashFilters } from "@/lib/crashes"
 import type { CrashFormat } from "@/lib/crashes"
+import { asDaemonError, revealPath } from "@/lib/daemon"
+import type { Crashes } from "@/hooks/useCrashes"
 import type { CrashReport } from "@/lib/wire"
 
 /**
@@ -103,7 +104,11 @@ export function CrashToolbar({
         </>
       )}
 
-      <ClearButton onClear={onClear} />
+      {/* A trash icon that raises the confirmation, as `CrashView` does — not
+          a labelled button that arms itself. */}
+      <Button onClick={onClear} title="Clear the device's crash buffer">
+        <Trash2 size={13} />
+      </Button>
     </div>
   )
 }
@@ -195,27 +200,83 @@ function CopyMenu({ onCopy }: { onCopy: (format: CrashFormat) => void }) {
   )
 }
 
-/** Emptying the device's buffer is not undoable, so it takes a second press. */
-function ClearButton({ onClear }: { onClear: () => void }) {
-  const confirm = useArmedConfirm()
-  const armed = confirm.isArmed("clear", "crash-buffer")
+
+
+/** What is streaming, what arrived, and what an export left behind. */
+export function CrashNotices({
+  crashes,
+  action,
+  onDismissAction,
+}: {
+  crashes: Crashes
+  action: { ok: boolean; message: string; path?: string } | null
+  onDismissAction: () => void
+}) {
+  const [failure, setFailure] = useState<string | null>(null)
+  const landed = action?.path
+  if (crashes.error === null && crashes.arrival === null && crashes.notice === null && action === null) {
+    return null
+  }
   return (
-    <Button
-      tone="danger"
-      onClick={() => {
-        if (!armed) {
-          confirm.arm("clear", "crash-buffer")
-          return
-        }
-        confirm.disarm()
-        onClear()
-      }}
-      title="Clear the device's crash buffer — this can't be undone"
-    >
-      <span className={cn("flex items-center gap-1.5")}>
-        <Trash2 size={13} />
-        {armed ? "Really clear the buffer?" : "Clear"}
-      </span>
-    </Button>
+    <div className="flex shrink-0 flex-col gap-2 px-3 pt-3">
+      {crashes.error === null ? null : (
+        <Banner tone="error">
+          {crashes.error.message}
+          {crashes.error.detail === null ? null : (
+            <div className="mt-1 opacity-70">{crashes.error.detail}</div>
+          )}
+        </Banner>
+      )}
+      {crashes.arrival === null ? null : (
+        <Banner tone="warn">
+          <span className="flex flex-wrap items-center gap-2">
+            New crash: {crashes.arrival.title}
+            <Dismiss onClick={crashes.dismiss} />
+          </span>
+        </Banner>
+      )}
+      {crashes.notice === null ? null : (
+        <Banner tone="ok">
+          <span className="flex flex-wrap items-center gap-2">
+            {crashes.notice}
+            <Dismiss onClick={crashes.dismiss} />
+          </span>
+        </Banner>
+      )}
+      {action === null ? null : (
+        <Banner tone={action.ok ? "ok" : "error"}>
+          <span className="flex flex-wrap items-center gap-2">
+            {action.message}
+            {landed === undefined ? null : (
+              <Button
+                onClick={() => {
+                  revealPath(landed).catch((thrown: unknown) => {
+                    setFailure(asDaemonError(thrown).message)
+                  })
+                }}
+              >
+                Show in folder
+              </Button>
+            )}
+            <Dismiss onClick={onDismissAction} />
+            {failure === null ? null : <span className="text-danger">{failure}</span>}
+          </span>
+        </Banner>
+      )}
+    </div>
   )
 }
+
+function Dismiss({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="Dismiss"
+      className="text-text-tertiary hover:text-text-primary"
+    >
+      <X size={12} />
+    </button>
+  )
+}
+

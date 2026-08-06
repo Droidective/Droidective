@@ -6,11 +6,11 @@ import type { FileEntry } from "@/lib/wire"
 /**
  * One folder's contents.
  *
- * A folder's name is a button and opens on a click; a file's name is text.
- * The Mac needs a double-click there because single-click is how its `List`
- * selects, but here the checkbox owns selection, so the click is free — and a
- * name that is a real button is one a screen reader and a keyboard can reach.
- * The row still opens on a double-click, for anyone arriving from the Mac.
+ * A double-click opens a folder and a single click does nothing, exactly as
+ * `FileExplorerView` behaves: the checkbox is how a row joins the selection.
+ * A single-click-to-open would be a nicer web idiom and is deliberately not
+ * used — a gesture that means different things in the two apps is a thing to
+ * relearn, which is the one cost this port exists to avoid.
  */
 export function FileList({
   entries,
@@ -105,22 +105,14 @@ function Row({
         className="h-[13px] w-[13px] shrink-0 accent-[var(--color-accent)]"
       />
       {entry.isDir ? (
-        <button
-          type="button"
-          onClick={onOpen}
-          title={`Open ${entry.name}`}
-          className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
-        >
-          <Folder size={15} className="shrink-0 text-accent" />
-          <span className="truncate text-text-primary">{entry.name}</span>
-        </button>
+        <Folder size={15} className="shrink-0 text-accent" />
       ) : (
-        <span className="flex min-w-0 flex-1 items-center gap-2.5" title={entry.name}>
-          <File size={15} className="shrink-0 text-text-tertiary" />
-          <span className="truncate text-text-primary">{entry.name}</span>
-        </span>
+        <File size={15} className="shrink-0 text-text-tertiary" />
       )}
-      <span className="shrink-0 font-mono text-[11px] text-text-tertiary">{entry.perms}</span>
+      <span className="min-w-0 flex-1 truncate text-text-primary" title={entry.name}>
+        {entry.name}
+      </span>
+      {/* Size only, and only for files — the Mac's row shows no permissions. */}
       <span className="w-[84px] shrink-0 text-right tabular-nums text-text-secondary">
         {entry.isDir ? "" : formatBytes(entry.size)}
       </span>

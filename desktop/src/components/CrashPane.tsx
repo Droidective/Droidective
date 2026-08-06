@@ -1,12 +1,11 @@
 import { useState } from "react"
-import { X } from "lucide-react"
-import { Banner, Button } from "@/components/Controls"
+import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { CrashDetail } from "@/components/CrashDetail"
 import { CrashList } from "@/components/CrashList"
-import { CrashToolbar } from "@/components/CrashToolbar"
+import { CrashNotices, CrashToolbar } from "@/components/CrashToolbar"
 import { useCrashes, type Crashes } from "@/hooks/useCrashes"
 import { formatCrash, type CrashFormat } from "@/lib/crashes"
-import { asDaemonError, copyText, exportText, revealPath } from "@/lib/daemon"
+import { asDaemonError, copyText, exportText } from "@/lib/daemon"
 import type { Device } from "@/lib/wire"
 
 /**
@@ -20,6 +19,7 @@ import type { Device } from "@/lib/wire"
 export function CrashPane({ device }: { device: Device | null }) {
   const crashes = useCrashes(device?.serial ?? null)
   const [showRaw, setShowRaw] = useState(false)
+  const [confirmingClear, setConfirmingClear] = useState(false)
   const [action, setAction] = useState<{ ok: boolean; message: string; path?: string } | null>(null)
 
   if (!device) {
@@ -71,10 +71,27 @@ export function CrashPane({ device }: { device: Device | null }) {
         selected={crashes.selected}
         onCopy={copy}
         onSave={save}
-        onClear={crashes.clear}
+        onClear={() => {
+          setConfirmingClear(true)
+        }}
       />
 
-      <Notices
+      {confirmingClear ? (
+        <ConfirmDialog
+          title="Clear the device's crash buffer?"
+          message="Removes every recorded crash from the device (logcat -c -b crash). This can't be undone."
+          confirmLabel="Clear Buffer"
+          onConfirm={() => {
+            setConfirmingClear(false)
+            crashes.clear()
+          }}
+          onCancel={() => {
+            setConfirmingClear(false)
+          }}
+        />
+      ) : null}
+
+      <CrashNotices
         crashes={crashes}
         action={action}
         onDismissAction={() => {
@@ -125,83 +142,6 @@ function Body({
         <CrashDetail crash={crashes.selected} showRaw={showRaw} onShowRaw={onShowRaw} />
       )}
     </div>
-  )
-}
-
-function Notices({
-  crashes,
-  action,
-  onDismissAction,
-}: {
-  crashes: Crashes
-  action: { ok: boolean; message: string; path?: string } | null
-  onDismissAction: () => void
-}) {
-  const [failure, setFailure] = useState<string | null>(null)
-  const landed = action?.path
-  if (crashes.error === null && crashes.arrival === null && crashes.notice === null && action === null) {
-    return null
-  }
-  return (
-    <div className="flex shrink-0 flex-col gap-2 px-3 pt-3">
-      {crashes.error === null ? null : (
-        <Banner tone="error">
-          {crashes.error.message}
-          {crashes.error.detail === null ? null : (
-            <div className="mt-1 opacity-70">{crashes.error.detail}</div>
-          )}
-        </Banner>
-      )}
-      {crashes.arrival === null ? null : (
-        <Banner tone="warn">
-          <span className="flex flex-wrap items-center gap-2">
-            New crash: {crashes.arrival.title}
-            <Dismiss onClick={crashes.dismiss} />
-          </span>
-        </Banner>
-      )}
-      {crashes.notice === null ? null : (
-        <Banner tone="ok">
-          <span className="flex flex-wrap items-center gap-2">
-            {crashes.notice}
-            <Dismiss onClick={crashes.dismiss} />
-          </span>
-        </Banner>
-      )}
-      {action === null ? null : (
-        <Banner tone={action.ok ? "ok" : "error"}>
-          <span className="flex flex-wrap items-center gap-2">
-            {action.message}
-            {landed === undefined ? null : (
-              <Button
-                onClick={() => {
-                  revealPath(landed).catch((thrown: unknown) => {
-                    setFailure(asDaemonError(thrown).message)
-                  })
-                }}
-              >
-                Show in folder
-              </Button>
-            )}
-            <Dismiss onClick={onDismissAction} />
-            {failure === null ? null : <span className="text-danger">{failure}</span>}
-          </span>
-        </Banner>
-      )}
-    </div>
-  )
-}
-
-function Dismiss({ onClick }: { onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label="Dismiss"
-      className="text-text-tertiary hover:text-text-primary"
-    >
-      <X size={12} />
-    </button>
   )
 }
 
