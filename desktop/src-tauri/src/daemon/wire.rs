@@ -161,6 +161,113 @@ pub struct DevicePropsResponse {
     pub properties: std::collections::HashMap<String, String>,
 }
 
+/// One signal behind the root verdict — a row in the UI, not just a boolean.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct RootSignal {
+    pub name: String,
+    pub detail: String,
+    #[serde(rename = "indicatesRoot")]
+    pub indicates_root: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct RootStatusResponse {
+    /// `su -c id` really answered uid 0 — what root-gated browsing needs.
+    #[serde(rename = "hasRootShell")]
+    pub has_root_shell: bool,
+    #[serde(rename = "likelyRooted")]
+    pub likely_rooted: bool,
+    pub summary: String,
+    pub signals: Vec<RootSignal>,
+}
+
+// MARK: - the device's filesystem
+
+#[derive(Debug, Clone, Serialize)]
+pub struct FilesListRequest {
+    pub serial: String,
+    pub path: String,
+    #[serde(rename = "asRoot")]
+    pub as_root: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct FileEntry {
+    pub name: String,
+    #[serde(rename = "isDir")]
+    pub is_dir: bool,
+    pub size: i64,
+    /// The `ls -la` mode column — "drwxrwx---".
+    pub perms: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct FilesListResponse {
+    /// Echoed by the daemon, so a client that navigated on can spot a late
+    /// reply.
+    pub path: String,
+    pub entries: Vec<FileEntry>,
+}
+
+/// A mutation. `op` is a string for the same reason an app verb is: the daemon
+/// owns the list and refuses an unknown one, so mirroring it as an enum here
+/// would only add a place to fall behind.
+#[derive(Debug, Clone, Serialize)]
+pub struct FileOperationRequest {
+    pub serial: String,
+    pub op: String,
+    pub path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub destination: Option<String>,
+    #[serde(rename = "asRoot")]
+    pub as_root: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct FileInfoRequest {
+    pub serial: String,
+    pub path: String,
+    #[serde(rename = "asRoot")]
+    pub as_root: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct FileDetails {
+    #[serde(rename = "type")]
+    pub kind: String,
+    #[serde(rename = "sizeBytes")]
+    pub size_bytes: Option<i64>,
+    pub owner: String,
+    pub permissions: String,
+    pub modified: String,
+    /// Last metadata change. Android records no creation time.
+    pub changed: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct FileInfoResponse {
+    /// Null when the device could not stat the path — an answer, not a fault.
+    pub info: Option<FileDetails>,
+}
+
+/// `destination` is a **host** path this process chose. The daemon writes
+/// exactly there; picking it here is what keeps one answer to "where do pulled
+/// files go", shared with `export_text`.
+#[derive(Debug, Clone, Serialize)]
+pub struct FilePullRequest {
+    pub serial: String,
+    pub path: String,
+    pub destination: String,
+    #[serde(rename = "asRoot")]
+    pub as_root: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct FilePullResponse {
+    /// Where it landed, for the Show in folder button.
+    pub path: String,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct AppControlRequest {
     pub serial: String,

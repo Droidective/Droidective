@@ -145,7 +145,48 @@ eventually disagree with the runner about it. An unknown verb is a 400 that
 never reaches the device. adb refusing — device gone, unauthorised — is a 502
 carrying adb's own words, not a 500.
 
-### 4.1 Errors
+### 4.1 The filesystem routes
+
+`/v1/files/list`, `/v1/files/op`, `/v1/files/info` and `/v1/files/pull` are the
+first surface here that **writes** to a device, so the rules are worth stating.
+
+```jsonc
+// POST /v1/files/list   { "serial": …, "path": "/sdcard", "asRoot": false }
+{ "path": "/sdcard",
+  "entries": [ { "name": "DCIM", "isDir": true, "size": 4096,
+                 "perms": "drwxrwx---" } ] }
+
+// POST /v1/files/op     { "serial": …, "op": "copy", "path": "/sdcard/a",
+//                         "destination": "/sdcard/b", "asRoot": false }
+{ "ok": true, "message": "Copied" }
+```
+
+**Paths travel verbatim.** Device-shell quoting happens exactly once, in
+ADBKit's `FileExplorerService`; a client that pre-escaped a path would have it
+quoted a second time and address a different file. The daemon builds no shell
+line of its own, and `FileExplorerServiceTests` asserts the quoted argument
+vector for every verb, including the double quoting `su -c` needs.
+
+**Every mutation is one route with the verb in the body**, the shape
+`/v1/apps/control` already uses. `makeDirectory` and `delete` take `path`;
+`copy` and `move` read it as the source and need a `destination` directory. An
+unknown verb is a 400 (`unknown_operation`) and a copy with nowhere to land is
+a 400 (`missing_destination`) — refused rather than guessed at, and neither
+reaches the device. A device *refusing* a known verb is a 200 with `ok:false`,
+the same split every other route keeps.
+
+**`/v1/files/pull` writes to a host path the client chose.** Only the client
+knows where its own Downloads folder is, so the daemon does not guess; it
+writes exactly where it is told and answers with where that was. The Tauri
+client picks `~/Downloads/Droidective/<name>` — the folder `export_text`
+already uses — and checks the leaf name before joining it, because that name
+came off a *device* listing.
+
+`/v1/device/root` answers `RootService.detect`: `hasRootShell` (the only
+definitive proof, and the File Explorer's Root-toggle gate) plus every signal
+behind the verdict, so a client can say *why* rather than only *whether*.
+
+### 4.2 Errors
 
 One shape everywhere, so the UI has one error path:
 

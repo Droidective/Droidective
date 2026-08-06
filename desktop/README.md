@@ -36,6 +36,7 @@ its own.
 | `src/lib/layout.ts` | what the window remembers between launches |
 | `src/lib/icons.ts` | one lucide glyph per registry id — the wire carries none |
 | `src/lib/logbuffer.ts` | the log feed's ring buffer and its gap markers |
+| `src/lib/files.ts` | the File Explorer's rules — paths, selection, batches |
 | `src/lib/fields.ts` | form values → run parameters |
 | `src-tauri/src/daemon/` | spawning, the HTTP client, and the stream socket |
 
@@ -64,8 +65,17 @@ and a tab strip: clicking a feature opens it in its own tab, tabs drag to
 reorder, and Home leads the strip permanently. An action feature renders from
 its registry fields — forms, toggles, destructive confirmation — which is why
 most of the registry works with no per-feature code. The screens built by hand
-so far are the installed-app browser with its verbs, and live logcat with
-visible gap markers.
+so far are the installed-app browser with its verbs, live logcat with visible
+gap markers, every device property searchable, and the file explorer.
+
+The file explorer is the first screen here that **writes** to a device.
+Everything on it — a new folder, a delete, a copy or move, a pull — goes over
+one of four `/v1/files/*` routes, and every path travels **verbatim**:
+device-shell quoting happens once, in ADBKit's `FileExplorerService`, so a
+path escaped on the way out would be quoted twice and address a different
+file. Delete needs a second press, the rule the app verbs already use. A pull
+lands in `~/Downloads/Droidective`, the folder `export_text` writes to, and
+the reply says where so the result can offer Show in folder.
 
 Open tabs stay mounted while they are in the background rather than
 unmounting, so a backgrounded tab keeps its log stream and its loaded lists.
@@ -88,11 +98,10 @@ shell, and this is the binding VS Code already trained everyone on), by a tab's
 right-click menu, or by dragging a tab onto the trailing edge of the pane. The
 divider clamps to 30–70% and its position is saved.
 
-Not yet: the command palette, hotkeys, and most of the
-full-screen views (file explorer, crash catcher, performance…), which are
-`kind: "view"` in the registry and need whole panels. They are listed in the
-sidebar and open a tab that says so, rather than being hidden — a feature the
-Mac has and this app does not is worth knowing about.
+Not yet: hotkeys, and most of the full-screen views (crash catcher,
+performance…), which are `kind: "view"` in the registry and need whole panels.
+They are listed in the sidebar and open a tab that says so, rather than being
+hidden — a feature the Mac has and this app does not is worth knowing about.
 `docs/desktop-parity.md` is the tracker.
 
 ## Two platform requirements for drag and drop

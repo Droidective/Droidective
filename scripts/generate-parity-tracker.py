@@ -117,7 +117,7 @@ for category, features in by_category.items():
         if fid in GATED:
             status, note = "⛔ n/a", GATED[fid]
             counts["gated"] += 1
-        elif fid in ("apps", "logcat"):
+        elif fid in ("apps", "logcat", "file-explorer"):
             status, note = "🟡 partial", "A pane exists; the checklist below is what it is missing."
             counts["partial"] += 1
         elif kind in ("instantAction", "formAction", "toggleAction") and f["implemented"]:

@@ -11,15 +11,15 @@ rewriting one when something turns out to be more work than it looked.
 
 | | Count |
 | --- | --- |
-| ⬜ Not started | 33 |
-| 🟡 Partial | 21 |
+| ⬜ Not started | 32 |
+| 🟡 Partial | 22 |
 | ⛔ Not applicable off-Apple | 6 |
 | **Total registry features** | **60** |
 
-"Partial" is doing a lot of work in that table: 19 of the 21 are actions that
-run from the palette but have no screen of their own, and the two that do have
-screens (Apps, Logcat) are missing most of what the Mac versions offer. Read it
-as *nothing is finished*, not as *a third is done*.
+"Partial" is doing a lot of work in that table: 19 of the 22 are actions that
+run from the palette but have no screen of their own, and the three that do
+have screens (Apps, Logcat, File Explorer) are each missing something the Mac
+version offers. Read it as *nothing is finished*, not as *a third is done*.
 
 ## How this was built
 
@@ -202,6 +202,8 @@ Tick an item here when its PR merges; the detail stays in the sections above.
 | ✅ | Split panes | #255 |
 | ✅ | Command palette and pinned features | #256 |
 | ✅ | Logcat: level, find-vs-filter, tags, export, restart | #257 |
+| ✅ | Device info | #260 |
+| ✅ | File explorer | #261 |
 
 **Next, in order.** Everything from *File explorer* down needs four layers, not
 one — a daemon route in Swift, a Rust command, a pane, and tests at both ends.
@@ -213,9 +215,11 @@ often someone opens them rather than by how hard they look.
    layers: `DaemonProtocol.Route.deviceProps` + a `DaemonBackend` method, a
    Rust `device_props` command, `lib/deviceinfo.ts` for the arranging, and a
    pane. Copy that shape for the rest.
-2. **File explorer** — browse, copy/move/delete, pull, root toggle, new folder,
-   context menu. The first screen that *writes* to the device, so its route
-   needs the same `shellQuote` care ADBKit applies.
+2. ~~**File explorer.**~~ Landed — browse, copy/cut/paste, delete, pull, new
+   folder, Get Info, the Root toggle, and a row context menu, over four
+   filesystem routes plus `/v1/device/root`. It is the worked example for a
+   screen that *writes*: paths travel verbatim and are quoted once, in
+   `FileExplorerService`. Gaps below.
 3. **Crash catcher** — a route over ADBKit's `CrashParser`, then a multi-crash
    browser: kind/process filters, watch mode, copy-for-Slack, clear buffer.
 4. **Performance monitor** — a *stream*, not a request: live CPU/RAM/FPS with a
@@ -232,7 +236,9 @@ often someone opens them rather than by how hard they look.
    has.
 9. **Manage-features catalog** and per-feature "connect a device" empty states.
 10. **The device-state screens** — dev-settings, root-status,
-    system-restrictions. Toggle tables over one route each.
+    system-restrictions. Toggle tables over one route each. `root-status` now
+    has its route: `/v1/device/root` already carries every signal, not just the
+    verdict.
 11. **The connection screens** — wifi, private-dns, network-speed.
 12. **The per-app screens** — app-info, permissions, meminfo, sandbox-browser,
     manage-app. All hang off the bundle already chosen in Apps.
@@ -252,6 +258,21 @@ often someone opens them rather than by how hard they look.
   start an HTML5 drag in WKWebView, so every drag path in this app is checked by
   hand. Keep the *decision* a drop makes in `lib/` where it can be tested, and
   only the event wiring uncovered.
+
+- **The File Explorer cannot push.** The Mac drags files in from Finder to
+  `adb push` them. Here `dragDropEnabled` is `false` — it has to be, or Tauri's
+  native handler swallows the tab drags — so an OS file drop reaches the DOM as
+  a `File` with no path, and pushing it would mean reading its bytes and
+  staging them somewhere first. The route (`FileExplorerService.push`) is
+  already there when someone wants it.
+
+- **No ⌘C / ⌘X / ⌘V in the File Explorer, and no keyboard navigation.** The
+  buttons do all of it; the shortcuts wait on the hotkey work in item 5, which
+  is where key handling should live rather than one screen growing its own.
+
+- **A pull overwrites a same-named file** in `~/Downloads/Droidective` without
+  asking, as `export_text` already does. The Mac asks for a save location; a
+  save dialog here is a plugin and a capability for one button.
 
 **Not planned.** Multi-window, the Quick Actions panel, the welcome tour, and
 the update pill. Each is a whole subsystem, and none of them is why anyone opens
@@ -506,10 +527,10 @@ Legend: ⬜ not started · 🟡 partial · ⛔ not applicable off-Apple.
 - **Note** Runs from the palette; no dedicated screen.
 - **Parameters** `level` (slider), `unplugged` (switch)
 
-#### `file-explorer` — File Explorer  ·  ⬜ todo
+#### `file-explorer` — File Explorer  ·  🟡 partial
 > Browse device storage — copy, move, delete, pull
 - **Kind** `view`
-- **Note** Not started on Windows/Linux.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `FileExplorerView` — `App/Sources/FeatureDetail/Views/FileExplorerView.swift`
 - **Must replicate**
   - [ ] button: Create

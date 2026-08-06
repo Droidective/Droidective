@@ -34,6 +34,34 @@ import FoundationNetworking
         func deviceProperties(serial: String) async throws -> [String: String] {
             ["ro.product.model": "Pixel", "ro.build.version.release": "14"]
         }
+
+        func rootStatus(serial: String) async -> RootStatus {
+            RootStatus(
+                hasRootShell: true, likelyRooted: true, summary: "Rooted",
+                signals: [RootSignal(
+                    name: "Root shell (su)", detail: "su -c id → uid=0", indicatesRoot: true)])
+        }
+
+        func listFiles(serial: String, path: String, asRoot: Bool) async throws -> [FsEntry] {
+            [
+                FsEntry(name: "DCIM", isDir: true, size: 4096, perms: "drwxrwx---"),
+                FsEntry(name: "note.txt", isDir: false, size: 12, perms: "-rw-rw----"),
+            ]
+        }
+
+        func fileOperation(
+            serial: String, _ operation: FileProtocol.Operation, asRoot: Bool
+        ) async throws -> FeatureResult {
+            FeatureResult(ok: true, message: "stub")
+        }
+
+        func fileInfo(
+            serial: String, path: String, asRoot: Bool
+        ) async throws -> FileExplorerService.FileInfo? { nil }
+
+        func pullFile(
+            serial: String, path: String, to destination: String, asRoot: Bool
+        ) async throws -> String { destination }
     }
 
     private static func device(_ serial: String) -> Device {
@@ -155,6 +183,45 @@ import FoundationNetworking
                 port: port, path: DaemonProtocol.Route.deviceProps.rawValue, token: token,
                 body: "not json")
             #expect(status == 400)
+        }
+    }
+
+    @Test func listsADirectoryAndEchoesThePathItRead() async throws {
+        // The echo is what lets a client that has already navigated on tell a
+        // late reply from the current one.
+        try await withServer { port, token in
+            let (status, body) = try await send(
+                port: port, path: DaemonProtocol.Route.filesList.rawValue, token: token,
+                body: #"{"serial":"emulator-5554","path":"/sdcard"}"#)
+            #expect(status == 200)
+            let decoded = try JSONDecoder().decode(FileProtocol.ListResponse.self, from: body)
+            #expect(decoded.path == "/sdcard")
+            #expect(decoded.entries.map(\.name) == ["DCIM", "note.txt"])
+            #expect(decoded.entries.first?.isDir == true)
+        }
+    }
+
+    @Test func theRootProbeCarriesItsSignalsNotJustTheVerdict() async throws {
+        try await withServer { port, token in
+            let (status, body) = try await send(
+                port: port, path: DaemonProtocol.Route.deviceRoot.rawValue, token: token,
+                body: #"{"serial":"emulator-5554"}"#)
+            #expect(status == 200)
+            let decoded = try JSONDecoder().decode(
+                DaemonProtocol.RootStatusResponse.self, from: body)
+            #expect(decoded.hasRootShell)
+            #expect(decoded.signals.first?.name == "Root shell (su)")
+        }
+    }
+
+    @Test func aPullAnswersWhereTheFileLanded() async throws {
+        try await withServer { port, token in
+            let (status, body) = try await send(
+                port: port, path: DaemonProtocol.Route.filesPull.rawValue, token: token,
+                body: #"{"serial":"emulator-5554","path":"/sdcard/note.txt","destination":"/tmp/note.txt"}"#)
+            #expect(status == 200)
+            let decoded = try JSONDecoder().decode(FileProtocol.PullResponse.self, from: body)
+            #expect(decoded.path == "/tmp/note.txt")
         }
     }
 

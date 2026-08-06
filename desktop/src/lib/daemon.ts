@@ -7,7 +7,12 @@ import type {
   Device,
   FeatureSummary,
   FieldValue,
+  FileInfoResponse,
+  FileOperation,
+  FilePullResponse,
+  FilesListResponse,
   LogLine,
+  RootStatusResponse,
   RunResponse,
   StreamUpdate,
 } from "@/lib/wire"
@@ -66,6 +71,56 @@ export function controlApp(args: {
   action: string
 }): Promise<RunResponse> {
   return invoke<RunResponse>("control_app", args)
+}
+
+/** Whether this device gives a root shell, and the signals behind the verdict. */
+export function rootStatus(serial: string): Promise<RootStatusResponse> {
+  return invoke<RootStatusResponse>("root_status", { serial })
+}
+
+export function listFiles(args: {
+  serial: string
+  path: string
+  asRoot: boolean
+}): Promise<FilesListResponse> {
+  return invoke<FilesListResponse>("list_files", args)
+}
+
+/**
+ * One mutation against the device's filesystem.
+ *
+ * Paths go over exactly as they came back from `ls`. Quoting them here would
+ * be quoting them twice: ADBKit's `FileExplorerService` is where a path meets
+ * a device shell, and it is the only place that escapes one.
+ */
+export function fileOperation(args: {
+  serial: string
+  op: FileOperation
+  path: string
+  destination?: string
+  asRoot: boolean
+}): Promise<RunResponse> {
+  return invoke<RunResponse>("file_operation", {
+    ...args,
+    destination: args.destination ?? null,
+  })
+}
+
+export function fileInfo(args: {
+  serial: string
+  path: string
+  asRoot: boolean
+}): Promise<FileInfoResponse> {
+  return invoke<FileInfoResponse>("file_info", args)
+}
+
+/** Pulls into ~/Downloads/Droidective and answers where it landed. */
+export function pullFile(args: {
+  serial: string
+  path: string
+  asRoot: boolean
+}): Promise<FilePullResponse> {
+  return invoke<FilePullResponse>("pull_file", args)
 }
 
 /**

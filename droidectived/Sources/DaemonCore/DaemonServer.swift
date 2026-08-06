@@ -25,6 +25,24 @@ public protocol DaemonBackend: Sendable {
     ) async throws -> FeatureResult
     /// Every `getprop` key and value on the device.
     func deviceProperties(serial: String) async throws -> [String: String]
+    /// Whether this device gives a root shell, and the signals behind the
+    /// verdict. Best-effort by design — a probe that fails is a negative
+    /// signal, not an error — so it does not throw.
+    func rootStatus(serial: String) async -> RootStatus
+    /// One directory listing.
+    func listFiles(serial: String, path: String, asRoot: Bool) async throws -> [FsEntry]
+    /// One mutation against the device's filesystem.
+    func fileOperation(
+        serial: String, _ operation: FileProtocol.Operation, asRoot: Bool
+    ) async throws -> FeatureResult
+    /// `stat` for one path; nil when the device could not stat it.
+    func fileInfo(
+        serial: String, path: String, asRoot: Bool
+    ) async throws -> FileExplorerService.FileInfo?
+    /// Pulls one device path to a host file path, answering where it landed.
+    func pullFile(
+        serial: String, path: String, to destination: String, asRoot: Bool
+    ) async throws -> String
 }
 
 /// `DeviceMonitor` in production.
@@ -64,6 +82,47 @@ public struct LiveBackend: DaemonBackend {
 
     public func deviceProperties(serial: String) async throws -> [String: String] {
         try await DeviceProps.all(client: client, serial: serial)
+    }
+
+    public func rootStatus(serial: String) async -> RootStatus {
+        await RootService(client: client).detect(serial: serial)
+    }
+
+    public func listFiles(serial: String, path: String, asRoot: Bool) async throws -> [FsEntry] {
+        try await FileExplorerService(client: client).list(serial: serial, dir: path, asRoot: asRoot)
+    }
+
+    public func fileOperation(
+        serial: String, _ operation: FileProtocol.Operation, asRoot: Bool
+    ) async throws -> FeatureResult {
+        let explorer = FileExplorerService(client: client)
+        switch operation {
+        case .makeDirectory(let path):
+            return try await explorer.makeDirectory(serial: serial, path: path, asRoot: asRoot)
+        case .delete(let path):
+            return try await explorer.delete(serial: serial, path: path, asRoot: asRoot)
+        case .copy(let source, let destination):
+            return try await explorer.copy(
+                serial: serial, from: source, toDir: destination, asRoot: asRoot)
+        case .move(let source, let destination):
+            return try await explorer.move(
+                serial: serial, from: source, toDir: destination, asRoot: asRoot)
+        }
+    }
+
+    public func fileInfo(
+        serial: String, path: String, asRoot: Bool
+    ) async throws -> FileExplorerService.FileInfo? {
+        try await FileExplorerService(client: client).info(
+            serial: serial, path: path, asRoot: asRoot)
+    }
+
+    public func pullFile(
+        serial: String, path: String, to destination: String, asRoot: Bool
+    ) async throws -> String {
+        try await FileExplorerService(client: client).pull(
+            serial: serial, path: path, to: URL(fileURLWithPath: destination), asRoot: asRoot
+        ).path
     }
 }
 
@@ -273,9 +332,7 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
         head: HTTPRequestHead, body: ByteBuffer, port: Int, token: String,
         backend: any DaemonBackend
     ) async -> (HTTPResponseStatus, Data) {
-        func encoded(_ body: some Encodable) -> Data {
-            (try? DaemonProtocol.encode(body)) ?? Data("{}".utf8)
-        }
+        func encoded(_ body: some Encodable) -> Data { DaemonProtocol.encoded(body) }
 
         if let refusal = DaemonGuards.check(
             authorization: head.headers.first(name: "Authorization"),
@@ -317,6 +374,31 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
                     code: "adb_failed", message: "Could not read the device properties.",
                     detail: "\(error)")))
             }
+
+        case .deviceRoot:
+            let raw = Data(body.readableBytesView)
+            guard let request = try? JSONDecoder().decode(
+                DaemonProtocol.DeviceRequest.self, from: raw)
+            else { return (.badRequest, encoded(DaemonProtocol.badRequest)) }
+            // Best-effort by construction: a probe the device refuses is a
+            // negative signal, so there is no failure branch to map.
+            let status = await backend.rootStatus(serial: request.serial)
+            return (.ok, encoded(DaemonProtocol.RootStatusResponse(status)))
+
+        // The filesystem half lives in `FileRoutes`, so this switch stays a
+        // table of routes rather than a fifth of the protocol inline.
+        case .filesList:
+            return Self.answer(
+                await FileRoutes.list(body: Data(body.readableBytesView), backend: backend))
+        case .filesOp:
+            return Self.answer(
+                await FileRoutes.operation(body: Data(body.readableBytesView), backend: backend))
+        case .filesInfo:
+            return Self.answer(
+                await FileRoutes.info(body: Data(body.readableBytesView), backend: backend))
+        case .filesPull:
+            return Self.answer(
+                await FileRoutes.pull(body: Data(body.readableBytesView), backend: backend))
 
         case .actionsRun:
             let raw = Data(body.readableBytesView)
@@ -378,6 +460,12 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
                     detail: "\(error)")))
             }
         }
+    }
+
+    /// A `FileRoutes` answer as NIO wants it. Those handlers deal in a plain
+    /// status code so they can be tested without a socket.
+    private static func answer(_ answer: FileRoutes.Answer) -> (HTTPResponseStatus, Data) {
+        (HTTPResponseStatus(statusCode: answer.status), answer.body)
     }
 
     private func write(context: ChannelHandlerContext, status: HTTPResponseStatus, body: Data) {
