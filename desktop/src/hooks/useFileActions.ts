@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { asDaemonError, fileOperation, pullFile } from "@/lib/daemon"
 import {
   batchLabel,
@@ -54,9 +54,19 @@ export function useFileActions({
   rootMode: boolean
   reload: () => Promise<void>
 }): FileActions {
-  const [clipboard, setClipboard] = useState<FileClipboard | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState<FileNotice | null>(null)
+
+  const paths = useCallback(
+    (targets: FileEntry[]) => targets.map((entry) => childPath(path, entry.name)),
+    [path],
+  )
+  const { clipboard, setClipboard, remember, forget } = useFileClipboard(serial, paths)
+
+  // A notice about the last device reads as if it were about this one.
+  useEffect(() => {
+    setNotice(null)
+  }, [serial])
 
   const operate = useCallback(
     (op: FileOperation, target: string, destination?: string) => () => {
@@ -89,26 +99,12 @@ export function useFileActions({
     [reload],
   )
 
-  const paths = useCallback(
-    (targets: FileEntry[]) => targets.map((entry) => childPath(path, entry.name)),
-    [path],
-  )
-
   return {
     clipboard,
     busy,
     notice,
-
-    remember: useCallback(
-      (targets: FileEntry[], isCut: boolean) => {
-        setClipboard({ paths: paths(targets), isCut })
-      },
-      [paths],
-    ),
-    forget: useCallback(() => {
-      setClipboard(null)
-    }, []),
-
+    remember,
+    forget,
     paste: usePaste({ clipboard, setClipboard, operate, path, run }),
     pull: usePull({ serial, rootMode, paths, setBusy, setNotice }),
 
@@ -135,6 +131,35 @@ export function useFileActions({
 
     dismissNotice: useCallback(() => {
       setNotice(null)
+    }, []),
+  }
+}
+
+/**
+ * What Copy or Cut remembered.
+ *
+ * Device paths, not entries — the folder they came from may well be closed by
+ * the time they are pasted. Dropped when the device changes: a path from the
+ * last one means nothing here, the rule the selected package already follows.
+ */
+function useFileClipboard(serial: string | null, paths: (targets: FileEntry[]) => string[]) {
+  const [clipboard, setClipboard] = useState<FileClipboard | null>(null)
+
+  useEffect(() => {
+    setClipboard(null)
+  }, [serial])
+
+  return {
+    clipboard,
+    setClipboard,
+    remember: useCallback(
+      (targets: FileEntry[], isCut: boolean) => {
+        setClipboard({ paths: paths(targets), isCut })
+      },
+      [paths],
+    ),
+    forget: useCallback(() => {
+      setClipboard(null)
     }, []),
   }
 }
