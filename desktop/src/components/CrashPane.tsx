@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { ConfirmDialog } from "@/components/ConfirmDialog"
+import { useNotifications } from "@/hooks/useNotifications"
 import { CrashDetail } from "@/components/CrashDetail"
 import { CrashList } from "@/components/CrashList"
 import { CrashNotices, CrashToolbar } from "@/components/CrashToolbar"
@@ -20,7 +21,7 @@ export function CrashPane({ device }: { device: Device | null }) {
   const crashes = useCrashes(device?.serial ?? null)
   const [showRaw, setShowRaw] = useState(false)
   const [confirmingClear, setConfirmingClear] = useState(false)
-  const [action, setAction] = useState<{ ok: boolean; message: string; path?: string } | null>(null)
+  const { show } = useNotifications()
 
   if (!device) {
     return <p className="p-6 text-text-tertiary">Connect a device to catch crashes.</p>
@@ -33,13 +34,12 @@ export function CrashPane({ device }: { device: Device | null }) {
   }
 
   const copy = (format: CrashFormat) => {
-    setAction(null)
     copyText(formatCrash(block(), format)).then(
       () => {
-        setAction({ ok: true, message: "Copied the crash to the clipboard." })
+        show({ message: "Copied the crash to the clipboard.", ok: true })
       },
       (thrown: unknown) => {
-        setAction({ ok: false, message: asDaemonError(thrown).message })
+        show({ message: asDaemonError(thrown).message, ok: false })
       },
     )
   }
@@ -47,13 +47,12 @@ export function CrashPane({ device }: { device: Device | null }) {
   const save = () => {
     const crash = crashes.selected
     if (crash === null) return
-    setAction(null)
     exportText(fileName(crash.kind, device.serial), block()).then(
       (path) => {
-        setAction({ ok: true, message: `Saved to ${path}`, path })
+        show({ message: `Saved to ${path}`, ok: true, revealPath: path })
       },
       (thrown: unknown) => {
-        setAction({ ok: false, message: asDaemonError(thrown).message })
+        show({ message: asDaemonError(thrown).message, ok: false })
       },
     )
   }
@@ -91,13 +90,7 @@ export function CrashPane({ device }: { device: Device | null }) {
         />
       ) : null}
 
-      <CrashNotices
-        crashes={crashes}
-        action={action}
-        onDismissAction={() => {
-          setAction(null)
-        }}
-      />
+      <CrashNotices crashes={crashes} />
 
       <Body crashes={crashes} showRaw={showRaw} onShowRaw={setShowRaw} />
     </div>

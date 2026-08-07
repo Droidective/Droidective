@@ -94,12 +94,7 @@ export function FileExplorerPane({ device }: { device: Device | null }) {
         }}
       />
 
-      <FileNotices
-        busy={actions.busy}
-        error={listing.error}
-        notice={actions.notice}
-        onDismiss={actions.dismissNotice}
-      />
+      <FileNotices busy={actions.busy} error={listing.error} />
 
       <Contents
         listing={listing}

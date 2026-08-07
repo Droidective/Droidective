@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
+import { useNotifications } from "@/hooks/useNotifications"
 import { asDaemonError, fileOperation, pullFile } from "@/lib/daemon"
 import {
   batchLabel,
@@ -10,22 +11,13 @@ import {
   summariseBatch,
   type FileClipboard,
 } from "@/lib/files"
+import type { ToastInput } from "@/lib/notifications"
 import type { FileEntry, FileOperation } from "@/lib/wire"
-
-/** What an operation reported, and where it left something if it did. */
-export interface FileNotice {
-  ok: boolean
-  message: string
-  detail?: string
-  /** A host path, for a Show in folder button. */
-  path?: string
-}
 
 export interface FileActions {
   clipboard: FileClipboard | null
   /** What is running, as a gerund for the banner: "Deleting". */
   busy: string | null
-  notice: FileNotice | null
 
   remember: (targets: FileEntry[], isCut: boolean) => void
   forget: () => void
@@ -33,7 +25,6 @@ export interface FileActions {
   pull: (targets: FileEntry[]) => void
   remove: (targets: FileEntry[]) => void
   createFolder: (raw: string) => void
-  dismissNotice: () => void
 }
 
 /**
@@ -55,18 +46,13 @@ export function useFileActions({
   reload: () => Promise<void>
 }): FileActions {
   const [busy, setBusy] = useState<string | null>(null)
-  const [notice, setNotice] = useState<FileNotice | null>(null)
+  const { show } = useNotifications()
 
   const paths = useCallback(
     (targets: FileEntry[]) => targets.map((entry) => childPath(path, entry.name)),
     [path],
   )
   const { clipboard, setClipboard, remember, forget } = useFileClipboard(serial, paths)
-
-  // A notice about the last device reads as if it were about this one.
-  useEffect(() => {
-    setNotice(null)
-  }, [serial])
 
   const operate = useCallback(
     (op: FileOperation, target: string, destination?: string) => () => {
@@ -84,29 +70,27 @@ export function useFileActions({
   const run = useCallback(
     (label: string, succeeded: string, calls: (() => Promise<{ ok: boolean; message: string }>)[]) => {
       setBusy(label)
-      setNotice(null)
       void (async () => {
         try {
-          setNotice(summariseBatch(await runInOrder(calls), succeeded))
+          show(summariseBatch(await runInOrder(calls), succeeded))
         } catch (thrown) {
-          setNotice(failed(thrown))
+          show(failed(thrown))
         } finally {
           setBusy(null)
           await reload()
         }
       })()
     },
-    [reload],
+    [reload, show],
   )
 
   return {
     clipboard,
     busy,
-    notice,
     remember,
     forget,
     paste: usePaste({ clipboard, setClipboard, operate, path, run }),
-    pull: usePull({ serial, rootMode, paths, setBusy, setNotice }),
+    pull: usePull({ serial, rootMode, paths, setBusy, show }),
 
     remove: useCallback(
       (targets: FileEntry[]) => {
@@ -128,10 +112,6 @@ export function useFileActions({
       },
       [operate, path, run],
     ),
-
-    dismissNotice: useCallback(() => {
-      setNotice(null)
-    }, []),
   }
 }
 
@@ -216,13 +196,13 @@ function usePull({
   rootMode,
   paths,
   setBusy,
-  setNotice,
+  show,
 }: {
   serial: string | null
   rootMode: boolean
   paths: (targets: FileEntry[]) => string[]
   setBusy: (value: string | null) => void
-  setNotice: (value: FileNotice | null) => void
+  show: (input: ToastInput) => void
 }): (targets: FileEntry[]) => void {
   return useCallback(
     (targets: FileEntry[]) => {
@@ -230,35 +210,35 @@ function usePull({
       const names = targets.map((entry) => entry.name)
       const sources = paths(targets)
       setBusy("Pulling")
-      setNotice(null)
       void (async () => {
         try {
           let landed: string | null = null
           for (const source of sources) {
             landed = (await pullFile({ serial, path: source, asRoot: rootMode })).path
           }
-          setNotice({
+          show({
             ok: true,
             message: `Pulled ${batchLabel(names)}`,
-            ...(landed === null ? {} : { path: landed }),
+            ...(landed === null ? {} : { revealPath: landed }),
           })
         } catch (thrown) {
-          setNotice(failed(thrown))
+          show(failed(thrown))
         } finally {
           setBusy(null)
         }
       })()
     },
-    [paths, rootMode, serial, setBusy, setNotice],
+    [paths, rootMode, serial, setBusy, show],
   )
 }
 
-/** A thrown failure as a notice, so there is one place a result is reported. */
-function failed(thrown: unknown): FileNotice {
+/** A thrown failure as a toast, so there is one place a result is reported. */
+function failed(thrown: unknown): ToastInput {
   const error = asDaemonError(thrown)
+  // The detail joins the message: a toast has one line to say what happened,
+  // and adb's own words are usually the useful half.
   return {
     ok: false,
-    message: error.message,
-    ...(error.detail === null ? {} : { detail: error.detail }),
+    message: error.detail === null ? error.message : `${error.message} — ${error.detail}`,
   }
 }

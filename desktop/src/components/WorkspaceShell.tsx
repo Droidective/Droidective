@@ -61,7 +61,10 @@ export function WorkspaceShell({
   })
 
   return (
-    <div className="flex min-h-0 flex-1">
+    // `min-w-0` matters: a flex item defaults to `min-width: auto`, so without
+    // it this refuses to shrink below its content and pushes the notification
+    // panel off the right edge of the window rather than making room.
+    <div className="flex min-h-0 min-w-0 flex-1">
       <Sidebar
         features={features}
         activeID={focused}

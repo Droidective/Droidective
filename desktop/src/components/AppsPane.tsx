@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Boxes, RefreshCw, Search } from "lucide-react"
 import { Banner, Button, Switch } from "@/components/Controls"
-import { ResultActions } from "@/components/ResultActions"
 import { useArmedConfirm } from "@/hooks/useArmedConfirm"
+import { useNotifications } from "@/hooks/useNotifications"
 import { actionLabel, searchApps, sortApps } from "@/lib/apps"
 import { asDaemonError, controlApp, listApps } from "@/lib/daemon"
 import { cn } from "@/lib/cn"
@@ -11,7 +11,6 @@ import type {
   AppSummary,
   DaemonError,
   Device,
-  RunResponse,
 } from "@/lib/wire"
 
 /**
@@ -204,9 +203,8 @@ function AppDetail({
   serial: string
 }) {
   const [running, setRunning] = useState<string | null>(null)
-  const [result, setResult] = useState<RunResponse | null>(null)
-  const [error, setError] = useState<DaemonError | null>(null)
   const confirm = useArmedConfirm()
+  const { show } = useNotifications()
 
   const run = async (action: AppActionDescriptor) => {
     // A second press for the destructive ones, matching the Quick Actions
@@ -219,12 +217,16 @@ function AppDetail({
     }
     confirm.disarm()
     setRunning(action.id)
-    setResult(null)
-    setError(null)
     try {
-      setResult(await controlApp({ serial, packageId: app.packageId, action: action.id }))
+      const outcome = await controlApp({ serial, packageId: app.packageId, action: action.id })
+      show({
+        message: outcome.message,
+        ok: outcome.ok,
+        ...(outcome.copyText === null ? {} : { copyText: outcome.copyText }),
+        ...(outcome.revealPath === null ? {} : { revealPath: outcome.revealPath }),
+      })
     } catch (thrown) {
-      setError(asDaemonError(thrown))
+      show({ message: asDaemonError(thrown).message, ok: false })
     } finally {
       setRunning(null)
     }
@@ -266,18 +268,6 @@ function AppDetail({
         ) : null}
       </div>
 
-      {error ? (
-        <Banner tone="error">
-          {error.message}
-          {error.detail ? <div className="mt-1 opacity-70">{error.detail}</div> : null}
-        </Banner>
-      ) : null}
-      {result ? (
-        <Banner tone={result.ok ? "ok" : "error"}>
-          {result.message}
-          <ResultActions result={result} />
-        </Banner>
-      ) : null}
     </div>
   )
 }

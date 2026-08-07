@@ -1,18 +1,17 @@
 import { useState } from "react"
 import { Circle, Pause, Play, Square, Upload } from "lucide-react"
 import { ConfirmDialog } from "@/components/ConfirmDialog"
+import { useNotifications } from "@/hooks/useNotifications"
 import { Banner, Button, Switch } from "@/components/Controls"
 import { PerfCharts, PerfProcessCard } from "@/components/PerfCharts"
 import { usePerformance, type Performance } from "@/hooks/usePerformance"
-import { asDaemonError, exportText, revealPath } from "@/lib/daemon"
+import { writeRecording } from "@/lib/perfexport"
 import {
   formatKb,
   formatNumber,
   formatRate,
   recordLabel,
   statusText,
-  toCsv,
-  toJson,
   totalCpu,
   type TimedSample,
 } from "@/lib/performance"
@@ -35,8 +34,8 @@ export function PerformancePane({
 }) {
   const [processes, setProcesses] = useState(false)
   const perf = usePerformance({ serial: device?.serial ?? null, packageId, processes })
-  const [saved, setSaved] = useState<Saved | null>(null)
   const [confirmingStop, setConfirmingStop] = useState(false)
+  const { show } = useNotifications()
 
   if (!device) {
     return (
@@ -47,8 +46,8 @@ export function PerformancePane({
   }
 
   const exportRecording = () => {
-    exportBoth(perf.samples, { serial: device.serial, packageId }).then(setSaved, () => {
-      /* exportBoth never rejects; it reports through the notice. */
+    writeRecording(perf.samples, { serial: device.serial, packageId }).then(show, () => {
+      /* exportBoth never rejects; it reports through the toast. */
     })
   }
 
@@ -90,13 +89,7 @@ export function PerformancePane({
         />
       ) : null}
 
-      <Notices
-        perf={perf}
-        saved={saved}
-        onDismiss={() => {
-          setSaved(null)
-        }}
-      />
+      <Notices perf={perf} />
 
       {perf.samples.length === 0 ? (
         <p className="flex min-h-0 flex-1 items-center justify-center px-8 text-center text-text-tertiary">
@@ -110,37 +103,6 @@ export function PerformancePane({
       )}
     </div>
   )
-}
-
-interface Saved {
-  ok: boolean
-  message: string
-  path?: string
-}
-
-/**
- * Writes the recording as JSON *and* CSV, which is the Mac's export.
- *
- * Both formats, always: the CSV is for a spreadsheet and the JSON keeps the
- * per-process rows a CSV row cannot hold.
- */
-async function exportBoth(
-  samples: readonly TimedSample[],
-  context: { serial: string; packageId: string | null },
-): Promise<Saved> {
-  if (samples.length === 0) return { ok: false, message: "There was nothing to export." }
-  const stem = `performance_${context.serial.replaceAll(/[^\w.-]/gu, "_")}`
-  try {
-    await exportText(`${stem}.json`, toJson(samples, context))
-    const csv = await exportText(`${stem}.csv`, toCsv(samples))
-    return {
-      ok: true,
-      message: `Exported ${String(samples.length)} samples (JSON + CSV)`,
-      path: csv,
-    }
-  } catch (thrown) {
-    return { ok: false, message: asDaemonError(thrown).message }
-  }
 }
 
 function Controls({
@@ -242,18 +204,14 @@ function Chip({ label, value }: { label: string; value: string }) {
   )
 }
 
-function Notices({
-  perf,
-  saved,
-  onDismiss,
-}: {
-  perf: Performance
-  saved: Saved | null
-  onDismiss: () => void
-}) {
-  const [failure, setFailure] = useState<string | null>(null)
-  const landed = saved?.path
-  if (perf.error === null && perf.dropped === 0 && saved === null) return null
+/**
+ * The stream's own states.
+ *
+ * An export's result goes to a toast; what is left is what is *about the
+ * recording* rather than about something that just happened.
+ */
+function Notices({ perf }: { perf: Performance }) {
+  if (perf.error === null && perf.dropped === 0) return null
   return (
     <div className="flex shrink-0 flex-col gap-2 px-3 pt-3">
       {perf.error === null ? null : <Banner tone="error">{perf.error.message}</Banner>}
@@ -261,26 +219,6 @@ function Notices({
         // Never swallowed: a chart with a silent gap claims a continuity it
         // does not have, and the elapsed clock would understate the run.
         <Banner tone="warn">{perf.dropped} samples were dropped — the charts have a gap.</Banner>
-      )}
-      {saved === null ? null : (
-        <Banner tone={saved.ok ? "ok" : "error"}>
-          <span className="flex flex-wrap items-center gap-2">
-            {saved.message}
-            {landed === undefined ? null : (
-              <Button
-                onClick={() => {
-                  revealPath(landed).catch((thrown: unknown) => {
-                    setFailure(asDaemonError(thrown).message)
-                  })
-                }}
-              >
-                Show in folder
-              </Button>
-            )}
-            <Button onClick={onDismiss}>Dismiss</Button>
-            {failure === null ? null : <span className="text-danger">{failure}</span>}
-          </span>
-        </Banner>
       )}
     </div>
   )

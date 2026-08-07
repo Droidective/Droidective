@@ -1,9 +1,8 @@
-import { useState } from "react"
+
 import { Copy, Download, Eye, RefreshCw, Search, Trash2, X } from "lucide-react"
 import { Banner, Button, Select } from "@/components/Controls"
 import { CRASH_FORMATS, presentKinds, presentProcesses, type CrashFilters } from "@/lib/crashes"
 import type { CrashFormat } from "@/lib/crashes"
-import { asDaemonError, revealPath } from "@/lib/daemon"
 import type { Crashes } from "@/hooks/useCrashes"
 import type { CrashReport } from "@/lib/wire"
 
@@ -202,21 +201,14 @@ function CopyMenu({ onCopy }: { onCopy: (format: CrashFormat) => void }) {
 
 
 
-/** What is streaming, what arrived, and what an export left behind. */
-export function CrashNotices({
-  crashes,
-  action,
-  onDismissAction,
-}: {
-  crashes: Crashes
-  action: { ok: boolean; message: string; path?: string } | null
-  onDismissAction: () => void
-}) {
-  const [failure, setFailure] = useState<string | null>(null)
-  const landed = action?.path
-  if (crashes.error === null && crashes.arrival === null && crashes.notice === null && action === null) {
-    return null
-  }
+/**
+ * What is streaming and what arrived.
+ *
+ * An export's result goes to a toast now; what is left is the two states that
+ * are *about the screen* rather than about something that just happened.
+ */
+export function CrashNotices({ crashes }: { crashes: Crashes }) {
+  if (crashes.error === null && crashes.arrival === null && crashes.notice === null) return null
   return (
     <div className="flex shrink-0 flex-col gap-2 px-3 pt-3">
       {crashes.error === null ? null : (
@@ -231,7 +223,14 @@ export function CrashNotices({
         <Banner tone="warn">
           <span className="flex flex-wrap items-center gap-2">
             New crash: {crashes.arrival.title}
-            <Dismiss onClick={crashes.dismiss} />
+            <button
+              type="button"
+              onClick={crashes.dismiss}
+              aria-label="Dismiss"
+              className="text-text-tertiary hover:text-text-primary"
+            >
+              <X size={12} />
+            </button>
           </span>
         </Banner>
       )}
@@ -239,44 +238,17 @@ export function CrashNotices({
         <Banner tone="ok">
           <span className="flex flex-wrap items-center gap-2">
             {crashes.notice}
-            <Dismiss onClick={crashes.dismiss} />
-          </span>
-        </Banner>
-      )}
-      {action === null ? null : (
-        <Banner tone={action.ok ? "ok" : "error"}>
-          <span className="flex flex-wrap items-center gap-2">
-            {action.message}
-            {landed === undefined ? null : (
-              <Button
-                onClick={() => {
-                  revealPath(landed).catch((thrown: unknown) => {
-                    setFailure(asDaemonError(thrown).message)
-                  })
-                }}
-              >
-                Show in folder
-              </Button>
-            )}
-            <Dismiss onClick={onDismissAction} />
-            {failure === null ? null : <span className="text-danger">{failure}</span>}
+            <button
+              type="button"
+              onClick={crashes.dismiss}
+              aria-label="Dismiss"
+              className="text-text-tertiary hover:text-text-primary"
+            >
+              <X size={12} />
+            </button>
           </span>
         </Banner>
       )}
     </div>
   )
 }
-
-function Dismiss({ onClick }: { onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label="Dismiss"
-      className="text-text-tertiary hover:text-text-primary"
-    >
-      <X size={12} />
-    </button>
-  )
-}
-

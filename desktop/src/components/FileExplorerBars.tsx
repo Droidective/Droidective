@@ -1,8 +1,6 @@
 import { useState } from "react"
 import { ChevronRight, FolderPlus, RefreshCw, X } from "lucide-react"
 import { Banner, Button, TextInput } from "@/components/Controls"
-import type { FileNotice } from "@/hooks/useFileActions"
-import { asDaemonError, revealPath } from "@/lib/daemon"
 import { breadcrumbs, pasteLabel, type FileClipboard } from "@/lib/files"
 import type { DaemonError, FileEntry } from "@/lib/wire"
 
@@ -198,21 +196,21 @@ export function NewFolderDialog({
   )
 }
 
-/** What is running, what failed, and what an operation left behind. */
+/**
+ * What is running, and a listing that failed.
+ *
+ * Results do not appear here any more — an action reports through a toast, so
+ * the only things left are the two states that are *about the pane* rather
+ * than about something that just happened.
+ */
 export function FileNotices({
   busy,
   error,
-  notice,
-  onDismiss,
 }: {
   busy: string | null
   error: DaemonError | null
-  notice: FileNotice | null
-  onDismiss: () => void
 }) {
-  const [failure, setFailure] = useState<string | null>(null)
-  if (busy === null && error === null && notice === null) return null
-  const landed = notice?.path
+  if (busy === null && error === null) return null
   return (
     <div className="flex shrink-0 flex-col gap-2 px-3 pt-3">
       {busy === null ? null : <Banner tone="warn">{busy}…</Banner>}
@@ -220,38 +218,6 @@ export function FileNotices({
         <Banner tone="error">
           {error.message}
           {error.detail === null ? null : <div className="mt-1 opacity-70">{error.detail}</div>}
-        </Banner>
-      )}
-      {notice === null ? null : (
-        <Banner tone={notice.ok ? "ok" : "error"}>
-          <span className="flex flex-wrap items-center gap-2">
-            {notice.message}
-            {notice.detail === undefined ? null : (
-              <span className="opacity-70">{notice.detail}</span>
-            )}
-            {landed === undefined ? null : (
-              <button
-                type="button"
-                onClick={() => {
-                  revealPath(landed).catch((thrown: unknown) => {
-                    setFailure(asDaemonError(thrown).message)
-                  })
-                }}
-                className="rounded-md bg-white/[0.06] px-2 py-0.5 text-[12px] hover:bg-white/[0.12]"
-              >
-                Show in folder
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={onDismiss}
-              aria-label="Dismiss"
-              className="text-text-tertiary hover:text-text-primary"
-            >
-              <X size={12} />
-            </button>
-            {failure === null ? null : <span className="text-danger">{failure}</span>}
-          </span>
         </Banner>
       )}
     </div>
