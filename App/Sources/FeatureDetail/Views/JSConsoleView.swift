@@ -1139,9 +1139,6 @@ struct JSConsoleView: View {
     /// Measured connection-bar width — below ~640pt (a narrow split pane)
     /// the bar reflows to two rows instead of squeezing its labels.
     @State private var connectionBarWidth: CGFloat = 0
-    /// Measured feed width — decides whether rows can afford a written-out
-    /// source location.
-    @State private var feedWidth: CGFloat = 0
     @State private var inputHeight: CGFloat = 26
     @State private var showLevels = false
     /// The "Clear data and restart" confirmation (it signs the user out).
@@ -1325,10 +1322,17 @@ struct JSConsoleView: View {
 
     private var statusBadge: some View {
         HStack(spacing: 6) {
-            Circle().fill(statusColor).frame(width: 8, height: 8)
-            Text(statusText).font(.app(.caption)).foregroundStyle(.secondary).lineLimit(1)
+            Circle().fill(statusColor).frame(width: 8, height: 8).frame(width: 8)
+            Text(statusText)
+                .font(.app(.caption)).foregroundStyle(.secondary)
+                .lineLimit(1).truncationMode(.tail)
         }
-        .fixedSize()
+        // Deliberately NOT fixedSize. Nothing in this bar may demand more width
+        // than the pane it sits in: an incompressible child sets the minimum for
+        // the whole pane, every row below is then laid out at that width, and
+        // the pane's clip cuts the lot — which reads as the tab beside it
+        // covering the console.
+        .layoutPriority(-1)
     }
 
     private var statusColor: Color {
@@ -1368,9 +1372,11 @@ struct JSConsoleView: View {
         } label: {
             Label(session.connectedTarget?.menuLabel ?? "Choose target", systemImage: "iphone.gen3")
                 .lineLimit(1)
+                // The middle goes first: an app id's tail and the device name
+                // are what tell two targets apart.
+                .truncationMode(.middle)
         }
         .menuStyle(.borderlessButton)
-        .fixedSize()
         .disabled(session.targets.isEmpty)
     }
 
@@ -1575,10 +1581,6 @@ struct JSConsoleView: View {
         // card step, not full opacity, whenever the window is translucent.
         .background(JSConsoleFeedBackground())
         .environment(\.colorScheme, .dark)
-        // Measured once for the whole feed, so every row makes the same call
-        // about whether there's room to write out a source location.
-        .measuringWidth(into: $feedWidth)
-        .environment(\.consoleCompactTrailing, feedWidth > 0 && feedWidth < consoleCompactTrailingWidth)
         // Terminal convention for the linkified URLs in the rows: ⌘-click
         // opens the browser; a plain click stays inert so click-drag text
         // selection can't accidentally navigate away.

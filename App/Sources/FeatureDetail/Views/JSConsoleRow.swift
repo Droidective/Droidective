@@ -62,25 +62,6 @@ struct ConsoleFlowLayout: Layout {
     }
 }
 
-/// Whether the feed is too narrow to write out each row's source location.
-/// Set by the feed from its own measured width, so every row agrees rather
-/// than each measuring itself.
-struct ConsoleCompactTrailingKey: EnvironmentKey {
-    static let defaultValue = false
-}
-
-extension EnvironmentValues {
-    var consoleCompactTrailing: Bool {
-        get { self[ConsoleCompactTrailingKey.self] }
-        set { self[ConsoleCompactTrailingKey.self] = newValue }
-    }
-}
-
-/// Below this the written-out location costs more than it's worth: a split
-/// pane at the 30% floor is around 450pt, and a path like
-/// `NetworkInterceptors.js:37` takes a third of it.
-let consoleCompactTrailingWidth: CGFloat = 620
-
 // MARK: - Entry row
 
 /// One console line: the level glyph, the message and its inline object
@@ -105,7 +86,6 @@ struct JSEntryRow: View {
     @State private var table: ConsoleTable?
     @Environment(\.logTailScrollToHeader) private var scrollToHeader
     @Environment(\.logTailPauseFollow) private var pauseFollow
-    @Environment(\.consoleCompactTrailing) private var compactTrailing
 
     private var query: String { session.findText.trimmingCharacters(in: .whitespaces) }
     private var isCurrentFind: Bool { session.findVisible && session.currentFindID == entry.id }
@@ -139,13 +119,12 @@ struct JSEntryRow: View {
             // Always in the layout — hidden, not removed, when idle — so
             // hovering can't change the row's width and reflow its text.
             copyButtons
-                .opacity(hovering || copied ? 1 : 0)
-                .allowsHitTesting(hovering || copied)
-            // Claims its width before the message does. Compact it is an icon
-            // and a clock — a few dozen points — and without the priority the
-            // message keeps all of it and pushes both off the row entirely,
-            // which loses more than it gains.
-            trailingLocation
+                .opacity(hovering || copied || stackShown ? 1 : 0)
+                .allowsHitTesting(hovering || copied || stackShown)
+            // Claims its width before the message does: a clock is a few dozen
+            // points, and without the priority the message keeps all of it and
+            // pushes the clock off the row entirely.
+            timestamp
                 .layoutPriority(1)
         }
         .contentShape(Rectangle())
@@ -342,61 +321,30 @@ struct JSEntryRow: View {
             .foregroundStyle(JSConsoleTheme.muted)
     }
 
-    /// The right edge: where the call was made, then the clock. Chrome's source
-    /// link is the anchor people scan for, so it leads; clicking it opens the
-    /// rest of the stack, which is the question the file name raises.
-    ///
-    /// In a narrow pane it collapses to its icon. `NetworkInterceptors.js:37`
-    /// is most of a split pane's width, and the message is the thing worth
-    /// reading — spending that width on the location truncates the log to make
-    /// room for where it came from, which is backwards.
-    private var trailingLocation: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            if let source {
-                Button { stackShown.toggle() } label: {
-                    Group {
-                        if compactTrailing {
-                            Image(systemName: "chevron.left.forwardslash.chevron.right")
-                                .font(.app(.caption2))
-                        } else {
-                            Text(source.label)
-                                .font(.app(.caption2).monospacedDigit())
-                                .lineLimit(1)
-                        }
-                    }
-                    .foregroundStyle(JSConsoleTheme.sourceLink)
-                }
-                .buttonStyle(.plain)
-                .help(sourceHelp(source))
-                // Revealed on hover, like the copy buttons — a feed of blue
-                // file paths competes with the messages for attention, and the
-                // location is what you go looking for, not what you scan. Kept
-                // in the layout rather than removed so hovering can't reflow
-                // the row's text, and held open while its stack is showing so
-                // the toggle stays reachable.
-                .opacity(hovering || stackShown ? 1 : 0)
-                .allowsHitTesting(hovering || stackShown)
-            }
-            Text(entry.at, format: .dateTime.hour().minute().second())
-                .font(.app(.caption2).monospacedDigit())
-                .foregroundStyle(JSConsoleTheme.muted)
-        }
-        .fixedSize()
-        .padding(.top, 1)
+    /// The clock, always there — two glanceable words wide, and how you line
+    /// the console up against logcat.
+    private var timestamp: some View {
+        Text(entry.at, format: .dateTime.hour().minute().second())
+            .font(.app(.caption2).monospacedDigit())
+            .foregroundStyle(JSConsoleTheme.muted)
+            .fixedSize()
+            .padding(.top, 1)
     }
 
+    /// The icon says nothing on its own, so the tooltip carries the whole
+    /// location: file and line, the function, and the full path.
     private func sourceHelp(_ source: ConsoleSourceLocation) -> String {
         let function = source.function.isEmpty ? "" : source.function + "  "
-        // Compact rows have no label to read, so the tooltip carries it.
-        let location = compactTrailing ? "\(source.label)\n\(function)\(source.file)" : "\(function)\(source.file)"
-        return "\(location) — click for the full stack"
+        return "\(source.label)\n\(function)\(source.file) — click for the full stack"
     }
 
     // MARK: Copy
 
-    /// Two affordances rather than one, because a row that carries an object is
-    /// really two things: the whole log — message *and* the data it was logged
-    /// with — and just the data, for pasting somewhere that wants JSON.
+    /// What a row lets you do, revealed together on hover: copy the whole log,
+    /// copy just its object, open where it came from. One weight and one
+    /// colour — a written-out `NetworkInterceptors.js:38` costs more width than
+    /// the message beside it can spare, and a blue link among grey icons reads
+    /// as a different kind of thing when it isn't.
     @ViewBuilder private var copyButtons: some View {
         HStack(spacing: 6) {
             Button(action: copyLog) {
@@ -421,6 +369,17 @@ struct JSEntryRow: View {
                 }
                 .buttonStyle(.plain)
                 .help("Copy just the object, as JSON")
+            }
+
+            if let source {
+                Button { stackShown.toggle() } label: {
+                    Image(systemName: "chevron.left.forwardslash.chevron.right")
+                        .font(.app(.caption))
+                        .foregroundStyle(JSConsoleTheme.muted)
+                        .frame(width: 14)
+                }
+                .buttonStyle(.plain)
+                .help(sourceHelp(source))
             }
         }
         .padding(.top, 1)
