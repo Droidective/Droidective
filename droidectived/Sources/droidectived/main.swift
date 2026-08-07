@@ -41,7 +41,8 @@ let engine = FeatureEngine(
 let server = DaemonServer(
     backend: LiveBackend(
         monitor: monitor, engine: engine, client: client,
-        emulators: EmulatorService(client: client, locator: locator)),
+        emulators: EmulatorService(client: client, locator: locator),
+        locator: locator),
     token: token,
     streamSource: LiveStreamSource(
         monitor: monitor, streamer: LogcatStreamer(client: client),

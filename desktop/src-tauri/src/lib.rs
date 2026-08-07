@@ -29,6 +29,7 @@ pub fn run() -> tauri::Result<()> {
         // through our own commands and nowhere else.
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(Supervisor::default())
         .invoke_handler(tauri::generate_handler![
             commands::daemon_status,
@@ -66,6 +67,7 @@ pub fn run() -> tauri::Result<()> {
             commands::watch_netspeed,
             commands::emulators,
             commands::emulator_action,
+            commands::pick_and_install,
             commands::stop_watching,
             commands::copy_text,
             commands::reveal_path,

@@ -10,6 +10,7 @@ import {
   DeviceInfoPane,
   DevSettingsPane,
   EmulatorsPane,
+  InstallAppPane,
   FileExplorerPane,
   LogcatPane,
   ManageAppPane,
@@ -114,6 +115,8 @@ export function FeaturePane(props: FeaturePaneProps) {
     // screen's whole job is launching one when none is connected.
     case "emulators":
       return <EmulatorsPane />
+    case "install-app":
+      return <InstallAppPane device={props.device} />
     case "app-info":
       return <AppInfoPane device={props.device} packageId={props.packageId} />
     case "permissions":

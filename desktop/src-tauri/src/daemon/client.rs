@@ -9,10 +9,10 @@ use crate::daemon::wire::{
     DevSettingsWriteRequest, Device, DevicePropsResponse, DeviceRequest, DevicesResponse,
     DnsResponse, DnsWriteRequest, EmulatorActionRequest, EmulatorsResponse, ErrorEnvelope,
     FeatureSummary, FeaturesResponse, FileInfoRequest, FileInfoResponse, FileOperationRequest,
-    FilePullRequest, FilePullResponse, FilesListRequest, FilesListResponse, MemInfoResponse,
-    PermissionWriteRequest, PermissionsResponse, RestrictionWriteRequest, RestrictionsResponse,
-    RootStatusResponse, RunRequest, RunResponse, SandboxRequest, SandboxResponse, WifiResponse,
-    WifiWriteRequest,
+    FilePullRequest, FilePullResponse, FilesListRequest, FilesListResponse, InstallFormatsResponse,
+    InstallRequest, InstallResponse, MemInfoResponse, PermissionWriteRequest, PermissionsResponse,
+    RestrictionWriteRequest, RestrictionsResponse, RootStatusResponse, RunRequest, RunResponse,
+    SandboxRequest, SandboxResponse, WifiResponse, WifiWriteRequest,
 };
 use crate::error::DaemonError;
 
@@ -202,6 +202,14 @@ impl DaemonClient {
         request: &EmulatorActionRequest,
     ) -> Result<RunResponse, DaemonError> {
         self.post("/v1/emulators/action", request).await
+    }
+
+    pub async fn install_formats(&self) -> Result<InstallFormatsResponse, DaemonError> {
+        self.post("/v1/install/formats", &EMPTY).await
+    }
+
+    pub async fn install(&self, request: &InstallRequest) -> Result<InstallResponse, DaemonError> {
+        self.post("/v1/install/run", request).await
     }
 
     pub async fn pull_apk(&self, request: &AppPullRequest) -> Result<AppPullResponse, DaemonError> {

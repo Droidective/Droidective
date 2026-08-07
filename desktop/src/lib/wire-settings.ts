@@ -169,3 +169,17 @@ export interface EmulatorsResponse {
  * else, so these are its strings spelled its way.
  */
 export type EmulatorAction = "launch" | "coldBoot" | "wipeData" | "relaunch" | "stop"
+
+// MARK: - installing an app package
+
+/** One device's outcome. Per device, not one collapsed verdict. */
+export interface InstallOutcome {
+  serial: string
+  ok: boolean
+  message: string
+}
+
+export interface InstallResponse {
+  outcomes: InstallOutcome[]
+  fileName: string
+}

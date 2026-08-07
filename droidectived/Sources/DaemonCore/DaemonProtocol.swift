@@ -48,6 +48,8 @@ public enum DaemonProtocol {
         case appPullApk = "/v1/app/apk/pull"
         case emulatorsList = "/v1/emulators/list"
         case emulatorsAction = "/v1/emulators/action"
+        case installFormats = "/v1/install/formats"
+        case installRun = "/v1/install/run"
     }
 
     /// The multiplexed stream socket. Not a `Route`: it is a WebSocket upgrade

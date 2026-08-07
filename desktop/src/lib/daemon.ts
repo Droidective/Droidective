@@ -253,6 +253,7 @@ export {
   devSettings,
   emulatorAction,
   emulators,
+  pickAndInstall,
   meminfo,
   permissions,
   privateDns,

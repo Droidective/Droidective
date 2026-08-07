@@ -104,6 +104,10 @@ public protocol DaemonBackend: Sendable {
     func emulatorAction(
         _ action: EmulatorProtocol.Action, avd: String, serial: String
     ) async throws -> FeatureResult
+    /// Installs one host-side package onto one device. Throws only when the
+    /// file cannot be processed at all; an install adb *ran* and rejected
+    /// comes back as a failed result carrying adb's own reason.
+    func installPackage(path: String, serial: String) async throws -> FeatureResult
 }
 
 /// `DeviceMonitor` in production.
@@ -114,15 +118,17 @@ public struct LiveBackend: DaemonBackend {
     /// call rather than held — there is no state to keep.
     private let client: AdbClient
     private let emulatorService: EmulatorService
+    private let locator: ToolLocator
 
     public init(
         monitor: DeviceMonitor, engine: FeatureEngine, client: AdbClient,
-        emulators: EmulatorService
+        emulators: EmulatorService, locator: ToolLocator
     ) {
         self.monitor = monitor
         self.engine = engine
         self.client = client
         emulatorService = emulators
+        self.locator = locator
     }
 
     public func listDevices() async -> [Device] { await monitor.list(force: true) }
@@ -384,6 +390,13 @@ public struct LiveBackend: DaemonBackend {
     /// held. Asking adb is portable *and* the better question: what matters is
     /// whether the emulator is still a device, and adb is the authority on
     /// that. Twenty seconds, as the Mac waits.
+    public func installPackage(path: String, serial: String) async throws -> FeatureResult {
+        try await AppBundleInstallService(
+            client: client,
+            toolchain: ApkToolchain(locator: locator, store: engine.managedTools)
+        ).install(bundlePath: path, serial: serial)
+    }
+
     private func waitForShutdown(serial: String) async {
         for _ in 0 ..< 20 {
             let devices = await monitor.list(force: true)
@@ -726,6 +739,12 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
             return Self.answer(await EmulatorRoutes.list(backend: backend))
         case .emulatorsAction:
             return Self.answer(await EmulatorRoutes.action(
+                body: Data(body.readableBytesView), backend: backend))
+
+        case .installFormats:
+            return Self.answer(InstallRoutes.formats())
+        case .installRun:
+            return Self.answer(await InstallRoutes.install(
                 body: Data(body.readableBytesView), backend: backend))
 
         case .actionsRun:

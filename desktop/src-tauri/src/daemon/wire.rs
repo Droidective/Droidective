@@ -580,6 +580,38 @@ pub struct EmulatorActionRequest {
     pub action: String,
 }
 
+// MARK: - installing an app package
+
+#[derive(Debug, Clone, Serialize)]
+pub struct InstallRequest {
+    pub serials: Vec<String>,
+    /// A host path, chosen by this process's file picker. The daemon never
+    /// browses the filesystem on a caller's behalf.
+    pub path: String,
+}
+
+/// One device's outcome. Per device because installing onto three where one is
+/// out of space is a partial success, not a single verdict.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct InstallOutcome {
+    pub serial: String,
+    pub ok: bool,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct InstallResponse {
+    pub outcomes: Vec<InstallOutcome>,
+    #[serde(rename = "fileName")]
+    pub file_name: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct InstallFormatsResponse {
+    /// From `AppPackageFormat`, so both apps accept exactly the same files.
+    pub extensions: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct AppControlRequest {
     pub serial: String,

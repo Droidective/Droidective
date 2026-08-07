@@ -12,6 +12,7 @@ import type {
   AppInfoResponse,
   EmulatorAction,
   EmulatorsResponse,
+  InstallResponse,
   AppPullResponse,
   DevSettingsResponse,
   DnsMode,
@@ -186,4 +187,16 @@ export function emulatorAction(args: {
     avd: args.avd ?? null,
     serial: args.serial ?? null,
   })
+}
+
+// MARK: - installing an app package
+
+/**
+ * Opens the file picker and installs what was chosen.
+ *
+ * Null when the picker was dismissed — a choice, not a failure, and the UI
+ * must not report it as one.
+ */
+export function pickAndInstall(serials: string[]): Promise<InstallResponse | null> {
+  return invoke<InstallResponse | null>("pick_and_install", { serials })
 }

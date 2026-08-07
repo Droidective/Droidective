@@ -133,4 +133,8 @@ extension DaemonBackend {
     ) async throws -> FeatureResult {
         FeatureResult(ok: true, message: "stub")
     }
+
+    func installPackage(path: String, serial: String) async throws -> FeatureResult {
+        FeatureResult(ok: true, message: "stub")
+    }
 }

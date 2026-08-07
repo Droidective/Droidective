@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_clipboard_manager::ClipboardExt;
+use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 
 use crate::daemon::stream::StreamMessage;
@@ -19,10 +20,10 @@ use crate::daemon::wire::{
     CrashListResponse, DevSettingsResponse, DevSettingsWriteRequest, Device, DevicePropsResponse,
     DnsResponse, DnsWriteRequest, EmulatorActionRequest, EmulatorsResponse, FeatureSummary,
     FileInfoRequest, FileInfoResponse, FileOperationRequest, FilePullRequest, FilePullResponse,
-    FilesListRequest, FilesListResponse, MemInfoResponse, PermissionWriteRequest,
-    PermissionsResponse, RestrictionWriteRequest, RestrictionsResponse, RootStatusResponse,
-    RunRequest, RunResponse, SandboxRequest, SandboxResponse, SubscribeParams, WifiResponse,
-    WifiWriteRequest,
+    FilesListRequest, FilesListResponse, InstallRequest, InstallResponse, MemInfoResponse,
+    PermissionWriteRequest, PermissionsResponse, RestrictionWriteRequest, RestrictionsResponse,
+    RootStatusResponse, RunRequest, RunResponse, SandboxRequest, SandboxResponse, SubscribeParams,
+    WifiResponse, WifiWriteRequest,
 };
 use crate::daemon::{DaemonStatus, Supervisor};
 use crate::error::DaemonError;
@@ -676,6 +677,46 @@ pub async fn watch_performance(
         }),
         forward(on_event),
     )
+}
+
+/// Picks a package and installs it onto the given devices.
+///
+/// The picker runs **here**, not in the webview: a webview drag hands over a
+/// `File` with no path, and the daemon needs a real one. It is also why the
+/// dialog plugin is registered for its Rust API only — the page cannot open a
+/// dialog on its own.
+///
+/// Answers `None` when the picker was dismissed, which is a choice rather than
+/// a failure and must not surface as an error.
+#[tauri::command]
+pub async fn pick_and_install(
+    app: AppHandle,
+    supervisor: State<'_, Supervisor>,
+    serials: Vec<String>,
+) -> Result<Option<InstallResponse>, DaemonError> {
+    let client = supervisor.client().await?;
+    let extensions = client.install_formats().await?.extensions;
+    let filters: Vec<&str> = extensions.iter().map(String::as_str).collect();
+
+    let picked = app
+        .dialog()
+        .file()
+        .add_filter("App package", &filters)
+        .blocking_pick_file();
+    let Some(picked) = picked else {
+        return Ok(None);
+    };
+
+    let path = picked
+        .into_path()
+        .map_err(|error| DaemonError::Host(format!("could not read that file: {error}")))?;
+    let response = client
+        .install(&InstallRequest {
+            serials,
+            path: path.to_string_lossy().into_owned(),
+        })
+        .await?;
+    Ok(Some(response))
 }
 
 /// Every AVD on this machine, and whether the emulator binary is here at all.
