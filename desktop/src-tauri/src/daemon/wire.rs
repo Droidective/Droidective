@@ -381,6 +381,68 @@ pub struct RestrictionWriteRequest {
     pub on: Option<bool>,
 }
 
+// MARK: - Wi-Fi and Private DNS
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct WifiStatus {
+    pub enabled: bool,
+    pub connected: bool,
+    pub ssid: Option<String>,
+    #[serde(rename = "ipAddress")]
+    pub ip_address: Option<String>,
+    #[serde(rename = "linkSpeed")]
+    pub link_speed: Option<String>,
+    pub frequency: Option<String>,
+    pub signal: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SavedNetwork {
+    pub id: String,
+    pub ssid: String,
+    pub security: Option<String>,
+    /// Present only on a rooted device — it comes from `WifiConfigStore.xml`.
+    pub password: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct WifiResponse {
+    pub status: WifiStatus,
+    pub networks: Vec<SavedNetwork>,
+    /// Why a password is missing, rather than implying there is none.
+    #[serde(rename = "hasRootShell")]
+    pub has_root_shell: bool,
+}
+
+/// `enabled` toggles the radio; an `ssid` plus a security mode connects.
+#[derive(Debug, Clone, Serialize)]
+pub struct WifiWriteRequest {
+    pub serial: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ssid: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub security: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub password: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct DnsResponse {
+    /// off | automatic | hostname.
+    pub mode: String,
+    pub hostname: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DnsWriteRequest {
+    pub serial: String,
+    pub mode: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hostname: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct AppControlRequest {
     pub serial: String,

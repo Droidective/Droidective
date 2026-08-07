@@ -6,10 +6,10 @@ use serde::Serialize;
 use crate::daemon::wire::{
     AppControlRequest, AppsListRequest, AppsResponse, CrashListRequest, CrashListResponse,
     DevSettingsResponse, DevSettingsWriteRequest, Device, DevicePropsResponse, DeviceRequest,
-    DevicesResponse, ErrorEnvelope, FeatureSummary, FeaturesResponse, FileInfoRequest,
-    FileInfoResponse, FileOperationRequest, FilePullRequest, FilePullResponse, FilesListRequest,
-    FilesListResponse, RestrictionWriteRequest, RestrictionsResponse, RootStatusResponse,
-    RunRequest, RunResponse,
+    DevicesResponse, DnsResponse, DnsWriteRequest, ErrorEnvelope, FeatureSummary, FeaturesResponse,
+    FileInfoRequest, FileInfoResponse, FileOperationRequest, FilePullRequest, FilePullResponse,
+    FilesListRequest, FilesListResponse, RestrictionWriteRequest, RestrictionsResponse,
+    RootStatusResponse, RunRequest, RunResponse, WifiResponse, WifiWriteRequest,
 };
 use crate::error::DaemonError;
 
@@ -133,6 +133,25 @@ impl DaemonClient {
         request: &RestrictionWriteRequest,
     ) -> Result<RunResponse, DaemonError> {
         self.post("/v1/restrictions/write", request).await
+    }
+
+    pub async fn wifi(&self, serial: String) -> Result<WifiResponse, DaemonError> {
+        self.post("/v1/wifi/read", &DeviceRequest { serial }).await
+    }
+
+    pub async fn write_wifi(&self, request: &WifiWriteRequest) -> Result<RunResponse, DaemonError> {
+        self.post("/v1/wifi/write", request).await
+    }
+
+    pub async fn private_dns(&self, serial: String) -> Result<DnsResponse, DaemonError> {
+        self.post("/v1/dns/read", &DeviceRequest { serial }).await
+    }
+
+    pub async fn write_private_dns(
+        &self,
+        request: &DnsWriteRequest,
+    ) -> Result<RunResponse, DaemonError> {
+        self.post("/v1/dns/write", request).await
     }
 
     /// One request path, so every route shares one error contract.

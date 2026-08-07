@@ -60,7 +60,8 @@ export function TextInput({
   value: string
   onChange: (value: string) => void
   placeholder?: string | undefined
-  type?: "text" | "number"
+  /** `password` is SwiftUI's `SecureField` — the Wi-Fi form uses it. */
+  type?: "text" | "number" | "password"
   autoFocus?: boolean
   onKeyDown?: (event: React.KeyboardEvent<HTMLInputElement>) => void
   /** A placeholder is not a name: it is gone the moment anything is typed. */

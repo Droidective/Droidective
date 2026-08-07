@@ -5,7 +5,6 @@ import type {
   CrashListResponse,
   DaemonError,
   DaemonStatus,
-  DevSettingsResponse,
   Device,
   FeatureSummary,
   FieldValue,
@@ -15,8 +14,6 @@ import type {
   FilesListResponse,
   LogLine,
   PerfSample,
-  RestrictionKey,
-  RestrictionsResponse,
   RootStatusResponse,
   RunResponse,
   StreamUpdate,
@@ -129,49 +126,6 @@ export function clearCrashes(serial: string): Promise<RunResponse> {
   return invoke<RunResponse>("clear_crashes", { serial })
 }
 
-/** Every Developer Options row, definition and current value together. */
-export function devSettings(serial: string): Promise<DevSettingsResponse> {
-  return invoke<DevSettingsResponse>("dev_settings", { serial })
-}
-
-/**
- * Writes one Developer Options row.
- *
- * `on` for a toggle, `value` for a scale — which one is sent is what picks the
- * table the daemon looks the id up in, so exactly one of them must be.
- */
-export function writeDevSetting(args: {
-  serial: string
-  id: string
-  on?: boolean
-  value?: number
-}): Promise<RunResponse> {
-  return invoke<RunResponse>("write_dev_setting", {
-    serial: args.serial,
-    id: args.id,
-    on: args.on ?? null,
-    value: args.value ?? null,
-  })
-}
-
-/** The dev-time restrictions, plus whether the root-only half is reachable. */
-export function restrictions(serial: string): Promise<RestrictionsResponse> {
-  return invoke<RestrictionsResponse>("restrictions", { serial })
-}
-
-export function writeRestriction(args: {
-  serial: string
-  key: RestrictionKey
-  on: boolean
-}): Promise<RunResponse> {
-  return invoke<RunResponse>("write_restriction", args)
-}
-
-/** `mount -o rw,remount /` through `su`. Root-only, and not a toggle. */
-export function remountSystem(serial: string): Promise<RunResponse> {
-  return invoke<RunResponse>("write_restriction", { serial, key: "remount", on: null })
-}
-
 /** Pulls into ~/Downloads/Droidective and answers where it landed. */
 export function pullFile(args: {
   serial: string
@@ -272,3 +226,18 @@ export function asDaemonError(error: unknown): DaemonError {
   }
   return { code: "unknown", message: String(error), detail: null }
 }
+
+// The per-device settings calls live next door, so this file stays inside its
+// line budget; `@/lib/daemon` remains the one import for all of them.
+export {
+  devSettings,
+  privateDns,
+  remountSystem,
+  restrictions,
+  setPrivateDns,
+  setWifiEnabled,
+  connectWifi,
+  wifi,
+  writeDevSetting,
+  writeRestriction,
+} from "@/lib/daemon-settings"

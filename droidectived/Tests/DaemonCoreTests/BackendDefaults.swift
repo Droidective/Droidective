@@ -72,4 +72,29 @@ extension DaemonBackend {
     ) async throws -> AdbResult {
         AdbResult(stdout: "", stderr: "", exitCode: 0, timedOut: false)
     }
+
+    func wifi(serial: String) async -> (WifiStatus, [WifiNetwork], Bool) {
+        (
+            WifiStatus(
+                enabled: false, connected: false, ssid: nil, ipAddress: nil,
+                linkSpeed: nil, frequency: nil, signal: nil),
+            [], false
+        )
+    }
+
+    func writeWifi(
+        serial: String, _ write: NetworkProtocol.WifiWrite
+    ) async throws -> AdbResult {
+        AdbResult(stdout: "", stderr: "", exitCode: 0, timedOut: false)
+    }
+
+    func privateDns(serial: String) async -> DnsStatus {
+        DnsStatus(mode: .automatic, hostname: nil)
+    }
+
+    func writePrivateDns(
+        serial: String, mode: DnsStatus.Mode, hostname: String
+    ) async throws -> AdbResult {
+        AdbResult(stdout: "", stderr: "", exitCode: 0, timedOut: false)
+    }
 }

@@ -16,10 +16,11 @@ use tauri_plugin_opener::OpenerExt;
 use crate::daemon::stream::StreamMessage;
 use crate::daemon::wire::{
     AppControlRequest, AppsResponse, CrashListResponse, DevSettingsResponse,
-    DevSettingsWriteRequest, Device, DevicePropsResponse, FeatureSummary, FileInfoRequest,
-    FileInfoResponse, FileOperationRequest, FilePullRequest, FilePullResponse, FilesListRequest,
-    FilesListResponse, RestrictionWriteRequest, RestrictionsResponse, RootStatusResponse,
-    RunRequest, RunResponse, SubscribeParams,
+    DevSettingsWriteRequest, Device, DevicePropsResponse, DnsResponse, DnsWriteRequest,
+    FeatureSummary, FileInfoRequest, FileInfoResponse, FileOperationRequest, FilePullRequest,
+    FilePullResponse, FilesListRequest, FilesListResponse, RestrictionWriteRequest,
+    RestrictionsResponse, RootStatusResponse, RunRequest, RunResponse, SubscribeParams,
+    WifiResponse, WifiWriteRequest,
 };
 use crate::daemon::{DaemonStatus, Supervisor};
 use crate::error::DaemonError;
@@ -304,6 +305,64 @@ pub async fn write_restriction(
         .client()
         .await?
         .write_restriction(&RestrictionWriteRequest { serial, key, on })
+        .await
+}
+
+/// The connection, the saved networks, and whether passwords were readable.
+#[tauri::command]
+pub async fn wifi(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+) -> Result<WifiResponse, DaemonError> {
+    supervisor.client().await?.wifi(serial).await
+}
+
+/// Toggles the radio (`enabled`), or connects (`ssid` + `security`).
+#[tauri::command]
+pub async fn write_wifi(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    enabled: Option<bool>,
+    ssid: Option<String>,
+    security: Option<String>,
+    password: Option<String>,
+) -> Result<RunResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .write_wifi(&WifiWriteRequest {
+            serial,
+            enabled,
+            ssid,
+            security,
+            password,
+        })
+        .await
+}
+
+#[tauri::command]
+pub async fn private_dns(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+) -> Result<DnsResponse, DaemonError> {
+    supervisor.client().await?.private_dns(serial).await
+}
+
+#[tauri::command]
+pub async fn write_private_dns(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    mode: String,
+    hostname: Option<String>,
+) -> Result<RunResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .write_private_dns(&DnsWriteRequest {
+            serial,
+            mode,
+            hostname,
+        })
         .await
 }
 

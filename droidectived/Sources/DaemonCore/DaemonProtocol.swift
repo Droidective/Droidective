@@ -33,6 +33,10 @@ public enum DaemonProtocol {
         case devSettingsWrite = "/v1/devsettings/write"
         case restrictionsRead = "/v1/restrictions/read"
         case restrictionsWrite = "/v1/restrictions/write"
+        case wifiRead = "/v1/wifi/read"
+        case wifiWrite = "/v1/wifi/write"
+        case dnsRead = "/v1/dns/read"
+        case dnsWrite = "/v1/dns/write"
     }
 
     /// The multiplexed stream socket. Not a `Route`: it is a WebSocket upgrade

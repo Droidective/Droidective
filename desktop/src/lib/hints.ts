@@ -41,6 +41,8 @@ const HINTS: Readonly<Record<string, string>> = {
   "root-status": "Connect a device to check its root status.",
   "dev-settings": "Connect a device to change its developer settings.",
   "system-restrictions": "Connect a device to change restrictions.",
+  wifi: "Connect a device to manage Wi-Fi.",
+  "private-dns": "Connect a device to set its Private DNS.",
 }
 
 /** The line for `id`, or one derived from the feature's title. */

@@ -61,6 +61,19 @@ public protocol DaemonBackend: Sendable {
     func writeRestriction(
         serial: String, _ write: DeviceSettingsProtocol.RestrictionWrite
     ) async throws -> AdbResult
+    /// The Wi-Fi screen's whole read: the connection, the saved networks (with
+    /// their passwords when `su` allows it), and whether it did.
+    func wifi(serial: String) async -> (WifiStatus, [WifiNetwork], Bool)
+    /// Toggles the radio, or connects to a network.
+    func writeWifi(
+        serial: String, _ write: NetworkProtocol.WifiWrite
+    ) async throws -> AdbResult
+    /// The device's Private DNS mode and hostname.
+    func privateDns(serial: String) async -> DnsStatus
+    /// Sets the Private DNS mode. `hostname` is used only by `.hostname`.
+    func writePrivateDns(
+        serial: String, mode: DnsStatus.Mode, hostname: String
+    ) async throws -> AdbResult
 }
 
 /// `DeviceMonitor` in production.
@@ -194,6 +207,66 @@ public struct LiveBackend: DaemonBackend {
             case .selinuxEnforcing:
                 return try await service.setSelinuxEnforcing(serial: serial, on)
             }
+        }
+    }
+
+    /// The Mac's `WiFiView.load`, moved down a layer.
+    ///
+    /// The password merge is here rather than in the client because it is the
+    /// same join on both platforms: `cmd wifi list-networks` names the saved
+    /// networks and `WifiConfigStore.xml` holds their secrets, and a network
+    /// that only appears in the store still belongs in the list.
+    public func wifi(serial: String) async -> (WifiStatus, [WifiNetwork], Bool) {
+        let service = WifiService(client: client)
+        let status = await service.status(serial: serial)
+        var networks = await service.savedNetworks(serial: serial)
+        let rooted = await RootService(client: client).detect(serial: serial).hasRootShell
+        guard rooted else { return (status, networks, false) }
+
+        let credentials = await service.savedPasswords(serial: serial)
+        var bySSID: [String: String] = [:]
+        for credential in credentials where credential.password != nil {
+            bySSID[credential.ssid] = credential.password
+        }
+        networks = networks.map { network in
+            var network = network
+            network.password = bySSID[network.ssid]
+            return network
+        }
+        let known = Set(networks.map(\.ssid))
+        for credential in credentials where !known.contains(credential.ssid) {
+            networks.append(WifiNetwork(
+                networkId: nil, ssid: credential.ssid, security: credential.security,
+                password: credential.password))
+        }
+        return (status, networks, true)
+    }
+
+    public func writeWifi(
+        serial: String, _ write: NetworkProtocol.WifiWrite
+    ) async throws -> AdbResult {
+        let service = WifiService(client: client)
+        switch write {
+        case .setEnabled(let on):
+            return try await service.setEnabled(serial: serial, on)
+        case .connect(let ssid, let security, let password):
+            return try await service.connect(
+                serial: serial, ssid: ssid, security: security, password: password)
+        }
+    }
+
+    public func privateDns(serial: String) async -> DnsStatus {
+        await DnsService(client: client).current(serial: serial)
+    }
+
+    public func writePrivateDns(
+        serial: String, mode: DnsStatus.Mode, hostname: String
+    ) async throws -> AdbResult {
+        let service = DnsService(client: client)
+        switch mode {
+        case .off: return try await service.setOff(serial: serial)
+        case .automatic: return try await service.setAutomatic(serial: serial)
+        case .hostname: return try await service.setHostname(serial: serial, hostname)
         }
     }
 }
@@ -490,6 +563,19 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
                 body: Data(body.readableBytesView), backend: backend))
         case .restrictionsWrite:
             return Self.answer(await DeviceSettingsRoutes.restrictionsWrite(
+                body: Data(body.readableBytesView), backend: backend))
+
+        case .wifiRead:
+            return Self.answer(await NetworkRoutes.wifiRead(
+                body: Data(body.readableBytesView), backend: backend))
+        case .wifiWrite:
+            return Self.answer(await NetworkRoutes.wifiWrite(
+                body: Data(body.readableBytesView), backend: backend))
+        case .dnsRead:
+            return Self.answer(await NetworkRoutes.dnsRead(
+                body: Data(body.readableBytesView), backend: backend))
+        case .dnsWrite:
+            return Self.answer(await NetworkRoutes.dnsWrite(
                 body: Data(body.readableBytesView), backend: backend))
 
         case .actionsRun:

@@ -9,8 +9,10 @@ import {
   FileExplorerPane,
   LogcatPane,
   PerformancePane,
+  PrivateDnsPane,
   RestrictionsPane,
   RootStatusPane,
+  WifiPane,
 } from "@/components/panes"
 import { HOME_TAB } from "@/lib/layout"
 import { isRunnable, type Device, type FeatureSummary } from "@/lib/wire"
@@ -75,6 +77,10 @@ export function FeaturePane(props: FeaturePaneProps) {
       return <DevSettingsPane device={props.device} />
     case "system-restrictions":
       return <RestrictionsPane device={props.device} />
+    case "wifi":
+      return <WifiPane device={props.device} />
+    case "private-dns":
+      return <PrivateDnsPane device={props.device} />
     default:
       return isRunnable(props.feature) ? (
         <ActionForm
