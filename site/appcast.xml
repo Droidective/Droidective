@@ -6,9 +6,9 @@
     <description>Most recent Droidective updates.</description>
     <language>en</language>
     <item>
-      <title>Droidective 3.8.1</title>
-      <sparkle:version>774</sparkle:version>
-      <sparkle:shortVersionString>3.8.1</sparkle:shortVersionString>
+      <title>Droidective 3.8.2</title>
+      <sparkle:version>783</sparkle:version>
+      <sparkle:shortVersionString>3.8.2</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <description><![CDATA[
 <style>
@@ -24,61 +24,37 @@ pre { background: color-mix(in srgb, currentColor 8%, transparent); padding: .6e
 pre code { background: none; padding: 0; }
 a { color: #2f9e44; }
 </style>
-<p>The JS Console now reads like Chrome DevTools' console. Log arguments sit on
-one line with their objects inline, every row says which line of your source
-made the call, and <code>console.group</code> and <code>console.table</code> render the way they do
-in Chrome. Copying a log takes the object with it, and clicking inside an
-expanded value no longer folds it back up.</p>
-<h3>JS Console — Chrome parity</h3>
+<p>Fixes for the JS Console in a split pane. The feed left blank space that grew
+every time the pane changed width, and the console refused to shrink to the
+pane it was given — which read as the tab beside it covering the log.</p>
+<h3>JS Console</h3>
 <ul>
 <li>
-<strong>A log is one line</strong> — the message and its objects sit together, each object
-an inline disclosure, instead of one object stacked per line. Strings logged
-at the top level print bare the way Chrome prints them (<code>console.log('hi')</code>
-shows <code>hi</code>, not <code>"hi"</code>), nested strings use single quotes, arrays lead with
-their length, and a nested object shows <code>{…}</code> rather than the word "Object".</li>
+<strong>The feed fills its pane again.</strong> A row's height was measured against a
+baseline that was still moving, so a message wrapped onto several lines drew
+past the height its row had reported. One row is invisible; a feed of them
+leaves gaps that shift on every resize. It only showed in a narrow pane,
+because that is where rows wrap at all.</li>
 <li>
-<strong>Every row says where it came from</strong> — <code>StreamScreen.tsx:142</code> at the right
-edge, resolved through Metro's symbolication, so it names the file you wrote
-rather than a line in the bundle. Clicking it opens the whole stack, with
-framework and <code>node_modules</code> frames dimmed the way Chrome greys the frames it
-ignore-lists.</li>
+<strong>The console shrinks to the pane it is given.</strong> The connection bar held its
+target label at full width — <code>com.myapp.features · Pixel 7 - 17 - API 37</code>
+is most of a split pane — and that became the minimum for everything below
+it, so rows were laid out wider than the pane and cut off at its edge. The
+target and the status line now truncate. This also brings back the filter
+row's level, find, export and clear controls, and each row's timestamp, at
+the narrowest split.</li>
 <li>
-<strong><code>console.group</code> blocks indent and fold</strong> — with a rule down their left, and
-<code>console.groupCollapsed</code> starts folded. <code>console.groupEnd</code> no longer leaves a
-blank row behind it.</li>
+<strong>A <code>console.table</code> no longer sizes the whole feed.</strong> Its grid scrolls
+inside its own row instead of making every row as wide as itself.</li>
 <li>
-<strong><code>console.table</code> draws a table</strong> — an index column, one column per key across
-the rows, and the value's own disclosure below it.</li>
-<li>
-<strong>Collapsed values show what's in them</strong> — a nested object previews its first
-few properties (<code>{at: '2026-08-07', session: {…}, tags: Array(3)}</code>) instead of
-a key count, so most values can be read without opening them.</li>
-<li>
-<strong>Terminal colours are rendered, not printed</strong> — React Native's own dev-server
-notices arrive coloured for a terminal, and the escape codes were burying the
-message.</li>
-<li>Log rows no longer carry a level glyph; Chrome marks only errors and warnings,
-and the column of identical icons was noise.</li>
-</ul>
-<h3>JS Console — fixes</h3>
-<ul>
-<li>
-<strong>Copying a log takes the object with it.</strong> The row shows an object as <code>{…}</code>,
-which is exactly the part a pasted log can't be used for — the copy now
-resolves it to real JSON. A second button beside it copies just the object,
-for pasting somewhere that wants JSON alone.</li>
-<li>
-<strong>Clicking inside an expanded object keeps it open.</strong> Clicking a nested value
-— or any blank space on the row — used to fold the whole thing back up.</li>
-<li>
-<strong>Expanding a logged <code>Error</code> shows its stack</strong> instead of an empty box.</li>
-<li>The find field inside an expanded value appears only when the value is big
-enough to need one.</li>
+<strong>Where a log came from is an icon</strong>, in the row's hover controls beside the
+two copy buttons. Written out it cost more width than the message beside it
+could spare. The file, line, function and full path are in its tooltip, and
+clicking it still opens the whole stack.</li>
 </ul>
 ]]></description>
-      <pubDate>Fri, 07 Aug 2026 10:49:33 +0000</pubDate>
-      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.8.1/Droidective-v3.8.1.dmg" sparkle:edSignature="XGf3jl5lkwc8i2qfCyVSsXnzlcIqSBo7LFAKajs/q7vti9WZ1zugHDj8vDugm9Kb8I7Ka3pQmcx4YzZ/U5KVCg==" length="144484969" type="application/octet-stream" />
+      <pubDate>Fri, 07 Aug 2026 14:12:34 +0000</pubDate>
+      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.8.2/Droidective-v3.8.2.dmg" sparkle:edSignature="FbSKxPfZWuLRwHs9CyEcXbH+R3Li3/tibv+zo9OGrqpT8KdlD7KKEXrLCheGuJXJIMRq9YTX5KtmUaA3gCerAw==" length="144425801" type="application/octet-stream" />
     </item>
     
   </channel>
