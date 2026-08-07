@@ -11,16 +11,20 @@ rewriting one when something turns out to be more work than it looked.
 
 | | Count |
 | --- | --- |
-| ⬜ Not started | 35 |
-| 🟡 Partial | 23 |
+| ⬜ Not started | 21 |
+| 🟡 Partial | 37 |
 | ⛔ Not applicable off-Apple | 2 |
 | **Total registry features** | **60** |
 
-"Partial" is doing a lot of work in that table: 19 of the 23 are actions that
-run from the palette but have no screen of their own, and the four that do have
-screens (Apps, Logcat, File Explorer, Crash Catcher) are each missing something
-the Mac version offers. Read it as *nothing is finished*, not as *a third is
-done*.
+"Partial" is doing a lot of work in that table: 19 of the 37 are actions that
+run from the palette but have no screen of their own, and the 18 that do have
+screens are each missing something the Mac version offers. Read it as *nothing
+is finished*, not as *most of it is done*.
+
+**Screens with a real pane today** (18): Apps, Logcat, Device Info, File
+Explorer, Crash Catcher, Performance, Root Status, Developer Settings, System
+Restrictions, Wi-Fi, Private DNS, App Info, Permissions, Memory Usage, Sandbox
+Browser, Manage App — plus the two app-chrome screens, the catalog and About.
 
 **Only two features are out of scope**, and only because they drive an Apple
 toolchain rather than a device: `ios-logs` and `push-notification` are `xcrun
@@ -168,30 +172,27 @@ memory — the file each item names is the thing to replicate.
 
 #### The sidebar footer (`SidebarPaletteView`)
 
-Three controls the port has none of, and they are the way into most of what
-follows:
-
-- [ ] **Manage Features** — opens the `catalog` tab.
-- [ ] **About & Feedback** (ⓘ) — opens the `about` tab: version, report an
+- [x] **Manage Features** — opens the `catalog` tab, and reads "+ N more
+      features" once anything is hidden.
+- [x] **About & Feedback** (ⓘ) — opens the `about` tab: version, report an
       issue, star on GitHub.
-- [ ] **Settings** (gear) — opens the Settings window.
+- [x] **Settings** (gear) — opens the Settings window.
 
 #### Settings (`SettingsView`, 969 lines, seven tabs)
 
-- [ ] **General** — Role picker plus "Open the role picker…"; Startup ▸ Open at
-      login; Background ▸ Keep running in the background; Quick Actions ▸
-      "Resume where I left off" (a minutes picker) and "Close the panel after
-      running an action"; Updates ▸ automatic download, beta channel, and the
-      Check / Update Now / Relaunch to Update button that changes with state;
-      Menu bar ▸ Show menu bar icon.
-- [ ] **Appearance** — Theme (light/dark/system); Accent as presets *and* a
-      colour well *and* a hex field with Reset; Background the same three ways;
-      Text ▸ Font family, Text size, Colour (well + hex + Reset); Window ▸
-      opacity, blur and grain sliders; Developer ▸ self-metrics overlay.
-- [ ] **Privacy** — Telemetry ▸ crash reports and usage analytics; Network ▸
-      accept Reactotron connections from the LAN; Data & Storage ▸ the captures
-      and pulls folder (Change… / Reset / Open in Finder) and the Command Log
-      (View… / Clear, with a confirmation).
+- [ ] **General** — every item is still waiting on its subsystem: the role
+      picker, Open at login, background mode, the Quick Actions preferences,
+      and the updater. The tab lists them and says which backlog item each
+      arrives with, rather than showing switches that control nothing.
+- [x] **Appearance** — Theme (light/dark/system) and Accent as presets *and* a
+      colour well *and* a hex field with Reset, plus the light theme itself
+      and the low-contrast warning. **Still missing:** Background and Text
+      colour, Font family and Text size, the Window opacity/blur/grain
+      sliders, and the Developer self-metrics overlay.
+- [x] **Privacy** — Data & Storage ▸ the captures and pulls folder, with Open.
+      Telemetry says outright that this app sends nothing, which is true and
+      worth stating rather than leaving as an unchecked box. **Still
+      missing:** Change…/Reset for the folder, and the Command Log.
 - [ ] **Doctor** — the toolchain check, with the install source for anything
       missing. The app never installs a tool itself.
 - [ ] **Tools** — the managed-tool store: download, size, remove, upgrade.
@@ -201,22 +202,22 @@ follows:
 
 #### Panels and sheets
 
-- [ ] **Notification panel** (`NotificationPanelView`) — a persistent right
-      column of the important notifications (errors, warnings, key wins),
-      toggled by the **bell in the device bar**, with its own empty state. This
-      is history, and separate from the transient toasts below.
-- [ ] **Toasts** (`ToastOverlay`) — top-trailing, per action result, with a
-      level and an optional Show in folder. Replaces the inline banner every
-      ported screen currently uses.
+- [x] **Notification panel** (`NotificationPanelView`) — a persistent right
+      column of the important notifications, toggled by the **bell in the
+      device bar**, with its own empty state.
+- [x] **Toasts** (`ToastOverlay`) — top-trailing, per action result, with a
+      level and an optional Show in folder. Every ported screen was converted
+      off its inline banner.
 - [ ] **Command Log** (`CommandLogView`) — every `CommandLog.userInitiated`
       adb call, opened from Privacy.
 - [ ] **Role picker** (`RolePickerView`) — shown on first launch before the
       tour (`LaunchPrompt.rolePicker`), and re-openable from General. A role
       curates which features the sidebar lists.
-- [ ] **Manage Features catalog** (`CatalogView`) — everything on by default;
-      this is for turning things off.
-- [ ] **About & Feedback** — the `about` tab: version, Report an Issue, Request
-      a Feature, GitHub, Release Notes.
+- [x] **Manage Features catalog** (`CatalogView`) — everything on by default;
+      this is for turning things off, with a right-click on a group header for
+      the whole group.
+- [x] **About & Feedback** — the `about` tab: version, Report an Issue, Request
+      a Feature, GitHub, Releases.
 - [ ] **Welcome tour** (`TourView` + `TourDemos`) — skippable, ending on the
       two Quick Actions pages and the confetti finale.
 - [ ] **What's New** (`WhatsNewPresenter`) — on first launch of a new version.
@@ -253,12 +254,14 @@ somebody already has in their fingers.
       `WindowEffects` already pure-tested in ADBKit. Note the Mac's blur is a
       private CoreGraphics call; Windows and Linux need their own (Mica /
       compositor blur) or the slider limits to opacity.
-- [ ] **Light theme** — the asset catalog has both; `desktop/` ported dark only.
-- [ ] **Custom accent, background and text colour**, including the
-      luminance-following scheme and the low-contrast warning.
+- [x] **Light theme** — ported from the asset catalog's own colorset values,
+      applied as CSS custom properties on `:root` so every existing token
+      follows it.
+- [x] **Custom accent**, with the low-contrast warning. **Background and text
+      colour are still missing**, as is the luminance-following scheme.
 - [ ] **Font family and text-size scale**, and the ⌘= / ⌘- zoom.
-- [ ] **Empty states per feature** ("connect a device") rather than one global
-      message.
+- [x] **Empty states per feature** ("connect a device") — the Mac's
+      `NoDeviceView` shape, with its per-feature copy table ported.
 - [ ] **Native notifications** — a finished background install, a crash caught
       while watching, an update staged. `tauri-plugin-notification`, behind the
       same Settings ▸ General switch the Mac puts it behind.
@@ -318,6 +321,12 @@ Tick an item here when its PR merges; the detail stays in the sections above.
 | ✅ | Device info | #260 |
 | ✅ | File explorer | #263 |
 | ✅ | Crash catcher | #264 |
+| ✅ | Performance monitor | #265 |
+| ✅ | Toasts and the notification panel | #265 |
+| ✅ | Root Status, Developer Settings, System Restrictions | #265 |
+| ✅ | Wi-Fi and Private DNS | #265 |
+| ✅ | App Info, Permissions, Memory, Sandbox, Manage App | #265 |
+| ✅ | Sidebar footer, catalog, About, Settings, light theme | #265 |
 
 **Next, in order.** Everything from *File explorer* down needs four layers, not
 one — a daemon route in Swift, a Rust command, a pane, and tests at both ends.
@@ -339,36 +348,39 @@ often someone opens them rather than by how hard they look.
    Watch on a 5 s poll that announces an arrival, Raw log, copy for
    Slack/Jira/plain, save to a file, and a Clear Buffer that keeps its
    watermark so the main-buffer fallback cannot resurface what it cleared.
-4. **Performance monitor** — record-first, exactly as `PerformanceView` is:
-   Record / Pause / Resume, a Stop that asks whether to export first, and
-   Export as JSON *and* CSV. Sampling happens while recording, not
-   continuously. The process table has its own name filter and sort picker;
-   the charts carry a seconds x-axis.
+4. ~~**Performance monitor.**~~ Landed — record-first as `PerformanceView` is,
+   with the Stop-then-export dialog and both export formats.
 5. **Per-feature hotkeys** with a live-preview recorder. Client-side, and the
    only shell item left that people will miss daily.
 6. **Device bar parity** — wireless pair and connect, run-on-all for
    `supportsRunAll`, launch an emulator, the pull-progress strip.
-7. **The notification surfaces** — `ToastOverlay` for an action result and
-   `NotificationPanelView` for the history behind the device bar's bell, plus
-   the Command Log sheet. These come before Settings because every ported
-   screen currently reports into an inline banner it should not have, and each
-   one built before this is one more to convert.
-8. **Settings**, all seven tabs — General, Appearance, Privacy, Doctor, Tools,
-   Hotkeys, and MCP when Reactotron lands. The Appearance tab is the biggest:
-   theme, accent, background and text each as presets *and* a colour well *and*
-   a hex field, plus the window sliders. It also unlocks the light theme, which
-   is a second set of tokens the asset catalog already has.
-9. **The sidebar footer and what it opens** — Manage Features (`CatalogView`),
-   About & Feedback (the `about` tab), and the gear. Plus the role picker
-   (`RolePickerView`, shown on first launch before the tour) and per-feature
-   "connect a device" empty states.
-10. **The device-state screens** — dev-settings, root-status,
-    system-restrictions. Toggle tables over one route each. `root-status` now
-    has its route: `/v1/device/root` already carries every signal, not just the
-    verdict.
-11. **The connection screens** — wifi, private-dns, network-speed.
-12. **The per-app screens** — app-info, permissions, meminfo, sandbox-browser,
-    manage-app. All hang off the bundle already chosen in Apps.
+7. ~~**The notification surfaces.**~~ Landed — `ToastOverlay` and the history
+   panel behind the device bar's bell, with every ported screen converted off
+   its inline banner. The Command Log sheet is still outstanding: it needs the
+   daemon to record its adb calls, which it does not do yet.
+8. **Settings** — landed as a seven-tab window with General, Appearance and
+   Privacy doing something and the other four naming what they wait on.
+   Appearance carries Theme and Accent (presets · colour well · hex + Reset)
+   and the light theme, ported from the asset catalog's own values. Still
+   missing: **Background and Text colour**, the **font family and text-size
+   scale**, and the **window opacity / blur / grain sliders** — those last
+   need a per-platform answer for the blur (see item 15).
+9. **The sidebar footer and what it opens** — landed: Manage Features
+   (`CatalogView`), About & Feedback, and the gear, plus per-feature "connect
+   a device" empty states matching `NoDeviceView`. Still missing: the **role
+   picker** (`RolePickerView`, shown on first launch before the tour).
+10. ~~**The device-state screens.**~~ Landed — root-status, dev-settings and
+    system-restrictions, over four routes. The Developer Options definitions
+    travel with their values so no client re-types a title; only the section
+    grouping is client-side, with a test that fails if it drifts.
+11. **The connection screens** — wifi and private-dns landed;
+    **network-speed** is left. It is the one that needs a stream rather than a
+    request: live `/proc/net/dev` throughput with a rolling chart, plus its own
+    Record and JSON/CSV export, which is a second recorder beside Performance's.
+12. ~~**The per-app screens.**~~ Landed — app-info, permissions, meminfo,
+    sandbox-browser and app-management, over seven routes. Three device
+    answers travel as answers rather than errors: not installed, not running,
+    and not debuggable.
 13. **Emulators and install-app.**
 14. **Deep links and bug report.**
 15. **Auto-hiding sidebar, UI zoom, window translucency** — `WindowEffects` is
@@ -406,11 +418,21 @@ often someone opens them rather than by how hard they look.
   save dialog here is a plugin and a capability for one button. The Crash
   Catcher's Save writes to the same folder under the same rule.
 
-- **The Crash Catcher announces an arrival in a banner, not a toast.** The Mac
-  raises one; this app has no toasts yet (item 7), so Watch reports into the
-  same banner strip every other screen uses. It stays until dismissed rather
-  than fading, which is the one behaviour a banner can offer that a toast
-  cannot.
+- **A pull cannot be cancelled, and shows no progress.** The Mac's pull
+  progress strip lives in the window's safe-area inset and polls the
+  destination file's size against the known source size. Here a pull is a
+  request that either answers or does not.
+
+- **App Info's Pull APK saves to `~/Downloads/Droidective`** rather than asking
+  where. Same rule as every other pull here, and the same gap.
+
+- **Memory Usage polls on its own timer rather than through the stream.** Two
+  seconds, stopped when the pane unmounts — but a hidden keep-alive tab keeps
+  polling, which the Mac pauses via `tabIsActive`. It needs the pane to know
+  whether it is the visible one.
+
+- **Settings has no role picker, no Command Log, no Doctor, no Tools, no
+  Hotkeys and no MCP tab.** Each names its blocker in the tab itself.
 
 - **The Crash Catcher's failed empty state has no Try Again button.** Refresh
   sits in the toolbar above it and is never hidden, so a second button beside
