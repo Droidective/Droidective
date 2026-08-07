@@ -1,6 +1,6 @@
 import { useState } from "react"
-import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { useNotifications } from "@/hooks/useNotifications"
+import { ConfirmDialog, NoDevice } from "@/components/screen"
 import { CrashDetail } from "@/components/CrashDetail"
 import { CrashList } from "@/components/CrashList"
 import { CrashNotices, CrashToolbar } from "@/components/CrashToolbar"
@@ -24,7 +24,7 @@ export function CrashPane({ device }: { device: Device | null }) {
   const { show } = useNotifications()
 
   if (!device) {
-    return <p className="p-6 text-text-tertiary">Connect a device to catch crashes.</p>
+    return <NoDevice feature="crash-catcher" title="Crash Catcher" />
   }
 
   const block = () => {

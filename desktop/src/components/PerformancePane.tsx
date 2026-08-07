@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { Circle, Pause, Play, Square, Upload } from "lucide-react"
-import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { useNotifications } from "@/hooks/useNotifications"
+import { ConfirmDialog, NoDevice } from "@/components/screen"
 import { Banner, Button, Switch } from "@/components/Controls"
 import { PerfCharts, PerfProcessCard } from "@/components/PerfCharts"
 import { usePerformance, type Performance } from "@/hooks/usePerformance"
@@ -37,13 +37,7 @@ export function PerformancePane({
   const [confirmingStop, setConfirmingStop] = useState(false)
   const { show } = useNotifications()
 
-  if (!device) {
-    return (
-      <p className="flex min-h-0 flex-1 items-center justify-center text-text-tertiary">
-        Connect a device to monitor its performance.
-      </p>
-    )
-  }
+  if (!device) return <NoDevice feature="performance" title="Performance" />
 
   const exportRecording = () => {
     writeRecording(perf.samples, { serial: device.serial, packageId }).then(show, () => {

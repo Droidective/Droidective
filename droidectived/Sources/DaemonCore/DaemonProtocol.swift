@@ -25,6 +25,14 @@ public enum DaemonProtocol {
         case filesPull = "/v1/files/pull"
         case crashesList = "/v1/crashes/list"
         case crashesClear = "/v1/crashes/clear"
+        /// Developer Options and the dev-time restrictions. Read and write are
+        /// split — unlike the filesystem's one `op` route — because a read
+        /// answers with a whole table and a write names one row, so folding
+        /// them together would mean a response type that is two shapes.
+        case devSettingsRead = "/v1/devsettings/read"
+        case devSettingsWrite = "/v1/devsettings/write"
+        case restrictionsRead = "/v1/restrictions/read"
+        case restrictionsWrite = "/v1/restrictions/write"
     }
 
     /// The multiplexed stream socket. Not a `Route`: it is a WebSocket upgrade

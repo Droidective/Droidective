@@ -4,11 +4,12 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 
 use crate::daemon::wire::{
-    AppControlRequest, AppsListRequest, AppsResponse, CrashListRequest, CrashListResponse, Device,
-    DevicePropsResponse, DeviceRequest, DevicesResponse, ErrorEnvelope, FeatureSummary,
-    FeaturesResponse, FileInfoRequest, FileInfoResponse, FileOperationRequest, FilePullRequest,
-    FilePullResponse, FilesListRequest, FilesListResponse, RootStatusResponse, RunRequest,
-    RunResponse,
+    AppControlRequest, AppsListRequest, AppsResponse, CrashListRequest, CrashListResponse,
+    DevSettingsResponse, DevSettingsWriteRequest, Device, DevicePropsResponse, DeviceRequest,
+    DevicesResponse, ErrorEnvelope, FeatureSummary, FeaturesResponse, FileInfoRequest,
+    FileInfoResponse, FileOperationRequest, FilePullRequest, FilePullResponse, FilesListRequest,
+    FilesListResponse, RestrictionWriteRequest, RestrictionsResponse, RootStatusResponse,
+    RunRequest, RunResponse,
 };
 use crate::error::DaemonError;
 
@@ -108,6 +109,30 @@ impl DaemonClient {
     pub async fn clear_crashes(&self, serial: String) -> Result<RunResponse, DaemonError> {
         self.post("/v1/crashes/clear", &CrashListRequest { serial })
             .await
+    }
+
+    pub async fn dev_settings(&self, serial: String) -> Result<DevSettingsResponse, DaemonError> {
+        self.post("/v1/devsettings/read", &DeviceRequest { serial })
+            .await
+    }
+
+    pub async fn write_dev_setting(
+        &self,
+        request: &DevSettingsWriteRequest,
+    ) -> Result<RunResponse, DaemonError> {
+        self.post("/v1/devsettings/write", request).await
+    }
+
+    pub async fn restrictions(&self, serial: String) -> Result<RestrictionsResponse, DaemonError> {
+        self.post("/v1/restrictions/read", &DeviceRequest { serial })
+            .await
+    }
+
+    pub async fn write_restriction(
+        &self,
+        request: &RestrictionWriteRequest,
+    ) -> Result<RunResponse, DaemonError> {
+        self.post("/v1/restrictions/write", request).await
     }
 
     /// One request path, so every route shares one error contract.

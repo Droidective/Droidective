@@ -302,6 +302,85 @@ pub struct CrashListResponse {
     pub crashes: Vec<CrashReport>,
 }
 
+// MARK: - Developer Options and the dev-time restrictions
+
+/// One Developer Options row: what it is, and what the device reports.
+///
+/// The title and detail come over the wire rather than being written here.
+/// `DeveloperSettingsService` already holds one declarative table of them and
+/// the Mac's panel renders straight from it, so a copy on this side would be a
+/// second table to keep in agreement.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct DevToggle {
+    pub id: String,
+    pub title: String,
+    pub detail: String,
+    pub on: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct DevScale {
+    pub id: String,
+    pub title: String,
+    pub value: f64,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct DevSettingsResponse {
+    pub toggles: Vec<DevToggle>,
+    pub scales: Vec<DevScale>,
+    /// The steps the picker offers, from the service rather than from here.
+    #[serde(rename = "scaleChoices")]
+    pub scale_choices: Vec<f64>,
+}
+
+/// `on` for a toggle, `value` for a scale — which is set picks the table the
+/// daemon looks the id up in, and an id neither table knows is a 400.
+#[derive(Debug, Clone, Serialize)]
+pub struct DevSettingsWriteRequest {
+    pub serial: String,
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub on: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<f64>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "a 1:1 mirror of the daemon's JSON; each field is an independent \
+              device toggle, so folding them into enums would only add a \
+              mapping layer between the wire and the same five booleans"
+)]
+pub struct RestrictionsResponse {
+    #[serde(rename = "adbInstallVerification")]
+    pub adb_install_verification: bool,
+    #[serde(rename = "packageVerifier")]
+    pub package_verifier: bool,
+    #[serde(rename = "stayAwake")]
+    pub stay_awake: bool,
+    #[serde(rename = "hiddenApiEnforced")]
+    pub hidden_api_enforced: bool,
+    /// `None` when `getenforce` said neither — "we could not tell" is a
+    /// different claim from "permissive", and the Mac shows neither state as
+    /// the other.
+    #[serde(rename = "selinuxEnforcing")]
+    pub selinux_enforcing: Option<bool>,
+    /// Whether the root-only half of the screen is reachable at all.
+    #[serde(rename = "hasRootShell")]
+    pub has_root_shell: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct RestrictionWriteRequest {
+    pub serial: String,
+    /// A restriction key, or `remount`.
+    pub key: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub on: Option<bool>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct AppControlRequest {
     pub serial: String,

@@ -15,10 +15,11 @@ use tauri_plugin_opener::OpenerExt;
 
 use crate::daemon::stream::StreamMessage;
 use crate::daemon::wire::{
-    AppControlRequest, AppsResponse, CrashListResponse, Device, DevicePropsResponse,
-    FeatureSummary, FileInfoRequest, FileInfoResponse, FileOperationRequest, FilePullRequest,
-    FilePullResponse, FilesListRequest, FilesListResponse, RootStatusResponse, RunRequest,
-    RunResponse, SubscribeParams,
+    AppControlRequest, AppsResponse, CrashListResponse, DevSettingsResponse,
+    DevSettingsWriteRequest, Device, DevicePropsResponse, FeatureSummary, FileInfoRequest,
+    FileInfoResponse, FileOperationRequest, FilePullRequest, FilePullResponse, FilesListRequest,
+    FilesListResponse, RestrictionWriteRequest, RestrictionsResponse, RootStatusResponse,
+    RunRequest, RunResponse, SubscribeParams,
 };
 use crate::daemon::{DaemonStatus, Supervisor};
 use crate::error::DaemonError;
@@ -250,6 +251,60 @@ pub async fn clear_crashes(
     serial: String,
 ) -> Result<RunResponse, DaemonError> {
     supervisor.client().await?.clear_crashes(serial).await
+}
+
+/// Every Developer Options row, definition and current value together.
+#[tauri::command]
+pub async fn dev_settings(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+) -> Result<DevSettingsResponse, DaemonError> {
+    supervisor.client().await?.dev_settings(serial).await
+}
+
+/// Writes one Developer Options row — `on` for a toggle, `value` for a scale.
+#[tauri::command]
+pub async fn write_dev_setting(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    id: String,
+    on: Option<bool>,
+    value: Option<f64>,
+) -> Result<RunResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .write_dev_setting(&DevSettingsWriteRequest {
+            serial,
+            id,
+            on,
+            value,
+        })
+        .await
+}
+
+/// The dev-time restrictions, plus whether the root-only half is reachable.
+#[tauri::command]
+pub async fn restrictions(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+) -> Result<RestrictionsResponse, DaemonError> {
+    supervisor.client().await?.restrictions(serial).await
+}
+
+/// Writes one restriction, or remounts the system partition (`key: "remount"`).
+#[tauri::command]
+pub async fn write_restriction(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    key: String,
+    on: Option<bool>,
+) -> Result<RunResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .write_restriction(&RestrictionWriteRequest { serial, key, on })
+        .await
 }
 
 /// Puts an action's `copyText` on the system clipboard.

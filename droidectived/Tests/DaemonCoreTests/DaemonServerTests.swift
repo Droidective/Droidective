@@ -23,8 +23,6 @@ import FoundationNetworking
             FeatureResult(ok: true, message: "stub")
         }
 
-        func listApps(serial: String) async throws -> [AppListing] { [] }
-
         func controlApp(
             serial: String, packageId: String, action: AppControlService.AppAction
         ) async throws -> FeatureResult {
@@ -55,14 +53,6 @@ import FoundationNetworking
             FeatureResult(ok: true, message: "stub")
         }
 
-        func fileInfo(
-            serial: String, path: String, asRoot: Bool
-        ) async throws -> FileExplorerService.FileInfo? { nil }
-
-        func pullFile(
-            serial: String, path: String, to destination: String, asRoot: Bool
-        ) async throws -> String { destination }
-
         func crashes(serial: String) async throws -> [CrashReport] {
             [CrashReport(
                 id: "06-12 10:00:02.123|4242|java|boom", kind: .java,
@@ -71,7 +61,6 @@ import FoundationNetworking
                 raw: "E AndroidRuntime: boom", body: "boom")]
         }
 
-        func clearCrashBuffer(serial: String) async throws {}
     }
 
     private static func device(_ serial: String) -> Device {

@@ -5,9 +5,12 @@ import {
   AppsPane,
   CrashPane,
   DeviceInfoPane,
+  DevSettingsPane,
   FileExplorerPane,
   LogcatPane,
   PerformancePane,
+  RestrictionsPane,
+  RootStatusPane,
 } from "@/components/panes"
 import { HOME_TAB } from "@/lib/layout"
 import { isRunnable, type Device, type FeatureSummary } from "@/lib/wire"
@@ -66,6 +69,12 @@ export function FeaturePane(props: FeaturePaneProps) {
       return <CrashPane device={props.device} />
     case "performance":
       return <PerformancePane device={props.device} packageId={props.packageId} />
+    case "root-status":
+      return <RootStatusPane device={props.device} />
+    case "dev-settings":
+      return <DevSettingsPane device={props.device} />
+    case "system-restrictions":
+      return <RestrictionsPane device={props.device} />
     default:
       return isRunnable(props.feature) ? (
         <ActionForm

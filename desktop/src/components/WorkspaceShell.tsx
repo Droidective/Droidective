@@ -65,19 +65,7 @@ export function WorkspaceShell({
     // it this refuses to shrink below its content and pushes the notification
     // panel off the right edge of the window rather than making room.
     <div className="flex min-h-0 min-w-0 flex-1">
-      <Sidebar
-        features={features}
-        activeID={focused}
-        onOpen={workspace.open}
-        sidebarOrder={workspace.layout.sidebarOrder}
-        categoryOrder={workspace.layout.categoryOrder}
-        collapsedCategories={workspace.layout.collapsedCategories}
-        favorites={workspace.layout.favorites}
-        onTogglePinned={workspace.togglePin}
-        onSidebarOrder={workspace.setSidebarOrder}
-        onCategoryOrder={workspace.setCategoryOrder}
-        onToggleCollapsed={workspace.toggleCategory}
-      />
+      <WorkspaceSidebar features={features} activeID={focused} workspace={workspace} />
 
       <PaneArea
         workspace={workspace.workspace}
@@ -115,6 +103,39 @@ export function WorkspaceShell({
         }}
       />
     </div>
+  )
+}
+
+/**
+ * The sidebar, wired to the workspace.
+ *
+ * Its own component only because every one of these props is a straight
+ * forward of `workspace.layout.*` — thirteen lines of plumbing that say
+ * nothing about what the shell does.
+ */
+function WorkspaceSidebar({
+  features,
+  activeID,
+  workspace,
+}: {
+  features: FeatureSummary[]
+  activeID: string | null
+  workspace: ReturnType<typeof useWorkspace>
+}) {
+  return (
+    <Sidebar
+      features={features}
+      activeID={activeID}
+      onOpen={workspace.open}
+      sidebarOrder={workspace.layout.sidebarOrder}
+      categoryOrder={workspace.layout.categoryOrder}
+      collapsedCategories={workspace.layout.collapsedCategories}
+      favorites={workspace.layout.favorites}
+      onTogglePinned={workspace.togglePin}
+      onSidebarOrder={workspace.setSidebarOrder}
+      onCategoryOrder={workspace.setCategoryOrder}
+      onToggleCollapsed={workspace.toggleCategory}
+    />
   )
 }
 

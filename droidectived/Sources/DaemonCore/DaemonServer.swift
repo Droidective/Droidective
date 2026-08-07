@@ -47,6 +47,20 @@ public protocol DaemonBackend: Sendable {
     func crashes(serial: String) async throws -> [CrashReport]
     /// Empties the device's crash buffer.
     func clearCrashBuffer(serial: String) async throws
+    /// Every Developer Options toggle and animation scale, as the device
+    /// currently reports them. Best-effort like the service it wraps — a key
+    /// the device refuses reads as its default rather than failing the panel.
+    func developerSettings(serial: String) async -> DeviceSettingsProtocol.DevState
+    /// Writes one Developer Options row.
+    func writeDeveloperSetting(
+        serial: String, _ write: DeviceSettingsProtocol.DevWrite
+    ) async throws -> AdbResult
+    /// The dev-time restriction toggles.
+    func restrictions(serial: String) async -> RestrictionsState
+    /// Writes one restriction, or remounts the system partition.
+    func writeRestriction(
+        serial: String, _ write: DeviceSettingsProtocol.RestrictionWrite
+    ) async throws -> AdbResult
 }
 
 /// `DeviceMonitor` in production.
@@ -135,6 +149,52 @@ public struct LiveBackend: DaemonBackend {
 
     public func clearCrashBuffer(serial: String) async throws {
         try await CrashExtractor(client: client).clearCrashBuffer(serial: serial)
+    }
+
+    public func developerSettings(serial: String) async -> DeviceSettingsProtocol.DevState {
+        let service = DeveloperSettingsService(client: client)
+        return DeviceSettingsProtocol.DevState(
+            toggles: await service.readToggles(serial: serial),
+            scales: await service.readScales(serial: serial))
+    }
+
+    public func writeDeveloperSetting(
+        serial: String, _ write: DeviceSettingsProtocol.DevWrite
+    ) async throws -> AdbResult {
+        let service = DeveloperSettingsService(client: client)
+        switch write {
+        case .toggle(let toggle, let on):
+            return try await service.set(toggle, on: on, serial: serial)
+        case .scale(let scale, let value):
+            return try await service.setScale(scale, value: value, serial: serial)
+        }
+    }
+
+    public func restrictions(serial: String) async -> RestrictionsState {
+        await RestrictionsService(client: client).current(serial: serial)
+    }
+
+    public func writeRestriction(
+        serial: String, _ write: DeviceSettingsProtocol.RestrictionWrite
+    ) async throws -> AdbResult {
+        let service = RestrictionsService(client: client)
+        switch write {
+        case .remountSystemReadWrite:
+            return try await service.remountSystemReadWrite(serial: serial)
+        case .toggle(let key, let on):
+            switch key {
+            case .adbInstallVerification:
+                return try await service.setAdbInstallVerification(serial: serial, on)
+            case .packageVerifier:
+                return try await service.setPackageVerifier(serial: serial, on)
+            case .stayAwake:
+                return try await service.setStayAwake(serial: serial, on)
+            case .hiddenApiEnforced:
+                return try await service.setHiddenApiEnforced(serial: serial, on)
+            case .selinuxEnforcing:
+                return try await service.setSelinuxEnforcing(serial: serial, on)
+            }
+        }
     }
 }
 
@@ -418,6 +478,19 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
         case .crashesClear:
             return Self.answer(
                 await CrashRoutes.clear(body: Data(body.readableBytesView), backend: backend))
+
+        case .devSettingsRead:
+            return Self.answer(await DeviceSettingsRoutes.developerRead(
+                body: Data(body.readableBytesView), backend: backend))
+        case .devSettingsWrite:
+            return Self.answer(await DeviceSettingsRoutes.developerWrite(
+                body: Data(body.readableBytesView), backend: backend))
+        case .restrictionsRead:
+            return Self.answer(await DeviceSettingsRoutes.restrictionsRead(
+                body: Data(body.readableBytesView), backend: backend))
+        case .restrictionsWrite:
+            return Self.answer(await DeviceSettingsRoutes.restrictionsWrite(
+                body: Data(body.readableBytesView), backend: backend))
 
         case .actionsRun:
             let raw = Data(body.readableBytesView)

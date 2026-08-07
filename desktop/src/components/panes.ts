@@ -8,7 +8,10 @@
 
 export { AppsPane } from "@/components/AppsPane"
 export { CrashPane } from "@/components/CrashPane"
+export { DevSettingsPane } from "@/components/DevSettingsPane"
 export { DeviceInfoPane } from "@/components/DeviceInfoPane"
 export { FileExplorerPane } from "@/components/FileExplorerPane"
 export { LogcatPane } from "@/components/LogcatPane"
 export { PerformancePane } from "@/components/PerformancePane"
+export { RestrictionsPane } from "@/components/RestrictionsPane"
+export { RootStatusPane } from "@/components/RootStatusPane"

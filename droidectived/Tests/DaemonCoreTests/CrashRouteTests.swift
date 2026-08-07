@@ -26,30 +26,6 @@ import Testing
         var reports: [CrashReport] = []
         var refusal: Refusal?
 
-        func listDevices() async -> [Device] { [] }
-        func runAction(
-            featureID: String, serial: String, platform: DevicePlatform,
-            params: [String: FeatureValue]
-        ) async -> FeatureResult { FeatureResult(ok: true, message: "stub") }
-        func listApps(serial: String) async throws -> [AppListing] { [] }
-        func controlApp(
-            serial: String, packageId: String, action: AppControlService.AppAction
-        ) async throws -> FeatureResult { FeatureResult(ok: true, message: "stub") }
-        func deviceProperties(serial: String) async throws -> [String: String] { [:] }
-        func rootStatus(serial: String) async -> RootStatus {
-            RootStatus(hasRootShell: false, likelyRooted: false, summary: "stub", signals: [])
-        }
-        func listFiles(serial: String, path: String, asRoot: Bool) async throws -> [FsEntry] { [] }
-        func fileOperation(
-            serial: String, _ operation: FileProtocol.Operation, asRoot: Bool
-        ) async throws -> FeatureResult { FeatureResult(ok: true, message: "stub") }
-        func fileInfo(
-            serial: String, path: String, asRoot: Bool
-        ) async throws -> FileExplorerService.FileInfo? { nil }
-        func pullFile(
-            serial: String, path: String, to destination: String, asRoot: Bool
-        ) async throws -> String { destination }
-
         func crashes(serial: String) async throws -> [CrashReport] {
             if let refusal { throw refusal }
             return reports

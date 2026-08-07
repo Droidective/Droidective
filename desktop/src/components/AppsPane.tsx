@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Boxes, RefreshCw, Search } from "lucide-react"
+import { NoDevice } from "@/components/NoDevice"
 import { Banner, Button, Switch } from "@/components/Controls"
 import { useArmedConfirm } from "@/hooks/useArmedConfirm"
 import { useNotifications } from "@/hooks/useNotifications"
@@ -69,7 +70,7 @@ export function AppsPane({
   const current = apps.find((app) => app.packageId === selected) ?? null
 
   if (!device) {
-    return <p className="p-6 text-text-tertiary">Connect a device to browse its apps.</p>
+    return <NoDevice feature="apps" title="Apps" />
   }
 
   return (

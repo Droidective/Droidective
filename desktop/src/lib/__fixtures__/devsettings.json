@@ -1,0 +1,72 @@
+{
+    "scaleChoices": [
+        0,
+        0.5,
+        1,
+        1.5,
+        2,
+        5,
+        10
+    ],
+    "scales": [
+        {
+            "id": "window-scale",
+            "title": "Window animation scale",
+            "value": 1
+        },
+        {
+            "id": "transition-scale",
+            "title": "Transition animation scale",
+            "value": 1
+        },
+        {
+            "id": "animator-scale",
+            "title": "Animator duration scale",
+            "value": 1
+        }
+    ],
+    "toggles": [
+        {
+            "detail": "Draw a dot under every touch on the device",
+            "id": "show-touches",
+            "on": false,
+            "title": "Show taps"
+        },
+        {
+            "detail": "Crosshair overlay tracking every pointer, with coordinates",
+            "id": "pointer-location",
+            "on": false,
+            "title": "Pointer location"
+        },
+        {
+            "detail": "Outline every view's clip bounds, margins, and padding",
+            "id": "layout-bounds",
+            "on": false,
+            "title": "Show layout bounds"
+        },
+        {
+            "detail": "Color areas by how often they're drawn per frame",
+            "id": "gpu-overdraw",
+            "on": false,
+            "title": "Show GPU overdraw"
+        },
+        {
+            "detail": "On-screen frame-time bars per visible app",
+            "id": "gpu-profile",
+            "on": false,
+            "title": "Profile GPU rendering"
+        },
+        {
+            "detail": "Flash the screen when an app blocks its main thread",
+            "id": "strict-mode",
+            "on": false,
+            "title": "Strict mode flash"
+        },
+        {
+            "detail": "Destroy every activity the moment it's left \u2014 surfaces state-restore bugs",
+            "id": "keep-activities",
+            "on": false,
+            "title": "Don't keep activities"
+        }
+    ]
+}
