@@ -26,7 +26,7 @@ public struct SymbolicatedFrame: Sendable, Equatable, Identifiable {
     /// `emitComplexError  StreamScreen.tsx:192` — one stack line.
     public var display: String {
         let method = methodName.isEmpty ? "(anonymous)" : methodName
-        return "\(method)  \((file as NSString).lastPathComponent):\(lineNumber)"
+        return "\(method)  \(MetroSymbolicator.fileName(file)):\(lineNumber)"
     }
 
     /// Whether this frame is plumbing rather than the reader's own code —
@@ -51,7 +51,7 @@ public struct ConsoleSourceLocation: Sendable, Equatable {
 
     /// `StreamScreen.tsx:142` — the file's own name and its line.
     public var label: String {
-        "\((file as NSString).lastPathComponent):\(line)"
+        "\(MetroSymbolicator.fileName(file)):\(line)"
     }
 }
 
@@ -201,5 +201,14 @@ public actor MetroSymbolicator {
 
     public static func isDependency(_ path: String) -> Bool {
         path.contains("/node_modules/")
+    }
+
+    /// A path's last component. Plain string work rather than `NSString`
+    /// bridging, which ADBKit keeps out of portable code — and it takes both
+    /// separators, since the path is whatever the machine running Metro
+    /// reports.
+    public static func fileName(_ path: String) -> String {
+        let last = path.split(whereSeparator: { $0 == "/" || $0 == "\\" }).last.map(String.init)
+        return last ?? path
     }
 }

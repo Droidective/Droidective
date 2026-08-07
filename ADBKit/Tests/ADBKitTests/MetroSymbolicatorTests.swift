@@ -71,7 +71,7 @@ struct MetroSymbolicatorTests {
         let frames = MetroSymbolicator.parse(Data(recorded.utf8))
         #expect(frames.count == 3)
         #expect(frames[0].collapse)
-        let location = try? #require(MetroSymbolicator.location(in: frames))
+        let location = MetroSymbolicator.location(in: frames)
         #expect(location?.file == "/w/src/StreamScreen.tsx")
         #expect(location?.line == 142)
         #expect(location?.function == "emitComplexLog")
@@ -126,6 +126,17 @@ struct MetroSymbolicatorTests {
         #expect(frames[2].display == "(anonymous)  App.tsx:15")
         // Identity survives a re-render without collapsing distinct frames.
         #expect(Set(frames.map(\.id)).count == 3)
+    }
+
+    /// The label's file name, without `NSString` bridging — ADBKit compiles for
+    /// Linux and Windows, and the path is whatever the machine running Metro
+    /// reports.
+    @Test func fileNameTakesTheLastPathComponent() {
+        #expect(MetroSymbolicator.fileName("/w/src/StreamScreen.tsx") == "StreamScreen.tsx")
+        #expect(MetroSymbolicator.fileName(#"D:\w\src\App.tsx"#) == "App.tsx")
+        #expect(MetroSymbolicator.fileName("bare.js") == "bare.js")
+        #expect(MetroSymbolicator.fileName("") == "")
+        #expect(MetroSymbolicator.fileName("/") == "/")
     }
 
     @Test func dependencyPathsAreRecognizedAnywhereInTheTree() {
