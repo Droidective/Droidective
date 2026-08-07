@@ -4,6 +4,7 @@ import { Row, Section } from "@/components/settings/SettingsKit"
 import { useAppearance } from "@/hooks/useAppearance"
 import {
   ACCENT_PRESETS,
+  accentFor,
   DEFAULT_ACCENT,
   isLowContrast,
   normalizeHex,
@@ -129,7 +130,10 @@ function AccentSection() {
 
       {invalid ? <Banner tone="error">That is not a colour. Use #rgb or #rrggbb.</Banner> : null}
 
-      {isLowContrast(accent, resolved) ? (
+      {/* The *applied* accent, not the stored one: light mode darkens the
+          default green, and warning about a colour the app never paints would
+          fire on its own default. */}
+      {isLowContrast(accentFor(accent, resolved), resolved) ? (
         // A warning, not a refusal: it is the user's app, and the Mac says
         // the same thing rather than rejecting the colour.
         <Banner tone="warn">This accent is hard to read against the {resolved} background.</Banner>

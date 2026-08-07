@@ -93,4 +93,12 @@ describe("isLowContrast", () => {
       expect(isLowContrast(preset.value, "dark"), `${preset.label} on dark`).toBe(false)
     }
   })
+
+  it("does not warn about the app's own default in light mode", () => {
+    // The stored green really is too pale on white — which is exactly why
+    // `accentFor` darkens it there. Testing the stored value would fire the
+    // warning on a colour the app never paints.
+    expect(isLowContrast(DEFAULT_ACCENT, "light")).toBe(true)
+    expect(isLowContrast(accentFor(DEFAULT_ACCENT, "light"), "light")).toBe(false)
+  })
 })
