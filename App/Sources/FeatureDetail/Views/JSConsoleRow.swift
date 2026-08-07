@@ -15,59 +15,50 @@ struct ConsoleFlowLayout: Layout {
     var lineSpacing: CGFloat = 3
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache _: inout Void) -> CGSize {
-        arrange(subviews, maxWidth: proposal.width ?? .infinity).size
+        let arranged = arrange(subviews, maxWidth: proposal.width ?? .infinity).arrangement
+        return CGSize(width: arranged.width, height: arranged.height)
     }
 
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache _: inout Void) {
-        let placement = arrange(subviews, maxWidth: proposal.width ?? bounds.width)
+    func placeSubviews(in bounds: CGRect, proposal _: ProposedViewSize, subviews: Subviews, cache _: inout Void) {
+        // Measured against the width actually allocated, not the proposal — the
+        // two can differ, and laying a row out against anything but its real
+        // bounds is how it ends up drawn wider than the pane holding it.
+        let (segments, arranged) = arrange(subviews, maxWidth: bounds.width)
         for (index, subview) in subviews.enumerated() {
-            let frame = placement.frames[index]
+            let slot = arranged.slots[index]
+            // Never offer a segment more width than the row has. A value with
+            // no break in it measures wider than the pane, and placed at its
+            // measured width it draws straight over whatever is beside the
+            // pane; clamped, it truncates inside its own row instead.
             subview.place(
-                at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
-                proposal: ProposedViewSize(width: frame.width, height: frame.height)
+                at: CGPoint(x: bounds.minX + slot.x, y: bounds.minY + slot.y),
+                proposal: ProposedViewSize(
+                    width: min(segments[index].width, bounds.width), height: segments[index].height
+                )
             )
         }
     }
 
-    private func arrange(_ subviews: Subviews, maxWidth: CGFloat) -> (frames: [CGRect], size: CGSize) {
-        var frames: [CGRect] = []
-        var rowStart = 0
-        var rowBaseline: CGFloat = 0
-        var rowHeight: CGFloat = 0
-        var baselines: [CGFloat] = []
-        var x: CGFloat = 0
-        var y: CGFloat = 0
-        var widest: CGFloat = 0
-
-        /// Shift a finished row's segments down onto a shared baseline.
-        func settleRow(through index: Int) {
-            for slot in rowStart ..< index {
-                frames[slot].origin.y = y + rowBaseline - baselines[slot]
-            }
-            y += rowHeight + lineSpacing
-        }
-
+    /// Measure each segment at the row's width, then hand the arithmetic to
+    /// `ConsoleRowLayout` — it's pure, and it's where the wrapping height has to
+    /// be right.
+    private func arrange(
+        _ subviews: Subviews, maxWidth: CGFloat
+    ) -> (segments: [ConsoleRowSegment], arrangement: ConsoleRowArrangement) {
+        var segments: [ConsoleRowSegment] = []
+        segments.reserveCapacity(subviews.count)
         for subview in subviews {
             let dimensions = subview.dimensions(in: ProposedViewSize(width: maxWidth, height: nil))
-            let size = CGSize(width: dimensions.width, height: dimensions.height)
-            let baseline = dimensions[VerticalAlignment.firstTextBaseline]
-            if x > 0, x + size.width > maxWidth + 0.5 {
-                settleRow(through: frames.count)
-                rowStart = frames.count
-                rowBaseline = 0
-                rowHeight = 0
-                x = 0
-            }
-            frames.append(CGRect(x: x, y: 0, width: size.width, height: size.height))
-            baselines.append(baseline)
-            rowBaseline = max(rowBaseline, baseline)
-            rowHeight = max(rowHeight, size.height + max(0, rowBaseline - baseline))
-            x += size.width + spacing
-            widest = max(widest, x - spacing)
+            segments.append(ConsoleRowSegment(
+                width: dimensions.width,
+                height: dimensions.height,
+                baseline: dimensions[VerticalAlignment.firstTextBaseline]
+            ))
         }
-        guard !frames.isEmpty else { return ([], .zero) }
-        settleRow(through: frames.count)
-        return (frames, CGSize(width: min(widest, maxWidth), height: max(0, y - lineSpacing)))
+        let arrangement = ConsoleRowLayout.arrange(
+            segments, maxWidth: maxWidth, spacing: spacing, lineSpacing: lineSpacing
+        )
+        return (segments, arrangement)
     }
 }
 
@@ -128,9 +119,13 @@ struct JSEntryRow: View {
             // Always in the layout — hidden, not removed, when idle — so
             // hovering can't change the row's width and reflow its text.
             copyButtons
-                .opacity(hovering || copied ? 1 : 0)
-                .allowsHitTesting(hovering || copied)
-            trailingLocation
+                .opacity(hovering || copied || stackShown ? 1 : 0)
+                .allowsHitTesting(hovering || copied || stackShown)
+            // Claims its width before the message does: a clock is a few dozen
+            // points, and without the priority the message keeps all of it and
+            // pushes the clock off the row entirely.
+            timestamp
+                .layoutPriority(1)
         }
         .contentShape(Rectangle())
         // The row's own click sits *behind* its content rather than over it, so
@@ -326,35 +321,30 @@ struct JSEntryRow: View {
             .foregroundStyle(JSConsoleTheme.muted)
     }
 
-    /// The right edge: where the call was made, then the clock. Chrome's source
-    /// link is the anchor people scan for, so it leads; clicking it opens the
-    /// rest of the stack, which is the question the file name raises.
-    private var trailingLocation: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            if let source {
-                Button { stackShown.toggle() } label: {
-                    Text(source.label)
-                        .font(.app(.caption2).monospacedDigit())
-                        .foregroundStyle(JSConsoleTheme.sourceLink)
-                        .underline(hovering)
-                        .lineLimit(1)
-                }
-                .buttonStyle(.plain)
-                .help("\(source.function.isEmpty ? "" : source.function + "  ")\(source.file) — click for the full stack")
-            }
-            Text(entry.at, format: .dateTime.hour().minute().second())
-                .font(.app(.caption2).monospacedDigit())
-                .foregroundStyle(JSConsoleTheme.muted)
-        }
-        .fixedSize()
-        .padding(.top, 1)
+    /// The clock, always there — two glanceable words wide, and how you line
+    /// the console up against logcat.
+    private var timestamp: some View {
+        Text(entry.at, format: .dateTime.hour().minute().second())
+            .font(.app(.caption2).monospacedDigit())
+            .foregroundStyle(JSConsoleTheme.muted)
+            .fixedSize()
+            .padding(.top, 1)
+    }
+
+    /// The icon says nothing on its own, so the tooltip carries the whole
+    /// location: file and line, the function, and the full path.
+    private func sourceHelp(_ source: ConsoleSourceLocation) -> String {
+        let function = source.function.isEmpty ? "" : source.function + "  "
+        return "\(source.label)\n\(function)\(source.file) — click for the full stack"
     }
 
     // MARK: Copy
 
-    /// Two affordances rather than one, because a row that carries an object is
-    /// really two things: the whole log — message *and* the data it was logged
-    /// with — and just the data, for pasting somewhere that wants JSON.
+    /// What a row lets you do, revealed together on hover: copy the whole log,
+    /// copy just its object, open where it came from. One weight and one
+    /// colour — a written-out `NetworkInterceptors.js:38` costs more width than
+    /// the message beside it can spare, and a blue link among grey icons reads
+    /// as a different kind of thing when it isn't.
     @ViewBuilder private var copyButtons: some View {
         HStack(spacing: 6) {
             Button(action: copyLog) {
@@ -379,6 +369,17 @@ struct JSEntryRow: View {
                 }
                 .buttonStyle(.plain)
                 .help("Copy just the object, as JSON")
+            }
+
+            if let source {
+                Button { stackShown.toggle() } label: {
+                    Image(systemName: "chevron.left.forwardslash.chevron.right")
+                        .font(.app(.caption))
+                        .foregroundStyle(JSConsoleTheme.muted)
+                        .frame(width: 14)
+                }
+                .buttonStyle(.plain)
+                .help(sourceHelp(source))
             }
         }
         .padding(.top, 1)
@@ -799,21 +800,13 @@ private struct ConsoleTableView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Grid(alignment: .leading, horizontalSpacing: 0, verticalSpacing: 0) {
-                GridRow {
-                    ForEach(Array(headers.enumerated()), id: \.offset) { _, name in
-                        cell(name, isHeader: true)
-                    }
-                }
-                ForEach(Array(table.rows.enumerated()), id: \.offset) { _, row in
-                    GridRow {
-                        cell(row.index, isHeader: false)
-                        ForEach(Array(row.cells.enumerated()), id: \.offset) { _, text in
-                            cell(text, isHeader: false)
-                        }
-                        if table.hasValueColumn { cell(row.value ?? "", isHeader: false) }
-                    }
-                }
+            // The grid scrolls inside its own row rather than sizing the feed.
+            // A capped `frame` bounds the maximum but not the *ideal* width, and
+            // that ideal propagates up: one wide table made every row in the
+            // feed as wide as itself, so in a split pane the rest of the rows
+            // ran under the pane beside them.
+            ScrollView(.horizontal, showsIndicators: false) {
+                grid
             }
             .frame(maxWidth: 900, alignment: .leading)
             if table.hiddenRows > 0 {
@@ -825,6 +818,28 @@ private struct ConsoleTableView: View {
         .padding(.vertical, 2)
     }
 
+    private var grid: some View {
+        Grid(alignment: .leading, horizontalSpacing: 0, verticalSpacing: 0) {
+            GridRow {
+                ForEach(Array(headers.enumerated()), id: \.offset) { _, name in
+                    cell(name, isHeader: true)
+                }
+            }
+            ForEach(Array(table.rows.enumerated()), id: \.offset) { _, row in
+                GridRow {
+                    cell(row.index, isHeader: false)
+                    ForEach(Array(row.cells.enumerated()), id: \.offset) { _, text in
+                        cell(text, isHeader: false)
+                    }
+                    if table.hasValueColumn { cell(row.value ?? "", isHeader: false) }
+                }
+            }
+        }
+    }
+
+    /// Columns size to a readable minimum rather than sharing the row: inside a
+    /// horizontal scroll there is no width to share, and `maxWidth: .infinity`
+    /// against an unbounded proposal would grow without limit.
     private func cell(_ text: String, isHeader: Bool) -> some View {
         Text(text)
             .font(.app(.caption, design: .monospaced))
@@ -833,7 +848,7 @@ private struct ConsoleTableView: View {
             .truncationMode(.tail)
             .padding(.horizontal, 6)
             .padding(.vertical, 3)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(minWidth: 72, maxWidth: 260, alignment: .leading)
             .background(isHeader ? JSConsoleTheme.muted.opacity(0.14) : .clear)
             .overlay(Rectangle().strokeBorder(JSConsoleTheme.muted.opacity(0.3), lineWidth: 0.5))
     }
