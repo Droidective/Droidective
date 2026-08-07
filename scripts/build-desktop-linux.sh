@@ -40,7 +40,11 @@ done
   exit 1
 }
 
-mkdir -p "$OUT" "$CACHE/cargo" "$CACHE/target" "$CACHE/apt"
+# Deliberately no apt cache: apt fetches as the unprivileged `_apt` user,
+# which cannot write into a host-mounted archives directory, and the failure
+# is a "Permission denied" on every download rather than a mount error. The
+# cargo registry and target dir are where the time actually goes anyway.
+mkdir -p "$OUT" "$CACHE/cargo" "$CACHE/target"
 
 # The repo is mounted read-only and copied to a scratch tree inside the
 # container. Building in the mount would put Linux `node_modules` and a Linux
@@ -62,7 +66,6 @@ exec "$RUNTIME" run --rm \
   --volume "$OUT:/out" \
   --volume "$CACHE/cargo:/root/.cargo-registry" \
   --volume "$CACHE/target:/cache/target" \
-  --volume "$CACHE/apt:/var/cache/apt/archives" \
   swift:6.2-noble \
   bash -euo pipefail -c "
 set -x
