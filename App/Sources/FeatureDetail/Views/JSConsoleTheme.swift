@@ -29,6 +29,9 @@ enum JSConsoleTheme {
     /// Info accent (icon), otherwise info reads as normal text (Chrome `#79b8ff`).
     static let info = Color(red: 0.475, green: 0.722, blue: 1.0)
 
+    /// The source location at the right edge of a row — Chrome's link blue.
+    static let sourceLink = Color(red: 0.416, green: 0.643, blue: 1.0)      // #6aa4ff
+
     /// ⌘F find highlights — warm yellow, stronger orange for the current match.
     static let findMatch = Color(red: 0.961, green: 0.773, blue: 0.094)    // #f5c518
     static let findCurrent = Color(red: 1.0, green: 0.549, blue: 0.102)    // #ff8c1a

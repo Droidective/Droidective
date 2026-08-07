@@ -48,19 +48,38 @@ enum JSPhase: Equatable {
     case failed(String)
 }
 
+/// Where a row sits in the `console.group` nesting: how far it indents, which
+/// headers it hangs under (so collapsing one hides exactly its block), and
+/// whether it *is* a header. Everything the console says on its own — input,
+/// results, notices — sits at the top level.
+struct JSGroupSlot: Equatable {
+    var depth = 0
+    var path: [Int] = []
+    var isHeader = false
+
+    /// Whether any of the enclosing headers is collapsed, i.e. this row is
+    /// inside a folded block.
+    func isHidden(by collapsed: Set<Int>) -> Bool {
+        !collapsed.isEmpty && path.contains(where: collapsed.contains)
+    }
+}
+
 /// One line in the console feed.
 struct JSEntry: Identifiable {
     enum Kind {
         case input(String)
         case result(RemoteObject)
         case evalError(ExceptionDetails)
-        case log(level: JSLevel, args: [RemoteObject], stack: CDPStackTrace?)
+        /// `isTable` marks a `console.table` call, which Chrome draws as a grid
+        /// over the argument rather than as its one-line preview.
+        case log(level: JSLevel, args: [RemoteObject], stack: CDPStackTrace?, isTable: Bool = false)
         case notice(String)
     }
 
     let id: Int
     let kind: Kind
     let at: Date
+    let group: JSGroupSlot
     /// Lowercased plain-text head for the filter and ⌘F, derived once at
     /// creation so they never re-tokenize the value tree per flush (a
     /// Sentry-reported main-thread hang during console bursts). Capped like
@@ -72,10 +91,21 @@ struct JSEntry: Identifiable {
     /// drives the buffer's byte budget.
     let approximateBytes: Int
 
-    init(id: Int, kind: Kind, at: Date) {
+    /// The call stack of the `console.*` call behind this row, when there is
+    /// one — what the source label at the right edge is resolved from.
+    var stack: CDPStackTrace? {
+        switch kind {
+        case let .log(_, _, stack, _): stack
+        case let .evalError(details): details.stackTrace
+        default: nil
+        }
+    }
+
+    init(id: Int, kind: Kind, at: Date, group: JSGroupSlot = JSGroupSlot()) {
         self.id = id
         self.kind = kind
         self.at = at
+        self.group = group
         let size = Self.approximateSize(kind)
         approximateBytes = size
         if size > 1_000_000 {
@@ -90,13 +120,15 @@ struct JSEntry: Identifiable {
         case let .result(object): return object.inlineSummary(limit: limit).lowercased()
         case let .evalError(details): return String(details.message.prefix(limit)).lowercased()
         case let .notice(text): return String(text.prefix(limit)).lowercased()
-        case let .log(_, args, _):
+        case let .log(_, args, _, _):
             var out = ""
             for arg in args {
                 let remaining = limit - out.utf8.count
                 guard remaining > 0 else { break }
                 if !out.isEmpty { out += " " }
-                out += arg.inlineSummary(limit: remaining)
+                // The console-argument rendering, so the filter matches the
+                // unquoted text a log row actually shows.
+                out += arg.inlineSummary(limit: remaining, style: .consoleArgument)
             }
             return out.lowercased()
         }
@@ -108,7 +140,7 @@ struct JSEntry: Identifiable {
         case let .result(object): object.approximateBytes
         case let .evalError(details): details.message.utf8.count + 512
         case let .notice(text): text.utf8.count + 256
-        case let .log(_, args, _): args.reduce(256) { $0 + $1.approximateBytes }
+        case let .log(_, args, _, _): args.reduce(256) { $0 + $1.approximateBytes }
         }
     }
 }
@@ -153,6 +185,12 @@ final class JSConsoleSession {
     var port: Int { didSet { UserDefaults.standard.set(port, forKey: Self.portKey) } }
     var searchText = "" { didSet { refilter() } }
     var hiddenLevels: Set<JSLevel> = [] { didSet { refilter() } }
+    /// Entry ids of the `console.group` headers currently folded — every row
+    /// naming one in its path is hidden, which is how Chrome's collapsed groups
+    /// (and `console.groupCollapsed`) behave.
+    private(set) var collapsedGroups: Set<Int> = [] {
+        didSet { if collapsedGroups != oldValue { refilter() } }
+    }
     /// Reversed feed: newest at the top instead of Chrome's newest-at-bottom.
     /// Persisted per feature; the ⌘F match order follows the display order, so
     /// flipping rebuilds the matches and restarts from the first visible one.
@@ -209,6 +247,12 @@ final class JSConsoleSession {
     /// Drops the re-replayed console history on reconnects to the same app so
     /// the persistent feed doesn't duplicate.
     @ObservationIgnored private var replayGate = ConsoleReplayGate()
+    /// The running `console.group` nesting the incoming stream is inside.
+    @ObservationIgnored private var groups = ConsoleGroupTracker()
+    /// Resolves a row's bundle coordinates to the file the developer wrote, for
+    /// the source label at the right edge. Rebuilt whenever the Metro port
+    /// changes — its cache belongs to one dev server.
+    @ObservationIgnored private var symbolicator = MetroSymbolicator()
     /// Auto-connect waits for a target to survive two discovery passes —
     /// attaching the instant it first registered crashed Hermes mid-boot
     /// (`TargetStabilityTracker`). Manual picks bypass this.
@@ -243,8 +287,30 @@ final class JSConsoleSession {
     init(adb: AdbClient) {
         self.adb = adb
         let savedPort = UserDefaults.standard.integer(forKey: Self.portKey)
-        port = (1 ... 65535).contains(savedPort) ? savedPort : 8081
+        let resolvedPort = (1 ... 65535).contains(savedPort) ? savedPort : 8081
+        port = resolvedPort
+        symbolicator = MetroSymbolicator(port: resolvedPort)
         newestFirst = UserDefaults.standard.bool(forKey: Self.newestFirstKey)
+    }
+
+    /// Fold or unfold a `console.group` block from its header row.
+    func toggleGroup(_ id: Int) {
+        if collapsedGroups.contains(id) {
+            collapsedGroups.remove(id)
+        } else {
+            collapsedGroups.insert(id)
+        }
+    }
+
+    func isGroupCollapsed(_ id: Int) -> Bool { collapsedGroups.contains(id) }
+
+    /// Where a row's `console.*` call was made, for the source label Chrome
+    /// prints at the right edge. Resolved lazily by the row that's on screen —
+    /// the feed never pays for rows nobody is looking at — and cached in the
+    /// symbolicator, so scrolling back over a row costs nothing.
+    func symbolicated(_ stack: CDPStackTrace?) async -> [SymbolicatedFrame] {
+        guard let stack else { return [] }
+        return await symbolicator.symbolicate(stack.callFrames)
     }
 
     /// Reset the connection back-references so the next connect re-welcomes.
@@ -493,6 +559,8 @@ final class JSConsoleSession {
             phase = .connected
             receivedCount = 0
             replayGate.connectionOpened(resumingSameApp: resumingSameApp)
+            // A new stream starts outside every group the old one left open.
+            groups.reset()
             // No target identity in the crumb — bundle ids stay out of
             // telemetry (the Settings ▸ Privacy promise).
             Telemetry.shared.breadcrumb(category: "js-console", "connected to a Hermes target")
@@ -526,14 +594,36 @@ final class JSConsoleSession {
             // otherwise wipe the feed the gate is preserving.
             guard replayGate.admit(call.timestamp) else { return }
             if call.type == "clear" { clearFeedEntries(); return }
-            enqueue(.log(level: JSLevel(consoleType: call.type), args: call.args, stack: call.stackTrace))
+            switch groups.placement(for: call.type, id: nextEntryId) {
+            case .groupEnd:
+                // `console.groupEnd` closes the block and shows nothing — a row
+                // for it is the empty line that used to trail every group.
+                return
+            case let .entry(depth, path):
+                enqueue(
+                    .log(
+                        level: JSLevel(consoleType: call.type), args: call.args,
+                        stack: call.stackTrace, isTable: call.type == "table"
+                    ),
+                    group: JSGroupSlot(depth: depth, path: path)
+                )
+            case let .groupStart(depth, path, collapsed):
+                if collapsed { collapsedGroups.insert(nextEntryId) }
+                enqueue(
+                    .log(level: JSLevel(consoleType: call.type), args: call.args, stack: call.stackTrace),
+                    group: JSGroupSlot(depth: depth, path: path, isHeader: true)
+                )
+            }
         case let .exception(details, timestamp):
             guard replayGate.admit(timestamp) else { return }
-            enqueue(.evalError(details))
+            enqueue(.evalError(details), group: JSGroupSlot(depth: groups.depth, path: groups.open))
         case .contextCreated:
             break
         case .contextDestroyed:
             // A JS reload replaced the context — mark it inline (logs keep flowing).
+            // The old context's unclosed groups went with it; leaving them open
+            // would indent the whole next session under a group that's gone.
+            groups.reset()
             enqueue(.notice("App reloaded — JS context replaced."))
         case let .closed(_, takeover):
             // The discovery loop reconnects (device id, then app id) within
@@ -611,6 +701,22 @@ final class JSConsoleSession {
     /// Faithful deep JSON of an object (Copy as JSON), evaluated in the runtime.
     func jsonString(of objectId: String) async -> String? {
         await cdp.deepStringify(objectId: objectId)
+    }
+
+    /// Grids already built for `console.table` rows, keyed by entry. Rows are
+    /// lazy, so without this every scroll back over a table would snapshot the
+    /// value on the device again. Bounded — `console.table` is rare, and a feed
+    /// full of them still can't grow this without limit.
+    @ObservationIgnored private var tables: [Int: ConsoleTable] = [:]
+    private static let maxCachedTables = 50
+
+    /// The grid for a `console.table` row, snapshotted once per entry.
+    func table(for entryID: Int, objectId: String) async -> ConsoleTable? {
+        if let cached = tables[entryID] { return cached }
+        guard let node = await snapshot(of: objectId), let table = ConsoleTable.from(node) else { return nil }
+        if tables.count >= Self.maxCachedTables { tables.removeAll(keepingCapacity: true) }
+        tables[entryID] = table
+        return table
     }
 
     // MARK: Find (⌘F)
@@ -692,8 +798,11 @@ final class JSConsoleSession {
         autoReconnectSuspended = false
         resetWelcome()
         targets = []
-        // Sightings from the old port say nothing about the new one.
+        // Sightings from the old port say nothing about the new one, and a
+        // source map's line numbers belong to one dev server.
         targetStability = TargetStabilityTracker()
+        symbolicator = MetroSymbolicator(port: newPort)
+        groups.reset()
         phase = .searching
         Task { [weak self] in await self?.cdp.disconnect() }
     }
@@ -862,9 +971,11 @@ final class JSConsoleSession {
     private var activeFilter: ((JSEntry) -> Bool)? {
         let query = ConsoleQuery(searchText)
         let hidden = hiddenLevels
-        guard !query.isEmpty || !hidden.isEmpty else { return nil }
+        let collapsed = collapsedGroups
+        guard !query.isEmpty || !hidden.isEmpty || !collapsed.isEmpty else { return nil }
         return { entry in
-            if case let .log(level, _, _) = entry.kind, hidden.contains(level) { return false }
+            if entry.group.isHidden(by: collapsed) { return false }
+            if case let .log(level, _, _, _) = entry.kind, hidden.contains(level) { return false }
             return query.matches(entry.searchableText)
         }
     }
@@ -899,8 +1010,8 @@ final class JSConsoleSession {
     /// Stream events — the post-connect replay burst is the hot path — are buffered
     /// and flushed together so a thousand-message burst causes a handful of renders,
     /// not one per message (the fix for the multi-second open stall).
-    private func enqueue(_ kind: JSEntry.Kind) {
-        let entry = JSEntry(id: nextEntryId, kind: kind, at: Date())
+    private func enqueue(_ kind: JSEntry.Kind, group: JSGroupSlot = JSGroupSlot()) {
+        let entry = JSEntry(id: nextEntryId, kind: kind, at: Date(), group: group)
         pendingEntries.append(entry)
         pendingBytes += entry.approximateBytes
         nextEntryId += 1
@@ -972,6 +1083,11 @@ final class JSConsoleSession {
         pendingBytes = 0
         buffer.removeAll()
         findMatchIDs = []
+        tables.removeAll(keepingCapacity: true)
+        // The headers those ids named are gone; a later group would otherwise
+        // inherit a fold nobody asked for once ids wrap around a long session.
+        collapsedGroups = []
+        groups.reset()
     }
 
     // MARK: Welcome banner
@@ -1343,7 +1459,7 @@ struct JSConsoleView: View {
             case .result: ("result", nil)
             case .evalError: ("error", nil)
             case .notice: ("notice", nil)
-            case let .log(logLevel, _, _): ("log", logLevel.rawValue)
+            case let .log(logLevel, _, _, _): ("log", logLevel.rawValue)
             }
             return ConsoleExportEntry(at: entry.at, type: type, level: level, text: jsEntryPlainText(entry.kind))
         })
@@ -1501,7 +1617,7 @@ struct JSConsoleView: View {
     /// nil for the levels that sit on the plain console surface.
     private func levelBand(_ entry: JSEntry) -> (fill: Color, rule: Color)? {
         switch entry.kind {
-        case let .log(level, _, _): level.consoleBand
+        case let .log(level, _, _, _): level.consoleBand
         case .evalError: (JSConsoleTheme.errorBackground, JSConsoleTheme.errorRule)
         default: nil
         }
@@ -1576,608 +1692,6 @@ struct JSConsoleView: View {
     private func run() {
         session.submit(input)
         input = ""
-    }
-}
-
-// MARK: - Entry row
-
-private struct JSEntryRow: View {
-    let entry: JSEntry
-    let session: JSConsoleSession
-    @State private var hovering = false
-    @State private var copied = false
-    /// Bumped by a click anywhere on the row; the primary expandable value
-    /// observes it and toggles, so the whole row is the disclosure target —
-    /// not just the value's own summary line.
-    @State private var rowToggleToken = 0
-
-    private var query: String { session.findText.trimmingCharacters(in: .whitespaces) }
-    private var isCurrentFind: Bool { session.findVisible && session.currentFindID == entry.id }
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            glyph
-            content
-                .frame(maxWidth: .infinity, alignment: .leading)
-            // Always in the layout — hidden, not removed, when idle — so
-            // hovering can't change the row's width and reflow its text.
-            copyButton
-                .opacity(hovering || copied ? 1 : 0)
-                .allowsHitTesting(hovering || copied)
-            Text(entry.at, format: .dateTime.hour().minute().second())
-                .font(.app(.caption2).monospacedDigit())
-                .foregroundStyle(JSConsoleTheme.muted)
-                .padding(.top, 1)
-        }
-        .contentShape(Rectangle())
-        // Whitespace, glyph, and timestamp clicks toggle the row's expandable
-        // value too (the value's own header still works). Text keeps its
-        // selection gesture — this only catches clicks nothing else claims.
-        .onTapGesture {
-            if primaryObjectID != nil { rowToggleToken += 1 }
-        }
-        .onHover { hovering = $0 }
-        // Hovering the row is what reveals its URLs' underlines.
-        .environment(\.consoleLinkUnderline, hovering)
-        .contextMenu {
-            Button("Copy") { copyToPasteboard(jsEntryPlainText(entry.kind)) }
-            if let objectID = primaryObjectID {
-                Button("Copy as JSON") {
-                    Task {
-                        let json = await session.jsonString(of: objectID) ?? jsEntryPlainText(entry.kind)
-                        copyToPasteboard(json)
-                    }
-                }
-            }
-        }
-    }
-
-    /// Hover copy affordance (the Reactotron rows' pattern): copies the row's
-    /// plain text with a checkmark flash; the right-click menu keeps the
-    /// deep "Copy as JSON".
-    private var copyButton: some View {
-        Button {
-            copyToPasteboard(jsEntryPlainText(entry.kind))
-            copied = true
-            Task { try? await Task.sleep(for: .seconds(1.5)); copied = false }
-        } label: {
-            Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                .font(.app(.caption))
-                .foregroundStyle(copied ? .green : JSConsoleTheme.muted)
-                // Fixed footprint for both glyphs, so neither hover nor the
-                // copy→checkmark swap nudges the layout.
-                .frame(width: 14)
-        }
-        .buttonStyle(.plain)
-        .padding(.top, 1)
-        .help("Copy this entry (right-click for JSON)")
-    }
-
-    /// The object handle to deep-copy as JSON (result value, or the first
-    /// expandable log arg).
-    private var primaryObjectID: String? {
-        switch entry.kind {
-        case let .result(object): object.isExpandable ? object.objectId : nil
-        case let .log(_, args, _): args.first(where: \.isExpandable)?.objectId
-        default: nil
-        }
-    }
-
-    @ViewBuilder private var glyph: some View {
-        switch entry.kind {
-        case .input:
-            icon("chevron.right", JSConsoleTheme.muted)
-        case .result:
-            icon("arrow.turn.down.right", JSConsoleTheme.muted)
-        case .evalError:
-            icon("xmark.octagon.fill", JSConsoleTheme.errorText)
-        case let .log(level, _, _):
-            icon(level.icon, level.consoleIconColor)
-        case .notice:
-            icon("info.circle", JSConsoleTheme.muted)
-        }
-    }
-
-    private func icon(_ name: String, _ style: some ShapeStyle) -> some View {
-        Image(systemName: name)
-            .font(.app(.caption))
-            .foregroundStyle(style)
-            .frame(width: 14)
-            .padding(.top, 2)
-    }
-
-    @ViewBuilder private var content: some View {
-        switch entry.kind {
-        case let .input(text):
-            line(text, base: JSConsoleTheme.muted)
-        case let .result(object):
-            JSValueView(object: object, session: session, scrollTargetID: entry.id, toggleToken: rowToggleToken)
-        case let .evalError(details):
-            errorContent(details)
-        case let .log(level, args, stack):
-            logContent(level: level, args: args, stack: stack)
-        case let .notice(text):
-            line(text, base: JSConsoleTheme.muted)
-        }
-    }
-
-    private func line(_ text: String, base: Color) -> some View {
-        highlightedText(text, query: query, base: base, current: isCurrentFind, underlineLinks: hovering)
-            .font(.app(.callout, design: .monospaced))
-            .lineSpacing(2)
-            .textSelection(.enabled)
-            .fixedSize(horizontal: false, vertical: true)
-    }
-
-    private func logContent(level: JSLevel, args: [RemoteObject], stack: CDPStackTrace?) -> some View {
-        let rows = argRows(args)
-        // The row-level click toggles the first expandable object — the one
-        // "Copy as JSON" also targets.
-        let primaryRowID = rows.first { if case .object = $0.kind { true } else { false } }?.id
-        return VStack(alignment: .leading, spacing: 3) {
-            // Each expandable object renders exactly once, as its own disclosure
-            // row in argument order — it used to appear twice (inline in the
-            // message line AND repeated below), which doubled every logged object.
-            // Scalar runs keep the level tint for errors/warnings and VSCode-style
-            // syntax colors otherwise.
-            ForEach(rows) { row in
-                switch row.kind {
-                case let .scalars(text, tokens):
-                    if level == .error || level == .warning {
-                        line(text, base: level.consoleTextColor)
-                    } else {
-                        coloredTokenText(tokens, query: query, current: isCurrentFind, underlineLinks: hovering)
-                            .font(.app(.callout, design: .monospaced))
-                            .lineSpacing(2)
-                            .textSelection(.enabled)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                case let .object(arg):
-                    JSValueView(
-                        object: arg, session: session, scrollTargetID: entry.id,
-                        toggleToken: row.id == primaryRowID ? rowToggleToken : 0
-                    )
-                }
-            }
-            if level == .error, let stack { StackView(stack: stack) }
-        }
-    }
-
-    /// The visual rows for one log call's arguments: consecutive scalars merge
-    /// into one line; each expandable object becomes its own row.
-    private struct ArgRow: Identifiable {
-        enum Kind {
-            case scalars(String, [JSToken])
-            case object(RemoteObject)
-        }
-
-        let id: Int
-        let kind: Kind
-    }
-
-    private func argRows(_ args: [RemoteObject]) -> [ArgRow] {
-        var rows: [ArgRow] = []
-        var run: [RemoteObject] = []
-        func flushRun() {
-            guard !run.isEmpty else { return }
-            let text = run.map(\.inlineSummary).joined(separator: " ")
-            rows.append(ArgRow(id: rows.count, kind: .scalars(text, argTokens(run))))
-            run = []
-        }
-        for arg in args {
-            if arg.isExpandable {
-                flushRun()
-                rows.append(ArgRow(id: rows.count, kind: .object(arg)))
-            } else {
-                run.append(arg)
-            }
-        }
-        flushRun()
-        return rows
-    }
-
-    private func argTokens(_ args: [RemoteObject]) -> [JSToken] {
-        var tokens: [JSToken] = []
-        for (index, arg) in args.enumerated() {
-            if index > 0 { tokens.append(JSToken(" ", .plain)) }
-            tokens.append(contentsOf: arg.tokens)
-        }
-        return tokens
-    }
-
-    private func errorContent(_ details: ExceptionDetails) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            line(details.message, base: JSConsoleTheme.errorText)
-            if let stack = details.stackTrace { StackView(stack: stack) }
-        }
-    }
-}
-
-// MARK: - Expandable value
-
-private struct JSValueView: View {
-    let object: RemoteObject
-    let session: JSConsoleSession
-    /// The owning log row's id — set for a top-level object so expanding it
-    /// scrolls that row's header into view instead of leaving the viewport at
-    /// the object's end (the flipped-layout jump).
-    var scrollTargetID: AnyHashable?
-    /// Bumped by the owning row when the user clicks anywhere on it — the
-    /// whole log row acts as this value's disclosure toggle.
-    var toggleToken = 0
-    @Environment(\.logTailScrollToHeader) private var scrollToHeader
-    @Environment(\.logTailPauseFollow) private var pauseFollow
-    @Environment(\.consoleLinkUnderline) private var underlineLinks
-    @State private var expanded = false
-    @State private var snapshot: SnapNode?
-    @State private var failed = false
-    @State private var loading = false
-
-    private var query: String { session.findText.trimmingCharacters(in: .whitespaces) }
-
-    var body: some View {
-        if object.isExpandable {
-            // Custom disclosure (not macOS DisclosureGroup, which right-aligns its
-            // content): a chevron header with children indented straight below.
-            // Collapsed previews truncate Chrome-style instead of wrapping the
-            // whole object — expanding is how you read the rest.
-            VStack(alignment: .leading, spacing: 2) {
-                Button {
-                    toggleExpanded()
-                } label: {
-                    HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        Image(systemName: expanded ? "chevron.down" : "chevron.right")
-                            .font(.app(size: 10, weight: .bold))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 14)
-                        summaryText
-                            .lineLimit(expanded ? 1 : 2)
-                            .truncationMode(.tail)
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .contextMenu { copyButtons }
-                if expanded { expandedChildren.padding(.leading, 18) }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .onChange(of: toggleToken) { _, _ in toggleExpanded() }
-        } else {
-            summaryText
-                .fixedSize(horizontal: false, vertical: true)
-                .contextMenu { copyButtons }
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
-    private func toggleExpanded() {
-        expanded.toggle()
-        if expanded {
-            // Expanding means the user is reading — pause tail-follow so
-            // streaming lines can't scroll the object away (same affordances
-            // as Reactotron: the jump button or scrolling back resumes).
-            pauseFollow()
-            if snapshot == nil, !loading { load() } else { scrollHeaderToTop() }
-        }
-    }
-
-    private var summaryText: some View {
-        coloredTokenText(object.tokens, query: query, current: false, underlineLinks: underlineLinks)
-            .font(.app(.callout, design: .monospaced))
-            .textSelection(.enabled)
-    }
-
-    @ViewBuilder private var copyButtons: some View {
-        Button("Copy") { copyToPasteboard(object.inlineSummary) }
-        if let objectId = object.objectId, object.isExpandable {
-            Button("Copy as JSON") {
-                Task {
-                    let json = await session.jsonString(of: objectId) ?? object.inlineSummary
-                    copyToPasteboard(json)
-                }
-            }
-        }
-    }
-
-    @ViewBuilder private var expandedChildren: some View {
-        if loading {
-            ProgressView().controlSize(.small)
-        } else if let snapshot {
-            // An interactive tree rendered from a bounded snapshot fetched via
-            // callFunctionOn (not getProperties, which crashes Hermes). All
-            // further expansion is client-side over this snapshot — no more
-            // device round-trips. The owning row scrolls its header to the top
-            // on expand (see scrollHeaderToTop) so the object reads from its
-            // start rather than the feed reflowing to its end.
-            ExpandedTree(node: snapshot, session: session)
-        } else if failed {
-            Text("Couldn't read this value.").font(.app(.caption)).foregroundStyle(.tertiary)
-        }
-    }
-
-    private func load() {
-        guard let objectId = object.objectId else { return }
-        loading = true
-        Task {
-            let node = await session.snapshot(of: objectId)
-            snapshot = node
-            failed = node == nil
-            loading = false
-            if node != nil { scrollHeaderToTop() }
-        }
-    }
-
-    /// Bring the object's header to the top after expanding. The child rows
-    /// aren't lazy, so a big object takes a few frames to lay out; re-issue the
-    /// scroll over a short window so it lands on the settled position, not an
-    /// early estimate (which left the viewport at the object's end).
-    private func scrollHeaderToTop() {
-        guard let id = scrollTargetID else { return }
-        Task {
-            for delay in [30, 120, 260] {
-                try? await Task.sleep(for: .milliseconds(delay))
-                guard expanded else { return }
-                scrollToHeader(id)
-            }
-        }
-    }
-}
-
-// MARK: - Snapshot tree (client-side, no getProperties)
-
-/// An expanded object/array: a "find in object" field over the tree, rendered
-/// inline (the feed grows to fit — no nested scroll). Typing shows a clickable
-/// result list (`SnapNode.findMatches`, pure in ADBKit); clicking a result
-/// expands the tree along its path and highlights the node in place. The
-/// scroll jump on expand is handled by the owning row scrolling its header
-/// into view.
-private struct ExpandedTree: View {
-    let node: SnapNode
-    let session: JSConsoleSession
-    @State private var search = ""
-    /// Ordinal paths ("0/3/1") of the containers currently open — hoisted here
-    /// so a clicked find result can expand its whole ancestor chain.
-    @State private var expandedPaths: Set<String> = []
-    /// The last revealed find result, tinted until the next find/reveal.
-    @State private var highlightedPath: String?
-
-    var body: some View {
-        let query = search.trimmingCharacters(in: .whitespaces).lowercased()
-        VStack(alignment: .leading, spacing: 4) {
-            SearchField(prompt: "Find in object…", text: $search)
-                .controlSize(.small)
-                .frame(maxWidth: 260)
-            if query.isEmpty {
-                SnapChildrenView(
-                    node: node, session: session, path: "",
-                    expandedPaths: $expandedPaths, highlightedPath: highlightedPath
-                )
-            } else {
-                SnapMatchList(matches: node.findMatches(query: query), onSelect: reveal)
-            }
-        }
-        // A newly typed query drops the previous reveal's tint (reveal itself
-        // clears the field, so its own highlight survives this).
-        .onChange(of: search) { _, newValue in
-            if !newValue.trimmingCharacters(in: .whitespaces).isEmpty { highlightedPath = nil }
-        }
-    }
-
-    /// Open every container down to the match, mark it, and swap back to the
-    /// tree so the user lands on the node.
-    private func reveal(_ match: TreeMatch) {
-        var path = ""
-        for index in match.path {
-            path = path.isEmpty ? String(index) : "\(path)/\(index)"
-            expandedPaths.insert(path)
-        }
-        highlightedPath = path
-        search = ""
-    }
-}
-
-/// The clickable results of a find inside one object — location, then value.
-private struct SnapMatchList: View {
-    let matches: [TreeMatch]
-    let onSelect: (TreeMatch) -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            if matches.isEmpty {
-                Text("No matches").font(.app(.caption)).foregroundStyle(.tertiary)
-            }
-            ForEach(Array(matches.enumerated()), id: \.offset) { _, match in
-                Button {
-                    onSelect(match)
-                } label: {
-                    HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        Image(systemName: "arrow.turn.down.right")
-                            .font(.app(size: 10))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 14)
-                        Text("\(match.displayPath):")
-                            .font(.app(.callout, design: .monospaced))
-                            .foregroundStyle(jsColor(.key))
-                        Text(match.preview)
-                            .font(.app(.callout, design: .monospaced))
-                            .foregroundStyle(jsColor(match.isContainer ? .className : .plain))
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help("Reveal in the tree")
-            }
-            if matches.count >= 200 {
-                Text("…first 200 matches — narrow the search")
-                    .font(.app(.caption)).foregroundStyle(.tertiary)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-/// The ordered child rows of a container `SnapNode` — array items with index
-/// labels, or object entries with key labels. `path` is the container's own
-/// ordinal path; expansion state lives in the owning `ExpandedTree` so find
-/// results can drive it.
-private struct SnapChildrenView: View {
-    let node: SnapNode
-    let session: JSConsoleSession
-    let path: String
-    @Binding var expandedPaths: Set<String>
-    let highlightedPath: String?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            if node.type == "array", let items = node.items {
-                if items.isEmpty { emptyRow }
-                ForEach(Array(items.enumerated()), id: \.offset) { index, child in
-                    SnapValueView(
-                        label: String(index), node: child, session: session,
-                        path: childPath(index), expandedPaths: $expandedPaths,
-                        highlightedPath: highlightedPath
-                    )
-                }
-                if let hidden = node.hiddenCount, hidden > 0 { moreRow("…(+\(hidden) more)") }
-            } else if let entries = node.entries {
-                if entries.isEmpty { emptyRow }
-                ForEach(Array(entries.enumerated()), id: \.offset) { index, entry in
-                    SnapValueView(
-                        label: entry.name, node: entry.node, session: session,
-                        path: childPath(index), expandedPaths: $expandedPaths,
-                        highlightedPath: highlightedPath
-                    )
-                }
-                if node.truncated == true { moreRow("…(more)") }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func childPath(_ index: Int) -> String {
-        path.isEmpty ? String(index) : "\(path)/\(index)"
-    }
-
-    private var emptyRow: some View {
-        Text(node.type == "array" ? "(empty array)" : "(no enumerable properties)")
-            .font(.app(.caption)).foregroundStyle(.tertiary)
-    }
-
-    private func moreRow(_ text: String) -> some View {
-        Text(text).font(.app(.caption)).foregroundStyle(.tertiary)
-    }
-}
-
-/// One row in the snapshot tree: a primitive `key: value`, or a collapsible
-/// container header whose children (another `SnapChildrenView`) indent below.
-/// The row revealed by a find result carries a highlight tint.
-private struct SnapValueView: View {
-    let label: String?
-    let node: SnapNode
-    let session: JSConsoleSession
-    let path: String
-    @Binding var expandedPaths: Set<String>
-    let highlightedPath: String?
-    @Environment(\.logTailPauseFollow) private var pauseFollow
-    @Environment(\.consoleLinkUnderline) private var underlineLinks
-
-    /// Text highlighted in rows: the ⌘F find query.
-    private var highlight: String { session.findText.trimmingCharacters(in: .whitespaces) }
-    private var isOpen: Bool { expandedPaths.contains(path) }
-    private var isRevealed: Bool { path == highlightedPath }
-
-    var body: some View {
-        if node.isContainer {
-            VStack(alignment: .leading, spacing: 2) {
-                Button {
-                    if isOpen {
-                        expandedPaths.remove(path)
-                    } else {
-                        expandedPaths.insert(path)
-                        // Reading a nested node is still reading — keep the
-                        // feed from scrolling it away.
-                        pauseFollow()
-                    }
-                } label: {
-                    HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        Image(systemName: isOpen ? "chevron.down" : "chevron.right")
-                            .font(.app(size: 10, weight: .bold))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 14)
-                        labelText
-                        highlightedText(node.containerSummary, query: highlight, base: jsColor(.className))
-                            .font(.app(.callout, design: .monospaced))
-                    }
-                    .contentShape(Rectangle())
-                    .background(revealTint)
-                }
-                .buttonStyle(.plain)
-                if isOpen {
-                    SnapChildrenView(
-                        node: node, session: session, path: path,
-                        expandedPaths: $expandedPaths, highlightedPath: highlightedPath
-                    )
-                    .padding(.leading, 18)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        } else {
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                labelText
-                highlightedText(
-                    node.primitivePreview, query: highlight, base: jsColor(kind),
-                    underlineLinks: underlineLinks
-                )
-                .font(.app(.callout, design: .monospaced))
-                .textSelection(.enabled)
-            }
-            .background(revealTint)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
-    @ViewBuilder private var revealTint: some View {
-        if isRevealed {
-            RoundedRectangle(cornerRadius: 3).fill(JSConsoleTheme.findMatch.opacity(0.22))
-        }
-    }
-
-    @ViewBuilder private var labelText: some View {
-        if let label {
-            highlightedText("\(label):", query: highlight, base: jsColor(.key))
-                .font(.app(.callout, design: .monospaced))
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    private var kind: JSTokenKind {
-        switch node.type {
-        case "string": return .string
-        case "number", "bigint": return .number
-        case "boolean": return .boolean
-        case "null": return .null
-        case "undefined": return .undefined
-        case "function": return .function
-        case "symbol": return .symbol
-        default: return .plain
-        }
-    }
-}
-
-private struct StackView: View {
-    let stack: CDPStackTrace
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            ForEach(stack.callFrames.prefix(8)) { frame in
-                Text(frame.display)
-                    .font(.app(.caption2).monospaced())
-                    .foregroundStyle(JSConsoleTheme.muted)
-            }
-        }
-        .padding(.leading, 4)
     }
 }
 
@@ -2314,7 +1828,9 @@ func jsEntryPlainText(_ kind: JSEntry.Kind) -> String {
     case let .input(text): text
     case let .result(object): object.inlineSummary
     case let .evalError(details): details.message
-    case let .log(_, args, _): args.map(\.inlineSummary).joined(separator: " ")
+    // Log arguments copy the way they render — a `console.log('hi')` pasted
+    // into an issue should read `hi`, not `'hi'`.
+    case let .log(_, args, _, _): args.map { $0.inlineSummary(style: .consoleArgument) }.joined(separator: " ")
     case let .notice(text): text
     }
 }
@@ -2350,7 +1866,7 @@ private struct ConsoleLinkUnderlineKey: EnvironmentKey {
 }
 
 extension EnvironmentValues {
-    fileprivate var consoleLinkUnderline: Bool {
+    var consoleLinkUnderline: Bool {
         get { self[ConsoleLinkUnderlineKey.self] }
         set { self[ConsoleLinkUnderlineKey.self] = newValue }
     }
