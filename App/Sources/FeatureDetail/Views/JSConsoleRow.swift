@@ -361,7 +361,6 @@ struct JSEntryRow: View {
                         } else {
                             Text(source.label)
                                 .font(.app(.caption2).monospacedDigit())
-                                .underline(hovering)
                                 .lineLimit(1)
                         }
                     }
@@ -369,6 +368,14 @@ struct JSEntryRow: View {
                 }
                 .buttonStyle(.plain)
                 .help(sourceHelp(source))
+                // Revealed on hover, like the copy buttons — a feed of blue
+                // file paths competes with the messages for attention, and the
+                // location is what you go looking for, not what you scan. Kept
+                // in the layout rather than removed so hovering can't reflow
+                // the row's text, and held open while its stack is showing so
+                // the toggle stays reachable.
+                .opacity(hovering || stackShown ? 1 : 0)
+                .allowsHitTesting(hovering || stackShown)
             }
             Text(entry.at, format: .dateTime.hour().minute().second())
                 .font(.app(.caption2).monospacedDigit())
