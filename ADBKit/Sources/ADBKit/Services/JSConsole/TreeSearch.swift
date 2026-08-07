@@ -24,23 +24,6 @@ public struct TreeMatch: Sendable, Equatable {
 }
 
 public extension SnapNode {
-    /// Collapsed one-liner for a container node, e.g. `Array(200)`, `{3}`,
-    /// `Map {2}` — shared by the tree rows and the find-result previews.
-    var containerSummary: String {
-        if type == "array" {
-            return "Array(\(length ?? items?.count ?? 0))"
-        }
-        let count = entries?.count ?? 0
-        let ctor = ctor ?? "Object"
-        return ctor == "Object" ? "{\(count)}" : "\(ctor) {\(count)}"
-    }
-
-    /// Display text for a primitive node (strings quoted, like the tree rows).
-    var primitivePreview: String {
-        let text = text ?? "—"
-        return type == "string" ? "\"\(text)\"" : text
-    }
-
     /// Every descendant whose own key or primitive value contains `query`
     /// (case-insensitive), in render order, capped at `limit`. The root itself
     /// is never a match — it has no key of its own.

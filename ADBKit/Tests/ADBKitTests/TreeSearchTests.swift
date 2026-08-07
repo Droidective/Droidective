@@ -30,7 +30,7 @@ struct SnapNodeFindMatchesTests {
         #expect(matches.count == 1)
         #expect(matches[0].path == [0, 0])
         #expect(matches[0].displayPath == "user.name")
-        #expect(matches[0].preview == "\"Ada\"")
+        #expect(matches[0].preview == "'Ada'")
         #expect(matches[0].isContainer == false)
     }
 

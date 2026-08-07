@@ -175,6 +175,10 @@ import Testing
         ]))
         let summary = huge.inlineSummary(limit: 100)
         #expect(summary == "\"" + String(repeating: "x", count: 100))
+        // A console argument's bounded head skips the opening quote too, so the
+        // filter matches the same text the bare row shows.
+        #expect(huge.inlineSummary(limit: 100, style: .consoleArgument)
+            == String(repeating: "x", count: 100))
         // Small values render exactly like the unbounded summary.
         let small = remote(#"{"type":"string","value":"hi"}"#)
         #expect(small.inlineSummary(limit: 100) == small.inlineSummary)
@@ -191,7 +195,7 @@ import Testing
     }
 
     @Test func inlineSummaryRendersPrimitives() {
-        #expect(remote(#"{"type":"string","value":"hi"}"#).inlineSummary == "\"hi\"")
+        #expect(remote(#"{"type":"string","value":"hi"}"#).inlineSummary == "'hi'")
         #expect(remote(#"{"type":"number","value":42}"#).inlineSummary == "42")
         #expect(remote(#"{"type":"number","value":3.5}"#).inlineSummary == "3.5")
         #expect(remote(#"{"type":"boolean","value":true}"#).inlineSummary == "true")
@@ -220,13 +224,83 @@ import Testing
          "description":"Array(3)","overflow":false,"properties":[{"name":"0","type":"number","value":"1"},
          {"name":"1","type":"string","value":"two"},{"name":"2","type":"object","value":"Array(2)"}]}}
         """#
-        #expect(remote(array).inlineSummary == "[1, \"two\", Array(2)]")
+        // Chrome leads a multi-element array with its length.
+        #expect(remote(array).inlineSummary == "(3) [1, 'two', Array(2)]")
 
         let object = #"""
         {"type":"object","className":"Object","description":"Object","preview":{"type":"object","description":"Object",
          "overflow":true,"properties":[{"name":"id","type":"number","value":"1"},{"name":"name","type":"string","value":"x"}]}}
         """#
-        #expect(remote(object).inlineSummary == "{id: 1, name: \"x\", …}")
+        #expect(remote(object).inlineSummary == "{id: 1, name: 'x', …}")
+    }
+
+    /// Chrome's array length prefix appears only where it says something: an
+    /// empty or single-element array reads fine without it.
+    @Test func arrayLengthPrefixOnlyForMultipleElements() {
+        func array(_ length: Int, _ properties: String) -> String {
+            #"""
+            {"type":"object","subtype":"array","description":"Array(\#(length))","preview":{"type":"object",
+             "subtype":"array","description":"Array(\#(length))","overflow":false,"properties":[\#(properties)]}}
+            """#
+        }
+        #expect(remote(array(0, "")).inlineSummary == "[]")
+        #expect(remote(array(1, #"{"name":"0","type":"number","value":"7"}"#)).inlineSummary == "[7]")
+        #expect(remote(array(2, #"{"name":"0","type":"number","value":"7"},{"name":"1","type":"number","value":"8"}"#))
+            .inlineSummary == "(2) [7, 8]")
+    }
+
+    /// A nested plain object is Chrome's `{…}`; a nested array or class instance
+    /// keeps the name Hermes reports.
+    @Test func nestedObjectsRenderAsChromeEllipsis() {
+        let object = #"""
+        {"type":"object","description":"Object","preview":{"type":"object","description":"Object","overflow":false,
+         "properties":[{"name":"meta","type":"object","value":"Object"},
+         {"name":"list","subtype":"array","type":"object","value":"Array(3)"},
+         {"name":"widget","type":"object","value":"Widget"},
+         {"name":"none","type":"object","subtype":"null","value":"null"}]}}
+        """#
+        #expect(remote(object).inlineSummary == "{meta: {…}, list: Array(3), widget: Widget, none: null}")
+    }
+
+    /// A top-level `console.log` string argument prints bare, the way Chrome
+    /// prints it; the same value quoted anywhere else.
+    @Test func consoleArgumentStringsPrintBare() {
+        let text = remote(#"{"type":"string","value":"[StreamLab] hello"}"#)
+        #expect(text.inlineSummary(style: .consoleArgument) == "[StreamLab] hello")
+        #expect(text.tokens(style: .consoleArgument).first?.kind == .plain)
+        #expect(text.inlineSummary(style: .value) == "'[StreamLab] hello'")
+        // Newlines survive a bare argument (Chrome prints a multi-line log
+        // across lines) and are escaped in the quoted form so a preview stays
+        // on one row.
+        let multiline = remote(#"{"type":"string","value":"a\nb"}"#)
+        #expect(multiline.inlineSummary(style: .consoleArgument) == "a\nb")
+        #expect(multiline.inlineSummary(style: .value) == "'a\\nb'")
+        // Only strings differ between the styles.
+        let number = remote(#"{"type":"number","value":42}"#)
+        #expect(number.inlineSummary(style: .consoleArgument) == number.inlineSummary)
+    }
+
+    /// The quoting rule: single quotes, switching to double when the text has
+    /// one of its own, and escapes so a value can't break its row.
+    @Test func stringQuotingFollowsChrome() {
+        #expect(RemoteObject.quoted("plain") == "'plain'")
+        #expect(RemoteObject.quoted("it's") == "\"it's\"")
+        #expect(RemoteObject.quoted("it's \"both\"") == #"'it\'s "both"'"#)
+        #expect(RemoteObject.quoted("tab\there") == #"'tab\there'"#)
+        #expect(RemoteObject.quoted(#"back\slash"#) == #"'back\\slash'"#)
+    }
+
+    /// Hermes replays its buffered console history without previews, so the
+    /// whole pre-connect backlog renders from the fallbacks alone.
+    @Test func objectsWithoutAPreviewFallBackTheWayChromeDoes() {
+        #expect(remote(#"{"type":"object","className":"Object","description":"Object","objectId":"1"}"#)
+            .inlineSummary == "{…}")
+        #expect(remote(#"{"type":"object","objectId":"1"}"#).inlineSummary == "{…}")
+        // An array or a class instance still names itself.
+        #expect(remote(#"{"type":"object","subtype":"array","description":"Array(2)","objectId":"1"}"#)
+            .inlineSummary == "Array(2)")
+        #expect(remote(#"{"type":"object","className":"Widget","description":"Object","objectId":"1"}"#)
+            .inlineSummary == "Widget")
     }
 
     @Test func tokensCarrySemanticKindsForColoring() {
@@ -237,10 +311,27 @@ import Testing
         let tokens = object.tokens
         #expect(tokens.contains { $0.text == "id" && $0.kind == .key })
         #expect(tokens.contains { $0.text == "1" && $0.kind == .number })
-        #expect(tokens.contains { $0.text == "\"x\"" && $0.kind == .string })
+        #expect(tokens.contains { $0.text == "'x'" && $0.kind == .string })
         #expect(remote(#"{"type":"string","value":"hi"}"#).tokens.first?.kind == .string)
         #expect(remote(#"{"type":"boolean","value":true}"#).tokens.first?.kind == .boolean)
         #expect(remote(#"{"type":"object","subtype":"null","value":null}"#).tokens.first?.kind == .null)
+    }
+
+    /// Metro's bundle URL carries a query string longer than the frame itself;
+    /// eight of those turn an unsymbolicated stack into a wall of parameters.
+    @Test func stackFrameDisplayNamesTheScriptNotItsURL() {
+        let bundle = "http://localhost:8081/index.bundle//&platform=android&dev=true&app=com.streamlab"
+        #expect(CDPCallFrame.scriptName(bundle) == "index.bundle")
+        #expect(CDPCallFrame.scriptName("http://h/a/b/main.js?v=2#frag") == "main.js")
+        #expect(CDPCallFrame.scriptName("plain.js") == "plain.js")
+        #expect(CDPCallFrame.scriptName("http://h/dir/") == "dir")
+        let frame = CDPCallFrame(json: .object([
+            "functionName": .string("emitLog"),
+            "url": .string(bundle),
+            "lineNumber": .number(87_065),
+            "columnNumber": .number(28),
+        ]))
+        #expect(frame.display == "emitLog  index.bundle:87066")
     }
 
     @Test func stackFrameDisplayIsOneBasedWithFile() {
