@@ -125,4 +125,12 @@ extension DaemonBackend {
     func pullApk(
         serial: String, packageId: String, to destination: String
     ) async throws -> [String] { [destination] }
+
+    func emulators() async -> ([Avd], Bool) { ([], true) }
+
+    func emulatorAction(
+        _ action: EmulatorProtocol.Action, avd: String, serial: String
+    ) async throws -> FeatureResult {
+        FeatureResult(ok: true, message: "stub")
+    }
 }

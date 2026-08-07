@@ -251,6 +251,8 @@ export function asDaemonError(error: unknown): DaemonError {
 export {
   appInfo,
   devSettings,
+  emulatorAction,
+  emulators,
   meminfo,
   permissions,
   privateDns,

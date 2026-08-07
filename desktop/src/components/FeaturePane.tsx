@@ -9,6 +9,7 @@ import {
   CrashPane,
   DeviceInfoPane,
   DevSettingsPane,
+  EmulatorsPane,
   FileExplorerPane,
   LogcatPane,
   ManageAppPane,
@@ -109,6 +110,10 @@ export function FeaturePane(props: FeaturePaneProps) {
       return <PrivateDnsPane device={props.device} />
     case "network-speed":
       return <NetspeedPane device={props.device} />
+    // No device prop: an emulator is a thing on *this* machine, and the
+    // screen's whole job is launching one when none is connected.
+    case "emulators":
+      return <EmulatorsPane />
     case "app-info":
       return <AppInfoPane device={props.device} packageId={props.packageId} />
     case "permissions":

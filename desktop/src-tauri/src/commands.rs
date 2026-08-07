@@ -17,11 +17,12 @@ use crate::daemon::stream::StreamMessage;
 use crate::daemon::wire::{
     AppControlRequest, AppInfoResponse, AppPullRequest, AppPullResponse, AppRequest, AppsResponse,
     CrashListResponse, DevSettingsResponse, DevSettingsWriteRequest, Device, DevicePropsResponse,
-    DnsResponse, DnsWriteRequest, FeatureSummary, FileInfoRequest, FileInfoResponse,
-    FileOperationRequest, FilePullRequest, FilePullResponse, FilesListRequest, FilesListResponse,
-    MemInfoResponse, PermissionWriteRequest, PermissionsResponse, RestrictionWriteRequest,
-    RestrictionsResponse, RootStatusResponse, RunRequest, RunResponse, SandboxRequest,
-    SandboxResponse, SubscribeParams, WifiResponse, WifiWriteRequest,
+    DnsResponse, DnsWriteRequest, EmulatorActionRequest, EmulatorsResponse, FeatureSummary,
+    FileInfoRequest, FileInfoResponse, FileOperationRequest, FilePullRequest, FilePullResponse,
+    FilesListRequest, FilesListResponse, MemInfoResponse, PermissionWriteRequest,
+    PermissionsResponse, RestrictionWriteRequest, RestrictionsResponse, RootStatusResponse,
+    RunRequest, RunResponse, SandboxRequest, SandboxResponse, SubscribeParams, WifiResponse,
+    WifiWriteRequest,
 };
 use crate::daemon::{DaemonStatus, Supervisor};
 use crate::error::DaemonError;
@@ -675,6 +676,33 @@ pub async fn watch_performance(
         }),
         forward(on_event),
     )
+}
+
+/// Every AVD on this machine, and whether the emulator binary is here at all.
+#[tauri::command]
+pub async fn emulators(
+    supervisor: State<'_, Supervisor>,
+) -> Result<EmulatorsResponse, DaemonError> {
+    supervisor.client().await?.emulators().await
+}
+
+/// Launch, cold-boot, wipe, relaunch or stop one AVD.
+#[tauri::command]
+pub async fn emulator_action(
+    supervisor: State<'_, Supervisor>,
+    avd: Option<String>,
+    serial: Option<String>,
+    action: String,
+) -> Result<RunResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .emulator_action(&EmulatorActionRequest {
+            avd,
+            serial,
+            action,
+        })
+        .await
 }
 
 /// Live `/proc/net/dev` throughput, one sample a second, until `stop_watching`.

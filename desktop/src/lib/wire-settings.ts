@@ -147,3 +147,25 @@ export interface AppPullResponse {
   /** An APK pull can answer several — a bundle install has splits. */
   paths: string[]
 }
+
+// MARK: - the Android emulator
+
+export interface Avd {
+  name: string
+  /** Underscores read as spaces. Sent rather than derived. */
+  displayName: string
+  /** The adb serial, when this AVD is running right now. */
+  runningSerial: string | null
+}
+
+export interface EmulatorsResponse {
+  avds: Avd[]
+  /** False when the emulator binary is not on this machine. */
+  installed: boolean
+}
+
+/**
+ * What can be done to an AVD. The daemon owns this list and refuses anything
+ * else, so these are its strings spelled its way.
+ */
+export type EmulatorAction = "launch" | "coldBoot" | "wipeData" | "relaunch" | "stop"

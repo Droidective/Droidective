@@ -7,11 +7,12 @@ use crate::daemon::wire::{
     AppControlRequest, AppInfoResponse, AppPullRequest, AppPullResponse, AppRequest,
     AppsListRequest, AppsResponse, CrashListRequest, CrashListResponse, DevSettingsResponse,
     DevSettingsWriteRequest, Device, DevicePropsResponse, DeviceRequest, DevicesResponse,
-    DnsResponse, DnsWriteRequest, ErrorEnvelope, FeatureSummary, FeaturesResponse, FileInfoRequest,
-    FileInfoResponse, FileOperationRequest, FilePullRequest, FilePullResponse, FilesListRequest,
-    FilesListResponse, MemInfoResponse, PermissionWriteRequest, PermissionsResponse,
-    RestrictionWriteRequest, RestrictionsResponse, RootStatusResponse, RunRequest, RunResponse,
-    SandboxRequest, SandboxResponse, WifiResponse, WifiWriteRequest,
+    DnsResponse, DnsWriteRequest, EmulatorActionRequest, EmulatorsResponse, ErrorEnvelope,
+    FeatureSummary, FeaturesResponse, FileInfoRequest, FileInfoResponse, FileOperationRequest,
+    FilePullRequest, FilePullResponse, FilesListRequest, FilesListResponse, MemInfoResponse,
+    PermissionWriteRequest, PermissionsResponse, RestrictionWriteRequest, RestrictionsResponse,
+    RootStatusResponse, RunRequest, RunResponse, SandboxRequest, SandboxResponse, WifiResponse,
+    WifiWriteRequest,
 };
 use crate::error::DaemonError;
 
@@ -190,6 +191,17 @@ impl DaemonClient {
         request: &AppPullRequest,
     ) -> Result<AppPullResponse, DaemonError> {
         self.post("/v1/app/sandbox/pull", request).await
+    }
+
+    pub async fn emulators(&self) -> Result<EmulatorsResponse, DaemonError> {
+        self.post("/v1/emulators/list", &EMPTY).await
+    }
+
+    pub async fn emulator_action(
+        &self,
+        request: &EmulatorActionRequest,
+    ) -> Result<RunResponse, DaemonError> {
+        self.post("/v1/emulators/action", request).await
     }
 
     pub async fn pull_apk(&self, request: &AppPullRequest) -> Result<AppPullResponse, DaemonError> {

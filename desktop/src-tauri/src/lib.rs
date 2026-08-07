@@ -64,6 +64,8 @@ pub fn run() -> tauri::Result<()> {
             commands::watch_logcat,
             commands::watch_performance,
             commands::watch_netspeed,
+            commands::emulators,
+            commands::emulator_action,
             commands::stop_watching,
             commands::copy_text,
             commands::reveal_path,

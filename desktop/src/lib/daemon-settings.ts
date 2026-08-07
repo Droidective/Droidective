@@ -10,6 +10,8 @@
 import { invoke } from "@tauri-apps/api/core"
 import type {
   AppInfoResponse,
+  EmulatorAction,
+  EmulatorsResponse,
   AppPullResponse,
   DevSettingsResponse,
   DnsMode,
@@ -158,4 +160,30 @@ export function sandboxPull(args: {
 /** Pulls the package's APK, and its splits if it has any. */
 export function pullApk(serial: string, packageId: string): Promise<AppPullResponse> {
   return invoke<AppPullResponse>("pull_apk", { serial, packageId })
+}
+
+// MARK: - the Android emulator
+
+/** Every AVD on this machine, and whether the emulator binary is here. */
+export function emulators(): Promise<EmulatorsResponse> {
+  return invoke<EmulatorsResponse>("emulators")
+}
+
+/**
+ * Launch, cold-boot, wipe, relaunch or stop one AVD.
+ *
+ * `stop` identifies by serial and the rest by name; `relaunch` needs both,
+ * since it stops one instance and boots the same AVD again. The daemon
+ * refuses a request missing what its verb needs.
+ */
+export function emulatorAction(args: {
+  action: EmulatorAction
+  avd?: string
+  serial?: string
+}): Promise<RunResponse> {
+  return invoke<RunResponse>("emulator_action", {
+    action: args.action,
+    avd: args.avd ?? null,
+    serial: args.serial ?? null,
+  })
 }

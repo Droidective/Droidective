@@ -547,6 +547,39 @@ pub struct AppPullResponse {
     pub paths: Vec<String>,
 }
 
+// MARK: - the Android emulator
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct Avd {
+    pub name: String,
+    /// Underscores read as spaces. Sent rather than derived, so both apps
+    /// name an AVD the same way.
+    #[serde(rename = "displayName")]
+    pub display_name: String,
+    /// The adb serial, when this AVD is running right now.
+    #[serde(rename = "runningSerial")]
+    pub running_serial: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct EmulatorsResponse {
+    pub avds: Vec<Avd>,
+    /// False when the emulator binary is not on this machine — a state the
+    /// screen explains rather than showing as "no AVDs".
+    pub installed: bool,
+}
+
+/// The daemon owns the verb list and refuses an unknown one, so this mirrors
+/// it as a string for the same reason an app action does.
+#[derive(Debug, Clone, Serialize)]
+pub struct EmulatorActionRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avd: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub serial: Option<String>,
+    pub action: String,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct AppControlRequest {
     pub serial: String,

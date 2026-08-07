@@ -96,6 +96,14 @@ public protocol DaemonBackend: Sendable {
     func pullApk(
         serial: String, packageId: String, to destination: String
     ) async throws -> [String]
+    /// Every AVD on this machine, and whether the emulator binary is here at
+    /// all. Best-effort: a missing emulator is a state the screen explains,
+    /// not an error.
+    func emulators() async -> ([Avd], Bool)
+    /// Launches, cold-boots, wipes, relaunches or stops one AVD.
+    func emulatorAction(
+        _ action: EmulatorProtocol.Action, avd: String, serial: String
+    ) async throws -> FeatureResult
 }
 
 /// `DeviceMonitor` in production.
@@ -105,11 +113,16 @@ public struct LiveBackend: DaemonBackend {
     /// The app services are cheap value types over this, so they are built per
     /// call rather than held — there is no state to keep.
     private let client: AdbClient
+    private let emulatorService: EmulatorService
 
-    public init(monitor: DeviceMonitor, engine: FeatureEngine, client: AdbClient) {
+    public init(
+        monitor: DeviceMonitor, engine: FeatureEngine, client: AdbClient,
+        emulators: EmulatorService
+    ) {
         self.monitor = monitor
         self.engine = engine
         self.client = client
+        emulatorService = emulators
     }
 
     public func listDevices() async -> [Device] { await monitor.list(force: true) }
@@ -334,6 +347,49 @@ public struct LiveBackend: DaemonBackend {
         try await inspection.pullApk(
             serial: serial, packageId: packageId, to: URL(fileURLWithPath: destination)
         ).map(\.path)
+    }
+
+    public func emulators() async -> ([Avd], Bool) {
+        let service = emulatorService
+        guard await service.emulatorInstalled() else { return ([], false) }
+        return (await service.listAvds(devices: await monitor.list(force: false)), true)
+    }
+
+    public func emulatorAction(
+        _ action: EmulatorProtocol.Action, avd: String, serial: String
+    ) async throws -> FeatureResult {
+        let service = emulatorService
+        switch action {
+        case .launch:
+            return await service.launch(avd: avd)
+        case .coldBoot:
+            return await service.launch(
+                avd: avd, options: EmulatorService.LaunchOptions(coldBoot: true))
+        case .wipeData:
+            return await service.wipeData(avd: avd)
+        case .stop:
+            return try await service.stop(serial: serial)
+        case .relaunch:
+            _ = try? await service.stop(serial: serial)
+            await waitForShutdown(serial: serial)
+            return await service.launch(avd: avd)
+        }
+    }
+
+    /// Waits for a stopping emulator to actually go away.
+    ///
+    /// The Mac polls `EmulatorService.consolePID`, which shells out to
+    /// `/usr/sbin/lsof` — a macOS path, so it would answer nil on Linux and
+    /// Windows and the relaunch would fire while the console port was still
+    /// held. Asking adb is portable *and* the better question: what matters is
+    /// whether the emulator is still a device, and adb is the authority on
+    /// that. Twenty seconds, as the Mac waits.
+    private func waitForShutdown(serial: String) async {
+        for _ in 0 ..< 20 {
+            let devices = await monitor.list(force: true)
+            if !devices.contains(where: { $0.serial == serial }) { return }
+            try? await Task.sleep(for: .seconds(1))
+        }
     }
 }
 
@@ -664,6 +720,12 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
                 body: Data(body.readableBytesView), backend: backend))
         case .appPullApk:
             return Self.answer(await AppInspectionRoutes.pullApk(
+                body: Data(body.readableBytesView), backend: backend))
+
+        case .emulatorsList:
+            return Self.answer(await EmulatorRoutes.list(backend: backend))
+        case .emulatorsAction:
+            return Self.answer(await EmulatorRoutes.action(
                 body: Data(body.readableBytesView), backend: backend))
 
         case .actionsRun:
