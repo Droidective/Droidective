@@ -15,59 +15,44 @@ struct ConsoleFlowLayout: Layout {
     var lineSpacing: CGFloat = 3
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache _: inout Void) -> CGSize {
-        arrange(subviews, maxWidth: proposal.width ?? .infinity).size
+        let arranged = arrange(subviews, maxWidth: proposal.width ?? .infinity).arrangement
+        return CGSize(width: arranged.width, height: arranged.height)
     }
 
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache _: inout Void) {
-        let placement = arrange(subviews, maxWidth: proposal.width ?? bounds.width)
+    func placeSubviews(in bounds: CGRect, proposal _: ProposedViewSize, subviews: Subviews, cache _: inout Void) {
+        // Measured against the width actually allocated, not the proposal — the
+        // two can differ, and laying a row out against anything but its real
+        // bounds is how it ends up drawn wider than the pane holding it.
+        let (segments, arranged) = arrange(subviews, maxWidth: bounds.width)
         for (index, subview) in subviews.enumerated() {
-            let frame = placement.frames[index]
+            let slot = arranged.slots[index]
             subview.place(
-                at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
-                proposal: ProposedViewSize(width: frame.width, height: frame.height)
+                at: CGPoint(x: bounds.minX + slot.x, y: bounds.minY + slot.y),
+                proposal: ProposedViewSize(width: segments[index].width, height: segments[index].height)
             )
         }
     }
 
-    private func arrange(_ subviews: Subviews, maxWidth: CGFloat) -> (frames: [CGRect], size: CGSize) {
-        var frames: [CGRect] = []
-        var rowStart = 0
-        var rowBaseline: CGFloat = 0
-        var rowHeight: CGFloat = 0
-        var baselines: [CGFloat] = []
-        var x: CGFloat = 0
-        var y: CGFloat = 0
-        var widest: CGFloat = 0
-
-        /// Shift a finished row's segments down onto a shared baseline.
-        func settleRow(through index: Int) {
-            for slot in rowStart ..< index {
-                frames[slot].origin.y = y + rowBaseline - baselines[slot]
-            }
-            y += rowHeight + lineSpacing
-        }
-
+    /// Measure each segment at the row's width, then hand the arithmetic to
+    /// `ConsoleRowLayout` — it's pure, and it's where the wrapping height has to
+    /// be right.
+    private func arrange(
+        _ subviews: Subviews, maxWidth: CGFloat
+    ) -> (segments: [ConsoleRowSegment], arrangement: ConsoleRowArrangement) {
+        var segments: [ConsoleRowSegment] = []
+        segments.reserveCapacity(subviews.count)
         for subview in subviews {
             let dimensions = subview.dimensions(in: ProposedViewSize(width: maxWidth, height: nil))
-            let size = CGSize(width: dimensions.width, height: dimensions.height)
-            let baseline = dimensions[VerticalAlignment.firstTextBaseline]
-            if x > 0, x + size.width > maxWidth + 0.5 {
-                settleRow(through: frames.count)
-                rowStart = frames.count
-                rowBaseline = 0
-                rowHeight = 0
-                x = 0
-            }
-            frames.append(CGRect(x: x, y: 0, width: size.width, height: size.height))
-            baselines.append(baseline)
-            rowBaseline = max(rowBaseline, baseline)
-            rowHeight = max(rowHeight, size.height + max(0, rowBaseline - baseline))
-            x += size.width + spacing
-            widest = max(widest, x - spacing)
+            segments.append(ConsoleRowSegment(
+                width: dimensions.width,
+                height: dimensions.height,
+                baseline: dimensions[VerticalAlignment.firstTextBaseline]
+            ))
         }
-        guard !frames.isEmpty else { return ([], .zero) }
-        settleRow(through: frames.count)
-        return (frames, CGSize(width: min(widest, maxWidth), height: max(0, y - lineSpacing)))
+        let arrangement = ConsoleRowLayout.arrange(
+            segments, maxWidth: maxWidth, spacing: spacing, lineSpacing: lineSpacing
+        )
+        return (segments, arrangement)
     }
 }
 
