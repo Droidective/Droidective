@@ -230,10 +230,17 @@ export function asDaemonError(error: unknown): DaemonError {
 // The per-device settings calls live next door, so this file stays inside its
 // line budget; `@/lib/daemon` remains the one import for all of them.
 export {
+  appInfo,
   devSettings,
+  meminfo,
+  permissions,
   privateDns,
   remountSystem,
   restrictions,
+  pullApk,
+  sandboxList,
+  sandboxPull,
+  setPermission,
   setPrivateDns,
   setWifiEnabled,
   connectWifi,

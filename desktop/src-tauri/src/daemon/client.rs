@@ -4,12 +4,14 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 
 use crate::daemon::wire::{
-    AppControlRequest, AppsListRequest, AppsResponse, CrashListRequest, CrashListResponse,
-    DevSettingsResponse, DevSettingsWriteRequest, Device, DevicePropsResponse, DeviceRequest,
-    DevicesResponse, DnsResponse, DnsWriteRequest, ErrorEnvelope, FeatureSummary, FeaturesResponse,
-    FileInfoRequest, FileInfoResponse, FileOperationRequest, FilePullRequest, FilePullResponse,
-    FilesListRequest, FilesListResponse, RestrictionWriteRequest, RestrictionsResponse,
-    RootStatusResponse, RunRequest, RunResponse, WifiResponse, WifiWriteRequest,
+    AppControlRequest, AppInfoResponse, AppPullRequest, AppPullResponse, AppRequest,
+    AppsListRequest, AppsResponse, CrashListRequest, CrashListResponse, DevSettingsResponse,
+    DevSettingsWriteRequest, Device, DevicePropsResponse, DeviceRequest, DevicesResponse,
+    DnsResponse, DnsWriteRequest, ErrorEnvelope, FeatureSummary, FeaturesResponse, FileInfoRequest,
+    FileInfoResponse, FileOperationRequest, FilePullRequest, FilePullResponse, FilesListRequest,
+    FilesListResponse, MemInfoResponse, PermissionWriteRequest, PermissionsResponse,
+    RestrictionWriteRequest, RestrictionsResponse, RootStatusResponse, RunRequest, RunResponse,
+    SandboxRequest, SandboxResponse, WifiResponse, WifiWriteRequest,
 };
 use crate::error::DaemonError;
 
@@ -152,6 +154,46 @@ impl DaemonClient {
         request: &DnsWriteRequest,
     ) -> Result<RunResponse, DaemonError> {
         self.post("/v1/dns/write", request).await
+    }
+
+    pub async fn app_info(&self, request: &AppRequest) -> Result<AppInfoResponse, DaemonError> {
+        self.post("/v1/app/info", request).await
+    }
+
+    pub async fn permissions(
+        &self,
+        request: &AppRequest,
+    ) -> Result<PermissionsResponse, DaemonError> {
+        self.post("/v1/app/permissions", request).await
+    }
+
+    pub async fn set_permission(
+        &self,
+        request: &PermissionWriteRequest,
+    ) -> Result<RunResponse, DaemonError> {
+        self.post("/v1/app/permission", request).await
+    }
+
+    pub async fn meminfo(&self, request: &AppRequest) -> Result<MemInfoResponse, DaemonError> {
+        self.post("/v1/app/meminfo", request).await
+    }
+
+    pub async fn sandbox_list(
+        &self,
+        request: &SandboxRequest,
+    ) -> Result<SandboxResponse, DaemonError> {
+        self.post("/v1/app/sandbox/list", request).await
+    }
+
+    pub async fn sandbox_pull(
+        &self,
+        request: &AppPullRequest,
+    ) -> Result<AppPullResponse, DaemonError> {
+        self.post("/v1/app/sandbox/pull", request).await
+    }
+
+    pub async fn pull_apk(&self, request: &AppPullRequest) -> Result<AppPullResponse, DaemonError> {
+        self.post("/v1/app/apk/pull", request).await
     }
 
     /// One request path, so every route shares one error contract.

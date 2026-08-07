@@ -443,6 +443,110 @@ pub struct DnsWriteRequest {
     pub hostname: Option<String>,
 }
 
+// MARK: - the per-app screens
+
+/// Every per-app read takes the same shape: a device and a package.
+#[derive(Debug, Clone, Serialize)]
+pub struct AppRequest {
+    pub serial: String,
+    #[serde(rename = "packageId")]
+    pub package_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AppInfoResponse {
+    /// False is an answer, not a failure — the Mac shows a "Not installed"
+    /// empty state for it.
+    pub installed: bool,
+    #[serde(rename = "versionName")]
+    pub version_name: String,
+    #[serde(rename = "versionCode")]
+    pub version_code: String,
+    #[serde(rename = "targetSdk")]
+    pub target_sdk: String,
+    #[serde(rename = "minSdk")]
+    pub min_sdk: String,
+    #[serde(rename = "firstInstall")]
+    pub first_install: String,
+    #[serde(rename = "lastUpdate")]
+    pub last_update: String,
+    #[serde(rename = "apkPath")]
+    pub apk_path: Option<String>,
+    #[serde(rename = "apkSizeBytes")]
+    pub apk_size_bytes: Option<i64>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct Permission {
+    pub name: String,
+    /// "CAMERA" — sent rather than derived, so both UIs split a name the same.
+    #[serde(rename = "shortName")]
+    pub short_name: String,
+    pub granted: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PermissionsResponse {
+    pub permissions: Vec<Permission>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PermissionWriteRequest {
+    pub serial: String,
+    #[serde(rename = "packageId")]
+    pub package_id: String,
+    pub permission: String,
+    pub grant: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct MemRow {
+    pub key: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct MemInfoResponse {
+    /// False when the app has no process. Not an error.
+    pub running: bool,
+    #[serde(rename = "totalPssKb")]
+    pub total_pss_kb: Option<i64>,
+    /// In the order `dumpsys meminfo` printed them — the order is information.
+    pub summary: Vec<MemRow>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SandboxRequest {
+    pub serial: String,
+    #[serde(rename = "packageId")]
+    pub package_id: String,
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SandboxResponse {
+    pub path: String,
+    pub entries: Vec<FileEntry>,
+    /// False when `run-as` refused — a release build, which is normal.
+    pub debuggable: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct AppPullRequest {
+    pub serial: String,
+    #[serde(rename = "packageId")]
+    pub package_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    pub destination: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AppPullResponse {
+    /// An APK pull can answer several — a bundle install has splits.
+    pub paths: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct AppControlRequest {
     pub serial: String,

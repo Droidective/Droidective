@@ -97,4 +97,32 @@ extension DaemonBackend {
     ) async throws -> AdbResult {
         AdbResult(stdout: "", stderr: "", exitCode: 0, timedOut: false)
     }
+
+    func appInfo(serial: String, packageId: String) async throws -> AppInfo { .notInstalled }
+
+    func permissions(serial: String, packageId: String) async throws -> [PermissionEntry] { [] }
+
+    func setPermission(
+        serial: String, packageId: String, permission: String, grant: Bool
+    ) async throws -> FeatureResult {
+        FeatureResult(ok: true, message: "stub")
+    }
+
+    func meminfo(serial: String, packageId: String) async throws -> MemInfo {
+        MemInfo(running: false, totalPssKb: nil, summary: [])
+    }
+
+    func sandboxList(
+        serial: String, packageId: String, path: String
+    ) async throws -> (entries: [FsEntry], debuggable: Bool) {
+        ([], true)
+    }
+
+    func sandboxPull(
+        serial: String, packageId: String, path: String, to destination: String
+    ) async throws -> String { destination }
+
+    func pullApk(
+        serial: String, packageId: String, to destination: String
+    ) async throws -> [String] { [destination] }
 }

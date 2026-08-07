@@ -6,14 +6,19 @@
  * each of them.
  */
 
+export { AppInfoPane } from "@/components/AppInfoPane"
 export { AppsPane } from "@/components/AppsPane"
 export { CrashPane } from "@/components/CrashPane"
 export { DevSettingsPane } from "@/components/DevSettingsPane"
 export { DeviceInfoPane } from "@/components/DeviceInfoPane"
 export { FileExplorerPane } from "@/components/FileExplorerPane"
 export { LogcatPane } from "@/components/LogcatPane"
+export { ManageAppPane } from "@/components/ManageAppPane"
+export { MeminfoPane } from "@/components/MeminfoPane"
 export { PerformancePane } from "@/components/PerformancePane"
+export { PermissionsPane } from "@/components/PermissionsPane"
 export { PrivateDnsPane } from "@/components/PrivateDnsPane"
 export { RestrictionsPane } from "@/components/RestrictionsPane"
 export { RootStatusPane } from "@/components/RootStatusPane"
+export { SandboxPane } from "@/components/SandboxPane"
 export { WifiPane } from "@/components/WifiPane"

@@ -43,6 +43,11 @@ const HINTS: Readonly<Record<string, string>> = {
   "system-restrictions": "Connect a device to change restrictions.",
   wifi: "Connect a device to manage Wi-Fi.",
   "private-dns": "Connect a device to set its Private DNS.",
+  "app-info": "Connect a device to read app info.",
+  permissions: "Connect a device to inspect permissions.",
+  meminfo: "Connect a device to read memory usage.",
+  "sandbox-browser": "Connect a device to browse files.",
+  "app-management": "Connect a device to manage apps.",
 }
 
 /** The line for `id`, or one derived from the feature's title. */

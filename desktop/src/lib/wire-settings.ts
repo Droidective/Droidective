@@ -1,11 +1,14 @@
 /**
- * The wire shapes for the device-state and network screens.
+ * The wire shapes for the per-device screens.
  *
  * Split out of `wire.ts` when it outgrew its line budget, and split *here*
- * because these are the screens that read and write one device's settings —
- * Developer Options, the dev-time restrictions, Wi-Fi and Private DNS. Every
- * one of them is re-exported from `@/lib/wire`, so no import moved.
+ * because these all read and write the state of one device: Developer
+ * Options, the dev-time restrictions, Wi-Fi, Private DNS, and the four
+ * screens that hang off a chosen package. Every one is re-exported from
+ * `@/lib/wire`, so no import moved.
  */
+
+import type { FileEntry } from "@/lib/wire"
 
 /**
  * One Developer Options row — what it is, and what the device reports.
@@ -92,4 +95,55 @@ export type DnsMode = "off" | "automatic" | "hostname"
 export interface DnsResponse {
   mode: DnsMode
   hostname: string | null
+}
+
+// MARK: - the per-app screens
+
+export interface AppInfoResponse {
+  /** False is an answer, not a failure — the Mac shows "Not installed". */
+  installed: boolean
+  versionName: string
+  versionCode: string
+  targetSdk: string
+  minSdk: string
+  firstInstall: string
+  lastUpdate: string
+  apkPath: string | null
+  apkSizeBytes: number | null
+}
+
+export interface Permission {
+  name: string
+  /** "CAMERA" — sent rather than derived, so both UIs split a name the same. */
+  shortName: string
+  granted: boolean
+}
+
+export interface PermissionsResponse {
+  permissions: Permission[]
+}
+
+export interface MemRow {
+  key: string
+  value: string
+}
+
+export interface MemInfoResponse {
+  /** False when the app has no process. Not an error. */
+  running: boolean
+  totalPssKb: number | null
+  /** In `dumpsys meminfo`'s own order — the order is information. */
+  summary: MemRow[]
+}
+
+export interface SandboxResponse {
+  path: string
+  entries: FileEntry[]
+  /** False when `run-as` refused — a release build, which is normal. */
+  debuggable: boolean
+}
+
+export interface AppPullResponse {
+  /** An APK pull can answer several — a bundle install has splits. */
+  paths: string[]
 }

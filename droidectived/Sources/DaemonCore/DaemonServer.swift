@@ -74,6 +74,28 @@ public protocol DaemonBackend: Sendable {
     func writePrivateDns(
         serial: String, mode: DnsStatus.Mode, hostname: String
     ) async throws -> AdbResult
+    /// Version, SDK levels, install dates and APK size for one package.
+    func appInfo(serial: String, packageId: String) async throws -> AppInfo
+    /// The package's runtime permissions and whether each is granted.
+    func permissions(serial: String, packageId: String) async throws -> [PermissionEntry]
+    /// Grants or revokes one runtime permission.
+    func setPermission(
+        serial: String, packageId: String, permission: String, grant: Bool
+    ) async throws -> FeatureResult
+    /// `dumpsys meminfo` for one package.
+    func meminfo(serial: String, packageId: String) async throws -> MemInfo
+    /// One directory inside a debuggable app's sandbox, via `run-as`.
+    func sandboxList(
+        serial: String, packageId: String, path: String
+    ) async throws -> (entries: [FsEntry], debuggable: Bool)
+    /// Pulls one file out of the sandbox to a host path.
+    func sandboxPull(
+        serial: String, packageId: String, path: String, to destination: String
+    ) async throws -> String
+    /// Pulls the package's APK — and its splits, if it has any.
+    func pullApk(
+        serial: String, packageId: String, to destination: String
+    ) async throws -> [String]
 }
 
 /// `DeviceMonitor` in production.
@@ -268,6 +290,50 @@ public struct LiveBackend: DaemonBackend {
         case .automatic: return try await service.setAutomatic(serial: serial)
         case .hostname: return try await service.setHostname(serial: serial, hostname)
         }
+    }
+
+    private var inspection: AppInspectionService { AppInspectionService(client: client) }
+
+    public func appInfo(serial: String, packageId: String) async throws -> AppInfo {
+        try await inspection.getAppInfo(serial: serial, packageId: packageId)
+    }
+
+    public func permissions(serial: String, packageId: String) async throws -> [PermissionEntry] {
+        try await inspection.listPermissions(serial: serial, packageId: packageId)
+    }
+
+    public func setPermission(
+        serial: String, packageId: String, permission: String, grant: Bool
+    ) async throws -> FeatureResult {
+        try await inspection.setPermission(
+            serial: serial, packageId: packageId, permission: permission, grant: grant)
+    }
+
+    public func meminfo(serial: String, packageId: String) async throws -> MemInfo {
+        try await inspection.getMemInfo(serial: serial, packageId: packageId)
+    }
+
+    public func sandboxList(
+        serial: String, packageId: String, path: String
+    ) async throws -> (entries: [FsEntry], debuggable: Bool) {
+        try await inspection.sandboxList(serial: serial, packageId: packageId, dir: path)
+    }
+
+    public func sandboxPull(
+        serial: String, packageId: String, path: String, to destination: String
+    ) async throws -> String {
+        try await inspection.sandboxPull(
+            serial: serial, packageId: packageId, filePath: path,
+            to: URL(fileURLWithPath: destination)
+        ).path
+    }
+
+    public func pullApk(
+        serial: String, packageId: String, to destination: String
+    ) async throws -> [String] {
+        try await inspection.pullApk(
+            serial: serial, packageId: packageId, to: URL(fileURLWithPath: destination)
+        ).map(\.path)
     }
 }
 
@@ -576,6 +642,28 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
                 body: Data(body.readableBytesView), backend: backend))
         case .dnsWrite:
             return Self.answer(await NetworkRoutes.dnsWrite(
+                body: Data(body.readableBytesView), backend: backend))
+
+        case .appInfo:
+            return Self.answer(await AppInspectionRoutes.info(
+                body: Data(body.readableBytesView), backend: backend))
+        case .appPermissions:
+            return Self.answer(await AppInspectionRoutes.permissions(
+                body: Data(body.readableBytesView), backend: backend))
+        case .appSetPermission:
+            return Self.answer(await AppInspectionRoutes.setPermission(
+                body: Data(body.readableBytesView), backend: backend))
+        case .appMeminfo:
+            return Self.answer(await AppInspectionRoutes.meminfo(
+                body: Data(body.readableBytesView), backend: backend))
+        case .appSandboxList:
+            return Self.answer(await AppInspectionRoutes.sandboxList(
+                body: Data(body.readableBytesView), backend: backend))
+        case .appSandboxPull:
+            return Self.answer(await AppInspectionRoutes.sandboxPull(
+                body: Data(body.readableBytesView), backend: backend))
+        case .appPullApk:
+            return Self.answer(await AppInspectionRoutes.pullApk(
                 body: Data(body.readableBytesView), backend: backend))
 
         case .actionsRun:

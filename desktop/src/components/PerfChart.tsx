@@ -1,4 +1,4 @@
-import { polyline, series, type TimedSample } from "@/lib/performance"
+import { polyline, series } from "@/lib/performance"
 
 /**
  * One metric over time.
@@ -8,7 +8,7 @@ import { polyline, series, type TimedSample } from "@/lib/performance"
  * scaling and the point list are `lib/performance.ts`, so what is left here is
  * drawing.
  */
-export function PerfChart({
+export function PerfChart<Sample extends { elapsed: number }>({
   title,
   value,
   samples,
@@ -19,8 +19,14 @@ export function PerfChart({
   title: string
   /** The headline figure, already formatted. */
   value: string
-  samples: readonly TimedSample[]
-  pick: (sample: TimedSample) => number | null
+  /**
+   * Anything with an elapsed clock. Generic rather than tied to a performance
+   * sample so Memory Usage draws its Total-PSS line with the same component —
+   * the Mac uses one `Chart` for both, and two sparklines that disagreed about
+   * their axis would be the difference someone notices.
+   */
+  samples: readonly Sample[]
+  pick: (sample: Sample) => number | null
   /** The top of the y axis, in the metric's own units. */
   max: number
   tone?: "accent" | "warn" | "danger"

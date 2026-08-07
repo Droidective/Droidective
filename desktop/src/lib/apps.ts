@@ -30,6 +30,26 @@ function titleCase(id: string): string {
 }
 
 /**
+ * What the confirmation asks before a destructive verb.
+ *
+ * The Mac's exact sentences, because they do the real work here: they name the
+ * package and say what is actually lost. "Are you sure?" over a Clear Data
+ * button tells someone nothing they did not already know.
+ */
+export function destructivePrompt(action: AppActionDescriptor, packageId: string): string {
+  switch (action.id) {
+    case "clearData":
+      return `Clear all data for ${packageId}? This signs you out and wipes local storage.`
+    case "uninstall":
+      return `Uninstall ${packageId}? This removes the app from the device.`
+    default:
+      // A destructive verb shipped after this build still gets a dialog rather
+      // than running unannounced; the daemon's flag is what decides.
+      return `${actionLabel(action)} ${packageId}?`
+  }
+}
+
+/**
  * Filters the list, mirroring `AppListing.matches`: package id, display name
  * or version. System apps are hidden unless asked for — there are hundreds of
  * them and they bury the handful anyone is looking for.

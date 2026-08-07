@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Boxes, RefreshCw, Search } from "lucide-react"
-import { NoDevice } from "@/components/NoDevice"
+import { AppActions } from "@/components/AppActions"
+import { NoDevice } from "@/components/screen"
 import { Banner, Button, Switch } from "@/components/Controls"
-import { useArmedConfirm } from "@/hooks/useArmedConfirm"
-import { useNotifications } from "@/hooks/useNotifications"
-import { actionLabel, searchApps, sortApps } from "@/lib/apps"
-import { asDaemonError, controlApp, listApps } from "@/lib/daemon"
+import { searchApps, sortApps } from "@/lib/apps"
+import { asDaemonError, listApps } from "@/lib/daemon"
 import { cn } from "@/lib/cn"
 import type {
   AppActionDescriptor,
@@ -203,36 +202,6 @@ function AppDetail({
   actions: AppActionDescriptor[]
   serial: string
 }) {
-  const [running, setRunning] = useState<string | null>(null)
-  const confirm = useArmedConfirm()
-  const { show } = useNotifications()
-
-  const run = async (action: AppActionDescriptor) => {
-    // A second press for the destructive ones, matching the Quick Actions
-    // panel's second-⏎ rule. The daemon says which those are. The arming is
-    // scoped to this verb on this package and expires on its own, so a stray
-    // click later — or on a different app — cannot clear anyone's data.
-    if (action.isDestructive && !confirm.isArmed(action.id, app.packageId)) {
-      confirm.arm(action.id, app.packageId)
-      return
-    }
-    confirm.disarm()
-    setRunning(action.id)
-    try {
-      const outcome = await controlApp({ serial, packageId: app.packageId, action: action.id })
-      show({
-        message: outcome.message,
-        ok: outcome.ok,
-        ...(outcome.copyText === null ? {} : { copyText: outcome.copyText }),
-        ...(outcome.revealPath === null ? {} : { revealPath: outcome.revealPath }),
-      })
-    } catch (thrown) {
-      show({ message: asDaemonError(thrown).message, ok: false })
-    } finally {
-      setRunning(null)
-    }
-  }
-
   return (
     <div className="flex h-full flex-col gap-4 overflow-y-auto p-6">
       <header className="flex items-start gap-3">
@@ -249,26 +218,7 @@ function AppDetail({
         </div>
       </header>
 
-      <div className="flex flex-wrap items-center gap-2">
-        {actions.map((action) => (
-          <Button
-            key={action.id}
-            tone={action.isDestructive ? "danger" : "default"}
-            disabled={running !== null}
-            onClick={() => void run(action)}
-          >
-            {running === action.id
-              ? "Running…"
-              : confirm.isArmed(action.id, app.packageId)
-                ? `Really ${actionLabel(action).toLowerCase()}?`
-                : actionLabel(action)}
-          </Button>
-        ))}
-        {actions.some((action) => confirm.isArmed(action.id, app.packageId)) ? (
-          <Button onClick={confirm.disarm}>Cancel</Button>
-        ) : null}
-      </div>
-
+      <AppActions actions={actions} packageId={app.packageId} serial={serial} />
     </div>
   )
 }

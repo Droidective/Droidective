@@ -15,12 +15,13 @@ use tauri_plugin_opener::OpenerExt;
 
 use crate::daemon::stream::StreamMessage;
 use crate::daemon::wire::{
-    AppControlRequest, AppsResponse, CrashListResponse, DevSettingsResponse,
-    DevSettingsWriteRequest, Device, DevicePropsResponse, DnsResponse, DnsWriteRequest,
-    FeatureSummary, FileInfoRequest, FileInfoResponse, FileOperationRequest, FilePullRequest,
-    FilePullResponse, FilesListRequest, FilesListResponse, RestrictionWriteRequest,
-    RestrictionsResponse, RootStatusResponse, RunRequest, RunResponse, SubscribeParams,
-    WifiResponse, WifiWriteRequest,
+    AppControlRequest, AppInfoResponse, AppPullRequest, AppPullResponse, AppRequest, AppsResponse,
+    CrashListResponse, DevSettingsResponse, DevSettingsWriteRequest, Device, DevicePropsResponse,
+    DnsResponse, DnsWriteRequest, FeatureSummary, FileInfoRequest, FileInfoResponse,
+    FileOperationRequest, FilePullRequest, FilePullResponse, FilesListRequest, FilesListResponse,
+    MemInfoResponse, PermissionWriteRequest, PermissionsResponse, RestrictionWriteRequest,
+    RestrictionsResponse, RootStatusResponse, RunRequest, RunResponse, SandboxRequest,
+    SandboxResponse, SubscribeParams, WifiResponse, WifiWriteRequest,
 };
 use crate::daemon::{DaemonStatus, Supervisor};
 use crate::error::DaemonError;
@@ -346,6 +347,133 @@ pub async fn private_dns(
     serial: String,
 ) -> Result<DnsResponse, DaemonError> {
     supervisor.client().await?.private_dns(serial).await
+}
+
+/// Version, SDK levels and install dates for the chosen package.
+#[tauri::command]
+pub async fn app_info(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    package_id: String,
+) -> Result<AppInfoResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .app_info(&AppRequest { serial, package_id })
+        .await
+}
+
+#[tauri::command]
+pub async fn permissions(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    package_id: String,
+) -> Result<PermissionsResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .permissions(&AppRequest { serial, package_id })
+        .await
+}
+
+#[tauri::command]
+pub async fn set_permission(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    package_id: String,
+    permission: String,
+    grant: bool,
+) -> Result<RunResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .set_permission(&PermissionWriteRequest {
+            serial,
+            package_id,
+            permission,
+            grant,
+        })
+        .await
+}
+
+#[tauri::command]
+pub async fn meminfo(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    package_id: String,
+) -> Result<MemInfoResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .meminfo(&AppRequest { serial, package_id })
+        .await
+}
+
+#[tauri::command]
+pub async fn sandbox_list(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    package_id: String,
+    path: String,
+) -> Result<SandboxResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .sandbox_list(&SandboxRequest {
+            serial,
+            package_id,
+            path,
+        })
+        .await
+}
+
+/// Pulls one sandbox file into `~/Downloads/Droidective`.
+///
+/// The destination is chosen here for the reason `pull_file`'s is: this is the
+/// process that knows where this platform's Downloads folder lives, and the
+/// leaf comes off a device path, so it goes through the same name check.
+#[tauri::command]
+pub async fn sandbox_pull(
+    app: AppHandle,
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    package_id: String,
+    path: String,
+) -> Result<AppPullResponse, DaemonError> {
+    let destination = droidective_folder(&app)?.join(safe_file_name(leaf_name(&path))?);
+    supervisor
+        .client()
+        .await?
+        .sandbox_pull(&AppPullRequest {
+            serial,
+            package_id,
+            path: Some(path),
+            destination: destination.to_string_lossy().into_owned(),
+        })
+        .await
+}
+
+/// Pulls the package's APK — and its splits, which land beside it.
+#[tauri::command]
+pub async fn pull_apk(
+    app: AppHandle,
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    package_id: String,
+) -> Result<AppPullResponse, DaemonError> {
+    // The package id is device-reported and ends up in a host path, so it goes
+    // through the same check every other leaf name does.
+    let destination = droidective_folder(&app)?.join(safe_file_name(&format!("{package_id}.apk"))?);
+    supervisor
+        .client()
+        .await?
+        .pull_apk(&AppPullRequest {
+            serial,
+            package_id,
+            path: None,
+            destination: destination.to_string_lossy().into_owned(),
+        })
+        .await
 }
 
 #[tauri::command]

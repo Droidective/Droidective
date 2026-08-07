@@ -9,12 +9,17 @@
 
 import { invoke } from "@tauri-apps/api/core"
 import type {
+  AppInfoResponse,
+  AppPullResponse,
   DevSettingsResponse,
   DnsMode,
   DnsResponse,
+  MemInfoResponse,
+  PermissionsResponse,
   RestrictionKey,
   RestrictionsResponse,
   RunResponse,
+  SandboxResponse,
   WifiResponse,
 } from "@/lib/wire"
 
@@ -106,4 +111,51 @@ export function setPrivateDns(args: {
 /** `mount -o rw,remount /` through `su`. Root-only, and not a toggle. */
 export function remountSystem(serial: string): Promise<RunResponse> {
   return invoke<RunResponse>("write_restriction", { serial, key: "remount", on: null })
+}
+
+// MARK: - the per-app screens
+
+/** Version, SDK levels and install dates for the chosen package. */
+export function appInfo(serial: string, packageId: string): Promise<AppInfoResponse> {
+  return invoke<AppInfoResponse>("app_info", { serial, packageId })
+}
+
+export function permissions(serial: string, packageId: string): Promise<PermissionsResponse> {
+  return invoke<PermissionsResponse>("permissions", { serial, packageId })
+}
+
+export function setPermission(args: {
+  serial: string
+  packageId: string
+  permission: string
+  grant: boolean
+}): Promise<RunResponse> {
+  return invoke<RunResponse>("set_permission", args)
+}
+
+export function meminfo(serial: string, packageId: string): Promise<MemInfoResponse> {
+  return invoke<MemInfoResponse>("meminfo", { serial, packageId })
+}
+
+/** One directory inside a debuggable app's sandbox, via `run-as`. */
+export function sandboxList(args: {
+  serial: string
+  packageId: string
+  path: string
+}): Promise<SandboxResponse> {
+  return invoke<SandboxResponse>("sandbox_list", args)
+}
+
+/** Pulls one sandbox file into ~/Downloads/Droidective. */
+export function sandboxPull(args: {
+  serial: string
+  packageId: string
+  path: string
+}): Promise<AppPullResponse> {
+  return invoke<AppPullResponse>("sandbox_pull", args)
+}
+
+/** Pulls the package's APK, and its splits if it has any. */
+export function pullApk(serial: string, packageId: string): Promise<AppPullResponse> {
+  return invoke<AppPullResponse>("pull_apk", { serial, packageId })
 }

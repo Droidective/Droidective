@@ -2,16 +2,21 @@ import { Construction } from "lucide-react"
 import { ActionForm } from "@/components/ActionForm"
 import { HomeView } from "@/components/HomeView"
 import {
+  AppInfoPane,
   AppsPane,
   CrashPane,
   DeviceInfoPane,
   DevSettingsPane,
   FileExplorerPane,
   LogcatPane,
+  ManageAppPane,
+  MeminfoPane,
   PerformancePane,
+  PermissionsPane,
   PrivateDnsPane,
   RestrictionsPane,
   RootStatusPane,
+  SandboxPane,
   WifiPane,
 } from "@/components/panes"
 import { HOME_TAB } from "@/lib/layout"
@@ -81,6 +86,16 @@ export function FeaturePane(props: FeaturePaneProps) {
       return <WifiPane device={props.device} />
     case "private-dns":
       return <PrivateDnsPane device={props.device} />
+    case "app-info":
+      return <AppInfoPane device={props.device} packageId={props.packageId} />
+    case "permissions":
+      return <PermissionsPane device={props.device} packageId={props.packageId} />
+    case "meminfo":
+      return <MeminfoPane device={props.device} packageId={props.packageId} />
+    case "sandbox-browser":
+      return <SandboxPane device={props.device} packageId={props.packageId} />
+    case "app-management":
+      return <ManageAppPane device={props.device} packageId={props.packageId} />
     default:
       return isRunnable(props.feature) ? (
         <ActionForm

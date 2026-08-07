@@ -37,6 +37,15 @@ public enum DaemonProtocol {
         case wifiWrite = "/v1/wifi/write"
         case dnsRead = "/v1/dns/read"
         case dnsWrite = "/v1/dns/write"
+        /// The per-app screens. All four hang off a package id already chosen
+        /// in Apps, so they take one shape: serial + packageId.
+        case appInfo = "/v1/app/info"
+        case appPermissions = "/v1/app/permissions"
+        case appSetPermission = "/v1/app/permission"
+        case appMeminfo = "/v1/app/meminfo"
+        case appSandboxList = "/v1/app/sandbox/list"
+        case appSandboxPull = "/v1/app/sandbox/pull"
+        case appPullApk = "/v1/app/apk/pull"
     }
 
     /// The multiplexed stream socket. Not a `Route`: it is a WebSocket upgrade

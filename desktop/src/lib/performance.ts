@@ -120,7 +120,7 @@ export function ramPercent(sample: PerfSample): number | null {
  * Fractions rather than pixels so the same series draws at any size, and the
  * component stays about drawing.
  */
-export function series<Sample extends PerfSample>(
+export function series<Sample>(
   history: readonly Sample[],
   pick: (sample: Sample) => number | null,
   max: number,

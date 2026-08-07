@@ -4,6 +4,11 @@ public struct PermissionEntry: Sendable, Equatable, Identifiable {
     public let name: String
     public var granted: Bool
 
+    public init(name: String, granted: Bool) {
+        self.name = name
+        self.granted = granted
+    }
+
     public var id: String { name }
     /// Short trailing component, e.g. "CAMERA".
     public var shortName: String { name.split(separator: ".").last.map(String.init) ?? name }
@@ -19,6 +24,22 @@ public struct AppInfo: Sendable, Equatable {
     public var lastUpdate: String
     public var apkPath: String?
     public var apkSizeBytes: Int?
+
+    public init(
+        installed: Bool, versionName: String, versionCode: String, targetSdk: String,
+        minSdk: String, firstInstall: String, lastUpdate: String, apkPath: String?,
+        apkSizeBytes: Int?
+    ) {
+        self.installed = installed
+        self.versionName = versionName
+        self.versionCode = versionCode
+        self.targetSdk = targetSdk
+        self.minSdk = minSdk
+        self.firstInstall = firstInstall
+        self.lastUpdate = lastUpdate
+        self.apkPath = apkPath
+        self.apkSizeBytes = apkSizeBytes
+    }
 
     public static let notInstalled = AppInfo(
         installed: false, versionName: "—", versionCode: "—", targetSdk: "—",
@@ -46,6 +67,12 @@ public struct MemInfo: Sendable, Equatable {
     public var running: Bool
     public var totalPssKb: Int?
     public var summary: [(key: String, value: String)]
+
+    public init(running: Bool, totalPssKb: Int?, summary: [(key: String, value: String)]) {
+        self.running = running
+        self.totalPssKb = totalPssKb
+        self.summary = summary
+    }
 
     public static func == (lhs: MemInfo, rhs: MemInfo) -> Bool {
         lhs.running == rhs.running && lhs.totalPssKb == rhs.totalPssKb
