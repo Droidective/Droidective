@@ -11,8 +11,8 @@ rewriting one when something turns out to be more work than it looked.
 
 | | Count |
 | --- | --- |
-| ⬜ Not started | 21 |
-| 🟡 Partial | 37 |
+| ⬜ Not started | 18 |
+| 🟡 Partial | 40 |
 | ⛔ Not applicable off-Apple | 2 |
 | **Total registry features** | **60** |
 
@@ -24,7 +24,8 @@ is finished*, not as *most of it is done*.
 **Screens with a real pane today** (18): Apps, Logcat, Device Info, File
 Explorer, Crash Catcher, Performance, Root Status, Developer Settings, System
 Restrictions, Wi-Fi, Private DNS, App Info, Permissions, Memory Usage, Sandbox
-Browser, Manage App — plus the two app-chrome screens, the catalog and About.
+Browser, Manage App, Network Speed, Emulators, Install App — plus the two
+app-chrome screens, the catalog and About.
 
 **Only two features are out of scope**, and only because they drive an Apple
 toolchain rather than a device: `ios-logs` and `push-notification` are `xcrun
@@ -327,6 +328,8 @@ Tick an item here when its PR merges; the detail stays in the sections above.
 | ✅ | Wi-Fi and Private DNS | #265 |
 | ✅ | App Info, Permissions, Memory, Sandbox, Manage App | #265 |
 | ✅ | Sidebar footer, catalog, About, Settings, light theme | #265 |
+| ✅ | Network Speed | #265 |
+| ✅ | Emulators and Install App | #265 |
 
 **Next, in order.** Everything from *File explorer* down needs four layers, not
 one — a daemon route in Swift, a Rust command, a pane, and tests at both ends.
@@ -373,15 +376,21 @@ often someone opens them rather than by how hard they look.
     system-restrictions, over four routes. The Developer Options definitions
     travel with their values so no client re-types a title; only the section
     grouping is client-side, with a test that fails if it drifts.
-11. **The connection screens** — wifi and private-dns landed;
-    **network-speed** is left. It is the one that needs a stream rather than a
-    request: live `/proc/net/dev` throughput with a rolling chart, plus its own
-    Record and JSON/CSV export, which is a second recorder beside Performance's.
+11. ~~**The connection screens.**~~ Landed — wifi, private-dns and
+    network-speed. The last needed a second stream topic (`netspeed`), marked
+    an increment so a dropped sample is reported rather than leaving a silent
+    gap in the chart.
 12. ~~**The per-app screens.**~~ Landed — app-info, permissions, meminfo,
     sandbox-browser and app-management, over seven routes. Three device
     answers travel as answers rather than errors: not installed, not running,
     and not debuggable.
-13. **Emulators and install-app.**
+13. ~~**Emulators and install-app.**~~ Landed. Emulators is the Mac's screen
+    minus its iOS Simulators section, and its Relaunch waits on adb rather
+    than `consolePID`, which shells out to a macOS-only `/usr/sbin/lsof`.
+    Install App picks through `tauri-plugin-dialog` in the Rust process,
+    because a webview drag hands over a `File` with no path — **so it has no
+    drag and drop yet**, and the zone says so. It also installs onto one
+    device rather than every targeted one, pending run-on-all (item 6).
 14. **Deep links and bug report.**
 15. **Auto-hiding sidebar, UI zoom, window translucency** — `WindowEffects` is
     already pure-tested in ADBKit; blur needs a per-platform answer.
@@ -433,6 +442,16 @@ often someone opens them rather than by how hard they look.
 
 - **Settings has no role picker, no Command Log, no Doctor, no Tools, no
   Hotkeys and no MCP tab.** Each names its blocker in the tab itself.
+
+- **Install App has no drag and drop and no live stage line.** The drop is
+  backlog 17. The stage line — "Unpacking", "Reading device", "Installing 4
+  APKs" — needs the install's `onStage` callback to reach the client, which
+  means a stream rather than the request/response route it has; for a large
+  `.xapk` that is a minute with no feedback beyond "Installing…".
+
+- **Emulators lists no iOS Simulators.** Deliberate: `xcrun simctl` is one of
+  the two genuinely unportable things. The section is absent rather than
+  present and permanently empty.
 
 - **The Crash Catcher's failed empty state has no Try Again button.** Refresh
   sits in the toolbar above it and is never hidden, so a second button beside
