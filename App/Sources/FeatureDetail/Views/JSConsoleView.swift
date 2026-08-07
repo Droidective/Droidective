@@ -1139,6 +1139,9 @@ struct JSConsoleView: View {
     /// Measured connection-bar width — below ~640pt (a narrow split pane)
     /// the bar reflows to two rows instead of squeezing its labels.
     @State private var connectionBarWidth: CGFloat = 0
+    /// Measured feed width — decides whether rows can afford a written-out
+    /// source location.
+    @State private var feedWidth: CGFloat = 0
     @State private var inputHeight: CGFloat = 26
     @State private var showLevels = false
     /// The "Clear data and restart" confirmation (it signs the user out).
@@ -1572,6 +1575,10 @@ struct JSConsoleView: View {
         // card step, not full opacity, whenever the window is translucent.
         .background(JSConsoleFeedBackground())
         .environment(\.colorScheme, .dark)
+        // Measured once for the whole feed, so every row makes the same call
+        // about whether there's room to write out a source location.
+        .measuringWidth(into: $feedWidth)
+        .environment(\.consoleCompactTrailing, feedWidth > 0 && feedWidth < consoleCompactTrailingWidth)
         // Terminal convention for the linkified URLs in the rows: ⌘-click
         // opens the browser; a plain click stays inert so click-drag text
         // selection can't accidentally navigate away.

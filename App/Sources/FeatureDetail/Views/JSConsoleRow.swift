@@ -26,9 +26,15 @@ struct ConsoleFlowLayout: Layout {
         let (segments, arranged) = arrange(subviews, maxWidth: bounds.width)
         for (index, subview) in subviews.enumerated() {
             let slot = arranged.slots[index]
+            // Never offer a segment more width than the row has. A value with
+            // no break in it measures wider than the pane, and placed at its
+            // measured width it draws straight over whatever is beside the
+            // pane; clamped, it truncates inside its own row instead.
             subview.place(
                 at: CGPoint(x: bounds.minX + slot.x, y: bounds.minY + slot.y),
-                proposal: ProposedViewSize(width: segments[index].width, height: segments[index].height)
+                proposal: ProposedViewSize(
+                    width: min(segments[index].width, bounds.width), height: segments[index].height
+                )
             )
         }
     }
@@ -56,6 +62,25 @@ struct ConsoleFlowLayout: Layout {
     }
 }
 
+/// Whether the feed is too narrow to write out each row's source location.
+/// Set by the feed from its own measured width, so every row agrees rather
+/// than each measuring itself.
+struct ConsoleCompactTrailingKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var consoleCompactTrailing: Bool {
+        get { self[ConsoleCompactTrailingKey.self] }
+        set { self[ConsoleCompactTrailingKey.self] = newValue }
+    }
+}
+
+/// Below this the written-out location costs more than it's worth: a split
+/// pane at the 30% floor is around 450pt, and a path like
+/// `NetworkInterceptors.js:37` takes a third of it.
+let consoleCompactTrailingWidth: CGFloat = 620
+
 // MARK: - Entry row
 
 /// One console line: the level glyph, the message and its inline object
@@ -80,6 +105,7 @@ struct JSEntryRow: View {
     @State private var table: ConsoleTable?
     @Environment(\.logTailScrollToHeader) private var scrollToHeader
     @Environment(\.logTailPauseFollow) private var pauseFollow
+    @Environment(\.consoleCompactTrailing) private var compactTrailing
 
     private var query: String { session.findText.trimmingCharacters(in: .whitespaces) }
     private var isCurrentFind: Bool { session.findVisible && session.currentFindID == entry.id }
@@ -115,7 +141,12 @@ struct JSEntryRow: View {
             copyButtons
                 .opacity(hovering || copied ? 1 : 0)
                 .allowsHitTesting(hovering || copied)
+            // Claims its width before the message does. Compact it is an icon
+            // and a clock — a few dozen points — and without the priority the
+            // message keeps all of it and pushes both off the row entirely,
+            // which loses more than it gains.
             trailingLocation
+                .layoutPriority(1)
         }
         .contentShape(Rectangle())
         // The row's own click sits *behind* its content rather than over it, so
@@ -314,18 +345,30 @@ struct JSEntryRow: View {
     /// The right edge: where the call was made, then the clock. Chrome's source
     /// link is the anchor people scan for, so it leads; clicking it opens the
     /// rest of the stack, which is the question the file name raises.
+    ///
+    /// In a narrow pane it collapses to its icon. `NetworkInterceptors.js:37`
+    /// is most of a split pane's width, and the message is the thing worth
+    /// reading — spending that width on the location truncates the log to make
+    /// room for where it came from, which is backwards.
     private var trailingLocation: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             if let source {
                 Button { stackShown.toggle() } label: {
-                    Text(source.label)
-                        .font(.app(.caption2).monospacedDigit())
-                        .foregroundStyle(JSConsoleTheme.sourceLink)
-                        .underline(hovering)
-                        .lineLimit(1)
+                    Group {
+                        if compactTrailing {
+                            Image(systemName: "chevron.left.forwardslash.chevron.right")
+                                .font(.app(.caption2))
+                        } else {
+                            Text(source.label)
+                                .font(.app(.caption2).monospacedDigit())
+                                .underline(hovering)
+                                .lineLimit(1)
+                        }
+                    }
+                    .foregroundStyle(JSConsoleTheme.sourceLink)
                 }
                 .buttonStyle(.plain)
-                .help("\(source.function.isEmpty ? "" : source.function + "  ")\(source.file) — click for the full stack")
+                .help(sourceHelp(source))
             }
             Text(entry.at, format: .dateTime.hour().minute().second())
                 .font(.app(.caption2).monospacedDigit())
@@ -333,6 +376,13 @@ struct JSEntryRow: View {
         }
         .fixedSize()
         .padding(.top, 1)
+    }
+
+    private func sourceHelp(_ source: ConsoleSourceLocation) -> String {
+        let function = source.function.isEmpty ? "" : source.function + "  "
+        // Compact rows have no label to read, so the tooltip carries it.
+        let location = compactTrailing ? "\(source.label)\n\(function)\(source.file)" : "\(function)\(source.file)"
+        return "\(location) — click for the full stack"
     }
 
     // MARK: Copy
@@ -784,21 +834,13 @@ private struct ConsoleTableView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Grid(alignment: .leading, horizontalSpacing: 0, verticalSpacing: 0) {
-                GridRow {
-                    ForEach(Array(headers.enumerated()), id: \.offset) { _, name in
-                        cell(name, isHeader: true)
-                    }
-                }
-                ForEach(Array(table.rows.enumerated()), id: \.offset) { _, row in
-                    GridRow {
-                        cell(row.index, isHeader: false)
-                        ForEach(Array(row.cells.enumerated()), id: \.offset) { _, text in
-                            cell(text, isHeader: false)
-                        }
-                        if table.hasValueColumn { cell(row.value ?? "", isHeader: false) }
-                    }
-                }
+            // The grid scrolls inside its own row rather than sizing the feed.
+            // A capped `frame` bounds the maximum but not the *ideal* width, and
+            // that ideal propagates up: one wide table made every row in the
+            // feed as wide as itself, so in a split pane the rest of the rows
+            // ran under the pane beside them.
+            ScrollView(.horizontal, showsIndicators: false) {
+                grid
             }
             .frame(maxWidth: 900, alignment: .leading)
             if table.hiddenRows > 0 {
@@ -810,6 +852,28 @@ private struct ConsoleTableView: View {
         .padding(.vertical, 2)
     }
 
+    private var grid: some View {
+        Grid(alignment: .leading, horizontalSpacing: 0, verticalSpacing: 0) {
+            GridRow {
+                ForEach(Array(headers.enumerated()), id: \.offset) { _, name in
+                    cell(name, isHeader: true)
+                }
+            }
+            ForEach(Array(table.rows.enumerated()), id: \.offset) { _, row in
+                GridRow {
+                    cell(row.index, isHeader: false)
+                    ForEach(Array(row.cells.enumerated()), id: \.offset) { _, text in
+                        cell(text, isHeader: false)
+                    }
+                    if table.hasValueColumn { cell(row.value ?? "", isHeader: false) }
+                }
+            }
+        }
+    }
+
+    /// Columns size to a readable minimum rather than sharing the row: inside a
+    /// horizontal scroll there is no width to share, and `maxWidth: .infinity`
+    /// against an unbounded proposal would grow without limit.
     private func cell(_ text: String, isHeader: Bool) -> some View {
         Text(text)
             .font(.app(.caption, design: .monospaced))
@@ -818,7 +882,7 @@ private struct ConsoleTableView: View {
             .truncationMode(.tail)
             .padding(.horizontal, 6)
             .padding(.vertical, 3)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(minWidth: 72, maxWidth: 260, alignment: .leading)
             .background(isHeader ? JSConsoleTheme.muted.opacity(0.14) : .clear)
             .overlay(Rectangle().strokeBorder(JSConsoleTheme.muted.opacity(0.3), lineWidth: 0.5))
     }
