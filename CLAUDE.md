@@ -738,7 +738,18 @@ position in `RELEASE_NOTES.md`.
 ## Status
 
 Feature-complete across all planned milestones plus several UX rounds.
-(Latest release: **v3.8.1** — the **JS Console rebuilt against Chrome
+(Latest release: **v3.8.2** — JS Console split-pane fixes. A row's height was
+grown against a baseline that was still moving, so a wrapped message drew past
+the height its row reported; the arithmetic is now `ConsoleRowLayout` in ADBKit,
+pure and tested, where a line's baseline settles before anything is positioned
+against it. And the pane refused to shrink: `targetPicker`'s `.fixedSize()` made
+a long target label the minimum width for the connection bar, and so for the
+whole pane, so every row was laid out wider than the pane and cut off by its
+clip — which reads as the tab beside it overlapping. Nothing in that bar may
+demand more width than the pane it sits in. A `console.table` scrolls inside its
+own row rather than sizing the feed, and the source location is an icon in the
+row's hover controls beside the copy buttons.) Before that,
+**v3.8.1** — the **JS Console rebuilt against Chrome
 DevTools**. The value layer is now Chrome's: a top-level `console.log` string
 argument prints bare, nested strings single-quote and escape their newlines,
 an array leads with `(n)`, a nested plain object is `{…}`, and a collapsed
