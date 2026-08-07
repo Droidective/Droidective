@@ -19,3 +19,7 @@ website/dist/
 # Where stage-release-artifacts.sh collects a release's artifacts.
 /dist/
 App/Resources/ffmpeg
+
+# Linux desktop builds and their container cache
+desktop/dist-linux/
+desktop/.linux-cache/
