@@ -1,3 +1,35 @@
+## Droidective v3.8.2
+
+Fixes for the JS Console in a split pane. The feed left blank space that grew
+every time the pane changed width, and the console refused to shrink to the
+pane it was given — which read as the tab beside it covering the log.
+
+### JS Console
+
+- **The feed fills its pane again.** A row's height was measured against a
+  baseline that was still moving, so a message wrapped onto several lines drew
+  past the height its row had reported. One row is invisible; a feed of them
+  leaves gaps that shift on every resize. It only showed in a narrow pane,
+  because that is where rows wrap at all.
+- **The console shrinks to the pane it is given.** The connection bar held its
+  target label at full width — `com.myapp.features · Pixel 7 - 17 - API 37`
+  is most of a split pane — and that became the minimum for everything below
+  it, so rows were laid out wider than the pane and cut off at its edge. The
+  target and the status line now truncate. This also brings back the filter
+  row's level, find, export and clear controls, and each row's timestamp, at
+  the narrowest split.
+- **A `console.table` no longer sizes the whole feed.** Its grid scrolls
+  inside its own row instead of making every row as wide as itself.
+- **Where a log came from is an icon**, in the row's hover controls beside the
+  two copy buttons. Written out it cost more width than the message beside it
+  could spare. The file, line, function and full path are in its tooltip, and
+  clicking it still opens the whole stack.
+
+### Install
+
+Download the DMG, drag Droidective to Applications, and open it. Existing
+installs update themselves.
+
 ## Droidective v3.8.1
 
 The JS Console now reads like Chrome DevTools' console. Log arguments sit on
