@@ -31,8 +31,11 @@ export function EmulatorsPane() {
       setAvds(response.avds)
       setInstalled(response.installed)
     } catch (thrown) {
+      // Deliberately not `setAvds([])`: an empty list renders "No AVDs yet",
+      // which alongside the error banner is two contradictory claims — one
+      // saying the read failed and the other saying it succeeded and found
+      // nothing.
       setError(asDaemonError(thrown))
-      setAvds([])
     }
   }, [])
 
@@ -84,12 +87,14 @@ export function EmulatorsPane() {
         </div>
       )}
 
-      <AvdList
-        avds={avds}
+      {error === null ? (
+        <AvdList
+          avds={avds}
         busy={busy}
-        onRun={run}
-        onWipe={setWiping}
-      />
+          onRun={run}
+          onWipe={setWiping}
+        />
+      ) : null}
 
       {wiping === null ? null : (
         <ConfirmDialog

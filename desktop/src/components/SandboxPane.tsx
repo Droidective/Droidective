@@ -50,8 +50,9 @@ export function SandboxPane({
       setDebuggable(listing.debuggable)
       setEntries(listing.entries)
     } catch (thrown) {
+      // Not `setEntries([])`: that renders "Empty directory", which beside the
+      // error banner claims the listing succeeded and found nothing.
       setError(asDaemonError(thrown))
-      setEntries([])
     }
   }, [packageId, path, serial])
 
@@ -90,17 +91,19 @@ export function SandboxPane({
         </div>
       )}
 
-      <Listing
-        entries={entries}
-        atRoot={components.length === 0}
-        onUp={() => {
-          setComponents((current) => current.slice(0, -1))
-        }}
-        onOpen={(name) => {
-          setComponents((current) => [...current, name])
-        }}
-        onPull={pull}
-      />
+      {error === null ? (
+        <Listing
+          entries={entries}
+          atRoot={components.length === 0}
+          onUp={() => {
+            setComponents((current) => current.slice(0, -1))
+          }}
+          onOpen={(name) => {
+            setComponents((current) => [...current, name])
+          }}
+          onPull={pull}
+        />
+      ) : null}
     </div>
   )
 }
