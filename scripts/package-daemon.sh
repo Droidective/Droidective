@@ -45,9 +45,32 @@ else
 fi
 cp LICENSE "$STAGE/LICENSE" 2>/dev/null || true
 
+# Zip the staged directory with whatever the machine actually has. `zip` is not
+# on a Windows runner's PATH, and installing it there isn't an option — the job
+# used to try `apt-get`, which a Windows runner doesn't have either, so the
+# Windows leg exited 127 and took the whole release with it. 7-Zip ships on the
+# GitHub Windows images, and Compress-Archive is in any Windows PowerShell.
+zip_stage() {
+  local archive="$1"
+  if command -v zip >/dev/null 2>&1; then
+    zip -q -r "$archive" .
+  elif command -v 7z >/dev/null 2>&1; then
+    7z a -tzip -bso0 -bsp0 "$archive" . >/dev/null
+  elif command -v powershell >/dev/null 2>&1; then
+    powershell -NoProfile -Command "Compress-Archive -Path * -DestinationPath '$archive' -Force"
+  else
+    echo "error: no zip, 7z, or powershell available to build $archive" >&2
+    return 1
+  fi
+  [[ -f "$archive" ]] || {
+    echo "error: $archive was not produced" >&2
+    return 1
+  }
+}
+
 ARCHIVE="droidectived-${VERSION}-${PLATFORM}"
 if [[ "$PLATFORM" == windows-x86_64 ]]; then
-  (cd "$STAGE" && zip -q -r "${ARCHIVE}.zip" .)
+  (cd "$STAGE" && zip_stage "${ARCHIVE}.zip")
   mv "$STAGE/${ARCHIVE}.zip" "$OUT_DIR/"
   echo "packaged $OUT_DIR/${ARCHIVE}.zip"
 else

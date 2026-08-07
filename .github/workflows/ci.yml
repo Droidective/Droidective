@@ -244,7 +244,6 @@ jobs:
       - name: Build and package droidectived
         shell: bash
         run: |
-          command -v zip >/dev/null || (apt-get update -q && apt-get install -y -q zip)
           VERSION="${GITHUB_REF_NAME#v}"
           (cd droidectived && swift build -c release --product droidectived)
           BIN="droidectived/.build/release/droidectived"
