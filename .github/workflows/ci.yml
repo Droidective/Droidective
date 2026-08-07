@@ -370,7 +370,12 @@ jobs:
       # fail_on_unmatched_files breaking on the set that varies.
       # Universal, like the app: the daemon is a sidecar next to it, and an
       # arm64-only binary would break Intel Macs that the app itself supports.
+      # Beta only — release-channel.sh lists the macOS daemon tarball and
+      # SHA256SUMS alongside the Linux and Windows ones, so a stable tag
+      # publishes neither and building them for one is ten minutes nothing
+      # consumes.
       - name: Build and package droidectived (macOS universal)
+        if: contains(github.ref_name, '-')
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           (cd droidectived && swift build -c release --arch arm64 --arch x86_64 \
@@ -386,8 +391,11 @@ jobs:
           merge-multiple: true
           path: DerivedData/Build/Products/Release
       # Checksums cover exactly what ships, so they are generated after every
-      # artifact is in place and before staging asserts the set.
+      # artifact is in place and before staging asserts the set. SHA256SUMS is
+      # itself a beta artifact, and on a stable tag there are no archives to
+      # sum — the glob would match nothing and shasum would fail the release.
       - name: Checksum the daemon archives
+        if: contains(github.ref_name, '-')
         run: |
           cd DerivedData/Build/Products/Release
           shasum -a 256 droidectived-* > SHA256SUMS
