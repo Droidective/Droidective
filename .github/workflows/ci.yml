@@ -216,7 +216,12 @@ jobs:
   # Windows binaries cannot be produced on the macOS release runner; the release
   # job downloads what this uploads.
   daemon-artifacts:
-    if: startsWith(github.ref, 'refs/tags/v')
+    # Beta tags only. A stable release is macOS-only, so
+    # stage-release-artifacts.sh would refuse to publish a Linux or Windows
+    # daemon anyway — building them for a stable tag is work nothing consumes,
+    # and it put the whole release behind two runners that don't need to run.
+    # Same hyphen rule release-channel.sh uses to pick the channel.
+    if: startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-')
     strategy:
       fail-fast: true
       matrix:
@@ -256,7 +261,17 @@ jobs:
           if-no-files-found: error
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    # A skipped dependency skips its dependents by default, and a stable tag
+    # skips daemon-artifacts — so the gate names the results that are actually
+    # acceptable instead. Writing an `if` at all drops the implicit success()
+    # check, which is why test and build are asserted explicitly.
+    if: >-
+      startsWith(github.ref, 'refs/tags/v')
+      && !cancelled()
+      && needs.test.result == 'success'
+      && needs.build.result == 'success'
+      && (needs['daemon-artifacts'].result == 'success'
+      || needs['daemon-artifacts'].result == 'skipped')
     needs: [test, build, daemon-artifacts]
     runs-on: macos-15
     permissions:
@@ -363,7 +378,9 @@ jobs:
           ./scripts/package-daemon.sh "$VERSION" macos-universal \
             droidectived/.build/apple/Products/Release/droidectived \
             DerivedData/Build/Products/Release
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+      # Only a beta has them — daemon-artifacts doesn't run for a stable tag.
+      - if: contains(github.ref_name, '-')
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
         with:
           pattern: daemon-*
           merge-multiple: true
