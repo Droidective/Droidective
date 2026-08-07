@@ -43,6 +43,7 @@ const HINTS: Readonly<Record<string, string>> = {
   "system-restrictions": "Connect a device to change restrictions.",
   wifi: "Connect a device to manage Wi-Fi.",
   "private-dns": "Connect a device to set its Private DNS.",
+  "network-speed": "Connect a device to watch its network traffic.",
   "app-info": "Connect a device to read app info.",
   permissions: "Connect a device to inspect permissions.",
   meminfo: "Connect a device to read memory usage.",

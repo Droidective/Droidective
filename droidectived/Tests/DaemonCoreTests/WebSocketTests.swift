@@ -76,6 +76,10 @@ private let hasWebSocketClient: Bool = {
         ) async -> AsyncStream<PerformanceService.PerfPoll> {
             AsyncStream { $0.finish() }
         }
+
+        func netspeed(serial: String) async -> AsyncStream<NetSample> {
+            AsyncStream { $0.finish() }
+        }
     }
 
     private static func device(_ serial: String) -> Device {

@@ -105,3 +105,37 @@ public enum StreamFrame {
         return String(decoding: data, as: UTF8.self)
     }
 }
+
+/// One network sample: device-wide throughput, the cumulative totals since
+/// boot, and the per-interface breakdown behind them.
+public struct NetSamplePayload: Codable, Equatable, Sendable {
+    public struct Interface: Codable, Equatable, Sendable {
+        public let name: String
+        public let downloadBytesPerSec: Double
+        public let uploadBytesPerSec: Double
+        public let rxBytes: UInt64
+        public let txBytes: UInt64
+    }
+
+    public let downloadBytesPerSec: Double
+    public let uploadBytesPerSec: Double
+    /// Since the device booted, not since the stream started — the screen
+    /// derives its own session totals by differencing against the first
+    /// sample, which is the only way a mid-session subscribe reads right.
+    public let totalRxBytes: UInt64
+    public let totalTxBytes: UInt64
+    public let interfaces: [Interface]
+
+    public init(_ sample: NetSample) {
+        downloadBytesPerSec = sample.downloadBytesPerSec
+        uploadBytesPerSec = sample.uploadBytesPerSec
+        totalRxBytes = sample.totalRxBytes
+        totalTxBytes = sample.totalTxBytes
+        interfaces = sample.interfaces.map {
+            Interface(
+                name: $0.name, downloadBytesPerSec: $0.downloadBytesPerSec,
+                uploadBytesPerSec: $0.uploadBytesPerSec,
+                rxBytes: $0.rxBytes, txBytes: $0.txBytes)
+        }
+    }
+}

@@ -10,6 +10,10 @@ public enum StreamProtocol {
         case devices
         case logcat
         case performance
+        /// `/proc/net/dev` throughput. Its own topic rather than a field on
+        /// `performance`, because the Network Speed screen samples while
+        /// nothing is being recorded and Performance deliberately does not.
+        case netspeed
     }
 
     // MARK: client → server
@@ -161,7 +165,7 @@ extension StreamProtocol.Topic {
     public var needsSerial: Bool {
         switch self {
         case .devices: return false
-        case .logcat, .performance: return true
+        case .logcat, .performance, .netspeed: return true
         }
     }
 
@@ -181,14 +185,15 @@ extension StreamProtocol.Topic {
     ///   buffered — which also means a snapshot topic can never emit a
     ///   `dropped` marker. A gap in a stream of complete states is not
     ///   something any client could act on.
-    /// `performance` is an increment for the same reason `logcat` is: each
-    /// sample is a point on a chart, and a client accumulating a history needs
-    /// every one of them. Treating it as a snapshot would silently drop the
-    /// middle of a graph, which is the one thing a graph must not do.
+    /// `performance` and `netspeed` are increments for the same reason
+    /// `logcat` is: each sample is a point on a chart, and a client
+    /// accumulating a history needs every one of them. Treating one as a
+    /// snapshot would silently drop the middle of a graph, which is the one
+    /// thing a graph must not do.
     public var isSnapshot: Bool {
         switch self {
         case .devices: return true
-        case .logcat, .performance: return false
+        case .logcat, .performance, .netspeed: return false
         }
     }
 }

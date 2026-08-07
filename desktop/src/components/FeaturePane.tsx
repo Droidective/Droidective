@@ -13,6 +13,7 @@ import {
   LogcatPane,
   ManageAppPane,
   MeminfoPane,
+  NetspeedPane,
   PerformancePane,
   PermissionsPane,
   PrivateDnsPane,
@@ -106,6 +107,8 @@ export function FeaturePane(props: FeaturePaneProps) {
       return <WifiPane device={props.device} />
     case "private-dns":
       return <PrivateDnsPane device={props.device} />
+    case "network-speed":
+      return <NetspeedPane device={props.device} />
     case "app-info":
       return <AppInfoPane device={props.device} packageId={props.packageId} />
     case "permissions":

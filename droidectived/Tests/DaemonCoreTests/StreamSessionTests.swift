@@ -53,6 +53,7 @@ import Testing
         var deviceBatches: [[Device]] = []
         var logBatches: [[LogLine]] = []
         var perfSamples: [PerformanceService.PerfPoll] = []
+        var netSamples: [NetSample] = []
         var logcatError: (any Error)?
         let stopped = StoppedBox()
 
@@ -89,6 +90,14 @@ import Testing
         }
 
         func stopLogcat(serial: String) async { stopped.record(serial) }
+
+        func netspeed(serial: String) async -> AsyncStream<NetSample> {
+            let samples = netSamples
+            return AsyncStream { continuation in
+                for sample in samples { continuation.yield(sample) }
+                continuation.finish()
+            }
+        }
 
         func performance(
             serial: String, packageId: String?, includeProcesses: Bool
@@ -217,10 +226,10 @@ import Testing
             case .devices:
                 #expect(!topic.needsSerial)
                 #expect(topic.isSnapshot)
-            case .logcat, .performance:
+            case .logcat, .performance, .netspeed:
                 #expect(topic.needsSerial)
-                // Increments, both: dropping the middle of a log or a graph is
-                // exactly what a client must be told about.
+                // Increments, all three: dropping the middle of a log or a
+                // graph is exactly what a client must be told about.
                 #expect(!topic.isSnapshot)
             }
         }

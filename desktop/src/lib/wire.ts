@@ -215,6 +215,26 @@ export interface PerfSample {
   processes: { pid: number; name: string; cpuPercent: number | null; pssKb: number | null }[]
 }
 
+/** One `/proc/net/dev` sample, as the daemon differenced it. */
+export interface NetSample {
+  downloadBytesPerSec: number
+  uploadBytesPerSec: number
+  /**
+   * Since the device booted, not since the stream started — the screen
+   * derives its own session totals by differencing against the first sample,
+   * which is the only way a mid-session subscribe reads right.
+   */
+  totalRxBytes: number
+  totalTxBytes: number
+  interfaces: {
+    name: string
+    downloadBytesPerSec: number
+    uploadBytesPerSec: number
+    rxBytes: number
+    txBytes: number
+  }[]
+}
+
 export type DaemonStatus =
   | { state: "starting" }
   | { state: "ready"; port: number }

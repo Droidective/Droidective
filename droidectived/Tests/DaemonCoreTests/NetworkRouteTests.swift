@@ -100,14 +100,24 @@ import Testing
             .networks.first?.password == "hunter2")
     }
 
-    @Test func aNetworkWithNoIdIsStillIdentifiedBySsid() async throws {
+    @Test func everySavedNetworkGetsAUniqueId() async throws {
         // A credential found only in the config store has no network id, and a
-        // row with no key cannot be rendered in a list.
+        // row with no key cannot be rendered in a list. The identity is
+        // composite — `cmd wifi list-networks` prints the same id twice on an
+        // emulator — so what matters is that it is non-empty and unique, not
+        // what it spells.
         let backend = StubBackend(
-            networks: [WifiNetwork(networkId: nil, ssid: "Hotel", security: nil)], rooted: true)
+            networks: [
+                WifiNetwork(networkId: nil, ssid: "Hotel", security: nil),
+                WifiNetwork(networkId: nil, ssid: "Cafe", security: "WPA2"),
+            ],
+            rooted: true)
         let answer = await NetworkRoutes.wifiRead(body: device(), backend: backend)
         let response = try decode(NetworkProtocol.WifiResponse.self, answer.body)
-        #expect(response.networks.first?.id == "Hotel")
+
+        let ids = response.networks.map(\.id)
+        #expect(ids.allSatisfy { !$0.isEmpty })
+        #expect(Set(ids).count == ids.count)
     }
 
     // MARK: - Wi-Fi, writing

@@ -677,6 +677,24 @@ pub async fn watch_performance(
     )
 }
 
+/// Live `/proc/net/dev` throughput, one sample a second, until `stop_watching`.
+#[tauri::command]
+pub async fn watch_netspeed(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    on_event: Channel<StreamUpdate>,
+) -> Result<i64, DaemonError> {
+    let stream = supervisor.stream().await?;
+    stream.subscribe(
+        "netspeed",
+        Some(SubscribeParams {
+            serial: Some(serial),
+            ..SubscribeParams::default()
+        }),
+        forward(on_event),
+    )
+}
+
 #[tauri::command]
 pub async fn stop_watching(supervisor: State<'_, Supervisor>, id: i64) -> Result<(), DaemonError> {
     // A stream that never came up is not an error to tear down — the view

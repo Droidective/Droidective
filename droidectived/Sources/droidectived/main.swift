@@ -42,7 +42,8 @@ let server = DaemonServer(
     backend: LiveBackend(monitor: monitor, engine: engine, client: client), token: token,
     streamSource: LiveStreamSource(
         monitor: monitor, streamer: LogcatStreamer(client: client),
-        performance: PerformanceService(client: client)))
+        performance: PerformanceService(client: client),
+        networkSpeed: NetworkSpeedService(client: client)))
 
 do {
     let bound = try await server.start(port: options.port)

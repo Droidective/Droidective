@@ -13,6 +13,7 @@ import type {
   FilePullResponse,
   FilesListResponse,
   LogLine,
+  NetSample,
   PerfSample,
   RootStatusResponse,
   RunResponse,
@@ -170,7 +171,7 @@ export interface Subscription {
 }
 
 async function subscribe<Item>(
-  command: "watch_devices" | "watch_logcat" | "watch_performance",
+  command: "watch_devices" | "watch_logcat" | "watch_netspeed" | "watch_performance",
   args: Record<string, unknown>,
   onUpdate: (update: StreamUpdate<Item>) => void,
 ): Promise<Subscription> {
@@ -216,6 +217,14 @@ export function watchPerformance(
   onUpdate: (update: StreamUpdate<PerfSample>) => void,
 ): Promise<Subscription> {
   return subscribe("watch_performance", args, onUpdate)
+}
+
+/** Live `/proc/net/dev` throughput, one sample a second. */
+export function watchNetspeed(
+  serial: string,
+  onUpdate: (update: StreamUpdate<NetSample>) => void,
+): Promise<Subscription> {
+  return subscribe("watch_netspeed", { serial }, onUpdate)
 }
 
 /**
