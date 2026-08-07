@@ -113,7 +113,7 @@ opening it — verify those by hand.
 ## Build / test / run
 
 ```
-make test          # ADBKit unit tests (cd ADBKit && swift test) — 1699 tests, keep green
+make test          # ADBKit unit tests (cd ADBKit && swift test) — 1751 tests, keep green
 make test-app      # the AppTests logic bundle — 99 tests
 make verify        # tiers 0-1: warnings-as-errors + both test bundles
 make test-linux    # the same suite on Linux (Apple `container` CLI; the port gate)
@@ -738,7 +738,32 @@ position in `RELEASE_NOTES.md`.
 ## Status
 
 Feature-complete across all planned milestones plus several UX rounds.
-(Latest release: **v3.8.0** — **API Testing** (the 60th feature: `api-client`,
+(Latest release: **v3.8.1** — the **JS Console rebuilt against Chrome
+DevTools**. The value layer is now Chrome's: a top-level `console.log` string
+argument prints bare, nested strings single-quote and escape their newlines,
+an array leads with `(n)`, a nested plain object is `{…}`, and a collapsed
+node inside an expanded value previews its own first properties instead of a
+key count (`RemoteObjectDisplay`, `SnapNodeDisplay`, both pure). Four things
+the console had no model for: `ConsoleANSI` (React Native's dev-server notices
+arrive coloured for a terminal), `ConsoleGrouping` (`console.group` depth and
+the id path a collapsed header hides by — `groupEnd` shows no row, which is
+where the trailing blank rows came from), `ConsoleTable` (the
+`console.table` grid, built from the snapshot the expandable rows already
+fetch), and `MetroSymbolicator` (a call's bundle coordinates back to the
+developer's file through Metro's `/symbolicate` — lines cross the wire
+1-based, and the frame shown is the first the app owns, skipping Metro's
+`collapse` flag and `node_modules` the way Chrome ignore-lists them; cached
+per stack, coalesced, circuit-broken). The row is `JSConsoleRow.swift`: a
+wrapping `ConsoleFlowLayout` puts the whole argument list on one line with
+each object an inline disclosure, the source label sits at the right edge and
+opens the symbolicated stack, group blocks indent under a rule and fold from
+their header, and only errors and warnings get a glyph. Two behaviours worth
+keeping: a row's click sits *behind* its content (so the copy buttons, source
+link, and nested disclosures always win) and only ever *opens* the first
+object — it used to toggle, so clicking a nested leaf folded the whole value;
+and copying a log resolves its objects to real JSON, because `{…}` is the one
+part of a pasted row nobody can act on.) Before that, **v3.8.0** — **API
+Testing** (the 60th feature: `api-client`,
 a device-free HTTP client — seven methods, six body kinds, five auth kinds,
 Postman collections/environments in and out, nested folders,
 `{{variable}}` scopes with unresolved ones flagged pre-send, assertions on
@@ -767,7 +792,7 @@ tabs during live resizes) plus ffmpeg's real error surfacing through
 `VideoEditing.stderrTail`. Under the hood: the portable ADBKit core (Linux +
 Windows suites in CI, `PortabilityGuardTests`), the `ReactotronMCP` package
 split, the tiered `make verify` harness with a mutation gate, and the
-release-channel split above.) Before that,
+release-channel split above. Before that,
 **v3.7.1** — the **Developer Settings feature** (the 59th:
 `dev-settings`, a `DeveloperSettingsService` declarative toggle table over
 `settings put`/`setprop` + the SYSPROPS poke — no force-RTL toggle; the

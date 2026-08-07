@@ -1,3 +1,54 @@
+## Droidective v3.8.1
+
+The JS Console now reads like Chrome DevTools' console. Log arguments sit on
+one line with their objects inline, every row says which line of your source
+made the call, and `console.group` and `console.table` render the way they do
+in Chrome. Copying a log takes the object with it, and clicking inside an
+expanded value no longer folds it back up.
+
+### JS Console — Chrome parity
+
+- **A log is one line** — the message and its objects sit together, each object
+  an inline disclosure, instead of one object stacked per line. Strings logged
+  at the top level print bare the way Chrome prints them (`console.log('hi')`
+  shows `hi`, not `"hi"`), nested strings use single quotes, arrays lead with
+  their length, and a nested object shows `{…}` rather than the word "Object".
+- **Every row says where it came from** — `StreamScreen.tsx:142` at the right
+  edge, resolved through Metro's symbolication, so it names the file you wrote
+  rather than a line in the bundle. Clicking it opens the whole stack, with
+  framework and `node_modules` frames dimmed the way Chrome greys the frames it
+  ignore-lists.
+- **`console.group` blocks indent and fold** — with a rule down their left, and
+  `console.groupCollapsed` starts folded. `console.groupEnd` no longer leaves a
+  blank row behind it.
+- **`console.table` draws a table** — an index column, one column per key across
+  the rows, and the value's own disclosure below it.
+- **Collapsed values show what's in them** — a nested object previews its first
+  few properties (`{at: '2026-08-07', session: {…}, tags: Array(3)}`) instead of
+  a key count, so most values can be read without opening them.
+- **Terminal colours are rendered, not printed** — React Native's own dev-server
+  notices arrive coloured for a terminal, and the escape codes were burying the
+  message.
+- Log rows no longer carry a level glyph; Chrome marks only errors and warnings,
+  and the column of identical icons was noise.
+
+### JS Console — fixes
+
+- **Copying a log takes the object with it.** The row shows an object as `{…}`,
+  which is exactly the part a pasted log can't be used for — the copy now
+  resolves it to real JSON. A second button beside it copies just the object,
+  for pasting somewhere that wants JSON alone.
+- **Clicking inside an expanded object keeps it open.** Clicking a nested value
+  — or any blank space on the row — used to fold the whole thing back up.
+- **Expanding a logged `Error` shows its stack** instead of an empty box.
+- The find field inside an expanded value appears only when the value is big
+  enough to need one.
+
+### Install
+
+Download the DMG, drag Droidective to Applications, and open it. Existing
+installs update themselves.
+
 ## Droidective v3.8.0
 
 API Testing arrives as the 60th tool — a full HTTP client with Postman import
