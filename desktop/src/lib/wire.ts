@@ -115,6 +115,64 @@ export function isRunnable(feature: FeatureSummary): boolean {
   return feature.implemented && RUNNABLE_KINDS.includes(feature.kind)
 }
 
+/** One signal behind the root verdict — a row, not just a boolean. */
+export interface RootSignal {
+  name: string
+  detail: string
+  indicatesRoot: boolean
+}
+
+export interface RootStatusResponse {
+  /** `su -c id` really answered uid 0 — what root-gated browsing needs. */
+  hasRootShell: boolean
+  likelyRooted: boolean
+  summary: string
+  signals: RootSignal[]
+}
+
+/** One row of `ls -la`, as the daemon parsed it. */
+export interface FileEntry {
+  name: string
+  isDir: boolean
+  size: number
+  /** The mode column — "drwxrwx---". */
+  perms: string
+}
+
+export interface FilesListResponse {
+  /** Echoed by the daemon, so a late reply can be told from the current one. */
+  path: string
+  entries: FileEntry[]
+}
+
+/**
+ * The mutations `/v1/files/op` accepts.
+ *
+ * The daemon owns this list and refuses anything else before it reaches a
+ * device shell; these are the strings it knows, spelled its way.
+ */
+export type FileOperation = "makeDirectory" | "delete" | "copy" | "move"
+
+export interface FileDetails {
+  type: string
+  sizeBytes: number | null
+  owner: string
+  permissions: string
+  modified: string
+  /** Last metadata change. Android records no creation time. */
+  changed: string
+}
+
+export interface FileInfoResponse {
+  /** Null when the device could not stat the path — an answer, not a fault. */
+  info: FileDetails | null
+}
+
+export interface FilePullResponse {
+  /** Where it landed on this computer, for the Show in folder button. */
+  path: string
+}
+
 export type DaemonStatus =
   | { state: "starting" }
   | { state: "ready"; port: number }

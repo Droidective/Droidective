@@ -52,6 +52,26 @@ private let hasWebSocketClient: Bool = {
         func deviceProperties(serial: String) async throws -> [String: String] {
             ["ro.product.model": "Pixel", "ro.build.version.release": "14"]
         }
+
+        func rootStatus(serial: String) async -> RootStatus {
+            RootStatus(hasRootShell: false, likelyRooted: false, summary: "stub", signals: [])
+        }
+
+        func listFiles(serial: String, path: String, asRoot: Bool) async throws -> [FsEntry] { [] }
+
+        func fileOperation(
+            serial: String, _ operation: FileProtocol.Operation, asRoot: Bool
+        ) async throws -> FeatureResult {
+            FeatureResult(ok: true, message: "stub")
+        }
+
+        func fileInfo(
+            serial: String, path: String, asRoot: Bool
+        ) async throws -> FileExplorerService.FileInfo? { nil }
+
+        func pullFile(
+            serial: String, path: String, to destination: String, asRoot: Bool
+        ) async throws -> String { destination }
     }
 
     private struct FixedSource: StreamSource {

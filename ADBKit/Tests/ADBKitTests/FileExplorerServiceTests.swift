@@ -65,6 +65,44 @@ import Testing
         })
     }
 
+    @Test func listDirectoryIsShellQuotedWithATrailingSlash() async throws {
+        // The trailing slash makes a symlinked dir (/sdcard → /storage/self/
+        // primary) list its contents rather than the link, and it has to be
+        // inside the quotes or the shell sees a bare `/`.
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["-s", "S1", "shell", "ls"], stdout: "", exitCode: 0)
+        _ = try await makeService(runner).list(serial: "S1", dir: "/sdcard/a b;rm -rf ~")
+        #expect(runner.invocations.contains {
+            $0.arguments == ["-s", "S1", "shell", "ls", "-la", "'/sdcard/a b;rm -rf ~/'"]
+        })
+    }
+
+    @Test func infoPathIsShellQuoted() async throws {
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["-s", "S1", "shell", "stat"], stdout: "", exitCode: 0)
+        _ = try await makeService(runner).info(serial: "S1", path: "/sdcard/a b;whoami")
+        #expect(runner.invocations.contains {
+            $0.arguments == [
+                "-s", "S1", "shell", "stat", "-c", "'%F|%s|%U|%A|%y|%z'", "'/sdcard/a b;whoami'",
+            ]
+        })
+    }
+
+    @Test func aRootedOperationQuotesTheWholeLineForSu() async throws {
+        // `su -c` takes one argument, so the joined command is quoted again —
+        // and the inner path stays quoted inside it. Getting this wrong is a
+        // root shell running a device-supplied path unquoted.
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["-s", "S1", "shell", "su"], stdout: "", exitCode: 0)
+        _ = try await makeService(runner).delete(
+            serial: "S1", path: "/data/a b;rm -rf /", asRoot: true)
+        #expect(runner.invocations.contains {
+            $0.arguments == [
+                "-s", "S1", "shell", "su", "-c", #"'rm -rf '\''/data/a b;rm -rf /'\'''"#,
+            ]
+        })
+    }
+
     @Test func moveSourceAndDestinationAreShellQuoted() async throws {
         let runner = MockProcessRunner()
         runner.script(argsPrefix: ["-s", "S1", "shell", "mv"], stdout: "", exitCode: 0)

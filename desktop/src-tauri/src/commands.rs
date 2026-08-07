@@ -4,6 +4,7 @@
 //! permission of its own, so the daemon's token and port never leave this
 //! process — which is also what keeps the daemon's `Origin` guard meaningful.
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
@@ -14,8 +15,9 @@ use tauri_plugin_opener::OpenerExt;
 
 use crate::daemon::stream::StreamMessage;
 use crate::daemon::wire::{
-    AppControlRequest, AppsResponse, Device, DevicePropsResponse, FeatureSummary, RunRequest,
-    RunResponse, SubscribeParams,
+    AppControlRequest, AppsResponse, Device, DevicePropsResponse, FeatureSummary, FileInfoRequest,
+    FileInfoResponse, FileOperationRequest, FilePullRequest, FilePullResponse, FilesListRequest,
+    FilesListResponse, RootStatusResponse, RunRequest, RunResponse, SubscribeParams,
 };
 use crate::daemon::{DaemonStatus, Supervisor};
 use crate::error::DaemonError;
@@ -127,6 +129,111 @@ pub async fn device_props(
     supervisor.client().await?.device_props(serial).await
 }
 
+/// Whether this device gives a root shell, and why. Gates the File Explorer's
+/// Root toggle the way the Mac's `RootService.detect` does.
+#[tauri::command]
+pub async fn root_status(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+) -> Result<RootStatusResponse, DaemonError> {
+    supervisor.client().await?.root_status(serial).await
+}
+
+#[tauri::command]
+pub async fn list_files(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    path: String,
+    as_root: bool,
+) -> Result<FilesListResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .list_files(&FilesListRequest {
+            serial,
+            path,
+            as_root,
+        })
+        .await
+}
+
+/// One mutation — `makeDirectory`, `delete`, `copy` or `move`.
+///
+/// The verb goes over as the daemon's own string and an unknown one is refused
+/// there, before it can reach a device shell. Nothing on this path is quoted
+/// here on purpose: `FileExplorerService` does that, and a path mangled in
+/// transit would be quoted wrong at the far end.
+#[tauri::command]
+pub async fn file_operation(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    op: String,
+    path: String,
+    destination: Option<String>,
+    as_root: bool,
+) -> Result<RunResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .file_operation(&FileOperationRequest {
+            serial,
+            op,
+            path,
+            destination,
+            as_root,
+        })
+        .await
+}
+
+#[tauri::command]
+pub async fn file_info(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    path: String,
+    as_root: bool,
+) -> Result<FileInfoResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .file_info(&FileInfoRequest {
+            serial,
+            path,
+            as_root,
+        })
+        .await
+}
+
+/// Pulls one device path into `~/Downloads/Droidective`, answering where it
+/// landed.
+///
+/// The destination is decided **here**, not by the caller and not by the
+/// daemon: this is the process that knows where this platform's Downloads
+/// folder is, and it is the same folder `export_text` writes to, so someone
+/// moving between the two apps finds their files in one place. The leaf name
+/// comes off a device path — which is device-controlled data ending up in a
+/// host path — so it goes through the same check.
+#[tauri::command]
+pub async fn pull_file(
+    app: AppHandle,
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    path: String,
+    as_root: bool,
+) -> Result<FilePullResponse, DaemonError> {
+    let folder = droidective_folder(&app)?;
+    let destination = folder.join(safe_file_name(leaf_name(&path))?);
+    supervisor
+        .client()
+        .await?
+        .pull_file(&FilePullRequest {
+            serial,
+            path,
+            destination: destination.to_string_lossy().into_owned(),
+            as_root,
+        })
+        .await
+}
+
 /// Puts an action's `copyText` on the system clipboard.
 ///
 /// Here rather than `navigator.clipboard` in the webview: that needs a secure
@@ -169,11 +276,20 @@ pub fn reveal_path(app: AppHandle, path: String) -> Result<(), DaemonError> {
     reason = "tauri's command macro hands AppHandle in by value"
 )]
 pub fn export_text(app: AppHandle, name: String, contents: String) -> Result<String, DaemonError> {
-    // A name is built from a feature id and a timestamp, never from device
-    // output — but it ends up in a path, so it is checked rather than trusted.
-    if name.contains('/') || name.contains('\\') || name.contains("..") {
-        return Err(DaemonError::Host(format!("refusing to write {name}")));
-    }
+    let folder = droidective_folder(&app)?;
+    let path = folder.join(safe_file_name(&name)?);
+    std::fs::write(&path, contents).map_err(|error| {
+        DaemonError::Host(format!("could not write {}: {error}", path.display()))
+    })?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+/// `~/Downloads/Droidective`, created if it is not there yet.
+///
+/// The one place this app decides where files land, shared by `export_text`
+/// and `pull_file` — two answers to that question is how a Show in folder
+/// button ends up pointing at the wrong one.
+fn droidective_folder(app: &AppHandle) -> Result<PathBuf, DaemonError> {
     let folder = app
         .path()
         .download_dir()
@@ -182,11 +298,37 @@ pub fn export_text(app: AppHandle, name: String, contents: String) -> Result<Str
     std::fs::create_dir_all(&folder).map_err(|error| {
         DaemonError::Host(format!("could not create {}: {error}", folder.display()))
     })?;
-    let path = folder.join(name);
-    std::fs::write(&path, contents).map_err(|error| {
-        DaemonError::Host(format!("could not write {}: {error}", path.display()))
-    })?;
-    Ok(path.to_string_lossy().into_owned())
+    Ok(folder)
+}
+
+/// The last path component, for either separator.
+///
+/// Both, because the input is a *device* path read with `/` — but a device is
+/// free to answer with a name containing `\`, which is a separator once this
+/// reaches Windows.
+fn leaf_name(path: &str) -> &str {
+    path.rsplit(['/', '\\']).next().unwrap_or(path)
+}
+
+/// A name that may safely be joined onto a folder.
+///
+/// Everything reaching here is about to become a host path, and some of it is
+/// device-controlled: a filename comes from `ls` on a phone this app does not
+/// own. `Path::join` is happy to escape its parent given `..`, an absolute
+/// path, or — the one that is easy to miss — a Windows drive-relative name like
+/// `C:x`, where `join` throws the folder away entirely.
+fn safe_file_name(name: &str) -> Result<&str, DaemonError> {
+    let refused = name.is_empty()
+        || name == "."
+        || name == ".."
+        || name.contains('/')
+        || name.contains('\\')
+        || name.contains(':')
+        || name.contains('\0');
+    if refused {
+        return Err(DaemonError::Host(format!("refusing to write {name:?}")));
+    }
+    Ok(name)
 }
 
 /// Subscribes to the device list. Returns the id to pass to `stop_watching`.
@@ -234,4 +376,57 @@ fn forward(channel: Channel<StreamUpdate>) -> crate::daemon::stream::StreamSink 
     Arc::new(move |message| {
         let _ = channel.send(StreamUpdate::from(message));
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::{leaf_name, safe_file_name};
+
+    #[test]
+    fn a_leaf_is_taken_off_either_separator() {
+        assert_eq!(leaf_name("/sdcard/DCIM/photo.jpg"), "photo.jpg");
+        // A device may answer with a backslash in a name; on Windows that is a
+        // separator by the time it reaches `join`.
+        assert_eq!(leaf_name(r"/sdcard/weird\name"), "name");
+        assert_eq!(leaf_name("photo.jpg"), "photo.jpg");
+        assert_eq!(leaf_name("/sdcard/"), "");
+    }
+
+    #[test]
+    fn an_ordinary_name_is_allowed_through_unchanged() {
+        assert_eq!(
+            safe_file_name("getprop_emulator-5554.txt").ok(),
+            Some("getprop_emulator-5554.txt")
+        );
+        // `..` inside a name is only a name; it is `..` *as* the name that walks.
+        assert_eq!(
+            safe_file_name("backup..2026.txt").ok(),
+            Some("backup..2026.txt")
+        );
+    }
+
+    #[test]
+    fn nothing_that_can_leave_the_folder_gets_through() {
+        for name in ["", ".", "..", "a/b", r"a\b", "/etc/passwd", "sub/../../x"] {
+            assert!(safe_file_name(name).is_err(), "{name:?} should be refused");
+        }
+    }
+
+    #[test]
+    fn a_windows_drive_relative_name_is_refused() {
+        // The one that does not look dangerous: `join` does not append a
+        // drive-relative path, it *replaces* what it was joined onto.
+        assert!(safe_file_name("C:evil.txt").is_err());
+        assert_eq!(
+            Path::new("/tmp/Droidective").join("C:evil.txt"),
+            Path::new(if cfg!(windows) {
+                "C:evil.txt"
+            } else {
+                "/tmp/Droidective/C:evil.txt"
+            }),
+            "the refusal is what stands between this and writing outside the folder",
+        );
+    }
 }

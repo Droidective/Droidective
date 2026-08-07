@@ -55,6 +55,7 @@ export function TextInput({
   type = "text",
   autoFocus = false,
   onKeyDown,
+  ariaLabel,
 }: {
   value: string
   onChange: (value: string) => void
@@ -62,12 +63,15 @@ export function TextInput({
   type?: "text" | "number"
   autoFocus?: boolean
   onKeyDown?: (event: React.KeyboardEvent<HTMLInputElement>) => void
+  /** A placeholder is not a name: it is gone the moment anything is typed. */
+  ariaLabel?: string | undefined
 }) {
   return (
     <input
       type={type}
       value={value}
       placeholder={placeholder}
+      aria-label={ariaLabel ?? placeholder}
       // Only the palette's search field asks for this, and it is the app's
       // entry point; landing anywhere else costs a keystroke every launch.
       // oxlint-disable-next-line jsx-a11y/no-autofocus

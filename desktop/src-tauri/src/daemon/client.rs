@@ -5,7 +5,9 @@ use serde::Serialize;
 
 use crate::daemon::wire::{
     AppControlRequest, AppsListRequest, AppsResponse, Device, DevicePropsResponse, DeviceRequest,
-    DevicesResponse, ErrorEnvelope, FeatureSummary, FeaturesResponse, RunRequest, RunResponse,
+    DevicesResponse, ErrorEnvelope, FeatureSummary, FeaturesResponse, FileInfoRequest,
+    FileInfoResponse, FileOperationRequest, FilePullRequest, FilePullResponse, FilesListRequest,
+    FilesListResponse, RootStatusResponse, RunRequest, RunResponse,
 };
 use crate::error::DaemonError;
 
@@ -62,6 +64,39 @@ impl DaemonClient {
         request: &AppControlRequest,
     ) -> Result<RunResponse, DaemonError> {
         self.post("/v1/apps/control", request).await
+    }
+
+    pub async fn root_status(&self, serial: String) -> Result<RootStatusResponse, DaemonError> {
+        self.post("/v1/device/root", &DeviceRequest { serial })
+            .await
+    }
+
+    pub async fn list_files(
+        &self,
+        request: &FilesListRequest,
+    ) -> Result<FilesListResponse, DaemonError> {
+        self.post("/v1/files/list", request).await
+    }
+
+    pub async fn file_operation(
+        &self,
+        request: &FileOperationRequest,
+    ) -> Result<RunResponse, DaemonError> {
+        self.post("/v1/files/op", request).await
+    }
+
+    pub async fn file_info(
+        &self,
+        request: &FileInfoRequest,
+    ) -> Result<FileInfoResponse, DaemonError> {
+        self.post("/v1/files/info", request).await
+    }
+
+    pub async fn pull_file(
+        &self,
+        request: &FilePullRequest,
+    ) -> Result<FilePullResponse, DaemonError> {
+        self.post("/v1/files/pull", request).await
     }
 
     /// One request path, so every route shares one error contract.
@@ -124,7 +159,9 @@ mod tests {
     use tokio::task::JoinHandle;
 
     use super::DaemonClient;
-    use crate::daemon::wire::RunRequest;
+    use crate::daemon::wire::{
+        FileInfoRequest, FileOperationRequest, FilesListRequest, RunRequest,
+    };
     use crate::error::DaemonError;
 
     /// What the fake daemon saw. Asserting on the request is the point: the
@@ -279,6 +316,85 @@ mod tests {
         assert!(captured.body.contains(r#""featureId":"dark-mode""#));
         assert!(!response.ok);
         assert_eq!(response.message, "Device offline");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn a_file_operation_sends_the_daemons_own_field_names() -> Result<(), Box<dyn Error>> {
+        // These structs are a hand-written mirror of Swift types no compiler
+        // checks them against, and `asRoot` is the one whose loss is silent:
+        // a dropped root flag browses the wrong filesystem without an error.
+        let payload = r#"{"ok":true,"message":"Deleted","copyText":null,"revealPath":null,"needsAdbKeyboard":false}"#;
+        let (port, server) = fake_daemon(200, payload).await?;
+        let client = DaemonClient::new(port, "t".into())?;
+
+        let response = client
+            .file_operation(&FileOperationRequest {
+                serial: "emulator-5554".into(),
+                op: "delete".into(),
+                path: "/sdcard/a b".into(),
+                destination: None,
+                as_root: true,
+            })
+            .await?;
+
+        let captured = server.await??;
+        assert_eq!(captured.request_line, "POST /v1/files/op HTTP/1.1");
+        assert!(
+            captured.body.contains(r#""asRoot":true"#),
+            "{}",
+            captured.body
+        );
+        assert!(
+            captured.body.contains(r#""op":"delete""#),
+            "{}",
+            captured.body
+        );
+        // Omitted rather than sent as null: the daemon reads a missing
+        // destination as "this verb does not take one".
+        assert!(!captured.body.contains("destination"), "{}", captured.body);
+        assert!(response.ok);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn a_listing_decodes_its_entries() -> Result<(), Box<dyn Error>> {
+        let payload = r#"{"path":"/sdcard","entries":[{"name":"DCIM","isDir":true,"size":4096,"perms":"drwxrwx---"}]}"#;
+        let (port, server) = fake_daemon(200, payload).await?;
+        let client = DaemonClient::new(port, "t".into())?;
+
+        let response = client
+            .list_files(&FilesListRequest {
+                serial: "emulator-5554".into(),
+                path: "/sdcard".into(),
+                as_root: false,
+            })
+            .await?;
+
+        server.await??;
+        assert_eq!(response.path, "/sdcard");
+        let entry = response.entries.first().ok_or("one entry")?;
+        assert_eq!(entry.name, "DCIM");
+        assert!(entry.is_dir);
+        assert_eq!(entry.perms, "drwxrwx---");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn a_path_the_device_cannot_stat_decodes_as_no_info() -> Result<(), Box<dyn Error>> {
+        let (port, server) = fake_daemon(200, r#"{"info":null}"#).await?;
+        let client = DaemonClient::new(port, "t".into())?;
+
+        let response = client
+            .file_info(&FileInfoRequest {
+                serial: "emulator-5554".into(),
+                path: "/sdcard/gone".into(),
+                as_root: false,
+            })
+            .await?;
+
+        server.await??;
+        assert!(response.info.is_none());
         Ok(())
     }
 

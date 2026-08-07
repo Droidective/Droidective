@@ -14,6 +14,15 @@ public enum DaemonProtocol {
         case appsList = "/v1/apps/list"
         case appsControl = "/v1/apps/control"
         case deviceProps = "/v1/device/props"
+        case deviceRoot = "/v1/device/root"
+        case filesList = "/v1/files/list"
+        /// Every mutation behind one route, with the verb in the body — the
+        /// shape `/v1/apps/control` already uses, for the same reason: the
+        /// daemon owns the list of what may be done, and four near-identical
+        /// routes would only be four places for it to drift.
+        case filesOp = "/v1/files/op"
+        case filesInfo = "/v1/files/info"
+        case filesPull = "/v1/files/pull"
     }
 
     /// The multiplexed stream socket. Not a `Route`: it is a WebSocket upgrade
@@ -40,6 +49,36 @@ public enum DaemonProtocol {
     public struct DevicePropsResponse: Codable, Equatable, Sendable {
         public let properties: [String: String]
         public init(properties: [String: String]) { self.properties = properties }
+    }
+
+    /// The root probe behind the File Explorer's Root toggle.
+    ///
+    /// Every signal travels, not just the verdict: the verdict is a summary of
+    /// them, and a client that only received it could say *whether* a device is
+    /// rooted but never *why* — which is the whole content of the Mac's Root
+    /// Status screen.
+    public struct RootStatusResponse: Codable, Equatable, Sendable {
+        public struct Signal: Codable, Equatable, Sendable {
+            public let name: String
+            public let detail: String
+            public let indicatesRoot: Bool
+        }
+
+        /// `su -c id` really answered uid 0 — the only definitive proof, and
+        /// the one thing root-gated browsing needs.
+        public let hasRootShell: Bool
+        public let likelyRooted: Bool
+        public let summary: String
+        public let signals: [Signal]
+
+        public init(_ status: RootStatus) {
+            hasRootShell = status.hasRootShell
+            likelyRooted = status.likelyRooted
+            summary = status.summary
+            signals = status.signals.map {
+                Signal(name: $0.name, detail: $0.detail, indicatesRoot: $0.indicatesRoot)
+            }
+        }
     }
 
     /// One error shape everywhere, so the UI has exactly one error path.
@@ -101,5 +140,13 @@ public enum DaemonProtocol {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         return try encoder.encode(value)
+    }
+
+    /// `encode` for a route handler, which has no useful answer to a body it
+    /// cannot encode. Every wire type here is a plain struct of scalars, so the
+    /// throwing path is unreachable in practice — but a route must still return
+    /// bytes rather than trap.
+    public static func encoded(_ value: some Encodable) -> Data {
+        (try? encode(value)) ?? Data("{}".utf8)
     }
 }

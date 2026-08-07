@@ -36,6 +36,7 @@ its own.
 | `src/lib/layout.ts` | what the window remembers between launches |
 | `src/lib/icons.ts` | one lucide glyph per registry id — the wire carries none |
 | `src/lib/logbuffer.ts` | the log feed's ring buffer and its gap markers |
+| `src/lib/files.ts` | the File Explorer's rules — paths, selection, batches |
 | `src/lib/fields.ts` | form values → run parameters |
 | `src-tauri/src/daemon/` | spawning, the HTTP client, and the stream socket |
 
@@ -64,8 +65,17 @@ and a tab strip: clicking a feature opens it in its own tab, tabs drag to
 reorder, and Home leads the strip permanently. An action feature renders from
 its registry fields — forms, toggles, destructive confirmation — which is why
 most of the registry works with no per-feature code. The screens built by hand
-so far are the installed-app browser with its verbs, and live logcat with
-visible gap markers.
+so far are the installed-app browser with its verbs, live logcat with visible
+gap markers, every device property searchable, and the file explorer.
+
+The file explorer is the first screen here that **writes** to a device.
+Everything on it — a new folder, a delete, a copy or move, a pull — goes over
+one of four `/v1/files/*` routes, and every path travels **verbatim**:
+device-shell quoting happens once, in ADBKit's `FileExplorerService`, so a
+path escaped on the way out would be quoted twice and address a different
+file. Delete needs a second press, the rule the app verbs already use. A pull
+lands in `~/Downloads/Droidective`, the folder `export_text` writes to, and
+the reply says where so the result can offer Show in folder.
 
 Open tabs stay mounted while they are in the background rather than
 unmounting, so a backgrounded tab keeps its log stream and its loaded lists.
@@ -88,11 +98,10 @@ shell, and this is the binding VS Code already trained everyone on), by a tab's
 right-click menu, or by dragging a tab onto the trailing edge of the pane. The
 divider clamps to 30–70% and its position is saved.
 
-Not yet: the command palette, hotkeys, and most of the
-full-screen views (file explorer, crash catcher, performance…), which are
-`kind: "view"` in the registry and need whole panels. They are listed in the
-sidebar and open a tab that says so, rather than being hidden — a feature the
-Mac has and this app does not is worth knowing about.
+Not yet: hotkeys, and most of the full-screen views (crash catcher,
+performance…), which are `kind: "view"` in the registry and need whole panels.
+They are listed in the sidebar and open a tab that says so, rather than being
+hidden — a feature the Mac has and this app does not is worth knowing about.
 `docs/desktop-parity.md` is the tracker.
 
 ## Two platform requirements for drag and drop
@@ -110,11 +119,30 @@ Both are needed before HTML5 drag works at all, and both fail silently:
 
 ## Parity with the Mac app
 
-`docs/desktop-parity.md` is the tracker: every registry feature, what its
-macOS view actually offers, and how far this app has got. The shell items at
-the top (tabs, split panes, sidebar, palette, hotkeys) come before the
-screens — porting a screen into a window with no tabs means reworking it once
-the tabs arrive.
+**The Mac's UI is this app's UI.** The Mac app is the proven one, and the point
+of the port is that someone moving between the two does not have to relearn
+anything. Where a control exists on both it looks and behaves the way
+`App/Sources/` makes it behave: same wording, same icon, same confirmation
+shape, same gesture. A double-click to open a folder stays a double-click even
+though single-click is the better web idiom; a `confirmationDialog` stays a
+dialog and does not become a button that arms itself. If an idea really is
+better, it goes into the Mac app first and this one follows.
+
+Two standing exceptions, both named where they occur: a keyboard shortcut whose
+modifier has no equivalent here (the split is **Ctrl/⌘ + \\**, because Ctrl+D
+is end-of-input in every Linux shell), and a label that names a platform.
+
+`docs/desktop-parity.md` is the tracker: every registry feature, every window
+and panel and menu the Mac has, what each actually offers, and how far this app
+has got. **Everything is in scope** — Settings and its seven tabs, the
+notification panel behind the device bar's bell, toasts, the Command Log, the
+role picker, the Manage Features catalog, About & Feedback, the menu bar, drag
+and drop. Only `ios-logs` and `push-notification` are out, and only because
+`xcrun simctl` is a macOS toolchain rather than anything about a device.
+
+The shell items come before the screens: porting a screen into a window with no
+tabs means reworking it once the tabs arrive, and the same is true of a screen
+that reports into an inline banner before the toasts exist.
 
 ## Conventions
 

@@ -33,6 +33,13 @@ public struct FsEntry: Sendable, Equatable, Identifiable {
     public let perms: String
 
     public var id: String { name }
+
+    public init(name: String, isDir: Bool, size: Int, perms: String) {
+        self.name = name
+        self.isDir = isDir
+        self.size = size
+        self.perms = perms
+    }
 }
 
 public struct MemInfo: Sendable, Equatable {

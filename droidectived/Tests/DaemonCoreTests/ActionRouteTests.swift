@@ -69,6 +69,26 @@ import FoundationNetworking
         func deviceProperties(serial: String) async throws -> [String: String] {
             ["ro.product.model": "Pixel", "ro.build.version.release": "14"]
         }
+
+        // The filesystem surface has its own suite; these are here only so this
+        // backend still conforms.
+        func rootStatus(serial: String) async -> RootStatus {
+            RootStatus(hasRootShell: false, likelyRooted: false, summary: "stub", signals: [])
+        }
+
+        func listFiles(serial: String, path: String, asRoot: Bool) async throws -> [FsEntry] { [] }
+
+        func fileOperation(
+            serial: String, _ operation: FileProtocol.Operation, asRoot: Bool
+        ) async throws -> FeatureResult { result }
+
+        func fileInfo(
+            serial: String, path: String, asRoot: Bool
+        ) async throws -> FileExplorerService.FileInfo? { nil }
+
+        func pullFile(
+            serial: String, path: String, to destination: String, asRoot: Bool
+        ) async throws -> String { destination }
     }
 
     private func withServer(

@@ -102,6 +102,18 @@ public struct FileExplorerService: Sendable {
         public var modified: String
         /// Last metadata change — Android/Linux doesn't record creation time.
         public var changed: String
+
+        public init(
+            type: String, sizeBytes: Int?, owner: String, permissions: String,
+            modified: String, changed: String
+        ) {
+            self.type = type
+            self.sizeBytes = sizeBytes
+            self.owner = owner
+            self.permissions = permissions
+            self.modified = modified
+            self.changed = changed
+        }
     }
 
     /// Detailed metadata via `stat`. Creation time isn't tracked by the

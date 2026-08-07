@@ -3,7 +3,7 @@ use serde::{Serialize, Serializer};
 /// Everything that can go wrong between this UI and `droidectived`.
 ///
 /// The daemon already promises one error shape (`{error:{code,message,detail}}`
-/// — see `docs/droidectived-protocol.md` §4.1), so this widens that same shape
+/// — see `docs/droidectived-protocol.md` §4.2), so this widens that same shape
 /// with the failures that happen on our side of the socket rather than
 /// inventing a second one for the UI to branch on.
 #[derive(Debug, thiserror::Error)]
