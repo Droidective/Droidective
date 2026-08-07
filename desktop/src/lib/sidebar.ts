@@ -71,6 +71,15 @@ export interface SidebarLayout {
   collapsedCategories: readonly string[]
   /** Pinned feature ids, in the order they were pinned. */
   favorites: readonly string[]
+  /**
+   * Features turned off in the catalog.
+   *
+   * They leave the *listing* but stay findable: turning something off is a
+   * decluttering choice, not a removal, and searching is how you go looking
+   * for the thing you tidied away — which is why the search branch below
+   * ignores this.
+   */
+  disabledFeatures?: readonly string[]
 }
 
 /** The pseudo-category the Pinned section uses. Never a real wire value. */
@@ -93,10 +102,12 @@ export function sidebarSections(
 
   const collapsed = new Set(layout.collapsedCategories)
   const sections: SidebarSection[] = []
+  const off = new Set(layout.disabledFeatures ?? [])
+  const listed = ordered.filter((feature) => !off.has(feature.id))
 
   // Pinned leads, and its members are lifted out of their categories rather
   // than listed twice — the same call the Mac's `enabledFeatures(in:)` makes.
-  const pinned = layout.favorites.flatMap((id) => ordered.filter((feature) => feature.id === id))
+  const pinned = layout.favorites.flatMap((id) => listed.filter((feature) => feature.id === id))
   if (pinned.length > 0) {
     sections.push({
       category: PINNED_SECTION,
@@ -106,7 +117,7 @@ export function sidebarSections(
     })
   }
 
-  const rest = ordered.filter((feature) => !layout.favorites.includes(feature.id))
+  const rest = listed.filter((feature) => !layout.favorites.includes(feature.id))
   for (const category of rankBy(orderedCategoryIDs(rest), layout.categoryOrder, (id) => id)) {
     const matching = rest.filter((feature) => feature.category === category)
     if (matching.length === 0) continue

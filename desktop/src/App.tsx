@@ -4,6 +4,7 @@ import { DeviceBar } from "@/components/DeviceBar"
 import { NotificationPanel } from "@/components/NotificationPanel"
 import { ToastOverlay } from "@/components/ToastOverlay"
 import { WorkspaceShell } from "@/components/WorkspaceShell"
+import { AppearanceProvider } from "@/hooks/useAppearance"
 import { NotificationsProvider } from "@/hooks/useNotifications"
 import { useSession } from "@/hooks/useSession"
 import { sidebarFeatures } from "@/lib/sidebar"
@@ -28,7 +29,8 @@ export function App() {
   }
 
   return (
-    <NotificationsProvider>
+    <AppearanceProvider>
+      <NotificationsProvider>
       <div className="flex h-full flex-col">
         <DeviceBar
           devices={session.devices}
@@ -50,7 +52,8 @@ export function App() {
         </div>
         <ToastOverlay />
       </div>
-    </NotificationsProvider>
+      </NotificationsProvider>
+    </AppearanceProvider>
   )
 }
 

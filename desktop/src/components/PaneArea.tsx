@@ -24,6 +24,9 @@ export interface PaneAreaProps {
   sidebarOrder: string[]
   categoryOrder: string[]
   favorites: string[]
+  disabledFeatures: string[]
+  onSetEnabled: (id: string, enabled: boolean) => void
+  onSetGroupEnabled: (members: FeatureSummary[], enabled: boolean) => void
   splitFraction: number
   onSplitFraction: (fraction: number) => void
 }
@@ -191,6 +194,9 @@ function PaneBody({
             sidebarOrder={props.sidebarOrder}
             categoryOrder={props.categoryOrder}
             favorites={props.favorites}
+            disabledFeatures={props.disabledFeatures}
+            onSetEnabled={props.onSetEnabled}
+            onSetGroupEnabled={props.onSetGroupEnabled}
           />
         </div>
       ))}

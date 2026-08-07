@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react"
 import { CommandPalette } from "@/components/CommandPalette"
+import { SettingsWindow } from "@/components/SettingsWindow"
 import { PaneArea } from "@/components/PaneArea"
 import { Sidebar } from "@/components/Sidebar"
-import { TabContextMenu } from "@/components/TabContextMenu"
-import type { TabMenuTarget } from "@/components/TabMenu"
+import { TabContextMenu, type TabMenuTarget } from "@/components/TabContextMenu"
 import { useTabShortcuts } from "@/hooks/useTabShortcuts"
 import { useWorkspace } from "@/hooks/useWorkspace"
 import type { Device, FeatureSummary } from "@/lib/wire"
@@ -25,6 +25,7 @@ export function WorkspaceShell({
   const workspace = useWorkspace(features)
   const [menu, setMenu] = useState<TabMenuTarget | null>(null)
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   // Lifted out of the Apps pane: a `needsBundle` action needs the same choice,
   // so it cannot live inside one tab. A package id means nothing on a different
   // device, so the choice is dropped when the selection changes.
@@ -33,11 +34,6 @@ export function WorkspaceShell({
   useEffect(() => {
     setPackageId(null)
   }, [serial])
-
-  const byID = useCallback(
-    (id: string) => features.find((feature) => feature.id === id) ?? null,
-    [features],
-  )
 
   // Focus the pane first, so whatever is chosen opens in the one that asked.
   const { focusPane } = workspace
@@ -65,30 +61,34 @@ export function WorkspaceShell({
     // it this refuses to shrink below its content and pushes the notification
     // panel off the right edge of the window rather than making room.
     <div className="flex min-h-0 min-w-0 flex-1">
-      <WorkspaceSidebar features={features} activeID={focused} workspace={workspace} />
-
-      <PaneArea
-        workspace={workspace.workspace}
+      <WorkspaceSidebar
         features={features}
-        featureByID={byID}
+        activeID={focused}
+        workspace={workspace}
+        onOpenSettings={() => {
+          setSettingsOpen(true)
+        }}
+      />
+
+      <WorkspacePanes
+        features={features}
         device={device}
+        workspace={workspace}
         packageId={packageId}
         onSelectPackage={setPackageId}
-        onOpen={workspace.open}
-        onClose={workspace.close}
-        onDrop={workspace.drop}
-        onSplit={workspace.split}
-        onFocusPane={workspace.focusPane}
+        onNewTab={onNewTab}
         onContextMenu={(id, x, y) => {
           setMenu({ id, x, y })
         }}
-        onNewTab={onNewTab}
-        sidebarOrder={workspace.layout.sidebarOrder}
-        categoryOrder={workspace.layout.categoryOrder}
-        favorites={workspace.layout.favorites}
-        splitFraction={workspace.layout.splitFraction}
-        onSplitFraction={workspace.setSplitFraction}
       />
+
+      {settingsOpen ? (
+        <SettingsWindow
+          onDismiss={() => {
+            setSettingsOpen(false)
+          }}
+        />
+      ) : null}
 
       <Overlays
         palette={paletteOpen}
@@ -117,13 +117,17 @@ function WorkspaceSidebar({
   features,
   activeID,
   workspace,
+  onOpenSettings,
 }: {
   features: FeatureSummary[]
   activeID: string | null
   workspace: ReturnType<typeof useWorkspace>
+  onOpenSettings: () => void
 }) {
   return (
     <Sidebar
+      disabledFeatures={workspace.layout.disabledFeatures}
+      onOpenSettings={onOpenSettings}
       features={features}
       activeID={activeID}
       onOpen={workspace.open}
@@ -135,6 +139,58 @@ function WorkspaceSidebar({
       onSidebarOrder={workspace.setSidebarOrder}
       onCategoryOrder={workspace.setCategoryOrder}
       onToggleCollapsed={workspace.toggleCategory}
+    />
+  )
+}
+
+/**
+ * The pane area, wired to the workspace.
+ *
+ * Its own component for the reason `WorkspaceSidebar` is: every prop below is
+ * a straight forward of `workspace.*`, and inline it buried what this file
+ * actually decides.
+ */
+function WorkspacePanes({
+  features,
+  device,
+  workspace,
+  packageId,
+  onSelectPackage,
+  onNewTab,
+  onContextMenu,
+}: {
+  features: FeatureSummary[]
+  device: Device | null
+  workspace: ReturnType<typeof useWorkspace>
+  packageId: string | null
+  onSelectPackage: (packageId: string | null) => void
+  onNewTab: (pane: number) => void
+  onContextMenu: (id: string, x: number, y: number) => void
+}) {
+  const byID = (id: string) => features.find((feature) => feature.id === id) ?? null
+  return (
+    <PaneArea
+      workspace={workspace.workspace}
+      features={features}
+      featureByID={byID}
+      device={device}
+      packageId={packageId}
+      onSelectPackage={onSelectPackage}
+      onOpen={workspace.open}
+      onClose={workspace.close}
+      onDrop={workspace.drop}
+      onSplit={workspace.split}
+      onFocusPane={workspace.focusPane}
+      onContextMenu={onContextMenu}
+      onNewTab={onNewTab}
+      sidebarOrder={workspace.layout.sidebarOrder}
+      categoryOrder={workspace.layout.categoryOrder}
+      favorites={workspace.layout.favorites}
+      disabledFeatures={workspace.layout.disabledFeatures}
+      onSetEnabled={workspace.setFeatureEnabled}
+      onSetGroupEnabled={workspace.setGroupEnabled}
+      splitFraction={workspace.layout.splitFraction}
+      onSplitFraction={workspace.setSplitFraction}
     />
   )
 }

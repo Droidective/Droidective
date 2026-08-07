@@ -66,6 +66,8 @@ pub fn run() -> tauri::Result<()> {
             commands::stop_watching,
             commands::copy_text,
             commands::reveal_path,
+            commands::open_url,
+            commands::captures_folder,
             commands::export_text,
         ])
         .setup(|app| {

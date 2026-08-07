@@ -32,7 +32,17 @@ public struct WifiNetwork: Sendable, Equatable, Identifiable {
     public let security: String?
     public var password: String?
 
-    public var id: String { networkId.map(String.init) ?? ssid }
+    /// Stable across refetches, and unique within one listing.
+    ///
+    /// Not the network id alone: `cmd wifi list-networks` really does print the
+    /// same id twice — an emulator lists `AndroidWifi` as both `open` and
+    /// `owe^` under id 0 — and two rows sharing an `Identifiable.id` is
+    /// undefined behaviour in a `ForEach` and a duplicate-key warning in the
+    /// desktop app. The security type is what tells those rows apart, so it is
+    /// part of the identity.
+    public var id: String {
+        [networkId.map(String.init) ?? "", ssid, security ?? ""].joined(separator: "\u{1F}")
+    }
 
     public init(networkId: Int?, ssid: String, security: String?, password: String? = nil) {
         self.networkId = networkId

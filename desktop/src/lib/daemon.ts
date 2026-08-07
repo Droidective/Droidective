@@ -148,6 +148,16 @@ export function revealPath(path: string): Promise<void> {
   return invoke("reveal_path", { path })
 }
 
+/** Where pulls and exports land, as the Rust side resolves it. */
+export function capturesFolder(): Promise<string> {
+  return invoke<string>("captures_folder")
+}
+
+/** Opens an external link. The Rust side refuses anything but https. */
+export function openUrl(url: string): Promise<void> {
+  return invoke("open_url", { url })
+}
+
 /** Writes into ~/Downloads/Droidective and returns where it landed. */
 export function exportText(name: string, contents: string): Promise<string> {
   return invoke<string>("export_text", { name, contents })

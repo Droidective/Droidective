@@ -1,5 +1,7 @@
 import { Construction } from "lucide-react"
 import { ActionForm } from "@/components/ActionForm"
+import { AboutPane } from "@/components/AboutPane"
+import { CatalogPane } from "@/components/CatalogPane"
 import { HomeView } from "@/components/HomeView"
 import {
   AppInfoPane,
@@ -19,7 +21,7 @@ import {
   SandboxPane,
   WifiPane,
 } from "@/components/panes"
-import { HOME_TAB } from "@/lib/layout"
+import { ABOUT_TAB, CATALOG_TAB, HOME_TAB } from "@/lib/layout"
 import { isRunnable, type Device, type FeatureSummary } from "@/lib/wire"
 
 export interface FeaturePaneProps {
@@ -33,6 +35,9 @@ export interface FeaturePaneProps {
   sidebarOrder: string[]
   categoryOrder: string[]
   favorites: string[]
+  disabledFeatures: string[]
+  onSetEnabled: (id: string, enabled: boolean) => void
+  onSetGroupEnabled: (members: FeatureSummary[], enabled: boolean) => void
 }
 
 /**
@@ -55,6 +60,21 @@ export function FeaturePane(props: FeaturePaneProps) {
       />
     )
   }
+  // The app's own screens, opened from the sidebar footer. No daemon serves
+  // them, so they are matched before the registry lookup below.
+  if (props.id === CATALOG_TAB) {
+    return (
+      <CatalogPane
+        features={props.features}
+        disabled={props.disabledFeatures}
+        sidebarOrder={props.sidebarOrder}
+        categoryOrder={props.categoryOrder}
+        onSetEnabled={props.onSetEnabled}
+        onSetGroupEnabled={props.onSetGroupEnabled}
+      />
+    )
+  }
+  if (props.id === ABOUT_TAB) return <AboutPane />
   if (props.feature === null) return <NotHere title={props.id} />
 
   switch (props.id) {

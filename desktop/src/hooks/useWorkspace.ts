@@ -6,6 +6,7 @@ import {
   saveLayout,
   type LayoutState,
 } from "@/lib/layout"
+import { withEnabled, withGroupEnabled } from "@/lib/catalog"
 import { clampedFraction } from "@/lib/panes"
 import { togglePinned } from "@/lib/palette"
 import { toggleCollapsed } from "@/lib/sidebar"
@@ -39,6 +40,10 @@ export interface WorkspaceController {
   setCategoryOrder: (order: string[]) => void
   toggleCategory: (category: string) => void
   togglePin: (id: string) => void
+  /** Turning one feature off in the catalog, or back on. */
+  setFeatureEnabled: (id: string, enabled: boolean) => void
+  /** A whole category at once — the Mac's right-click on a group header. */
+  setGroupEnabled: (members: FeatureSummary[], enabled: boolean) => void
 }
 
 /**
@@ -124,6 +129,18 @@ export function useWorkspace(features: FeatureSummary[]): WorkspaceController {
     }, []),
     togglePin: useCallback((id: string) => {
       setLayout((current) => ({ ...current, favorites: togglePinned(current.favorites, id) }))
+    }, []),
+    setFeatureEnabled: useCallback((id: string, enabled: boolean) => {
+      setLayout((current) => ({
+        ...current,
+        disabledFeatures: withEnabled(current.disabledFeatures, id, enabled),
+      }))
+    }, []),
+    setGroupEnabled: useCallback((members: FeatureSummary[], enabled: boolean) => {
+      setLayout((current) => ({
+        ...current,
+        disabledFeatures: withGroupEnabled(current.disabledFeatures, members, enabled),
+      }))
     }, []),
     toggleCategory: useCallback((category: string) => {
       setLayout((current) => ({

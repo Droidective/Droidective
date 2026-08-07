@@ -13,6 +13,17 @@ import { restoreWorkspace, type Workspace } from "@/lib/workspace"
 /** The permanent first tab, and what a closed last tab falls back to. */
 export const HOME_TAB = "home"
 
+/**
+ * The app's own screens, opened from the sidebar footer rather than the
+ * registry. They are tabs like any other — the Mac opens them the same way,
+ * through `requestFeature("catalog")` — but no daemon serves them.
+ */
+export const CATALOG_TAB = "catalog"
+export const ABOUT_TAB = "about"
+
+/** Tabs this app provides itself, which a restore must therefore accept. */
+export const CHROME_TABS: readonly string[] = [HOME_TAB, CATALOG_TAB, ABOUT_TAB]
+
 /** One pane's worth of saved tabs. */
 export interface SavedPane {
   tabs: string[]
@@ -26,6 +37,15 @@ export interface LayoutState {
   collapsedCategories: string[]
   /** Pinned feature ids, in the order they were pinned. */
   favorites: string[]
+  /**
+   * Features turned *off* in the catalog.
+   *
+   * The disabled set rather than the enabled one, because everything is on by
+   * default: a feature shipped after this was written is on without a
+   * migration having to notice it. The Mac reaches the same place by storing
+   * the enabled set and running `adoptNewDefaults()` over it.
+   */
+  disabledFeatures: string[]
   /** One entry per open pane, left to right. */
   panes: SavedPane[]
   focusedPane: number
@@ -41,6 +61,7 @@ export function emptyLayout(): LayoutState {
     categoryOrder: [],
     collapsedCategories: [],
     favorites: [],
+    disabledFeatures: [],
     panes: [{ tabs: [HOME_TAB], activeTab: HOME_TAB }],
     focusedPane: 0,
     splitFraction: 0.5,
@@ -72,6 +93,7 @@ export function loadLayout(storage: Pick<Storage, "getItem">): LayoutState {
     categoryOrder: stringArray(saved.categoryOrder),
     collapsedCategories: stringArray(saved.collapsedCategories),
     favorites: stringArray(saved.favorites),
+    disabledFeatures: stringArray(saved.disabledFeatures),
     panes: panes.length === 0 ? emptyLayout().panes : panes,
     focusedPane: typeof saved.focusedPane === "number" ? saved.focusedPane : 0,
     splitFraction: typeof saved.splitFraction === "number" ? saved.splitFraction : 0.5,
@@ -120,7 +142,8 @@ export function restoreWorkspaceFrom(
     tabs: index === 0 ? [HOME_TAB, ...pane.tabs.filter((id) => id !== HOME_TAB)] : pane.tabs,
     activeTab: pane.activeTab,
   }))
-  return restoreWorkspace(panes, layout.focusedPane, HOME_TAB, (id) => id === HOME_TAB || isKnownTab(id))
+  return restoreWorkspace(panes, layout.focusedPane, HOME_TAB, (id) =>
+    CHROME_TABS.includes(id) || isKnownTab(id))
 }
 
 function stringArray(value: unknown): string[] {

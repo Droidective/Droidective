@@ -1,12 +1,11 @@
 import { useMemo, useState } from "react"
-import { Search } from "lucide-react"
-import {
-  SidebarSection,
-  type Dragging,
-  type DropSlot,
-} from "@/components/SidebarSection"
+import { Info, LayoutGrid, Search, Settings } from "lucide-react"
+import { SidebarSection, type Dragging, type DropSlot } from "@/components/SidebarSection"
+import { hiddenCount, manageFeaturesLabel } from "@/lib/catalog"
+import { cn } from "@/lib/cn"
+import { ABOUT_TAB, CATALOG_TAB } from "@/lib/layout"
 import { applyDrop } from "@/lib/ordering"
-import { sidebarSections } from "@/lib/sidebar"
+import { sidebarFeatures, sidebarSections } from "@/lib/sidebar"
 import type { FeatureSummary } from "@/lib/wire"
 
 export interface SidebarProps {
@@ -21,6 +20,10 @@ export interface SidebarProps {
   onSidebarOrder: (order: string[]) => void
   onCategoryOrder: (order: string[]) => void
   onToggleCollapsed: (category: string) => void
+  /** Features turned off in the catalog — hidden from the listing, still findable. */
+  disabledFeatures: string[]
+  /** The sidebar footer's three destinations. */
+  onOpenSettings: () => void
 }
 
 /**
@@ -47,6 +50,7 @@ export function Sidebar(props: SidebarProps) {
         categoryOrder: props.categoryOrder,
         collapsedCategories: props.collapsedCategories,
         favorites: props.favorites,
+        disabledFeatures: props.disabledFeatures,
       }),
     [
       props.features,
@@ -54,6 +58,7 @@ export function Sidebar(props: SidebarProps) {
       props.categoryOrder,
       props.collapsedCategories,
       props.favorites,
+      props.disabledFeatures,
       query,
     ],
   )
@@ -101,30 +106,141 @@ export function Sidebar(props: SidebarProps) {
       {/* Dropping outside every row still ends the drag, so a guideline cannot
           be left painted where nothing landed. */}
       <div className="min-h-0 flex-1 overflow-y-auto pb-3" onDragEnd={endDrag}>
-        {sections.length === 0 ? (
-          <p className="px-4 py-8 text-center text-text-tertiary">Nothing matches “{query}”.</p>
-        ) : (
-          sections.map((section) => (
-            <SidebarSection
-              key={section.category}
-              section={section}
-              activeID={props.activeID}
-              favorites={props.favorites}
-              onTogglePinned={props.onTogglePinned}
-              dragging={dragging}
-              slot={slot}
-              draggable={!searching}
-              onOpen={props.onOpen}
-              onToggle={props.onToggleCollapsed}
-              onDragStart={setDragging}
-              onHover={setSlot}
-              onDropFeature={dropFeature}
-              onDropCategory={dropCategory}
-            />
-          ))
-        )}
+        <Rows
+          sections={sections}
+          props={props}
+          dragging={dragging}
+          slot={slot}
+          searching={searching}
+          onDragStart={setDragging}
+          onHover={setSlot}
+          onDropFeature={dropFeature}
+          onDropCategory={dropCategory}
+          query={query}
+        />
       </div>
+
+      <BottomBar
+        hidden={hiddenCount(sidebarFeatures(props.features), props.disabledFeatures)}
+        activeID={props.activeID}
+        onOpen={props.onOpen}
+        onOpenSettings={props.onOpenSettings}
+      />
     </aside>
+  )
+}
+
+/** The section list, or the empty state when a search matches nothing. */
+function Rows({
+  sections,
+  props,
+  dragging,
+  slot,
+  searching,
+  onDragStart,
+  onHover,
+  onDropFeature,
+  onDropCategory,
+  query,
+}: {
+  sections: ReturnType<typeof sidebarSections>
+  props: SidebarProps
+  dragging: Dragging | null
+  slot: DropSlot | null
+  searching: boolean
+  onDragStart: (dragging: Dragging | null) => void
+  onHover: (slot: DropSlot | null) => void
+  onDropFeature: (target: string, after: boolean, group: readonly string[]) => void
+  onDropCategory: (target: string, after: boolean) => void
+  query: string
+}) {
+  if (sections.length === 0) {
+    return <p className="px-4 py-8 text-center text-text-tertiary">Nothing matches “{query}”.</p>
+  }
+  return (
+    <>
+      {sections.map((section) => (
+        <SidebarSection
+          key={section.category}
+          section={section}
+          activeID={props.activeID}
+          favorites={props.favorites}
+          onTogglePinned={props.onTogglePinned}
+          dragging={dragging}
+          slot={slot}
+          draggable={!searching}
+          onOpen={props.onOpen}
+          onToggle={props.onToggleCollapsed}
+          onDragStart={onDragStart}
+          onHover={onHover}
+          onDropFeature={onDropFeature}
+          onDropCategory={onDropCategory}
+        />
+      ))}
+    </>
+  )
+}
+
+/**
+ * The sidebar footer — Manage features, About & Feedback, Settings.
+ *
+ * The Mac's `bottomBar`, including the detail that matters most: the first
+ * control reads "+ N more features" once anything is hidden, which is the only
+ * reminder that a feature turned off months ago still exists.
+ */
+function BottomBar({
+  hidden,
+  activeID,
+  onOpen,
+  onOpenSettings,
+}: {
+  hidden: number
+  activeID: string | null
+  onOpen: (id: string) => void
+  onOpenSettings: () => void
+}) {
+  return (
+    <footer className="flex shrink-0 items-center gap-4 px-3 py-2.5">
+      <button
+        type="button"
+        onClick={() => {
+          onOpen(CATALOG_TAB)
+        }}
+        className={cn(
+          "flex min-w-0 items-center gap-1.5 truncate text-left",
+          activeID === CATALOG_TAB ? "text-accent" : "text-text-tertiary hover:text-text-primary",
+        )}
+      >
+        <LayoutGrid size={13} className="shrink-0" />
+        <span className="truncate">{manageFeaturesLabel(hidden)}</span>
+      </button>
+
+      <span className="flex-1" />
+
+      <button
+        type="button"
+        onClick={() => {
+          onOpen(ABOUT_TAB)
+        }}
+        aria-label="About & Feedback"
+        title="About & Feedback — version, report an issue, star on GitHub"
+        className={
+          activeID === ABOUT_TAB ? "text-accent" : "text-text-tertiary hover:text-text-primary"
+        }
+      >
+        <Info size={17} />
+      </button>
+
+      <button
+        type="button"
+        onClick={onOpenSettings}
+        aria-label="Settings"
+        title="Settings (Ctrl+,)"
+        className="text-text-tertiary hover:text-text-primary"
+      >
+        <Settings size={17} />
+      </button>
+    </footer>
   )
 }
 

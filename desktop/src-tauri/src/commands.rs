@@ -524,6 +524,41 @@ pub fn reveal_path(app: AppHandle, path: String) -> Result<(), DaemonError> {
         .map_err(|error| DaemonError::Host(format!("could not open {path}: {error}")))
 }
 
+/// Where pulls and exports land — `~/Downloads/Droidective`.
+///
+/// Answered rather than assumed by the UI: this process is the one that
+/// resolves the platform's Downloads folder, and Settings showing a path the
+/// files do not actually go to would be worse than showing none.
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "tauri's command macro hands AppHandle in by value"
+)]
+pub fn captures_folder(app: AppHandle) -> Result<String, DaemonError> {
+    Ok(droidective_folder(&app)?.to_string_lossy().into_owned())
+}
+
+/// Opens an external URL in the default browser.
+///
+/// Only `https://` is opened, and the check is here rather than at the call
+/// site: this command is the boundary, and a `file://` or a custom scheme
+/// reaching the OS opener is the difference between showing a web page and
+/// launching something. The About screen's links are the only caller today,
+/// but a boundary that trusts its caller is not a boundary.
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "tauri's command macro hands AppHandle in by value"
+)]
+pub fn open_url(app: AppHandle, url: String) -> Result<(), DaemonError> {
+    if !url.starts_with("https://") {
+        return Err(DaemonError::Host(format!("refusing to open {url}")));
+    }
+    app.opener()
+        .open_url(url.clone(), None::<&str>)
+        .map_err(|error| DaemonError::Host(format!("could not open {url}: {error}")))
+}
+
 /// Writes text into `~/Downloads/Droidective/<name>` and returns the path.
 ///
 /// The Mac exports there too, so someone moving between the two finds their
