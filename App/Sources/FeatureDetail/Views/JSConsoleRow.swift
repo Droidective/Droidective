@@ -14,16 +14,31 @@ struct ConsoleFlowLayout: Layout {
     var spacing: CGFloat = 5
     var lineSpacing: CGFloat = 3
 
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache _: inout Void) -> CGSize {
-        let arranged = arrange(subviews, maxWidth: proposal.width ?? .infinity).arrangement
+    /// Measurements already taken, keyed by width. SwiftUI asks a row for its
+    /// size several times per layout pass and then places it, and measuring is
+    /// the expensive half — see `ConsoleRowMeasurementCache`. The default
+    /// `updateCache` throws the whole memo away whenever the subviews change,
+    /// which is what keeps a memoised row honest about its own content.
+    func makeCache(subviews _: Subviews) -> ConsoleRowMeasurementCache {
+        ConsoleRowMeasurementCache()
+    }
+
+    func sizeThatFits(
+        proposal: ProposedViewSize, subviews: Subviews, cache: inout ConsoleRowMeasurementCache
+    ) -> CGSize {
+        let arranged = measure(subviews, maxWidth: proposal.width ?? .infinity, cache: &cache).arrangement
         return CGSize(width: arranged.width, height: arranged.height)
     }
 
-    func placeSubviews(in bounds: CGRect, proposal _: ProposedViewSize, subviews: Subviews, cache _: inout Void) {
+    func placeSubviews(
+        in bounds: CGRect, proposal _: ProposedViewSize, subviews: Subviews,
+        cache: inout ConsoleRowMeasurementCache
+    ) {
         // Measured against the width actually allocated, not the proposal — the
         // two can differ, and laying a row out against anything but its real
         // bounds is how it ends up drawn wider than the pane holding it.
-        let (segments, arranged) = arrange(subviews, maxWidth: bounds.width)
+        let measured = measure(subviews, maxWidth: bounds.width, cache: &cache)
+        let (segments, arranged) = (measured.segments, measured.arrangement)
         for (index, subview) in subviews.enumerated() {
             let slot = arranged.slots[index]
             // Never offer a segment more width than the row has. A value with
@@ -39,12 +54,21 @@ struct ConsoleFlowLayout: Layout {
         }
     }
 
+    /// This row measured at `maxWidth`, from the memo when it's already been
+    /// asked for at that width and freshly otherwise.
+    private func measure(
+        _ subviews: Subviews, maxWidth: CGFloat, cache: inout ConsoleRowMeasurementCache
+    ) -> ConsoleRowMeasurement {
+        if let memoised = cache.measurement(atWidth: maxWidth) { return memoised }
+        let fresh = arrange(subviews, maxWidth: maxWidth)
+        cache.store(fresh, atWidth: maxWidth)
+        return fresh
+    }
+
     /// Measure each segment at the row's width, then hand the arithmetic to
     /// `ConsoleRowLayout` — it's pure, and it's where the wrapping height has to
     /// be right.
-    private func arrange(
-        _ subviews: Subviews, maxWidth: CGFloat
-    ) -> (segments: [ConsoleRowSegment], arrangement: ConsoleRowArrangement) {
+    private func arrange(_ subviews: Subviews, maxWidth: CGFloat) -> ConsoleRowMeasurement {
         var segments: [ConsoleRowSegment] = []
         segments.reserveCapacity(subviews.count)
         for subview in subviews {
@@ -58,7 +82,7 @@ struct ConsoleFlowLayout: Layout {
         let arrangement = ConsoleRowLayout.arrange(
             segments, maxWidth: maxWidth, spacing: spacing, lineSpacing: lineSpacing
         )
-        return (segments, arrangement)
+        return ConsoleRowMeasurement(segments: segments, arrangement: arrangement)
     }
 }
 
