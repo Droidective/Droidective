@@ -42,11 +42,27 @@ public enum JSONTreeLayout {
         return Int(min(capacity, 100_000))
     }
 
-    /// True when a value of `characters` still overflows `lines` wrapped lines
-    /// of a `columnCharacters`-wide column, i.e. the row keeps its disclosure.
+    /// Collapsed budget for a row whose pane hasn't reported its width yet —
+    /// roughly three lines of a typical pane, so the frame before the first
+    /// measurement neither flashes a three-character value nor lays out a whole
+    /// payload.
+    public static let unmeasuredBudget = 240
+
+    /// Characters a collapsed value shows before it is cut: `lines` of the
+    /// column, less one glyph per line so an estimate that runs a hair
+    /// optimistic can't spill onto a line the row didn't reserve. The row cuts
+    /// the *string* to this rather than asking for a line limit — a limit is a
+    /// drawing instruction the height doesn't always follow, a shorter string
+    /// can't be drawn taller than it is.
+    public static func collapsedBudget(columnCharacters: Int, lines: Int = collapsedLines) -> Int {
+        max(1, (max(1, columnCharacters) - 1) * max(1, lines))
+    }
+
+    /// True when a value of `characters` doesn't fit the collapsed budget, i.e.
+    /// the row is cut and keeps its disclosure.
     public static func overflows(
         characters: Int, columnCharacters: Int, lines: Int = collapsedLines
     ) -> Bool {
-        characters > max(1, columnCharacters) * max(1, lines)
+        characters > collapsedBudget(columnCharacters: columnCharacters, lines: lines)
     }
 }

@@ -55,20 +55,43 @@ import Testing
         )
     }
 
-    @Test func overflowIsMeasuredAgainstTheWrappedLines() {
-        // 40 characters per line × 3 lines: 120 fits, 121 doesn't.
-        #expect(!JSONTreeLayout.overflows(characters: 120, columnCharacters: 40))
-        #expect(JSONTreeLayout.overflows(characters: 121, columnCharacters: 40))
+    @Test func budgetKeepsAGlyphPerLineInHand() {
+        // 40-character column × 3 lines, less a glyph a line so a hair-optimistic
+        // estimate can't spill onto a fourth: 117, not 120.
+        #expect(JSONTreeLayout.collapsedBudget(columnCharacters: 40) == 117)
+        #expect(JSONTreeLayout.collapsedBudget(columnCharacters: 40, lines: 1) == 39)
+        // Degenerate columns and line counts still yield a budget of at least
+        // one character — a zero would cut every value to nothing.
+        #expect(JSONTreeLayout.collapsedBudget(columnCharacters: 0) == 1)
+        #expect(JSONTreeLayout.collapsedBudget(columnCharacters: 1) == 1)
+        #expect(JSONTreeLayout.collapsedBudget(columnCharacters: 40, lines: 0) == 39)
+    }
+
+    @Test func overflowIsMeasuredAgainstTheBudget() {
+        #expect(!JSONTreeLayout.overflows(characters: 117, columnCharacters: 40))
+        #expect(JSONTreeLayout.overflows(characters: 118, columnCharacters: 40))
         #expect(!JSONTreeLayout.overflows(characters: 0, columnCharacters: 40))
         // An explicit line count is honoured — one line is the un-wrapped case.
-        #expect(JSONTreeLayout.overflows(characters: 41, columnCharacters: 40, lines: 1))
-        #expect(!JSONTreeLayout.overflows(characters: 41, columnCharacters: 40, lines: 2))
+        #expect(JSONTreeLayout.overflows(characters: 40, columnCharacters: 40, lines: 1))
+        #expect(!JSONTreeLayout.overflows(characters: 40, columnCharacters: 40, lines: 2))
     }
 
     @Test func degenerateColumnStillDecides() {
         #expect(JSONTreeLayout.overflows(characters: 10, columnCharacters: 0))
         #expect(!JSONTreeLayout.overflows(characters: 1, columnCharacters: 0))
         #expect(JSONTreeLayout.overflows(characters: 10, columnCharacters: 3, lines: 0))
+    }
+
+    @Test func theUnmeasuredBudgetIsAboutThreeLinesOfATypicalPane() {
+        // The first frame, before the pane reports its width: enough to look
+        // like a collapsed value, far short of a whole payload.
+        let typical = JSONTreeLayout.collapsedBudget(
+            columnCharacters: JSONTreeLayout.columnCharacters(
+                rowWidth: 660, fontSize: font, depth: 0, keyCharacters: 4
+            )
+        )
+        #expect(JSONTreeLayout.unmeasuredBudget < typical)
+        #expect(JSONTreeLayout.unmeasuredBudget > 100)
     }
 
     @Test func aRealisticPayloadKeepsItsDisclosure() {
