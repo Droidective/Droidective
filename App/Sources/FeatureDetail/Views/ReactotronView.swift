@@ -2585,10 +2585,22 @@ private struct JSONTreeView: View {
     /// where a search box per row would be clutter).
     var showSearch: Bool = true
     @State private var expanded: Set<String> = []
+    /// Leaf rows whose value is shown in full — the rest wrap to
+    /// `JSONTreeLayout.collapsedLines` so one 20 KB payload can't bury the
+    /// timeline.
+    @State private var expandedValues: Set<String> = []
     @State private var search = ""
     /// The last find result revealed by a click, tinted in the tree until the
     /// next search.
     @State private var highlightedPath: String?
+    /// The tree's laid-out width, measured once for every row: a value wraps
+    /// with the pane, so whether it *still* overflows — and needs its "show all"
+    /// disclosure — is a function of the width the pane currently has.
+    @State private var treeWidth: CGFloat = 0
+
+    /// The row font's point size, scaled the way `Font.app` scales it, so the
+    /// per-line character estimate tracks Settings ▸ Appearance ▸ Text size.
+    private var valueFontSize: Double { 11 * AppFontPrefs.sizeScale }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -2628,6 +2640,7 @@ private struct JSONTreeView: View {
                     if matches.count >= 200 { emptyRow("…first 200 matches — narrow the search") }
                 }
             }
+            .measuringWidth(into: $treeWidth)
         }
         // A newly typed query drops the previous reveal's tint (reveal itself
         // clears the field, so its own highlight survives this).
@@ -2696,13 +2709,28 @@ private struct JSONTreeView: View {
 
     @ViewBuilder
     private func rowView(_ node: JSONNode) -> some View {
+        // Built once per row: on a big payload the preview is a full copy of
+        // the value, and both the overflow test and the row itself need it.
+        let preview = node.valuePreview
+        let showsAll = expandedValues.contains(node.path)
+        // An opened row keeps its disclosure even if a wider pane has since
+        // made the value fit — otherwise the only way to close it disappears.
+        let disclosesValue = !node.isContainer && (showsAll || overflows(preview, at: node))
         HStack(alignment: .top, spacing: 4) {
-            Color.clear.frame(width: CGFloat(max(0, node.depth)) * 12, height: 1)
+            Color.clear.frame(width: CGFloat(max(0, node.depth)) * JSONTreeLayout.indentPerDepth, height: 1)
             if node.isContainer {
                 Image(systemName: expanded.contains(node.path) ? "chevron.down" : "chevron.right")
                     .font(.app(size: 10, weight: .bold))
                     .foregroundStyle(.secondary)
                     .frame(width: 14)
+            } else if disclosesValue {
+                // A long value borrows the containers' disclosure column —
+                // same column, lighter weight, so the two never read alike.
+                Image(systemName: showsAll ? "chevron.down" : "chevron.right")
+                    .font(.app(size: 9))
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 14)
+                    .help(showsAll ? "Show less" : "Show the whole value")
             } else {
                 Color.clear.frame(width: 14, height: 1)
             }
@@ -2714,10 +2742,14 @@ private struct JSONTreeView: View {
                     .font(.app(size: 11, design: .monospaced))
                     .foregroundStyle(.tertiary)
             }
-            Text(node.valuePreview)
+            // Values wrap with the pane instead of being cut at its edge —
+            // capped at a few lines until the row is opened, so a stringified
+            // payload doesn't push the rest of the object off-screen.
+            Text(displayValue(preview, showingAll: showsAll))
                 .font(.app(size: 11, design: .monospaced))
                 .foregroundStyle(node.valueColor)
-                .lineLimit(1)
+                .lineLimit(showsAll ? nil : JSONTreeLayout.collapsedLines)
+                .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
             Spacer(minLength: 0)
         }
@@ -2730,7 +2762,11 @@ private struct JSONTreeView: View {
             }
         }
         .onTapGesture {
-            if node.isContainer { toggle(node.path) }
+            if node.isContainer {
+                toggle(node.path)
+            } else if disclosesValue {
+                toggleValue(node.path)
+            }
         }
         .contextMenu {
             Button("Copy value") {
@@ -2742,6 +2778,38 @@ private struct JSONTreeView: View {
 
     private func toggle(_ path: String) {
         if expanded.contains(path) { expanded.remove(path) } else { expanded.insert(path) }
+    }
+
+    private func toggleValue(_ path: String) {
+        if expandedValues.contains(path) { expandedValues.remove(path) } else { expandedValues.insert(path) }
+    }
+
+    /// An opened value is capped the way a log body is — laying an unbounded
+    /// payload out over unlimited lines stalls the pane, and the row's
+    /// "Copy value" still yields the whole thing.
+    private static let openValueCap = 20_000
+
+    private func displayValue(_ preview: String, showingAll: Bool) -> String {
+        guard showingAll, preview.prefix(Self.openValueCap + 1).count > Self.openValueCap else { return preview }
+        return String(preview.prefix(Self.openValueCap)) + "…"
+    }
+
+    /// Whether this row's value still runs past its wrapped lines at the pane's
+    /// current width — estimated from the monospaced advance rather than
+    /// measured per row, which would cost a geometry read on every node of a
+    /// streaming timeline.
+    private func overflows(_ preview: String, at node: JSONNode) -> Bool {
+        guard !node.isContainer, treeWidth > 0 else { return false }
+        let column = JSONTreeLayout.columnCharacters(
+            rowWidth: Double(treeWidth),
+            fontSize: valueFontSize,
+            depth: node.depth,
+            keyCharacters: node.key.count
+        )
+        // Counting a multi-megabyte payload on every render would cost more
+        // than the decision is worth: anything past this bound overflows any
+        // pane the app can be resized to.
+        return JSONTreeLayout.overflows(characters: preview.prefix(8192).count, columnCharacters: column)
     }
 }
 
