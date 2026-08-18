@@ -448,6 +448,16 @@ table) is in `docs/reactotron-mcp-analysis.md`.
     `sharedBackgroundVisibility`), and titlebar content via
     `.fullSizeContentView` or `NSTitlebarAccessoryViewController` is collapsed
     or clipped. All four were tried.
+  - **Full View is per window and transient.** `AppState.fullView` hides the
+    app's chrome (sidebar, device bar, tab strip) *and* puts the window into
+    macOS full screen — View ▸ Full View / ⇧⌘F (not ⌃⌘F, which macOS owns), the
+    Mirror Wall header's expand button, and a toast naming the way out. It is
+    deliberately not persisted, and RootView watches
+    `NSWindow.willExitFullScreenNotification` so leaving full screen by the
+    green button can't leave a chrome-less window behind. A feature's own
+    controls stay — the wall keeps its header row, which is where the exit
+    button lives. The menu key equivalent is the exit that always works: a
+    mirror view swallows key events that reach it, but NSMenu sees them first.
   - **Only the windows after the first tint their device icon**
     (`DeviceTint`); the app keeps one accent.
   - **A feature that can't run twice on one device** goes in

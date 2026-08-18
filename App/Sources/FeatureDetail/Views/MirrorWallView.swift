@@ -109,6 +109,7 @@ struct MirrorWallView: View {
             Spacer(minLength: 8)
 
             layoutMenu
+            fullViewButton
             optionsMenu
         }
         .padding(.horizontal, 12)
@@ -131,6 +132,24 @@ struct MirrorWallView: View {
         .menuStyle(.borderlessButton)
         .fixedSize()
         .help("Pick which devices this wall shows")
+    }
+
+    /// Give the wall the whole display: the app's chrome (sidebar, device bar,
+    /// tab strip) goes away and the window enters macOS full screen. This row
+    /// stays — it's the wall's own controls, and the way back out.
+    private var fullViewButton: some View {
+        Button {
+            state.toggleFullView()
+        } label: {
+            Image(systemName: state.fullView
+                ? "arrow.down.right.and.arrow.up.left"
+                : "arrow.up.left.and.arrow.down.right")
+                .font(.app(.body))
+        }
+        .buttonStyle(.plain)
+        .help(state.fullView
+            ? "Exit full view (⇧⌘F)"
+            : "Full view — hide the app chrome (⇧⌘F)")
     }
 
     private var layoutMenu: some View {

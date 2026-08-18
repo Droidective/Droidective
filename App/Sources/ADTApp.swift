@@ -468,6 +468,16 @@ struct ADTApp: App {
                     appState?.toggleSidebar()
                 }
                 .keyboardShortcut("b", modifiers: .command)
+
+                // ⇧⌘F, not the system's ⌃⌘F: macOS already owns that for plain
+                // full screen, and this does more (it hides the app's chrome
+                // too). A menu key equivalent is also the one exit that always
+                // works — the mirror swallows key events that reach its view,
+                // but NSMenu gets them first.
+                Button(appState?.fullView == true ? "Exit Full View" : "Full View") {
+                    appState?.toggleFullView()
+                }
+                .keyboardShortcut("f", modifiers: [.command, .shift])
             }
 
             CommandGroup(after: .toolbar) {

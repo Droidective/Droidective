@@ -243,6 +243,36 @@ final class AppState {
     /// visibility, driven by the left-edge hover zone and ⌘B.
     var sidebarOverlayShown = false
 
+    /// Full View: the app's own chrome — sidebar, device bar, tab strip — is
+    /// hidden and the window goes into macOS full screen, so the feature on
+    /// screen gets the whole display. Transient by design (a mode you toggle,
+    /// never a state you relaunch into), and per window.
+    private(set) var fullView = false
+
+    /// Enter or leave Full View, taking the window's native full-screen state
+    /// with it. Leaving native full screen by the green button leaves the mode
+    /// too — RootView watches for that, so the two can't disagree.
+    func toggleFullView() {
+        setFullView(!fullView)
+    }
+
+    func setFullView(_ on: Bool) {
+        guard fullView != on else { return }
+        withAnimation(.easeInOut(duration: 0.2)) { fullView = on }
+        if on {
+            // With the chrome gone there's no button left in sight for most
+            // features, so say how to get back instead of leaving the user to
+            // find the menu. Not kept in the notification history.
+            showToast(Toast(
+                message: "Full view — press ⇧⌘F to leave",
+                ok: true, level: .info, important: false))
+        }
+        guard let window = nsWindow else { return }
+        if window.styleMask.contains(.fullScreen) != on {
+            window.toggleFullScreen(nil)
+        }
+    }
+
     func toggleSidebar() {
         if UserDefaults.standard.bool(forKey: sidebarAutoHideDefaultsKey) {
             withAnimation(.easeInOut(duration: 0.18)) { sidebarOverlayShown.toggle() }
