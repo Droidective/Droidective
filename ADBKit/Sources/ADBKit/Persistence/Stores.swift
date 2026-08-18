@@ -144,6 +144,10 @@ public struct WindowState: Codable, Sendable, Equatable, Identifiable {
     /// Working directories of this window's terminal tabs at the last implicit
     /// teardown (see `TerminalResume`).
     public var terminalResumeDirs: [String]?
+    /// Devices this window's Mirror Wall shows, in tile order — the picked set
+    /// and the arrangement, which are per window like everything else here.
+    /// nil (or a set whose devices all left) opens on the connected devices.
+    public var mirrorWallSerials: [String]?
 
     public init(
         id: WorkspaceID,
@@ -151,7 +155,8 @@ public struct WindowState: Codable, Sendable, Equatable, Identifiable {
         bundleId: String? = nil,
         tabGroups: [TabGroupState]? = nil,
         focusedGroup: Int? = nil,
-        terminalResumeDirs: [String]? = nil
+        terminalResumeDirs: [String]? = nil,
+        mirrorWallSerials: [String]? = nil
     ) {
         self.id = id
         self.serial = serial
@@ -159,6 +164,7 @@ public struct WindowState: Codable, Sendable, Equatable, Identifiable {
         self.tabGroups = tabGroups
         self.focusedGroup = focusedGroup
         self.terminalResumeDirs = terminalResumeDirs
+        self.mirrorWallSerials = mirrorWallSerials
     }
 }
 

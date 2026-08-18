@@ -909,7 +909,7 @@ private struct SplitDivider: View {
 /// Reads the hosting `NSWindow` once it attaches, so the main window can be
 /// sized to fill the screen on launch. `viewDidMoveToWindow` runs on the main
 /// actor with the window in place — no async hop, so it stays Swift-6 clean.
-private final class WindowReaderView: NSView {
+final class WindowReaderView: NSView {
     var onWindow: ((NSWindow) -> Void)?
 
     override func viewDidMoveToWindow() {
@@ -1002,7 +1002,10 @@ final class WindowMinSizeGuard {
     }
 }
 
-private struct WindowAccessor: NSViewRepresentable {
+/// Hands back the `NSWindow` hosting a SwiftUI view. Used by the workspace
+/// windows and by the pop-out mirror windows, which register themselves for
+/// "Arrange Mirror Windows".
+struct WindowAccessor: NSViewRepresentable {
     let onResolve: (NSWindow) -> Void
 
     func makeNSView(context: Context) -> WindowReaderView {

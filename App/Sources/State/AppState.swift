@@ -538,6 +538,7 @@ final class AppState {
             selectedSerial = saved.serial
             selectedBundleId = saved.bundleId
             terminalResumeDirs = saved.terminalResumeDirs
+            mirrorWallSerials = saved.mirrorWallSerials
             // Reopen the tabs from the last session (idle — recordings/streams
             // don't resume). Falls back to a single Home tab for a new user or
             // a layout written before tabs existed.
@@ -981,7 +982,8 @@ final class AppState {
                 TabGroupState(tabs: $0.openTabs, activeTab: $0.activeTab)
             },
             focusedGroup: workspace.focusedGroup,
-            terminalResumeDirs: terminalResumeDirs
+            terminalResumeDirs: terminalResumeDirs,
+            mirrorWallSerials: mirrorWallSerials
         ))
         core.persistLayout()
     }
@@ -989,6 +991,24 @@ final class AppState {
     /// Working directories of this window's terminal tabs at the last implicit
     /// teardown — the next Terminal open in *this* window resumes them.
     var terminalResumeDirs: [String]?
+
+    /// Devices this window's Mirror Wall shows, in tile order. Per window (two
+    /// windows can watch different sets), and persisted, so a wall arranged for
+    /// six devices comes back arranged.
+    var mirrorWallSerials: [String]? {
+        didSet {
+            guard mirrorWallSerials != oldValue else { return }
+            persistWindowState()
+        }
+    }
+
+    /// Tell the conflict rules which devices this window is mirroring outside
+    /// its own selection — the wall's live tiles and its pop-out mirror
+    /// windows. Replaces the previous set, so a tile that stops streaming
+    /// releases its device (see `WorkspaceRegistry.setClaims`).
+    func noteMirrorClaims(_ serials: Set<String>, featureID: String) {
+        core.noteMirrorClaims(serials, featureID: featureID, in: id)
+    }
 
     /// Ids that can back a tab: every registry feature plus the standalone
     /// Home / About / Catalog screens and the Finder-opened-APK screen.

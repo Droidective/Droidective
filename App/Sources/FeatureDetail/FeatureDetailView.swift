@@ -167,6 +167,8 @@ struct FeatureDetailView: View {
             NetworkView()
         case .scrcpy:
             ScreenMirrorView()
+        case .mirrorWall:
+            MirrorWallView()
         case .apiClient:
             ApiClientView()
         }

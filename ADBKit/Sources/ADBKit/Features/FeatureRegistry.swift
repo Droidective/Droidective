@@ -177,6 +177,16 @@ public enum FeatureRegistry {
             category: .screen, icon: "display", kind: .view, needsScrcpy: true
         ),
         FeatureDef(
+            id: "mirror-wall", title: "Mirror Wall",
+            subtitle: "Mirror up to six devices side by side",
+            keywords: ["mirror", "wall", "grid", "multi", "devices", "all", "scrcpy",
+                       "side by side", "several", "farm"],
+            // Not scoped to the device bar: the wall picks its own devices, so a
+            // simulator (or nothing) being selected must not gate it.
+            category: .screen, icon: "square.grid.2x2", kind: .view,
+            needsDevice: false, needsScrcpy: true
+        ),
+        FeatureDef(
             id: "screenshot", title: "Screenshot",
             subtitle: "Capture the screen and save it to your Mac",
             keywords: ["screenshot", "capture", "screencap", "png", "image"],
@@ -675,7 +685,7 @@ public enum FeatureRegistry {
             "react-native", "reactotron", "js-console",
             "logcat", "ios-logs", "crash-catcher", "performance", "network-speed",
             "apps", "install-app", "apk-studio", "aab-convert",
-            "device-info", "simulate", "scrcpy", "screenshot", "send-text",
+            "device-info", "simulate", "scrcpy", "mirror-wall", "screenshot", "send-text",
             "emulators", "connection",
             "api-client", "terminal", "custom-commands",
         ],
@@ -691,7 +701,7 @@ public enum FeatureRegistry {
         // Capture first (the QA staple), then repro/report, state simulation,
         // perf/fuzz, app install, and device context.
         .qaTester: [
-            "screenshot", "screen-record", "scrcpy", "video-editor",
+            "screenshot", "screen-record", "scrcpy", "mirror-wall", "video-editor",
             "bug-report", "crash-catcher", "logcat",
             "simulate", "performance", "monkey",
             "apps", "install-app", "send-text", "demo-mode",

@@ -23,6 +23,12 @@ let mirrorHiddenGraceSeconds: TimeInterval = 120
 /// window. The toolbar takes a screenshot (→ annotate in place) or records
 /// (→ video editor on stop) without interrupting the live, controllable mirror.
 struct ScreenMirrorView: View {
+    /// The device this mirror is pinned to, instead of following the device
+    /// bar. The pop-out windows use it: one window per device, so a window that
+    /// re-targeted on every click in the main window would mirror whatever was
+    /// last selected rather than the device it was opened for.
+    var pinnedSerial: String?
+
     @Environment(AppState.self) private var state
     @Environment(\.tabFeatureID) private var tabFeatureID
     @Environment(\.tabIsActive) private var tabIsActive
@@ -71,13 +77,14 @@ struct ScreenMirrorView: View {
             // Connect if the mirror is the tab on screen when it's first
             // mounted; a hidden tab connects lazily once it becomes active
             // (below). A hidden mirror is heavy video encode for nothing.
-            if tabIsActive, model == nil { scheduleReconnect(to: state.targetSerials.first) }
+            if tabIsActive, model == nil { scheduleReconnect(to: targetSerial) }
         }
         .onChange(of: state.targetSerials.first) { _, serial in
             // Follow the selected device: switching it re-targets the live
             // mirror — but never mid-recording, which stays on its device
-            // (leaving to switch is gated by the recording exit guard).
-            guard tabIsActive, model?.isRecording != true else { return }
+            // (leaving to switch is gated by the recording exit guard). A pinned
+            // mirror ignores the bar entirely.
+            guard pinnedSerial == nil, tabIsActive, model?.isRecording != true else { return }
             scheduleReconnect(to: serial)
         }
         .onChange(of: tabIsActive) { _, active in
@@ -94,8 +101,8 @@ struct ScreenMirrorView: View {
                     hasSession: model != nil,
                     isRecording: model?.isRecording == true,
                     sessionEnded: model?.hasEnded == true,
-                    deviceChanged: model?.serial != state.targetSerials.first)
-                if action == .reconnect { scheduleReconnect(to: state.targetSerials.first) }
+                    deviceChanged: model?.serial != targetSerial)
+                if action == .reconnect { scheduleReconnect(to: targetSerial) }
             } else if MirrorTabPolicy.schedulesTeardownOnHide(isRecording: model?.isRecording == true) {
                 // Hidden — keep streaming for a grace window instead of tearing
                 // down instantly, so a quick tab flip doesn't stop-and-reconnect.
@@ -115,6 +122,16 @@ struct ScreenMirrorView: View {
             // applies on the next connect.
             guard let model else { return }
             Task { await CommandLog.userInitiated { await model.setShowTouches(show) } }
+        }
+        .onChange(of: model?.serial) { _, serial in
+            // Publish what this mirror is actually streaming, so the Mirror Wall
+            // doesn't put a second encoder on the same device (a split pane can
+            // show both at once). Claims come from *live* sessions, which is why
+            // a merely-open tab isn't enough. The pop-out windows are registered
+            // by `AppCore` instead — it holds all of them, and one write here
+            // would clobber its siblings.
+            guard tabFeatureID != MirrorWindow.featureID else { return }
+            state.noteMirrorClaims(serial.map { [$0] } ?? [], featureID: tabFeatureID)
         }
         .onChange(of: model?.recordingError) { _, message in
             guard let message else { return }
@@ -138,6 +155,9 @@ struct ScreenMirrorView: View {
         }
         .onDisappear {
             state.clearExitGuard(exitGuardID)
+            if tabFeatureID != MirrorWindow.featureID {
+                state.noteMirrorClaims([], featureID: tabFeatureID)
+            }
             teardownTask?.cancel()
             connectTask?.cancel()
             let leaving = model
@@ -183,9 +203,12 @@ struct ScreenMirrorView: View {
         state.finishExitSave()
     }
 
-    /// Reconnect the selected device in place — the stopped/failed cards' button.
+    /// The device this view mirrors: its pin, or the device bar's selection.
+    private var targetSerial: String? { pinnedSerial ?? state.targetSerials.first }
+
+    /// Reconnect the current device in place — the stopped/failed cards' button.
     private func reconnectCurrent() {
-        scheduleReconnect(to: state.targetSerials.first)
+        scheduleReconnect(to: targetSerial)
     }
 
     /// Pop-out is offered only in the tab host — the window host has nowhere
@@ -195,15 +218,15 @@ struct ScreenMirrorView: View {
         return { popOut() }
     }
 
-    /// Move the mirror to its own window: open (or focus) the mirror window —
-    /// which connects its own session to the selected device — and close this
-    /// tab so the same device isn't encoded twice.
+    /// Move the mirror to its own window: open (or focus) the window for *this
+    /// device* — which connects its own session — and close this tab so the same
+    /// device isn't encoded twice.
     private func popOut() {
-        // There's one pop-out window, so it belongs to whichever workspace
-        // opened it — otherwise it would swap devices every time the user
-        // clicked between windows.
+        guard let serial = targetSerial else { return }
+        // The windows read their adb client and toasts from whichever workspace
+        // popped one out; the device rides in the window's own presented value.
         state.core.mirrorWindowOwner = state.id
-        openWindow(id: MirrorWindow.windowID)
+        openWindow(id: MirrorWindow.windowID, value: serial)
         state.closeTab(tabFeatureID)
     }
 

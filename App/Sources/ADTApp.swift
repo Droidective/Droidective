@@ -489,11 +489,13 @@ struct ADTApp: App {
             }
         }
 
-        // The pop-out screen mirror (the mirror control bar's window button,
-        // also listed in the Window menu). Sized like a phone by default. It
-        // follows the window that opened it — one pop-out, one owner.
-        Window("Screen Mirror", id: MirrorWindow.windowID) {
-            WorkspaceScopedView(owner: core.mirrorWindowOwner) { MirrorWindowView() }
+        // The pop-out screen mirrors (the mirror control bar's window button,
+        // and the Mirror Wall's per-tile "Open in Its Own Window"). One window
+        // per device: the presented value IS the serial, so several stand side
+        // by side. Sized like a phone by default. They read their adb client and
+        // toasts from the workspace that popped them out.
+        WindowGroup("Screen Mirror", id: MirrorWindow.windowID, for: String.self) { $serial in
+            WorkspaceScopedView(owner: core.mirrorWindowOwner) { MirrorWindowView(serial: serial) }
                 .tint(.brandAccent)
                 .id(appearanceKey)
         }
