@@ -557,6 +557,24 @@ table) is in `docs/reactotron-mcp-analysis.md`.
   `\.windowOpacity` is declared in Theme.swift because the AppTests logic
   bundle compiles that file standalone (and links ADBKit for it). JS Console
   keeps its Chrome-dark hue at the card step; CodeMirror webviews stay opaque.
+- **A mirror session's teardown has to be *awaited* at quit.** Every session
+  owns an `adb forward` tunnel that only `MirrorTransport.stop()` removes, and
+  view teardown is fire-and-forget — at quit the process exits first and the
+  tunnel stays registered in the long-lived adb server (one leaked listening
+  socket per session per quit; six for a full Mirror Wall). `MirrorSessions`
+  holds every live `MirrorViewModel` weakly, registered at the *top* of
+  `start()` (a start that fails part-way can still have opened the tunnel), and
+  `AppCore.finishQuitNow` awaits `stopAllForQuit()` alongside the MCP server and
+  the Reactotron relay. Check with `adb forward --list`: it must be empty of
+  `scrcpy_*` entries once the app is gone.
+- **A view model swap needs the display layer swapped with it.**
+  `MirrorVideoView` hands `MirrorRenderer.displayLayer` to its NSView at init,
+  so a *new* session for the same on-screen tile must be adopted in
+  `updateNSView` (`MirrorLayerNSView.adopt(displayLayer:)`) — otherwise the tile
+  keeps drawing the stopped session's layer: input still works, no frame ever
+  arrives, and it reads as a broken mirror. The full-pane mirror only escapes it
+  by rendering a nil model in between; the wall's reconnect replaces the model
+  in one turn.
 - **Recording audio is one AAC track fed by up to two sources.** A recording
   captures the device's audio, the Mac's microphone, both, or neither —
   `RecordAudioOptions`/`DeviceAudioSource` in ScreenTools, persisted by the
