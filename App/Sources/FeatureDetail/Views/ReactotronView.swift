@@ -2305,7 +2305,12 @@ private struct RtRow: View {
                 apiTabPicker.pickerStyle(.segmented)
                 apiTabPicker.pickerStyle(.menu)
             }
+            // The tree's opened rows, raw/parsed choices and find text belong to
+            // the payload on screen. Without this the four tabs share one tree
+            // and one set of positional paths, so switching tabs carried the
+            // other tab's opened rows onto this one.
             treeSection(title: nil, object: apiObject(request: request, response: response))
+                .id(apiTab)
         }
     }
 
@@ -2378,6 +2383,10 @@ private struct RtRow: View {
             if let message = object?["message"] {
                 switch message {
                 case .object, .array:
+                    treeSection(title: nil, object: message)
+                // A logged payload is often `JSON.stringify`d too — the same
+                // escaped wall, so it gets the same tree and raw toggle.
+                case let .string(text) where EmbeddedJSON.looksLikeJSON(text):
                     treeSection(title: nil, object: message)
                 default:
                     Text(String((message.stringValue ?? message.jsonString).prefix(20_000)))
@@ -2643,15 +2652,21 @@ private struct JSONTreeView: View {
     /// serialized body. Filled when the row appears — which only happens inside
     /// an *expanded* event — and never while building a row, so a streaming
     /// timeline parses nothing until someone opens the event.
-    @State private var parsedStrings: [String: JSONValue] = [:]
+    ///
+    /// Each entry carries the string it was parsed from, because a path alone
+    /// does not identify a value: a tree that swaps its root — the API event's
+    /// Response/Request tabs are one tree — reuses `.0` for a different payload,
+    /// and a cache hit from the other tab rendered *its* object on this row.
+    @State private var parsedStrings: [String: ParsedPayload] = [:]
     /// Paths the reader switched back to the raw text. A parsed payload is the
     /// default (it's the readable form); some are only readable raw — a
     /// signature, whitespace that matters, a diff against a server log.
     @State private var rawPaths: Set<String> = []
-    /// Paths whose value looked like JSON but didn't parse (malformed, or cut off
-    /// by the client). Tried once, then the row is plain text — an offer that
-    /// does nothing when clicked is worse than no offer.
-    @State private var unparseable: Set<String> = []
+    /// The string at each path that looked like JSON but didn't parse (malformed,
+    /// or cut off by the client). Tried once, then the row is plain text — an
+    /// offer that does nothing when clicked is worse than no offer. Keyed with
+    /// its source for the same reason the parses are.
+    @State private var unparseable: [String: String] = [:]
     @State private var search = ""
     /// The last find result revealed by a click, tinted in the tree until the
     /// next search.
@@ -2725,7 +2740,7 @@ private struct JSONTreeView: View {
             if node.isContainer {
                 guard expanded.contains(node.path) else { return }
                 for child in node.children { walk(child) }
-            } else if let parsed = shownParse(node.path) {
+            } else if let parsed = shownParse(node) {
                 // The string's own tree hangs off the row that carried it, one
                 // level deeper — a nested stringified value is a row of its own
                 // and parses when *it* is opened.
@@ -2791,7 +2806,7 @@ private struct JSONTreeView: View {
     private func rowView(_ node: JSONNode) -> some View {
         // A stringified payload, shown as its object: the tree below the row is
         // the parse, and the row itself reads like the container it really is.
-        let parsed = shownParse(node.path)
+        let parsed = shownParse(node)
         // The value shaped like JSON but still escaped — the cheap check, made
         // per render; the parse waits for a tap.
         let embedded = embeddedJSONString(node)
@@ -2860,12 +2875,18 @@ private struct JSONTreeView: View {
                     enabled: parsed == nil && !node.isContainer && (showsAll || !isCut)
                 ))
                 .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                // A parsed row's value is a two-glyph summary (`{ 9 }`): let it
+                // size to its content so the toggle sits beside it rather than
+                // stranded at the pane's far edge. A raw value keeps the row's
+                // whole width — it has to be the one flexible child, or the
+                // height it reports stops matching the height it draws.
+                .frame(maxWidth: parsed == nil ? .infinity : nil, alignment: .leading)
             if let embedded {
                 // Incompressible, so the value stays the row's one flexible
                 // child (see the gutter note above).
                 parsedToggle(path: node.path, text: embedded, showingParsed: parsed != nil)
             }
+            if parsed != nil { Spacer(minLength: 0) }
         }
         // Rows were 13pt slivers — give container rows a real click target.
         .padding(.vertical, 2)
@@ -2901,23 +2922,28 @@ private struct JSONTreeView: View {
         // one place a parse is started for a value nobody clicked, and only for
         // a row that exists, i.e. inside an event the reader expanded.
         .task(id: node.path) {
-            guard let embedded, parsedStrings[node.path] == nil else { return }
+            guard let embedded, parsedStrings[node.path]?.source != embedded else { return }
             showParsed(embedded, at: node.path)
         }
     }
 
-    /// The parse a row is currently showing: the cached value unless the reader
-    /// asked for the raw text.
-    private func shownParse(_ path: String) -> JSONValue? {
-        rawPaths.contains(path) ? nil : parsedStrings[path]
+    /// The parse a row is currently showing: the cached value for *this* row's
+    /// string, unless the reader asked for the raw text. A container never has
+    /// one — only a string can be a stringified payload.
+    private func shownParse(_ node: JSONNode) -> JSONValue? {
+        guard case let .string(text) = node.value,
+              !rawPaths.contains(node.path),
+              let entry = parsedStrings[node.path],
+              entry.source == text else { return nil }
+        return entry.value
     }
 
     /// The row's value as a JSON-shaped string, when it is one. Cheap by
     /// construction (`EmbeddedJSON.looksLikeJSON` reads two characters), because
     /// every visible row asks this on every render.
     private func embeddedJSONString(_ node: JSONNode) -> String? {
-        guard !unparseable.contains(node.path),
-              case let .string(text) = node.value,
+        guard case let .string(text) = node.value,
+              unparseable[node.path] != text,
               EmbeddedJSON.looksLikeJSON(text) else { return nil }
         return text
     }
@@ -2952,9 +2978,9 @@ private struct JSONTreeView: View {
     private func showParsed(_ text: String, at path: String) {
         rawPaths.remove(path)
         expandedValues.remove(path)
-        guard parsedStrings[path] == nil else { return }
-        guard let value = EmbeddedJSON.parse(text) else { unparseable.insert(path); return }
-        parsedStrings[path] = value
+        guard parsedStrings[path]?.source != text else { return }
+        guard let value = EmbeddedJSON.parse(text) else { unparseable[path] = text; return }
+        parsedStrings[path] = ParsedPayload(source: text, value: value)
     }
 
     /// `{ n }` / `[ n ]` for a parsed value, the same summary a container row
@@ -3002,6 +3028,13 @@ private struct JSONTreeView: View {
         )
         return JSONTreeLayout.collapsedBudget(columnCharacters: column)
     }
+}
+
+/// One parsed stringified payload, with the string it came from — the pair is
+/// what makes a path-keyed cache safe when the tree's root can change under it.
+private struct ParsedPayload {
+    let source: String
+    let value: JSONValue
 }
 
 /// `textSelection` takes two different concrete types, so the choice can't be a
