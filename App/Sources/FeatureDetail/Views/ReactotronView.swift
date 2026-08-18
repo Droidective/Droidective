@@ -2585,10 +2585,22 @@ private struct JSONTreeView: View {
     /// where a search box per row would be clutter).
     var showSearch: Bool = true
     @State private var expanded: Set<String> = []
+    /// Leaf rows whose value is shown in full — the rest wrap to
+    /// `JSONTreeLayout.collapsedLines` so one 20 KB payload can't bury the
+    /// timeline.
+    @State private var expandedValues: Set<String> = []
     @State private var search = ""
     /// The last find result revealed by a click, tinted in the tree until the
     /// next search.
     @State private var highlightedPath: String?
+    /// The tree's laid-out width, measured once for every row: a value wraps
+    /// with the pane, so whether it *still* overflows — and needs its "show all"
+    /// disclosure — is a function of the width the pane currently has.
+    @State private var treeWidth: CGFloat = 0
+
+    /// The row font's point size, scaled the way `Font.app` scales it, so the
+    /// per-line character estimate tracks Settings ▸ Appearance ▸ Text size.
+    private var valueFontSize: Double { 11 * AppFontPrefs.sizeScale }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -2628,6 +2640,7 @@ private struct JSONTreeView: View {
                     if matches.count >= 200 { emptyRow("…first 200 matches — narrow the search") }
                 }
             }
+            .measuringWidth(into: $treeWidth)
         }
         // A newly typed query drops the previous reveal's tint (reveal itself
         // clears the field, so its own highlight survives this).
@@ -2696,30 +2709,69 @@ private struct JSONTreeView: View {
 
     @ViewBuilder
     private func rowView(_ node: JSONNode) -> some View {
+        // Built once per row: on a big payload the preview is a full copy of
+        // the value, and the cut, the disclosure, and the row all need it.
+        let preview = node.valuePreview
+        let showsAll = expandedValues.contains(node.path)
+        let budget = collapsedBudget(for: node)
+        let isCut = !node.isContainer && preview.prefix(budget + 1).count > budget
+        // An opened row keeps its disclosure even if a wider pane has since
+        // made the value fit — otherwise the only way to close it disappears.
+        let disclosesValue = !node.isContainer && (showsAll || isCut)
         HStack(alignment: .top, spacing: 4) {
-            Color.clear.frame(width: CGFloat(max(0, node.depth)) * 12, height: 1)
-            if node.isContainer {
-                Image(systemName: expanded.contains(node.path) ? "chevron.down" : "chevron.right")
-                    .font(.app(size: 10, weight: .bold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 14)
-            } else {
-                Color.clear.frame(width: 14, height: 1)
+            // The gutter is incompressible, so the value below is the row's one
+            // flexible child: it's proposed exactly the width it renders at, and
+            // the height it reports is the height it draws. Leave the key and
+            // the value as peer flexible children and the two passes disagree —
+            // the text wraps to more lines than the row reserved and spills
+            // over the event below it.
+            HStack(alignment: .top, spacing: 4) {
+                Color.clear.frame(width: CGFloat(max(0, node.depth)) * JSONTreeLayout.indentPerDepth, height: 1)
+                if node.isContainer {
+                    Image(systemName: expanded.contains(node.path) ? "chevron.down" : "chevron.right")
+                        .font(.app(size: 10, weight: .bold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 14)
+                } else if disclosesValue {
+                    // A long value borrows the containers' disclosure column —
+                    // same column, lighter weight, so the two never read alike.
+                    Image(systemName: showsAll ? "chevron.down" : "chevron.right")
+                        .font(.app(size: 9))
+                        .foregroundStyle(.tertiary)
+                        .frame(width: 14)
+                        .help(showsAll ? "Show less" : "Show the whole value")
+                } else {
+                    Color.clear.frame(width: 14, height: 1)
+                }
+                if !node.key.isEmpty {
+                    Text(node.key)
+                        .font(.app(size: 11, design: .monospaced))
+                        .foregroundStyle(.rtKey)
+                        // Keys are payload data too: an incompressible 300-character
+                        // one would leave the value nothing to wrap into.
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .frame(maxWidth: 240, alignment: .leading)
+                    Text(":")
+                        .font(.app(size: 11, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                }
             }
-            if !node.key.isEmpty {
-                Text(node.key)
-                    .font(.app(size: 11, design: .monospaced))
-                    .foregroundStyle(.rtKey)
-                Text(":")
-                    .font(.app(size: 11, design: .monospaced))
-                    .foregroundStyle(.tertiary)
-            }
-            Text(node.valuePreview)
+            .fixedSize()
+            // Values wrap with the pane instead of being cut at its edge. The
+            // collapsed row carries a *shortened string*, not a line limit:
+            // `fixedSize` then reports exactly the height it draws, and no
+            // stale line count can spill over the event below.
+            Text(valueText(preview, showingAll: showsAll, budget: budget, isCut: isCut))
                 .font(.app(size: 11, design: .monospaced))
                 .foregroundStyle(node.valueColor)
-                .lineLimit(1)
-                .textSelection(.enabled)
-            Spacer(minLength: 0)
+                // Selectable text eats the click, and the value spans the whole
+                // row — so a row whose click means "open this" hands the click
+                // to the row instead. A cut value has nothing worth selecting
+                // (it's an excerpt); once open, the full text selects again.
+                .modifier(SelectableValue(enabled: !node.isContainer && (showsAll || !isCut)))
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         // Rows were 13pt slivers — give container rows a real click target.
         .padding(.vertical, 2)
@@ -2730,7 +2782,11 @@ private struct JSONTreeView: View {
             }
         }
         .onTapGesture {
-            if node.isContainer { toggle(node.path) }
+            if node.isContainer {
+                toggle(node.path)
+            } else if disclosesValue {
+                toggleValue(node.path)
+            }
         }
         .contextMenu {
             Button("Copy value") {
@@ -2742,6 +2798,57 @@ private struct JSONTreeView: View {
 
     private func toggle(_ path: String) {
         if expanded.contains(path) { expanded.remove(path) } else { expanded.insert(path) }
+    }
+
+    private func toggleValue(_ path: String) {
+        if expandedValues.contains(path) { expandedValues.remove(path) } else { expandedValues.insert(path) }
+    }
+
+    /// An opened value is capped the way a log body is — laying an unbounded
+    /// payload out over unlimited lines stalls the pane, and the row's
+    /// "Copy value" still yields the whole thing.
+    private static let openValueCap = 20_000
+
+    /// The string the row draws: the whole value when it's open (bounded), the
+    /// first few wrapped lines' worth when it isn't. Cutting the string is what
+    /// keeps the drawn height honest — see the `Text` above.
+    private func valueText(_ preview: String, showingAll: Bool, budget: Int, isCut: Bool) -> String {
+        guard showingAll else {
+            return isCut ? String(preview.prefix(budget)) + "…" : preview
+        }
+        guard preview.prefix(Self.openValueCap + 1).count > Self.openValueCap else { return preview }
+        return String(preview.prefix(Self.openValueCap)) + "…"
+    }
+
+    /// How many characters this row shows collapsed, from the pane's measured
+    /// width — estimated from the monospaced advance rather than measured per
+    /// row, which would cost a geometry read on every node of a streaming
+    /// timeline. Before the first measurement lands, a width-independent
+    /// fallback keeps the first frame from drawing a whole payload.
+    private func collapsedBudget(for node: JSONNode) -> Int {
+        guard treeWidth > 0 else { return JSONTreeLayout.unmeasuredBudget }
+        let column = JSONTreeLayout.columnCharacters(
+            rowWidth: Double(treeWidth),
+            fontSize: valueFontSize,
+            depth: node.depth,
+            keyCharacters: node.key.count
+        )
+        return JSONTreeLayout.collapsedBudget(columnCharacters: column)
+    }
+}
+
+/// `textSelection` takes two different concrete types, so the choice can't be a
+/// ternary at the call site — this carries it.
+private struct SelectableValue: ViewModifier {
+    let enabled: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if enabled {
+            content.textSelection(.enabled)
+        } else {
+            content.textSelection(.disabled)
+        }
     }
 }
 
