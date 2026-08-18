@@ -3,8 +3,9 @@ import AppKit
 import SwiftUI
 
 /// After a recording or screenshot is captured, ask what to do with it — shown
-/// as a sheet with a preview and Edit / Save / Discard. Cancelling the sheet
-/// discards, so nothing is orphaned. Shared by Screen Record and Mirror Screen.
+/// as a sheet with a preview and Edit / Save / Discard, plus Copy for a
+/// screenshot. Cancelling the sheet discards, so nothing is orphaned. Shared by
+/// Screen Record and Mirror Screen.
 private struct MediaDecisionView: View {
     let title: String
     let preview: NSImage?
@@ -12,6 +13,12 @@ private struct MediaDecisionView: View {
     let onEdit: () -> Void
     let onSave: () -> Void
     let onDiscard: () -> Void
+    /// Screenshots only: put the image on the clipboard. Deliberately *not* a
+    /// decision like the other three — the sheet stays up, so a copy can still
+    /// be followed by Save, Edit, or Discard, and nothing lands on the clipboard
+    /// unless it was asked for. nil for a recording, which has no pasteable image.
+    var onCopy: (() -> Void)?
+    @State private var copied = false
 
     var body: some View {
         VStack(spacing: 18) {
@@ -33,6 +40,18 @@ private struct MediaDecisionView: View {
                 Button(role: .destructive) { onDiscard() } label: {
                     Text("Discard").frame(maxWidth: .infinity)
                 }
+                if let onCopy {
+                    Button {
+                        onCopy()
+                        copied = true
+                        Task { try? await Task.sleep(for: .seconds(1.5)); copied = false }
+                    } label: {
+                        // The confirmation is in the button: a toast would be
+                        // behind this sheet.
+                        Text(copied ? "Copied" : "Copy").frame(maxWidth: .infinity)
+                    }
+                    .help("Copy the screenshot to the clipboard — Save and Edit still work after")
+                }
                 Button { onSave() } label: { Text("Save").frame(maxWidth: .infinity) }
                 Button { onEdit() } label: { Text("Edit").frame(maxWidth: .infinity) }
                     .buttonStyle(.borderedProminent)
@@ -41,7 +60,7 @@ private struct MediaDecisionView: View {
             .controlSize(.large)
         }
         .padding(20)
-        .frame(width: 420)
+        .frame(width: 460)
     }
 }
 
@@ -126,7 +145,8 @@ private struct ImageDecisionModifier: ViewModifier {
                     loadingPreview: false,
                     onEdit: { act(onEdit) },
                     onSave: { act(save) },
-                    onDiscard: { act { _ in } })
+                    onDiscard: { act { _ in } },
+                    onCopy: { copyToClipboard(image) })
             }
         }
     }
@@ -139,6 +159,13 @@ private struct ImageDecisionModifier: ViewModifier {
         guard let pending = image else { return }
         image = nil
         body(pending)
+    }
+
+    /// The clipboard form the Screenshot editor's Copy writes, so pasting a
+    /// screenshot behaves the same wherever it was copied from.
+    private func copyToClipboard(_ pending: NSImage) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.writeObjects([pending])
     }
 
     private func save(_ pending: NSImage) {
