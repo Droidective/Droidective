@@ -243,6 +243,36 @@ final class AppState {
     /// visibility, driven by the left-edge hover zone and ⌘B.
     var sidebarOverlayShown = false
 
+    /// Full View: the app's own chrome — sidebar, device bar, tab strip — is
+    /// hidden and the window goes into macOS full screen, so the feature on
+    /// screen gets the whole display. Transient by design (a mode you toggle,
+    /// never a state you relaunch into), and per window.
+    private(set) var fullView = false
+
+    /// Enter or leave Full View, taking the window's native full-screen state
+    /// with it. Leaving native full screen by the green button leaves the mode
+    /// too — RootView watches for that, so the two can't disagree.
+    func toggleFullView() {
+        setFullView(!fullView)
+    }
+
+    func setFullView(_ on: Bool) {
+        guard fullView != on else { return }
+        withAnimation(.easeInOut(duration: 0.2)) { fullView = on }
+        if on {
+            // With the chrome gone there's no button left in sight for most
+            // features, so say how to get back instead of leaving the user to
+            // find the menu. Not kept in the notification history.
+            showToast(Toast(
+                message: "Full view — press ⇧⌘F to leave",
+                ok: true, level: .info, important: false))
+        }
+        guard let window = nsWindow else { return }
+        if window.styleMask.contains(.fullScreen) != on {
+            window.toggleFullScreen(nil)
+        }
+    }
+
     func toggleSidebar() {
         if UserDefaults.standard.bool(forKey: sidebarAutoHideDefaultsKey) {
             withAnimation(.easeInOut(duration: 0.18)) { sidebarOverlayShown.toggle() }
@@ -538,6 +568,7 @@ final class AppState {
             selectedSerial = saved.serial
             selectedBundleId = saved.bundleId
             terminalResumeDirs = saved.terminalResumeDirs
+            mirrorWallSerials = saved.mirrorWallSerials
             // Reopen the tabs from the last session (idle — recordings/streams
             // don't resume). Falls back to a single Home tab for a new user or
             // a layout written before tabs existed.
@@ -981,7 +1012,8 @@ final class AppState {
                 TabGroupState(tabs: $0.openTabs, activeTab: $0.activeTab)
             },
             focusedGroup: workspace.focusedGroup,
-            terminalResumeDirs: terminalResumeDirs
+            terminalResumeDirs: terminalResumeDirs,
+            mirrorWallSerials: mirrorWallSerials
         ))
         core.persistLayout()
     }
@@ -989,6 +1021,24 @@ final class AppState {
     /// Working directories of this window's terminal tabs at the last implicit
     /// teardown — the next Terminal open in *this* window resumes them.
     var terminalResumeDirs: [String]?
+
+    /// Devices this window's Mirror Wall shows, in tile order. Per window (two
+    /// windows can watch different sets), and persisted, so a wall arranged for
+    /// six devices comes back arranged.
+    var mirrorWallSerials: [String]? {
+        didSet {
+            guard mirrorWallSerials != oldValue else { return }
+            persistWindowState()
+        }
+    }
+
+    /// Tell the conflict rules which devices this window is mirroring outside
+    /// its own selection — the wall's live tiles and its pop-out mirror
+    /// windows. Replaces the previous set, so a tile that stops streaming
+    /// releases its device (see `WorkspaceRegistry.setClaims`).
+    func noteMirrorClaims(_ serials: Set<String>, featureID: String) {
+        core.noteMirrorClaims(serials, featureID: featureID, in: id)
+    }
 
     /// Ids that can back a tab: every registry feature plus the standalone
     /// Home / About / Catalog screens and the Finder-opened-APK screen.

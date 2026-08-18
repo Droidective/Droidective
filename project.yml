@@ -146,6 +146,10 @@ targets:
             UTTypeDescription: Droidective terminal rail item
             UTTypeConformsTo:
               - public.data
+          - UTTypeIdentifier: com.rohindh.droidective.mirror-wall-tile
+            UTTypeDescription: Droidective mirror wall tile
+            UTTypeConformsTo:
+              - public.data
         CFBundleDocumentTypes:
           - CFBundleTypeName: Android Package
             CFBundleTypeRole: Viewer

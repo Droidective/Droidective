@@ -83,6 +83,7 @@ def affordances(view_name):
 # Off-Apple exclusions, with the reason from docs/cross-platform.md.
 GATED = {
     "scrcpy": "Mirror pipeline is Apple-only (VideoToolbox/AVFoundation); other hosts drive the scrcpy desktop app.",
+    "mirror-wall": "Several mirrors at once, on the same Apple-only mirror pipeline as `scrcpy`.",
     "screen-record": "Records through the mirror session, which is Apple-only.",
     "video-editor": "Rides the mirror/ffmpeg export path built on the Apple media stack.",
     "reactotron": "ReactotronServer is a Network.framework listener; needs a portable NIO listener first.",

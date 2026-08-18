@@ -535,9 +535,9 @@ import Testing
 }
 
 @Suite struct FeatureRegistryTests {
-    @Test func hasAll60Features() {
-        #expect(FeatureRegistry.all.count == 60)
-        #expect(FeatureRegistry.byID.count == 60)
+    @Test func hasAll61Features() {
+        #expect(FeatureRegistry.all.count == 61)
+        #expect(FeatureRegistry.byID.count == 61)
     }
 
     @Test func everyFeatureSupportsAtLeastOnePlatform() {

@@ -110,6 +110,68 @@ import Testing
         }
     }
 
+    // MARK: - Claims (the Mirror Wall's tiles and the pop-out mirror windows)
+
+    /// A wall streams up to six devices, and a pop-out mirror window shows a
+    /// device its owner window isn't pointed at, so both can only be seen
+    /// through claims — the exclusivity rules read them like an open tab.
+    @Test func aClaimMakesAnotherWindowSeeTheFeatureAsTaken() {
+        var registry = self.registry([(w1, "abc", []), (w2, "def", [])])
+        registry.setClaims([.init(featureID: "scrcpy-window", serial: "def")], for: w1)
+        #expect(registry.owner(ofFeature: "scrcpy-window", on: "def", excluding: w2) == w1)
+        #expect(registry.owner(ofFeature: "scrcpy-window", on: "ghi", excluding: w2) == nil)
+    }
+
+    @Test func claimsAreReplacedNotAccumulated() {
+        var registry = self.registry([(w1, "abc", [])])
+        registry.setClaims([.init(featureID: "mirror-wall", serial: "def")], for: w1)
+        registry.setClaims([.init(featureID: "mirror-wall", serial: "ghi")], for: w1)
+        #expect(registry.owner(ofMirroredDevice: "def", excluding: w2) == nil)
+        #expect(registry.owner(ofMirroredDevice: "ghi", excluding: w2) == w1)
+    }
+
+    @Test func aWindowIsNotBlockedByItsOwnClaims() {
+        var registry = self.registry([(w1, "abc", [])])
+        registry.setClaims([.init(featureID: "mirror-wall", serial: "def")], for: w1)
+        #expect(registry.owner(ofMirroredDevice: "def", excluding: w1) == nil)
+    }
+
+    /// All three routes to the live mirror drive one device-side session, so a
+    /// wall tile asks about the family, not about its own id.
+    @Test func everyRouteToTheMirrorClaimsTheDeviceForTheFamily() {
+        var registry = self.registry([(w1, "abc", ["scrcpy"]), (w2, "def", [])])
+        #expect(registry.owner(ofMirroredDevice: "abc", excluding: w2) == w1)
+
+        registry.setClaims([.init(featureID: "scrcpy-window", serial: "ghi")], for: w1)
+        #expect(registry.owner(ofMirroredDevice: "ghi", excluding: w2) == w1)
+
+        registry.setClaims([.init(featureID: "mirror-wall", serial: "jkl")], for: w1)
+        #expect(registry.owner(ofMirroredDevice: "jkl", excluding: w2) == w1)
+    }
+
+    @Test func aNonMirrorFeatureDoesNotClaimTheDeviceForMirroring() {
+        var registry = self.registry([(w1, "abc", ["logcat"]), (w2, "def", [])])
+        #expect(registry.owner(ofMirroredDevice: "abc", excluding: w2) == nil)
+        registry.setClaims([.init(featureID: "js-console", serial: "ghi")], for: w1)
+        #expect(registry.owner(ofMirroredDevice: "ghi", excluding: w2) == nil)
+    }
+
+    @Test func everyMirrorFamilyIDIsRealOrThePopOutPseudoID() {
+        for id in WorkspaceRegistry.mirrorFeatureIDs where id != "scrcpy-window" {
+            #expect(FeatureRegistry.byID[id] != nil, "\(id) is not a registry feature")
+        }
+    }
+
+    /// The wall contends per tile, so it must NOT take the whole-pane
+    /// Focus / Take Over banner over the window's selected device — that would
+    /// block five working tiles because of the sixth.
+    @Test func theWallIsNotBlockedAsAWhole() {
+        var registry = self.registry([(w1, "abc", ["mirror-wall"]), (w2, "abc", [])])
+        registry.setClaims([.init(featureID: "mirror-wall", serial: "abc")], for: w1)
+        #expect(!WorkspaceRegistry.isExclusive("mirror-wall"))
+        #expect(registry.conflict(opening: "mirror-wall", in: w2) == nil)
+    }
+
     @Test func exclusiveFeatureOnTheSameDeviceConflicts() {
         let registry = self.registry([(w1, "abc", ["scrcpy"]), (w2, "abc", [])])
         #expect(registry.conflict(opening: "scrcpy", in: w2)

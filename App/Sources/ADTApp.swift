@@ -468,6 +468,16 @@ struct ADTApp: App {
                     appState?.toggleSidebar()
                 }
                 .keyboardShortcut("b", modifiers: .command)
+
+                // ⇧⌘F, not the system's ⌃⌘F: macOS already owns that for plain
+                // full screen, and this does more (it hides the app's chrome
+                // too). A menu key equivalent is also the one exit that always
+                // works — the mirror swallows key events that reach its view,
+                // but NSMenu gets them first.
+                Button(appState?.fullView == true ? "Exit Full View" : "Full View") {
+                    appState?.toggleFullView()
+                }
+                .keyboardShortcut("f", modifiers: [.command, .shift])
             }
 
             CommandGroup(after: .toolbar) {
@@ -489,11 +499,13 @@ struct ADTApp: App {
             }
         }
 
-        // The pop-out screen mirror (the mirror control bar's window button,
-        // also listed in the Window menu). Sized like a phone by default. It
-        // follows the window that opened it — one pop-out, one owner.
-        Window("Screen Mirror", id: MirrorWindow.windowID) {
-            WorkspaceScopedView(owner: core.mirrorWindowOwner) { MirrorWindowView() }
+        // The pop-out screen mirrors (the mirror control bar's window button,
+        // and the Mirror Wall's per-tile "Open in Its Own Window"). One window
+        // per device: the presented value IS the serial, so several stand side
+        // by side. Sized like a phone by default. They read their adb client and
+        // toasts from the workspace that popped them out.
+        WindowGroup("Screen Mirror", id: MirrorWindow.windowID, for: String.self) { $serial in
+            WorkspaceScopedView(owner: core.mirrorWindowOwner) { MirrorWindowView(serial: serial) }
                 .tint(.brandAccent)
                 .id(appearanceKey)
         }

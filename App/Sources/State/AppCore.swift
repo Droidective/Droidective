@@ -488,9 +488,88 @@ final class AppCore {
     /// Device a not-yet-created window should open on (see `openNewWindow`).
     private var pendingWindowTargets: [WorkspaceID: String] = [:]
 
-    /// The workspace the single mirror pop-out window belongs to — set when it
-    /// is popped out, so it keeps showing that window's device.
+    /// The workspace the pop-out mirror windows belong to — set when one is
+    /// popped out, so they read that window's adb client and toasts. The device
+    /// each window shows rides in the window's own presented value, not here.
     var mirrorWindowOwner: WorkspaceID?
+
+    /// Open pop-out mirror windows by device serial. Held by *reference* and
+    /// weakly, for the same reason `AppState.nsWindow` is: SwiftUI re-stamps its
+    /// own window identifiers, so they can't be matched across a close.
+    private var mirrorWindows: [String: WeakWindow] = [:]
+
+    private final class WeakWindow {
+        weak var window: NSWindow?
+        init(_ window: NSWindow?) { self.window = window }
+    }
+
+    var hasMirrorWindows: Bool { !liveMirrorWindows().isEmpty }
+
+    /// Devices currently showing in a pop-out mirror window. The wall reads
+    /// this directly rather than through the registry's claims, because those
+    /// are keyed by the *owner* window — and the owner is usually the very
+    /// window whose wall is asking, which would exclude itself.
+    var mirrorWindowSerials: Set<String> {
+        Set(mirrorWindows.filter { $0.value.window != nil }.keys)
+    }
+
+    /// Bring one device's pop-out mirror window forward.
+    func focusMirrorWindow(_ serial: String) {
+        mirrorWindows[serial]?.window?.makeKeyAndOrderFront(nil)
+    }
+
+    /// Close one device's pop-out mirror window — "Bring Back Into the Wall".
+    /// Closing releases the claim (the window's own teardown), and the wall
+    /// picks the device back up on its next reconcile.
+    func closeMirrorWindow(_ serial: String) {
+        mirrorWindows[serial]?.window?.close()
+    }
+
+    /// A pop-out mirror window appeared (or moved to a new NSWindow). Records
+    /// the device as claimed so no wall tile or tab puts a second encoder on it.
+    func noteMirrorWindow(serial: String, window: NSWindow?) {
+        mirrorWindows[serial] = WeakWindow(window)
+        publishMirrorWindowClaims()
+    }
+
+    /// A pop-out mirror window went away — its device is free again.
+    func forgetMirrorWindow(serial: String) {
+        mirrorWindows.removeValue(forKey: serial)
+        publishMirrorWindowClaims()
+    }
+
+    /// Tile the open pop-out mirror windows across the active screen — the
+    /// starting grid for "Arrange Mirror Windows". They stay freely draggable
+    /// afterwards; this only deals the first hand.
+    func arrangeMirrorWindows() {
+        let windows = liveMirrorWindows()
+        guard !windows.isEmpty else { return }
+        let screen = windows.first?.screen ?? NSScreen.main
+        guard let visible = screen?.visibleFrame else { return }
+        let area = MirrorWall.TileFrame(
+            x: visible.minX, y: visible.minY, width: visible.width, height: visible.height)
+        let frames = MirrorWall.windowFrames(in: area, count: windows.count)
+        for (window, frame) in zip(windows, frames) {
+            window.setFrame(
+                NSRect(x: frame.x, y: frame.y, width: frame.width, height: frame.height),
+                display: true, animate: false)
+        }
+    }
+
+    /// Open mirror windows in serial order, dropping entries whose window has
+    /// been released.
+    private func liveMirrorWindows() -> [NSWindow] {
+        mirrorWindows.keys.sorted().compactMap { mirrorWindows[$0]?.window }
+    }
+
+    /// Mirror the pop-out windows' devices into the registry, under the pop-out
+    /// mirror's pseudo-id. All of them belong to one owner window, so one
+    /// replace-the-set write covers every window.
+    private func publishMirrorWindowClaims() {
+        guard let owner = mirrorWindowOwner ?? registry.ids.first else { return }
+        let serials = Set(mirrorWindows.filter { $0.value.window != nil }.keys)
+        noteMirrorClaims(serials, featureID: MirrorWindow.featureID, in: owner)
+    }
 
     func takeWindowTarget(_ id: WorkspaceID) -> String? {
         pendingWindowTargets.removeValue(forKey: id)
@@ -529,6 +608,17 @@ final class AppCore {
     /// `noteSelection`).
     func noteOpenFeatures(_ ids: Set<String>, in id: WorkspaceID) {
         registry.setOpenFeatures(ids, for: id)
+    }
+
+    /// Mirror the devices a window mirrors *outside* its own selection — the
+    /// Mirror Wall's live tiles and its pop-out mirror windows — so the
+    /// conflict rules see them (`WorkspaceRegistry.Claim`). `featureID`'s
+    /// previous claims for this window are replaced; other features' are kept.
+    func noteMirrorClaims(_ serials: Set<String>, featureID: String, in id: WorkspaceID) {
+        let others: Set<WorkspaceRegistry.Claim> = registry[id]?.claims
+            .filter { $0.featureID != featureID } ?? []
+        let mine = serials.map { WorkspaceRegistry.Claim(featureID: featureID, serial: $0) }
+        registry.setClaims(others.union(mine), for: id)
     }
 
     /// Whether any *other* window still has `featureID` open — the refcount
@@ -814,6 +904,12 @@ final class AppCore {
         Task {
             await mcp.stopForQuit()
             if reactotronSession.isRunning { await reactotronSession.stopForQuit() }
+            // Mirror sessions own an `adb forward` tunnel each. Their views'
+            // teardown is fire-and-forget, so at quit it never lands and the
+            // tunnels stay registered in the adb server — six of them for a full
+            // Mirror Wall. Tear them down here, where termination is already
+            // deferred.
+            await MirrorSessions.shared.stopAllForQuit()
             // Flush before termination — `persistLayout` saves through a
             // fire-and-forget Task, and that write racing process exit would
             // lose whatever this quit just recorded (the terminal-resume

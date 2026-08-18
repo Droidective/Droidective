@@ -15,6 +15,8 @@ extension UTType {
     static let workspaceTab = UTType(exportedAs: "com.rohindh.droidective.workspace-tab")
     /// A Terminal-rail shell tab or group dragged within the rail.
     static let terminalRailItem = UTType(exportedAs: "com.rohindh.droidective.terminal-rail-item")
+    /// A Mirror Wall tile dragged to rearrange the grid.
+    static let mirrorWallTile = UTType(exportedAs: "com.rohindh.droidective.mirror-wall-tile")
 }
 
 /// A drag item carried under a private `type`. The drop delegates key off view
