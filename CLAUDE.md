@@ -113,7 +113,7 @@ opening it — verify those by hand.
 ## Build / test / run
 
 ```
-make test          # ADBKit unit tests (cd ADBKit && swift test) — 1802 tests, keep green
+make test          # ADBKit unit tests (cd ADBKit && swift test) — 1806 tests, keep green
 make test-app      # the AppTests logic bundle — 99 tests
 make verify        # tiers 0-1: warnings-as-errors + both test bundles
 make test-linux    # the same suite on Linux (Apple `container` CLI; the port gate)
@@ -794,7 +794,21 @@ position in `RELEASE_NOTES.md`.
 ## Status
 
 Feature-complete across all planned milestones plus several UX rounds.
-(Latest release: **v3.8.2** — JS Console split-pane fixes. A row's height was
+(Latest release: **v3.9.0** — the **Mirror Wall** (the 61st feature,
+`mirror-wall`): up to six connected devices mirrored side by side in one pane,
+each tile the same interactive session the full mirror runs, at a per-tile
+quality that steps down with the tile count. It picks its own devices (capped
+at six, persisted per window as `WindowState.mirrorWallSerials`) instead of
+following the device bar, lays out automatically or in a fixed column count,
+and reorders by dragging a tile's caption strip — never the video. The pop-out
+mirror became a `WindowGroup(for: String.self)` keyed by serial: one window per
+device, pinned to it, with `AppCore.arrangeMirrorWindows` tiling them. Plus
+**Full View** (⇧⌘F, `AppState.fullView`) and the exclusivity model's second
+dimension, `WorkspaceRegistry.Claim`, for the devices a window mirrors outside
+its own selection. Two leaks closed on the way: mirror sessions kept their
+`adb forward` tunnel through quit (the single mirror too — see the mirror
+teardown convention), and a reconnected tile drew the stopped session's layer.
+Before that, **v3.8.2** — JS Console split-pane fixes. A row's height was
 grown against a baseline that was still moving, so a wrapped message drew past
 the height its row reported; the arithmetic is now `ConsoleRowLayout` in ADBKit,
 pure and tested, where a line's baseline settles before anything is positioned

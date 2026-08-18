@@ -1,3 +1,66 @@
+## Droidective v3.9.0
+
+Mirroring several devices at once. The Mirror Wall shows up to six connected
+devices side by side in one pane, each one live and controllable, and Full View
+hands the whole display to whatever screen you are on. Mirror sessions also stop
+leaking their adb tunnel when the app quits — which affected the single mirror
+too.
+
+### Mirror Wall
+
+- **Up to six devices, side by side.** The 61st tool mirrors several connected
+  devices in one pane. Every tile is the same session the full mirror runs, so
+  clicking a tile taps that device and typing goes to it — one wall for a whole
+  bench of phones instead of one window per device.
+- **The wall picks its own devices.** A Devices menu lists the connected
+  Android devices with a checkbox each, capped at six; the picked set and the
+  order they sit in are remembered per window. Opening the wall for the first
+  time shows what is connected.
+- **Automatic or fixed layout.** Auto derives the column count from the pane
+  width and drops a column rather than shrinking tiles into uselessness; 1, 2
+  or 3 columns is a fixed choice that stands. Tiles rearrange by dragging a
+  tile's caption strip — the strip, not the video, so a swipe on the device
+  stays a swipe.
+- **Any tile can become its own window.** Open one device in its own window, or
+  every tile at once, and Arrange Mirror Windows tiles them across the screen.
+  Bring Back closes the window and the tile picks the device up again. A pop-out
+  mirror window is now pinned to the device it was opened for rather than
+  following the device bar, which is what lets several stand side by side.
+- **Six encoders is a real cost, so the wall spends less per tile.** The
+  resolution and frame rate each tile asks the device for step down as tiles are
+  added (one tile is exactly the full mirror), tiles pause individually, audio
+  streams from the focused tile only and is off by default, and the whole wall
+  stops after two minutes behind another tab — or behind another window, or
+  minimised.
+- **One device, one mirror.** A device already showing in its own window, in the
+  Mirror Screen tab, or in another workspace window says so on its tile with a
+  way to reach it, instead of putting a second encoder on the device.
+
+### Full View
+
+- **View ▸ Full View (⇧⌘F) gives a screen the whole display.** The sidebar,
+  device bar and tab strip go away and the window enters full screen — six
+  mirror tiles want every pixel. The feature's own controls stay, so the wall
+  keeps the row with its Devices menu, layout picker and the way back out.
+
+### Fixes
+
+- **Mirror sessions released their adb tunnel on quit.** Each live mirror opens
+  an `adb forward` tunnel that its teardown removes, but at quit the app exited
+  before the teardown ran, leaving the tunnel registered in the adb server —
+  one per session, every quit, until `adb kill-server`. Quit now waits for the
+  sessions to close. This affected the single mirror and the pop-out window, not
+  just the wall.
+- **Reconnecting a mirror tile showed a black screen.** The tile kept drawing
+  the stopped session's video layer, so input worked while no frame ever
+  arrived.
+
+### Install
+
+Download the DMG, drag Droidective to Applications, and launch it. The app is
+Developer ID-signed and notarized, and updates arrive through Sparkle — no
+Homebrew, no separate scrcpy or ffmpeg install.
+
 ## Droidective v3.8.2
 
 Fixes for the JS Console in a split pane. The feed left blank space that grew
