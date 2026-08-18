@@ -2710,7 +2710,11 @@ private struct JSONTreeView: View {
                     // Clickable results (JSONSearch, pure in ADBKit): clicking
                     // one expands the tree along its path and highlights the
                     // node in place.
-                    let matches = JSONSearch.matches(in: root, query: search)
+                    // Expanded, because the rows below are: a find that only
+                    // knew the escaped string would point at a 4 KB blob
+                    // instead of the leaf the tree shows.
+                    let matches = JSONSearch.matches(
+                        in: root, query: search, expandingStringifiedJSON: true)
                     ForEach(Array(matches.enumerated()), id: \.offset) { _, match in
                         matchRow(match)
                     }
@@ -2797,6 +2801,9 @@ private struct JSONTreeView: View {
         for index in match.path {
             path += ".\(index)"
             expanded.insert(path)
+            // A match can sit inside a stringified payload the reader switched
+            // back to raw — the row it lives on only exists in the parse.
+            rawPaths.remove(path)
         }
         highlightedPath = path
         search = ""
@@ -2963,9 +2970,12 @@ private struct JSONTreeView: View {
             Text(showingParsed ? "raw" : "parsed")
                 .font(.app(size: 9, weight: .medium))
                 .foregroundStyle(.secondary)
-                .padding(.horizontal, 5)
-                .padding(.vertical, 1)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
                 .overlay(Capsule().strokeBorder(Color.secondary.opacity(0.35)))
+                // A 9pt label is a small target: take the whole capsule, padding
+                // included, rather than just the glyphs.
+                .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .help(showingParsed
