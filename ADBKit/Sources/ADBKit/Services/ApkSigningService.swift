@@ -204,16 +204,14 @@ public struct ApkSigningService: Sendable {
         ]
     }
 
-    /// Write a secret to a temp file created 0600 from the start (no window
-    /// where it exists world-readable) and return its path. Callers delete it.
+    /// Write the keystore password to an owner-only temp file (never argv) and
+    /// return its path. Callers delete it.
     private func writeSecret(_ secret: String) throws -> String {
-        let path = FileManager.default.temporaryDirectory.appendingPathComponent("apksign-\(UUID().uuidString)")
-        guard FileManager.default.createFile(
-            atPath: path.path, contents: Data(secret.utf8),
-            attributes: [.posixPermissions: 0o600]
-        ) else {
-            throw SigningError.stepFailed("Couldn't write the keystore password file.")
+        do {
+            return try SecretFile.write(secret, prefix: "apksign-")
+        } catch {
+            throw SigningError.stepFailed(
+                "Couldn't write the keystore password file. \(error.localizedDescription)")
         }
-        return path.path
     }
 }

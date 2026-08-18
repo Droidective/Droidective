@@ -6,9 +6,9 @@
     <description>Most recent Droidective updates.</description>
     <language>en</language>
     <item>
-      <title>Droidective 3.8.2</title>
-      <sparkle:version>783</sparkle:version>
-      <sparkle:shortVersionString>3.8.2</sparkle:shortVersionString>
+      <title>Droidective 3.9.0</title>
+      <sparkle:version>795</sparkle:version>
+      <sparkle:shortVersionString>3.9.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <description><![CDATA[
 <style>
@@ -24,37 +24,72 @@ pre { background: color-mix(in srgb, currentColor 8%, transparent); padding: .6e
 pre code { background: none; padding: 0; }
 a { color: #2f9e44; }
 </style>
-<p>Fixes for the JS Console in a split pane. The feed left blank space that grew
-every time the pane changed width, and the console refused to shrink to the
-pane it was given — which read as the tab beside it covering the log.</p>
-<h3>JS Console</h3>
+<p>Mirroring several devices at once. The Mirror Wall shows up to six connected
+devices side by side in one pane, each one live and controllable, and Full View
+hands the whole display to whatever screen you are on. Mirror sessions also stop
+leaking their adb tunnel when the app quits — which affected the single mirror
+too.</p>
+<h3>Mirror Wall</h3>
 <ul>
 <li>
-<strong>The feed fills its pane again.</strong> A row's height was measured against a
-baseline that was still moving, so a message wrapped onto several lines drew
-past the height its row had reported. One row is invisible; a feed of them
-leaves gaps that shift on every resize. It only showed in a narrow pane,
-because that is where rows wrap at all.</li>
+<strong>Up to six devices, side by side.</strong> The 61st tool mirrors several connected
+devices in one pane. Every tile is the same session the full mirror runs, so
+clicking a tile taps that device and typing goes to it — one wall for a whole
+bench of phones instead of one window per device.</li>
 <li>
-<strong>The console shrinks to the pane it is given.</strong> The connection bar held its
-target label at full width — <code>com.myapp.features · Pixel 7 - 17 - API 37</code>
-is most of a split pane — and that became the minimum for everything below
-it, so rows were laid out wider than the pane and cut off at its edge. The
-target and the status line now truncate. This also brings back the filter
-row's level, find, export and clear controls, and each row's timestamp, at
-the narrowest split.</li>
+<strong>The wall picks its own devices.</strong> A Devices menu lists the connected
+Android devices with a checkbox each, capped at six; the picked set and the
+order they sit in are remembered per window. Opening the wall for the first
+time shows what is connected.</li>
 <li>
-<strong>A <code>console.table</code> no longer sizes the whole feed.</strong> Its grid scrolls
-inside its own row instead of making every row as wide as itself.</li>
+<strong>Automatic or fixed layout.</strong> Auto derives the column count from the pane
+width and drops a column rather than shrinking tiles into uselessness; 1, 2
+or 3 columns is a fixed choice that stands. Tiles rearrange by dragging a
+tile's caption strip — the strip, not the video, so a swipe on the device
+stays a swipe.</li>
 <li>
-<strong>Where a log came from is an icon</strong>, in the row's hover controls beside the
-two copy buttons. Written out it cost more width than the message beside it
-could spare. The file, line, function and full path are in its tooltip, and
-clicking it still opens the whole stack.</li>
+<strong>Any tile can become its own window.</strong> Open one device in its own window, or
+every tile at once, and Arrange Mirror Windows tiles them across the screen.
+Bring Back closes the window and the tile picks the device up again. A pop-out
+mirror window is now pinned to the device it was opened for rather than
+following the device bar, which is what lets several stand side by side.</li>
+<li>
+<strong>Six encoders is a real cost, so the wall spends less per tile.</strong> The
+resolution and frame rate each tile asks the device for step down as tiles are
+added (one tile is exactly the full mirror), tiles pause individually, audio
+streams from the focused tile only and is off by default, and the whole wall
+stops after two minutes behind another tab — or behind another window, or
+minimised.</li>
+<li>
+<strong>One device, one mirror.</strong> A device already showing in its own window, in the
+Mirror Screen tab, or in another workspace window says so on its tile with a
+way to reach it, instead of putting a second encoder on the device.</li>
+</ul>
+<h3>Full View</h3>
+<ul>
+<li>
+<strong>View ▸ Full View (⇧⌘F) gives a screen the whole display.</strong> The sidebar,
+device bar and tab strip go away and the window enters full screen — six
+mirror tiles want every pixel. The feature's own controls stay, so the wall
+keeps the row with its Devices menu, layout picker and the way back out.</li>
+</ul>
+<h3>Fixes</h3>
+<ul>
+<li>
+<strong>Mirror sessions released their adb tunnel on quit.</strong> Each live mirror opens
+an <code>adb forward</code> tunnel that its teardown removes, but at quit the app exited
+before the teardown ran, leaving the tunnel registered in the adb server —
+one per session, every quit, until <code>adb kill-server</code>. Quit now waits for the
+sessions to close. This affected the single mirror and the pop-out window, not
+just the wall.</li>
+<li>
+<strong>Reconnecting a mirror tile showed a black screen.</strong> The tile kept drawing
+the stopped session's video layer, so input worked while no frame ever
+arrived.</li>
 </ul>
 ]]></description>
-      <pubDate>Fri, 07 Aug 2026 14:12:34 +0000</pubDate>
-      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.8.2/Droidective-v3.8.2.dmg" sparkle:edSignature="FbSKxPfZWuLRwHs9CyEcXbH+R3Li3/tibv+zo9OGrqpT8KdlD7KKEXrLCheGuJXJIMRq9YTX5KtmUaA3gCerAw==" length="144425801" type="application/octet-stream" />
+      <pubDate>Tue, 18 Aug 2026 09:02:55 +0000</pubDate>
+      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.9.0/Droidective-v3.9.0.dmg" sparkle:edSignature="onEUjSNOZEy5ii/jbLm8BlOF0eGpGgUwNZzcmt+FzNbyei5UQewMDctdqnacuMmCXIjCQdmAZ2vwdXTWvyL6CQ==" length="144872996" type="application/octet-stream" />
     </item>
     
   </channel>
