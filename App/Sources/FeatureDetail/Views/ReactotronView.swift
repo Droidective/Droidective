@@ -2121,6 +2121,12 @@ private struct RtRow: View {
     @State private var apiTab: ApiTab = .response
     @State private var hovering = false
     @State private var copiedLine = false
+    /// The API row's URL, shown whole. A signed S3 link runs to several hundred
+    /// characters, so the collapsed form is an excerpt and this opens it in place.
+    @State private var urlExpanded = false
+    /// The URL line's laid-out width — how much of the URL one line holds is a
+    /// function of the pane's current width, the same as an object row's value.
+    @State private var urlWidth: CGFloat = 0
 
     private static let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -2280,11 +2286,7 @@ private struct RtRow: View {
         method: String, url: String, status: Int, duration: Double, request: JSONValue?, response: JSONValue?
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(url)
-                .font(.app(size: 11, design: .monospaced))
-                .foregroundStyle(.rtKey)
-                .textSelection(.enabled)
-                .lineLimit(3)
+            urlLine(url)
             VStack(alignment: .leading, spacing: 3) {
                 metaRow("Status", "\(status)", color: statusColor(status))
                 metaRow("Method", method.uppercased(), color: .rtNumber)
@@ -2303,8 +2305,60 @@ private struct RtRow: View {
                 apiTabPicker.pickerStyle(.segmented)
                 apiTabPicker.pickerStyle(.menu)
             }
+            // The tree's opened rows, raw/parsed choices and find text belong to
+            // the payload on screen. Without this the four tabs share one tree
+            // and one set of positional paths, so switching tabs carried the
+            // other tab's opened rows onto this one.
             treeSection(title: nil, object: apiObject(request: request, response: response))
+                .id(apiTab)
         }
+    }
+
+    /// The request URL, cut to what the line holds and opened in place by a
+    /// click — never line-limited. A limit is a drawing instruction the reported
+    /// height doesn't follow: a long query string drew its full ten lines over
+    /// the status rows and the tab strip below it while the layout had reserved
+    /// three. A shortened *string* can't be drawn taller than it is, and the
+    /// open form lays out at its real height, so the rest of the body moves down
+    /// the way a disclosure should. (Same reasoning as the object tree's rows.)
+    @ViewBuilder
+    private func urlLine(_ url: String) -> some View {
+        let budget = urlBudget()
+        let isCut = url.prefix(budget + 1).count > budget
+        let shown = urlExpanded || !isCut ? url : String(url.prefix(budget)) + "…"
+        HStack(alignment: .top, spacing: 4) {
+            if isCut {
+                Image(systemName: urlExpanded ? "chevron.down" : "chevron.right")
+                    .font(.app(size: 9))
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 14)
+                    .help(urlExpanded ? "Show less" : "Show the whole URL")
+            }
+            Text(shown)
+                .font(.app(size: 11, design: .monospaced))
+                .foregroundStyle(.rtKey)
+                // An excerpt has nothing worth selecting, and selectable text
+                // eats the click that opens it; the whole URL selects again.
+                .modifier(SelectableValue(enabled: urlExpanded || !isCut))
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { if isCut { urlExpanded.toggle() } }
+        .measuringWidth(into: $urlWidth)
+    }
+
+    /// Characters the collapsed URL shows: two wrapped lines of the measured
+    /// line width, from the same pure geometry the object tree uses.
+    private func urlBudget() -> Int {
+        guard urlWidth > 0 else { return JSONTreeLayout.unmeasuredBudget }
+        let column = JSONTreeLayout.columnCharacters(
+            rowWidth: Double(urlWidth),
+            fontSize: 11 * AppFontPrefs.sizeScale,
+            depth: 0,
+            keyCharacters: 0
+        )
+        return JSONTreeLayout.collapsedBudget(columnCharacters: column, lines: 2)
     }
 
     private var apiTabPicker: some View {
@@ -2329,6 +2383,10 @@ private struct RtRow: View {
             if let message = object?["message"] {
                 switch message {
                 case .object, .array:
+                    treeSection(title: nil, object: message)
+                // A logged payload is often `JSON.stringify`d too — the same
+                // escaped wall, so it gets the same tree and raw toggle.
+                case let .string(text) where EmbeddedJSON.looksLikeJSON(text):
                     treeSection(title: nil, object: message)
                 default:
                     Text(String((message.stringValue ?? message.jsonString).prefix(20_000)))
@@ -2383,11 +2441,12 @@ private struct RtRow: View {
         .background(.bgSurface, in: RoundedRectangle(cornerRadius: 6))
     }
 
+    /// A response body arrives as a string; show the object when it is one.
+    /// Only ever called from the expanded body, so nothing parses until the row
+    /// is opened.
     private func parseBody(_ value: JSONValue?) -> JSONValue? {
-        guard case let .string(text) = value,
-              let data = text.data(using: .utf8),
-              let parsed = try? JSONDecoder().decode(JSONValue.self, from: data) else { return nil }
-        return parsed
+        guard case let .string(text) = value else { return nil }
+        return EmbeddedJSON.parse(text)
     }
 
     private func formatMs(_ ms: Double) -> String {
@@ -2589,6 +2648,25 @@ private struct JSONTreeView: View {
     /// `JSONTreeLayout.collapsedLines` so one 20 KB payload can't bury the
     /// timeline.
     @State private var expandedValues: Set<String> = []
+    /// Parsed stringified payloads, keyed by row path: an API's `data: "{…}"`, a
+    /// serialized body. Filled when the row appears — which only happens inside
+    /// an *expanded* event — and never while building a row, so a streaming
+    /// timeline parses nothing until someone opens the event.
+    ///
+    /// Each entry carries the string it was parsed from, because a path alone
+    /// does not identify a value: a tree that swaps its root — the API event's
+    /// Response/Request tabs are one tree — reuses `.0` for a different payload,
+    /// and a cache hit from the other tab rendered *its* object on this row.
+    @State private var parsedStrings: [String: ParsedPayload] = [:]
+    /// Paths the reader switched back to the raw text. A parsed payload is the
+    /// default (it's the readable form); some are only readable raw — a
+    /// signature, whitespace that matters, a diff against a server log.
+    @State private var rawPaths: Set<String> = []
+    /// The string at each path that looked like JSON but didn't parse (malformed,
+    /// or cut off by the client). Tried once, then the row is plain text — an
+    /// offer that does nothing when clicked is worse than no offer. Keyed with
+    /// its source for the same reason the parses are.
+    @State private var unparseable: [String: String] = [:]
     @State private var search = ""
     /// The last find result revealed by a click, tinted in the tree until the
     /// next search.
@@ -2632,7 +2710,11 @@ private struct JSONTreeView: View {
                     // Clickable results (JSONSearch, pure in ADBKit): clicking
                     // one expands the tree along its path and highlights the
                     // node in place.
-                    let matches = JSONSearch.matches(in: root, query: search)
+                    // Expanded, because the rows below are: a find that only
+                    // knew the escaped string would point at a 4 KB blob
+                    // instead of the leaf the tree shows.
+                    let matches = JSONSearch.matches(
+                        in: root, query: search, expandingStringifiedJSON: true)
                     ForEach(Array(matches.enumerated()), id: \.offset) { _, match in
                         matchRow(match)
                     }
@@ -2659,10 +2741,27 @@ private struct JSONTreeView: View {
         var out: [JSONNode] = []
         func walk(_ node: JSONNode) {
             out.append(node)
-            guard node.isContainer, expanded.contains(node.path) else { return }
-            for child in node.children { walk(child) }
+            if node.isContainer {
+                guard expanded.contains(node.path) else { return }
+                for child in node.children { walk(child) }
+            } else if let parsed = shownParse(node) {
+                // The string's own tree hangs off the row that carried it, one
+                // level deeper — a nested stringified value is a row of its own
+                // and parses when *it* is opened.
+                let host = JSONNode(path: node.path, key: "", value: parsed, depth: node.depth)
+                for child in host.children { walk(child) }
+            }
         }
-        for child in JSONNode(path: "", key: "", value: root, depth: -1).children { walk(child) }
+        let host = JSONNode(path: "", key: "", value: root, depth: -1)
+        // A scalar root is a payload too — a plain-text or stringified response
+        // body. Showing its children (none) read as "(empty)"; show the value.
+        guard host.isContainer else {
+            let node = JSONNode(path: ".0", key: "", value: root, depth: 0)
+            if case .null = root { return [] }
+            walk(node)
+            return out
+        }
+        for child in host.children { walk(child) }
         return out
     }
 
@@ -2702,6 +2801,9 @@ private struct JSONTreeView: View {
         for index in match.path {
             path += ".\(index)"
             expanded.insert(path)
+            // A match can sit inside a stringified payload the reader switched
+            // back to raw — the row it lives on only exists in the parse.
+            rawPaths.remove(path)
         }
         highlightedPath = path
         search = ""
@@ -2709,15 +2811,21 @@ private struct JSONTreeView: View {
 
     @ViewBuilder
     private func rowView(_ node: JSONNode) -> some View {
+        // A stringified payload, shown as its object: the tree below the row is
+        // the parse, and the row itself reads like the container it really is.
+        let parsed = shownParse(node)
+        // The value shaped like JSON but still escaped — the cheap check, made
+        // per render; the parse waits for a tap.
+        let embedded = embeddedJSONString(node)
         // Built once per row: on a big payload the preview is a full copy of
         // the value, and the cut, the disclosure, and the row all need it.
-        let preview = node.valuePreview
-        let showsAll = expandedValues.contains(node.path)
+        let preview = parsed.map(Self.containerPreview) ?? node.valuePreview
+        let showsAll = parsed == nil && expandedValues.contains(node.path)
         let budget = collapsedBudget(for: node)
-        let isCut = !node.isContainer && preview.prefix(budget + 1).count > budget
+        let isCut = parsed == nil && !node.isContainer && preview.prefix(budget + 1).count > budget
         // An opened row keeps its disclosure even if a wider pane has since
         // made the value fit — otherwise the only way to close it disappears.
-        let disclosesValue = !node.isContainer && (showsAll || isCut)
+        let disclosesValue = parsed == nil && !node.isContainer && (showsAll || isCut)
         HStack(alignment: .top, spacing: 4) {
             // The gutter is incompressible, so the value below is the row's one
             // flexible child: it's proposed exactly the width it renders at, and
@@ -2727,8 +2835,9 @@ private struct JSONTreeView: View {
             // over the event below it.
             HStack(alignment: .top, spacing: 4) {
                 Color.clear.frame(width: CGFloat(max(0, node.depth)) * JSONTreeLayout.indentPerDepth, height: 1)
-                if node.isContainer {
-                    Image(systemName: expanded.contains(node.path) ? "chevron.down" : "chevron.right")
+                if node.isContainer || parsed != nil {
+                    Image(systemName: (parsed != nil || expanded.contains(node.path))
+                        ? "chevron.down" : "chevron.right")
                         .font(.app(size: 10, weight: .bold))
                         .foregroundStyle(.secondary)
                         .frame(width: 14)
@@ -2764,14 +2873,27 @@ private struct JSONTreeView: View {
             // stale line count can spill over the event below.
             Text(valueText(preview, showingAll: showsAll, budget: budget, isCut: isCut))
                 .font(.app(size: 11, design: .monospaced))
-                .foregroundStyle(node.valueColor)
+                .foregroundStyle(parsed == nil ? node.valueColor : .secondary)
                 // Selectable text eats the click, and the value spans the whole
                 // row — so a row whose click means "open this" hands the click
                 // to the row instead. A cut value has nothing worth selecting
                 // (it's an excerpt); once open, the full text selects again.
-                .modifier(SelectableValue(enabled: !node.isContainer && (showsAll || !isCut)))
+                .modifier(SelectableValue(
+                    enabled: parsed == nil && !node.isContainer && (showsAll || !isCut)
+                ))
                 .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                // A parsed row's value is a two-glyph summary (`{ 9 }`): let it
+                // size to its content so the toggle sits beside it rather than
+                // stranded at the pane's far edge. A raw value keeps the row's
+                // whole width — it has to be the one flexible child, or the
+                // height it reports stops matching the height it draws.
+                .frame(maxWidth: parsed == nil ? .infinity : nil, alignment: .leading)
+            if let embedded {
+                // Incompressible, so the value stays the row's one flexible
+                // child (see the gutter note above).
+                parsedToggle(path: node.path, text: embedded, showingParsed: parsed != nil)
+            }
+            if parsed != nil { Spacer(minLength: 0) }
         }
         // Rows were 13pt slivers — give container rows a real click target.
         .padding(.vertical, 2)
@@ -2784,6 +2906,12 @@ private struct JSONTreeView: View {
         .onTapGesture {
             if node.isContainer {
                 toggle(node.path)
+            } else if parsed != nil {
+                rawPaths.insert(node.path)          // close the tree, back to the excerpt
+            } else if showsAll {
+                toggleValue(node.path)              // close the raw text
+            } else if let embedded {
+                showParsed(embedded, at: node.path)
             } else if disclosesValue {
                 toggleValue(node.path)
             }
@@ -2791,9 +2919,84 @@ private struct JSONTreeView: View {
         .contextMenu {
             Button("Copy value") {
                 NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(node.value.prettyJSON, forType: .string)
+                // What the row shows: the parsed object while it stands, the raw
+                // string the app sent once it's switched back.
+                let text = parsed?.prettyJSON ?? node.value.prettyJSON
+                NSPasteboard.general.setString(text, forType: .string)
             }
         }
+        // Keyed by path, so it runs once per row rather than per render — the
+        // one place a parse is started for a value nobody clicked, and only for
+        // a row that exists, i.e. inside an event the reader expanded.
+        .task(id: node.path) {
+            guard let embedded, parsedStrings[node.path]?.source != embedded else { return }
+            showParsed(embedded, at: node.path)
+        }
+    }
+
+    /// The parse a row is currently showing: the cached value for *this* row's
+    /// string, unless the reader asked for the raw text. A container never has
+    /// one — only a string can be a stringified payload.
+    private func shownParse(_ node: JSONNode) -> JSONValue? {
+        guard case let .string(text) = node.value,
+              !rawPaths.contains(node.path),
+              let entry = parsedStrings[node.path],
+              entry.source == text else { return nil }
+        return entry.value
+    }
+
+    /// The row's value as a JSON-shaped string, when it is one. Cheap by
+    /// construction (`EmbeddedJSON.looksLikeJSON` reads two characters), because
+    /// every visible row asks this on every render.
+    private func embeddedJSONString(_ node: JSONNode) -> String? {
+        guard case let .string(text) = node.value,
+              unparseable[node.path] != text,
+              EmbeddedJSON.looksLikeJSON(text) else { return nil }
+        return text
+    }
+
+    /// Chrome DevTools' "View parsed / View source", per row: a stringified
+    /// payload shows as an object, and the raw text the app sent stays one click
+    /// away.
+    private func parsedToggle(path: String, text: String, showingParsed: Bool) -> some View {
+        Button {
+            if showingParsed {
+                rawPaths.insert(path)
+                expandedValues.insert(path)     // the raw text, in full
+            } else {
+                showParsed(text, at: path)
+            }
+        } label: {
+            Text(showingParsed ? "raw" : "parsed")
+                .font(.app(size: 9, weight: .medium))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .overlay(Capsule().strokeBorder(Color.secondary.opacity(0.35)))
+                // A 9pt label is a small target: take the whole capsule, padding
+                // included, rather than just the glyphs.
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .help(showingParsed
+            ? "Show the raw text the app sent"
+            : "Parse this value and show it as an object")
+    }
+
+    /// Parses one stringified value and shows its tree. The only parse site — a
+    /// row render never reaches it.
+    private func showParsed(_ text: String, at path: String) {
+        rawPaths.remove(path)
+        expandedValues.remove(path)
+        guard parsedStrings[path]?.source != text else { return }
+        guard let value = EmbeddedJSON.parse(text) else { unparseable[path] = text; return }
+        parsedStrings[path] = ParsedPayload(source: text, value: value)
+    }
+
+    /// `{ n }` / `[ n ]` for a parsed value, the same summary a container row
+    /// shows in place of its contents.
+    private static func containerPreview(_ value: JSONValue) -> String {
+        JSONNode(path: "", key: "", value: value, depth: 0).valuePreview
     }
 
     private func toggle(_ path: String) {
@@ -2835,6 +3038,13 @@ private struct JSONTreeView: View {
         )
         return JSONTreeLayout.collapsedBudget(columnCharacters: column)
     }
+}
+
+/// One parsed stringified payload, with the string it came from — the pair is
+/// what makes a path-keyed cache safe when the tree's root can change under it.
+private struct ParsedPayload {
+    let source: String
+    let value: JSONValue
 }
 
 /// `textSelection` takes two different concrete types, so the choice can't be a
