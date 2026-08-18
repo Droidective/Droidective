@@ -2765,7 +2765,11 @@ private struct JSONTreeView: View {
             Text(valueText(preview, showingAll: showsAll, budget: budget, isCut: isCut))
                 .font(.app(size: 11, design: .monospaced))
                 .foregroundStyle(node.valueColor)
-                .textSelection(.enabled)
+                // Selectable text eats the click, and the value spans the whole
+                // row — so a row whose click means "open this" hands the click
+                // to the row instead. A cut value has nothing worth selecting
+                // (it's an excerpt); once open, the full text selects again.
+                .modifier(SelectableValue(enabled: !node.isContainer && (showsAll || !isCut)))
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -2830,6 +2834,21 @@ private struct JSONTreeView: View {
             keyCharacters: node.key.count
         )
         return JSONTreeLayout.collapsedBudget(columnCharacters: column)
+    }
+}
+
+/// `textSelection` takes two different concrete types, so the choice can't be a
+/// ternary at the call site — this carries it.
+private struct SelectableValue: ViewModifier {
+    let enabled: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if enabled {
+            content.textSelection(.enabled)
+        } else {
+            content.textSelection(.disabled)
+        }
     }
 }
 
