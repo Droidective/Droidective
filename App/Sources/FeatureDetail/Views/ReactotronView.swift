@@ -2121,6 +2121,12 @@ private struct RtRow: View {
     @State private var apiTab: ApiTab = .response
     @State private var hovering = false
     @State private var copiedLine = false
+    /// The API row's URL, shown whole. A signed S3 link runs to several hundred
+    /// characters, so the collapsed form is an excerpt and this opens it in place.
+    @State private var urlExpanded = false
+    /// The URL line's laid-out width — how much of the URL one line holds is a
+    /// function of the pane's current width, the same as an object row's value.
+    @State private var urlWidth: CGFloat = 0
 
     private static let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -2280,11 +2286,7 @@ private struct RtRow: View {
         method: String, url: String, status: Int, duration: Double, request: JSONValue?, response: JSONValue?
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(url)
-                .font(.app(size: 11, design: .monospaced))
-                .foregroundStyle(.rtKey)
-                .textSelection(.enabled)
-                .lineLimit(3)
+            urlLine(url)
             VStack(alignment: .leading, spacing: 3) {
                 metaRow("Status", "\(status)", color: statusColor(status))
                 metaRow("Method", method.uppercased(), color: .rtNumber)
@@ -2305,6 +2307,53 @@ private struct RtRow: View {
             }
             treeSection(title: nil, object: apiObject(request: request, response: response))
         }
+    }
+
+    /// The request URL, cut to what the line holds and opened in place by a
+    /// click — never line-limited. A limit is a drawing instruction the reported
+    /// height doesn't follow: a long query string drew its full ten lines over
+    /// the status rows and the tab strip below it while the layout had reserved
+    /// three. A shortened *string* can't be drawn taller than it is, and the
+    /// open form lays out at its real height, so the rest of the body moves down
+    /// the way a disclosure should. (Same reasoning as the object tree's rows.)
+    @ViewBuilder
+    private func urlLine(_ url: String) -> some View {
+        let budget = urlBudget()
+        let isCut = url.prefix(budget + 1).count > budget
+        let shown = urlExpanded || !isCut ? url : String(url.prefix(budget)) + "…"
+        HStack(alignment: .top, spacing: 4) {
+            if isCut {
+                Image(systemName: urlExpanded ? "chevron.down" : "chevron.right")
+                    .font(.app(size: 9))
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 14)
+                    .help(urlExpanded ? "Show less" : "Show the whole URL")
+            }
+            Text(shown)
+                .font(.app(size: 11, design: .monospaced))
+                .foregroundStyle(.rtKey)
+                // An excerpt has nothing worth selecting, and selectable text
+                // eats the click that opens it; the whole URL selects again.
+                .modifier(SelectableValue(enabled: urlExpanded || !isCut))
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { if isCut { urlExpanded.toggle() } }
+        .measuringWidth(into: $urlWidth)
+    }
+
+    /// Characters the collapsed URL shows: two wrapped lines of the measured
+    /// line width, from the same pure geometry the object tree uses.
+    private func urlBudget() -> Int {
+        guard urlWidth > 0 else { return JSONTreeLayout.unmeasuredBudget }
+        let column = JSONTreeLayout.columnCharacters(
+            rowWidth: Double(urlWidth),
+            fontSize: 11 * AppFontPrefs.sizeScale,
+            depth: 0,
+            keyCharacters: 0
+        )
+        return JSONTreeLayout.collapsedBudget(columnCharacters: column, lines: 2)
     }
 
     private var apiTabPicker: some View {
