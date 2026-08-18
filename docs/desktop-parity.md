@@ -13,8 +13,8 @@ rewriting one when something turns out to be more work than it looked.
 | --- | --- |
 | ⬜ Not started | 32 |
 | 🟡 Partial | 22 |
-| ⛔ Not applicable off-Apple | 6 |
-| **Total registry features** | **60** |
+| ⛔ Not applicable off-Apple | 7 |
+| **Total registry features** | **61** |
 
 "Partial" is doing a lot of work in that table: 19 of the 22 are actions that
 run from the palette but have no screen of their own, and the three that do
@@ -283,9 +283,6 @@ Apple-only by design.
 ---
 
 ## Per-feature checklists
-
-Legend: ⬜ not started · 🟡 partial · ⛔ not applicable off-Apple.
-
 ### Input & Clipboard
 #### `send-text` — Send Text  ·  🟡 partial
 > Type text, URLs, or symbols on the device
@@ -408,8 +405,6 @@ Legend: ⬜ not started · 🟡 partial · ⛔ not applicable off-Apple.
   - [ ] button: Hide All
   - [ ] button: Run adb reverse for the device
   - [ ] button: Run
-  - [ ] button: Copy
-  - [ ] button: Copy as JSON
   - [ ] field: Find in console
   - [ ] field: 8081
   - [ ] field: Filter
@@ -423,10 +418,7 @@ Legend: ⬜ not started · 🟡 partial · ⛔ not applicable off-Apple.
   - [ ] tooltip: Find & highlight in console (⌘F)
   - [ ] tooltip: Clear the console
   - [ ] tooltip: Choose which log levels to show
-  - [ ] tooltip: Copy this entry (right-click for JSON)
-  - [ ] tooltip: Reveal in the tree
   - [ ] search: searchable list
-  - [ ] menu: right-click context menu
   - [ ] export: save/export to a file
 
 #### `open-dev-menu` — Open Dev Menu  ·  🟡 partial
@@ -471,6 +463,11 @@ Legend: ⬜ not started · 🟡 partial · ⛔ not applicable off-Apple.
 - **Kind** `toggleAction`
 - **Note** Runs from the palette; no dedicated screen.
 
+#### `mirror-wall` — Mirror Wall  ·  ⛔ n/a
+> Mirror up to six devices side by side
+- **Kind** `view`
+- **Note** Several mirrors at once, on the same Apple-only mirror pipeline as `scrcpy`.
+
 #### `scrcpy` — Mirror Screen  ·  ⛔ n/a
 > Mirror and control the device with scrcpy
 - **Kind** `view`
@@ -511,15 +508,13 @@ Legend: ⬜ not started · 🟡 partial · ⛔ not applicable off-Apple.
 - **Must replicate**
   - [ ] tooltip: Refresh from the device
 
-#### `device-info` — Device Info  ·  🟡 partial
+#### `device-info` — Device Info  ·  ⬜ todo
 > Browse and search every device property
 - **Kind** `view`
-- **Note** Built. `/v1/device/props` passes `getprop` through untouched; the
-  pane adds a summary header, two-segment grouping, search over key and value,
-  copy and export.
+- **Note** Not started on Windows/Linux.
 - **macOS view** `DeviceInfoView` — `App/Sources/FeatureDetail/Views/DeviceInfoView.swift`
 - **Must replicate**
-  - [x] field: Filter properties…
+  - [ ] field: Filter properties…
 
 #### `fake-battery` — Fake Battery  ·  🟡 partial
 > Set a fake battery level and unplugged state
@@ -646,22 +641,22 @@ Legend: ⬜ not started · 🟡 partial · ⛔ not applicable off-Apple.
 #### `logcat` — Logcat  ·  🟡 partial
 > Live log stream with search and filters
 - **Kind** `view`
-- **Note** A pane exists; the app filter is what it is still missing.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `LogcatView` — `App/Sources/FeatureDetail/Views/LogcatView.swift`
 - **Must replicate**
-  - [x] picker: Level
-  - [x] field: Filter lines…
+  - [ ] picker: Level
+  - [ ] field: Filter lines…
   - [ ] label: All apps
   - [ ] label: Add from installed apps
   - [ ] label: Use app on device screen
   - [ ] label: Add manually / manage…
-  - [x] tooltip: Show only the lines containing this text
-  - [x] tooltip: Find & highlight in the log without hiding lines
-  - [x] tooltip: Export buffer to ~/Downloads/Droidective
-  - [x] tooltip: Clear
+  - [ ] tooltip: Show only the lines containing this text
+  - [ ] tooltip: Find & highlight in the log without hiding lines (⌘F)
+  - [ ] tooltip: Export buffer to ~/Downloads/Droidective
+  - [ ] tooltip: Clear
   - [ ] tooltip: Stream one app's logs — pick a saved bundle or add a new one
-  - [x] tooltip: Remove tag filter
-  - [x] export: save/export to a file
+  - [ ] tooltip: Remove tag filter
+  - [ ] export: save/export to a file
 
 #### `performance` — Performance Monitor  ·  ⬜ todo
 > Live CPU, RAM & FPS with recording and export
@@ -930,3 +925,4 @@ Legend: ⬜ not started · 🟡 partial · ⛔ not applicable off-Apple.
   - [ ] drag: drag and drop
 
 
+<!-- counts: {'done': 0, 'partial': 22, 'todo': 32, 'gated': 7} -->
