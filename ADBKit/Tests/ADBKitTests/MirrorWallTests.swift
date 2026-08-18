@@ -112,6 +112,33 @@ import Testing
         #expect(MirrorWall.toggled("a", in: full) == ["b", "c", "d", "e", "f"])
     }
 
+    // MARK: - Which tiles hold a session
+
+    @Test func everyPickedDeviceStreamsByDefault() {
+        #expect(MirrorWall.streamingSerials(order: ["a", "b"], paused: [], blocked: [])
+            == ["a", "b"])
+    }
+
+    @Test func pausedAndTakenDevicesDoNotStream() {
+        #expect(MirrorWall.streamingSerials(order: ["a", "b", "c"], paused: ["b"], blocked: ["c"])
+            == ["a"])
+        #expect(MirrorWall.streamingSerials(order: ["a"], paused: ["a"], blocked: ["a"]) == [])
+    }
+
+    /// The start pass follows the grid, so bring-up order matches what the user
+    /// sees rather than a dictionary's whim.
+    @Test func streamingKeepsTileOrder() {
+        #expect(MirrorWall.streamingSerials(order: ["c", "a", "b"], paused: ["a"], blocked: [])
+            == ["c", "b"])
+    }
+
+    /// Starts wait for the device list to settle (a tile's quality comes from
+    /// the tile *count*); stops never do.
+    @Test func startsAreCoalescedButNotForLong() {
+        #expect(MirrorWall.startCoalescingDelay > .zero)
+        #expect(MirrorWall.startCoalescingDelay < .seconds(1))
+    }
+
     // MARK: - Pop-out window tiling
 
     private let screen = MirrorWall.TileFrame(x: 0, y: 0, width: 1600, height: 1000)

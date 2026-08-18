@@ -44,7 +44,12 @@ struct MirrorWallView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .imageDecision(image: $pendingScreenshot) { editingScreenshot = $0 }
         .task {
-            if wall == nil {
+            // A wall that has been shut down is inert for good (that's what
+            // stops it resurrecting sessions during teardown), so a view whose
+            // `@State` outlived its own `onDisappear` — a tab moved between
+            // panes — must build a fresh one instead of showing black tiles
+            // nothing can revive.
+            if wall == nil || wall?.isShutDown == true {
                 wall = MirrorWallModel(
                     adb: state.env.engine.client, locator: state.env.engine.locator)
             }
@@ -64,6 +69,23 @@ struct MirrorWallView: View {
         }
         .onChange(of: wall?.liveSerials) { _, live in
             state.noteMirrorClaims(live ?? [], featureID: "mirror-wall")
+        }
+        .onReceive(NotificationCenter.default.publisher(
+            for: NSWindow.didChangeOcclusionStateNotification)
+        ) { notification in
+            // Six encoders behind another app's window — or a miniaturized one —
+            // is device battery and Mac CPU spent on pixels nobody can see. Same
+            // grace window as a hidden tab, so flipping between apps doesn't
+            // stop-and-reconnect the whole wall.
+            guard let window = notification.object as? NSWindow,
+                  window === state.nsWindow else { return }
+            if window.occlusionState.contains(.visible) {
+                teardownTask?.cancel()
+                teardownTask = nil
+                sync()
+            } else {
+                scheduleHiddenTeardown()
+            }
         }
         .onDisappear {
             teardownTask?.cancel()
@@ -239,7 +261,11 @@ struct MirrorWallView: View {
     }
 
     private func dropEdge(_ serial: String) -> MirrorWallTile.DropEdge? {
-        switch dropSlot {
+        // Only ever while a drag is actually in flight: a drag abandoned over a
+        // tile (Esc, or released outside) doesn't always land a `dropExited`,
+        // and a guideline left painted on the grid reads as a stuck drag.
+        guard dragging != nil else { return nil }
+        return switch dropSlot {
         case .before(serial): .leading
         case .end where selection.last == serial: .trailing
         default: nil
@@ -354,6 +380,12 @@ struct MirrorWallView: View {
             try? await Task.sleep(for: .seconds(mirrorHiddenGraceSeconds))
             guard !Task.isCancelled else { return }
             teardownTask = nil
+            // Re-check rather than trusting the reason this was scheduled: an
+            // occlusion notification during window bring-up would otherwise be
+            // able to strand a wall that is plainly on screen.
+            let onScreen = tabIsActive
+                && state.nsWindow?.occlusionState.contains(.visible) != false
+            guard !onScreen else { return }
             wall?.suspend()
         }
     }

@@ -904,6 +904,12 @@ final class AppCore {
         Task {
             await mcp.stopForQuit()
             if reactotronSession.isRunning { await reactotronSession.stopForQuit() }
+            // Mirror sessions own an `adb forward` tunnel each. Their views'
+            // teardown is fire-and-forget, so at quit it never lands and the
+            // tunnels stay registered in the adb server — six of them for a full
+            // Mirror Wall. Tear them down here, where termination is already
+            // deferred.
+            await MirrorSessions.shared.stopAllForQuit()
             // Flush before termination — `persistLayout` saves through a
             // fire-and-forget Task, and that write racing process exit would
             // lose whatever this quit just recorded (the terminal-resume

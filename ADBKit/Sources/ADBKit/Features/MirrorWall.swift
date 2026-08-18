@@ -120,6 +120,25 @@ public enum MirrorWall {
         Array(serials.prefix(maximumDevices))
     }
 
+    /// Which of a wall's tiles should hold a live session: the picked order
+    /// minus the ones the user paused and the ones something else already
+    /// mirrors. Order is kept, so the caller's start pass follows the grid.
+    public static func streamingSerials(
+        order: [String], paused: Set<String>, blocked: Set<String>
+    ) -> [String] {
+        order.filter { !paused.contains($0) && !blocked.contains($0) }
+    }
+
+    /// How long a burst of device arrivals is allowed to settle before tiles
+    /// start.
+    ///
+    /// Devices show up across `adb devices` polls, so the count is unknown for
+    /// the first moment of a wall's life — starting on the first one gave the
+    /// first tile the *one-tile* quality (a heavier encoder than a six-tile wall
+    /// wants) while its neighbours got the right one. Stops are never delayed:
+    /// releasing a device is always safe to do at once.
+    public static let startCoalescingDelay = Duration.milliseconds(250)
+
     // MARK: - Pop-out window tiling
 
     /// A rectangle in screen coordinates. Deliberately not `CGRect`: this math

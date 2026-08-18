@@ -39,8 +39,14 @@ final class MirrorWallModel {
     private var blocked: Set<String> = []
     /// One chain of work per serial. Connects and teardowns for a tile must
     /// never interleave — that's what leaves an orphaned session streaming with
-    /// nothing holding it (see `ScreenMirrorView.scheduleReconnect`).
+    /// nothing holding it (see `ScreenMirrorView.scheduleReconnect`). One entry
+    /// per serial the wall has ever streamed — a drained `Task` holds nothing of
+    /// its body, and the key set is bounded by the devices the user picked, so
+    /// there's nothing here to prune.
     private var work: [String: Task<Void, Never>] = [:]
+    /// The pending start pass — see `MirrorWall.startCoalescingDelay`. Stops run
+    /// immediately; only starts wait for the device list to settle.
+    private var pendingStart: Task<Void, Never>?
     /// Terminal: set by `stopAll()` and never cleared. A wall going away must
     /// not start anything else, and it can be *asked* to during its own
     /// teardown — a mirror tab closing at quit releases its device, which the
@@ -48,6 +54,11 @@ final class MirrorWallModel {
     /// lifetime (the session outlives the process; see `MirrorViewModel.stopped`
     /// for the same trap one layer down).
     private var stopped = false
+
+    /// Whether this wall has been shut down for good. A view whose `@State`
+    /// outlived its own `onDisappear` must build a fresh model rather than hold
+    /// an inert one, which would show black tiles with no way back.
+    var isShutDown: Bool { stopped }
 
     init(adb: AdbClient, locator: ToolLocator) {
         self.adb = adb
@@ -118,6 +129,8 @@ final class MirrorWallModel {
     /// its grace window, and returning to the tab syncs it back up. Teardown
     /// outlives the view, the way the single mirror's does.
     func suspend() {
+        pendingStart?.cancel()
+        pendingStart = nil
         let leaving = streams
         streams = [:]
         for (serial, model) in leaving {
@@ -148,15 +161,42 @@ final class MirrorWallModel {
 
     private func reconcile() {
         guard !stopped else { return }
-        let wanted = order.filter { !pausedSerials.contains($0) && !blocked.contains($0) }
+        let wanted = MirrorWall.streamingSerials(
+            order: order, paused: pausedSerials, blocked: blocked)
+        // Stop at once: a device this wall no longer wants must be released
+        // without waiting on anything.
         let wantedSet = Set(wanted)
         for (serial, model) in streams where !wantedSet.contains(serial) {
             streams.removeValue(forKey: serial)
             schedule(serial) { await model.stop() }
         }
-        // Quality is fixed when a tile starts: re-deriving it for every tile
-        // whenever the count changes would restart live sessions just because a
-        // seventh device was plugged in.
+        if wanted.contains(where: { streams[$0] == nil }) { scheduleStartPass() }
+        if let focused, order.contains(focused) { return }
+        focused = wanted.first ?? order.first
+    }
+
+    /// Start the tiles that have no session, once the device list has settled.
+    /// Coalesced because devices arrive across `adb devices` polls and a tile's
+    /// quality is chosen from the tile *count* — starting on the first arrival
+    /// gave the first device a one-tile encoder on a six-tile wall.
+    private func scheduleStartPass() {
+        guard pendingStart == nil else { return }
+        pendingStart = Task { [weak self] in
+            try? await Task.sleep(for: MirrorWall.startCoalescingDelay)
+            guard !Task.isCancelled else { return }
+            self?.startPass()
+        }
+    }
+
+    private func startPass() {
+        pendingStart = nil
+        guard !stopped else { return }
+        let wanted = MirrorWall.streamingSerials(
+            order: order, paused: pausedSerials, blocked: blocked)
+        // Quality is fixed when a tile starts. Re-deriving it for the tiles
+        // already streaming would restart live sessions every time a device was
+        // plugged in — the settle delay above is what keeps a wall's tiles
+        // matched in practice.
         let quality = MirrorWall.quality(tiles: order.count)
         for serial in wanted where streams[serial] == nil {
             let model = MirrorViewModel(
@@ -167,8 +207,6 @@ final class MirrorWallModel {
             streams[serial] = model
             schedule(serial) { await model.start() }
         }
-        if let focused, order.contains(focused) { return }
-        focused = wanted.first ?? order.first
     }
 
     private func setAudio(_ on: Bool, on serial: String) {

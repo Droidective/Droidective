@@ -108,6 +108,11 @@ final class MirrorViewModel {
 
     func start() async {
         guard !stopped else { return }
+        // Registered *before* anything is opened, not after the stream is up: a
+        // start that fails or hangs part-way can still have pushed the server
+        // and opened the adb tunnel, and quit has to be able to reach that too
+        // (see `MirrorSessions`).
+        MirrorSessions.shared.note(self)
         status = .connecting
         didStream = false
         // Prefer the bundled server (self-contained); fall back to an installed
@@ -239,6 +244,7 @@ final class MirrorViewModel {
     /// `start()` and the audio-fallback restart are permanently inert.
     func stop() async {
         stopped = true
+        MirrorSessions.shared.forget(self)
         await teardown()
     }
 
