@@ -249,7 +249,7 @@ struct MirrorWallView: View {
             },
             onScreenshot: { capture(device.serial, wall: wall) },
             onPopOut: { popOut(device.serial) },
-            onBringBack: { state.core.closeMirrorWindow(device.serial) },
+            onBringBack: { bringBack(device.serial) },
             onOpenFullMirror: { openFullMirror(device.serial) })
             .onDrop(of: [.mirrorWallTile], delegate: MirrorWallDrop(
                 target: device.serial,
@@ -258,6 +258,19 @@ struct MirrorWallView: View {
                 tileWidth: width,
                 setSlot: { dropSlot = $0 },
                 perform: moveTile))
+    }
+
+    /// Take a device back into the wall by closing whatever holds it: its
+    /// pop-out window, or this window's Mirror Screen tab. Both release the
+    /// claim, and the next reconcile starts the tile. A tab close still routes
+    /// through `closeTab`, so a recording over there gets its own confirmation
+    /// rather than being dropped.
+    private func bringBack(_ serial: String) {
+        switch blocked(serial) {
+        case .poppedOut: state.core.closeMirrorWindow(serial)
+        case .mirrorTab: state.closeTab("scrcpy")
+        case .otherWindow, nil: break
+        }
     }
 
     private func dropEdge(_ serial: String) -> MirrorWallTile.DropEdge? {

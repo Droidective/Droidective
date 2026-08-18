@@ -95,6 +95,7 @@ struct MirrorWallTile: View {
         case .mirrorTab:
             card(icon: "display", text: "Showing in the Mirror Screen tab.") {
                 Button("Go to Mirror Screen") { onOpenFullMirror() }
+                Button("Bring Back") { onBringBack() }
                     .buttonStyle(.borderedProminent)
             }
         case let .otherWindow(owner):
@@ -212,7 +213,10 @@ struct MirrorWallTile: View {
 
             Divider()
 
-            if blocked == .poppedOut {
+            // Both blocks a tile can take itself out of: its own window, and
+            // this window's Mirror Screen tab. Closing whichever holds the
+            // device hands it straight back to the wall.
+            if blocked == .poppedOut || blocked == .mirrorTab {
                 Button("Bring Back Into the Wall") { onBringBack() }
             } else {
                 Button("Open in Its Own Window") { onPopOut() }
