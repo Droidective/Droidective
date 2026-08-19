@@ -2183,6 +2183,14 @@ private struct RtRow: View {
                 Text(presentation.badge)
                     .font(.app(size: 10, weight: .bold))
                     .foregroundStyle(presentation.badgeColor)
+                if let status = presentation.status {
+                    // A request that never got a response reports 0 — say so
+                    // rather than showing a status that doesn't exist.
+                    Text(status == 0 ? "ERR" : "\(status)")
+                        .font(.app(size: 11, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(rtStatusColor(status))
+                        .help(status == 0 ? "The request failed before a response" : "HTTP \(status)")
+                }
             }
             // Incompressible: without this, HStack treats the wrappable time
             // Text as flexible and squeezes the whole cluster — the timestamp
@@ -2288,7 +2296,7 @@ private struct RtRow: View {
         VStack(alignment: .leading, spacing: 8) {
             urlLine(url)
             VStack(alignment: .leading, spacing: 3) {
-                metaRow("Status", "\(status)", color: statusColor(status))
+                metaRow("Status", "\(status)", color: rtStatusColor(status))
                 metaRow("Method", method.uppercased(), color: .rtNumber)
                 metaRow("Duration", "\(formatMs(duration)) ms", color: .rtNumber)
             }
@@ -2451,15 +2459,6 @@ private struct RtRow: View {
 
     private func formatMs(_ ms: Double) -> String {
         ms < 10 ? String(format: "%.2f", ms) : String(Int(ms.rounded()))
-    }
-
-    private func statusColor(_ status: Int) -> Color {
-        switch status {
-        case 200..<300: .green
-        case 400..<500: .orange
-        case 500...: .red
-        default: .rtNumber
-        }
     }
 
     private func copyToPasteboard(_ text: String) {
@@ -3580,8 +3579,30 @@ private struct RtPresentation {
     let badgeColor: Color
     let primary: String
     let primaryColor: Color
+    /// An API event's HTTP status, shown on the collapsed row — reading a
+    /// timeline is mostly looking for the one call that didn't return 200, and
+    /// that meant expanding each row. nil for every other event.
+    var status: Int?
 
-    var copyText: String { "\(badge) \(primary)".trimmingCharacters(in: .whitespaces) }
+    var copyText: String {
+        [badge, status.map(String.init), primary]
+            .compactMap { $0 }
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespaces)
+    }
+}
+
+/// The status code's tint: green for 2xx, orange for a client error, red for a
+/// server error, and the number tint for anything else (a redirect, or the 0 a
+/// failed request reports). Only the code is coloured — colouring the row would
+/// drown the timeline's own badge colours.
+private func rtStatusColor(_ status: Int) -> Color {
+    switch HTTPStatusClass(status: status) {
+    case .success: .green
+    case .clientError: .orange
+    case .serverError: .red
+    case .redirect, .failure, nil: .rtNumber
+    }
 }
 
 /// Path (+ trimmed query) of an API URL for the compact list row; the full URL
@@ -3633,10 +3654,11 @@ private extension ReactotronEvent {
             )
         case let .image(_, _, caption, _, _):
             return RtPresentation(badge: "IMAGE", badgeColor: .rtBadge, primary: caption ?? "", primaryColor: .primary)
-        case let .apiResponse(method, url, _, _, _, _):
+        case let .apiResponse(method, url, status, _, _, _):
             return RtPresentation(
                 badge: "API", badgeColor: .rtBadge,
-                primary: "\(method.uppercased()) \(rtShortPath(url))", primaryColor: .primary
+                primary: "\(method.uppercased()) \(rtShortPath(url))", primaryColor: .primary,
+                status: status
             )
         case let .benchmark(title, _):
             return RtPresentation(badge: "BENCHMARK", badgeColor: .rtBadge, primary: title, primaryColor: .rtName)
