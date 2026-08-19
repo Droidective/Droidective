@@ -14,11 +14,17 @@ import SwiftUI
     /// The row whose band contains `y`. A drag that runs past the first or last
     /// row answers with the nearest one, so sweeping off the edge of the feed
     /// selects to the end instead of stopping where the pointer left the rows.
+    ///
+    /// Only rows that are *on screen* have frames (see `reportingRowFrame`), so
+    /// this answers about what the reader can actually see — `ids` may be
+    /// thousands of buffered rows.
     func row(at y: CGFloat, among ids: [ID]) -> ID? {
         var nearest: (id: ID, distance: CGFloat)?
         for id in ids {
             guard let frame = frames[id] else { continue }
-            if y >= frame.minY, y <= frame.maxY { return id }
+            // Half-open band: the boundary between two rows belongs to the lower
+            // one, or a click on the seam would pick the row above the pointer.
+            if y >= frame.minY, y < frame.maxY { return id }
             let distance = min(abs(y - frame.minY), abs(y - frame.maxY))
             if nearest == nil || distance < nearest!.distance { nearest = (id, distance) }
         }
@@ -38,6 +44,11 @@ extension View {
                 Color.clear
                     .onAppear { frames.frames[id] = frame }
                     .onChange(of: frame) { _, new in frames.frames[id] = new }
+                    // A row scrolled out of a `LazyVStack` stops reporting but
+                    // its last frame would linger — and a click is then matched
+                    // against where that row *used* to be, which is how a sweep
+                    // could start from a row nowhere near the pointer.
+                    .onDisappear { frames.frames[id] = nil }
             }
         }
     }
@@ -47,7 +58,7 @@ extension View {
 /// carried. SwiftUI's tap gesture doesn't report them, and composing one gesture
 /// per modifier makes the plain tap's precedence depend on gesture order — so the
 /// event's own flags are read as the tap is handled.
-enum LogRowClick {
+enum LogRowClick: Equatable {
     /// ⌘: add or drop this row, leaving the rest alone.
     case toggle
     /// ⇧: take the range from the last row picked.
@@ -66,7 +77,6 @@ enum LogRowClick {
         }
     }
 
-    static var current: LogRowClick { LogRowClick(modifiers: NSEvent.modifierFlags) }
 }
 
 /// Drives log-row selection from real mouse events, because SwiftUI's gestures
@@ -83,10 +93,20 @@ enum LogRowClick {
 /// seals `scrollWheel`. Same rule applies here — one monitor per mounted feed,
 /// scoped to its own view's bounds, torn down with the view.
 struct LogSelectionMouse: NSViewRepresentable {
+    /// Whether this feed is the one on screen. A hidden keep-alive tab keeps its
+    /// view mounted, and this monitor bypasses hit testing — so without this the
+    /// hidden pane would answer (and swallow) clicks meant for the visible one.
+    let isActive: Bool
+    /// A press landed at this feed-space y: the pane fixes the sweep's anchor
+    /// *row* here. Anchoring to the y instead would drift, because a streaming
+    /// feed moves its rows under a held pointer.
+    let onPress: (CGFloat) -> Void
     /// Feed-space y of the click, and what its modifiers meant.
     let onClick: (CGFloat, LogRowClick) -> Void
-    /// Feed-space y where the drag began, and where the pointer is now.
-    let onSweep: (CGFloat, CGFloat) -> Void
+    /// The pointer moved to this feed-space y while sweeping; the anchor is the
+    /// row the pane recorded on the press. `additive` (⌘ or ⇧ held) unions the
+    /// span with what was already picked instead of replacing it.
+    let onSweep: (CGFloat, Bool) -> Void
     /// A sweep just ended: the click AppKit delivers next must not clear it.
     let onSweepEnd: () -> Void
 
@@ -120,9 +140,10 @@ struct LogSelectionMouse: NSViewRepresentable {
         private weak var view: NSView?
         private var monitor: Any?
         private var handlers: LogSelectionMouse?
-        /// Where the current drag began, in feed space; nil when no button is down
-        /// inside the feed.
-        private var anchorY: CGFloat?
+        /// Where the button went down, in feed space; nil when no button is down
+        /// inside the feed. Only the drag *threshold* is measured from it — the
+        /// sweep's anchor is a row, held by the pane.
+        private var pressY: CGFloat?
         /// Whether this drag has moved far enough to be a sweep rather than a click.
         private var swept = false
 
@@ -148,7 +169,8 @@ struct LogSelectionMouse: NSViewRepresentable {
 
         /// True when the event is ours and must not travel any further.
         private func handle(_ event: NSEvent) -> Bool {
-            guard let view, let handlers, let window = view.window, event.window === window
+            guard let view, let handlers, handlers.isActive,
+                  let window = view.window, event.window === window
             else { return false }
             let point = view.convert(event.locationInWindow, from: nil)
             // Outside this feed (another pane, the toolbar, another window's
@@ -160,8 +182,11 @@ struct LogSelectionMouse: NSViewRepresentable {
 
             switch event.type {
             case .leftMouseDown:
-                anchorY = point.y
+                pressY = point.y
                 swept = false
+                // Fixes the anchor row, and clears a suppression left over from a
+                // sweep whose closing click never landed on a row.
+                handlers.onPress(point.y)
                 let click = LogRowClick(modifiers: event.modifierFlags)
                 switch click {
                 case .toggle, .extend:
@@ -171,15 +196,17 @@ struct LogSelectionMouse: NSViewRepresentable {
                     return false          // a plain click stays the row's own
                 }
             case .leftMouseDragged:
-                guard let anchorY else { return false }
+                guard let pressY else { return false }
                 // Swallow the sub-threshold jitter too: letting it through is
                 // what would start a text selection before the sweep begins.
-                guard swept || abs(point.y - anchorY) > 3 else { return true }
+                guard swept || abs(point.y - pressY) > 3 else { return true }
                 swept = true
-                handlers.onSweep(anchorY, point.y)
+                let additive = event.modifierFlags.contains(.command)
+                    || event.modifierFlags.contains(.shift)
+                handlers.onSweep(point.y, additive)
                 return true
             case .leftMouseUp:
-                defer { anchorY = nil }
+                defer { pressY = nil }
                 if swept { handlers.onSweepEnd() }
                 return false
             default:

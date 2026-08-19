@@ -1157,6 +1157,11 @@ struct JSConsoleView: View {
     /// this the row would read it as a plain click and drop the selection just
     /// made.
     @State private var suppressNextPlainClick = false
+    /// The row a sweep started on, fixed when the button went down. Held as an
+    /// *id*, not a y: this feed streams, so the row under a given y changes while
+    /// the pointer is still held — which made a sweep start from whatever row had
+    /// drifted under the press point.
+    @State private var sweepAnchor: JSEntry.ID?
     @FocusState private var findFocused: Bool
     /// This tab stays mounted when the user switches away (see `TabHostView`).
     /// The input is a bare `NSTextView`, which `installFocusRelease` can't
@@ -1626,8 +1631,10 @@ struct JSConsoleView: View {
             // gets the click (see `LogSelectionMouse`).
             .background(
                 LogSelectionMouse(
+                    isActive: tabIsActive,
+                    onPress: { y in beginSweep(atY: y, in: visible) },
                     onClick: { y, click in clickRow(atY: y, in: visible, click: click) },
-                    onSweep: { from, to in dragSelect(from: from, to: to, in: visible) },
+                    onSweep: { y, additive in sweep(toY: y, additive: additive, in: visible) },
                     onSweepEnd: { suppressNextPlainClick = true }
                 )
             )
@@ -1712,11 +1719,20 @@ struct JSConsoleView: View {
         _ = select(entry, in: visible, click: click)
     }
 
-    private func dragSelect(from: CGFloat, to: CGFloat, in visible: [JSEntry]) {
+    /// The button went down: fix the sweep's anchor row, and drop a suppression
+    /// left over from a sweep whose closing click never landed on a row (it would
+    /// otherwise eat this press's click).
+    private func beginSweep(atY y: CGFloat, in visible: [JSEntry]) {
+        sweepAnchor = rowFrames.row(at: y, among: visible.map(\.id))
+        suppressNextPlainClick = false
+    }
+
+    /// The pointer moved while sweeping: the span runs from the anchor row to
+    /// whatever row is under the pointer *now*.
+    private func sweep(toY y: CGFloat, additive: Bool, in visible: [JSEntry]) {
         let ids = visible.map(\.id)
-        guard let start = rowFrames.row(at: from, among: ids),
-              let end = rowFrames.row(at: to, among: ids) else { return }
-        selection.select(from: start, to: end, in: ids)
+        guard let anchor = sweepAnchor, let end = rowFrames.row(at: y, among: ids) else { return }
+        selection.select(from: anchor, to: end, in: ids, additive: additive)
     }
 
     /// Copy the picked rows. The text form resolves every object through the

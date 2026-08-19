@@ -114,7 +114,7 @@ opening it — verify those by hand.
 
 ```
 make test          # ADBKit unit tests (cd ADBKit && swift test) — 1844 tests, keep green
-make test-app      # the AppTests logic bundle — 99 tests
+make test-app      # the AppTests logic bundle — 105 tests
 make verify        # tiers 0-1: warnings-as-errors + both test bundles
 make test-linux    # the same suite on Linux (Apple `container` CLI; the port gate)
 make test-emulator # tier 3: the device-dependent suites against a real emulator
