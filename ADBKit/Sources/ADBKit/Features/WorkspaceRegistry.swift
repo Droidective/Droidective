@@ -254,6 +254,26 @@ public struct WorkspaceRegistry: Sendable, Equatable {
         return serials.filter { !taken.contains($0) }
     }
 
+    /// The claims `id` should hold once `featureID`'s are replaced by `serials`
+    /// (other features' kept) — or nil when that is already what it holds.
+    ///
+    /// The nil is the load-bearing part, and it has to be decided *before* the
+    /// registry is touched. Claims are published from view updates, and the
+    /// registry lives on an `@Observable`, where writing an equal value still
+    /// invalidates every reader — `RootView`'s body asks it for the window's
+    /// ordinal. A write per update is then an update per write: an endless
+    /// SwiftUI update loop, not a wasted pass. Guarding inside `setClaims`
+    /// cannot help, because a mutating call on an observed property fires its
+    /// `didSet` whether or not the value changed.
+    public func claimsChange(
+        replacing featureID: String, with serials: Set<String>, for id: WorkspaceID
+    ) -> Set<Claim>? {
+        let current = self[id]?.claims ?? []
+        let wanted = current.filter { $0.featureID != featureID }
+            .union(serials.map { Claim(featureID: featureID, serial: $0) })
+        return wanted == current ? nil : wanted
+    }
+
     // MARK: - Mutation
 
     /// Add a window (no-op if already registered, so a re-entrant bind is safe).
