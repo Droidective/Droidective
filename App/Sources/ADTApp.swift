@@ -53,6 +53,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             self, selector: #selector(windowWillClose(_:)),
             name: NSWindow.willCloseNotification, object: nil
         )
+        // Whatever SwiftUI's scene restoration decided to bring back, the app
+        // has to come up with a workspace window. A restored pop-out mirror
+        // counts as a restored session, so SwiftUI creates no main window — and
+        // an app whose only window is a phantom mirror (see `MirrorWindowHost`)
+        // would otherwise show a title bar and nothing else.
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1))
+            guard !isQuitting else { return }
+            core.ensureWorkspaceWindow { core.activateAnyWindow() }
+        }
     }
 
     /// A workspace window closed: tear down *that* window's sessions. Once no
@@ -561,6 +571,22 @@ private struct MirrorWindowHost: View {
     @Environment(\.openWindow) private var openWindow
     @State private var core = AppCore.shared
 
+    /// Close an unasked-for window — but only once a real one is up. A pop-out
+    /// mirror is `canBecomeMain`, so closing it while it is the app's only such
+    /// window is exactly what `AppDelegate.windowWillClose` reads as "the user
+    /// closed the workspace": the app drops to `.accessory` and then opens
+    /// nothing, leaving it resident with no window at all. Open first, close
+    /// after, and bail out of waiting rather than hanging on forever.
+    private func discard() {
+        core.ensureWorkspaceWindow { openWindow(id: mainWindowID) }
+        Task { @MainActor in
+            for _ in 0..<40 where !core.hasWorkspaceWindow {
+                try? await Task.sleep(for: .milliseconds(50))
+            }
+            dismiss()
+        }
+    }
+
     var body: some View {
         if let serial, core.mirrorWindowWasRequested(serial) {
             WorkspaceScopedView(owner: core.mirrorWindowOwner) { MirrorWindowView(serial: serial) }
@@ -568,10 +594,7 @@ private struct MirrorWindowHost: View {
             // Not `EmptyView()`: the window needs a view on screen to run this.
             Color.clear
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .onAppear {
-                    dismiss()
-                    core.ensureWorkspaceWindow { openWindow(id: mainWindowID) }
-                }
+                .onAppear { discard() }
         }
     }
 }
