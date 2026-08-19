@@ -1298,7 +1298,7 @@ struct ReactotronView: View {
         }
     }
 
-    private static let timeFormatter: DateFormatter = {
+    fileprivate static let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "HH:mm:ss"
         return formatter
@@ -1840,6 +1840,32 @@ private struct TimelineFilterSheet: View {
 /// time. Filter, API refinements, search, and sort order are
 /// UserDefaults-backed per pane index, so each pane keeps its slice — and its
 /// direction — across feature switches and relaunches.
+/// The feed's coordinate space: rows report their frames in it and a drag reads
+/// them back, which is the only way a row can know what a drag has crossed.
+private let rtFeedSpace = "rt-feed"
+
+/// Where each visible row sits in the feed, for drag-select hit-testing. A plain
+/// reference box — deliberately *not* observable, so the per-scroll geometry
+/// updates that fill it don't re-render the feed (`LogTailViewV2` keeps its own
+/// measurements in one for the same reason).
+@MainActor private final class RowFrames {
+    var frames: [RtItem.ID: CGRect] = [:]
+
+    /// The row whose band contains `y`. A drag that runs past the first or last
+    /// row answers with the nearest one, so sweeping off the edge of the feed
+    /// selects to the end instead of stopping where the pointer left.
+    func row(at y: CGFloat, among ids: [RtItem.ID]) -> RtItem.ID? {
+        var nearest: (id: RtItem.ID, distance: CGFloat)?
+        for id in ids {
+            guard let frame = frames[id] else { continue }
+            if y >= frame.minY, y <= frame.maxY { return id }
+            let distance = min(abs(y - frame.minY), abs(y - frame.maxY))
+            if nearest == nil || distance < nearest!.distance { nearest = (id, distance) }
+        }
+        return nearest?.id
+    }
+}
+
 private struct TimelinePane: View {
     /// 0 = the single/left pane, 1 = the right split pane — keys the persisted
     /// filters and picks the clear button's wording (the right pane's clear is
@@ -1876,6 +1902,15 @@ private struct TimelinePane: View {
     @AppStorage private var methodFilter: String?
     @AppStorage private var statusFilter: HTTPStatusClass?
     @State private var showFilterSheet = false
+    /// Rows the reader picked out — ⌘-click one, ⇧-click a range, or drag across
+    /// them — so a handful of events can be copied out of a busy timeline. The
+    /// model is `RowSelection` in ADBKit (pure, tested).
+    @State private var selection = RowSelection<RtItem.ID>()
+    /// Each visible row's frame in the feed's own space, so a drag can tell
+    /// which rows it has crossed. A plain box, not state: rows report this on
+    /// every scroll and layout pass, and putting it in `@State` would re-render
+    /// the feed per pixel.
+    @State private var rowFrames = RowFrames()
     /// Newest at the top (the Reactotron app's order) unless this pane's
     /// reverse button flips its feed to chronological. Persisted per pane, so
     /// each side of a split orders independently.
@@ -1986,6 +2021,10 @@ private struct TimelinePane: View {
                     .foregroundStyle(.textMuted)
             }
 
+            if !selection.isEmpty {
+                selectionControls(visible: visible)
+            }
+
             Button {
                 newestFirst.toggle()
             } label: {
@@ -2068,18 +2107,106 @@ private struct TimelinePane: View {
         Group {
             if newestFirst {
                 LogTailViewV2(entries: visible.reversed(), newestEdge: .top) { item in
-                    RtRow(item: item)
+                    row(item, in: visible)
                     Divider()
                 }
             } else {
                 LogTailViewV2(entries: visible, newestEdge: .bottom) { item in
-                    RtRow(item: item)
+                    row(item, in: visible)
                     Divider()
                 }
             }
         }
+        // A drag has to know where every row is, and rows only know their own
+        // frame — they report it into `rowFrames` in this space.
+        .coordinateSpace(name: rtFeedSpace)
         .translucentFeedBackground()
         .overlay { emptyOverlay }
+        // A selection over rows that have since been cleared, filtered out or
+        // trimmed would copy events nobody can see.
+        .onChange(of: visible.map(\.id)) { _, ids in selection.retain(in: ids) }
+    }
+
+    private func row(_ item: RtItem, in visible: [RtItem]) -> some View {
+        RtRow(
+            item: item,
+            isSelected: selection.contains(item.id),
+            onSelect: { modifiers in select(item, in: visible, modifiers: modifiers) },
+            onDragSelect: { from, to in dragSelect(from: from, to: to, in: visible) },
+            onCopySelection: { copySelection(visible: visible, asJSON: $0) },
+            selectionCount: selection.count
+        )
+        .background {
+            // Reported per row, in the feed's space — a drag over the feed reads
+            // these to work out which rows it crossed.
+            GeometryReader { geometry in
+                Color.clear.onAppear {
+                    rowFrames.frames[item.id] = geometry.frame(in: .named(rtFeedSpace))
+                }
+                .onChange(of: geometry.frame(in: .named(rtFeedSpace))) { _, frame in
+                    rowFrames.frames[item.id] = frame
+                }
+            }
+        }
+    }
+
+    /// A click on a row, with the modifiers it was made with. Plain clicks stay
+    /// the row's own business (expand/collapse) and only clear a selection.
+    private func select(_ item: RtItem, in visible: [RtItem], modifiers: NSEvent.ModifierFlags) {
+        let ids = visible.map(\.id)
+        if modifiers.contains(.command) {
+            selection.toggle(item.id)
+        } else if modifiers.contains(.shift) {
+            selection.extend(to: item.id, in: ids)
+        } else {
+            selection.clear()
+        }
+    }
+
+    /// A drag across the feed: `from`/`to` are y positions in the feed's space.
+    private func dragSelect(from: CGFloat, to: CGFloat, in visible: [RtItem]) {
+        let ids = visible.map(\.id)
+        guard let start = rowFrames.row(at: from, among: ids),
+              let end = rowFrames.row(at: to, among: ids) else { return }
+        selection.select(from: start, to: end, in: ids)
+    }
+
+    private func copySelection(visible: [RtItem], asJSON: Bool) {
+        let picked = selection.ordered(in: visible.map(\.id))
+        let items = visible.filter { picked.contains($0.id) }
+        guard !items.isEmpty else { return }
+        if asJSON {
+            onCopyExport(items)
+        } else {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(RtRow.plainText(of: items), forType: .string)
+        }
+    }
+
+    @ViewBuilder
+    private func selectionControls(visible: [RtItem]) -> some View {
+        Text("\(selection.count) selected")
+            .font(.app(.caption))
+            .foregroundStyle(.textMuted)
+        Menu {
+            Button("Copy") { copySelection(visible: visible, asJSON: false) }
+            Button("Copy as JSON") { copySelection(visible: visible, asJSON: true) }
+            Divider()
+            Button("Deselect") { selection.clear() }
+        } label: {
+            Image(systemName: "doc.on.doc")
+        }
+        .buttonStyle(IconButtonStyle())
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Copy the selected events (⌘C) — ⌘-click to pick rows, ⇧-click or drag for a range")
+        // ⌘C while rows are picked. Disabled with an empty selection, so it
+        // never shadows copying text out of the search field or an open payload.
+        Button("") { copySelection(visible: visible, asJSON: false) }
+            .keyboardShortcut("c", modifiers: .command)
+            .opacity(0)
+            .frame(width: 0)
+            .accessibilityHidden(true)
     }
 
     /// Empty-state overlays appear only over an *empty* timeline — a device
@@ -2116,6 +2243,16 @@ private struct TimelinePane: View {
 
 private struct RtRow: View {
     let item: RtItem
+    /// Picked out by ⌘-click, ⇧-click or a drag — see `RowSelection`.
+    var isSelected = false
+    /// A click on the row, with the modifiers it carried. The pane decides what
+    /// they mean; the row only keeps its own expand/collapse for a plain click.
+    var onSelect: (NSEvent.ModifierFlags) -> Void = { _ in }
+    /// A drag across the feed, as y positions in the feed's coordinate space.
+    var onDragSelect: (CGFloat, CGFloat) -> Void = { _, _ in }
+    /// Copy the pane's whole selection — plain text, or the wire JSON.
+    var onCopySelection: (Bool) -> Void = { _ in }
+    var selectionCount = 0
     @Environment(\.logTailPauseFollow) private var pauseFollow
     @State private var expanded = false
     @State private var apiTab: ApiTab = .response
@@ -2148,11 +2285,16 @@ private struct RtRow: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(item.important ? Color.orange.opacity(0.06) : Color.clear)
+        .background(rowTint)
         .overlay(alignment: .leading) {
             if item.important { Rectangle().fill(.orange).frame(width: 3) }
         }
         .contextMenu {
+            if selectionCount > 1 {
+                Button("Copy \(selectionCount) Selected Events") { onCopySelection(false) }
+                Button("Copy \(selectionCount) Selected as JSON") { onCopySelection(true) }
+                Divider()
+            }
             if let object {
                 Button("Copy object") { copyToPasteboard(object.prettyJSON) }
             }
@@ -2177,7 +2319,7 @@ private struct RtRow: View {
                     .foregroundStyle(.secondary)
                     .frame(width: 16)
                     .opacity(canExpand ? 1 : 0)
-                Text(Self.timeFormatter.string(from: item.receivedAt))
+                Text(RtRow.timeFormatter.string(from: item.receivedAt))
                     .font(.app(size: 11, design: .monospaced))
                     .foregroundStyle(.textMuted)
                 Text(presentation.badge)
@@ -2230,8 +2372,49 @@ private struct RtRow: View {
         .padding(.horizontal, 14)
         .frame(minHeight: 36)
         .contentShape(Rectangle())
-        .onTapGesture { toggleExpanded() }
+        // The modifiers are read from the event that just landed: SwiftUI's tap
+        // gesture doesn't carry them, and composing one gesture per modifier
+        // makes the plain tap's precedence depend on gesture order.
+        .onTapGesture {
+            let modifiers = NSEvent.modifierFlags
+            onSelect(modifiers)
+            // ⌘/⇧ are the selection's; a plain click stays the row's own
+            // expand/collapse (and clears the selection, in the pane).
+            guard !modifiers.contains(.command), !modifiers.contains(.shift) else { return }
+            toggleExpanded()
+        }
+        // Sweep across rows to select them. Only the header carries this, so a
+        // drag through an expanded payload still selects that text.
+        .gesture(
+            DragGesture(minimumDistance: 6, coordinateSpace: .named(rtFeedSpace))
+                .onChanged { onDragSelect($0.startLocation.y, $0.location.y) }
+        )
         .onHover { hovering = $0 }
+    }
+
+    /// Selection wins over the important-event wash: the reader is looking at
+    /// what they picked, and two tints stacked read as neither.
+    private var rowTint: Color {
+        if isSelected { return .brandAccent.opacity(0.22) }
+        return item.important ? Color.orange.opacity(0.06) : .clear
+    }
+
+    /// The selected rows as text: each row's own line, then the event's *whole*
+    /// payload. The point of copying an API call is its body and its response,
+    /// and an action or a saga is its arguments — a list of one-line summaries
+    /// would leave the reader pasting the part they can already see.
+    ///
+    /// The payload is the wire form, so a stringified body stays the string the
+    /// app sent (what the row's `raw` toggle shows). "Copy as JSON" is the same
+    /// events as the export's array of commands.
+    static func plainText(of items: [RtItem]) -> String {
+        items.map { item in
+            let line = "\(RtRow.timeFormatter.string(from: item.receivedAt)) "
+                + item.event.presentation.copyText
+            guard let payload = item.command.payload, !payload.isNull else { return line }
+            return "\(line)\n\(payload.prettyJSON)"
+        }
+        .joined(separator: "\n\n")
     }
 
     /// Expanding an item means the user is reading it — pause tail-follow so
