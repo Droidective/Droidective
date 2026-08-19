@@ -91,9 +91,48 @@ struct ConsoleFlowLayout: Layout {
 /// One console line: the level glyph, the message and its inline object
 /// previews, whatever objects the reader expanded, and — at the right edge, the
 /// way Chrome ends every row — where the call was made.
+/// One entry, complete: its message with every object it carries resolved to
+/// real JSON. The feed shows objects as `{…}`, which is exactly the part a paste
+/// can't act on, so a copy resolves them through the runtime. Shared by the row's
+/// own Copy Log and by copying a selection of rows.
+@MainActor
+func jsEntryCompleteText(_ entry: JSEntry, session: JSConsoleSession) async -> String {
+    /// Faithful JSON for a value, or nil when it has no handle or the runtime
+    /// couldn't stringify it (the caller falls back to the preview).
+    func stringify(_ object: RemoteObject) async -> String? {
+        guard object.isExpandable, let objectId = object.objectId else { return nil }
+        return await session.jsonString(of: objectId)
+    }
+
+    switch entry.kind {
+    case let .log(_, args, _, _):
+        let chunks = ConsoleArguments.chunks(args)
+        var json: [Int: String] = [:]
+        for (index, chunk) in chunks.enumerated() {
+            if case let .object(object) = chunk, let text = await stringify(object) {
+                json[index] = text
+            }
+        }
+        return ConsoleArguments.copyText(chunks, json: json)
+    case let .result(object):
+        return await stringify(object) ?? object.inlineSummary
+    default:
+        return jsEntryPlainText(entry.kind)
+    }
+}
+
 struct JSEntryRow: View {
     let entry: JSEntry
     let session: JSConsoleSession
+    /// Picked out by ⌘-click, ⇧-click or a drag — see `RowSelection`.
+    var isSelected = false
+    /// A click on the row, with what its modifiers meant. The pane decides; a
+    /// plain click stays the row's own "open the first object".
+    /// Returns true when the pane took the click and the row should do nothing.
+    var onSelect: (LogRowClick) -> Bool = { _ in false }
+    /// Copy the pane's whole selection — resolved text, or the export JSON.
+    var onCopySelection: (Bool) -> Void = { _ in }
+    var selectionCount = 0
     @State private var hovering = false
     @State private var copied = false
     /// Per-argument disclosure state. It lives on the row rather than inside
@@ -164,7 +203,15 @@ struct JSEntryRow: View {
         .background {
             Color.clear
                 .contentShape(Rectangle())
-                .onTapGesture { expandPrimaryObject() }
+                .onTapGesture {
+                    // ⌘/⇧-clicks never reach here — the mouse monitor takes them
+                    // before the text does (`LogSelectionMouse`). This is the
+                    // plain click: the pane gets first refusal (dropping a
+                    // selection, or absorbing the click that ended a sweep), and
+                    // otherwise the row opens its first object as before.
+                    guard !onSelect(.plain) else { return }
+                    expandPrimaryObject()
+                }
         }
         .onHover { hovering = $0 }
         // Hovering the row is what reveals its URLs' underlines.
@@ -410,6 +457,11 @@ struct JSEntryRow: View {
     }
 
     @ViewBuilder private var copyMenu: some View {
+        if selectionCount > 1 {
+            Button("Copy \(selectionCount) Selected Logs") { onCopySelection(false) }
+            Button("Copy \(selectionCount) Selected as JSON") { onCopySelection(true) }
+            Divider()
+        }
         Button("Copy Log", action: copyLog)
         if primaryObjectID != nil {
             Button("Copy Object as JSON", action: copyObject)
@@ -432,28 +484,7 @@ struct JSEntryRow: View {
     }
 
     private func logText() async -> String {
-        switch entry.kind {
-        case let .log(_, args, _, _):
-            let chunks = ConsoleArguments.chunks(args)
-            var json: [Int: String] = [:]
-            for (index, chunk) in chunks.enumerated() {
-                if case let .object(object) = chunk, let text = await stringify(object) {
-                    json[index] = text
-                }
-            }
-            return ConsoleArguments.copyText(chunks, json: json)
-        case let .result(object):
-            return await stringify(object) ?? object.inlineSummary
-        default:
-            return jsEntryPlainText(entry.kind)
-        }
-    }
-
-    /// Faithful JSON for a value, or nil when it has no handle or the runtime
-    /// couldn't stringify it (the caller falls back to the preview).
-    private func stringify(_ object: RemoteObject) async -> String? {
-        guard object.isExpandable, let objectId = object.objectId else { return nil }
-        return await session.jsonString(of: objectId)
+        await jsEntryCompleteText(entry, session: session)
     }
 
     private func copyObject() {

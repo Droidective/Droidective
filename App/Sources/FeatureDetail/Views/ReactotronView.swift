@@ -1889,6 +1889,10 @@ private struct TimelinePane: View {
     /// every scroll and layout pass, and putting it in `@State` would re-render
     /// the feed per pixel.
     @State private var rowFrames = LogRowFrames<RtItem.ID>()
+    /// A sweep ends with a mouse-up that AppKit also delivers as a click; without
+    /// this the row would read it as a plain click and drop the selection just
+    /// made.
+    @State private var suppressNextPlainClick = false
     /// Newest at the top (the Reactotron app's order) unless this pane's
     /// reverse button flips its feed to chronological. Persisted per pane, so
     /// each side of a split orders independently.
@@ -2098,11 +2102,26 @@ private struct TimelinePane: View {
         // A drag has to know where every row is, and rows only know their own
         // frame — they report it into `rowFrames` in this space.
         .coordinateSpace(name: rtFeedSpace)
+        // Behind the rows, purely to read the mouse: a SwiftUI gesture can't be
+        // relied on over selectable text (see `LogSelectionMouse`), and this feed
+        // has plenty of it once a row is expanded.
+        .background(
+            LogSelectionMouse(
+                onClick: { y, click in clickRow(atY: y, in: visible, click: click) },
+                onSweep: { from, to in dragSelect(from: from, to: to, in: visible) },
+                onSweepEnd: { suppressNextPlainClick = true }
+            )
+        )
         .translucentFeedBackground()
         .overlay { emptyOverlay }
         // A selection over rows that have since been cleared, filtered out or
-        // trimmed would copy events nobody can see.
-        .onChange(of: visible.map(\.id)) { _, ids in selection.retain(in: ids) }
+        // trimmed would copy events nobody can see. Keyed on the count, not the
+        // ids: mapping every id per render is a per-flush allocation on a feed
+        // that streams.
+        .onChange(of: visible.count) { _, _ in
+            guard !selection.isEmpty else { return }
+            selection.retain(in: visible.map(\.id))
+        }
     }
 
     private func row(_ item: RtItem, in visible: [RtItem]) -> some View {
@@ -2110,7 +2129,6 @@ private struct TimelinePane: View {
             item: item,
             isSelected: selection.contains(item.id),
             onSelect: { click in select(item, in: visible, click: click) },
-            onDragSelect: { from, to in dragSelect(from: from, to: to, in: visible) },
             onCopySelection: { copySelection(visible: visible, asJSON: $0) },
             selectionCount: selection.count
         )
@@ -2119,12 +2137,36 @@ private struct TimelinePane: View {
 
     /// A click on a row, with the modifiers it was made with. Plain clicks stay
     /// the row's own business (expand/collapse) and only clear a selection.
-    private func select(_ item: RtItem, in visible: [RtItem], click: LogRowClick) {
+    /// Returns true when the pane took the click, so the row leaves its own
+    /// expand/collapse alone.
+    private func select(_ item: RtItem, in visible: [RtItem], click: LogRowClick) -> Bool {
         switch click {
-        case .toggle: selection.toggle(item.id)
-        case .extend: selection.extend(to: item.id, in: visible.map(\.id))
-        case .plain: selection.clear()
+        case .toggle:
+            selection.toggle(item.id)
+            return true
+        case .extend:
+            selection.extend(to: item.id, in: visible.map(\.id))
+            return true
+        case .plain:
+            if suppressNextPlainClick {
+                suppressNextPlainClick = false
+                return true             // the click that ended a sweep
+            }
+            let had = !selection.isEmpty
+            selection.clear()
+            // Dropping a selection is what that click did; also expanding the
+            // row would be a second, unasked-for action.
+            return had
         }
+    }
+
+    /// A ⌘/⇧-click from the mouse monitor, which knows a y position rather than a
+    /// row — resolved through the same frames the sweep uses.
+    private func clickRow(atY y: CGFloat, in visible: [RtItem], click: LogRowClick) {
+        let ids = visible.map(\.id)
+        guard let id = rowFrames.row(at: y, among: ids),
+              let item = visible.first(where: { $0.id == id }) else { return }
+        _ = select(item, in: visible, click: click)
     }
 
     /// A drag across the feed: `from`/`to` are y positions in the feed's space.
@@ -2211,9 +2253,8 @@ private struct RtRow: View {
     var isSelected = false
     /// A click on the row, with the modifiers it carried. The pane decides what
     /// they mean; the row only keeps its own expand/collapse for a plain click.
-    var onSelect: (LogRowClick) -> Void = { _ in }
-    /// A drag across the feed, as y positions in the feed's coordinate space.
-    var onDragSelect: (CGFloat, CGFloat) -> Void = { _, _ in }
+    /// Returns true when the pane took the click and the row should do nothing.
+    var onSelect: (LogRowClick) -> Bool = { _ in false }
     /// Copy the pane's whole selection — plain text, or the wire JSON.
     var onCopySelection: (Bool) -> Void = { _ in }
     var selectionCount = 0
@@ -2336,23 +2377,14 @@ private struct RtRow: View {
         .padding(.horizontal, 14)
         .frame(minHeight: 36)
         .contentShape(Rectangle())
-        // The modifiers are read from the event that just landed: SwiftUI's tap
-        // gesture doesn't carry them, and composing one gesture per modifier
-        // makes the plain tap's precedence depend on gesture order.
+        // ⌘/⇧-clicks and sweeps never reach here — the mouse monitor takes them
+        // first (`LogSelectionMouse`). This is the plain click: the pane gets
+        // first refusal (dropping a selection, or absorbing the click that ended
+        // a sweep), and otherwise the row expands as it always did.
         .onTapGesture {
-            let click = LogRowClick.current
-            onSelect(click)
-            // ⌘/⇧ are the selection's; a plain click stays the row's own
-            // expand/collapse (and clears the selection, in the pane).
-            guard case .plain = click else { return }
+            guard !onSelect(.plain) else { return }
             toggleExpanded()
         }
-        // Sweep across rows to select them. Only the header carries this, so a
-        // drag through an expanded payload still selects that text.
-        .gesture(
-            DragGesture(minimumDistance: 6, coordinateSpace: .named(rtFeedSpace))
-                .onChanged { onDragSelect($0.startLocation.y, $0.location.y) }
-        )
         .onHover { hovering = $0 }
     }
 
