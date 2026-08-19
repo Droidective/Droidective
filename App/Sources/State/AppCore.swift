@@ -529,7 +529,44 @@ final class AppCore {
     /// the device as claimed so no wall tile or tab puts a second encoder on it.
     func noteMirrorWindow(serial: String, window: NSWindow?) {
         mirrorWindows[serial] = WeakWindow(window)
+        // Same reason the workspace windows opt out in `bind`: Droidective
+        // decides which windows exist, and a restorer that disagrees brings
+        // this one back empty on the next launch.
+        window?.isRestorable = false
         publishMirrorWindowClaims()
+    }
+
+    /// Serials this session opened a pop-out mirror for. `WindowGroup(for:)`
+    /// persists its presented value and re-presents it at the next launch, so a
+    /// window arriving for a serial that isn't here was not asked for — see
+    /// `MirrorWindowHost`.
+    private var requestedMirrorSerials: Set<String> = []
+
+    /// Record that the *user* asked for this pop-out (the mirror bar's window
+    /// button, the wall tile's "Open in Its Own Window"). Call before
+    /// `openWindow(id:value:)`.
+    func noteMirrorWindowRequested(_ serial: String) {
+        requestedMirrorSerials.insert(serial)
+    }
+
+    func mirrorWindowWasRequested(_ serial: String) -> Bool {
+        requestedMirrorSerials.contains(serial)
+    }
+
+    /// True while at least one workspace window is on screen.
+    var hasWorkspaceWindow: Bool {
+        allWorkspaces.contains { $0.nsWindow != nil }
+    }
+
+    /// Open a workspace window when there is none, through the caller's opener.
+    /// It can't go through `openNewWindow` here: that needs `openWorkspaceWindow`,
+    /// which *RootView* installs — and RootView only exists once a workspace
+    /// window does. A launch that re-presented only a pop-out mirror has none,
+    /// which is exactly when this is needed, so the caller passes SwiftUI's
+    /// `openWindow(id:)` instead.
+    func ensureWorkspaceWindow(open: () -> Void) {
+        guard !hasWorkspaceWindow else { return }
+        open()
     }
 
     /// A pop-out mirror window went away — its device is free again.

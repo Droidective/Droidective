@@ -269,7 +269,7 @@ struct ADTApp: App {
         // One window per device-scoped workspace. The presented `WorkspaceID`
         // is what binds a window to its selection, tabs and sessions; a fresh
         // one means a new workspace, a parked one reopens where it left off.
-        WindowGroup(id: "main") {
+        WindowGroup(id: mainWindowID) {
             WorkspaceHost(appDelegate: appDelegate)
                 // Force the brand accent on standard controls (prominent
                 // buttons, switches, sliders) so they stay green regardless of
@@ -505,7 +505,7 @@ struct ADTApp: App {
         // by side. Sized like a phone by default. They read their adb client and
         // toasts from the workspace that popped them out.
         WindowGroup("Screen Mirror", id: MirrorWindow.windowID, for: String.self) { $serial in
-            WorkspaceScopedView(owner: core.mirrorWindowOwner) { MirrorWindowView(serial: serial) }
+            MirrorWindowHost(serial: serial)
                 .tint(.brandAccent)
                 .id(appearanceKey)
         }
@@ -537,6 +537,45 @@ struct ADTApp: App {
 /// window — Settings, the mirror pop-out, the menu-bar extra. They act on the
 /// frontmost window and follow it as the user switches, which is why the
 /// environment value is resolved here rather than captured once.
+/// The main `WindowGroup`'s scene id — also how a scene that isn't a workspace
+/// window (the pop-out mirror) asks for one.
+let mainWindowID = "main"
+
+/// The pop-out mirror window's content, and the guard that keeps a *phantom*
+/// one off the screen.
+///
+/// `WindowGroup(for:)` persists its presented value and re-presents it at the
+/// next launch — the same trap the main group's `WorkspaceToken` exists to dodge.
+/// A restored mirror window comes up before any workspace does, so
+/// `WorkspaceScopedView` has nothing to scope to and the window renders
+/// *nothing*: a 420×850 rectangle titled "Screen Mirror" that appears out of
+/// nowhere at launch. Worse, when it is the only window restored the app has no
+/// main window at all.
+///
+/// So a mirror window has to have been asked for, in this session, by the mirror
+/// bar's window button or a wall tile's pop-out. Anything else closes itself and
+/// makes sure a real window is up.
+private struct MirrorWindowHost: View {
+    let serial: String?
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.openWindow) private var openWindow
+    @State private var core = AppCore.shared
+
+    var body: some View {
+        if let serial, core.mirrorWindowWasRequested(serial) {
+            WorkspaceScopedView(owner: core.mirrorWindowOwner) { MirrorWindowView(serial: serial) }
+        } else {
+            // Not `EmptyView()`: the window needs a view on screen to run this.
+            Color.clear
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .onAppear {
+                    dismiss()
+                    core.ensureWorkspaceWindow { openWindow(id: mainWindowID) }
+                }
+        }
+    }
+}
+
 struct WorkspaceScopedView<Content: View>: View {
     /// Pin to one workspace instead of following the front. The mirror pop-out
     /// uses this: there's a single pop-out window, and it should keep showing
