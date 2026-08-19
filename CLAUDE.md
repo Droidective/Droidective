@@ -113,7 +113,7 @@ opening it — verify those by hand.
 ## Build / test / run
 
 ```
-make test          # ADBKit unit tests (cd ADBKit && swift test) — 1830 tests, keep green
+make test          # ADBKit unit tests (cd ADBKit && swift test) — 1833 tests, keep green
 make test-app      # the AppTests logic bundle — 99 tests
 make verify        # tiers 0-1: warnings-as-errors + both test bundles
 make test-linux    # the same suite on Linux (Apple `container` CLI; the port gate)
@@ -817,7 +817,28 @@ position in `RELEASE_NOTES.md`.
 ## Status
 
 Feature-complete across all planned milestones plus several UX rounds.
-(Latest release: **v3.9.0** — the **Mirror Wall** (the 61st feature,
+(Latest release: **v3.9.1** — a bug-fix release. A pop-out mirror window
+hung the app: `MirrorWindowRegistrar` re-registered on every `updateNSView`, and
+`noteMirrorWindow` wrote `AppCore.registry` unconditionally — which `RootView`'s
+body and the Window menu read, so the write ran the update and the update ran
+the write (an `@Observable` `didSet` fires on an equal value, so no guard inside
+the registry can break it; the decision has to happen before the registry is
+touched). The pop-out windows also now set `isRestorable = false` like the
+workspace windows, so AppKit stops reopening them at launch before any workspace
+exists — see the update-loop and window-restoration rules in the conventions.
+Reactotron renders a stringified payload as a tree (`EmbeddedJSON` in ADBKit,
+pure: `looksLikeJSON` per render, `parse` once per row from an expanded row's
+`task`), with the parse cache keyed by row path *and* the string it came from
+*and* the tab, since an API event's four tabs are one tree; `JSONSearch.matches`
+takes `expandingStringifiedJSON` so find agrees with the display, bounded by
+`maxStringifiedBytes` (256 KiB). A long API URL carries a shortened string cut
+to the measured width instead of `lineLimit(3)`, which drew over the rows below
+it. The mirror capture sheet gained Copy — deliberately not a decision, so the
+sheet stays up. And `SecretFile` replaces both signing paths'
+`FileManager.createFile`, so a keystore password file that can't be written
+reports the path and the underlying error, with the 0600 step reportable
+separately and best-effort on Windows.) Before that,
+**v3.9.0** — the **Mirror Wall** (the 61st feature,
 `mirror-wall`): up to six connected devices mirrored side by side in one pane,
 each tile the same interactive session the full mirror runs, at a per-tile
 quality that steps down with the tile count. It picks its own devices (capped
@@ -1030,7 +1051,7 @@ jadx/apktool, recompile, and sign — with keystore creation) plus Frida setup, 
 custom accent color, launching emulators from the device bar, per-feature
 connect-a-device empty states, a live-preview hotkey recorder, and a Settings
 split into Appearance/Privacy; managed tools download from GitHub releases into
-Application Support and are sized/removable in Settings); 1503 ADBKit + 99
+Application Support and are sized/removable in Settings); 1833 ADBKit + 99
 AppTests green (macOS — the suite also runs on Linux in CI, minus the
 Darwin-gated files);
 builds clean with zero warnings (enforced as errors in CI). Verified live against a
