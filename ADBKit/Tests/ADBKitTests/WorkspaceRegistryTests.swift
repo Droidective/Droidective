@@ -130,6 +130,45 @@ import Testing
         #expect(registry.owner(ofMirroredDevice: "ghi", excluding: w2) == w1)
     }
 
+    /// The guard that keeps a claim publisher from spinning the SwiftUI update
+    /// graph: re-publishing what a window already claims is *no change*, so the
+    /// caller never touches the observed registry. The pop-out mirror windows
+    /// publish from a view update, where one needless write beach-balls the app
+    /// for as long as the window is open.
+    @Test func republishingTheSameClaimsIsNoChange() {
+        var registry = self.registry([(w1, "abc", [])])
+        let wanted = registry.claimsChange(replacing: "scrcpy-window", with: ["def"], for: w1)
+        #expect(wanted == [.init(featureID: "scrcpy-window", serial: "def")])
+        registry.setClaims(wanted ?? [], for: w1)
+        #expect(registry.claimsChange(replacing: "scrcpy-window", with: ["def"], for: w1) == nil)
+    }
+
+    @Test func aChangedClaimSetIsReportedAndKeepsOtherFeaturesClaims() {
+        var registry = self.registry([(w1, "abc", [])])
+        registry.setClaims(
+            [
+                .init(featureID: "mirror-wall", serial: "def"),
+                .init(featureID: "scrcpy-window", serial: "ghi"),
+            ], for: w1)
+        #expect(
+            registry.claimsChange(replacing: "mirror-wall", with: ["jkl"], for: w1) == [
+                .init(featureID: "mirror-wall", serial: "jkl"),
+                .init(featureID: "scrcpy-window", serial: "ghi"),
+            ])
+        // Dropping the last tile is a change too — that's how a device is released.
+        #expect(
+            registry.claimsChange(replacing: "mirror-wall", with: [], for: w1)
+                == [.init(featureID: "scrcpy-window", serial: "ghi")])
+    }
+
+    /// An unregistered window claiming nothing must not mint an entry: entries
+    /// are ordered, and `ordinal(of:)` names both the window and its saved frame.
+    @Test func claimingNothingInAnUnknownWindowIsNoChange() {
+        let registry = WorkspaceRegistry()
+        #expect(registry.claimsChange(replacing: "scrcpy-window", with: [], for: w1) == nil)
+        #expect(registry.count == 0)
+    }
+
     @Test func aWindowIsNotBlockedByItsOwnClaims() {
         var registry = self.registry([(w1, "abc", [])])
         registry.setClaims([.init(featureID: "mirror-wall", serial: "def")], for: w1)

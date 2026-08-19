@@ -113,7 +113,7 @@ opening it — verify those by hand.
 ## Build / test / run
 
 ```
-make test          # ADBKit unit tests (cd ADBKit && swift test) — 1841 tests, keep green
+make test          # ADBKit unit tests (cd ADBKit && swift test) — 1844 tests, keep green
 make test-app      # the AppTests logic bundle — 99 tests
 make verify        # tiers 0-1: warnings-as-errors + both test bundles
 make test-linux    # the same suite on Linux (Apple `container` CLI; the port gate)
@@ -621,6 +621,29 @@ table) is in `docs/reactotron-mcp-analysis.md`.
   Xcode** (local passes, CI fails with "unable to type-check in reasonable
   time"). Add cross-cutting concerns as ONE `.modifier(...)` link (see
   `WindowTranslucencyModifier`), never several inline links.
+- **A view update must not write observable state unconditionally — that's an
+  endless update loop, not a wasted pass.** `WindowAccessor` re-reports its
+  window on *every* `updateNSView`, and `AppCore`/`AppState` are `@Observable`
+  that `RootView.body` and the app's menus read (the window ordinal, the
+  registry entries), so a write from inside an update invalidates the scene,
+  whose update writes again — the app beach-balls for as long as the view is
+  mounted, from launch if the window is restored. Writing an *equal* value is
+  just as bad (`@Observable` fires `didSet` regardless), and a guard inside the
+  value type can't save you: a mutating call on an observed property notifies
+  whether or not the value changed. Decide before touching it — a pure "what
+  would change?" query in ADBKit that returns nil for "nothing"
+  (`WorkspaceRegistry.claimsChange`) plus an identity guard at the call site
+  (`AppCore.noteMirrorWindow`, `RootView`'s `state.nsWindow !== window`).
+  Better still, publish from `.onChange`/`.onDisappear`, the way the wall and
+  the in-tab mirror publish their claims.
+- **Windows the app opens itself opt out of AppKit restoration.** Droidective
+  restores its own windows from `LayoutState.windows`; AppKit's saved state
+  would *also* bring them back, before the layout has loaded and with no
+  workspace to own them — `AppCore.bind` and the pop-out mirror windows both set
+  `isRestorable = false`. Saved state lives outside the bundle
+  (`~/Library/Saved Application State/`), so a launch bug it feeds survives
+  deleting and reinstalling the app — worth knowing when a user reports that the
+  reinstall didn't help.
 - **⌘=/⌘- font zoom is a `scaleEffect` on RootView, not dynamic type.** macOS
   ignores SwiftUI `dynamicTypeSize` for rendering, so the content is laid out at
   `size/scale` and scaled up. It's bypassed entirely at 1.0× because the
@@ -794,7 +817,28 @@ position in `RELEASE_NOTES.md`.
 ## Status
 
 Feature-complete across all planned milestones plus several UX rounds.
-(Latest release: **v3.9.0** — the **Mirror Wall** (the 61st feature,
+(Latest release: **v3.9.1** — a bug-fix release. A pop-out mirror window
+hung the app: `MirrorWindowRegistrar` re-registered on every `updateNSView`, and
+`noteMirrorWindow` wrote `AppCore.registry` unconditionally — which `RootView`'s
+body and the Window menu read, so the write ran the update and the update ran
+the write (an `@Observable` `didSet` fires on an equal value, so no guard inside
+the registry can break it; the decision has to happen before the registry is
+touched). The pop-out windows also now set `isRestorable = false` like the
+workspace windows, so AppKit stops reopening them at launch before any workspace
+exists — see the update-loop and window-restoration rules in the conventions.
+Reactotron renders a stringified payload as a tree (`EmbeddedJSON` in ADBKit,
+pure: `looksLikeJSON` per render, `parse` once per row from an expanded row's
+`task`), with the parse cache keyed by row path *and* the string it came from
+*and* the tab, since an API event's four tabs are one tree; `JSONSearch.matches`
+takes `expandingStringifiedJSON` so find agrees with the display, bounded by
+`maxStringifiedBytes` (256 KiB). A long API URL carries a shortened string cut
+to the measured width instead of `lineLimit(3)`, which drew over the rows below
+it. The mirror capture sheet gained Copy — deliberately not a decision, so the
+sheet stays up. And `SecretFile` replaces both signing paths'
+`FileManager.createFile`, so a keystore password file that can't be written
+reports the path and the underlying error, with the 0600 step reportable
+separately and best-effort on Windows.) Before that,
+**v3.9.0** — the **Mirror Wall** (the 61st feature,
 `mirror-wall`): up to six connected devices mirrored side by side in one pane,
 each tile the same interactive session the full mirror runs, at a per-tile
 quality that steps down with the tile count. It picks its own devices (capped
@@ -1007,7 +1051,7 @@ jadx/apktool, recompile, and sign — with keystore creation) plus Frida setup, 
 custom accent color, launching emulators from the device bar, per-feature
 connect-a-device empty states, a live-preview hotkey recorder, and a Settings
 split into Appearance/Privacy; managed tools download from GitHub releases into
-Application Support and are sized/removable in Settings); 1503 ADBKit + 99
+Application Support and are sized/removable in Settings); 1833 ADBKit + 99
 AppTests green (macOS — the suite also runs on Linux in CI, minus the
 Darwin-gated files);
 builds clean with zero warnings (enforced as errors in CI). Verified live against a

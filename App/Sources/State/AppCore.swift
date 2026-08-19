@@ -527,12 +527,18 @@ final class AppCore {
 
     /// A pop-out mirror window appeared (or moved to a new NSWindow). Records
     /// the device as claimed so no wall tile or tab puts a second encoder on it.
+    ///
+    /// Re-reporting the window it already holds must change *nothing*.
+    /// `WindowAccessor` reports on every view update, and this writes state the
+    /// app scene reads — `RootView`'s body asks the registry for its window
+    /// ordinal, the Window menu reads the entries — so an unconditional write
+    /// invalidated the scene, which ran the update, which reported again: an
+    /// endless SwiftUI update loop that beach-balled the app for as long as a
+    /// pop-out mirror window was open. Same identity guard the workspace
+    /// windows use in `RootView` (`state.nsWindow !== window`).
     func noteMirrorWindow(serial: String, window: NSWindow?) {
+        guard mirrorWindows[serial]?.window !== window else { return }
         mirrorWindows[serial] = WeakWindow(window)
-        // Same reason the workspace windows opt out in `bind`: Droidective
-        // decides which windows exist, and a restorer that disagrees brings
-        // this one back empty on the next launch.
-        window?.isRestorable = false
         publishMirrorWindowClaims()
     }
 
@@ -571,7 +577,7 @@ final class AppCore {
 
     /// A pop-out mirror window went away — its device is free again.
     func forgetMirrorWindow(serial: String) {
-        mirrorWindows.removeValue(forKey: serial)
+        guard mirrorWindows.removeValue(forKey: serial) != nil else { return }
         publishMirrorWindowClaims()
     }
 
@@ -652,10 +658,13 @@ final class AppCore {
     /// conflict rules see them (`WorkspaceRegistry.Claim`). `featureID`'s
     /// previous claims for this window are replaced; other features' are kept.
     func noteMirrorClaims(_ serials: Set<String>, featureID: String, in id: WorkspaceID) {
-        let others: Set<WorkspaceRegistry.Claim> = registry[id]?.claims
-            .filter { $0.featureID != featureID } ?? []
-        let mine = serials.map { WorkspaceRegistry.Claim(featureID: featureID, serial: $0) }
-        registry.setClaims(others.union(mine), for: id)
+        // Decide before writing: publishing the same claims again must not touch
+        // the registry at all. Writing an equal value through `@Observable`
+        // still invalidates every reader, and these are published from view
+        // updates — see `claimsChange` and `noteMirrorWindow`.
+        guard let claims = registry.claimsChange(replacing: featureID, with: serials, for: id)
+        else { return }
+        registry.setClaims(claims, for: id)
     }
 
     /// Whether any *other* window still has `featureID` open — the refcount

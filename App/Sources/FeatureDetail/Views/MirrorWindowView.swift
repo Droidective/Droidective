@@ -66,6 +66,15 @@ private struct MirrorWindowRegistrar: View {
 
     var body: some View {
         WindowAccessor { window in
+            // Droidective restores its own windows, and a pop-out mirror is not
+            // one of them: it exists because someone asked for this device now.
+            // AppKit's saved-state restoration brought them back at launch
+            // instead — before any workspace existed, so the window had no owner
+            // to read its adb client from, and a device nobody asked about got
+            // an encoder during launch. Saved state also lives outside the
+            // bundle, so reinstalling the app never cleared it. Same opt-out the
+            // workspace windows take in `AppCore.bind`.
+            window.isRestorable = false
             guard let serial else { return }
             state.core.noteMirrorWindow(serial: serial, window: window)
         }

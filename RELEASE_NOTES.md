@@ -1,3 +1,58 @@
+## Droidective v3.9.1
+
+A bug-fix release. The pop-out mirror window from 3.9.0 could hang the app —
+including at launch, before anything was open — and Reactotron's timeline showed
+stringified payloads as a wall of escaped text instead of the object they are.
+A mirror screenshot can also be copied straight to the clipboard now.
+
+### Mirror
+
+- **A pop-out mirror window no longer hangs the app.** The window re-registered
+  itself on every view update, and each registration wrote state the app's own
+  window list reads — so the write ran the update and the update ran the write.
+  The app beach-balled for as long as one of those windows was open, with no way
+  out. Registration now happens once per window.
+- **Those windows are no longer restored at launch.** macOS was reopening them
+  from its own saved state before the app had a workspace to own them, which
+  started a mirror session on a device nobody had asked about and made the hang
+  reproducible from launch — and immune to reinstalling the app, since saved
+  state lives outside the bundle.
+- **A mirror screenshot can be copied to the clipboard.** The capture sheet on
+  Mirror Screen and the Mirror Wall offered Discard / Save / Edit, so getting the
+  image into a chat or a ticket meant opening the editor first. Copy sits beside
+  them and leaves the sheet up, so a copy can still be followed by Save or Edit.
+
+### Reactotron
+
+- **A stringified payload shows as an object.** An API request's `data` field
+  arrives as the app's own `JSON.stringify` output, so an expanded event showed
+  escaped text where the body should be. It now renders as a real tree, with a
+  raw toggle per row for the payloads that only read in their escaped form. A
+  logged string that is itself JSON gets the same treatment.
+- **Find agrees with what the tree shows.** Searching `storeId` in a payload
+  rendered as an object returned the whole 4 KB escaped blob on the `data` row
+  instead of the leaf two rows below it. The search now walks a string's parsed
+  form, and clicking a result reveals the row it actually lives on.
+- **A long API URL opens in place instead of over the rows below it.** A signed
+  URL several hundred characters long drew all of its lines across the status
+  rows and the tab strip, because the layout had reserved three. The line is now
+  cut to the measured width and a click opens it whole at its real height.
+- **A parsed payload stays with the tab it belongs to.** An API event's four tabs
+  are one tree, so switching tabs could render the previous tab's object on this
+  tab's row, under a chevron that claimed to be open.
+
+### APK signing
+
+- **A keystore password file that can't be written says why.** Signing reported
+  only "Couldn't write the keystore password file"; the failure now carries the
+  path and the underlying reason, and creating the file is reported separately
+  from restricting it to its owner.
+
+### Install
+
+Download the DMG, drag Droidective to Applications, and open it. Existing
+installs update themselves.
+
 ## Droidective v3.9.0
 
 Mirroring several devices at once. The Mirror Wall shows up to six connected
