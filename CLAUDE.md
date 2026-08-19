@@ -621,6 +621,29 @@ table) is in `docs/reactotron-mcp-analysis.md`.
   Xcode** (local passes, CI fails with "unable to type-check in reasonable
   time"). Add cross-cutting concerns as ONE `.modifier(...)` link (see
   `WindowTranslucencyModifier`), never several inline links.
+- **A view update must not write observable state unconditionally — that's an
+  endless update loop, not a wasted pass.** `WindowAccessor` re-reports its
+  window on *every* `updateNSView`, and `AppCore`/`AppState` are `@Observable`
+  that `RootView.body` and the app's menus read (the window ordinal, the
+  registry entries), so a write from inside an update invalidates the scene,
+  whose update writes again — the app beach-balls for as long as the view is
+  mounted, from launch if the window is restored. Writing an *equal* value is
+  just as bad (`@Observable` fires `didSet` regardless), and a guard inside the
+  value type can't save you: a mutating call on an observed property notifies
+  whether or not the value changed. Decide before touching it — a pure "what
+  would change?" query in ADBKit that returns nil for "nothing"
+  (`WorkspaceRegistry.claimsChange`) plus an identity guard at the call site
+  (`AppCore.noteMirrorWindow`, `RootView`'s `state.nsWindow !== window`).
+  Better still, publish from `.onChange`/`.onDisappear`, the way the wall and
+  the in-tab mirror publish their claims.
+- **Windows the app opens itself opt out of AppKit restoration.** Droidective
+  restores its own windows from `LayoutState.windows`; AppKit's saved state
+  would *also* bring them back, before the layout has loaded and with no
+  workspace to own them — `AppCore.bind` and the pop-out mirror windows both set
+  `isRestorable = false`. Saved state lives outside the bundle
+  (`~/Library/Saved Application State/`), so a launch bug it feeds survives
+  deleting and reinstalling the app — worth knowing when a user reports that the
+  reinstall didn't help.
 - **⌘=/⌘- font zoom is a `scaleEffect` on RootView, not dynamic type.** macOS
   ignores SwiftUI `dynamicTypeSize` for rendering, so the content is laid out at
   `size/scale` and scaled up. It's bypassed entirely at 1.0× because the
