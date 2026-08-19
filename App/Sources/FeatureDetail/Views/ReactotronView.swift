@@ -1844,28 +1844,6 @@ private struct TimelineFilterSheet: View {
 /// them back, which is the only way a row can know what a drag has crossed.
 private let rtFeedSpace = "rt-feed"
 
-/// Where each visible row sits in the feed, for drag-select hit-testing. A plain
-/// reference box — deliberately *not* observable, so the per-scroll geometry
-/// updates that fill it don't re-render the feed (`LogTailViewV2` keeps its own
-/// measurements in one for the same reason).
-@MainActor private final class RowFrames {
-    var frames: [RtItem.ID: CGRect] = [:]
-
-    /// The row whose band contains `y`. A drag that runs past the first or last
-    /// row answers with the nearest one, so sweeping off the edge of the feed
-    /// selects to the end instead of stopping where the pointer left.
-    func row(at y: CGFloat, among ids: [RtItem.ID]) -> RtItem.ID? {
-        var nearest: (id: RtItem.ID, distance: CGFloat)?
-        for id in ids {
-            guard let frame = frames[id] else { continue }
-            if y >= frame.minY, y <= frame.maxY { return id }
-            let distance = min(abs(y - frame.minY), abs(y - frame.maxY))
-            if nearest == nil || distance < nearest!.distance { nearest = (id, distance) }
-        }
-        return nearest?.id
-    }
-}
-
 private struct TimelinePane: View {
     /// 0 = the single/left pane, 1 = the right split pane — keys the persisted
     /// filters and picks the clear button's wording (the right pane's clear is
@@ -1910,7 +1888,7 @@ private struct TimelinePane: View {
     /// which rows it has crossed. A plain box, not state: rows report this on
     /// every scroll and layout pass, and putting it in `@State` would re-render
     /// the feed per pixel.
-    @State private var rowFrames = RowFrames()
+    @State private var rowFrames = LogRowFrames<RtItem.ID>()
     /// Newest at the top (the Reactotron app's order) unless this pane's
     /// reverse button flips its feed to chronological. Persisted per pane, so
     /// each side of a split orders independently.
@@ -2131,35 +2109,21 @@ private struct TimelinePane: View {
         RtRow(
             item: item,
             isSelected: selection.contains(item.id),
-            onSelect: { modifiers in select(item, in: visible, modifiers: modifiers) },
+            onSelect: { click in select(item, in: visible, click: click) },
             onDragSelect: { from, to in dragSelect(from: from, to: to, in: visible) },
             onCopySelection: { copySelection(visible: visible, asJSON: $0) },
             selectionCount: selection.count
         )
-        .background {
-            // Reported per row, in the feed's space — a drag over the feed reads
-            // these to work out which rows it crossed.
-            GeometryReader { geometry in
-                Color.clear.onAppear {
-                    rowFrames.frames[item.id] = geometry.frame(in: .named(rtFeedSpace))
-                }
-                .onChange(of: geometry.frame(in: .named(rtFeedSpace))) { _, frame in
-                    rowFrames.frames[item.id] = frame
-                }
-            }
-        }
+        .reportingRowFrame(item.id, in: rtFeedSpace, into: rowFrames)
     }
 
     /// A click on a row, with the modifiers it was made with. Plain clicks stay
     /// the row's own business (expand/collapse) and only clear a selection.
-    private func select(_ item: RtItem, in visible: [RtItem], modifiers: NSEvent.ModifierFlags) {
-        let ids = visible.map(\.id)
-        if modifiers.contains(.command) {
-            selection.toggle(item.id)
-        } else if modifiers.contains(.shift) {
-            selection.extend(to: item.id, in: ids)
-        } else {
-            selection.clear()
+    private func select(_ item: RtItem, in visible: [RtItem], click: LogRowClick) {
+        switch click {
+        case .toggle: selection.toggle(item.id)
+        case .extend: selection.extend(to: item.id, in: visible.map(\.id))
+        case .plain: selection.clear()
         }
     }
 
@@ -2247,7 +2211,7 @@ private struct RtRow: View {
     var isSelected = false
     /// A click on the row, with the modifiers it carried. The pane decides what
     /// they mean; the row only keeps its own expand/collapse for a plain click.
-    var onSelect: (NSEvent.ModifierFlags) -> Void = { _ in }
+    var onSelect: (LogRowClick) -> Void = { _ in }
     /// A drag across the feed, as y positions in the feed's coordinate space.
     var onDragSelect: (CGFloat, CGFloat) -> Void = { _, _ in }
     /// Copy the pane's whole selection — plain text, or the wire JSON.
@@ -2376,11 +2340,11 @@ private struct RtRow: View {
         // gesture doesn't carry them, and composing one gesture per modifier
         // makes the plain tap's precedence depend on gesture order.
         .onTapGesture {
-            let modifiers = NSEvent.modifierFlags
-            onSelect(modifiers)
+            let click = LogRowClick.current
+            onSelect(click)
             // ⌘/⇧ are the selection's; a plain click stays the row's own
             // expand/collapse (and clears the selection, in the pane).
-            guard !modifiers.contains(.command), !modifiers.contains(.shift) else { return }
+            guard case .plain = click else { return }
             toggleExpanded()
         }
         // Sweep across rows to select them. Only the header carries this, so a
