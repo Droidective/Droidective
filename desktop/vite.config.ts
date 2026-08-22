@@ -36,7 +36,12 @@ export default defineConfig({
     sourcemap: Boolean(process.env["TAURI_ENV_DEBUG"]),
   },
   test: {
-    environment: "node",
-    include: ["src/**/*.test.ts"],
+    // jsdom, not node: the panes and hooks are where the state machines live
+    // (a recording that must survive a toggle, a listing that must not land on
+    // the device you just switched away from), and a node environment cannot
+    // reach any of it. The pure `lib/` tests do not care either way.
+    environment: "jsdom",
+    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+    setupFiles: ["./src/test/setup.ts"],
   },
 })

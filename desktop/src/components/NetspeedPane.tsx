@@ -29,13 +29,11 @@ export function NetspeedPane({ device }: { device: Device | null }) {
   const totals = sessionTotals(net.live)
   const max = chartMax(net.live)
 
+  // Writes and returns, as the Mac's `NetworkView.export()` does. It must not
+  // touch the recording: exporting is not a way of ending one, and a recording
+  // you have saved once is still there to save again.
   const exportRecording = () => {
-    writeRecording(net.recorded, device.serial).then((result) => {
-      show(result)
-      // Cleared only on a successful write: a failed export must not be the
-      // thing that loses the recording it failed to save.
-      if (result.ok) net.discard()
-    }, ignore)
+    writeRecording(net.recorded, device.serial).then(show, ignore)
   }
 
   return (
@@ -62,10 +60,13 @@ export function NetspeedPane({ device }: { device: Device | null }) {
           onExtra={() => {
             setConfirming(false)
             exportRecording()
+            net.stopRecording()
           }}
           onConfirm={() => {
+            // "not now", not "throw it away" — the samples stay exportable,
+            // which is what `PerformancePane` does with the same dialog.
             setConfirming(false)
-            net.discard()
+            net.stopRecording()
           }}
           onCancel={() => {
             setConfirming(false)
