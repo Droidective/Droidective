@@ -705,9 +705,32 @@ after the screens rather than instead of them.
 22. **The welcome tour** on first run.
 23. **The updater** — Sparkle is macOS-only, so this is `tauri-plugin-updater`
     behind the same "Relaunch to update" pill and What's New sheet.
-24. **Reactotron** — blocked only on the relay's `Network.framework` listener
-    being ported to NIO. `ReactotronMCP` already proves the NIO listener works;
-    this is the same job for the relay socket.
+24. **Reactotron** — **the relay has landed; the pane has not.**
+    `ReactotronRelay` in the daemon is a NIO WebSocket listener speaking
+    upstream's protocol, feeding the portable `ReactotronCommand` decoders that
+    ADBKit already shares with the Mac. It reaches a client as the `reactotron`
+    stream topic (protocol §5.3), and `POST /v1/reactotron/reverse` opens the
+    `adb reverse tcp:9090` tunnel that lets a device find it — with the same
+    three retries the Mac uses, because a just-attached device refuses the first
+    one.
+
+    Proven against real sockets rather than a fake: thirteen tests drive a
+    `URLSessionWebSocketTask` through the handshake, command decoding, frame
+    ordering, an undecodable frame, a disconnect, and the port being taken. A
+    mock would have proved nothing here — the whole class is a listener, and the
+    masking and reassembly are exactly what does not survive being faked.
+
+    Still to come: the timeline pane. The Mac's is a large screen (filters, the
+    per-pane sort order, JSON trees via `EmbeddedJSON`, find-in-object,
+    filter-aware export, the bounded and clear-data restarts) and it is the next
+    slice rather than part of this one.
+
+    One thing to know before debugging it: **two Reactotrons can both bind
+    9090.** `portInUse` catches the collision when the address families match,
+    but observed on a Mac running both apps, the Mac app held the IPv6 wildcard
+    while the daemon took IPv4 loopback and neither failed — so the device's
+    traffic goes to whichever owns IPv4 loopback. The Mac has the same property
+    against upstream's Electron app, so it is parity, not a regression.
 25. **Mirror, screen record, and the video editor.** The Mac's pipeline is
     VideoToolbox + AVFoundation + a `Network.framework` socket, none of which
     exists off Apple — but the *capability* is not Apple-only. scrcpy's own

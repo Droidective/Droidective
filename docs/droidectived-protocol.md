@@ -341,6 +341,69 @@ Swift marks `fork` unavailable because only async-signal-safe calls are legal
 between it and `exec`. Windows has no pty here — ConPTY is a different API
 rather than a variation — so `openPty` throws and the client renders the reason.
 
+### 5.3 The `reactotron` topic, and the tunnel that feeds it
+
+Two halves, because they are two shapes. The relay produces a feed, so it is a
+topic; the `adb reverse` tunnel that lets a device reach it is request/response,
+so it is a route.
+
+```jsonc
+// client -> server
+{ "op": "subscribe", "id": 4, "topic": "reactotron" }
+// server -> client: one envelope per thing the relay saw
+{ "id": 4, "event": "batch", "items": [
+  { "kind": "listening",    "port": 9090 },
+  { "kind": "connected",    "connection": 1, "clientId": "my-app", "command": { … } },
+  { "kind": "command",      "connection": 1, "command": { "type": "log", … } },
+  { "kind": "disconnected", "connection": 1, "reason": "client closed" }
+] }
+```
+
+```jsonc
+// POST /v1/reactotron/reverse   { "serials": ["R58M"], "port": 9090 }
+{ "results": [ { "serial": "R58M", "ok": true, "detail": "" } ],
+  "command": "adb reverse tcp:9090 tcp:9090" }
+```
+
+Decisions worth keeping:
+
+- **The listener is NIO and lives in the daemon.** The Mac's relay is an
+  `NWListener`, Apple-only and gated as such. NIO is the portable answer and the
+  daemon already links it for this very socket — but it must not go into ADBKit,
+  because that package staying free of swift-nio is what lets `swift test` run on
+  Windows. So the listener is here and everything above it (`ReactotronCommand`,
+  the command types, the timeline) is the portable ADBKit code both hosts share.
+- **No authentication on the relay, unlike everything else here.** It speaks
+  Reactotron's protocol, and a Reactotron client sends no token — requiring one
+  would mean no existing app could connect. The exposure is bounded by the bind
+  address instead: loopback by default, which USB devices reach through
+  `adb reverse` and emulators reach directly.
+- **Subscribing starts the relay; the last unsubscribe stops it.** A separate
+  start call would let the two disagree about whether it is listening, and a
+  second window watching the timeline must not have its feed cut when the first
+  one closes.
+- **One envelope with a `kind`, not four payload types.** The timeline renders
+  them as one list, so a client switching on a string is simpler than one
+  decoding four shapes off a single topic. The command inside travels as the raw
+  `ReactotronCommand`: unlike `LogLine`, that type *is* the protocol — it mirrors
+  upstream's wire format — so a DTO would be a second spelling of a contract that
+  is not ours to reshape.
+- **The tunnel retries three times.** A freshly attached or just-booted device
+  rejects `reverse` for a moment, and the Mac retries for the same reason: one
+  attempt makes "plug in and open Reactotron" fail about as often as it works.
+  Removal does *not* retry — a device that has already gone is the outcome asked
+  for.
+
+**One port, one relay, and no way to detect a rival.** Upstream's Reactotron
+desktop and the Mac app both want 9090. `portInUse` reports the collision when
+it happens, but it does not always happen: observed on a Mac running both, the
+Mac app held the IPv6 wildcard while the daemon bound IPv4 loopback, and *both
+binds succeeded* — so a device's `adb reverse` traffic reaches whichever listener
+owns IPv4 loopback. The Mac app has the identical property against upstream's
+Electron app, so this is parity rather than a regression, and it only arises
+where two Reactotrons run at once. Worth knowing before debugging "my app
+connects but nothing appears".
+
 ## 6. Lifecycle
 
 - **Startup:** parse args, write the token, bind, print the port line.
