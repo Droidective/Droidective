@@ -11,10 +11,10 @@ rewriting one when something turns out to be more work than it looked.
 
 | | Count |
 | --- | --- |
-| ⬜ Not started | 18 |
+| ⬜ Not started | 19 |
 | 🟡 Partial | 40 |
 | ⛔ Not applicable off-Apple | 2 |
-| **Total registry features** | **60** |
+| **Total registry features** | **61** |
 
 "Partial" is doing a lot of work in that table: 19 of the 37 are actions that
 run from the palette but have no screen of their own, and the 18 that do have
@@ -508,9 +508,6 @@ job, and the checklist now says which.
 ---
 
 ## Per-feature checklists
-
-Legend: ⬜ not started · 🟡 partial · ⛔ not applicable off-Apple.
-
 ### Input & Clipboard
 #### `send-text` — Send Text  ·  🟡 partial
 > Type text, URLs, or symbols on the device
@@ -631,10 +628,11 @@ Legend: ⬜ not started · 🟡 partial · ⛔ not applicable off-Apple.
   - [ ] button: Copy to Clipboard
   - [ ] button: Show All
   - [ ] button: Hide All
-  - [ ] button: Run adb reverse for the device
-  - [ ] button: Run
   - [ ] button: Copy
   - [ ] button: Copy as JSON
+  - [ ] button: Deselect
+  - [ ] button: Run adb reverse for the device
+  - [ ] button: Run
   - [ ] field: Find in console
   - [ ] field: 8081
   - [ ] field: Filter
@@ -648,10 +646,8 @@ Legend: ⬜ not started · 🟡 partial · ⛔ not applicable off-Apple.
   - [ ] tooltip: Find & highlight in console (⌘F)
   - [ ] tooltip: Clear the console
   - [ ] tooltip: Choose which log levels to show
-  - [ ] tooltip: Copy this entry (right-click for JSON)
-  - [ ] tooltip: Reveal in the tree
   - [ ] search: searchable list
-  - [ ] menu: right-click context menu
+  - [ ] shortcut: "c", modifiers: .command
   - [ ] export: save/export to a file
 
 #### `open-dev-menu` — Open Dev Menu  ·  🟡 partial
@@ -677,6 +673,63 @@ Legend: ⬜ not started · 🟡 partial · ⛔ not applicable off-Apple.
 > Live React Native inspector — logs, network, state, custom display
 - **Kind** `view`
 - **Note** Not started — blocked on porting the relay's Network.framework listener to NIO, which ReactotronMCP already proves out. Backlog 24.
+- **macOS view** `ReactotronView` — `App/Sources/FeatureDetail/Views/ReactotronView.swift`
+- **Must replicate**
+  - [ ] button: OK
+  - [ ] button: Retry
+  - [ ] button: Add
+  - [ ] button: Evaluate
+  - [ ] button: All
+  - [ ] button: Cancel
+  - [ ] button: Done
+  - [ ] button: Save as JSON…
+  - [ ] button: Copy to Clipboard
+  - [ ] button: Copy
+  - [ ] button: Copy as JSON
+  - [ ] button: Deselect
+  - [ ] button: Copy \(selectionCount) Selected Events
+  - [ ] button: Copy \(selectionCount) Selected as JSON
+  - [ ] button: Copy object
+  - [ ] button: Copy line
+  - [ ] button: Restore
+  - [ ] button: Copy value
+  - [ ] button: Send
+  - [ ] button: Got it
+  - [ ] button: Clear Data & Restart
+  - [ ] picker: View
+  - [ ] picker: App
+  - [ ] field: Path to watch, e.g. user.name
+  - [ ] field: e.g. store.getState()
+  - [ ] field: Search keys & values…
+  - [ ] label: Reverse :9090
+  - [ ] label: AI Agents
+  - [ ] label: Refresh
+  - [ ] label: Dispatch
+  - [ ] label: Take Snapshot
+  - [ ] label: Pane cleared
+  - [ ] label: Clear cache and restart
+  - [ ] label: Clear data and restart
+  - [ ] label: Restart app
+  - [ ] tooltip: Force-stop and relaunch the connected app so it reconnects
+  - [ ] tooltip: Run adb reverse tcp:9090 tcp:9090 on connected devices
+  - [ ] tooltip: Clear the whole timeline — both panes
+  - [ ] tooltip: Split into two panes
+  - [ ] tooltip: Clear the timeline
+  - [ ] tooltip: Stop watching this path
+  - [ ] tooltip: Refresh available values
+  - [ ] tooltip: Close without applying
+  - [ ] tooltip: Show only requests with this HTTP method
+  - [ ] tooltip: Show only responses in this status class
+  - [ ] tooltip: Filter the timeline by event type
+  - [ ] tooltip: Copy this line (right-click for the full object)
+  - [ ] tooltip: Click to view full size
+  - [ ] tooltip: Delete this snapshot
+  - [ ] tooltip: Reveal in the tree
+  - [ ] menu: right-click context menu
+  - [ ] shortcut: .cancelAction
+  - [ ] shortcut: .defaultAction
+  - [ ] shortcut: "c", modifiers: .command
+  - [ ] export: save/export to a file
 
 #### `reload-js` — Reload JS  ·  🟡 partial
 > Reload the JS bundle (double-tap R)
@@ -696,15 +749,51 @@ Legend: ⬜ not started · 🟡 partial · ⛔ not applicable off-Apple.
 - **Kind** `toggleAction`
 - **Note** Runs from the palette; no dedicated screen.
 
+#### `mirror-wall` — Mirror Wall  ·  ⬜ todo
+> Mirror up to six devices side by side
+- **Kind** `view`
+- **Note** Not started — several mirrors at once, on the same pipeline as `scrcpy`, so it follows the mirror. Backlog 25.
+- **macOS view** `MirrorWallView` — `App/Sources/FeatureDetail/Views/MirrorWallView.swift`
+- **Must replicate**
+  - [ ] button: Open Each in Its Own Window
+  - [ ] button: Arrange Mirror Windows
+  - [ ] toggle: Audio from the Focused Device
+  - [ ] picker: Columns
+  - [ ] label: Devices
+  - [ ] tooltip: Pick which devices this wall shows
+  - [ ] tooltip: Audio, and breaking tiles out into windows
+  - [ ] drag: drag and drop
+
 #### `scrcpy` — Mirror Screen  ·  ⬜ todo
 > Mirror and control the device with scrcpy
 - **Kind** `view`
 - **Note** Not started — the decode/render stack needs writing off Apple (scrcpy's server is portable; VideoToolbox/AVFoundation are not). Backlog 25.
+- **macOS view** `ScreenMirrorView` — `App/Sources/FeatureDetail/Views/ScreenMirrorView.swift`
+- **Must replicate**
+  - [ ] button: Volume down
+  - [ ] button: Volume up
+  - [ ] button: Mute / unmute
+  - [ ] button: Open in a separate window
+  - [ ] button: circle
+  - [ ] button: square
+  - [ ] button: camera
+  - [ ] button: Reconnect
+  - [ ] toggle: Stream audio (restarts mirror)
+  - [ ] toggle: Show touches
+  - [ ] toggle: Microphone
+  - [ ] tooltip: Audio and touch options
+  - [ ] tooltip: Volume, audio, touch, and window options
+  - [ ] tooltip: Recording audio — device playback or mic, plus the Mac's mic
+  - [ ] tooltip: Mute or unmute what's being recorded
 
 #### `screen-record` — Screen Record  ·  ⬜ todo
 > Record via scrcpy — no time limit, with audio
 - **Kind** `view`
 - **Note** Not started — rides the mirror session, so it follows the mirror. Backlog 25.
+- **macOS view** `ScreenRecordView` — `App/Sources/FeatureDetail/Views/ScreenRecordView.swift`
+- **Must replicate**
+  - [ ] label: Stop & Save
+  - [ ] label: Stop
 
 #### `screenshot` — Screenshot  ·  🟡 partial
 > Capture the screen and save it to your Mac
@@ -715,6 +804,9 @@ Legend: ⬜ not started · 🟡 partial · ⛔ not applicable off-Apple.
 > Trim, rotate, crop, convert & compress video
 - **Kind** `view`
 - **Note** Not started — needs the mirror pipeline plus the bundled ffmpeg. Backlog 25.
+- **macOS view** `VideoEditorView` — `App/Sources/FeatureDetail/Views/VideoEditorView.swift`
+- **Must replicate**
+  - [ ] label: Open video…
 
 
 ### Device State
@@ -739,12 +831,10 @@ Legend: ⬜ not started · 🟡 partial · ⛔ not applicable off-Apple.
 #### `device-info` — Device Info  ·  🟡 partial
 > Browse and search every device property
 - **Kind** `view`
-- **Note** Built. `/v1/device/props` passes `getprop` through untouched; the
-  pane adds a summary header, two-segment grouping, search over key and value,
-  copy and export.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `DeviceInfoView` — `App/Sources/FeatureDetail/Views/DeviceInfoView.swift`
 - **Must replicate**
-  - [x] field: Filter properties…
+  - [ ] field: Filter properties…
 
 #### `fake-battery` — Fake Battery  ·  🟡 partial
 > Set a fake battery level and unplugged state
@@ -866,27 +956,27 @@ Legend: ⬜ not started · 🟡 partial · ⛔ not applicable off-Apple.
 #### `ios-logs` — iOS Logs  ·  ⛔ n/a
 > Live simulator log stream (unified log)
 - **Kind** `view`
-- **Note** iOS Simulator only, via simctl — macOS-only toolchain.
+- **Note** iOS Simulator only, via simctl — a macOS toolchain, not a device.
 
 #### `logcat` — Logcat  ·  🟡 partial
 > Live log stream with search and filters
 - **Kind** `view`
-- **Note** A pane exists; the app filter is what it is still missing.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `LogcatView` — `App/Sources/FeatureDetail/Views/LogcatView.swift`
 - **Must replicate**
-  - [x] picker: Level
-  - [x] field: Filter lines…
+  - [ ] picker: Level
+  - [ ] field: Filter lines…
   - [ ] label: All apps
   - [ ] label: Add from installed apps
   - [ ] label: Use app on device screen
   - [ ] label: Add manually / manage…
-  - [x] tooltip: Show only the lines containing this text
-  - [x] tooltip: Find & highlight in the log without hiding lines
-  - [x] tooltip: Export buffer to ~/Downloads/Droidective
-  - [x] tooltip: Clear
+  - [ ] tooltip: Show only the lines containing this text
+  - [ ] tooltip: Find & highlight in the log without hiding lines (⌘F)
+  - [ ] tooltip: Export buffer to ~/Downloads/Droidective
+  - [ ] tooltip: Clear
   - [ ] tooltip: Stream one app's logs — pick a saved bundle or add a new one
-  - [x] tooltip: Remove tag filter
-  - [x] export: save/export to a file
+  - [ ] tooltip: Remove tag filter
+  - [ ] export: save/export to a file
 
 #### `performance` — Performance Monitor  ·  ⬜ todo
 > Live CPU, RAM & FPS with recording and export
@@ -1155,3 +1245,4 @@ Legend: ⬜ not started · 🟡 partial · ⛔ not applicable off-Apple.
   - [ ] drag: drag and drop
 
 
+<!-- counts: {'done': 0, 'partial': 24, 'todo': 35, 'gated': 2} -->

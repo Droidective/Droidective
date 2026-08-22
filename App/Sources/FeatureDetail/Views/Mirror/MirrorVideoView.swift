@@ -54,7 +54,7 @@ final class MirrorLayerNSView: NSView {
     var onCut: (() -> Void)?
     var videoSize: CGSize?
 
-    private let displayLayer: AVSampleBufferDisplayLayer
+    private var displayLayer: AVSampleBufferDisplayLayer
 
     init(displayLayer: AVSampleBufferDisplayLayer) {
         self.displayLayer = displayLayer
@@ -62,6 +62,22 @@ final class MirrorLayerNSView: NSView {
         wantsLayer = true
         layer?.backgroundColor = NSColor.black.cgColor
         layer?.addSublayer(displayLayer)
+    }
+
+    /// Adopt a *new* session's layer in place.
+    ///
+    /// A reconnect replaces the view model — and its renderer — while the
+    /// SwiftUI view keeps its identity, so `updateNSView` is the only chance to
+    /// notice. Without this the tile goes on showing the dead session's layer:
+    /// input still works, no frame ever arrives again, and it reads as a broken
+    /// mirror. (The full-pane mirror only escapes it by rendering a `nil` model
+    /// in between, which the wall's same-turn reconnect never does.)
+    func adopt(displayLayer newLayer: AVSampleBufferDisplayLayer) {
+        guard newLayer !== displayLayer else { return }
+        displayLayer.removeFromSuperlayer()
+        displayLayer = newLayer
+        layer?.addSublayer(newLayer)
+        syncDisplayLayerFrame()
     }
 
     @available(*, unavailable)
@@ -85,7 +101,7 @@ final class MirrorLayerNSView: NSView {
     }
 
     private func syncDisplayLayerFrame() {
-        guard displayLayer.frame != bounds else { return }
+        guard displayLayer.frame != bounds, bounds.width > 0, bounds.height > 0 else { return }
         // Sublayer frame changes are implicitly animated — a 0.25s lag per
         // divider tick reads as the video chasing the drag. Snap instead.
         CATransaction.begin()
@@ -194,6 +210,7 @@ struct MirrorVideoView: NSViewRepresentable {
     }
 
     private func apply(to view: MirrorLayerNSView) {
+        view.adopt(displayLayer: renderer.displayLayer)
         view.videoSize = videoSize
         view.onTouch = onTouch
         view.onKeycode = onKeycode

@@ -320,10 +320,24 @@ public struct CDPCallFrame: Sendable, Equatable, Identifiable {
     }
 
     /// `functionName  file:line` — CDP line numbers are 0-based, shown 1-based.
+    /// The file is the script's own name: Metro's bundle URL carries a query
+    /// string longer than the rest of the frame, and eight of those turn a
+    /// stack trace into a wall of `&excludeSource=true&sourcePaths=url-server`.
     public var display: String {
         let fn = functionName.isEmpty ? "(anonymous)" : functionName
         guard !url.isEmpty else { return fn }
-        return "\(fn)  \(url):\(lineNumber + 1)"
+        return "\(fn)  \(Self.scriptName(url)):\(lineNumber + 1)"
+    }
+
+    /// The last path component of a script URL, without its query or fragment.
+    public static func scriptName(_ url: String) -> String {
+        var name = url
+        if let cut = name.firstIndex(where: { $0 == "?" || $0 == "#" }) { name = String(name[..<cut]) }
+        // Metro appends its parameters after a bare `&`, with no `?` at all.
+        if let cut = name.firstIndex(of: "&") { name = String(name[..<cut]) }
+        while name.hasSuffix("/") { name.removeLast() }
+        let last = name.split(separator: "/").last.map(String.init) ?? name
+        return last.isEmpty ? url : last
     }
 }
 

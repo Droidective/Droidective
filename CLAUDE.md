@@ -75,7 +75,7 @@ opening it — verify those by hand.
 
 1. **Define it** — add a `FeatureDef` to `FeatureRegistry.all` (unique `id`,
    title, keywords, category, `kind`; set `platforms` if it works on iOS
-   Simulators — the default is Android-only). **[test: `hasAll60Features` —
+   Simulators — the default is Android-only). **[test: `hasAll61Features` —
    bump the count; `byID` traps on a duplicate id]**
 2. **If it's an action** (`.instantAction`/`.formAction`/`.toggleAction`):
    - add the runner `case` to `FeatureEngine.dispatch`,
@@ -113,8 +113,8 @@ opening it — verify those by hand.
 ## Build / test / run
 
 ```
-make test          # ADBKit unit tests (cd ADBKit && swift test) — 1699 tests, keep green
-make test-app      # the AppTests logic bundle — 99 tests
+make test          # ADBKit unit tests (cd ADBKit && swift test) — 1844 tests, keep green
+make test-app      # the AppTests logic bundle — 105 tests
 make verify        # tiers 0-1: warnings-as-errors + both test bundles
 make test-linux    # the same suite on Linux (Apple `container` CLI; the port gate)
 make test-emulator # tier 3: the device-dependent suites against a real emulator
@@ -165,7 +165,7 @@ Node 22 in CI; scroll reveals and the hero palette demo must keep their
   twins — booted iOS Simulators surface as `Device`s with
   `platform: .iosSimulator`, merged into the bar in `AppState`), `DeviceProps` (getprop), `DeviceOverview` (RAM/storage/
   battery/CPU/app counts), `DeviceDetails` (picker enrichment).
-- `Features/`: `FeatureRegistry` (60 `FeatureDef`s, declarative; `absorbedByHub`
+- `Features/`: `FeatureRegistry` (61 `FeatureDef`s, declarative; `absorbedByHub`
   maps a hub screen to the features it gathers, flattened to
   `absorbedFeatureIDs`; `catalogFeatureIDs` is the registry minus those),
   `FeatureModel`,
@@ -304,11 +304,11 @@ Node 22 in CI; scroll reveals and the hero palette demo must keep their
   tab/window close; it never restarts a relay the user stopped (status
   goes amber, ghost clients cleared via `noteRelayStopped`).
 
-## The 60 features
+## The 61 features
 
 Most `.view` features are full-screen bespoke panels (file-explorer, apps,
 emulators, device-info, logcat, ios-logs — the simulator unified-log twin (`SimulatorLogStreamer` over `simctl spawn <udid> log stream --style ndjson`, iOS-only, standalone), crash-catcher, sandbox-browser, performance,
-network-speed, wifi, root-status, screen-record, scrcpy, reactotron, js-console,
+network-speed, wifi, root-status, screen-record, scrcpy, mirror-wall, reactotron, js-console,
 terminal — multi-tab PTY login shells via SwiftTerm, with the device selected at
 open exported as ANDROID_SERIAL; tabs split into panes (⌘D/⇧⌘D — the pure
 `TerminalSplitTree` model, tested in ADBKit; ⌘W peels a pane, then the tab), a
@@ -324,7 +324,19 @@ and `connection` gather related instant-/form-/toggle-actions into one scrollabl
 grouped `Form`; `apk-studio` is a tabbed workspace over one loaded APK (Inspect/
 Decompile/Recompile/Sign). (The Apps explorer similarly covers per-app
 management — its detail pane carries the old "Manage App" controls: open,
-force-stop, clear cache/data, plus disable/uninstall). A hub's gathered features
+force-stop, clear cache/data, plus disable/uninstall). **`mirror-wall`** is the
+multi-device mirror: up to `MirrorWall.maximumDevices` (6) devices side by side,
+each interactive, each its own `MirrorViewModel`/scrcpy session at a per-tile
+quality that steps down as tiles are added (`MirrorWall.quality(tiles:)` — a
+one-tile wall is exactly the full mirror). It picks its own devices (header menu,
+persisted per window as `WindowState.mirrorWallSerials`) rather than following
+the device bar, lays out automatically or in a fixed column count, reorders by
+dragging a tile's **caption strip** (never the video — `.onDrag` there would eat
+every swipe on the device), and breaks any tile out into its own window. The
+pop-out mirror is a `WindowGroup(for: String.self)` keyed by serial — one window
+per device, pinned to it (`ScreenMirrorView.pinnedSerial`) rather than following
+the selection — and `AppCore.arrangeMirrorWindows` tiles the open ones across the
+screen via the pure `MirrorWall.windowFrames`. A hub's gathered features
 (`FeatureRegistry.absorbedByHub` → `absorbedFeatureIDs`) are managed only from
 the hub: the display layer filters `FeatureDef.isAbsorbedByHub` out of the
 catalog, the sidebar (`AppState.enabledFeatures`), and search
@@ -336,7 +348,7 @@ Apps hub. They stay hotkey-able (every feature registers a shortcut; the Hotkeys
 tab lists bound members under "Hidden features"). This is a pure display filter —
 no persisted migration — so it also covers a hub that grows later. The rest are generic instant-/form-/toggle-actions
 driven by the registry. The catalog and Home's "All N features" count use
-`catalogFeatureIDs` (38). **Every feature is enabled by default**
+`catalogFeatureIDs` (39). **Every feature is enabled by default**
 (`defaultEnabledIDs == catalogFeatureIDs`); the catalog (Manage features) is for
 turning OFF the ones you don't want, not opting in — there's no Restore button.
 `LayoutState.adoptAllEnabled()` is a one-time migration that turns everything on
@@ -436,6 +448,16 @@ table) is in `docs/reactotron-mcp-analysis.md`.
     `sharedBackgroundVisibility`), and titlebar content via
     `.fullSizeContentView` or `NSTitlebarAccessoryViewController` is collapsed
     or clipped. All four were tried.
+  - **Full View is per window and transient.** `AppState.fullView` hides the
+    app's chrome (sidebar, device bar, tab strip) *and* puts the window into
+    macOS full screen — View ▸ Full View / ⇧⌘F (not ⌃⌘F, which macOS owns), the
+    Mirror Wall header's expand button, and a toast naming the way out. It is
+    deliberately not persisted, and RootView watches
+    `NSWindow.willExitFullScreenNotification` so leaving full screen by the
+    green button can't leave a chrome-less window behind. A feature's own
+    controls stay — the wall keeps its header row, which is where the exit
+    button lives. The menu key equivalent is the exit that always works: a
+    mirror view swallows key events that reach it, but NSMenu sees them first.
   - **Only the windows after the first tint their device icon**
     (`DeviceTint`); the app keeps one accent.
   - **A feature that can't run twice on one device** goes in
@@ -443,6 +465,22 @@ table) is in `docs/reactotron-mcp-analysis.md`.
     encoder, `js-console` loses the CDP target to the newest client,
     `frida-console` owns a port). It then gets the Focus / Take Over banner
     instead of racing. A test asserts every id there is a real feature.
+  - **A feature that runs against devices the window isn't pointed at
+    registers `WorkspaceRegistry.Claim`s.** `Entry.serial` answers "who owns
+    this device?" only for device-bar-scoped features; the Mirror Wall streams
+    up to six devices from one window and the pop-out mirrors show a device
+    each, so both publish claims (`AppCore.noteMirrorClaims`) and the mirror
+    family (`mirrorFeatureIDs` — `scrcpy`, `scrcpy-window`, `mirror-wall`)
+    contends through them. Claims are written by *live sessions*, which is what
+    `claimant(ofFeature:on:)` reads — a hidden keep-alive mirror tab that isn't
+    streaming must not hold a device hostage. `mirror-wall` is deliberately NOT
+    exclusive: a whole-pane banner over the window's selected device would
+    block five working tiles because of the sixth, so it blocks per tile.
+  - **A wall-shaped feature needs a terminal stop.** `MirrorWallModel.suspend()`
+    is the resumable one (hidden past the grace window); `shutDown()` is
+    terminal. Without the terminal flag, a mirror tab closing *during quit*
+    releases its device, the still-mounted wall starts a session on it, and that
+    session outlives the process — the leak this feature was caught doing once.
 
 - **Process runner must never block a cooperative thread.** `SystemProcessRunner`
   uses `terminationHandler` + `readabilityHandler`, not `waitUntilExit`. A
@@ -519,6 +557,24 @@ table) is in `docs/reactotron-mcp-analysis.md`.
   `\.windowOpacity` is declared in Theme.swift because the AppTests logic
   bundle compiles that file standalone (and links ADBKit for it). JS Console
   keeps its Chrome-dark hue at the card step; CodeMirror webviews stay opaque.
+- **A mirror session's teardown has to be *awaited* at quit.** Every session
+  owns an `adb forward` tunnel that only `MirrorTransport.stop()` removes, and
+  view teardown is fire-and-forget — at quit the process exits first and the
+  tunnel stays registered in the long-lived adb server (one leaked listening
+  socket per session per quit; six for a full Mirror Wall). `MirrorSessions`
+  holds every live `MirrorViewModel` weakly, registered at the *top* of
+  `start()` (a start that fails part-way can still have opened the tunnel), and
+  `AppCore.finishQuitNow` awaits `stopAllForQuit()` alongside the MCP server and
+  the Reactotron relay. Check with `adb forward --list`: it must be empty of
+  `scrcpy_*` entries once the app is gone.
+- **A view model swap needs the display layer swapped with it.**
+  `MirrorVideoView` hands `MirrorRenderer.displayLayer` to its NSView at init,
+  so a *new* session for the same on-screen tile must be adopted in
+  `updateNSView` (`MirrorLayerNSView.adopt(displayLayer:)`) — otherwise the tile
+  keeps drawing the stopped session's layer: input still works, no frame ever
+  arrives, and it reads as a broken mirror. The full-pane mirror only escapes it
+  by rendering a nil model in between; the wall's reconnect replaces the model
+  in one turn.
 - **Recording audio is one AAC track fed by up to two sources.** A recording
   captures the device's audio, the Mac's microphone, both, or neither —
   `RecordAudioOptions`/`DeviceAudioSource` in ScreenTools, persisted by the
@@ -565,6 +621,29 @@ table) is in `docs/reactotron-mcp-analysis.md`.
   Xcode** (local passes, CI fails with "unable to type-check in reasonable
   time"). Add cross-cutting concerns as ONE `.modifier(...)` link (see
   `WindowTranslucencyModifier`), never several inline links.
+- **A view update must not write observable state unconditionally — that's an
+  endless update loop, not a wasted pass.** `WindowAccessor` re-reports its
+  window on *every* `updateNSView`, and `AppCore`/`AppState` are `@Observable`
+  that `RootView.body` and the app's menus read (the window ordinal, the
+  registry entries), so a write from inside an update invalidates the scene,
+  whose update writes again — the app beach-balls for as long as the view is
+  mounted, from launch if the window is restored. Writing an *equal* value is
+  just as bad (`@Observable` fires `didSet` regardless), and a guard inside the
+  value type can't save you: a mutating call on an observed property notifies
+  whether or not the value changed. Decide before touching it — a pure "what
+  would change?" query in ADBKit that returns nil for "nothing"
+  (`WorkspaceRegistry.claimsChange`) plus an identity guard at the call site
+  (`AppCore.noteMirrorWindow`, `RootView`'s `state.nsWindow !== window`).
+  Better still, publish from `.onChange`/`.onDisappear`, the way the wall and
+  the in-tab mirror publish their claims.
+- **Windows the app opens itself opt out of AppKit restoration.** Droidective
+  restores its own windows from `LayoutState.windows`; AppKit's saved state
+  would *also* bring them back, before the layout has loaded and with no
+  workspace to own them — `AppCore.bind` and the pop-out mirror windows both set
+  `isRestorable = false`. Saved state lives outside the bundle
+  (`~/Library/Saved Application State/`), so a launch bug it feeds survives
+  deleting and reinstalling the app — worth knowing when a user reports that the
+  reinstall didn't help.
 - **⌘=/⌘- font zoom is a `scaleEffect` on RootView, not dynamic type.** macOS
   ignores SwiftUI `dynamicTypeSize` for rendering, so the content is laid out at
   `size/scale` and scaled up. It's bypassed entirely at 1.0× because the
@@ -738,7 +817,78 @@ position in `RELEASE_NOTES.md`.
 ## Status
 
 Feature-complete across all planned milestones plus several UX rounds.
-(Latest release: **v3.8.0** — **API Testing** (the 60th feature: `api-client`,
+(Latest release: **v3.9.1** — a bug-fix release. A pop-out mirror window
+hung the app: `MirrorWindowRegistrar` re-registered on every `updateNSView`, and
+`noteMirrorWindow` wrote `AppCore.registry` unconditionally — which `RootView`'s
+body and the Window menu read, so the write ran the update and the update ran
+the write (an `@Observable` `didSet` fires on an equal value, so no guard inside
+the registry can break it; the decision has to happen before the registry is
+touched). The pop-out windows also now set `isRestorable = false` like the
+workspace windows, so AppKit stops reopening them at launch before any workspace
+exists — see the update-loop and window-restoration rules in the conventions.
+Reactotron renders a stringified payload as a tree (`EmbeddedJSON` in ADBKit,
+pure: `looksLikeJSON` per render, `parse` once per row from an expanded row's
+`task`), with the parse cache keyed by row path *and* the string it came from
+*and* the tab, since an API event's four tabs are one tree; `JSONSearch.matches`
+takes `expandingStringifiedJSON` so find agrees with the display, bounded by
+`maxStringifiedBytes` (256 KiB). A long API URL carries a shortened string cut
+to the measured width instead of `lineLimit(3)`, which drew over the rows below
+it. The mirror capture sheet gained Copy — deliberately not a decision, so the
+sheet stays up. And `SecretFile` replaces both signing paths'
+`FileManager.createFile`, so a keystore password file that can't be written
+reports the path and the underlying error, with the 0600 step reportable
+separately and best-effort on Windows.) Before that,
+**v3.9.0** — the **Mirror Wall** (the 61st feature,
+`mirror-wall`): up to six connected devices mirrored side by side in one pane,
+each tile the same interactive session the full mirror runs, at a per-tile
+quality that steps down with the tile count. It picks its own devices (capped
+at six, persisted per window as `WindowState.mirrorWallSerials`) instead of
+following the device bar, lays out automatically or in a fixed column count,
+and reorders by dragging a tile's caption strip — never the video. The pop-out
+mirror became a `WindowGroup(for: String.self)` keyed by serial: one window per
+device, pinned to it, with `AppCore.arrangeMirrorWindows` tiling them. Plus
+**Full View** (⇧⌘F, `AppState.fullView`) and the exclusivity model's second
+dimension, `WorkspaceRegistry.Claim`, for the devices a window mirrors outside
+its own selection. Two leaks closed on the way: mirror sessions kept their
+`adb forward` tunnel through quit (the single mirror too — see the mirror
+teardown convention), and a reconnected tile drew the stopped session's layer.
+Before that, **v3.8.2** — JS Console split-pane fixes. A row's height was
+grown against a baseline that was still moving, so a wrapped message drew past
+the height its row reported; the arithmetic is now `ConsoleRowLayout` in ADBKit,
+pure and tested, where a line's baseline settles before anything is positioned
+against it. And the pane refused to shrink: `targetPicker`'s `.fixedSize()` made
+a long target label the minimum width for the connection bar, and so for the
+whole pane, so every row was laid out wider than the pane and cut off by its
+clip — which reads as the tab beside it overlapping. Nothing in that bar may
+demand more width than the pane it sits in. A `console.table` scrolls inside its
+own row rather than sizing the feed, and the source location is an icon in the
+row's hover controls beside the copy buttons.) Before that,
+**v3.8.1** — the **JS Console rebuilt against Chrome
+DevTools**. The value layer is now Chrome's: a top-level `console.log` string
+argument prints bare, nested strings single-quote and escape their newlines,
+an array leads with `(n)`, a nested plain object is `{…}`, and a collapsed
+node inside an expanded value previews its own first properties instead of a
+key count (`RemoteObjectDisplay`, `SnapNodeDisplay`, both pure). Four things
+the console had no model for: `ConsoleANSI` (React Native's dev-server notices
+arrive coloured for a terminal), `ConsoleGrouping` (`console.group` depth and
+the id path a collapsed header hides by — `groupEnd` shows no row, which is
+where the trailing blank rows came from), `ConsoleTable` (the
+`console.table` grid, built from the snapshot the expandable rows already
+fetch), and `MetroSymbolicator` (a call's bundle coordinates back to the
+developer's file through Metro's `/symbolicate` — lines cross the wire
+1-based, and the frame shown is the first the app owns, skipping Metro's
+`collapse` flag and `node_modules` the way Chrome ignore-lists them; cached
+per stack, coalesced, circuit-broken). The row is `JSConsoleRow.swift`: a
+wrapping `ConsoleFlowLayout` puts the whole argument list on one line with
+each object an inline disclosure, the source label sits at the right edge and
+opens the symbolicated stack, group blocks indent under a rule and fold from
+their header, and only errors and warnings get a glyph. Two behaviours worth
+keeping: a row's click sits *behind* its content (so the copy buttons, source
+link, and nested disclosures always win) and only ever *opens* the first
+object — it used to toggle, so clicking a nested leaf folded the whole value;
+and copying a log resolves its objects to real JSON, because `{…}` is the one
+part of a pasted row nobody can act on.) Before that, **v3.8.0** — **API
+Testing** (the 60th feature: `api-client`,
 a device-free HTTP client — seven methods, six body kinds, five auth kinds,
 Postman collections/environments in and out, nested folders,
 `{{variable}}` scopes with unresolved ones flagged pre-send, assertions on
@@ -767,7 +917,7 @@ tabs during live resizes) plus ffmpeg's real error surfacing through
 `VideoEditing.stderrTail`. Under the hood: the portable ADBKit core (Linux +
 Windows suites in CI, `PortabilityGuardTests`), the `ReactotronMCP` package
 split, the tiered `make verify` harness with a mutation gate, and the
-release-channel split above.) Before that,
+release-channel split above. Before that,
 **v3.7.1** — the **Developer Settings feature** (the 59th:
 `dev-settings`, a `DeveloperSettingsService` declarative toggle table over
 `settings put`/`setprop` + the SYSPROPS poke — no force-RTL toggle; the
@@ -901,7 +1051,7 @@ jadx/apktool, recompile, and sign — with keystore creation) plus Frida setup, 
 custom accent color, launching emulators from the device bar, per-feature
 connect-a-device empty states, a live-preview hotkey recorder, and a Settings
 split into Appearance/Privacy; managed tools download from GitHub releases into
-Application Support and are sized/removable in Settings); 1503 ADBKit + 99
+Application Support and are sized/removable in Settings); 1833 ADBKit + 99
 AppTests green (macOS — the suite also runs on Linux in CI, minus the
 Darwin-gated files);
 builds clean with zero warnings (enforced as errors in CI). Verified live against a

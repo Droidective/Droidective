@@ -80,6 +80,11 @@ final class MirrorViewModel {
     /// as the scrcpy `show_touches` start option on every (re)connect, and as
     /// a live settings write (`ShowTouches`) for mid-session flips.
     private var requestShowTouches: Bool
+    /// What this session asks the device-side encoder for. A full-pane mirror
+    /// takes `MirrorWall.fullQuality`; a Mirror Wall tile is a fraction of the
+    /// pane and shares the Mac with up to five other decoders, so it asks for
+    /// less (`MirrorWall.quality(tiles:)`).
+    private let quality: MirrorWall.Quality
     /// Set once video frames begin flowing; gates the video-only fallback so a
     /// session that streamed and later stopped isn't silently restarted.
     private var didStream = false
@@ -89,16 +94,25 @@ final class MirrorViewModel {
     /// stop, each burning ~a core until quit (Sentry DROIDECTIVE-MAC-2K).
     private var stopped = false
 
-    init(adb: AdbClient, locator: ToolLocator, serial: String, includeAudio: Bool, showTouches: Bool) {
+    init(
+        adb: AdbClient, locator: ToolLocator, serial: String, includeAudio: Bool,
+        showTouches: Bool, quality: MirrorWall.Quality = MirrorWall.fullQuality
+    ) {
         self.adb = adb
         self.locator = locator
         self.serial = serial
         requestAudio = includeAudio
         requestShowTouches = showTouches
+        self.quality = quality
     }
 
     func start() async {
         guard !stopped else { return }
+        // Registered *before* anything is opened, not after the stream is up: a
+        // start that fails or hangs part-way can still have pushed the server
+        // and opened the adb tunnel, and quit has to be able to reach that too
+        // (see `MirrorSessions`).
+        MirrorSessions.shared.note(self)
         status = .connecting
         didStream = false
         // Prefer the bundled server (self-contained); fall back to an installed
@@ -125,8 +139,8 @@ final class MirrorViewModel {
         // session — live writes are for mid-session flips (`setShowTouches`).
         let params = ScrcpyServerParams(
             scid: UInt32.random(in: 1 ... 0x7fff_ffff),
-            audio: requestAudio, control: true, maxSize: 1280,
-            showTouches: requestShowTouches)
+            audio: requestAudio, control: true, maxSize: quality.maxSize,
+            maxFps: quality.maxFps, showTouches: requestShowTouches)
         let config = MirrorTransport.Configuration(
             serial: serial, params: params,
             serverVersion: server.version, localJarPath: server.jarPath)
@@ -230,6 +244,7 @@ final class MirrorViewModel {
     /// `start()` and the audio-fallback restart are permanently inert.
     func stop() async {
         stopped = true
+        MirrorSessions.shared.forget(self)
         await teardown()
     }
 

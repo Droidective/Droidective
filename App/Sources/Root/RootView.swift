@@ -107,6 +107,15 @@ struct RootView: View {
         let showExitDialog = state.pendingExit.map { !$0.saving } ?? false
         return zoomedContent
             .overlay(alignment: .topTrailing) { devMetricsOverlay }
+            .onReceive(NotificationCenter.default.publisher(
+                for: NSWindow.willExitFullScreenNotification)
+            ) { notification in
+                // The green button / ⌃⌘F can leave full screen without going
+                // through `toggleFullView`, and chrome-less-in-a-window is not a
+                // state to leave someone in.
+                guard notification.object as? NSWindow === state.nsWindow else { return }
+                state.setFullView(false)
+            }
             .modifier(PostTourCelebration(state: state))
             .modifier(WindowTranslucencyModifier(state: state))
             .modifier(
@@ -214,7 +223,7 @@ struct RootView: View {
         // Every window can open another; refreshed each time because a
         // SwiftUI action captured from a closed window is not worth trusting.
         state.core.windowOpenerReady {
-            openWindow(id: "main")
+            openWindow(id: mainWindowID)
         }
         applyStoredTheme()
         // Anything below is app-wide and must run once, not once per window.
@@ -446,7 +455,7 @@ struct RootView: View {
     /// full-height VS Code-style sidebar with a single continuous divider.
     private var split: some View {
         HStack(spacing: 0) {
-            if state.sidebarVisible && !sidebarAutoHide {
+            if state.sidebarVisible && !sidebarAutoHide && !state.fullView {
                 SidebarPaletteView()
                     .frame(width: sidebarDragWidth ?? min(max(sidebarWidth, 300), 460))
                     .transition(.move(edge: .leading).combined(with: .opacity))
@@ -458,7 +467,8 @@ struct RootView: View {
                 // whenever any visible pane needs a device, so focusing the
                 // catalog in one pane of a split doesn't pull the bar (and the
                 // progress strip) out from under a live feature in the other.
-                if state.workspace.groups.contains(where: { $0.activeTab != "catalog" }) {
+                if !state.fullView,
+                   state.workspace.groups.contains(where: { $0.activeTab != "catalog" }) {
                     DeviceBarView()
                     if let operation = state.runningOperation ?? state.installOperation {
                         OperationProgressStrip(operation: operation)
@@ -501,7 +511,7 @@ struct RootView: View {
         // continuous-hover tracker on the whole split decides both — a thin
         // transparent hot-strip never received hover events reliably.
         .onContinuousHover { phase in
-            guard sidebarAutoHide, case .active(let point) = phase else { return }
+            guard sidebarAutoHide, !state.fullView, case .active(let point) = phase else { return }
             if point.x <= 8, !state.sidebarOverlayShown {
                 withAnimation(.easeOut(duration: 0.18)) { state.sidebarOverlayShown = true }
             } else if state.sidebarOverlayShown, point.x > overlaySidebarWidth + 8 {
@@ -509,7 +519,7 @@ struct RootView: View {
             }
         }
         .overlay(alignment: .leading) {
-            if sidebarAutoHide && state.sidebarOverlayShown {
+            if sidebarAutoHide && state.sidebarOverlayShown && !state.fullView {
                 SidebarPaletteView()
                     .frame(width: overlaySidebarWidth)
                     .background(.bgSurface)
@@ -777,7 +787,7 @@ private struct EditorPane: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            TabStripView(group: index)
+            if !state.fullView { TabStripView(group: index) }
             TabHostView(group: index)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .onDrop(of: [.workspaceTab], delegate: paneDrop)
@@ -909,7 +919,7 @@ private struct SplitDivider: View {
 /// Reads the hosting `NSWindow` once it attaches, so the main window can be
 /// sized to fill the screen on launch. `viewDidMoveToWindow` runs on the main
 /// actor with the window in place — no async hop, so it stays Swift-6 clean.
-private final class WindowReaderView: NSView {
+final class WindowReaderView: NSView {
     var onWindow: ((NSWindow) -> Void)?
 
     override func viewDidMoveToWindow() {
@@ -1002,7 +1012,10 @@ final class WindowMinSizeGuard {
     }
 }
 
-private struct WindowAccessor: NSViewRepresentable {
+/// Hands back the `NSWindow` hosting a SwiftUI view. Used by the workspace
+/// windows and by the pop-out mirror windows, which register themselves for
+/// "Arrange Mirror Windows".
+struct WindowAccessor: NSViewRepresentable {
     let onResolve: (NSWindow) -> Void
 
     func makeNSView(context: Context) -> WindowReaderView {

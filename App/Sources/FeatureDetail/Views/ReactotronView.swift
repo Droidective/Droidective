@@ -1298,7 +1298,7 @@ struct ReactotronView: View {
         }
     }
 
-    private static let timeFormatter: DateFormatter = {
+    fileprivate static let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "HH:mm:ss"
         return formatter
@@ -1840,6 +1840,10 @@ private struct TimelineFilterSheet: View {
 /// time. Filter, API refinements, search, and sort order are
 /// UserDefaults-backed per pane index, so each pane keeps its slice — and its
 /// direction — across feature switches and relaunches.
+/// The feed's coordinate space: rows report their frames in it and a drag reads
+/// them back, which is the only way a row can know what a drag has crossed.
+private let rtFeedSpace = "rt-feed"
+
 private struct TimelinePane: View {
     /// 0 = the single/left pane, 1 = the right split pane — keys the persisted
     /// filters and picks the clear button's wording (the right pane's clear is
@@ -1876,6 +1880,27 @@ private struct TimelinePane: View {
     @AppStorage private var methodFilter: String?
     @AppStorage private var statusFilter: HTTPStatusClass?
     @State private var showFilterSheet = false
+    /// A hidden keep-alive tab keeps this pane mounted; its mouse monitor must
+    /// stay out of the visible pane's way.
+    @Environment(\.tabIsActive) private var tabIsActive
+    /// Rows the reader picked out — ⌘-click one, ⇧-click a range, or drag across
+    /// them — so a handful of events can be copied out of a busy timeline. The
+    /// model is `RowSelection` in ADBKit (pure, tested).
+    @State private var selection = RowSelection<RtItem.ID>()
+    /// Each visible row's frame in the feed's own space, so a drag can tell
+    /// which rows it has crossed. A plain box, not state: rows report this on
+    /// every scroll and layout pass, and putting it in `@State` would re-render
+    /// the feed per pixel.
+    @State private var rowFrames = LogRowFrames<RtItem.ID>()
+    /// A sweep ends with a mouse-up that AppKit also delivers as a click; without
+    /// this the row would read it as a plain click and drop the selection just
+    /// made.
+    @State private var suppressNextPlainClick = false
+    /// The row a sweep started on, fixed when the button went down. Held as an
+    /// *id*, not a y: this feed streams, so the row under a given y changes while
+    /// the pointer is still held — which made a sweep start from whatever row had
+    /// drifted under the press point.
+    @State private var sweepAnchor: RtItem.ID?
     /// Newest at the top (the Reactotron app's order) unless this pane's
     /// reverse button flips its feed to chronological. Persisted per pane, so
     /// each side of a split orders independently.
@@ -1986,6 +2011,10 @@ private struct TimelinePane: View {
                     .foregroundStyle(.textMuted)
             }
 
+            if !selection.isEmpty {
+                selectionControls(visible: visible)
+            }
+
             Button {
                 newestFirst.toggle()
             } label: {
@@ -2068,18 +2097,141 @@ private struct TimelinePane: View {
         Group {
             if newestFirst {
                 LogTailViewV2(entries: visible.reversed(), newestEdge: .top) { item in
-                    RtRow(item: item)
+                    row(item, in: visible)
                     Divider()
                 }
             } else {
                 LogTailViewV2(entries: visible, newestEdge: .bottom) { item in
-                    RtRow(item: item)
+                    row(item, in: visible)
                     Divider()
                 }
             }
         }
+        // A drag has to know where every row is, and rows only know their own
+        // frame — they report it into `rowFrames` in this space.
+        .coordinateSpace(name: rtFeedSpace)
+        // Behind the rows, purely to read the mouse: a SwiftUI gesture can't be
+        // relied on over selectable text (see `LogSelectionMouse`), and this feed
+        // has plenty of it once a row is expanded.
+        .background(
+            LogSelectionMouse(
+                isActive: tabIsActive,
+                onPress: { y in beginSweep(atY: y, in: visible) },
+                onClick: { y, click in clickRow(atY: y, in: visible, click: click) },
+                onSweep: { y, additive in sweep(toY: y, additive: additive, in: visible) },
+                onSweepEnd: { suppressNextPlainClick = true }
+            )
+        )
         .translucentFeedBackground()
         .overlay { emptyOverlay }
+        // A selection over rows that have since been cleared, filtered out or
+        // trimmed would copy events nobody can see. Keyed on the count, not the
+        // ids: mapping every id per render is a per-flush allocation on a feed
+        // that streams.
+        .onChange(of: visible.count) { _, _ in
+            guard !selection.isEmpty else { return }
+            selection.retain(in: visible.map(\.id))
+        }
+    }
+
+    private func row(_ item: RtItem, in visible: [RtItem]) -> some View {
+        RtRow(
+            item: item,
+            isSelected: selection.contains(item.id),
+            onSelect: { click in select(item, in: visible, click: click) },
+            onCopySelection: { copySelection(visible: visible, asJSON: $0) },
+            selectionCount: selection.count
+        )
+        .reportingRowFrame(item.id, in: rtFeedSpace, into: rowFrames)
+    }
+
+    /// A click on a row, with the modifiers it was made with. Plain clicks stay
+    /// the row's own business (expand/collapse) and only clear a selection.
+    /// Returns true when the pane took the click, so the row leaves its own
+    /// expand/collapse alone.
+    private func select(_ item: RtItem, in visible: [RtItem], click: LogRowClick) -> Bool {
+        switch click {
+        case .toggle:
+            selection.toggle(item.id)
+            return true
+        case .extend:
+            selection.extend(to: item.id, in: visible.map(\.id))
+            return true
+        case .plain:
+            if suppressNextPlainClick {
+                suppressNextPlainClick = false
+                return true             // the click that ended a sweep
+            }
+            let had = !selection.isEmpty
+            selection.clear()
+            // Dropping a selection is what that click did; also expanding the
+            // row would be a second, unasked-for action.
+            return had
+        }
+    }
+
+    /// A ⌘/⇧-click from the mouse monitor, which knows a y position rather than a
+    /// row — resolved through the same frames the sweep uses.
+    private func clickRow(atY y: CGFloat, in visible: [RtItem], click: LogRowClick) {
+        let ids = visible.map(\.id)
+        guard let id = rowFrames.row(at: y, among: ids),
+              let item = visible.first(where: { $0.id == id }) else { return }
+        _ = select(item, in: visible, click: click)
+    }
+
+    /// A drag across the feed: `from`/`to` are y positions in the feed's space.
+    /// The button went down: fix the sweep's anchor row, and drop a suppression
+    /// left over from a sweep whose closing click never landed on a row (it would
+    /// otherwise eat this press's click).
+    private func beginSweep(atY y: CGFloat, in visible: [RtItem]) {
+        sweepAnchor = rowFrames.row(at: y, among: visible.map(\.id))
+        suppressNextPlainClick = false
+    }
+
+    /// The pointer moved while sweeping: the span runs from the anchor row to
+    /// whatever row is under the pointer *now*.
+    private func sweep(toY y: CGFloat, additive: Bool, in visible: [RtItem]) {
+        let ids = visible.map(\.id)
+        guard let anchor = sweepAnchor, let end = rowFrames.row(at: y, among: ids) else { return }
+        selection.select(from: anchor, to: end, in: ids, additive: additive)
+    }
+
+    private func copySelection(visible: [RtItem], asJSON: Bool) {
+        let picked = selection.ordered(in: visible.map(\.id))
+        let items = visible.filter { picked.contains($0.id) }
+        guard !items.isEmpty else { return }
+        if asJSON {
+            onCopyExport(items)
+        } else {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(RtRow.plainText(of: items), forType: .string)
+        }
+    }
+
+    @ViewBuilder
+    private func selectionControls(visible: [RtItem]) -> some View {
+        Text("\(selection.count) selected")
+            .font(.app(.caption))
+            .foregroundStyle(.textMuted)
+        Menu {
+            Button("Copy") { copySelection(visible: visible, asJSON: false) }
+            Button("Copy as JSON") { copySelection(visible: visible, asJSON: true) }
+            Divider()
+            Button("Deselect") { selection.clear() }
+        } label: {
+            Image(systemName: "doc.on.doc")
+        }
+        .buttonStyle(IconButtonStyle())
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Copy the selected events (⌘C) — ⌘-click to pick rows, ⇧-click or drag for a range")
+        // ⌘C while rows are picked. Disabled with an empty selection, so it
+        // never shadows copying text out of the search field or an open payload.
+        Button("") { copySelection(visible: visible, asJSON: false) }
+            .keyboardShortcut("c", modifiers: .command)
+            .opacity(0)
+            .frame(width: 0)
+            .accessibilityHidden(true)
     }
 
     /// Empty-state overlays appear only over an *empty* timeline — a device
@@ -2116,11 +2268,26 @@ private struct TimelinePane: View {
 
 private struct RtRow: View {
     let item: RtItem
+    /// Picked out by ⌘-click, ⇧-click or a drag — see `RowSelection`.
+    var isSelected = false
+    /// A click on the row, with the modifiers it carried. The pane decides what
+    /// they mean; the row only keeps its own expand/collapse for a plain click.
+    /// Returns true when the pane took the click and the row should do nothing.
+    var onSelect: (LogRowClick) -> Bool = { _ in false }
+    /// Copy the pane's whole selection — plain text, or the wire JSON.
+    var onCopySelection: (Bool) -> Void = { _ in }
+    var selectionCount = 0
     @Environment(\.logTailPauseFollow) private var pauseFollow
     @State private var expanded = false
     @State private var apiTab: ApiTab = .response
     @State private var hovering = false
     @State private var copiedLine = false
+    /// The API row's URL, shown whole. A signed S3 link runs to several hundred
+    /// characters, so the collapsed form is an excerpt and this opens it in place.
+    @State private var urlExpanded = false
+    /// The URL line's laid-out width — how much of the URL one line holds is a
+    /// function of the pane's current width, the same as an object row's value.
+    @State private var urlWidth: CGFloat = 0
 
     private static let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -2142,11 +2309,16 @@ private struct RtRow: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(item.important ? Color.orange.opacity(0.06) : Color.clear)
+        .background(rowTint)
         .overlay(alignment: .leading) {
             if item.important { Rectangle().fill(.orange).frame(width: 3) }
         }
         .contextMenu {
+            if selectionCount > 1 {
+                Button("Copy \(selectionCount) Selected Events") { onCopySelection(false) }
+                Button("Copy \(selectionCount) Selected as JSON") { onCopySelection(true) }
+                Divider()
+            }
             if let object {
                 Button("Copy object") { copyToPasteboard(object.prettyJSON) }
             }
@@ -2171,12 +2343,20 @@ private struct RtRow: View {
                     .foregroundStyle(.secondary)
                     .frame(width: 16)
                     .opacity(canExpand ? 1 : 0)
-                Text(Self.timeFormatter.string(from: item.receivedAt))
+                Text(RtRow.timeFormatter.string(from: item.receivedAt))
                     .font(.app(size: 11, design: .monospaced))
                     .foregroundStyle(.textMuted)
                 Text(presentation.badge)
                     .font(.app(size: 10, weight: .bold))
                     .foregroundStyle(presentation.badgeColor)
+                if let status = presentation.status {
+                    // A request that never got a response reports 0 — say so
+                    // rather than showing a status that doesn't exist.
+                    Text(status == 0 ? "ERR" : "\(status)")
+                        .font(.app(size: 11, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(rtStatusColor(status))
+                        .help(status == 0 ? "The request failed before a response" : "HTTP \(status)")
+                }
             }
             // Incompressible: without this, HStack treats the wrappable time
             // Text as flexible and squeezes the whole cluster — the timestamp
@@ -2216,8 +2396,40 @@ private struct RtRow: View {
         .padding(.horizontal, 14)
         .frame(minHeight: 36)
         .contentShape(Rectangle())
-        .onTapGesture { toggleExpanded() }
+        // ⌘/⇧-clicks and sweeps never reach here — the mouse monitor takes them
+        // first (`LogSelectionMouse`). This is the plain click: the pane gets
+        // first refusal (dropping a selection, or absorbing the click that ended
+        // a sweep), and otherwise the row expands as it always did.
+        .onTapGesture {
+            guard !onSelect(.plain) else { return }
+            toggleExpanded()
+        }
         .onHover { hovering = $0 }
+    }
+
+    /// Selection wins over the important-event wash: the reader is looking at
+    /// what they picked, and two tints stacked read as neither.
+    private var rowTint: Color {
+        if isSelected { return .brandAccent.opacity(0.22) }
+        return item.important ? Color.orange.opacity(0.06) : .clear
+    }
+
+    /// The selected rows as text: each row's own line, then the event's *whole*
+    /// payload. The point of copying an API call is its body and its response,
+    /// and an action or a saga is its arguments — a list of one-line summaries
+    /// would leave the reader pasting the part they can already see.
+    ///
+    /// The payload is the wire form, so a stringified body stays the string the
+    /// app sent (what the row's `raw` toggle shows). "Copy as JSON" is the same
+    /// events as the export's array of commands.
+    static func plainText(of items: [RtItem]) -> String {
+        items.map { item in
+            let line = "\(RtRow.timeFormatter.string(from: item.receivedAt)) "
+                + item.event.presentation.copyText
+            guard let payload = item.command.payload, !payload.isNull else { return line }
+            return "\(line)\n\(payload.prettyJSON)"
+        }
+        .joined(separator: "\n\n")
     }
 
     /// Expanding an item means the user is reading it — pause tail-follow so
@@ -2280,13 +2492,9 @@ private struct RtRow: View {
         method: String, url: String, status: Int, duration: Double, request: JSONValue?, response: JSONValue?
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(url)
-                .font(.app(size: 11, design: .monospaced))
-                .foregroundStyle(.rtKey)
-                .textSelection(.enabled)
-                .lineLimit(3)
+            urlLine(url)
             VStack(alignment: .leading, spacing: 3) {
-                metaRow("Status", "\(status)", color: statusColor(status))
+                metaRow("Status", "\(status)", color: rtStatusColor(status))
                 metaRow("Method", method.uppercased(), color: .rtNumber)
                 metaRow("Duration", "\(formatMs(duration)) ms", color: .rtNumber)
             }
@@ -2303,8 +2511,60 @@ private struct RtRow: View {
                 apiTabPicker.pickerStyle(.segmented)
                 apiTabPicker.pickerStyle(.menu)
             }
+            // The tree's opened rows, raw/parsed choices and find text belong to
+            // the payload on screen. Without this the four tabs share one tree
+            // and one set of positional paths, so switching tabs carried the
+            // other tab's opened rows onto this one.
             treeSection(title: nil, object: apiObject(request: request, response: response))
+                .id(apiTab)
         }
+    }
+
+    /// The request URL, cut to what the line holds and opened in place by a
+    /// click — never line-limited. A limit is a drawing instruction the reported
+    /// height doesn't follow: a long query string drew its full ten lines over
+    /// the status rows and the tab strip below it while the layout had reserved
+    /// three. A shortened *string* can't be drawn taller than it is, and the
+    /// open form lays out at its real height, so the rest of the body moves down
+    /// the way a disclosure should. (Same reasoning as the object tree's rows.)
+    @ViewBuilder
+    private func urlLine(_ url: String) -> some View {
+        let budget = urlBudget()
+        let isCut = url.prefix(budget + 1).count > budget
+        let shown = urlExpanded || !isCut ? url : String(url.prefix(budget)) + "…"
+        HStack(alignment: .top, spacing: 4) {
+            if isCut {
+                Image(systemName: urlExpanded ? "chevron.down" : "chevron.right")
+                    .font(.app(size: 9))
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 14)
+                    .help(urlExpanded ? "Show less" : "Show the whole URL")
+            }
+            Text(shown)
+                .font(.app(size: 11, design: .monospaced))
+                .foregroundStyle(.rtKey)
+                // An excerpt has nothing worth selecting, and selectable text
+                // eats the click that opens it; the whole URL selects again.
+                .modifier(SelectableValue(enabled: urlExpanded || !isCut))
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { if isCut { urlExpanded.toggle() } }
+        .measuringWidth(into: $urlWidth)
+    }
+
+    /// Characters the collapsed URL shows: two wrapped lines of the measured
+    /// line width, from the same pure geometry the object tree uses.
+    private func urlBudget() -> Int {
+        guard urlWidth > 0 else { return JSONTreeLayout.unmeasuredBudget }
+        let column = JSONTreeLayout.columnCharacters(
+            rowWidth: Double(urlWidth),
+            fontSize: 11 * AppFontPrefs.sizeScale,
+            depth: 0,
+            keyCharacters: 0
+        )
+        return JSONTreeLayout.collapsedBudget(columnCharacters: column, lines: 2)
     }
 
     private var apiTabPicker: some View {
@@ -2329,6 +2589,10 @@ private struct RtRow: View {
             if let message = object?["message"] {
                 switch message {
                 case .object, .array:
+                    treeSection(title: nil, object: message)
+                // A logged payload is often `JSON.stringify`d too — the same
+                // escaped wall, so it gets the same tree and raw toggle.
+                case let .string(text) where EmbeddedJSON.looksLikeJSON(text):
                     treeSection(title: nil, object: message)
                 default:
                     Text(String((message.stringValue ?? message.jsonString).prefix(20_000)))
@@ -2383,24 +2647,16 @@ private struct RtRow: View {
         .background(.bgSurface, in: RoundedRectangle(cornerRadius: 6))
     }
 
+    /// A response body arrives as a string; show the object when it is one.
+    /// Only ever called from the expanded body, so nothing parses until the row
+    /// is opened.
     private func parseBody(_ value: JSONValue?) -> JSONValue? {
-        guard case let .string(text) = value,
-              let data = text.data(using: .utf8),
-              let parsed = try? JSONDecoder().decode(JSONValue.self, from: data) else { return nil }
-        return parsed
+        guard case let .string(text) = value else { return nil }
+        return EmbeddedJSON.parse(text)
     }
 
     private func formatMs(_ ms: Double) -> String {
         ms < 10 ? String(format: "%.2f", ms) : String(Int(ms.rounded()))
-    }
-
-    private func statusColor(_ status: Int) -> Color {
-        switch status {
-        case 200..<300: .green
-        case 400..<500: .orange
-        case 500...: .red
-        default: .rtNumber
-        }
     }
 
     private func copyToPasteboard(_ text: String) {
@@ -2585,10 +2841,41 @@ private struct JSONTreeView: View {
     /// where a search box per row would be clutter).
     var showSearch: Bool = true
     @State private var expanded: Set<String> = []
+    /// Leaf rows whose value is shown in full — the rest wrap to
+    /// `JSONTreeLayout.collapsedLines` so one 20 KB payload can't bury the
+    /// timeline.
+    @State private var expandedValues: Set<String> = []
+    /// Parsed stringified payloads, keyed by row path: an API's `data: "{…}"`, a
+    /// serialized body. Filled when the row appears — which only happens inside
+    /// an *expanded* event — and never while building a row, so a streaming
+    /// timeline parses nothing until someone opens the event.
+    ///
+    /// Each entry carries the string it was parsed from, because a path alone
+    /// does not identify a value: a tree that swaps its root — the API event's
+    /// Response/Request tabs are one tree — reuses `.0` for a different payload,
+    /// and a cache hit from the other tab rendered *its* object on this row.
+    @State private var parsedStrings: [String: ParsedPayload] = [:]
+    /// Paths the reader switched back to the raw text. A parsed payload is the
+    /// default (it's the readable form); some are only readable raw — a
+    /// signature, whitespace that matters, a diff against a server log.
+    @State private var rawPaths: Set<String> = []
+    /// The string at each path that looked like JSON but didn't parse (malformed,
+    /// or cut off by the client). Tried once, then the row is plain text — an
+    /// offer that does nothing when clicked is worse than no offer. Keyed with
+    /// its source for the same reason the parses are.
+    @State private var unparseable: [String: String] = [:]
     @State private var search = ""
     /// The last find result revealed by a click, tinted in the tree until the
     /// next search.
     @State private var highlightedPath: String?
+    /// The tree's laid-out width, measured once for every row: a value wraps
+    /// with the pane, so whether it *still* overflows — and needs its "show all"
+    /// disclosure — is a function of the width the pane currently has.
+    @State private var treeWidth: CGFloat = 0
+
+    /// The row font's point size, scaled the way `Font.app` scales it, so the
+    /// per-line character estimate tracks Settings ▸ Appearance ▸ Text size.
+    private var valueFontSize: Double { 11 * AppFontPrefs.sizeScale }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -2620,7 +2907,11 @@ private struct JSONTreeView: View {
                     // Clickable results (JSONSearch, pure in ADBKit): clicking
                     // one expands the tree along its path and highlights the
                     // node in place.
-                    let matches = JSONSearch.matches(in: root, query: search)
+                    // Expanded, because the rows below are: a find that only
+                    // knew the escaped string would point at a 4 KB blob
+                    // instead of the leaf the tree shows.
+                    let matches = JSONSearch.matches(
+                        in: root, query: search, expandingStringifiedJSON: true)
                     ForEach(Array(matches.enumerated()), id: \.offset) { _, match in
                         matchRow(match)
                     }
@@ -2628,6 +2919,7 @@ private struct JSONTreeView: View {
                     if matches.count >= 200 { emptyRow("…first 200 matches — narrow the search") }
                 }
             }
+            .measuringWidth(into: $treeWidth)
         }
         // A newly typed query drops the previous reveal's tint (reveal itself
         // clears the field, so its own highlight survives this).
@@ -2646,10 +2938,27 @@ private struct JSONTreeView: View {
         var out: [JSONNode] = []
         func walk(_ node: JSONNode) {
             out.append(node)
-            guard node.isContainer, expanded.contains(node.path) else { return }
-            for child in node.children { walk(child) }
+            if node.isContainer {
+                guard expanded.contains(node.path) else { return }
+                for child in node.children { walk(child) }
+            } else if let parsed = shownParse(node) {
+                // The string's own tree hangs off the row that carried it, one
+                // level deeper — a nested stringified value is a row of its own
+                // and parses when *it* is opened.
+                let host = JSONNode(path: node.path, key: "", value: parsed, depth: node.depth)
+                for child in host.children { walk(child) }
+            }
         }
-        for child in JSONNode(path: "", key: "", value: root, depth: -1).children { walk(child) }
+        let host = JSONNode(path: "", key: "", value: root, depth: -1)
+        // A scalar root is a payload too — a plain-text or stringified response
+        // body. Showing its children (none) read as "(empty)"; show the value.
+        guard host.isContainer else {
+            let node = JSONNode(path: ".0", key: "", value: root, depth: 0)
+            if case .null = root { return [] }
+            walk(node)
+            return out
+        }
+        for child in host.children { walk(child) }
         return out
     }
 
@@ -2689,6 +2998,9 @@ private struct JSONTreeView: View {
         for index in match.path {
             path += ".\(index)"
             expanded.insert(path)
+            // A match can sit inside a stringified payload the reader switched
+            // back to raw — the row it lives on only exists in the parse.
+            rawPaths.remove(path)
         }
         highlightedPath = path
         search = ""
@@ -2696,30 +3008,89 @@ private struct JSONTreeView: View {
 
     @ViewBuilder
     private func rowView(_ node: JSONNode) -> some View {
+        // A stringified payload, shown as its object: the tree below the row is
+        // the parse, and the row itself reads like the container it really is.
+        let parsed = shownParse(node)
+        // The value shaped like JSON but still escaped — the cheap check, made
+        // per render; the parse waits for a tap.
+        let embedded = embeddedJSONString(node)
+        // Built once per row: on a big payload the preview is a full copy of
+        // the value, and the cut, the disclosure, and the row all need it.
+        let preview = parsed.map(Self.containerPreview) ?? node.valuePreview
+        let showsAll = parsed == nil && expandedValues.contains(node.path)
+        let budget = collapsedBudget(for: node)
+        let isCut = parsed == nil && !node.isContainer && preview.prefix(budget + 1).count > budget
+        // An opened row keeps its disclosure even if a wider pane has since
+        // made the value fit — otherwise the only way to close it disappears.
+        let disclosesValue = parsed == nil && !node.isContainer && (showsAll || isCut)
         HStack(alignment: .top, spacing: 4) {
-            Color.clear.frame(width: CGFloat(max(0, node.depth)) * 12, height: 1)
-            if node.isContainer {
-                Image(systemName: expanded.contains(node.path) ? "chevron.down" : "chevron.right")
-                    .font(.app(size: 10, weight: .bold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 14)
-            } else {
-                Color.clear.frame(width: 14, height: 1)
+            // The gutter is incompressible, so the value below is the row's one
+            // flexible child: it's proposed exactly the width it renders at, and
+            // the height it reports is the height it draws. Leave the key and
+            // the value as peer flexible children and the two passes disagree —
+            // the text wraps to more lines than the row reserved and spills
+            // over the event below it.
+            HStack(alignment: .top, spacing: 4) {
+                Color.clear.frame(width: CGFloat(max(0, node.depth)) * JSONTreeLayout.indentPerDepth, height: 1)
+                if node.isContainer || parsed != nil {
+                    Image(systemName: (parsed != nil || expanded.contains(node.path))
+                        ? "chevron.down" : "chevron.right")
+                        .font(.app(size: 10, weight: .bold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 14)
+                } else if disclosesValue {
+                    // A long value borrows the containers' disclosure column —
+                    // same column, lighter weight, so the two never read alike.
+                    Image(systemName: showsAll ? "chevron.down" : "chevron.right")
+                        .font(.app(size: 9))
+                        .foregroundStyle(.tertiary)
+                        .frame(width: 14)
+                        .help(showsAll ? "Show less" : "Show the whole value")
+                } else {
+                    Color.clear.frame(width: 14, height: 1)
+                }
+                if !node.key.isEmpty {
+                    Text(node.key)
+                        .font(.app(size: 11, design: .monospaced))
+                        .foregroundStyle(.rtKey)
+                        // Keys are payload data too: an incompressible 300-character
+                        // one would leave the value nothing to wrap into.
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .frame(maxWidth: 240, alignment: .leading)
+                    Text(":")
+                        .font(.app(size: 11, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                }
             }
-            if !node.key.isEmpty {
-                Text(node.key)
-                    .font(.app(size: 11, design: .monospaced))
-                    .foregroundStyle(.rtKey)
-                Text(":")
-                    .font(.app(size: 11, design: .monospaced))
-                    .foregroundStyle(.tertiary)
-            }
-            Text(node.valuePreview)
+            .fixedSize()
+            // Values wrap with the pane instead of being cut at its edge. The
+            // collapsed row carries a *shortened string*, not a line limit:
+            // `fixedSize` then reports exactly the height it draws, and no
+            // stale line count can spill over the event below.
+            Text(valueText(preview, showingAll: showsAll, budget: budget, isCut: isCut))
                 .font(.app(size: 11, design: .monospaced))
-                .foregroundStyle(node.valueColor)
-                .lineLimit(1)
-                .textSelection(.enabled)
-            Spacer(minLength: 0)
+                .foregroundStyle(parsed == nil ? node.valueColor : .secondary)
+                // Selectable text eats the click, and the value spans the whole
+                // row — so a row whose click means "open this" hands the click
+                // to the row instead. A cut value has nothing worth selecting
+                // (it's an excerpt); once open, the full text selects again.
+                .modifier(SelectableValue(
+                    enabled: parsed == nil && !node.isContainer && (showsAll || !isCut)
+                ))
+                .fixedSize(horizontal: false, vertical: true)
+                // A parsed row's value is a two-glyph summary (`{ 9 }`): let it
+                // size to its content so the toggle sits beside it rather than
+                // stranded at the pane's far edge. A raw value keeps the row's
+                // whole width — it has to be the one flexible child, or the
+                // height it reports stops matching the height it draws.
+                .frame(maxWidth: parsed == nil ? .infinity : nil, alignment: .leading)
+            if let embedded {
+                // Incompressible, so the value stays the row's one flexible
+                // child (see the gutter note above).
+                parsedToggle(path: node.path, text: embedded, showingParsed: parsed != nil)
+            }
+            if parsed != nil { Spacer(minLength: 0) }
         }
         // Rows were 13pt slivers — give container rows a real click target.
         .padding(.vertical, 2)
@@ -2730,18 +3101,161 @@ private struct JSONTreeView: View {
             }
         }
         .onTapGesture {
-            if node.isContainer { toggle(node.path) }
+            if node.isContainer {
+                toggle(node.path)
+            } else if parsed != nil {
+                rawPaths.insert(node.path)          // close the tree, back to the excerpt
+            } else if showsAll {
+                toggleValue(node.path)              // close the raw text
+            } else if let embedded {
+                showParsed(embedded, at: node.path)
+            } else if disclosesValue {
+                toggleValue(node.path)
+            }
         }
         .contextMenu {
             Button("Copy value") {
                 NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(node.value.prettyJSON, forType: .string)
+                // What the row shows: the parsed object while it stands, the raw
+                // string the app sent once it's switched back.
+                let text = parsed?.prettyJSON ?? node.value.prettyJSON
+                NSPasteboard.general.setString(text, forType: .string)
             }
         }
+        // Keyed by path, so it runs once per row rather than per render — the
+        // one place a parse is started for a value nobody clicked, and only for
+        // a row that exists, i.e. inside an event the reader expanded.
+        .task(id: node.path) {
+            guard let embedded, parsedStrings[node.path]?.source != embedded else { return }
+            showParsed(embedded, at: node.path)
+        }
+    }
+
+    /// The parse a row is currently showing: the cached value for *this* row's
+    /// string, unless the reader asked for the raw text. A container never has
+    /// one — only a string can be a stringified payload.
+    private func shownParse(_ node: JSONNode) -> JSONValue? {
+        guard case let .string(text) = node.value,
+              !rawPaths.contains(node.path),
+              let entry = parsedStrings[node.path],
+              entry.source == text else { return nil }
+        return entry.value
+    }
+
+    /// The row's value as a JSON-shaped string, when it is one. Cheap by
+    /// construction (`EmbeddedJSON.looksLikeJSON` reads two characters), because
+    /// every visible row asks this on every render.
+    private func embeddedJSONString(_ node: JSONNode) -> String? {
+        guard case let .string(text) = node.value,
+              unparseable[node.path] != text,
+              EmbeddedJSON.looksLikeJSON(text) else { return nil }
+        return text
+    }
+
+    /// Chrome DevTools' "View parsed / View source", per row: a stringified
+    /// payload shows as an object, and the raw text the app sent stays one click
+    /// away.
+    private func parsedToggle(path: String, text: String, showingParsed: Bool) -> some View {
+        Button {
+            if showingParsed {
+                rawPaths.insert(path)
+                expandedValues.insert(path)     // the raw text, in full
+            } else {
+                showParsed(text, at: path)
+            }
+        } label: {
+            Text(showingParsed ? "raw" : "parsed")
+                .font(.app(size: 9, weight: .medium))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .overlay(Capsule().strokeBorder(Color.secondary.opacity(0.35)))
+                // A 9pt label is a small target: take the whole capsule, padding
+                // included, rather than just the glyphs.
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .help(showingParsed
+            ? "Show the raw text the app sent"
+            : "Parse this value and show it as an object")
+    }
+
+    /// Parses one stringified value and shows its tree. The only parse site — a
+    /// row render never reaches it.
+    private func showParsed(_ text: String, at path: String) {
+        rawPaths.remove(path)
+        expandedValues.remove(path)
+        guard parsedStrings[path]?.source != text else { return }
+        guard let value = EmbeddedJSON.parse(text) else { unparseable[path] = text; return }
+        parsedStrings[path] = ParsedPayload(source: text, value: value)
+    }
+
+    /// `{ n }` / `[ n ]` for a parsed value, the same summary a container row
+    /// shows in place of its contents.
+    private static func containerPreview(_ value: JSONValue) -> String {
+        JSONNode(path: "", key: "", value: value, depth: 0).valuePreview
     }
 
     private func toggle(_ path: String) {
         if expanded.contains(path) { expanded.remove(path) } else { expanded.insert(path) }
+    }
+
+    private func toggleValue(_ path: String) {
+        if expandedValues.contains(path) { expandedValues.remove(path) } else { expandedValues.insert(path) }
+    }
+
+    /// An opened value is capped the way a log body is — laying an unbounded
+    /// payload out over unlimited lines stalls the pane, and the row's
+    /// "Copy value" still yields the whole thing.
+    private static let openValueCap = 20_000
+
+    /// The string the row draws: the whole value when it's open (bounded), the
+    /// first few wrapped lines' worth when it isn't. Cutting the string is what
+    /// keeps the drawn height honest — see the `Text` above.
+    private func valueText(_ preview: String, showingAll: Bool, budget: Int, isCut: Bool) -> String {
+        guard showingAll else {
+            return isCut ? String(preview.prefix(budget)) + "…" : preview
+        }
+        guard preview.prefix(Self.openValueCap + 1).count > Self.openValueCap else { return preview }
+        return String(preview.prefix(Self.openValueCap)) + "…"
+    }
+
+    /// How many characters this row shows collapsed, from the pane's measured
+    /// width — estimated from the monospaced advance rather than measured per
+    /// row, which would cost a geometry read on every node of a streaming
+    /// timeline. Before the first measurement lands, a width-independent
+    /// fallback keeps the first frame from drawing a whole payload.
+    private func collapsedBudget(for node: JSONNode) -> Int {
+        guard treeWidth > 0 else { return JSONTreeLayout.unmeasuredBudget }
+        let column = JSONTreeLayout.columnCharacters(
+            rowWidth: Double(treeWidth),
+            fontSize: valueFontSize,
+            depth: node.depth,
+            keyCharacters: node.key.count
+        )
+        return JSONTreeLayout.collapsedBudget(columnCharacters: column)
+    }
+}
+
+/// One parsed stringified payload, with the string it came from — the pair is
+/// what makes a path-keyed cache safe when the tree's root can change under it.
+private struct ParsedPayload {
+    let source: String
+    let value: JSONValue
+}
+
+/// `textSelection` takes two different concrete types, so the choice can't be a
+/// ternary at the call site — this carries it.
+private struct SelectableValue: ViewModifier {
+    let enabled: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if enabled {
+            content.textSelection(.enabled)
+        } else {
+            content.textSelection(.disabled)
+        }
     }
 }
 
@@ -3263,8 +3777,30 @@ private struct RtPresentation {
     let badgeColor: Color
     let primary: String
     let primaryColor: Color
+    /// An API event's HTTP status, shown on the collapsed row — reading a
+    /// timeline is mostly looking for the one call that didn't return 200, and
+    /// that meant expanding each row. nil for every other event.
+    var status: Int?
 
-    var copyText: String { "\(badge) \(primary)".trimmingCharacters(in: .whitespaces) }
+    var copyText: String {
+        [badge, status.map(String.init), primary]
+            .compactMap { $0 }
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespaces)
+    }
+}
+
+/// The status code's tint: green for 2xx, orange for a client error, red for a
+/// server error, and the number tint for anything else (a redirect, or the 0 a
+/// failed request reports). Only the code is coloured — colouring the row would
+/// drown the timeline's own badge colours.
+private func rtStatusColor(_ status: Int) -> Color {
+    switch HTTPStatusClass(status: status) {
+    case .success: .green
+    case .clientError: .orange
+    case .serverError: .red
+    case .redirect, .failure, nil: .rtNumber
+    }
 }
 
 /// Path (+ trimmed query) of an API URL for the compact list row; the full URL
@@ -3316,10 +3852,11 @@ private extension ReactotronEvent {
             )
         case let .image(_, _, caption, _, _):
             return RtPresentation(badge: "IMAGE", badgeColor: .rtBadge, primary: caption ?? "", primaryColor: .primary)
-        case let .apiResponse(method, url, _, _, _, _):
+        case let .apiResponse(method, url, status, _, _, _):
             return RtPresentation(
                 badge: "API", badgeColor: .rtBadge,
-                primary: "\(method.uppercased()) \(rtShortPath(url))", primaryColor: .primary
+                primary: "\(method.uppercased()) \(rtShortPath(url))", primaryColor: .primary,
+                status: status
             )
         case let .benchmark(title, _):
             return RtPresentation(badge: "BENCHMARK", badgeColor: .rtBadge, primary: title, primaryColor: .rtName)

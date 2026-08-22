@@ -137,18 +137,15 @@ public struct AabConvertService: Sendable {
         return arguments
     }
 
-    /// Write a secret to a temp file created with 0600 permissions and return
-    /// its path. The per-user temp dir (0700) covers any instant between
-    /// creation and the attribute landing. Callers delete it.
+    /// Write the keystore password to an owner-only temp file (never argv) and
+    /// return its path. Callers delete it.
     private func writeSecret(_ secret: String) throws -> String {
-        let path = FileManager.default.temporaryDirectory.appendingPathComponent("aab-sign-\(UUID().uuidString)")
-        guard FileManager.default.createFile(
-            atPath: path.path, contents: Data(secret.utf8),
-            attributes: [.posixPermissions: 0o600]
-        ) else {
-            throw ConvertError.buildFailed("Couldn't write the keystore password file.")
+        do {
+            return try SecretFile.write(secret, prefix: "aab-sign-")
+        } catch {
+            throw ConvertError.buildFailed(
+                "Couldn't write the keystore password file. \(error.localizedDescription)")
         }
-        return path.path
     }
 
     static func extractArguments(apks: String, destination: String) -> [String] {

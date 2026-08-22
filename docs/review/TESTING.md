@@ -13,12 +13,12 @@ suite is the contract — keep it green and keep it meaningful.
 - **Every error path the code handles.** If the code branches on a failure
   (device offline, tool not found, malformed output), a test triggers that
   branch.
-- **New feature wiring.** A feature must be in `FeatureRegistry`, have a
-  `FeatureNotes` note and a `FeatureCommands` reference, and (if hub-absorbed)
-  fold its keywords into the hub — there are tests enforcing each
-  (`everyFeatureHasAHowToNote`, `everyFeatureHasACommandReference`,
-  `hubsStaySearchableByTheirMembersPrimaryKeyword`, and the feature count). Don't
-  remove them to make a PR pass.
+- **New feature wiring.** A feature must be in `FeatureRegistry`, route to a
+  pane if it's a view feature, and (if hub-absorbed) fold its keywords into the
+  hub — there are tests enforcing each (`hasAll61Features`,
+  `implementedIDsAreAllRealFeatures`, `FeatureDetailRouteTests`,
+  `hubsStaySearchableByTheirMembersPrimaryKeyword`). Don't remove them to make a
+  PR pass.
 - **Action arg-vectors.** An implemented action needs a test asserting the
   *exact* adb argument vector, including the quoted form of any user value
   (see `FeatureEngineTests`, `OverridesServiceTests`). The dispatch/`implementedIDs`
@@ -67,6 +67,6 @@ the runner.
 - [ ] New parsing/command logic has tests, and they assert on behavior.
 - [ ] Edge and error cases are covered, not just the happy path.
 - [ ] Mocks are at boundaries only; the thing under test isn't mocked.
-- [ ] No enforcement test (FeatureNotes, hub keywords, the 16-process canary) was
-      removed or hollowed out to go green.
+- [ ] No enforcement test (registry invariants, feature routing, hub keywords,
+      the 16-process canary) was removed or hollowed out to go green.
 - [ ] If the change is a bug fix, there's a test that fails without the fix.

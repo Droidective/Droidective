@@ -1,3 +1,204 @@
+## Droidective v3.9.1
+
+A bug-fix release. The pop-out mirror window from 3.9.0 could hang the app —
+including at launch, before anything was open — and Reactotron's timeline showed
+stringified payloads as a wall of escaped text instead of the object they are.
+A mirror screenshot can also be copied straight to the clipboard now.
+
+### Mirror
+
+- **A pop-out mirror window no longer hangs the app.** The window re-registered
+  itself on every view update, and each registration wrote state the app's own
+  window list reads — so the write ran the update and the update ran the write.
+  The app beach-balled for as long as one of those windows was open, with no way
+  out. Registration now happens once per window.
+- **Those windows are no longer restored at launch.** macOS was reopening them
+  from its own saved state before the app had a workspace to own them, which
+  started a mirror session on a device nobody had asked about and made the hang
+  reproducible from launch — and immune to reinstalling the app, since saved
+  state lives outside the bundle.
+- **A mirror screenshot can be copied to the clipboard.** The capture sheet on
+  Mirror Screen and the Mirror Wall offered Discard / Save / Edit, so getting the
+  image into a chat or a ticket meant opening the editor first. Copy sits beside
+  them and leaves the sheet up, so a copy can still be followed by Save or Edit.
+
+### Reactotron
+
+- **A stringified payload shows as an object.** An API request's `data` field
+  arrives as the app's own `JSON.stringify` output, so an expanded event showed
+  escaped text where the body should be. It now renders as a real tree, with a
+  raw toggle per row for the payloads that only read in their escaped form. A
+  logged string that is itself JSON gets the same treatment.
+- **Find agrees with what the tree shows.** Searching `storeId` in a payload
+  rendered as an object returned the whole 4 KB escaped blob on the `data` row
+  instead of the leaf two rows below it. The search now walks a string's parsed
+  form, and clicking a result reveals the row it actually lives on.
+- **A long API URL opens in place instead of over the rows below it.** A signed
+  URL several hundred characters long drew all of its lines across the status
+  rows and the tab strip, because the layout had reserved three. The line is now
+  cut to the measured width and a click opens it whole at its real height.
+- **A parsed payload stays with the tab it belongs to.** An API event's four tabs
+  are one tree, so switching tabs could render the previous tab's object on this
+  tab's row, under a chevron that claimed to be open.
+
+### APK signing
+
+- **A keystore password file that can't be written says why.** Signing reported
+  only "Couldn't write the keystore password file"; the failure now carries the
+  path and the underlying reason, and creating the file is reported separately
+  from restricting it to its owner.
+
+### Install
+
+Download the DMG, drag Droidective to Applications, and open it. Existing
+installs update themselves.
+
+## Droidective v3.9.0
+
+Mirroring several devices at once. The Mirror Wall shows up to six connected
+devices side by side in one pane, each one live and controllable, and Full View
+hands the whole display to whatever screen you are on. Mirror sessions also stop
+leaking their adb tunnel when the app quits — which affected the single mirror
+too.
+
+### Mirror Wall
+
+- **Up to six devices, side by side.** The 61st tool mirrors several connected
+  devices in one pane. Every tile is the same session the full mirror runs, so
+  clicking a tile taps that device and typing goes to it — one wall for a whole
+  bench of phones instead of one window per device.
+- **The wall picks its own devices.** A Devices menu lists the connected
+  Android devices with a checkbox each, capped at six; the picked set and the
+  order they sit in are remembered per window. Opening the wall for the first
+  time shows what is connected.
+- **Automatic or fixed layout.** Auto derives the column count from the pane
+  width and drops a column rather than shrinking tiles into uselessness; 1, 2
+  or 3 columns is a fixed choice that stands. Tiles rearrange by dragging a
+  tile's caption strip — the strip, not the video, so a swipe on the device
+  stays a swipe.
+- **Any tile can become its own window.** Open one device in its own window, or
+  every tile at once, and Arrange Mirror Windows tiles them across the screen.
+  Bring Back closes the window and the tile picks the device up again. A pop-out
+  mirror window is now pinned to the device it was opened for rather than
+  following the device bar, which is what lets several stand side by side.
+- **Six encoders is a real cost, so the wall spends less per tile.** The
+  resolution and frame rate each tile asks the device for step down as tiles are
+  added (one tile is exactly the full mirror), tiles pause individually, audio
+  streams from the focused tile only and is off by default, and the whole wall
+  stops after two minutes behind another tab — or behind another window, or
+  minimised.
+- **One device, one mirror.** A device already showing in its own window, in the
+  Mirror Screen tab, or in another workspace window says so on its tile with a
+  way to reach it, instead of putting a second encoder on the device.
+
+### Full View
+
+- **View ▸ Full View (⇧⌘F) gives a screen the whole display.** The sidebar,
+  device bar and tab strip go away and the window enters full screen — six
+  mirror tiles want every pixel. The feature's own controls stay, so the wall
+  keeps the row with its Devices menu, layout picker and the way back out.
+
+### Fixes
+
+- **Mirror sessions released their adb tunnel on quit.** Each live mirror opens
+  an `adb forward` tunnel that its teardown removes, but at quit the app exited
+  before the teardown ran, leaving the tunnel registered in the adb server —
+  one per session, every quit, until `adb kill-server`. Quit now waits for the
+  sessions to close. This affected the single mirror and the pop-out window, not
+  just the wall.
+- **Reconnecting a mirror tile showed a black screen.** The tile kept drawing
+  the stopped session's video layer, so input worked while no frame ever
+  arrived.
+
+### Install
+
+Download the DMG, drag Droidective to Applications, and launch it. The app is
+Developer ID-signed and notarized, and updates arrive through Sparkle — no
+Homebrew, no separate scrcpy or ffmpeg install.
+
+## Droidective v3.8.2
+
+Fixes for the JS Console in a split pane. The feed left blank space that grew
+every time the pane changed width, and the console refused to shrink to the
+pane it was given — which read as the tab beside it covering the log.
+
+### JS Console
+
+- **The feed fills its pane again.** A row's height was measured against a
+  baseline that was still moving, so a message wrapped onto several lines drew
+  past the height its row had reported. One row is invisible; a feed of them
+  leaves gaps that shift on every resize. It only showed in a narrow pane,
+  because that is where rows wrap at all.
+- **The console shrinks to the pane it is given.** The connection bar held its
+  target label at full width — `com.myapp.features · Pixel 7 - 17 - API 37`
+  is most of a split pane — and that became the minimum for everything below
+  it, so rows were laid out wider than the pane and cut off at its edge. The
+  target and the status line now truncate. This also brings back the filter
+  row's level, find, export and clear controls, and each row's timestamp, at
+  the narrowest split.
+- **A `console.table` no longer sizes the whole feed.** Its grid scrolls
+  inside its own row instead of making every row as wide as itself.
+- **Where a log came from is an icon**, in the row's hover controls beside the
+  two copy buttons. Written out it cost more width than the message beside it
+  could spare. The file, line, function and full path are in its tooltip, and
+  clicking it still opens the whole stack.
+
+### Install
+
+Download the DMG, drag Droidective to Applications, and open it. Existing
+installs update themselves.
+
+## Droidective v3.8.1
+
+The JS Console now reads like Chrome DevTools' console. Log arguments sit on
+one line with their objects inline, every row says which line of your source
+made the call, and `console.group` and `console.table` render the way they do
+in Chrome. Copying a log takes the object with it, and clicking inside an
+expanded value no longer folds it back up.
+
+### JS Console — Chrome parity
+
+- **A log is one line** — the message and its objects sit together, each object
+  an inline disclosure, instead of one object stacked per line. Strings logged
+  at the top level print bare the way Chrome prints them (`console.log('hi')`
+  shows `hi`, not `"hi"`), nested strings use single quotes, arrays lead with
+  their length, and a nested object shows `{…}` rather than the word "Object".
+- **Every row says where it came from** — `StreamScreen.tsx:142` at the right
+  edge, resolved through Metro's symbolication, so it names the file you wrote
+  rather than a line in the bundle. Clicking it opens the whole stack, with
+  framework and `node_modules` frames dimmed the way Chrome greys the frames it
+  ignore-lists.
+- **`console.group` blocks indent and fold** — with a rule down their left, and
+  `console.groupCollapsed` starts folded. `console.groupEnd` no longer leaves a
+  blank row behind it.
+- **`console.table` draws a table** — an index column, one column per key across
+  the rows, and the value's own disclosure below it.
+- **Collapsed values show what's in them** — a nested object previews its first
+  few properties (`{at: '2026-08-07', session: {…}, tags: Array(3)}`) instead of
+  a key count, so most values can be read without opening them.
+- **Terminal colours are rendered, not printed** — React Native's own dev-server
+  notices arrive coloured for a terminal, and the escape codes were burying the
+  message.
+- Log rows no longer carry a level glyph; Chrome marks only errors and warnings,
+  and the column of identical icons was noise.
+
+### JS Console — fixes
+
+- **Copying a log takes the object with it.** The row shows an object as `{…}`,
+  which is exactly the part a pasted log can't be used for — the copy now
+  resolves it to real JSON. A second button beside it copies just the object,
+  for pasting somewhere that wants JSON alone.
+- **Clicking inside an expanded object keeps it open.** Clicking a nested value
+  — or any blank space on the row — used to fold the whole thing back up.
+- **Expanding a logged `Error` shows its stack** instead of an empty box.
+- The find field inside an expanded value appears only when the value is big
+  enough to need one.
+
+### Install
+
+Download the DMG, drag Droidective to Applications, and open it. Existing
+installs update themselves.
+
 ## Droidective v3.8.0
 
 API Testing arrives as the 60th tool — a full HTTP client with Postman import

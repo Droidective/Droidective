@@ -95,6 +95,8 @@ GATED = {
 BLOCKED = {
     "scrcpy": "Not started — the decode/render stack needs writing off Apple "
               "(scrcpy's server is portable; VideoToolbox/AVFoundation are not). Backlog 25.",
+    "mirror-wall": "Not started — several mirrors at once, on the same pipeline "
+                   "as `scrcpy`, so it follows the mirror. Backlog 25.",
     "screen-record": "Not started — rides the mirror session, so it follows the mirror. Backlog 25.",
     "video-editor": "Not started — needs the mirror pipeline plus the bundled ffmpeg. Backlog 25.",
     "reactotron": "Not started — blocked on porting the relay's Network.framework "
@@ -131,7 +133,7 @@ for category, features in by_category.items():
         elif fid in BLOCKED:
             status, note = "⬜ todo", BLOCKED[fid]
             counts["todo"] += 1
-        elif fid in ("apps", "logcat", "file-explorer", "crash-catcher"):
+        elif fid in ("apps", "logcat", "file-explorer", "crash-catcher", "device-info"):
             status, note = "🟡 partial", "A pane exists; the checklist below is what it is missing."
             counts["partial"] += 1
         elif kind in ("instantAction", "formAction", "toggleAction") and f["implemented"]:

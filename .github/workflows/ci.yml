@@ -38,7 +38,7 @@ jobs:
     runs-on: ubuntu-24.04
     container: swift:6.2-noble
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
       - name: Install extraction tools the suite shells out to
@@ -67,7 +67,7 @@ jobs:
         with:
           branch: swift-6.2.4-release
           tag: 6.2.4-RELEASE
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
       - name: Run ADBKit tests (Windows)
@@ -116,7 +116,7 @@ jobs:
     # by the compiler its own suite ran under.
     container: swift:6.2-noble
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
       - name: Install the Tauri build dependencies
@@ -216,7 +216,12 @@ jobs:
   # Windows binaries cannot be produced on the macOS release runner; the release
   # job downloads what this uploads.
   daemon-artifacts:
-    if: startsWith(github.ref, 'refs/tags/v')
+    # Beta tags only. A stable release is macOS-only, so
+    # stage-release-artifacts.sh would refuse to publish a Linux or Windows
+    # daemon anyway — building them for a stable tag is work nothing consumes,
+    # and it put the whole release behind two runners that don't need to run.
+    # Same hyphen rule release-channel.sh uses to pick the channel.
+    if: startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-')
     strategy:
       fail-fast: true
       matrix:
@@ -244,20 +249,29 @@ jobs:
       - name: Build and package droidectived
         shell: bash
         run: |
-          command -v zip >/dev/null || (apt-get update -q && apt-get install -y -q zip)
           VERSION="${GITHUB_REF_NAME#v}"
           (cd droidectived && swift build -c release --product droidectived)
           BIN="droidectived/.build/release/droidectived"
           [[ "${{ matrix.platform }}" == windows-x86_64 ]] && BIN="$BIN.exe"
           ./scripts/package-daemon.sh "$VERSION" "${{ matrix.platform }}" "$BIN" dist
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: daemon-${{ matrix.platform }}
           path: dist/*
           if-no-files-found: error
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    # A skipped dependency skips its dependents by default, and a stable tag
+    # skips daemon-artifacts — so the gate names the results that are actually
+    # acceptable instead. Writing an `if` at all drops the implicit success()
+    # check, which is why test and build are asserted explicitly.
+    if: >-
+      startsWith(github.ref, 'refs/tags/v')
+      && !cancelled()
+      && needs.test.result == 'success'
+      && needs.build.result == 'success'
+      && (needs['daemon-artifacts'].result == 'success'
+      || needs['daemon-artifacts'].result == 'skipped')
     needs: [test, build, daemon-artifacts]
     runs-on: macos-15
     permissions:
@@ -356,7 +370,12 @@ jobs:
       # fail_on_unmatched_files breaking on the set that varies.
       # Universal, like the app: the daemon is a sidecar next to it, and an
       # arm64-only binary would break Intel Macs that the app itself supports.
+      # Beta only — release-channel.sh lists the macOS daemon tarball and
+      # SHA256SUMS alongside the Linux and Windows ones, so a stable tag
+      # publishes neither and building them for one is ten minutes nothing
+      # consumes.
       - name: Build and package droidectived (macOS universal)
+        if: contains(github.ref_name, '-')
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           (cd droidectived && swift build -c release --arch arm64 --arch x86_64 \
@@ -364,14 +383,19 @@ jobs:
           ./scripts/package-daemon.sh "$VERSION" macos-universal \
             droidectived/.build/apple/Products/Release/droidectived \
             DerivedData/Build/Products/Release
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+      # Only a beta has them — daemon-artifacts doesn't run for a stable tag.
+      - if: contains(github.ref_name, '-')
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
         with:
           pattern: daemon-*
           merge-multiple: true
           path: DerivedData/Build/Products/Release
       # Checksums cover exactly what ships, so they are generated after every
-      # artifact is in place and before staging asserts the set.
+      # artifact is in place and before staging asserts the set. SHA256SUMS is
+      # itself a beta artifact, and on a stable tag there are no archives to
+      # sum — the glob would match nothing and shasum would fail the release.
       - name: Checksum the daemon archives
+        if: contains(github.ref_name, '-')
         run: |
           cd DerivedData/Build/Products/Release
           shasum -a 256 droidectived-* > SHA256SUMS

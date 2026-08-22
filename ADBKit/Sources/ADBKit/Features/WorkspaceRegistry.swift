@@ -60,15 +60,35 @@ public struct WorkspaceRegistry: Sendable, Equatable {
         public var serial: String?
         /// Feature ids currently open as tabs in this window.
         public var openFeatureIDs: Set<String>
+        /// Exclusive work this window runs against devices *other than* its
+        /// selected one — the Mirror Wall's live tiles and its pop-out mirror
+        /// windows. Everything else is device-scoped to `serial`, so this stays
+        /// empty for them.
+        public var claims: Set<Claim>
 
         public init(
             id: WorkspaceID,
             serial: String? = nil,
-            openFeatureIDs: Set<String> = []
+            openFeatureIDs: Set<String> = [],
+            claims: Set<Claim> = []
         ) {
             self.id = id
             self.serial = serial
             self.openFeatureIDs = openFeatureIDs
+            self.claims = claims
+        }
+    }
+
+    /// One window holding one exclusive feature against one device. The
+    /// window's own selection can't express this: a wall streams up to six
+    /// devices from a window pointed at just one of them.
+    public struct Claim: Hashable, Sendable {
+        public let featureID: String
+        public let serial: String
+
+        public init(featureID: String, serial: String) {
+            self.featureID = featureID
+            self.serial = serial
         }
     }
 
@@ -98,6 +118,11 @@ public struct WorkspaceRegistry: Sendable, Equatable {
     /// `scrcpy-window` is the pop-out mirror's pseudo-id (`MirrorWindow
     /// .featureID`), not a registry feature — it shares the encoder with
     /// `scrcpy`, so it carries the same exclusivity.
+    ///
+    /// `mirror-wall` is deliberately *absent*: it streams several devices at
+    /// once, so blocking the whole pane over the window's selected device would
+    /// be wrong in both directions. It contends per tile instead — see
+    /// `owner(ofMirroredDevice:excluding:)`.
     public static let exclusiveFeatureIDs: Set<String> = [
         "scrcpy", "scrcpy-window", "screen-record", "js-console", "frida-console",
     ]
@@ -105,6 +130,12 @@ public struct WorkspaceRegistry: Sendable, Equatable {
     public static func isExclusive(_ featureID: String) -> Bool {
         exclusiveFeatureIDs.contains(featureID)
     }
+
+    /// Every way to open the live mirror. All three drive one scrcpy display
+    /// session on the device, so they contend as one family rather than by id:
+    /// a wall tile for a device already mirrored in another window shows that
+    /// instead of starting a second encoder on it.
+    public static let mirrorFeatureIDs: Set<String> = ["scrcpy", "scrcpy-window", "mirror-wall"]
 
     // MARK: - Window tint
 
@@ -160,7 +191,42 @@ public struct WorkspaceRegistry: Sendable, Equatable {
     ) -> WorkspaceID? {
         guard Self.isExclusive(featureID) else { return nil }
         return entries.first {
-            $0.id != excluding && $0.serial == serial && $0.openFeatureIDs.contains(featureID)
+            $0.id != excluding
+                && (($0.serial == serial && $0.openFeatureIDs.contains(featureID))
+                    || $0.claims.contains(Claim(featureID: featureID, serial: serial)))
+        }?.id
+    }
+
+    /// The window holding a live *claim* for `featureID` on `serial`.
+    ///
+    /// Unlike `owner(ofFeature:on:)` this counts only claims — which are
+    /// registered by running sessions — so a feature whose tab is merely open
+    /// (a hidden keep-alive tab that isn't streaming) doesn't answer yes.
+    public func claimant(
+        ofFeature featureID: String, on serial: String, excluding: WorkspaceID? = nil
+    ) -> WorkspaceID? {
+        entries.first {
+            $0.id != excluding
+                && $0.claims.contains(Claim(featureID: featureID, serial: serial))
+        }?.id
+    }
+
+    /// The window already mirroring `serial` in any of the three ways
+    /// (`mirrorFeatureIDs`), ignoring `excluding`. What a Mirror Wall tile asks
+    /// before it starts a session, so two windows never put two encoders on one
+    /// device.
+    public func owner(
+        ofMirroredDevice serial: String, excluding: WorkspaceID? = nil
+    ) -> WorkspaceID? {
+        entries.first { entry in
+            guard entry.id != excluding else { return false }
+            let mirrors = Self.mirrorFeatureIDs
+            if entry.serial == serial, !entry.openFeatureIDs.isDisjoint(with: mirrors) {
+                return true
+            }
+            return entry.claims.contains {
+                mirrors.contains($0.featureID) && $0.serial == serial
+            }
         }?.id
     }
 
@@ -188,6 +254,26 @@ public struct WorkspaceRegistry: Sendable, Equatable {
         return serials.filter { !taken.contains($0) }
     }
 
+    /// The claims `id` should hold once `featureID`'s are replaced by `serials`
+    /// (other features' kept) — or nil when that is already what it holds.
+    ///
+    /// The nil is the load-bearing part, and it has to be decided *before* the
+    /// registry is touched. Claims are published from view updates, and the
+    /// registry lives on an `@Observable`, where writing an equal value still
+    /// invalidates every reader — `RootView`'s body asks it for the window's
+    /// ordinal. A write per update is then an update per write: an endless
+    /// SwiftUI update loop, not a wasted pass. Guarding inside `setClaims`
+    /// cannot help, because a mutating call on an observed property fires its
+    /// `didSet` whether or not the value changed.
+    public func claimsChange(
+        replacing featureID: String, with serials: Set<String>, for id: WorkspaceID
+    ) -> Set<Claim>? {
+        let current = self[id]?.claims ?? []
+        let wanted = current.filter { $0.featureID != featureID }
+            .union(serials.map { Claim(featureID: featureID, serial: $0) })
+        return wanted == current ? nil : wanted
+    }
+
     // MARK: - Mutation
 
     /// Add a window (no-op if already registered, so a re-entrant bind is safe).
@@ -212,5 +298,14 @@ public struct WorkspaceRegistry: Sendable, Equatable {
         register(id)
         guard let index = entries.firstIndex(where: { $0.id == id }) else { return }
         entries[index].openFeatureIDs = featureIDs
+    }
+
+    /// Replace this window's off-selection claims (the wall's live tiles and
+    /// its pop-out mirror windows). Replacing rather than adding means a tile
+    /// that stops streaming releases its device without anyone tracking pairs.
+    public mutating func setClaims(_ claims: Set<Claim>, for id: WorkspaceID) {
+        register(id)
+        guard let index = entries.firstIndex(where: { $0.id == id }) else { return }
+        entries[index].claims = claims
     }
 }
