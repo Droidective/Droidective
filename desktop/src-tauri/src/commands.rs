@@ -11,13 +11,19 @@ use serde::{Deserialize, Serialize};
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_clipboard_manager::ClipboardExt;
+use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 
 use crate::daemon::stream::StreamMessage;
 use crate::daemon::wire::{
-    AppControlRequest, AppsResponse, Device, DevicePropsResponse, FeatureSummary, FileInfoRequest,
-    FileInfoResponse, FileOperationRequest, FilePullRequest, FilePullResponse, FilesListRequest,
-    FilesListResponse, RootStatusResponse, RunRequest, RunResponse, SubscribeParams,
+    AppControlRequest, AppInfoResponse, AppPullRequest, AppPullResponse, AppRequest, AppsResponse,
+    CrashListResponse, DevSettingsResponse, DevSettingsWriteRequest, Device, DevicePropsResponse,
+    DnsResponse, DnsWriteRequest, EmulatorActionRequest, EmulatorsResponse, FeatureSummary,
+    FileInfoRequest, FileInfoResponse, FileOperationRequest, FilePullRequest, FilePullResponse,
+    FilesListRequest, FilesListResponse, InstallRequest, InstallResponse, MemInfoResponse,
+    PermissionWriteRequest, PermissionsResponse, RestrictionWriteRequest, RestrictionsResponse,
+    RootStatusResponse, RunRequest, RunResponse, SandboxRequest, SandboxResponse, SubscribeParams,
+    WifiResponse, WifiWriteRequest,
 };
 use crate::daemon::{DaemonStatus, Supervisor};
 use crate::error::DaemonError;
@@ -234,6 +240,262 @@ pub async fn pull_file(
         .await
 }
 
+/// Every crash the device has recorded, newest first.
+#[tauri::command]
+pub async fn list_crashes(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+) -> Result<CrashListResponse, DaemonError> {
+    supervisor.client().await?.list_crashes(serial).await
+}
+
+#[tauri::command]
+pub async fn clear_crashes(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+) -> Result<RunResponse, DaemonError> {
+    supervisor.client().await?.clear_crashes(serial).await
+}
+
+/// Every Developer Options row, definition and current value together.
+#[tauri::command]
+pub async fn dev_settings(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+) -> Result<DevSettingsResponse, DaemonError> {
+    supervisor.client().await?.dev_settings(serial).await
+}
+
+/// Writes one Developer Options row — `on` for a toggle, `value` for a scale.
+#[tauri::command]
+pub async fn write_dev_setting(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    id: String,
+    on: Option<bool>,
+    value: Option<f64>,
+) -> Result<RunResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .write_dev_setting(&DevSettingsWriteRequest {
+            serial,
+            id,
+            on,
+            value,
+        })
+        .await
+}
+
+/// The dev-time restrictions, plus whether the root-only half is reachable.
+#[tauri::command]
+pub async fn restrictions(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+) -> Result<RestrictionsResponse, DaemonError> {
+    supervisor.client().await?.restrictions(serial).await
+}
+
+/// Writes one restriction, or remounts the system partition (`key: "remount"`).
+#[tauri::command]
+pub async fn write_restriction(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    key: String,
+    on: Option<bool>,
+) -> Result<RunResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .write_restriction(&RestrictionWriteRequest { serial, key, on })
+        .await
+}
+
+/// The connection, the saved networks, and whether passwords were readable.
+#[tauri::command]
+pub async fn wifi(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+) -> Result<WifiResponse, DaemonError> {
+    supervisor.client().await?.wifi(serial).await
+}
+
+/// Toggles the radio (`enabled`), or connects (`ssid` + `security`).
+#[tauri::command]
+pub async fn write_wifi(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    enabled: Option<bool>,
+    ssid: Option<String>,
+    security: Option<String>,
+    password: Option<String>,
+) -> Result<RunResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .write_wifi(&WifiWriteRequest {
+            serial,
+            enabled,
+            ssid,
+            security,
+            password,
+        })
+        .await
+}
+
+#[tauri::command]
+pub async fn private_dns(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+) -> Result<DnsResponse, DaemonError> {
+    supervisor.client().await?.private_dns(serial).await
+}
+
+/// Version, SDK levels and install dates for the chosen package.
+#[tauri::command]
+pub async fn app_info(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    package_id: String,
+) -> Result<AppInfoResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .app_info(&AppRequest { serial, package_id })
+        .await
+}
+
+#[tauri::command]
+pub async fn permissions(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    package_id: String,
+) -> Result<PermissionsResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .permissions(&AppRequest { serial, package_id })
+        .await
+}
+
+#[tauri::command]
+pub async fn set_permission(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    package_id: String,
+    permission: String,
+    grant: bool,
+) -> Result<RunResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .set_permission(&PermissionWriteRequest {
+            serial,
+            package_id,
+            permission,
+            grant,
+        })
+        .await
+}
+
+#[tauri::command]
+pub async fn meminfo(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    package_id: String,
+) -> Result<MemInfoResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .meminfo(&AppRequest { serial, package_id })
+        .await
+}
+
+#[tauri::command]
+pub async fn sandbox_list(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    package_id: String,
+    path: String,
+) -> Result<SandboxResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .sandbox_list(&SandboxRequest {
+            serial,
+            package_id,
+            path,
+        })
+        .await
+}
+
+/// Pulls one sandbox file into `~/Downloads/Droidective`.
+///
+/// The destination is chosen here for the reason `pull_file`'s is: this is the
+/// process that knows where this platform's Downloads folder lives, and the
+/// leaf comes off a device path, so it goes through the same name check.
+#[tauri::command]
+pub async fn sandbox_pull(
+    app: AppHandle,
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    package_id: String,
+    path: String,
+) -> Result<AppPullResponse, DaemonError> {
+    let destination = droidective_folder(&app)?.join(safe_file_name(leaf_name(&path))?);
+    supervisor
+        .client()
+        .await?
+        .sandbox_pull(&AppPullRequest {
+            serial,
+            package_id,
+            path: Some(path),
+            destination: destination.to_string_lossy().into_owned(),
+        })
+        .await
+}
+
+/// Pulls the package's APK — and its splits, which land beside it.
+#[tauri::command]
+pub async fn pull_apk(
+    app: AppHandle,
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    package_id: String,
+) -> Result<AppPullResponse, DaemonError> {
+    // The package id is device-reported and ends up in a host path, so it goes
+    // through the same check every other leaf name does.
+    let destination = droidective_folder(&app)?.join(safe_file_name(&format!("{package_id}.apk"))?);
+    supervisor
+        .client()
+        .await?
+        .pull_apk(&AppPullRequest {
+            serial,
+            package_id,
+            path: None,
+            destination: destination.to_string_lossy().into_owned(),
+        })
+        .await
+}
+
+#[tauri::command]
+pub async fn write_private_dns(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    mode: String,
+    hostname: Option<String>,
+) -> Result<RunResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .write_private_dns(&DnsWriteRequest {
+            serial,
+            mode,
+            hostname,
+        })
+        .await
+}
+
 /// Puts an action's `copyText` on the system clipboard.
 ///
 /// Here rather than `navigator.clipboard` in the webview: that needs a secure
@@ -262,6 +524,41 @@ pub fn reveal_path(app: AppHandle, path: String) -> Result<(), DaemonError> {
     app.opener()
         .reveal_item_in_dir(&path)
         .map_err(|error| DaemonError::Host(format!("could not open {path}: {error}")))
+}
+
+/// Where pulls and exports land — `~/Downloads/Droidective`.
+///
+/// Answered rather than assumed by the UI: this process is the one that
+/// resolves the platform's Downloads folder, and Settings showing a path the
+/// files do not actually go to would be worse than showing none.
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "tauri's command macro hands AppHandle in by value"
+)]
+pub fn captures_folder(app: AppHandle) -> Result<String, DaemonError> {
+    Ok(droidective_folder(&app)?.to_string_lossy().into_owned())
+}
+
+/// Opens an external URL in the default browser.
+///
+/// Only `https://` is opened, and the check is here rather than at the call
+/// site: this command is the boundary, and a `file://` or a custom scheme
+/// reaching the OS opener is the difference between showing a web page and
+/// launching something. The About screen's links are the only caller today,
+/// but a boundary that trusts its caller is not a boundary.
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "tauri's command macro hands AppHandle in by value"
+)]
+pub fn open_url(app: AppHandle, url: String) -> Result<(), DaemonError> {
+    if !url.starts_with("https://") {
+        return Err(DaemonError::Host(format!("refusing to open {url}")));
+    }
+    app.opener()
+        .open_url(url.clone(), None::<&str>)
+        .map_err(|error| DaemonError::Host(format!("could not open {url}: {error}")))
 }
 
 /// Writes text into `~/Downloads/Droidective/<name>` and returns the path.
@@ -354,6 +651,114 @@ pub async fn watch_logcat(
         Some(SubscribeParams {
             serial: Some(serial),
             filter,
+            ..SubscribeParams::default()
+        }),
+        forward(on_event),
+    )
+}
+
+/// Live performance samples, one a second, until `stop_watching`.
+#[tauri::command]
+pub async fn watch_performance(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    package_id: Option<String>,
+    processes: bool,
+    on_event: Channel<StreamUpdate>,
+) -> Result<i64, DaemonError> {
+    let stream = supervisor.stream().await?;
+    stream.subscribe(
+        "performance",
+        Some(SubscribeParams {
+            serial: Some(serial),
+            package_id,
+            processes: Some(processes),
+            ..SubscribeParams::default()
+        }),
+        forward(on_event),
+    )
+}
+
+/// Picks a package and installs it onto the given devices.
+///
+/// The picker runs **here**, not in the webview: a webview drag hands over a
+/// `File` with no path, and the daemon needs a real one. It is also why the
+/// dialog plugin is registered for its Rust API only — the page cannot open a
+/// dialog on its own.
+///
+/// Answers `None` when the picker was dismissed, which is a choice rather than
+/// a failure and must not surface as an error.
+#[tauri::command]
+pub async fn pick_and_install(
+    app: AppHandle,
+    supervisor: State<'_, Supervisor>,
+    serials: Vec<String>,
+) -> Result<Option<InstallResponse>, DaemonError> {
+    let client = supervisor.client().await?;
+    let extensions = client.install_formats().await?.extensions;
+    let filters: Vec<&str> = extensions.iter().map(String::as_str).collect();
+
+    let picked = app
+        .dialog()
+        .file()
+        .add_filter("App package", &filters)
+        .blocking_pick_file();
+    let Some(picked) = picked else {
+        return Ok(None);
+    };
+
+    let path = picked
+        .into_path()
+        .map_err(|error| DaemonError::Host(format!("could not read that file: {error}")))?;
+    let response = client
+        .install(&InstallRequest {
+            serials,
+            path: path.to_string_lossy().into_owned(),
+        })
+        .await?;
+    Ok(Some(response))
+}
+
+/// Every AVD on this machine, and whether the emulator binary is here at all.
+#[tauri::command]
+pub async fn emulators(
+    supervisor: State<'_, Supervisor>,
+) -> Result<EmulatorsResponse, DaemonError> {
+    supervisor.client().await?.emulators().await
+}
+
+/// Launch, cold-boot, wipe, relaunch or stop one AVD.
+#[tauri::command]
+pub async fn emulator_action(
+    supervisor: State<'_, Supervisor>,
+    avd: Option<String>,
+    serial: Option<String>,
+    action: String,
+) -> Result<RunResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .emulator_action(&EmulatorActionRequest {
+            avd,
+            serial,
+            action,
+        })
+        .await
+}
+
+/// Live `/proc/net/dev` throughput, one sample a second, until `stop_watching`.
+#[tauri::command]
+pub async fn watch_netspeed(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    on_event: Channel<StreamUpdate>,
+) -> Result<i64, DaemonError> {
+    let stream = supervisor.stream().await?;
+    stream.subscribe(
+        "netspeed",
+        Some(SubscribeParams {
+            serial: Some(serial),
+            ..SubscribeParams::default()
         }),
         forward(on_event),
     )

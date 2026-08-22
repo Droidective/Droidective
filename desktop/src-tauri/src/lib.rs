@@ -29,6 +29,7 @@ pub fn run() -> tauri::Result<()> {
         // through our own commands and nowhere else.
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(Supervisor::default())
         .invoke_handler(tauri::generate_handler![
             commands::daemon_status,
@@ -43,11 +44,35 @@ pub fn run() -> tauri::Result<()> {
             commands::file_operation,
             commands::file_info,
             commands::pull_file,
+            commands::list_crashes,
+            commands::clear_crashes,
+            commands::dev_settings,
+            commands::write_dev_setting,
+            commands::restrictions,
+            commands::write_restriction,
+            commands::wifi,
+            commands::write_wifi,
+            commands::private_dns,
+            commands::write_private_dns,
+            commands::app_info,
+            commands::permissions,
+            commands::set_permission,
+            commands::meminfo,
+            commands::sandbox_list,
+            commands::sandbox_pull,
+            commands::pull_apk,
             commands::watch_devices,
             commands::watch_logcat,
+            commands::watch_performance,
+            commands::watch_netspeed,
+            commands::emulators,
+            commands::emulator_action,
+            commands::pick_and_install,
             commands::stop_watching,
             commands::copy_text,
             commands::reveal_path,
+            commands::open_url,
+            commands::captures_folder,
             commands::export_text,
         ])
         .setup(|app| {

@@ -41,8 +41,6 @@ import FoundationNetworking
         let log: CallLog
         var result = FeatureResult(ok: true, message: "done")
 
-        func listDevices() async -> [Device] { [] }
-
         func runAction(
             featureID: String, serial: String, platform: DevicePlatform,
             params: [String: FeatureValue]
@@ -72,23 +70,11 @@ import FoundationNetworking
 
         // The filesystem surface has its own suite; these are here only so this
         // backend still conforms.
-        func rootStatus(serial: String) async -> RootStatus {
-            RootStatus(hasRootShell: false, likelyRooted: false, summary: "stub", signals: [])
-        }
-
-        func listFiles(serial: String, path: String, asRoot: Bool) async throws -> [FsEntry] { [] }
 
         func fileOperation(
             serial: String, _ operation: FileProtocol.Operation, asRoot: Bool
         ) async throws -> FeatureResult { result }
 
-        func fileInfo(
-            serial: String, path: String, asRoot: Bool
-        ) async throws -> FileExplorerService.FileInfo? { nil }
-
-        func pullFile(
-            serial: String, path: String, to destination: String, asRoot: Bool
-        ) async throws -> String { destination }
     }
 
     private func withServer(

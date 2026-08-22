@@ -11,15 +11,38 @@ rewriting one when something turns out to be more work than it looked.
 
 | | Count |
 | --- | --- |
-| ⬜ Not started | 32 |
-| 🟡 Partial | 22 |
-| ⛔ Not applicable off-Apple | 7 |
+| ⬜ Not started | 19 |
+| 🟡 Partial | 40 |
+| ⛔ Not applicable off-Apple | 2 |
 | **Total registry features** | **61** |
 
-"Partial" is doing a lot of work in that table: 19 of the 22 are actions that
-run from the palette but have no screen of their own, and the three that do
-have screens (Apps, Logcat, File Explorer) are each missing something the Mac
-version offers. Read it as *nothing is finished*, not as *a third is done*.
+"Partial" is doing a lot of work in that table: 19 of the 37 are actions that
+run from the palette but have no screen of their own, and the 18 that do have
+screens are each missing something the Mac version offers. Read it as *nothing
+is finished*, not as *most of it is done*.
+
+**Screens with a real pane today** (18): Apps, Logcat, Device Info, File
+Explorer, Crash Catcher, Performance, Root Status, Developer Settings, System
+Restrictions, Wi-Fi, Private DNS, App Info, Permissions, Memory Usage, Sandbox
+Browser, Manage App, Network Speed, Emulators, Install App — plus the two
+app-chrome screens, the catalog and About.
+
+**Only two features are out of scope**, and only because they drive an Apple
+toolchain rather than a device: `ios-logs` and `push-notification` are `xcrun
+simctl` against an iOS Simulator. Everything else — the mirror, screen record,
+the video editor, Reactotron, multi-window, Quick Actions, the tour, the
+updater, notifications, every drag-and-drop path — is a porting job with an
+entry in the backlog. Hard is not the same as impossible, and a ⛔ that means
+"hard" is a decision nobody goes back to revisit.
+
+**The UI is the Mac's UI.** Where a control exists on both, it looks and
+behaves the way `App/Sources/FeatureDetail/Views/` makes it behave — same
+wording, same icon, same confirmation shape, same gesture. A nicer idea for
+Windows and Linux is still a difference someone has to relearn, so it does not
+belong here; if it is genuinely better, it goes in the Mac app first. The two
+standing exceptions are named where they occur: a keyboard shortcut whose
+modifier has no Windows/Linux equivalent, and a label that names a platform
+("Pull to Mac").
 
 ## How this was built
 
@@ -100,6 +123,11 @@ the chrome and the device bar have not.
       people already have from VS Code.
 - [x] **Drop-to-split** — dragging a tab onto the trailing edge of the only
       pane splits there; dropping it on the other pane's strip moves it.
+- [ ] **Drops from outside the app** — a file dragged from the file manager
+      onto the File Explorer (`adb push`), and an APK or AAB dropped on the
+      window to install it. The blocker is that `dragDropEnabled: false` is
+      what makes the *tab* drags work at all, so the two have to coexist rather
+      than one being switched off for the other.
 - [ ] **Multi-window** (`docs/multi-window.md`).
 - [ ] **⌘= / ⌘- zoom** of the whole UI.
 
@@ -132,27 +160,116 @@ the chrome and the device bar have not.
 
 ### Chrome and feel
 
+Every window, panel, sheet and menu the Mac has. Sourced by reading
+`App/Sources/Root/`, `App/Sources/Settings/` and `ADTApp.swift`, not from
+memory — the file each item names is the thing to replicate.
+
 - [x] **Per-feature icons.** The daemon drops `FeatureDef.icon` on purpose —
       those are SF Symbol names, which mean nothing off Apple — so
       `desktop/src/lib/icons.ts` pairs each registry id with a lucide glyph
       chosen to read as the same thing the Mac's symbol does. A test fails if
       the daemon serves a feature the table has no entry for, so a new feature
       cannot quietly inherit its neighbour's icon.
-- [ ] **Settings** — Appearance (accent colour, custom background/text,
-      window opacity / blur / grain), General, Hotkeys, Tools, Privacy, MCP.
+
+#### The sidebar footer (`SidebarPaletteView`)
+
+- [x] **Manage Features** — opens the `catalog` tab, and reads "+ N more
+      features" once anything is hidden.
+- [x] **About & Feedback** (ⓘ) — opens the `about` tab: version, report an
+      issue, star on GitHub.
+- [x] **Settings** (gear) — opens the Settings window.
+
+#### Settings (`SettingsView`, 969 lines, seven tabs)
+
+- [ ] **General** — every item is still waiting on its subsystem: the role
+      picker, Open at login, background mode, the Quick Actions preferences,
+      and the updater. The tab lists them and says which backlog item each
+      arrives with, rather than showing switches that control nothing.
+- [x] **Appearance** — Theme (light/dark/system) and Accent as presets *and* a
+      colour well *and* a hex field with Reset, plus the light theme itself
+      and the low-contrast warning. **Still missing:** Background and Text
+      colour, Font family and Text size, the Window opacity/blur/grain
+      sliders, and the Developer self-metrics overlay.
+- [x] **Privacy** — Data & Storage ▸ the captures and pulls folder, with Open.
+      Telemetry says outright that this app sends nothing, which is true and
+      worth stating rather than leaving as an unchecked box. **Still
+      missing:** Change…/Reset for the folder, and the Command Log.
+- [ ] **Doctor** — the toolchain check, with the install source for anything
+      missing. The app never installs a tool itself.
+- [ ] **Tools** — the managed-tool store: download, size, remove, upgrade.
+- [ ] **Hotkeys** — the Global section plus a per-feature recorder.
+- [ ] **MCP** — shown conditionally on the Mac; the Reactotron MCP server's
+      switches. Follows Reactotron (backlog 23).
+
+#### Panels and sheets
+
+- [x] **Notification panel** (`NotificationPanelView`) — a persistent right
+      column of the important notifications, toggled by the **bell in the
+      device bar**, with its own empty state.
+- [x] **Toasts** (`ToastOverlay`) — top-trailing, per action result, with a
+      level and an optional Show in folder. Every ported screen was converted
+      off its inline banner.
+- [ ] **Command Log** (`CommandLogView`) — every `CommandLog.userInitiated`
+      adb call, opened from Privacy.
+- [ ] **Role picker** (`RolePickerView`) — shown on first launch before the
+      tour (`LaunchPrompt.rolePicker`), and re-openable from General. A role
+      curates which features the sidebar lists.
+- [x] **Manage Features catalog** (`CatalogView`) — everything on by default;
+      this is for turning things off, with a right-click on a group header for
+      the whole group.
+- [x] **About & Feedback** — the `about` tab: version, Report an Issue, Request
+      a Feature, GitHub, Releases.
+- [ ] **Welcome tour** (`TourView` + `TourDemos`) — skippable, ending on the
+      two Quick Actions pages and the confetti finale.
+- [ ] **What's New** (`WhatsNewPresenter`) — on first launch of a new version.
+- [ ] **Star prompt** (`StarPromptView`) — the recurring, capped GitHub nudge.
+- [ ] **Wireless connect sheet** (`WirelessConnectSheet`) — the three-tab
+      pairing / connect / tcpip bootstrap.
+- [ ] **Installed-apps picker** (`InstalledAppsPickerView`) and the **bundle
+      manager** (`BundleManagerView`).
+- [ ] **Overrides pill** (`OverridesPillView`) — the standing reminder that a
+      device override is in effect.
+- [ ] **Install inbox** (`InstallInbox`) — an APK opened from the file manager
+      before the window exists has to be buffered, not dropped.
+- [ ] **Self-metrics overlay** (`DevOverlay`), behind the Appearance switch.
+
+#### The menu bar (`ADTApp.swift`)
+
+A webview has no menu bar of its own, so this is a real port: Tauri's native
+menu plus the accelerators. Every item here is also a keyboard shortcut
+somebody already has in their fingers.
+
+- [ ] **File** ▸ New Window.
+- [ ] **Terminal** ▸ New, Split Vertically, Split Horizontally, Close, Rename…,
+      Next, Previous.
+- [ ] **Tab** ▸ New Tab, Close Tab, Next, Previous, Show Tab 1–9.
+- [ ] **Go**, **View** ▸ the sidebar commands, and the zoom pair.
+- [ ] **Edit** ▸ Find Feature, Manage Features, Find in Terminal…, Find Next,
+      Find Previous.
+- [ ] **Help** ▸ Report an Issue…, Request a Feature…, Droidective on GitHub,
+      Release Notes. **About Droidective** in the app menu.
+
+#### Look
+
 - [ ] **Window translucency** — the `.bgRoot`/`.bgSurface` token system, with
       `WindowEffects` already pure-tested in ADBKit. Note the Mac's blur is a
       private CoreGraphics call; Windows and Linux need their own (Mica /
       compositor blur) or the slider limits to opacity.
-- [ ] **Light theme** — the asset catalog has both; `desktop/` ported dark only.
-- [ ] **Toasts** for action results, instead of an inline banner per screen.
-- [ ] **Command Log** — every user-initiated adb call, as
-      `CommandLog.userInitiated` records it.
-- [ ] **Welcome tour** on first run.
-- [ ] **Update pill + What's New** — Sparkle is macOS-only, so this needs its
-      own updater on Windows/Linux.
-- [ ] **Empty states per feature** ("connect a device") rather than one global
-      message.
+- [x] **Light theme** — ported from the asset catalog's own colorset values,
+      applied as CSS custom properties on `:root` so every existing token
+      follows it.
+- [x] **Custom accent**, with the low-contrast warning. **Background and text
+      colour are still missing**, as is the luminance-following scheme.
+- [ ] **Font family and text-size scale**, and the ⌘= / ⌘- zoom.
+- [x] **Empty states per feature** ("connect a device") — the Mac's
+      `NoDeviceView` shape, with its per-feature copy table ported.
+- [ ] **Native notifications** — a finished background install, a crash caught
+      while watching, an update staged. `tauri-plugin-notification`, behind the
+      same Settings ▸ General switch the Mac puts it behind.
+- [ ] **Background mode and a tray icon** — closing the window keeps the app
+      resident, stops the kept-alive sessions, and leaves the global hotkey
+      working.
+
 
 ---
 
@@ -204,6 +321,15 @@ Tick an item here when its PR merges; the detail stays in the sections above.
 | ✅ | Logcat: level, find-vs-filter, tags, export, restart | #257 |
 | ✅ | Device info | #260 |
 | ✅ | File explorer | #263 |
+| ✅ | Crash catcher | #264 |
+| ✅ | Performance monitor | #265 |
+| ✅ | Toasts and the notification panel | #265 |
+| ✅ | Root Status, Developer Settings, System Restrictions | #265 |
+| ✅ | Wi-Fi and Private DNS | #265 |
+| ✅ | App Info, Permissions, Memory, Sandbox, Manage App | #265 |
+| ✅ | Sidebar footer, catalog, About, Settings, light theme | #265 |
+| ✅ | Network Speed | #265 |
+| ✅ | Emulators and Install App | #265 |
 
 **Next, in order.** Everything from *File explorer* down needs four layers, not
 one — a daemon route in Swift, a Rust command, a pane, and tests at both ends.
@@ -220,32 +346,58 @@ often someone opens them rather than by how hard they look.
    filesystem routes plus `/v1/device/root`. It is the worked example for a
    screen that *writes*: paths travel verbatim and are quoted once, in
    `FileExplorerService`. Gaps below.
-3. **Crash catcher** — a route over ADBKit's `CrashParser`, then a multi-crash
-   browser: kind/process filters, watch mode, copy-for-Slack, clear buffer.
-4. **Performance monitor** — a *stream*, not a request: live CPU/RAM/FPS with a
-   per-process list, recording, and export.
+3. ~~**Crash catcher.**~~ Landed — two routes over `CrashExtractor`, then the
+   browser: kind and process filters that list only what is present, a search,
+   Watch on a 5 s poll that announces an arrival, Raw log, copy for
+   Slack/Jira/plain, save to a file, and a Clear Buffer that keeps its
+   watermark so the main-buffer fallback cannot resurface what it cleared.
+4. ~~**Performance monitor.**~~ Landed — record-first as `PerformanceView` is,
+   with the Stop-then-export dialog and both export formats.
 5. **Per-feature hotkeys** with a live-preview recorder. Client-side, and the
    only shell item left that people will miss daily.
 6. **Device bar parity** — wireless pair and connect, run-on-all for
    `supportsRunAll`, launch an emulator, the pull-progress strip.
-7. **Toasts and the Command Log** — action results as toasts instead of a banner
-   per screen, and every user-initiated adb call recorded the way
-   `CommandLog.userInitiated` records it.
-8. **Settings** — Appearance (accent colour, light theme), General, Hotkeys,
-   Privacy. The light theme is a second set of tokens the asset catalog already
-   has.
-9. **Manage-features catalog** and per-feature "connect a device" empty states.
-10. **The device-state screens** — dev-settings, root-status,
-    system-restrictions. Toggle tables over one route each. `root-status` now
-    has its route: `/v1/device/root` already carries every signal, not just the
-    verdict.
-11. **The connection screens** — wifi, private-dns, network-speed.
-12. **The per-app screens** — app-info, permissions, meminfo, sandbox-browser,
-    manage-app. All hang off the bundle already chosen in Apps.
-13. **Emulators and install-app.**
+7. ~~**The notification surfaces.**~~ Landed — `ToastOverlay` and the history
+   panel behind the device bar's bell, with every ported screen converted off
+   its inline banner. The Command Log sheet is still outstanding: it needs the
+   daemon to record its adb calls, which it does not do yet.
+8. **Settings** — landed as a seven-tab window with General, Appearance and
+   Privacy doing something and the other four naming what they wait on.
+   Appearance carries Theme and Accent (presets · colour well · hex + Reset)
+   and the light theme, ported from the asset catalog's own values. Still
+   missing: **Background and Text colour**, the **font family and text-size
+   scale**, and the **window opacity / blur / grain sliders** — those last
+   need a per-platform answer for the blur (see item 15).
+9. **The sidebar footer and what it opens** — landed: Manage Features
+   (`CatalogView`), About & Feedback, and the gear, plus per-feature "connect
+   a device" empty states matching `NoDeviceView`. Still missing: the **role
+   picker** (`RolePickerView`, shown on first launch before the tour).
+10. ~~**The device-state screens.**~~ Landed — root-status, dev-settings and
+    system-restrictions, over four routes. The Developer Options definitions
+    travel with their values so no client re-types a title; only the section
+    grouping is client-side, with a test that fails if it drifts.
+11. ~~**The connection screens.**~~ Landed — wifi, private-dns and
+    network-speed. The last needed a second stream topic (`netspeed`), marked
+    an increment so a dropped sample is reported rather than leaving a silent
+    gap in the chart.
+12. ~~**The per-app screens.**~~ Landed — app-info, permissions, meminfo,
+    sandbox-browser and app-management, over seven routes. Three device
+    answers travel as answers rather than errors: not installed, not running,
+    and not debuggable.
+13. ~~**Emulators and install-app.**~~ Landed. Emulators is the Mac's screen
+    minus its iOS Simulators section, and its Relaunch waits on adb rather
+    than `consolePID`, which shells out to a macOS-only `/usr/sbin/lsof`.
+    Install App picks through `tauri-plugin-dialog` in the Rust process,
+    because a webview drag hands over a `File` with no path — **so it has no
+    drag and drop yet**, and the zone says so. It also installs onto one
+    device rather than every targeted one, pending run-on-all (item 6).
 14. **Deep links and bug report.**
 15. **Auto-hiding sidebar, UI zoom, window translucency** — `WindowEffects` is
     already pure-tested in ADBKit; blur needs a per-platform answer.
+16. **The menu bar** — Tauri's native menu and its accelerators, over the same
+    File / Terminal / Tab / Go / View / Edit / Help commands `ADTApp.swift`
+    declares. A webview has no menu of its own, and every item there is a
+    shortcut somebody already has in their fingers.
 
 **Known gaps inside work already called done.**
 
@@ -272,13 +424,86 @@ often someone opens them rather than by how hard they look.
 
 - **A pull overwrites a same-named file** in `~/Downloads/Droidective` without
   asking, as `export_text` already does. The Mac asks for a save location; a
-  save dialog here is a plugin and a capability for one button.
+  save dialog here is a plugin and a capability for one button. The Crash
+  Catcher's Save writes to the same folder under the same rule.
 
-**Not planned.** Multi-window, the Quick Actions panel, the welcome tour, and
-the update pill. Each is a whole subsystem, and none of them is why anyone opens
-this app. Reactotron stays blocked until the relay's `Network.framework`
-listener is ported to NIO; mirror, screen-record and the video editor are
-Apple-only by design.
+- **A pull cannot be cancelled, and shows no progress.** The Mac's pull
+  progress strip lives in the window's safe-area inset and polls the
+  destination file's size against the known source size. Here a pull is a
+  request that either answers or does not.
+
+- **App Info's Pull APK saves to `~/Downloads/Droidective`** rather than asking
+  where. Same rule as every other pull here, and the same gap.
+
+- **Memory Usage polls on its own timer rather than through the stream.** Two
+  seconds, stopped when the pane unmounts — but a hidden keep-alive tab keeps
+  polling, which the Mac pauses via `tabIsActive`. It needs the pane to know
+  whether it is the visible one.
+
+- **Settings has no role picker, no Command Log, no Doctor, no Tools, no
+  Hotkeys and no MCP tab.** Each names its blocker in the tab itself.
+
+- **Install App has no drag and drop and no live stage line.** The drop is
+  backlog 17. The stage line — "Unpacking", "Reading device", "Installing 4
+  APKs" — needs the install's `onStage` callback to reach the client, which
+  means a stream rather than the request/response route it has; for a large
+  `.xapk` that is a minute with no feedback beyond "Installing…".
+
+- **Emulators lists no iOS Simulators.** Deliberate: `xcrun simctl` is one of
+  the two genuinely unportable things. The section is absent rather than
+  present and permanently empty.
+
+- **The Crash Catcher's failed empty state has no Try Again button.** Refresh
+  sits in the toolbar above it and is never hidden, so a second button beside
+  it would be two names for one action.
+
+**The subsystems, after the screens.** These were once listed as "not planned".
+They are planned: the goal is that someone moving between the two apps does not
+have to relearn anything, and "this one is missing a whole subsystem" fails that
+just as badly as a missing button. Each is a release of its own, so they come
+after the screens rather than instead of them.
+
+17. **Drag and drop, everywhere the Mac has it.** The shell's tab and sidebar
+    drags already work. Still missing: dropping a file from the file manager
+    onto the File Explorer to `adb push` it, and dropping an APK/AAB on the
+    window to install it. Both need `dragDropEnabled: true`-style handling the
+    webview can use — the current `false` is what makes the *tab* drags work,
+    so this needs Tauri's native drop **and** HTML5 drag to coexist rather than
+    one being turned off for the other. That is the actual engineering problem;
+    it is not a reason to skip the feature.
+18. **Notifications and their settings.** The Mac posts a native notification
+    when a background install finishes, when a watched crash lands, and when an
+    update is staged, with a Settings ▸ General switch behind it.
+    `tauri-plugin-notification` is the equivalent; the settings pane is item 8.
+19. **The Quick Actions panel** — the non-activating global-hotkey mini app:
+    the grid of every runnable action, pinned first, custom commands, the
+    pick-device interstitial, ⌘⏎ run-on-all. Needs a second Tauri window with
+    `alwaysOnTop` + no focus steal, and a global shortcut.
+20. **Background mode and the menu bar** — closing the window keeps the app
+    resident behind a tray icon, stops the kept-alive sessions, and the global
+    hotkey still opens Quick Actions. `tauri-plugin-global-shortcut` plus a
+    tray icon.
+21. **Multi-window** (`docs/multi-window.md`) — one window per device, the
+    per-window workspace split, the Focus / Take Over banner for the exclusive
+    features, and the window tint.
+22. **The welcome tour** on first run.
+23. **The updater** — Sparkle is macOS-only, so this is `tauri-plugin-updater`
+    behind the same "Relaunch to update" pill and What's New sheet.
+24. **Reactotron** — blocked only on the relay's `Network.framework` listener
+    being ported to NIO. `ReactotronMCP` already proves the NIO listener works;
+    this is the same job for the relay socket.
+25. **Mirror, screen record, and the video editor.** The Mac's pipeline is
+    VideoToolbox + AVFoundation + a `Network.framework` socket, none of which
+    exists off Apple — but the *capability* is not Apple-only. scrcpy's own
+    server speaks the same protocol to any host, and the bundled ffmpeg already
+    builds for Windows and Linux. This is a decode/render stack to write, not a
+    feature to drop.
+
+**What genuinely cannot be ported.** Two features, and only for the reason
+that they drive an Apple toolchain rather than a device: `ios-logs` and
+`push-notification` are `xcrun simctl` against an iOS Simulator, which does not
+exist on Windows or Linux. Everything else on the ⛔ list above is a porting
+job, and the checklist now says which.
 
 ---
 
@@ -403,6 +628,9 @@ Apple-only by design.
   - [ ] button: Copy to Clipboard
   - [ ] button: Show All
   - [ ] button: Hide All
+  - [ ] button: Copy
+  - [ ] button: Copy as JSON
+  - [ ] button: Deselect
   - [ ] button: Run adb reverse for the device
   - [ ] button: Run
   - [ ] field: Find in console
@@ -419,6 +647,7 @@ Apple-only by design.
   - [ ] tooltip: Clear the console
   - [ ] tooltip: Choose which log levels to show
   - [ ] search: searchable list
+  - [ ] shortcut: "c", modifiers: .command
   - [ ] export: save/export to a file
 
 #### `open-dev-menu` — Open Dev Menu  ·  🟡 partial
@@ -440,10 +669,67 @@ Apple-only by design.
   - [ ] button: Forward
   - [ ] button: Set
 
-#### `reactotron` — Reactotron  ·  ⛔ n/a
+#### `reactotron` — Reactotron  ·  ⬜ todo
 > Live React Native inspector — logs, network, state, custom display
 - **Kind** `view`
-- **Note** ReactotronServer is a Network.framework listener; needs a portable NIO listener first.
+- **Note** Not started — blocked on porting the relay's Network.framework listener to NIO, which ReactotronMCP already proves out. Backlog 24.
+- **macOS view** `ReactotronView` — `App/Sources/FeatureDetail/Views/ReactotronView.swift`
+- **Must replicate**
+  - [ ] button: OK
+  - [ ] button: Retry
+  - [ ] button: Add
+  - [ ] button: Evaluate
+  - [ ] button: All
+  - [ ] button: Cancel
+  - [ ] button: Done
+  - [ ] button: Save as JSON…
+  - [ ] button: Copy to Clipboard
+  - [ ] button: Copy
+  - [ ] button: Copy as JSON
+  - [ ] button: Deselect
+  - [ ] button: Copy \(selectionCount) Selected Events
+  - [ ] button: Copy \(selectionCount) Selected as JSON
+  - [ ] button: Copy object
+  - [ ] button: Copy line
+  - [ ] button: Restore
+  - [ ] button: Copy value
+  - [ ] button: Send
+  - [ ] button: Got it
+  - [ ] button: Clear Data & Restart
+  - [ ] picker: View
+  - [ ] picker: App
+  - [ ] field: Path to watch, e.g. user.name
+  - [ ] field: e.g. store.getState()
+  - [ ] field: Search keys & values…
+  - [ ] label: Reverse :9090
+  - [ ] label: AI Agents
+  - [ ] label: Refresh
+  - [ ] label: Dispatch
+  - [ ] label: Take Snapshot
+  - [ ] label: Pane cleared
+  - [ ] label: Clear cache and restart
+  - [ ] label: Clear data and restart
+  - [ ] label: Restart app
+  - [ ] tooltip: Force-stop and relaunch the connected app so it reconnects
+  - [ ] tooltip: Run adb reverse tcp:9090 tcp:9090 on connected devices
+  - [ ] tooltip: Clear the whole timeline — both panes
+  - [ ] tooltip: Split into two panes
+  - [ ] tooltip: Clear the timeline
+  - [ ] tooltip: Stop watching this path
+  - [ ] tooltip: Refresh available values
+  - [ ] tooltip: Close without applying
+  - [ ] tooltip: Show only requests with this HTTP method
+  - [ ] tooltip: Show only responses in this status class
+  - [ ] tooltip: Filter the timeline by event type
+  - [ ] tooltip: Copy this line (right-click for the full object)
+  - [ ] tooltip: Click to view full size
+  - [ ] tooltip: Delete this snapshot
+  - [ ] tooltip: Reveal in the tree
+  - [ ] menu: right-click context menu
+  - [ ] shortcut: .cancelAction
+  - [ ] shortcut: .defaultAction
+  - [ ] shortcut: "c", modifiers: .command
+  - [ ] export: save/export to a file
 
 #### `reload-js` — Reload JS  ·  🟡 partial
 > Reload the JS bundle (double-tap R)
@@ -463,30 +749,64 @@ Apple-only by design.
 - **Kind** `toggleAction`
 - **Note** Runs from the palette; no dedicated screen.
 
-#### `mirror-wall` — Mirror Wall  ·  ⛔ n/a
+#### `mirror-wall` — Mirror Wall  ·  ⬜ todo
 > Mirror up to six devices side by side
 - **Kind** `view`
-- **Note** Several mirrors at once, on the same Apple-only mirror pipeline as `scrcpy`.
+- **Note** Not started — several mirrors at once, on the same pipeline as `scrcpy`, so it follows the mirror. Backlog 25.
+- **macOS view** `MirrorWallView` — `App/Sources/FeatureDetail/Views/MirrorWallView.swift`
+- **Must replicate**
+  - [ ] button: Open Each in Its Own Window
+  - [ ] button: Arrange Mirror Windows
+  - [ ] toggle: Audio from the Focused Device
+  - [ ] picker: Columns
+  - [ ] label: Devices
+  - [ ] tooltip: Pick which devices this wall shows
+  - [ ] tooltip: Audio, and breaking tiles out into windows
+  - [ ] drag: drag and drop
 
-#### `scrcpy` — Mirror Screen  ·  ⛔ n/a
+#### `scrcpy` — Mirror Screen  ·  ⬜ todo
 > Mirror and control the device with scrcpy
 - **Kind** `view`
-- **Note** Mirror pipeline is Apple-only (VideoToolbox/AVFoundation); other hosts drive the scrcpy desktop app.
+- **Note** Not started — the decode/render stack needs writing off Apple (scrcpy's server is portable; VideoToolbox/AVFoundation are not). Backlog 25.
+- **macOS view** `ScreenMirrorView` — `App/Sources/FeatureDetail/Views/ScreenMirrorView.swift`
+- **Must replicate**
+  - [ ] button: Volume down
+  - [ ] button: Volume up
+  - [ ] button: Mute / unmute
+  - [ ] button: Open in a separate window
+  - [ ] button: circle
+  - [ ] button: square
+  - [ ] button: camera
+  - [ ] button: Reconnect
+  - [ ] toggle: Stream audio (restarts mirror)
+  - [ ] toggle: Show touches
+  - [ ] toggle: Microphone
+  - [ ] tooltip: Audio and touch options
+  - [ ] tooltip: Volume, audio, touch, and window options
+  - [ ] tooltip: Recording audio — device playback or mic, plus the Mac's mic
+  - [ ] tooltip: Mute or unmute what's being recorded
 
-#### `screen-record` — Screen Record  ·  ⛔ n/a
+#### `screen-record` — Screen Record  ·  ⬜ todo
 > Record via scrcpy — no time limit, with audio
 - **Kind** `view`
-- **Note** Records through the mirror session, which is Apple-only.
+- **Note** Not started — rides the mirror session, so it follows the mirror. Backlog 25.
+- **macOS view** `ScreenRecordView` — `App/Sources/FeatureDetail/Views/ScreenRecordView.swift`
+- **Must replicate**
+  - [ ] label: Stop & Save
+  - [ ] label: Stop
 
 #### `screenshot` — Screenshot  ·  🟡 partial
 > Capture the screen and save it to your Mac
 - **Kind** `instantAction`
 - **Note** Runs from the palette; no dedicated screen.
 
-#### `video-editor` — Video Editor  ·  ⛔ n/a
+#### `video-editor` — Video Editor  ·  ⬜ todo
 > Trim, rotate, crop, convert & compress video
 - **Kind** `view`
-- **Note** Rides the mirror/ffmpeg export path built on the Apple media stack.
+- **Note** Not started — needs the mirror pipeline plus the bundled ffmpeg. Backlog 25.
+- **macOS view** `VideoEditorView` — `App/Sources/FeatureDetail/Views/VideoEditorView.swift`
+- **Must replicate**
+  - [ ] label: Open video…
 
 
 ### Device State
@@ -508,10 +828,10 @@ Apple-only by design.
 - **Must replicate**
   - [ ] tooltip: Refresh from the device
 
-#### `device-info` — Device Info  ·  ⬜ todo
+#### `device-info` — Device Info  ·  🟡 partial
 > Browse and search every device property
 - **Kind** `view`
-- **Note** Not started on Windows/Linux.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `DeviceInfoView` — `App/Sources/FeatureDetail/Views/DeviceInfoView.swift`
 - **Must replicate**
   - [ ] field: Filter properties…
@@ -609,10 +929,10 @@ Apple-only by design.
   - [ ] button: Open in Finder
   - [ ] label: Generate bug report
 
-#### `crash-catcher` — Crash Catcher  ·  ⬜ todo
+#### `crash-catcher` — Crash Catcher  ·  🟡 partial
 > Browse device crashes — watch, filter, copy for Slack/Jira
 - **Kind** `view`
-- **Note** Not started on Windows/Linux.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `CrashView` — `App/Sources/FeatureDetail/Views/CrashView.swift`
 - **Must replicate**
   - [ ] button: Clear Buffer
@@ -636,7 +956,7 @@ Apple-only by design.
 #### `ios-logs` — iOS Logs  ·  ⛔ n/a
 > Live simulator log stream (unified log)
 - **Kind** `view`
-- **Note** iOS Simulator only, via simctl — macOS-only toolchain.
+- **Note** iOS Simulator only, via simctl — a macOS toolchain, not a device.
 
 #### `logcat` — Logcat  ·  🟡 partial
 > Live log stream with search and filters
@@ -925,4 +1245,4 @@ Apple-only by design.
   - [ ] drag: drag and drop
 
 
-<!-- counts: {'done': 0, 'partial': 22, 'todo': 32, 'gated': 7} -->
+<!-- counts: {'done': 0, 'partial': 24, 'todo': 35, 'gated': 2} -->

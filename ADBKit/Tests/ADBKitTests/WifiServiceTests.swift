@@ -86,6 +86,33 @@ import Testing
         #expect(creds[1].security == "open")
     }
 
+    @Test func twoNetworksSharingAnIdStillGetDistinctIdentities() {
+        // Real emulator output: `cmd wifi list-networks` prints the same
+        // network id twice, once per security type. Two rows sharing an
+        // `Identifiable.id` is undefined behaviour in a `ForEach` and a
+        // duplicate-key warning in the desktop app, so the security type is
+        // part of the identity.
+        let networks = WifiService.parseSavedNetworks("""
+        Network Id      SSID                         Security type
+        0            AndroidWifi                      open
+        0            AndroidWifi                      owe^
+        """)
+
+        #expect(networks.count == 2)
+        #expect(networks[0].id != networks[1].id)
+    }
+
+    @Test func anIdentityIsStableAcrossRefetches() {
+        // A watch poll re-reads the same listing; an id that changed between
+        // reads would move the selection every time.
+        let text = """
+        Network Id      SSID                         Security type
+        3            HomeNet                          WPA2
+        """
+        #expect(WifiService.parseSavedNetworks(text).first?.id
+            == WifiService.parseSavedNetworks(text).first?.id)
+    }
+
     @Test func decodeConfigStringUnescapesAndStripsQuotes() {
         #expect(WifiService.decodeConfigString("&quot;HomeNet&quot;") == "HomeNet")
         #expect(WifiService.decodeConfigString("&quot;p&amp;ss&quot;") == "p&ss")

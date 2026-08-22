@@ -16,6 +16,16 @@ public protocol StreamSource: Sendable {
     /// Called when a logcat subscription ends, so the underlying adb child is
     /// torn down rather than left running.
     func stopLogcat(serial: String) async
+    /// Repeated performance samples until the stream is cancelled. Polling
+    /// rather than pushing, because that is what the device supports —
+    /// `PerformanceService` reads `/proc` and `dumpsys` on a timer.
+    func performance(
+        serial: String, packageId: String?, includeProcesses: Bool
+    ) async -> AsyncStream<PerformanceService.PerfPoll>
+    /// Repeated `/proc/net/dev` samples. Polling for the same reason
+    /// `performance` is: the counters are cumulative and throughput is the
+    /// difference between two reads.
+    func netspeed(serial: String) async -> AsyncStream<NetSample>
 }
 
 /// One WebSocket connection's worth of subscriptions.
@@ -146,6 +156,33 @@ public actor StreamSession {
                         StreamProtocol.Event<LogLinePayload>.failed(
                             id: id, message: "\(error)")))
             }
+        case .netspeed:
+            guard let serial = command.params?.serial else { return }
+            let stream = await source.netspeed(serial: serial)
+            subscriptions[id]?.pump = Task { [weak self] in
+                for await sample in stream {
+                    await self?.enqueue(
+                        id: id,
+                        items: [try? DaemonProtocol.encode(NetSamplePayload(sample))]
+                            .compactMap { $0 })
+                }
+                await self?.end(id, reason: .deviceDisconnected)
+            }
+
+        case .performance:
+            guard let serial = command.params?.serial else { return }
+            let stream = await source.performance(
+                serial: serial, packageId: command.params?.packageId,
+                includeProcesses: command.params?.wantsProcesses ?? false)
+            subscriptions[id]?.pump = Task { [weak self] in
+                for await poll in stream {
+                    await self?.enqueue(
+                        id: id,
+                        items: [try? DaemonProtocol.encode(PerfSamplePayload(poll))]
+                            .compactMap { $0 })
+                }
+                await self?.end(id, reason: .deviceDisconnected)
+            }
         }
     }
 
@@ -222,10 +259,17 @@ public actor StreamSession {
 public struct LiveStreamSource: StreamSource {
     private let monitor: DeviceMonitor
     private let streamer: LogcatStreamer
+    private let performanceService: PerformanceService
+    private let networkService: NetworkSpeedService
 
-    public init(monitor: DeviceMonitor, streamer: LogcatStreamer) {
+    public init(
+        monitor: DeviceMonitor, streamer: LogcatStreamer, performance: PerformanceService,
+        networkSpeed: NetworkSpeedService
+    ) {
         self.monitor = monitor
         self.streamer = streamer
+        performanceService = performance
+        networkService = networkSpeed
     }
 
     public func devices() async -> AsyncStream<[Device]> { await monitor.updates() }
@@ -235,4 +279,57 @@ public struct LiveStreamSource: StreamSource {
     }
 
     public func stopLogcat(serial: String) async { await streamer.stop() }
+
+    /// One sample per second, which is what the Mac's monitor uses: fast
+    /// enough that a spike is visible, slow enough that the sampling itself
+    /// does not become the load being measured.
+    public static let performanceInterval = Duration.seconds(1)
+
+    public func performance(
+        serial: String, packageId: String?, includeProcesses: Bool
+    ) async -> AsyncStream<PerformanceService.PerfPoll> {
+        let service = performanceService
+        return AsyncStream { continuation in
+            let task = Task {
+                // Forget any baseline from a previous subscription: a delta
+                // against a reading from ten minutes ago is not a spike, it is
+                // an artefact.
+                await service.reset()
+                while !Task.isCancelled {
+                    let poll = await service.poll(
+                        serial: serial, packageId: packageId,
+                        includeProcesses: includeProcesses)
+                    guard !Task.isCancelled else { break }
+                    continuation.yield(poll)
+                    try? await Task.sleep(for: Self.performanceInterval)
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    /// One sample a second, matching the Mac's `NetworkView`.
+    ///
+    /// The first poll after a reset yields nothing — `NetworkSpeedService`
+    /// needs two reads to have a delta — so a subscriber sees its first sample
+    /// one interval in, which is the honest answer rather than a fabricated
+    /// zero.
+    public func netspeed(serial: String) async -> AsyncStream<NetSample> {
+        let service = networkService
+        return AsyncStream { continuation in
+            let task = Task {
+                await service.reset()
+                while !Task.isCancelled {
+                    if let sample = await service.poll(serial: serial) {
+                        guard !Task.isCancelled else { break }
+                        continuation.yield(sample)
+                    }
+                    try? await Task.sleep(for: Self.performanceInterval)
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
 }

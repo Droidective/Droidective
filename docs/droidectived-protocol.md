@@ -186,7 +186,27 @@ came off a *device* listing.
 definitive proof, and the File Explorer's Root-toggle gate) plus every signal
 behind the verdict, so a client can say *why* rather than only *whether*.
 
-### 4.2 Errors
+### 4.2 The crash routes
+
+`/v1/crashes/list` and `/v1/crashes/clear` are a pass-through over
+`CrashExtractor`, which reads the crash buffer (falling back to the tail of
+`main` when it is empty) and hands `CrashParser` the splitting. **Which buffer
+to read and where one crash ends are not the daemon's questions** — ADBKit
+answers them for both clients, and a client re-deriving either would eventually
+disagree with the Mac about how many crashes a device has.
+
+Each crash carries `kindLabel` beside `kind` for the same reason
+`AppSummary.displayName` travels, and **both** renderings of the block: `raw`
+as logcat printed it, `body` with the threadtime prefixes stripped. Deriving
+one from the other means reimplementing that strip, and the Raw-log toggle
+needs them both anyway.
+
+Clearing is not the whole story and the wire cannot make it so: `logcat -c -b
+crash` empties one buffer, and the same crashes can come back through the
+main-buffer fallback on the next list. A client that offers Clear has to keep
+its own high-water mark — the Mac does, and so does `desktop/`.
+
+### 4.3 Errors
 
 One shape everywhere, so the UI has one error path:
 

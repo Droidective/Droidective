@@ -26,6 +26,59 @@ public struct LogLinePayload: Codable, Equatable, Sendable {
     }
 }
 
+/// One performance sample.
+///
+/// A DTO for the same reason `LogLinePayload` is: `PerfPoll` and the models
+/// under it are shaped for the Mac's charts (`Identifiable`, computed labels),
+/// and a protocol other programs depend on should not move when those do.
+///
+/// Every field is optional-shaped the way the sample itself is: the first
+/// sample after a subscribe has no CPU figures at all, because a percentage is
+/// a delta and there is nothing yet to subtract from. Sending it anyway — with
+/// no cores — is deliberate: it is how a client learns the stream is alive.
+public struct PerfSamplePayload: Codable, Equatable, Sendable {
+    public struct Core: Codable, Equatable, Sendable {
+        /// -1 is the all-cores aggregate, as `CpuCoreLoad` numbers it.
+        public let core: Int
+        public let label: String
+        public let usagePercent: Double
+    }
+
+    public struct Process: Codable, Equatable, Sendable {
+        public let pid: Int
+        public let name: String
+        public let cpuPercent: Double?
+        public let pssKb: Int?
+    }
+
+    public let cores: [Core]
+    public let ramTotalKb: Int?
+    public let ramUsedKb: Int?
+    public let appFps: Double?
+    /// Percent of frames that missed the deadline, when any were drawn.
+    public let appJankPercent: Double?
+    public let appPssKb: Int?
+    public let downloadBytesPerSec: Double?
+    public let uploadBytesPerSec: Double?
+    public let processes: [Process]
+
+    public init(_ poll: PerformanceService.PerfPoll) {
+        cores = poll.cores.map {
+            Core(core: $0.core, label: $0.label, usagePercent: $0.usagePercent)
+        }
+        ramTotalKb = poll.ramTotalKb
+        ramUsedKb = poll.ramUsedKb
+        appFps = poll.appFps?.fps
+        appJankPercent = poll.appFps?.jankPercent
+        appPssKb = poll.appPssKb
+        downloadBytesPerSec = poll.downloadBytesPerSec
+        uploadBytesPerSec = poll.uploadBytesPerSec
+        processes = poll.processes.map {
+            Process(pid: $0.pid, name: $0.name, cpuPercent: $0.cpuPercent, pssKb: $0.pssKb)
+        }
+    }
+}
+
 /// Frame assembly.
 ///
 /// Items are buffered pre-encoded, so a dropped item costs one wasted encode
@@ -50,5 +103,39 @@ public enum StreamFrame {
             return #"{"event":"failed","id":\#(event.id),"message":"encode failed"}"#
         }
         return String(decoding: data, as: UTF8.self)
+    }
+}
+
+/// One network sample: device-wide throughput, the cumulative totals since
+/// boot, and the per-interface breakdown behind them.
+public struct NetSamplePayload: Codable, Equatable, Sendable {
+    public struct Interface: Codable, Equatable, Sendable {
+        public let name: String
+        public let downloadBytesPerSec: Double
+        public let uploadBytesPerSec: Double
+        public let rxBytes: UInt64
+        public let txBytes: UInt64
+    }
+
+    public let downloadBytesPerSec: Double
+    public let uploadBytesPerSec: Double
+    /// Since the device booted, not since the stream started — the screen
+    /// derives its own session totals by differencing against the first
+    /// sample, which is the only way a mid-session subscribe reads right.
+    public let totalRxBytes: UInt64
+    public let totalTxBytes: UInt64
+    public let interfaces: [Interface]
+
+    public init(_ sample: NetSample) {
+        downloadBytesPerSec = sample.downloadBytesPerSec
+        uploadBytesPerSec = sample.uploadBytesPerSec
+        totalRxBytes = sample.totalRxBytes
+        totalTxBytes = sample.totalTxBytes
+        interfaces = sample.interfaces.map {
+            Interface(
+                name: $0.name, downloadBytesPerSec: $0.downloadBytesPerSec,
+                uploadBytesPerSec: $0.uploadBytesPerSec,
+                rxBytes: $0.rxBytes, txBytes: $0.txBytes)
+        }
     }
 }

@@ -217,6 +217,8 @@ public actor PerformanceService {
         public var downloadBytesPerSec: Double?
         public var uploadBytesPerSec: Double?
         public var processes: [ProcessLoad] = []
+
+        public init() {}
     }
 
     public func poll(serial: String, packageId: String?, includeProcesses: Bool) async -> PerfPoll {

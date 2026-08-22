@@ -80,15 +80,27 @@ def affordances(view_name):
     return path.relative_to(ROOT), found
 
 
-# Off-Apple exclusions, with the reason from docs/cross-platform.md.
+# The only two features that genuinely cannot exist off Apple: both drive an
+# iOS Simulator through `xcrun simctl`, which is a macOS toolchain rather than
+# anything about the device. Everything else the port lacks is a porting job
+# with a plan in the tracker's backlog, not an exclusion — a ⛔ that means
+# "hard" rather than "impossible" reads as a decision nobody has to revisit.
 GATED = {
-    "scrcpy": "Mirror pipeline is Apple-only (VideoToolbox/AVFoundation); other hosts drive the scrcpy desktop app.",
-    "mirror-wall": "Several mirrors at once, on the same Apple-only mirror pipeline as `scrcpy`.",
-    "screen-record": "Records through the mirror session, which is Apple-only.",
-    "video-editor": "Rides the mirror/ffmpeg export path built on the Apple media stack.",
-    "reactotron": "ReactotronServer is a Network.framework listener; needs a portable NIO listener first.",
-    "ios-logs": "iOS Simulator only, via simctl — macOS-only toolchain.",
+    "ios-logs": "iOS Simulator only, via simctl — a macOS toolchain, not a device.",
     "push-notification": "iOS Simulator only (simctl push).",
+}
+
+# Not started, and big enough that the checklist alone understates them. The
+# note says what each actually needs so the entry is a plan, not a shrug.
+BLOCKED = {
+    "scrcpy": "Not started — the decode/render stack needs writing off Apple "
+              "(scrcpy's server is portable; VideoToolbox/AVFoundation are not). Backlog 25.",
+    "mirror-wall": "Not started — several mirrors at once, on the same pipeline "
+                   "as `scrcpy`, so it follows the mirror. Backlog 25.",
+    "screen-record": "Not started — rides the mirror session, so it follows the mirror. Backlog 25.",
+    "video-editor": "Not started — needs the mirror pipeline plus the bundled ffmpeg. Backlog 25.",
+    "reactotron": "Not started — blocked on porting the relay's Network.framework "
+                  "listener to NIO, which ReactotronMCP already proves out. Backlog 24.",
 }
 
 by_category = {}
@@ -118,7 +130,10 @@ for category, features in by_category.items():
         if fid in GATED:
             status, note = "⛔ n/a", GATED[fid]
             counts["gated"] += 1
-        elif fid in ("apps", "logcat", "file-explorer"):
+        elif fid in BLOCKED:
+            status, note = "⬜ todo", BLOCKED[fid]
+            counts["todo"] += 1
+        elif fid in ("apps", "logcat", "file-explorer", "crash-catcher", "device-info"):
             status, note = "🟡 partial", "A pane exists; the checklist below is what it is missing."
             counts["partial"] += 1
         elif kind in ("instantAction", "formAction", "toggleAction") and f["implemented"]:

@@ -52,6 +52,8 @@ import Testing
     private struct ScriptedSource: StreamSource, @unchecked Sendable {
         var deviceBatches: [[Device]] = []
         var logBatches: [[LogLine]] = []
+        var perfSamples: [PerformanceService.PerfPoll] = []
+        var netSamples: [NetSample] = []
         var logcatError: (any Error)?
         let stopped = StoppedBox()
 
@@ -88,6 +90,24 @@ import Testing
         }
 
         func stopLogcat(serial: String) async { stopped.record(serial) }
+
+        func netspeed(serial: String) async -> AsyncStream<NetSample> {
+            let samples = netSamples
+            return AsyncStream { continuation in
+                for sample in samples { continuation.yield(sample) }
+                continuation.finish()
+            }
+        }
+
+        func performance(
+            serial: String, packageId: String?, includeProcesses: Bool
+        ) async -> AsyncStream<PerformanceService.PerfPoll> {
+            let samples = perfSamples
+            return AsyncStream { continuation in
+                for sample in samples { continuation.yield(sample) }
+                continuation.finish()
+            }
+        }
     }
 
     private static func device(_ serial: String) -> Device {
@@ -156,6 +176,63 @@ import Testing
         // `id` and `searchKey` are internal rendering concerns and must not leak.
         #expect(!batch.contains("searchKey"))
         #expect(!batch.contains(#""id":"#) || batch.contains(#""id":4"#))
+    }
+
+    @Test func performanceSamplesGoOutAsTheDTONotTheInternalModel() async {
+        var poll = PerformanceService.PerfPoll()
+        poll.cores = [CpuCoreLoad(core: -1, usagePercent: 42.5), CpuCoreLoad(core: 0, usagePercent: 12)]
+        poll.ramTotalKb = 8_000_000
+        poll.ramUsedKb = 3_200_000
+        poll.appFps = FpsStat(fps: 58.5, jankPercent: 4)
+        poll.processes = [ProcessLoad(pid: 99, name: "com.example.app", cpuPercent: 7, pssKb: 120)]
+
+        let sink = RecordingSink()
+        let source = ScriptedSource(perfSamples: [poll])
+        let session = StreamSession(sink: sink, source: source)
+
+        await session.handle(
+            text: #"{"op":"subscribe","id":7,"topic":"performance","params":{"serial":"R58M"}}"#)
+        #expect(await eventually { await sink.events().contains("batch") })
+
+        let batch = try! #require(await sink.rawFrames(ofEvent: "batch").first)
+        // The core's own label travels: -1 is "All cores", and a client
+        // re-deriving that would eventually name it something else.
+        #expect(batch.contains(#""label":"All cores""#))
+        #expect(batch.contains(#""appFps":58.5"#))
+        #expect(batch.contains(#""appJankPercent":4"#))
+        #expect(batch.contains(#""ramUsedKb":3200000"#))
+        #expect(batch.contains(#""name":"com.example.app""#))
+    }
+
+    @Test func performanceNeedsASerialLikeLogcatDoes() async {
+        // Device-wide figures still come from one device; a subscription with
+        // no serial has nothing to sample.
+        let sink = RecordingSink()
+        let session = StreamSession(sink: sink, source: ScriptedSource())
+
+        await session.handle(text: #"{"op":"subscribe","id":8,"topic":"performance"}"#)
+
+        #expect(await sink.events() == ["failed"])
+        let failed = try! #require(await sink.rawFrames(ofEvent: "failed").first)
+        #expect(failed.contains("device serial"))
+    }
+
+    @Test func everyTopicDeclaresWhetherItNeedsASerialAndWhetherItSnapshots() {
+        // The registry-invariant shape: a topic added to the enum without
+        // being classified would take the default of whichever switch arm it
+        // fell into, and the two questions have opposite right answers.
+        for topic in StreamProtocol.Topic.allCases {
+            switch topic {
+            case .devices:
+                #expect(!topic.needsSerial)
+                #expect(topic.isSnapshot)
+            case .logcat, .performance, .netspeed:
+                #expect(topic.needsSerial)
+                // Increments, all three: dropping the middle of a log or a
+                // graph is exactly what a client must be told about.
+                #expect(!topic.isSnapshot)
+            }
+        }
     }
 
     @Test func aStalledClientGetsAGapNotUnboundedMemory() async {

@@ -1,4 +1,5 @@
 import { ChevronDown, Smartphone, Wifi } from "lucide-react"
+import { NotificationBell } from "@/components/NotificationPanel"
 import { cn } from "@/lib/cn"
 import type { Device } from "@/lib/wire"
 
@@ -29,6 +30,10 @@ export function DeviceBar({
       ) : (
         <DevicePicker devices={devices} selected={selected} onSelect={onSelect} />
       )}
+      <span className="flex-1" />
+      {/* Top-right, so the toasts drop from underneath it — which is what
+          makes the two surfaces read as one thing on the Mac. */}
+      <NotificationBell />
     </div>
   )
 }

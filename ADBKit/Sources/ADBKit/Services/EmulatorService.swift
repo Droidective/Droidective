@@ -5,6 +5,11 @@ public struct Avd: Sendable, Equatable, Identifiable {
     /// adb serial (emulator-5554) when this AVD is currently running.
     public var runningSerial: String?
 
+    public init(name: String, runningSerial: String? = nil) {
+        self.name = name
+        self.runningSerial = runningSerial
+    }
+
     public var id: String { name }
     public var displayName: String { name.replacingOccurrences(of: "_", with: " ") }
 }

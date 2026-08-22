@@ -60,7 +60,8 @@ export function TextInput({
   value: string
   onChange: (value: string) => void
   placeholder?: string | undefined
-  type?: "text" | "number"
+  /** `password` is SwiftUI's `SecureField` — the Wi-Fi form uses it. */
+  type?: "text" | "number" | "password"
   autoFocus?: boolean
   onKeyDown?: (event: React.KeyboardEvent<HTMLInputElement>) => void
   /** A placeholder is not a name: it is gone the moment anything is typed. */
@@ -123,12 +124,14 @@ export function Switch({
   onChange,
   label,
   ariaLabel,
+  disabled = false,
 }: {
   checked: boolean
   onChange: (checked: boolean) => void
   label?: string | undefined
   /** For a switch whose only caption is a separate field label. */
   ariaLabel?: string | undefined
+  disabled?: boolean
 }) {
   return (
     <label className="flex cursor-pointer items-center gap-2">
@@ -137,11 +140,13 @@ export function Switch({
         role="switch"
         aria-checked={checked}
         aria-label={label ?? ariaLabel ?? "Toggle"}
+        disabled={disabled}
         onClick={() => {
           onChange(!checked)
         }}
         className={cn(
           "relative h-[18px] w-8 shrink-0 rounded-full transition",
+          "disabled:cursor-not-allowed disabled:opacity-40",
           checked ? "bg-accent" : "bg-border-subtle",
         )}
       >

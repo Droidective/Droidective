@@ -268,6 +268,350 @@ pub struct FilePullResponse {
     pub path: String,
 }
 
+// MARK: - the crash buffer
+
+#[derive(Debug, Clone, Serialize)]
+pub struct CrashListRequest {
+    pub serial: String,
+}
+
+/// One crash, as `CrashParser` split it.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CrashReport {
+    /// Stable across refetches, so a watch poll does not move the selection.
+    pub id: String,
+    /// A `CrashReport.Kind` raw value: java, native, reactNative, anr, unknown.
+    pub kind: String,
+    /// Sent rather than derived here, so the two UIs name a kind the same way.
+    #[serde(rename = "kindLabel")]
+    pub kind_label: String,
+    /// Logcat's own timestamp. A string: logcat prints no year.
+    pub timestamp: Option<String>,
+    pub process: Option<String>,
+    pub pid: Option<i64>,
+    pub title: String,
+    /// The block as logcat printed it.
+    pub raw: String,
+    /// The block with the threadtime prefixes stripped.
+    pub body: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CrashListResponse {
+    /// Newest first.
+    pub crashes: Vec<CrashReport>,
+}
+
+// MARK: - Developer Options and the dev-time restrictions
+
+/// One Developer Options row: what it is, and what the device reports.
+///
+/// The title and detail come over the wire rather than being written here.
+/// `DeveloperSettingsService` already holds one declarative table of them and
+/// the Mac's panel renders straight from it, so a copy on this side would be a
+/// second table to keep in agreement.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct DevToggle {
+    pub id: String,
+    pub title: String,
+    pub detail: String,
+    pub on: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct DevScale {
+    pub id: String,
+    pub title: String,
+    pub value: f64,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct DevSettingsResponse {
+    pub toggles: Vec<DevToggle>,
+    pub scales: Vec<DevScale>,
+    /// The steps the picker offers, from the service rather than from here.
+    #[serde(rename = "scaleChoices")]
+    pub scale_choices: Vec<f64>,
+}
+
+/// `on` for a toggle, `value` for a scale — which is set picks the table the
+/// daemon looks the id up in, and an id neither table knows is a 400.
+#[derive(Debug, Clone, Serialize)]
+pub struct DevSettingsWriteRequest {
+    pub serial: String,
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub on: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<f64>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "a 1:1 mirror of the daemon's JSON; each field is an independent \
+              device toggle, so folding them into enums would only add a \
+              mapping layer between the wire and the same five booleans"
+)]
+pub struct RestrictionsResponse {
+    #[serde(rename = "adbInstallVerification")]
+    pub adb_install_verification: bool,
+    #[serde(rename = "packageVerifier")]
+    pub package_verifier: bool,
+    #[serde(rename = "stayAwake")]
+    pub stay_awake: bool,
+    #[serde(rename = "hiddenApiEnforced")]
+    pub hidden_api_enforced: bool,
+    /// `None` when `getenforce` said neither — "we could not tell" is a
+    /// different claim from "permissive", and the Mac shows neither state as
+    /// the other.
+    #[serde(rename = "selinuxEnforcing")]
+    pub selinux_enforcing: Option<bool>,
+    /// Whether the root-only half of the screen is reachable at all.
+    #[serde(rename = "hasRootShell")]
+    pub has_root_shell: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct RestrictionWriteRequest {
+    pub serial: String,
+    /// A restriction key, or `remount`.
+    pub key: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub on: Option<bool>,
+}
+
+// MARK: - Wi-Fi and Private DNS
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct WifiStatus {
+    pub enabled: bool,
+    pub connected: bool,
+    pub ssid: Option<String>,
+    #[serde(rename = "ipAddress")]
+    pub ip_address: Option<String>,
+    #[serde(rename = "linkSpeed")]
+    pub link_speed: Option<String>,
+    pub frequency: Option<String>,
+    pub signal: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SavedNetwork {
+    pub id: String,
+    pub ssid: String,
+    pub security: Option<String>,
+    /// Present only on a rooted device — it comes from `WifiConfigStore.xml`.
+    pub password: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct WifiResponse {
+    pub status: WifiStatus,
+    pub networks: Vec<SavedNetwork>,
+    /// Why a password is missing, rather than implying there is none.
+    #[serde(rename = "hasRootShell")]
+    pub has_root_shell: bool,
+}
+
+/// `enabled` toggles the radio; an `ssid` plus a security mode connects.
+#[derive(Debug, Clone, Serialize)]
+pub struct WifiWriteRequest {
+    pub serial: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ssid: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub security: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub password: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct DnsResponse {
+    /// off | automatic | hostname.
+    pub mode: String,
+    pub hostname: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DnsWriteRequest {
+    pub serial: String,
+    pub mode: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hostname: Option<String>,
+}
+
+// MARK: - the per-app screens
+
+/// Every per-app read takes the same shape: a device and a package.
+#[derive(Debug, Clone, Serialize)]
+pub struct AppRequest {
+    pub serial: String,
+    #[serde(rename = "packageId")]
+    pub package_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AppInfoResponse {
+    /// False is an answer, not a failure — the Mac shows a "Not installed"
+    /// empty state for it.
+    pub installed: bool,
+    #[serde(rename = "versionName")]
+    pub version_name: String,
+    #[serde(rename = "versionCode")]
+    pub version_code: String,
+    #[serde(rename = "targetSdk")]
+    pub target_sdk: String,
+    #[serde(rename = "minSdk")]
+    pub min_sdk: String,
+    #[serde(rename = "firstInstall")]
+    pub first_install: String,
+    #[serde(rename = "lastUpdate")]
+    pub last_update: String,
+    #[serde(rename = "apkPath")]
+    pub apk_path: Option<String>,
+    #[serde(rename = "apkSizeBytes")]
+    pub apk_size_bytes: Option<i64>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct Permission {
+    pub name: String,
+    /// "CAMERA" — sent rather than derived, so both UIs split a name the same.
+    #[serde(rename = "shortName")]
+    pub short_name: String,
+    pub granted: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PermissionsResponse {
+    pub permissions: Vec<Permission>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PermissionWriteRequest {
+    pub serial: String,
+    #[serde(rename = "packageId")]
+    pub package_id: String,
+    pub permission: String,
+    pub grant: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct MemRow {
+    pub key: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct MemInfoResponse {
+    /// False when the app has no process. Not an error.
+    pub running: bool,
+    #[serde(rename = "totalPssKb")]
+    pub total_pss_kb: Option<i64>,
+    /// In the order `dumpsys meminfo` printed them — the order is information.
+    pub summary: Vec<MemRow>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SandboxRequest {
+    pub serial: String,
+    #[serde(rename = "packageId")]
+    pub package_id: String,
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SandboxResponse {
+    pub path: String,
+    pub entries: Vec<FileEntry>,
+    /// False when `run-as` refused — a release build, which is normal.
+    pub debuggable: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct AppPullRequest {
+    pub serial: String,
+    #[serde(rename = "packageId")]
+    pub package_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    pub destination: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AppPullResponse {
+    /// An APK pull can answer several — a bundle install has splits.
+    pub paths: Vec<String>,
+}
+
+// MARK: - the Android emulator
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct Avd {
+    pub name: String,
+    /// Underscores read as spaces. Sent rather than derived, so both apps
+    /// name an AVD the same way.
+    #[serde(rename = "displayName")]
+    pub display_name: String,
+    /// The adb serial, when this AVD is running right now.
+    #[serde(rename = "runningSerial")]
+    pub running_serial: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct EmulatorsResponse {
+    pub avds: Vec<Avd>,
+    /// False when the emulator binary is not on this machine — a state the
+    /// screen explains rather than showing as "no AVDs".
+    pub installed: bool,
+}
+
+/// The daemon owns the verb list and refuses an unknown one, so this mirrors
+/// it as a string for the same reason an app action does.
+#[derive(Debug, Clone, Serialize)]
+pub struct EmulatorActionRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avd: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub serial: Option<String>,
+    pub action: String,
+}
+
+// MARK: - installing an app package
+
+#[derive(Debug, Clone, Serialize)]
+pub struct InstallRequest {
+    pub serials: Vec<String>,
+    /// A host path, chosen by this process's file picker. The daemon never
+    /// browses the filesystem on a caller's behalf.
+    pub path: String,
+}
+
+/// One device's outcome. Per device because installing onto three where one is
+/// out of space is a partial success, not a single verdict.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct InstallOutcome {
+    pub serial: String,
+    pub ok: bool,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct InstallResponse {
+    pub outcomes: Vec<InstallOutcome>,
+    #[serde(rename = "fileName")]
+    pub file_name: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct InstallFormatsResponse {
+    /// From `AppPackageFormat`, so both apps accept exactly the same files.
+    pub extensions: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct AppControlRequest {
     pub serial: String,
@@ -304,12 +648,19 @@ pub struct SubscribeCommand {
     pub params: Option<SubscribeParams>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Default, Serialize)]
 pub struct SubscribeParams {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub serial: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub filter: Option<String>,
+    /// The app whose FPS and memory to sample, for `performance`.
+    #[serde(rename = "packageId", skip_serializing_if = "Option::is_none")]
+    pub package_id: Option<String>,
+    /// Whether to add the per-process table — two extra `dumpsys` calls a
+    /// sample, so it is asked for rather than assumed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processes: Option<bool>,
 }
 
 impl SubscribeCommand {

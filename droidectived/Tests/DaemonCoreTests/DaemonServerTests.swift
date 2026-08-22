@@ -23,8 +23,6 @@ import FoundationNetworking
             FeatureResult(ok: true, message: "stub")
         }
 
-        func listApps(serial: String) async throws -> [AppListing] { [] }
-
         func controlApp(
             serial: String, packageId: String, action: AppControlService.AppAction
         ) async throws -> FeatureResult {
@@ -55,13 +53,14 @@ import FoundationNetworking
             FeatureResult(ok: true, message: "stub")
         }
 
-        func fileInfo(
-            serial: String, path: String, asRoot: Bool
-        ) async throws -> FileExplorerService.FileInfo? { nil }
+        func crashes(serial: String) async throws -> [CrashReport] {
+            [CrashReport(
+                id: "06-12 10:00:02.123|4242|java|boom", kind: .java,
+                timestamp: "06-12 10:00:02.123", process: "com.example.app", pid: 4242,
+                title: "java.lang.IllegalStateException: boom",
+                raw: "E AndroidRuntime: boom", body: "boom")]
+        }
 
-        func pullFile(
-            serial: String, path: String, to destination: String, asRoot: Bool
-        ) async throws -> String { destination }
     }
 
     private static func device(_ serial: String) -> Device {
@@ -222,6 +221,18 @@ import FoundationNetworking
             #expect(status == 200)
             let decoded = try JSONDecoder().decode(FileProtocol.PullResponse.self, from: body)
             #expect(decoded.path == "/tmp/note.txt")
+        }
+    }
+
+    @Test func listsTheDevicesCrashes() async throws {
+        try await withServer { port, token in
+            let (status, body) = try await send(
+                port: port, path: DaemonProtocol.Route.crashesList.rawValue, token: token,
+                body: #"{"serial":"emulator-5554"}"#)
+            #expect(status == 200)
+            let decoded = try JSONDecoder().decode(CrashProtocol.ListResponse.self, from: body)
+            #expect(decoded.crashes.first?.process == "com.example.app")
+            #expect(decoded.crashes.first?.kind == "java")
         }
     }
 

@@ -219,9 +219,7 @@ public enum FileProtocol {
 /// deal in `Data` and an HTTP status code rather than NIO types for the same
 /// reason.
 enum FileRoutes {
-    typealias Answer = (status: Int, body: Data)
-
-    static func list(body: Data, backend: any DaemonBackend) async -> Answer {
+    static func list(body: Data, backend: any DaemonBackend) async -> DaemonProtocol.Answer {
         guard let request = decode(FileProtocol.ListRequest.self, from: body) else {
             return (400, DaemonProtocol.encoded(DaemonProtocol.badRequest))
         }
@@ -235,7 +233,7 @@ enum FileRoutes {
         }
     }
 
-    static func operation(body: Data, backend: any DaemonBackend) async -> Answer {
+    static func operation(body: Data, backend: any DaemonBackend) async -> DaemonProtocol.Answer {
         guard let request = decode(FileProtocol.OperationRequest.self, from: body) else {
             return (400, DaemonProtocol.encoded(DaemonProtocol.badRequest))
         }
@@ -256,7 +254,7 @@ enum FileRoutes {
         }
     }
 
-    static func info(body: Data, backend: any DaemonBackend) async -> Answer {
+    static func info(body: Data, backend: any DaemonBackend) async -> DaemonProtocol.Answer {
         guard let request = decode(FileProtocol.InfoRequest.self, from: body) else {
             return (400, DaemonProtocol.encoded(DaemonProtocol.badRequest))
         }
@@ -270,7 +268,7 @@ enum FileRoutes {
         }
     }
 
-    static func pull(body: Data, backend: any DaemonBackend) async -> Answer {
+    static func pull(body: Data, backend: any DaemonBackend) async -> DaemonProtocol.Answer {
         guard let request = decode(FileProtocol.PullRequest.self, from: body) else {
             return (400, DaemonProtocol.encoded(DaemonProtocol.badRequest))
         }
@@ -290,7 +288,7 @@ enum FileRoutes {
 
     /// adb's answer, not a daemon fault — the 502 every other route uses,
     /// carrying adb's own words.
-    private static func adbRefused(_ message: String, _ error: some Error) -> Answer {
+    private static func adbRefused(_ message: String, _ error: some Error) -> DaemonProtocol.Answer {
         (502, DaemonProtocol.encoded(DaemonProtocol.ErrorBody(
             code: "adb_failed", message: message, detail: "\(error)")))
     }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Clipboard, Download, RefreshCw, Search } from "lucide-react"
+import { NoDevice } from "@/components/NoDevice"
 import { Banner, Button } from "@/components/Controls"
 import { asDaemonError, copyText, deviceProps, exportText } from "@/lib/daemon"
 import {
@@ -55,7 +56,7 @@ export function DeviceInfoPane({ device }: { device: Device | null }) {
   }
 
   if (!device) {
-    return <p className="p-6 text-text-tertiary">Connect a device to read its properties.</p>
+    return <NoDevice feature="device-info" title="Device Info" />
   }
 
   return (

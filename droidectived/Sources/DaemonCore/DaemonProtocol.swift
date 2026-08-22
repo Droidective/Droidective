@@ -23,12 +23,46 @@ public enum DaemonProtocol {
         case filesOp = "/v1/files/op"
         case filesInfo = "/v1/files/info"
         case filesPull = "/v1/files/pull"
+        case crashesList = "/v1/crashes/list"
+        case crashesClear = "/v1/crashes/clear"
+        /// Developer Options and the dev-time restrictions. Read and write are
+        /// split — unlike the filesystem's one `op` route — because a read
+        /// answers with a whole table and a write names one row, so folding
+        /// them together would mean a response type that is two shapes.
+        case devSettingsRead = "/v1/devsettings/read"
+        case devSettingsWrite = "/v1/devsettings/write"
+        case restrictionsRead = "/v1/restrictions/read"
+        case restrictionsWrite = "/v1/restrictions/write"
+        case wifiRead = "/v1/wifi/read"
+        case wifiWrite = "/v1/wifi/write"
+        case dnsRead = "/v1/dns/read"
+        case dnsWrite = "/v1/dns/write"
+        /// The per-app screens. All four hang off a package id already chosen
+        /// in Apps, so they take one shape: serial + packageId.
+        case appInfo = "/v1/app/info"
+        case appPermissions = "/v1/app/permissions"
+        case appSetPermission = "/v1/app/permission"
+        case appMeminfo = "/v1/app/meminfo"
+        case appSandboxList = "/v1/app/sandbox/list"
+        case appSandboxPull = "/v1/app/sandbox/pull"
+        case appPullApk = "/v1/app/apk/pull"
+        case emulatorsList = "/v1/emulators/list"
+        case emulatorsAction = "/v1/emulators/action"
+        case installFormats = "/v1/install/formats"
+        case installRun = "/v1/install/run"
     }
 
     /// The multiplexed stream socket. Not a `Route`: it is a WebSocket upgrade
     /// rather than a POST, and folding it into the route table would make
     /// `everyRouteIsReachable` assert something untrue about it.
     public static let streamPath = "/v1/stream"
+
+    /// A route's answer before it meets NIO.
+    ///
+    /// The route groups that live outside `DaemonServer` deal in a plain status
+    /// code rather than an `HTTPResponseStatus`, which is what lets them be
+    /// tested without standing up a socket.
+    public typealias Answer = (status: Int, body: Data)
 
     public struct DevicesResponse: Codable, Equatable, Sendable {
         public let devices: [Device]

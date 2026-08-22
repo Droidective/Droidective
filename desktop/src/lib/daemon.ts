@@ -2,6 +2,7 @@ import { Channel, invoke } from "@tauri-apps/api/core"
 import { listen, type UnlistenFn } from "@tauri-apps/api/event"
 import type {
   AppsResponse,
+  CrashListResponse,
   DaemonError,
   DaemonStatus,
   Device,
@@ -12,6 +13,8 @@ import type {
   FilePullResponse,
   FilesListResponse,
   LogLine,
+  NetSample,
+  PerfSample,
   RootStatusResponse,
   RunResponse,
   StreamUpdate,
@@ -114,6 +117,16 @@ export function fileInfo(args: {
   return invoke<FileInfoResponse>("file_info", args)
 }
 
+/** Every crash the device has recorded, newest first. */
+export function listCrashes(serial: string): Promise<CrashListResponse> {
+  return invoke<CrashListResponse>("list_crashes", { serial })
+}
+
+/** Empties `logcat -b crash` on the device. */
+export function clearCrashes(serial: string): Promise<RunResponse> {
+  return invoke<RunResponse>("clear_crashes", { serial })
+}
+
 /** Pulls into ~/Downloads/Droidective and answers where it landed. */
 export function pullFile(args: {
   serial: string
@@ -136,6 +149,16 @@ export function revealPath(path: string): Promise<void> {
   return invoke("reveal_path", { path })
 }
 
+/** Where pulls and exports land, as the Rust side resolves it. */
+export function capturesFolder(): Promise<string> {
+  return invoke<string>("captures_folder")
+}
+
+/** Opens an external link. The Rust side refuses anything but https. */
+export function openUrl(url: string): Promise<void> {
+  return invoke("open_url", { url })
+}
+
 /** Writes into ~/Downloads/Droidective and returns where it landed. */
 export function exportText(name: string, contents: string): Promise<string> {
   return invoke<string>("export_text", { name, contents })
@@ -148,7 +171,7 @@ export interface Subscription {
 }
 
 async function subscribe<Item>(
-  command: "watch_devices" | "watch_logcat",
+  command: "watch_devices" | "watch_logcat" | "watch_netspeed" | "watch_performance",
   args: Record<string, unknown>,
   onUpdate: (update: StreamUpdate<Item>) => void,
 ): Promise<Subscription> {
@@ -184,6 +207,27 @@ export function watchLogcat(
 }
 
 /**
+ * One performance sample a second until stopped.
+ *
+ * `processes` is opt-in because it costs two extra `dumpsys` calls per sample
+ * — enough that leaving it on would show up in the numbers being measured.
+ */
+export function watchPerformance(
+  args: { serial: string; packageId: string | null; processes: boolean },
+  onUpdate: (update: StreamUpdate<PerfSample>) => void,
+): Promise<Subscription> {
+  return subscribe("watch_performance", args, onUpdate)
+}
+
+/** Live `/proc/net/dev` throughput, one sample a second. */
+export function watchNetspeed(
+  serial: string,
+  onUpdate: (update: StreamUpdate<NetSample>) => void,
+): Promise<Subscription> {
+  return subscribe("watch_netspeed", { serial }, onUpdate)
+}
+
+/**
  * Normalises whatever `invoke` rejected with.
  *
  * Rust serialises `DaemonError` as the daemon's own `{code,message,detail}`,
@@ -201,3 +245,28 @@ export function asDaemonError(error: unknown): DaemonError {
   }
   return { code: "unknown", message: String(error), detail: null }
 }
+
+// The per-device settings calls live next door, so this file stays inside its
+// line budget; `@/lib/daemon` remains the one import for all of them.
+export {
+  appInfo,
+  devSettings,
+  emulatorAction,
+  emulators,
+  pickAndInstall,
+  meminfo,
+  permissions,
+  privateDns,
+  remountSystem,
+  restrictions,
+  pullApk,
+  sandboxList,
+  sandboxPull,
+  setPermission,
+  setPrivateDns,
+  setWifiEnabled,
+  connectWifi,
+  wifi,
+  writeDevSetting,
+  writeRestriction,
+} from "@/lib/daemon-settings"

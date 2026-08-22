@@ -173,6 +173,68 @@ export interface FilePullResponse {
   path: string
 }
 
+/** One crash, as `CrashParser` split it out of a logcat buffer. */
+export interface CrashReport {
+  /** Stable across refetches, so a watch poll does not move the selection. */
+  id: string
+  /** A `CrashReport.Kind` raw value: java, native, reactNative, anr, unknown. */
+  kind: string
+  /** Sent by the daemon so both UIs name a kind the same way. */
+  kindLabel: string
+  /** Logcat's own timestamp. A string — logcat prints no year. */
+  timestamp: string | null
+  process: string | null
+  pid: number | null
+  title: string
+  /** The block as logcat printed it. */
+  raw: string
+  /** The block with the threadtime prefixes stripped. */
+  body: string
+}
+
+export interface CrashListResponse {
+  /** Newest first. */
+  crashes: CrashReport[]
+}
+
+/** One performance sample, from `/v1/stream`'s `performance` topic. */
+export interface PerfSample {
+  /**
+   * Empty on the first sample: a CPU percentage is a delta and there is
+   * nothing yet to subtract from. `-1` is the all-cores aggregate.
+   */
+  cores: { core: number; label: string; usagePercent: number }[]
+  ramTotalKb: number | null
+  ramUsedKb: number | null
+  appFps: number | null
+  /** Percent of frames that missed the deadline, when any were drawn. */
+  appJankPercent: number | null
+  appPssKb: number | null
+  downloadBytesPerSec: number | null
+  uploadBytesPerSec: number | null
+  processes: { pid: number; name: string; cpuPercent: number | null; pssKb: number | null }[]
+}
+
+/** One `/proc/net/dev` sample, as the daemon differenced it. */
+export interface NetSample {
+  downloadBytesPerSec: number
+  uploadBytesPerSec: number
+  /**
+   * Since the device booted, not since the stream started — the screen
+   * derives its own session totals by differencing against the first sample,
+   * which is the only way a mid-session subscribe reads right.
+   */
+  totalRxBytes: number
+  totalTxBytes: number
+  interfaces: {
+    name: string
+    downloadBytesPerSec: number
+    uploadBytesPerSec: number
+    rxBytes: number
+    txBytes: number
+  }[]
+}
+
 export type DaemonStatus =
   | { state: "starting" }
   | { state: "ready"; port: number }
@@ -201,3 +263,7 @@ export interface DaemonError {
   message: string
   detail: string | null
 }
+
+// The device-state and network shapes live next door, so this file stays
+// inside its line budget; `@/lib/wire` remains the one import for all of them.
+export type * from "@/lib/wire-settings"

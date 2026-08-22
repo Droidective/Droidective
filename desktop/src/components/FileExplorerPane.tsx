@@ -1,11 +1,11 @@
 import { useState } from "react"
-import { ConfirmDialog } from "@/components/ConfirmDialog"
 import {
   FileNotices,
   FileSelectionBar,
   FileToolbar,
   NewFolderDialog,
 } from "@/components/FileExplorerBars"
+import { ConfirmDialog, NoDevice } from "@/components/screen"
 import { FileInfoSheet } from "@/components/FileInfoSheet"
 import { FileList } from "@/components/FileList"
 import { FileRowMenu, type FileMenuTarget } from "@/components/FileRowMenu"
@@ -36,7 +36,7 @@ export function FileExplorerPane({ device }: { device: Device | null }) {
   const [confirmingDelete, setConfirmingDelete] = useState<FileEntry[] | null>(null)
 
   if (!device) {
-    return <p className="p-6 text-text-tertiary">Connect a device to browse its storage.</p>
+    return <NoDevice feature="file-explorer" title="File Explorer" />
   }
 
   const busy = actions.busy !== null
@@ -94,12 +94,7 @@ export function FileExplorerPane({ device }: { device: Device | null }) {
         }}
       />
 
-      <FileNotices
-        busy={actions.busy}
-        error={listing.error}
-        notice={actions.notice}
-        onDismiss={actions.dismissNotice}
-      />
+      <FileNotices busy={actions.busy} error={listing.error} />
 
       <Contents
         listing={listing}

@@ -43,6 +43,71 @@ public protocol DaemonBackend: Sendable {
     func pullFile(
         serial: String, path: String, to destination: String, asRoot: Bool
     ) async throws -> String
+    /// Every crash the device has recorded, newest first.
+    func crashes(serial: String) async throws -> [CrashReport]
+    /// Empties the device's crash buffer.
+    func clearCrashBuffer(serial: String) async throws
+    /// Every Developer Options toggle and animation scale, as the device
+    /// currently reports them. Best-effort like the service it wraps — a key
+    /// the device refuses reads as its default rather than failing the panel.
+    func developerSettings(serial: String) async -> DeviceSettingsProtocol.DevState
+    /// Writes one Developer Options row.
+    func writeDeveloperSetting(
+        serial: String, _ write: DeviceSettingsProtocol.DevWrite
+    ) async throws -> AdbResult
+    /// The dev-time restriction toggles.
+    func restrictions(serial: String) async -> RestrictionsState
+    /// Writes one restriction, or remounts the system partition.
+    func writeRestriction(
+        serial: String, _ write: DeviceSettingsProtocol.RestrictionWrite
+    ) async throws -> AdbResult
+    /// The Wi-Fi screen's whole read: the connection, the saved networks (with
+    /// their passwords when `su` allows it), and whether it did.
+    func wifi(serial: String) async -> (WifiStatus, [WifiNetwork], Bool)
+    /// Toggles the radio, or connects to a network.
+    func writeWifi(
+        serial: String, _ write: NetworkProtocol.WifiWrite
+    ) async throws -> AdbResult
+    /// The device's Private DNS mode and hostname.
+    func privateDns(serial: String) async -> DnsStatus
+    /// Sets the Private DNS mode. `hostname` is used only by `.hostname`.
+    func writePrivateDns(
+        serial: String, mode: DnsStatus.Mode, hostname: String
+    ) async throws -> AdbResult
+    /// Version, SDK levels, install dates and APK size for one package.
+    func appInfo(serial: String, packageId: String) async throws -> AppInfo
+    /// The package's runtime permissions and whether each is granted.
+    func permissions(serial: String, packageId: String) async throws -> [PermissionEntry]
+    /// Grants or revokes one runtime permission.
+    func setPermission(
+        serial: String, packageId: String, permission: String, grant: Bool
+    ) async throws -> FeatureResult
+    /// `dumpsys meminfo` for one package.
+    func meminfo(serial: String, packageId: String) async throws -> MemInfo
+    /// One directory inside a debuggable app's sandbox, via `run-as`.
+    func sandboxList(
+        serial: String, packageId: String, path: String
+    ) async throws -> (entries: [FsEntry], debuggable: Bool)
+    /// Pulls one file out of the sandbox to a host path.
+    func sandboxPull(
+        serial: String, packageId: String, path: String, to destination: String
+    ) async throws -> String
+    /// Pulls the package's APK — and its splits, if it has any.
+    func pullApk(
+        serial: String, packageId: String, to destination: String
+    ) async throws -> [String]
+    /// Every AVD on this machine, and whether the emulator binary is here at
+    /// all. Best-effort: a missing emulator is a state the screen explains,
+    /// not an error.
+    func emulators() async -> ([Avd], Bool)
+    /// Launches, cold-boots, wipes, relaunches or stops one AVD.
+    func emulatorAction(
+        _ action: EmulatorProtocol.Action, avd: String, serial: String
+    ) async throws -> FeatureResult
+    /// Installs one host-side package onto one device. Throws only when the
+    /// file cannot be processed at all; an install adb *ran* and rejected
+    /// comes back as a failed result carrying adb's own reason.
+    func installPackage(path: String, serial: String) async throws -> FeatureResult
 }
 
 /// `DeviceMonitor` in production.
@@ -52,11 +117,18 @@ public struct LiveBackend: DaemonBackend {
     /// The app services are cheap value types over this, so they are built per
     /// call rather than held — there is no state to keep.
     private let client: AdbClient
+    private let emulatorService: EmulatorService
+    private let locator: ToolLocator
 
-    public init(monitor: DeviceMonitor, engine: FeatureEngine, client: AdbClient) {
+    public init(
+        monitor: DeviceMonitor, engine: FeatureEngine, client: AdbClient,
+        emulators: EmulatorService, locator: ToolLocator
+    ) {
         self.monitor = monitor
         self.engine = engine
         self.client = client
+        emulatorService = emulators
+        self.locator = locator
     }
 
     public func listDevices() async -> [Device] { await monitor.list(force: true) }
@@ -123,6 +195,214 @@ public struct LiveBackend: DaemonBackend {
         try await FileExplorerService(client: client).pull(
             serial: serial, path: path, to: URL(fileURLWithPath: destination), asRoot: asRoot
         ).path
+    }
+
+    public func crashes(serial: String) async throws -> [CrashReport] {
+        try await CrashExtractor(client: client).crashes(serial: serial)
+    }
+
+    public func clearCrashBuffer(serial: String) async throws {
+        try await CrashExtractor(client: client).clearCrashBuffer(serial: serial)
+    }
+
+    public func developerSettings(serial: String) async -> DeviceSettingsProtocol.DevState {
+        let service = DeveloperSettingsService(client: client)
+        return DeviceSettingsProtocol.DevState(
+            toggles: await service.readToggles(serial: serial),
+            scales: await service.readScales(serial: serial))
+    }
+
+    public func writeDeveloperSetting(
+        serial: String, _ write: DeviceSettingsProtocol.DevWrite
+    ) async throws -> AdbResult {
+        let service = DeveloperSettingsService(client: client)
+        switch write {
+        case .toggle(let toggle, let on):
+            return try await service.set(toggle, on: on, serial: serial)
+        case .scale(let scale, let value):
+            return try await service.setScale(scale, value: value, serial: serial)
+        }
+    }
+
+    public func restrictions(serial: String) async -> RestrictionsState {
+        await RestrictionsService(client: client).current(serial: serial)
+    }
+
+    public func writeRestriction(
+        serial: String, _ write: DeviceSettingsProtocol.RestrictionWrite
+    ) async throws -> AdbResult {
+        let service = RestrictionsService(client: client)
+        switch write {
+        case .remountSystemReadWrite:
+            return try await service.remountSystemReadWrite(serial: serial)
+        case .toggle(let key, let on):
+            switch key {
+            case .adbInstallVerification:
+                return try await service.setAdbInstallVerification(serial: serial, on)
+            case .packageVerifier:
+                return try await service.setPackageVerifier(serial: serial, on)
+            case .stayAwake:
+                return try await service.setStayAwake(serial: serial, on)
+            case .hiddenApiEnforced:
+                return try await service.setHiddenApiEnforced(serial: serial, on)
+            case .selinuxEnforcing:
+                return try await service.setSelinuxEnforcing(serial: serial, on)
+            }
+        }
+    }
+
+    /// The Mac's `WiFiView.load`, moved down a layer.
+    ///
+    /// The password merge is here rather than in the client because it is the
+    /// same join on both platforms: `cmd wifi list-networks` names the saved
+    /// networks and `WifiConfigStore.xml` holds their secrets, and a network
+    /// that only appears in the store still belongs in the list.
+    public func wifi(serial: String) async -> (WifiStatus, [WifiNetwork], Bool) {
+        let service = WifiService(client: client)
+        let status = await service.status(serial: serial)
+        var networks = await service.savedNetworks(serial: serial)
+        let rooted = await RootService(client: client).detect(serial: serial).hasRootShell
+        guard rooted else { return (status, networks, false) }
+
+        let credentials = await service.savedPasswords(serial: serial)
+        var bySSID: [String: String] = [:]
+        for credential in credentials where credential.password != nil {
+            bySSID[credential.ssid] = credential.password
+        }
+        networks = networks.map { network in
+            var network = network
+            network.password = bySSID[network.ssid]
+            return network
+        }
+        let known = Set(networks.map(\.ssid))
+        for credential in credentials where !known.contains(credential.ssid) {
+            networks.append(WifiNetwork(
+                networkId: nil, ssid: credential.ssid, security: credential.security,
+                password: credential.password))
+        }
+        return (status, networks, true)
+    }
+
+    public func writeWifi(
+        serial: String, _ write: NetworkProtocol.WifiWrite
+    ) async throws -> AdbResult {
+        let service = WifiService(client: client)
+        switch write {
+        case .setEnabled(let on):
+            return try await service.setEnabled(serial: serial, on)
+        case .connect(let ssid, let security, let password):
+            return try await service.connect(
+                serial: serial, ssid: ssid, security: security, password: password)
+        }
+    }
+
+    public func privateDns(serial: String) async -> DnsStatus {
+        await DnsService(client: client).current(serial: serial)
+    }
+
+    public func writePrivateDns(
+        serial: String, mode: DnsStatus.Mode, hostname: String
+    ) async throws -> AdbResult {
+        let service = DnsService(client: client)
+        switch mode {
+        case .off: return try await service.setOff(serial: serial)
+        case .automatic: return try await service.setAutomatic(serial: serial)
+        case .hostname: return try await service.setHostname(serial: serial, hostname)
+        }
+    }
+
+    private var inspection: AppInspectionService { AppInspectionService(client: client) }
+
+    public func appInfo(serial: String, packageId: String) async throws -> AppInfo {
+        try await inspection.getAppInfo(serial: serial, packageId: packageId)
+    }
+
+    public func permissions(serial: String, packageId: String) async throws -> [PermissionEntry] {
+        try await inspection.listPermissions(serial: serial, packageId: packageId)
+    }
+
+    public func setPermission(
+        serial: String, packageId: String, permission: String, grant: Bool
+    ) async throws -> FeatureResult {
+        try await inspection.setPermission(
+            serial: serial, packageId: packageId, permission: permission, grant: grant)
+    }
+
+    public func meminfo(serial: String, packageId: String) async throws -> MemInfo {
+        try await inspection.getMemInfo(serial: serial, packageId: packageId)
+    }
+
+    public func sandboxList(
+        serial: String, packageId: String, path: String
+    ) async throws -> (entries: [FsEntry], debuggable: Bool) {
+        try await inspection.sandboxList(serial: serial, packageId: packageId, dir: path)
+    }
+
+    public func sandboxPull(
+        serial: String, packageId: String, path: String, to destination: String
+    ) async throws -> String {
+        try await inspection.sandboxPull(
+            serial: serial, packageId: packageId, filePath: path,
+            to: URL(fileURLWithPath: destination)
+        ).path
+    }
+
+    public func pullApk(
+        serial: String, packageId: String, to destination: String
+    ) async throws -> [String] {
+        try await inspection.pullApk(
+            serial: serial, packageId: packageId, to: URL(fileURLWithPath: destination)
+        ).map(\.path)
+    }
+
+    public func emulators() async -> ([Avd], Bool) {
+        let service = emulatorService
+        guard await service.emulatorInstalled() else { return ([], false) }
+        return (await service.listAvds(devices: await monitor.list(force: false)), true)
+    }
+
+    public func emulatorAction(
+        _ action: EmulatorProtocol.Action, avd: String, serial: String
+    ) async throws -> FeatureResult {
+        let service = emulatorService
+        switch action {
+        case .launch:
+            return await service.launch(avd: avd)
+        case .coldBoot:
+            return await service.launch(
+                avd: avd, options: EmulatorService.LaunchOptions(coldBoot: true))
+        case .wipeData:
+            return await service.wipeData(avd: avd)
+        case .stop:
+            return try await service.stop(serial: serial)
+        case .relaunch:
+            _ = try? await service.stop(serial: serial)
+            await waitForShutdown(serial: serial)
+            return await service.launch(avd: avd)
+        }
+    }
+
+    /// Waits for a stopping emulator to actually go away.
+    ///
+    /// The Mac polls `EmulatorService.consolePID`, which shells out to
+    /// `/usr/sbin/lsof` — a macOS path, so it would answer nil on Linux and
+    /// Windows and the relaunch would fire while the console port was still
+    /// held. Asking adb is portable *and* the better question: what matters is
+    /// whether the emulator is still a device, and adb is the authority on
+    /// that. Twenty seconds, as the Mac waits.
+    public func installPackage(path: String, serial: String) async throws -> FeatureResult {
+        try await AppBundleInstallService(
+            client: client,
+            toolchain: ApkToolchain(locator: locator, store: engine.managedTools)
+        ).install(bundlePath: path, serial: serial)
+    }
+
+    private func waitForShutdown(serial: String) async {
+        for _ in 0 ..< 20 {
+            let devices = await monitor.list(force: true)
+            if !devices.contains(where: { $0.serial == serial }) { return }
+            try? await Task.sleep(for: .seconds(1))
+        }
     }
 }
 
@@ -400,6 +680,73 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
             return Self.answer(
                 await FileRoutes.pull(body: Data(body.readableBytesView), backend: backend))
 
+        case .crashesList:
+            return Self.answer(
+                await CrashRoutes.list(body: Data(body.readableBytesView), backend: backend))
+        case .crashesClear:
+            return Self.answer(
+                await CrashRoutes.clear(body: Data(body.readableBytesView), backend: backend))
+
+        case .devSettingsRead:
+            return Self.answer(await DeviceSettingsRoutes.developerRead(
+                body: Data(body.readableBytesView), backend: backend))
+        case .devSettingsWrite:
+            return Self.answer(await DeviceSettingsRoutes.developerWrite(
+                body: Data(body.readableBytesView), backend: backend))
+        case .restrictionsRead:
+            return Self.answer(await DeviceSettingsRoutes.restrictionsRead(
+                body: Data(body.readableBytesView), backend: backend))
+        case .restrictionsWrite:
+            return Self.answer(await DeviceSettingsRoutes.restrictionsWrite(
+                body: Data(body.readableBytesView), backend: backend))
+
+        case .wifiRead:
+            return Self.answer(await NetworkRoutes.wifiRead(
+                body: Data(body.readableBytesView), backend: backend))
+        case .wifiWrite:
+            return Self.answer(await NetworkRoutes.wifiWrite(
+                body: Data(body.readableBytesView), backend: backend))
+        case .dnsRead:
+            return Self.answer(await NetworkRoutes.dnsRead(
+                body: Data(body.readableBytesView), backend: backend))
+        case .dnsWrite:
+            return Self.answer(await NetworkRoutes.dnsWrite(
+                body: Data(body.readableBytesView), backend: backend))
+
+        case .appInfo:
+            return Self.answer(await AppInspectionRoutes.info(
+                body: Data(body.readableBytesView), backend: backend))
+        case .appPermissions:
+            return Self.answer(await AppInspectionRoutes.permissions(
+                body: Data(body.readableBytesView), backend: backend))
+        case .appSetPermission:
+            return Self.answer(await AppInspectionRoutes.setPermission(
+                body: Data(body.readableBytesView), backend: backend))
+        case .appMeminfo:
+            return Self.answer(await AppInspectionRoutes.meminfo(
+                body: Data(body.readableBytesView), backend: backend))
+        case .appSandboxList:
+            return Self.answer(await AppInspectionRoutes.sandboxList(
+                body: Data(body.readableBytesView), backend: backend))
+        case .appSandboxPull:
+            return Self.answer(await AppInspectionRoutes.sandboxPull(
+                body: Data(body.readableBytesView), backend: backend))
+        case .appPullApk:
+            return Self.answer(await AppInspectionRoutes.pullApk(
+                body: Data(body.readableBytesView), backend: backend))
+
+        case .emulatorsList:
+            return Self.answer(await EmulatorRoutes.list(backend: backend))
+        case .emulatorsAction:
+            return Self.answer(await EmulatorRoutes.action(
+                body: Data(body.readableBytesView), backend: backend))
+
+        case .installFormats:
+            return Self.answer(InstallRoutes.formats())
+        case .installRun:
+            return Self.answer(await InstallRoutes.install(
+                body: Data(body.readableBytesView), backend: backend))
+
         case .actionsRun:
             let raw = Data(body.readableBytesView)
             guard let request = try? JSONDecoder().decode(
@@ -464,7 +811,7 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
 
     /// A `FileRoutes` answer as NIO wants it. Those handlers deal in a plain
     /// status code so they can be tested without a socket.
-    private static func answer(_ answer: FileRoutes.Answer) -> (HTTPResponseStatus, Data) {
+    private static func answer(_ answer: DaemonProtocol.Answer) -> (HTTPResponseStatus, Data) {
         (HTTPResponseStatus(statusCode: answer.status), answer.body)
     }
 

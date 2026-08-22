@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react"
 import { Eraser, Pause, Play } from "lucide-react"
+import { NoDevice } from "@/components/NoDevice"
 import { Banner, Button } from "@/components/Controls"
 import { LogcatToolbar } from "@/components/LogcatToolbar"
 import { useLogcatStream } from "@/hooks/useLogcatStream"
@@ -64,7 +65,7 @@ export function LogcatPane({ device }: { device: Device | null }) {
   }
 
   if (!device) {
-    return <p className="p-6 text-text-tertiary">Connect a device to read its log.</p>
+    return <NoDevice feature="logcat" title="Logcat" />
   }
 
   return (

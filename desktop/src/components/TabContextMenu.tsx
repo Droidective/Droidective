@@ -1,4 +1,9 @@
 import { TabMenu, type TabMenuTarget } from "@/components/TabMenu"
+
+// Re-exported because it is this component's own prop type: a caller that
+// renders the menu needs the target, and making it reach into a second module
+// for it is two imports for one idea.
+export type { TabMenuTarget }
 import type { WorkspaceController } from "@/hooks/useWorkspace"
 import { isSplit } from "@/lib/workspace"
 

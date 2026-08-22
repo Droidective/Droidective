@@ -37,6 +37,7 @@ its own.
 | `src/lib/icons.ts` | one lucide glyph per registry id — the wire carries none |
 | `src/lib/logbuffer.ts` | the log feed's ring buffer and its gap markers |
 | `src/lib/files.ts` | the File Explorer's rules — paths, selection, batches |
+| `src/lib/crashes.ts` | the Crash Catcher's rules — filters, the clear watermark |
 | `src/lib/fields.ts` | form values → run parameters |
 | `src-tauri/src/daemon/` | spawning, the HTTP client, and the stream socket |
 
@@ -66,7 +67,8 @@ reorder, and Home leads the strip permanently. An action feature renders from
 its registry fields — forms, toggles, destructive confirmation — which is why
 most of the registry works with no per-feature code. The screens built by hand
 so far are the installed-app browser with its verbs, live logcat with visible
-gap markers, every device property searchable, and the file explorer.
+gap markers, every device property searchable, the file explorer, and the
+crash catcher.
 
 The file explorer is the first screen here that **writes** to a device.
 Everything on it — a new folder, a delete, a copy or move, a pull — goes over
@@ -76,6 +78,13 @@ path escaped on the way out would be quoted twice and address a different
 file. Delete needs a second press, the rule the app verbs already use. A pull
 lands in `~/Downloads/Droidective`, the folder `export_text` writes to, and
 the reply says where so the result can offer Show in folder.
+
+The crash catcher reads the same buffer the Mac does, and decides nothing about
+it: `CrashExtractor` picks the buffer (falling back to `main` when `crash` is
+empty) and `CrashParser` says where one crash ends, so the two apps can never
+disagree about how many crashes a device has. Clear Buffer empties
+`logcat -b crash` and then remembers a high-water mark, because the fallback
+would otherwise resurface the same crashes on the very next fetch.
 
 Open tabs stay mounted while they are in the background rather than
 unmounting, so a backgrounded tab keeps its log stream and its loaded lists.
@@ -98,8 +107,9 @@ shell, and this is the binding VS Code already trained everyone on), by a tab's
 right-click menu, or by dragging a tab onto the trailing edge of the pane. The
 divider clamps to 30–70% and its position is saved.
 
-Not yet: hotkeys, and most of the full-screen views (crash catcher,
-performance…), which are `kind: "view"` in the registry and need whole panels.
+Not yet: hotkeys, and most of the full-screen views (performance, the
+device-state screens…), which are `kind: "view"` in the registry and need whole
+panels.
 They are listed in the sidebar and open a tab that says so, rather than being
 hidden — a feature the Mac has and this app does not is worth knowing about.
 `docs/desktop-parity.md` is the tracker.
