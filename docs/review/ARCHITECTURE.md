@@ -44,24 +44,26 @@ ADBKit. Views render; they don't compute. Built via XcodeGen + xcodebuild; the
 ## The feature system
 
 A feature's string `id` is a contract spread across several files —
-`FeatureRegistry` (the `FeatureDef`), `FeatureNotes` (how-it-works),
-`FeatureCommands` (command reference), `FeatureEngine` (runner dispatch +
-`implementedIDs`) for actions, and `FeatureDetailView.detailByKind` + a view in
-`App` for view features. **`CLAUDE.md` → "Adding a feature — the checklist" is
-the source of truth** for the order and which steps have enforcing tests vs.
-silent failure modes.
+`FeatureRegistry` (the `FeatureDef`), `FeatureEngine` (runner dispatch +
+`implementedIDs`) for actions, and a `FeatureDetailRoute` case +
+`FeatureDetailView.pane` + a view in `App` for view features. **`CLAUDE.md` →
+"Adding a feature — the checklist" is the source of truth** for the order and
+which steps have enforcing tests vs. silent failure modes.
 
 ### Review checks
 
 - [ ] New feature is in `FeatureRegistry` with a stable id, keywords, and a
-      hotkey, plus a `FeatureNotes` note and a `FeatureCommands` reference (all
-      three have enforcing tests — flag a gap in review so it isn't a CI surprise).
+      hotkey (`hasAll61Features` and `implementedIDsAreAllRealFeatures` enforce
+      the registry side — flag a gap in review so it isn't a CI surprise).
 - [ ] **Actions** wire `FeatureEngine.dispatch` *and* `implementedIDs`
       *and* an arg-vector test asserting the exact adb arguments. A feature in
       `implementedIDs` with no dispatch case, or vice versa, is caught by tests —
       but the arg-vector test (correct/quoted arguments) is on the author.
-- [ ] **View features** add the `detailByKind` case (a missing case renders
-      "Coming Soon" *silently* — no test catches it) and `implementedIDs`.
+- [ ] **View features** add a `FeatureDetailRoute` case *and* its
+      `FeatureDetailView.pane` case *and* `implementedIDs`. `pane` is exhaustive
+      over the enum, so a route with no view is a build error; an id with no
+      route at all still renders "Coming Soon" silently, which
+      `FeatureDetailRouteTests` catches.
 - [ ] If absorbed by a hub (`react-native`, `simulate`, `connection`,
       `apk-studio`), it's in `absorbedByHub` and its keywords fold into the hub
       (a test enforces the hub matches each member's primary keyword). It must
