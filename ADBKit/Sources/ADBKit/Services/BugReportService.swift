@@ -1,8 +1,9 @@
 import Foundation
 
 /// Assembles a lightweight bug-report zip: screenshot + recent logcat +
-/// device info + (optional) app version. Built in a temp dir, zipped with
-/// the macOS `zip` CLI, dropped in ~/Downloads/Droidective.
+/// device info + (optional) app version. Built in a temp dir, zipped with the
+/// host's own archiver (`HostArchive`), dropped in ~/Downloads/Droidective —
+/// or wherever the caller says.
 public struct BugReportService: Sendable {
     static let infoKeys = [
         "ro.product.brand",
@@ -20,7 +21,13 @@ public struct BugReportService: Sendable {
         self.client = client
     }
 
-    public func create(serial: String, packageId: String?) async throws -> URL {
+    /// Builds the report and answers where it landed.
+    ///
+    /// `into` is nil for the app's own capture folder, which is what the Mac
+    /// passes. The daemon supplies a folder instead, because *its* client has
+    /// already decided where downloaded things go and two answers to that
+    /// question is one too many.
+    public func create(serial: String, packageId: String?, into folder: URL? = nil) async throws -> URL {
         let id = ScreenCaptureService.stamp()
         let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("bugreport-\(id)")
         try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
@@ -48,17 +55,24 @@ public struct BugReportService: Sendable {
                 .write(to: tmp.appendingPathComponent("app-info.txt"))
         }
 
-        let outDir = try ScreenCaptureService.ensureCaptureDir()
+        let outDir = try folder ?? ScreenCaptureService.ensureCaptureDir()
+        if folder != nil {
+            try FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
+        }
         let zipPath = outDir.appendingPathComponent("bug-report_\(id).zip")
         let runner = SystemProcessRunner()
         let zip = await runner.run(
-            executable: "/usr/bin/zip",
-            arguments: ["-r", "-j", zipPath.path, tmp.path],
+            executable: HostArchive.zipExecutable,
+            arguments: HostArchive.zipArguments(archive: zipPath.path, from: tmp.path),
             timeout: .seconds(60),
             maxOutputBytes: 10 * 1024 * 1024
         )
         guard zip.exitCode == 0 else {
-            throw AppInspectionService.PullError.failed("Couldn't create the zip: \(zip.stderrText)")
+            // Naming the archiver matters off macOS: `zip` is a package a Linux
+            // host may simply not have installed, and "couldn't create the zip"
+            // on its own sends someone looking at the device instead.
+            throw AppInspectionService.PullError.failed(
+                "Couldn't create the zip with \(HostArchive.zipExecutable): \(zip.stderrText)")
         }
         return zipPath
     }
