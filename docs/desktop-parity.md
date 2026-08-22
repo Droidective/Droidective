@@ -720,10 +720,33 @@ after the screens rather than instead of them.
     mock would have proved nothing here — the whole class is a listener, and the
     masking and reassembly are exactly what does not survive being faked.
 
-    Still to come: the timeline pane. The Mac's is a large screen (filters, the
-    per-pane sort order, JSON trees via `EmbeddedJSON`, find-in-object,
-    filter-aware export, the bounded and clear-data restarts) and it is the next
-    slice rather than part of this one.
+    **What is left, in order.** Each step stands on its own, which is why they
+    are separate — and the pure layers come first because they are the ones that
+    can be tested without a renderer, which is all this app has.
+
+    1. **The timeline model, in `lib/`.** A bounded ring of rows built from the
+       topic's envelopes, the per-type row shape, and the filter predicate.
+       ADBKit's `ReactotronTimeline`, `EmbeddedJSON`, `JSONSearch` and
+       `JSONTreeLayout` are already pure and tested there, so this is a
+       translation with its tests coming along — the way `TerminalSplitTree`
+       came across. The buffer is bounded for the reason the Mac's is: a chatty
+       app produces events faster than anyone reads them, and the Mac caps at
+       500 items / 16 MiB.
+    2. **The feed pane.** Rows by type (log, api.response, state change, display,
+       benchmark), the level and type filters, the per-pane newest-first toggle
+       (`reactotronPane<n>NewestFirst` on the Mac), and the connect banner —
+       which is where the `adb reverse` button lives, because a relay listening
+       with no tunnel is the failure that reads as the feature being broken.
+    3. **The detail side.** JSON trees over `EmbeddedJSON`, find-in-object, the
+       cURL builder (`ReactotronCurl`, already portable), and the copy verbs the
+       Mac has: copy, copy as JSON, copy object, copy line, copy value.
+    4. **Export and the restarts.** Filter-aware export to file and clipboard,
+       then the split Restart button — the bounded `pm clear --cache-only` and
+       the confirmed clear-data variant (`RestartClearScope`).
+
+    Deliberately later: the **MCP server** over the relay. `ReactotronMCP` is a
+    separate package that depends on the Mac-gated `ReactotronServer`, so
+    pointing it at this relay is its own change rather than part of the pane.
 
     One thing to know before debugging it: **two Reactotrons can both bind
     9090.** `portInUse` catches the collision when the address families match,
