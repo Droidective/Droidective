@@ -1,6 +1,7 @@
 mod commands;
 mod daemon;
 mod error;
+mod menu;
 
 use tauri::{Emitter, Manager, RunEvent};
 
@@ -23,6 +24,11 @@ const STATUS_EVENT: &str = "daemon://status";
 )]
 pub fn run() -> tauri::Result<()> {
     let app = tauri::Builder::default()
+        // The window menu, and the only home these commands have: a webview has
+        // no menu of its own. Every click is forwarded to the page, which is
+        // where the state each command acts on lives.
+        .menu(menu::build)
+        .on_menu_event(menu::forward)
         .plugin(tauri_plugin_shell::init())
         // Registered for their Rust APIs only. The capability file grants the
         // webview neither, so the clipboard and the file manager are reachable
@@ -65,8 +71,21 @@ pub fn run() -> tauri::Result<()> {
             commands::watch_logcat,
             commands::watch_performance,
             commands::watch_netspeed,
+            commands::open_terminal,
+            commands::write_terminal,
+            commands::resize_terminal,
+            commands::set_terminal_commands_enabled,
             commands::emulators,
             commands::emulator_action,
+            commands::pair_wireless,
+            commands::connect_wireless,
+            commands::disconnect_wireless,
+            commands::enable_tcpip,
+            commands::deep_links,
+            commands::write_deep_links,
+            commands::launch_deep_link,
+            commands::create_bug_report,
+            commands::detect_tools,
             commands::pick_and_install,
             commands::stop_watching,
             commands::copy_text,

@@ -5,14 +5,17 @@ use serde::Serialize;
 
 use crate::daemon::wire::{
     AppControlRequest, AppInfoResponse, AppPullRequest, AppPullResponse, AppRequest,
-    AppsListRequest, AppsResponse, CrashListRequest, CrashListResponse, DevSettingsResponse,
-    DevSettingsWriteRequest, Device, DevicePropsResponse, DeviceRequest, DevicesResponse,
-    DnsResponse, DnsWriteRequest, EmulatorActionRequest, EmulatorsResponse, ErrorEnvelope,
-    FeatureSummary, FeaturesResponse, FileInfoRequest, FileInfoResponse, FileOperationRequest,
-    FilePullRequest, FilePullResponse, FilesListRequest, FilesListResponse, InstallFormatsResponse,
-    InstallRequest, InstallResponse, MemInfoResponse, PermissionWriteRequest, PermissionsResponse,
+    AppsListRequest, AppsResponse, BugReportRequest, BugReportResponse, CrashListRequest,
+    CrashListResponse, DeepLinkLaunchRequest, DeepLinksRequest, DeepLinksResponse,
+    DeepLinksWriteRequest, DevSettingsResponse, DevSettingsWriteRequest, Device,
+    DevicePropsResponse, DeviceRequest, DevicesResponse, DnsResponse, DnsWriteRequest,
+    EmulatorActionRequest, EmulatorsResponse, ErrorEnvelope, FeatureSummary, FeaturesResponse,
+    FileInfoRequest, FileInfoResponse, FileOperationRequest, FilePullRequest, FilePullResponse,
+    FilesListRequest, FilesListResponse, InstallFormatsResponse, InstallRequest, InstallResponse,
+    LaunchResponse, MemInfoResponse, PairResponse, PermissionWriteRequest, PermissionsResponse,
     RestrictionWriteRequest, RestrictionsResponse, RootStatusResponse, RunRequest, RunResponse,
-    SandboxRequest, SandboxResponse, WifiResponse, WifiWriteRequest,
+    SandboxRequest, SandboxResponse, ToolsResponse, WifiResponse, WifiWriteRequest,
+    WirelessActionRequest,
 };
 use crate::error::DaemonError;
 
@@ -214,6 +217,53 @@ impl DaemonClient {
 
     pub async fn pull_apk(&self, request: &AppPullRequest) -> Result<AppPullResponse, DaemonError> {
         self.post("/v1/app/apk/pull", request).await
+    }
+
+    /// Pairing answers its own shape, because a successful pair also carries
+    /// the endpoint the device then advertised.
+    pub async fn pair_wireless(
+        &self,
+        request: &WirelessActionRequest,
+    ) -> Result<PairResponse, DaemonError> {
+        self.post("/v1/wireless/action", request).await
+    }
+
+    /// Connect, disconnect, and the tcpip bootstrap all answer a plain result.
+    pub async fn wireless_action(
+        &self,
+        request: &WirelessActionRequest,
+    ) -> Result<RunResponse, DaemonError> {
+        self.post("/v1/wireless/action", request).await
+    }
+
+    pub async fn deep_links(&self, package_id: String) -> Result<DeepLinksResponse, DaemonError> {
+        self.post("/v1/deeplinks/read", &DeepLinksRequest { package_id })
+            .await
+    }
+
+    pub async fn write_deep_links(
+        &self,
+        request: &DeepLinksWriteRequest,
+    ) -> Result<DeepLinksResponse, DaemonError> {
+        self.post("/v1/deeplinks/write", request).await
+    }
+
+    pub async fn launch_deep_link(
+        &self,
+        request: &DeepLinkLaunchRequest,
+    ) -> Result<LaunchResponse, DaemonError> {
+        self.post("/v1/deeplinks/launch", request).await
+    }
+
+    pub async fn create_bug_report(
+        &self,
+        request: &BugReportRequest,
+    ) -> Result<BugReportResponse, DaemonError> {
+        self.post("/v1/bugreport/create", request).await
+    }
+
+    pub async fn detect_tools(&self) -> Result<ToolsResponse, DaemonError> {
+        self.post("/v1/tools/detect", &EMPTY).await
     }
 
     /// One request path, so every route shares one error contract.

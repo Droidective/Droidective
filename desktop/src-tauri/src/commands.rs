@@ -17,13 +17,15 @@ use tauri_plugin_opener::OpenerExt;
 use crate::daemon::stream::StreamMessage;
 use crate::daemon::wire::{
     AppControlRequest, AppInfoResponse, AppPullRequest, AppPullResponse, AppRequest, AppsResponse,
-    CrashListResponse, DevSettingsResponse, DevSettingsWriteRequest, Device, DevicePropsResponse,
-    DnsResponse, DnsWriteRequest, EmulatorActionRequest, EmulatorsResponse, FeatureSummary,
-    FileInfoRequest, FileInfoResponse, FileOperationRequest, FilePullRequest, FilePullResponse,
-    FilesListRequest, FilesListResponse, InstallRequest, InstallResponse, MemInfoResponse,
-    PermissionWriteRequest, PermissionsResponse, RestrictionWriteRequest, RestrictionsResponse,
-    RootStatusResponse, RunRequest, RunResponse, SandboxRequest, SandboxResponse, SubscribeParams,
-    WifiResponse, WifiWriteRequest,
+    BugReportRequest, BugReportResponse, CrashListResponse, DeepLink, DeepLinkLaunchRequest,
+    DeepLinksResponse, DeepLinksWriteRequest, DevSettingsResponse, DevSettingsWriteRequest, Device,
+    DevicePropsResponse, DnsResponse, DnsWriteRequest, EmulatorActionRequest, EmulatorsResponse,
+    FeatureSummary, FileInfoRequest, FileInfoResponse, FileOperationRequest, FilePullRequest,
+    FilePullResponse, FilesListRequest, FilesListResponse, InstallRequest, InstallResponse,
+    LaunchResponse, MemInfoResponse, PairResponse, PermissionWriteRequest, PermissionsResponse,
+    RestrictionWriteRequest, RestrictionsResponse, RootStatusResponse, RunRequest, RunResponse,
+    SandboxRequest, SandboxResponse, StreamParams, ToolsResponse, WifiResponse, WifiWriteRequest,
+    WirelessActionRequest,
 };
 use crate::daemon::{DaemonStatus, Supervisor};
 use crate::error::DaemonError;
@@ -648,13 +650,75 @@ pub async fn watch_logcat(
     let stream = supervisor.stream().await?;
     stream.subscribe(
         "logcat",
-        Some(SubscribeParams {
+        Some(StreamParams {
             serial: Some(serial),
             filter,
-            ..SubscribeParams::default()
+            ..StreamParams::default()
         }),
         forward(on_event),
     )
+}
+
+/// Greys the menu's terminal commands in or out.
+///
+/// Called by the Terminal pane as it mounts and unmounts, because it is the
+/// only thing that knows whether there is a shell to act on — the same reason
+/// the Mac's `terminalCommandsEnabled` reads `AppState.terminals`.
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "tauri's command macro hands AppHandle in by value"
+)]
+pub fn set_terminal_commands_enabled(app: AppHandle, enabled: bool) {
+    crate::menu::set_terminal_commands_enabled(&app, enabled);
+}
+
+/// Opens a shell on a pseudo-terminal. Returns the id to pass to
+/// `write_terminal`, `resize_terminal` and `stop_watching`.
+///
+/// `serial` is optional and only exports `ANDROID_SERIAL` into the shell, so
+/// every adb command inside it targets that device without `-s` — the way the
+/// Mac's terminal scopes a tab. A terminal opens with nothing connected.
+#[tauri::command]
+pub async fn open_terminal(
+    supervisor: State<'_, Supervisor>,
+    serial: Option<String>,
+    columns: u16,
+    rows: u16,
+    on_event: Channel<StreamUpdate>,
+) -> Result<i64, DaemonError> {
+    let stream = supervisor.stream().await?;
+    stream.subscribe(
+        "pty",
+        Some(StreamParams {
+            serial,
+            columns: Some(columns),
+            rows: Some(rows),
+            ..StreamParams::default()
+        }),
+        forward(on_event),
+    )
+}
+
+/// Keystrokes into a terminal. `data` is base64: terminal input is bytes,
+/// including the control codes a JSON string cannot carry.
+#[tauri::command]
+pub async fn write_terminal(
+    supervisor: State<'_, Supervisor>,
+    id: i64,
+    data: String,
+) -> Result<(), DaemonError> {
+    supervisor.stream().await?.write(id, data)
+}
+
+#[tauri::command]
+pub async fn resize_terminal(
+    supervisor: State<'_, Supervisor>,
+    id: i64,
+    columns: u16,
+    rows: u16,
+) -> Result<(), DaemonError> {
+    supervisor.stream().await?.resize(id, columns, rows)
 }
 
 /// Live performance samples, one a second, until `stop_watching`.
@@ -669,11 +733,11 @@ pub async fn watch_performance(
     let stream = supervisor.stream().await?;
     stream.subscribe(
         "performance",
-        Some(SubscribeParams {
+        Some(StreamParams {
             serial: Some(serial),
             package_id,
             processes: Some(processes),
-            ..SubscribeParams::default()
+            ..StreamParams::default()
         }),
         forward(on_event),
     )
@@ -746,6 +810,147 @@ pub async fn emulator_action(
         .await
 }
 
+/// Android 11+ pairing. The reply carries the endpoint the device then
+/// advertised, so the sheet can connect without asking for a port the phone
+/// never showed.
+#[tauri::command]
+pub async fn pair_wireless(
+    supervisor: State<'_, Supervisor>,
+    endpoint: String,
+    code: String,
+) -> Result<PairResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .pair_wireless(&WirelessActionRequest {
+            action: "pair".to_owned(),
+            endpoint: Some(endpoint),
+            code: Some(code),
+            serial: None,
+        })
+        .await
+}
+
+/// `adb connect`. A bare host takes adb's own default port, which the daemon
+/// applies — this side never invents one.
+#[tauri::command]
+pub async fn connect_wireless(
+    supervisor: State<'_, Supervisor>,
+    endpoint: String,
+) -> Result<RunResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .wireless_action(&WirelessActionRequest {
+            action: "connect".to_owned(),
+            endpoint: Some(endpoint),
+            code: None,
+            serial: None,
+        })
+        .await
+}
+
+/// `adb disconnect`. No serial means every wireless device.
+#[tauri::command]
+pub async fn disconnect_wireless(
+    supervisor: State<'_, Supervisor>,
+    serial: Option<String>,
+) -> Result<RunResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .wireless_action(&WirelessActionRequest {
+            action: "disconnect".to_owned(),
+            endpoint: None,
+            code: None,
+            serial,
+        })
+        .await
+}
+
+/// `adb tcpip 5555` on a USB device, then connect to its Wi-Fi address.
+#[tauri::command]
+pub async fn enable_tcpip(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+) -> Result<RunResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .wireless_action(&WirelessActionRequest {
+            action: "tcpip".to_owned(),
+            endpoint: None,
+            code: None,
+            serial: Some(serial),
+        })
+        .await
+}
+
+/// One app's saved deep links.
+#[tauri::command]
+pub async fn deep_links(
+    supervisor: State<'_, Supervisor>,
+    package_id: String,
+) -> Result<DeepLinksResponse, DaemonError> {
+    supervisor.client().await?.deep_links(package_id).await
+}
+
+/// Replaces one app's list, and answers with what was stored.
+#[tauri::command]
+pub async fn write_deep_links(
+    supervisor: State<'_, Supervisor>,
+    package_id: String,
+    links: Vec<DeepLink>,
+) -> Result<DeepLinksResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .write_deep_links(&DeepLinksWriteRequest { package_id, links })
+        .await
+}
+
+/// Launches one url on every targeted device, answering per device.
+#[tauri::command]
+pub async fn launch_deep_link(
+    supervisor: State<'_, Supervisor>,
+    serials: Vec<String>,
+    url: String,
+) -> Result<LaunchResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .launch_deep_link(&DeepLinkLaunchRequest { serials, url })
+        .await
+}
+
+/// Builds the bug-report zip into the same folder every other download lands
+/// in, and answers where it went.
+#[tauri::command]
+pub async fn create_bug_report(
+    app: AppHandle,
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    package_id: Option<String>,
+) -> Result<BugReportResponse, DaemonError> {
+    let folder = droidective_folder(&app)?;
+    supervisor
+        .client()
+        .await?
+        .create_bug_report(&BugReportRequest {
+            serial,
+            package_id,
+            destination: folder.to_string_lossy().into_owned(),
+        })
+        .await
+}
+
+/// Which external tools are on this machine — the Doctor, and the device bar's
+/// adb warning.
+#[tauri::command]
+pub async fn detect_tools(supervisor: State<'_, Supervisor>) -> Result<ToolsResponse, DaemonError> {
+    supervisor.client().await?.detect_tools().await
+}
+
 /// Live `/proc/net/dev` throughput, one sample a second, until `stop_watching`.
 #[tauri::command]
 pub async fn watch_netspeed(
@@ -756,9 +961,9 @@ pub async fn watch_netspeed(
     let stream = supervisor.stream().await?;
     stream.subscribe(
         "netspeed",
-        Some(SubscribeParams {
+        Some(StreamParams {
             serial: Some(serial),
-            ..SubscribeParams::default()
+            ..StreamParams::default()
         }),
         forward(on_event),
     )

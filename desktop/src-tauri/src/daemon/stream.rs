@@ -15,7 +15,7 @@ use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::http::HeaderValue;
 use tokio_tungstenite::tungstenite::Message;
 
-use crate::daemon::wire::{StreamEvent, SubscribeCommand, SubscribeParams};
+use crate::daemon::wire::{StreamCommand, StreamEvent, StreamParams};
 use crate::error::DaemonError;
 
 /// One event, already routed to its subscription.
@@ -134,7 +134,7 @@ impl StreamClient {
     pub fn subscribe(
         &self,
         topic: &'static str,
-        params: Option<SubscribeParams>,
+        params: Option<StreamParams>,
         sink: StreamSink,
     ) -> Result<i64, DaemonError> {
         if self.is_closed() {
@@ -146,7 +146,7 @@ impl StreamClient {
             .lock()
             .map_err(|_| DaemonError::Transport("stream registry poisoned".into()))?
             .insert(id, sink);
-        self.send(&SubscribeCommand::subscribe(id, topic, params))?;
+        self.send(&StreamCommand::subscribe(id, topic, params))?;
         Ok(id)
     }
 
@@ -159,10 +159,31 @@ impl StreamClient {
         if self.is_closed() {
             return Ok(());
         }
-        self.send(&SubscribeCommand::unsubscribe(id))
+        self.send(&StreamCommand::unsubscribe(id))
     }
 
-    fn send(&self, command: &SubscribeCommand) -> Result<(), DaemonError> {
+    /// Keystrokes into a terminal subscription, already base64.
+    ///
+    /// No local check that `id` names a live subscription: the daemon is the
+    /// authority on that and answers an unknown id, and duplicating the rule
+    /// here is how the two come to disagree. A write after the shell exited is
+    /// a real race — the sink is already gone, so the answer goes nowhere,
+    /// which is the right outcome.
+    pub fn write(&self, id: i64, data: String) -> Result<(), DaemonError> {
+        if self.is_closed() {
+            return Err(DaemonError::NotRunning);
+        }
+        self.send(&StreamCommand::write(id, data))
+    }
+
+    pub fn resize(&self, id: i64, columns: u16, rows: u16) -> Result<(), DaemonError> {
+        if self.is_closed() {
+            return Err(DaemonError::NotRunning);
+        }
+        self.send(&StreamCommand::resize(id, columns, rows))
+    }
+
+    fn send(&self, command: &StreamCommand) -> Result<(), DaemonError> {
         let text = serde_json::to_string(command)
             .map_err(|error| DaemonError::Decode(error.to_string()))?;
         self.outgoing
@@ -207,28 +228,28 @@ mod tests {
     use tokio_tungstenite::tungstenite::Message;
 
     use super::{StreamClient, StreamMessage};
-    use crate::daemon::wire::SubscribeParams;
+    use crate::daemon::wire::StreamParams;
 
     /// A fake `/v1/stream`: accepts one client, records the handshake's
-    /// Authorization header and the first command, then replays `script`.
+    /// Authorization header and the first command, replays `script`, then reads
+    /// until it has `expect_commands` of them and hangs up.
+    ///
+    /// The count exists because the socket is two-way: a terminal's `write` and
+    /// `resize` arrive *after* the subscription is acknowledged, so a fake that
+    /// closed straight after the script could never see one.
     #[expect(
         clippy::result_large_err,
         reason = "the Err type belongs to tungstenite's handshake callback, not to us"
     )]
     async fn fake_stream(
         script: Vec<String>,
-    ) -> Result<
-        (
-            u16,
-            tokio::task::JoinHandle<(Option<String>, Option<String>)>,
-        ),
-        Box<dyn Error>,
-    > {
+        expect_commands: usize,
+    ) -> Result<(u16, tokio::task::JoinHandle<(Option<String>, Vec<String>)>), Box<dyn Error>> {
         let listener = TcpListener::bind("127.0.0.1:0").await?;
         let port = listener.local_addr()?.port();
         let handle = tokio::spawn(async move {
             let Ok((socket, _)) = listener.accept().await else {
-                return (None, None);
+                return (None, Vec::new());
             };
             let mut authorization = None;
             let upgraded = tokio_tungstenite::accept_hdr_async(socket, |request: &_, response| {
@@ -242,19 +263,26 @@ mod tests {
             })
             .await;
             let Ok(mut socket) = upgraded else {
-                return (authorization, None);
+                return (authorization, Vec::new());
             };
-            let command = match socket.next().await {
-                Some(Ok(Message::Text(text))) => Some(text.to_string()),
-                _ => None,
-            };
+            let mut commands = Vec::new();
+            if let Some(Ok(Message::Text(text))) = socket.next().await {
+                commands.push(text.to_string());
+            }
             for frame in script {
                 if socket.send(Message::text(frame)).await.is_err() {
                     break;
                 }
             }
+            while commands.len() < expect_commands {
+                match socket.next().await {
+                    Some(Ok(Message::Text(text))) => commands.push(text.to_string()),
+                    Some(Ok(_)) => {}
+                    _ => break,
+                }
+            }
             let _ = socket.close(None).await;
-            (authorization, command)
+            (authorization, commands)
         });
         Ok((port, handle))
     }
@@ -283,23 +311,26 @@ mod tests {
     #[tokio::test]
     async fn the_handshake_carries_the_token_and_the_subscription_reaches_the_daemon(
     ) -> Result<(), Box<dyn Error>> {
-        let (port, server) = fake_stream(vec![r#"{"id":1,"event":"subscribed"}"#.into()]).await?;
+        let (port, server) =
+            fake_stream(vec![r#"{"id":1,"event":"subscribed"}"#.into()], 1).await?;
         let client = StreamClient::connect(port, "secret-token").await?;
         let (sink, mut events) = recorder();
 
         let id = client.subscribe(
             "logcat",
-            Some(SubscribeParams {
+            Some(StreamParams {
                 serial: Some("emulator-5554".into()),
-                ..SubscribeParams::default()
+                ..StreamParams::default()
             }),
             sink,
         )?;
         assert_eq!(id, 1, "ids are allocated here, starting at 1");
 
-        let (authorization, command) = server.await?;
+        let (authorization, commands) = server.await?;
         assert_eq!(authorization.as_deref(), Some("Bearer secret-token"));
-        let command = command.ok_or("the daemon should have received a command")?;
+        let command = commands
+            .first()
+            .ok_or("the daemon should have received a command")?;
         assert!(command.contains(r#""op":"subscribe""#), "{command}");
         assert!(command.contains(r#""topic":"logcat""#), "{command}");
         assert!(command.contains(r#""serial":"emulator-5554""#), "{command}");
@@ -311,11 +342,14 @@ mod tests {
 
     #[tokio::test]
     async fn a_batch_and_a_gap_both_reach_the_subscriber() -> Result<(), Box<dyn Error>> {
-        let (port, server) = fake_stream(vec![
-            r#"{"id":1,"event":"batch","items":[{"tag":"A"},{"tag":"B"}]}"#.into(),
-            r#"{"id":1,"event":"dropped","count":17}"#.into(),
-            r#"{"id":1,"event":"ended","reason":"device_disconnected"}"#.into(),
-        ])
+        let (port, server) = fake_stream(
+            vec![
+                r#"{"id":1,"event":"batch","items":[{"tag":"A"},{"tag":"B"}]}"#.into(),
+                r#"{"id":1,"event":"dropped","count":17}"#.into(),
+                r#"{"id":1,"event":"ended","reason":"device_disconnected"}"#.into(),
+            ],
+            1,
+        )
         .await?;
         let client = StreamClient::connect(port, "t").await?;
         let (sink, mut events) = recorder();
@@ -340,10 +374,13 @@ mod tests {
     #[tokio::test]
     async fn a_frame_for_an_unknown_id_does_not_disturb_a_live_subscription(
     ) -> Result<(), Box<dyn Error>> {
-        let (port, server) = fake_stream(vec![
-            r#"{"id":99,"event":"batch","items":[{"stray":true}]}"#.into(),
-            r#"{"id":1,"event":"batch","items":[{"mine":true}]}"#.into(),
-        ])
+        let (port, server) = fake_stream(
+            vec![
+                r#"{"id":99,"event":"batch","items":[{"stray":true}]}"#.into(),
+                r#"{"id":1,"event":"batch","items":[{"mine":true}]}"#.into(),
+            ],
+            1,
+        )
         .await?;
         let client = StreamClient::connect(port, "t").await?;
         let (sink, mut events) = recorder();
@@ -361,9 +398,67 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_terminals_keystrokes_and_size_reach_the_daemon() -> Result<(), Box<dyn Error>> {
+        // Three commands: the subscribe, then the two that only exist because
+        // this socket is two-way.
+        let (port, server) =
+            fake_stream(vec![r#"{"id":1,"event":"subscribed"}"#.into()], 3).await?;
+        let client = StreamClient::connect(port, "t").await?;
+        let (sink, _events) = recorder();
+
+        let id = client.subscribe(
+            "pty",
+            Some(StreamParams {
+                columns: Some(120),
+                rows: Some(40),
+                ..StreamParams::default()
+            }),
+            sink,
+        )?;
+        // "ls\n", base64. Encoding happens in the webview, so what this proves
+        // is that Rust passes the bytes through untouched.
+        client.write(id, "bHMK".into())?;
+        client.resize(id, 100, 30)?;
+
+        let (_, commands) = server.await?;
+        assert_eq!(commands.len(), 3, "{commands:?}");
+        let opened = commands.first().ok_or("no subscribe")?;
+        assert!(opened.contains(r#""topic":"pty""#), "{opened}");
+        assert!(opened.contains(r#""columns":120"#), "{opened}");
+
+        let typed = commands.get(1).ok_or("no write")?;
+        assert!(typed.contains(r#""op":"write""#), "{typed}");
+        assert!(typed.contains(r#""data":"bHMK""#), "{typed}");
+        // No topic on a write: the id alone says which subscription is meant.
+        assert!(!typed.contains(r#""topic""#), "{typed}");
+
+        let resized = commands.get(2).ok_or("no resize")?;
+        assert!(resized.contains(r#""op":"resize""#), "{resized}");
+        assert!(resized.contains(r#""columns":100"#), "{resized}");
+        assert!(resized.contains(r#""rows":30"#), "{resized}");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn typing_into_a_dead_socket_fails_rather_than_looking_delivered(
+    ) -> Result<(), Box<dyn Error>> {
+        let (port, server) = fake_stream(Vec::new(), 1).await?;
+        let client = StreamClient::connect(port, "t").await?;
+        let (sink, mut events) = recorder();
+        let id = client.subscribe("pty", None, sink)?;
+        server.await?;
+        // Wait for the reader task to notice, which is what sets `closed`.
+        let _ = next_message(&mut events).await?;
+
+        assert!(client.write(id, "bHMK".into()).is_err());
+        assert!(client.resize(id, 80, 24).is_err());
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn a_dead_socket_ends_every_live_subscription() -> Result<(), Box<dyn Error>> {
         // Nothing scripted: the server accepts, then hangs up.
-        let (port, server) = fake_stream(Vec::new()).await?;
+        let (port, server) = fake_stream(Vec::new(), 1).await?;
         let client = StreamClient::connect(port, "t").await?;
         let (sink, mut events) = recorder();
         client.subscribe("logcat", None, sink)?;
