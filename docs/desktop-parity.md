@@ -724,22 +724,50 @@ after the screens rather than instead of them.
     are separate — and the pure layers come first because they are the ones that
     can be tested without a renderer, which is all this app has.
 
-    1. **The timeline model, in `lib/`.** A bounded ring of rows built from the
-       topic's envelopes, the per-type row shape, and the filter predicate.
-       ADBKit's `ReactotronTimeline`, `EmbeddedJSON`, `JSONSearch` and
-       `JSONTreeLayout` are already pure and tested there, so this is a
-       translation with its tests coming along — the way `TerminalSplitTree`
-       came across. The buffer is bounded for the reason the Mac's is: a chatty
-       app produces events faster than anyone reads them, and the Mac caps at
-       500 items / 16 MiB.
+    1. ~~**The timeline model, in `lib/`.**~~ **Landed.** Seven modules and 112
+       tests: `json.ts` (the sentinel repair and the bounded preview),
+       `embedded-json.ts`, `json-search.ts`, `reactotron.ts` (the wire types
+       decoded to a tagged event), `reactotron-rows.ts` (badge, headline,
+       filterable kind), `reactotron-buffer.ts` (the bounded ring and the frame
+       reducer) and `reactotron-filter.ts`. The caps are the Mac's own —
+       `ReactotronTimeline`'s 2000 rows and 128 MiB, trimmed oldest-first with
+       7/8 hysteresis — for the Mac's reason: a React Native client streams
+       frames of arbitrary size, so a count cap alone still lets the retained
+       timeline reach gigabytes.
+
+       Three things came out differently from the plan, each on purpose:
+
+       - **`JSONValue` does not come across.** Swift needs a tagged union to
+         hold an arbitrary payload; TypeScript already has one. Every *decision*
+         in ADBKit's enum is ported, and its tests came with them, but
+         `case .string(let text)` is just `typeof value === "string"`.
+       - **`JSONTreeLayout` does not come across either.** It is pixel
+         arithmetic — SF Mono's 0.6 em advance, a 14 pt disclosure column —
+         computing how many characters fit a wrapped line, because SwiftUI's
+         `lineLimit` is "a drawing instruction the height doesn't always
+         follow". A DOM wraps text natively and `-webkit-line-clamp` collapses
+         it correctly, so porting the maths would be porting the workaround, not
+         the behaviour. The behaviour — three wrapped lines collapsed, a
+         disclosure when the value overflows them — is step 3's, in CSS.
+       - **Two fields were added to the `reactotron` envelope** (protocol §5.3),
+         because the model is wrong without them: `bytes`, since a client can
+         only recover a frame's size by re-serializing every payload as it
+         arrives, and `code`, since the Mac's most useful disconnect notice —
+         1001 means the app out-produced the connection, log ids not whole
+         objects — cannot be written without the close status. Both are proven
+         off a real client's frames in `ReactotronRelayTests`.
     2. **The feed pane.** Rows by type (log, api.response, state change, display,
        benchmark), the level and type filters, the per-pane newest-first toggle
        (`reactotronPane<n>NewestFirst` on the Mac), and the connect banner —
        which is where the `adb reverse` button lives, because a relay listening
        with no tunnel is the failure that reads as the feature being broken.
-    3. **The detail side.** JSON trees over `EmbeddedJSON`, find-in-object, the
-       cURL builder (`ReactotronCurl`, already portable), and the copy verbs the
-       Mac has: copy, copy as JSON, copy object, copy line, copy value.
+    3. **The detail side.** JSON trees over `embedded-json.ts`, find-in-object
+       over `json-search.ts` (whose ordinal paths already follow the render
+       order the tree has to use — object children sorted by key, array items in
+       order — so a clicked result expands to the right row), the collapse in
+       CSS rather than ported pixel maths, the cURL builder (`ReactotronCurl`,
+       already portable), and the copy verbs the Mac has: copy, copy as JSON,
+       copy object, copy line, copy value.
     4. **Export and the restarts.** Filter-aware export to file and clipboard,
        then the split Restart button — the bounded `pm clear --cache-only` and
        the confirmed clear-data variant (`RestartClearScope`).
@@ -933,7 +961,7 @@ job, and the checklist now says which.
 #### `reactotron` — Reactotron  ·  ⬜ todo
 > Live React Native inspector — logs, network, state, custom display
 - **Kind** `view`
-- **Note** Not started — blocked on porting the relay's Network.framework listener to NIO, which ReactotronMCP already proves out. Backlog 24.
+- **Note** No pane yet, but no longer blocked: the NIO relay, the `reactotron` topic and the timeline model (seven pure modules in desktop/src/lib) have landed, so what is left is the screen. Backlog 24.
 - **macOS view** `ReactotronView` — `App/Sources/FeatureDetail/Views/ReactotronView.swift`
 - **Must replicate**
   - [ ] button: OK

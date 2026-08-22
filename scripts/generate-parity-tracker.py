@@ -106,8 +106,9 @@ BLOCKED = {
                    "as `scrcpy`, so it follows the mirror. Backlog 25.",
     "screen-record": "Not started — rides the mirror session, so it follows the mirror. Backlog 25.",
     "video-editor": "Not started — needs the mirror pipeline plus the bundled ffmpeg. Backlog 25.",
-    "reactotron": "Not started — blocked on porting the relay's Network.framework "
-                  "listener to NIO, which ReactotronMCP already proves out. Backlog 24.",
+    "reactotron": "No pane yet, but no longer blocked: the NIO relay, the `reactotron` "
+                  "topic and the timeline model (seven pure modules in desktop/src/lib) "
+                  "have landed, so what is left is the screen. Backlog 24.",
 }
 
 by_category = {}
