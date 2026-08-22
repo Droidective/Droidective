@@ -19,3 +19,6 @@ website/dist/
 # Where stage-release-artifacts.sh collects a release's artifacts.
 /dist/
 App/Resources/ffmpeg
+# Knowledge-graph output from the graphify skill — regenerable, and ~100 MB
+# across 15k files (graph.json, graph.html, an Obsidian vault, the cache).
+/graphify-out/
