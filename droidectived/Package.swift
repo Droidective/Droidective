@@ -19,11 +19,17 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.65.0"),
     ],
     targets: [
+        // Opening a pseudo-terminal and exec'ing a shell on it. C because
+        // between `fork` and `exec` only async-signal-safe calls are allowed —
+        // which is why Swift marks `fork` unavailable — so the constraint is
+        // expressed where it can be honoured. See `Sources/CPty/include/cpty.h`.
+        .target(name: "CPty"),
         // The logic lives in a library so the tests can reach it; the
         // executable is a thin `main` over `Daemon.run`.
         .target(
             name: "DaemonCore",
             dependencies: [
+                "CPty",
                 .product(name: "ADBKit", package: "ADBKit"),
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOConcurrencyHelpers", package: "swift-nio"),

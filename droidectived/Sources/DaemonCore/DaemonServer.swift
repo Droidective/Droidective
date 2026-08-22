@@ -108,6 +108,33 @@ public protocol DaemonBackend: Sendable {
     /// file cannot be processed at all; an install adb *ran* and rejected
     /// comes back as a failed result carrying adb's own reason.
     func installPackage(path: String, serial: String) async throws -> FeatureResult
+    /// Android 11+ pairing. `port` is the *pairing* port, which is not the
+    /// connection port and changes every session.
+    func pairWireless(host: String, port: String, code: String) async throws -> FeatureResult
+    /// The connect endpoint a freshly paired device advertises over mDNS.
+    /// Best-effort — nil covers "this adb has mDNS off" and "nothing matching
+    /// turned up", both of which the sheet handles by asking for the port.
+    func discoverConnectEndpoint(host: String) async -> WirelessEndpoint?
+    func connectWireless(host: String, port: String) async throws -> FeatureResult
+    /// `adb disconnect`. A nil target drops every wireless device.
+    func disconnectWireless(target: String?) async throws -> FeatureResult
+    /// `adb tcpip 5555` on a USB device, then connect to its Wi-Fi address.
+    func enableTcpip(serial: String) async throws -> FeatureResult
+    /// One app's saved deep links. Best-effort: a store that will not load
+    /// reads as no links rather than failing the screen.
+    func deepLinks(packageId: String) async -> [DeepLink]
+    /// Replaces one app's list. Throws only when the store cannot be written.
+    func writeDeepLinks(packageId: String, links: [DeepLink]) async throws
+    /// `am start -a android.intent.action.VIEW -d <url>` on one device.
+    func launchDeepLink(serial: String, url: String) async throws -> FeatureResult
+    /// Builds the bug-report zip into a host folder, answering where it landed.
+    func createBugReport(
+        serial: String, packageId: String?, destination: String
+    ) async throws -> String
+    /// Which external tools are installed, with an install hint for each that
+    /// is not. Best-effort by construction — a tool that cannot be found is the
+    /// answer, not an error.
+    func detectTools() async -> [Tool: ToolStatus]
 }
 
 /// `DeviceMonitor` in production.
@@ -119,16 +146,20 @@ public struct LiveBackend: DaemonBackend {
     private let client: AdbClient
     private let emulatorService: EmulatorService
     private let locator: ToolLocator
+    /// The same on-disk store the Mac app uses, under the shared support dir.
+    private let deepLinkStore: JSONStore<DeepLinksMap>
 
     public init(
         monitor: DeviceMonitor, engine: FeatureEngine, client: AdbClient,
-        emulators: EmulatorService, locator: ToolLocator
+        emulators: EmulatorService, locator: ToolLocator,
+        deepLinks: JSONStore<DeepLinksMap>
     ) {
         self.monitor = monitor
         self.engine = engine
         self.client = client
         emulatorService = emulators
         self.locator = locator
+        deepLinkStore = deepLinks
     }
 
     public func listDevices() async -> [Device] { await monitor.list(force: true) }
@@ -395,6 +426,62 @@ public struct LiveBackend: DaemonBackend {
             client: client,
             toolchain: ApkToolchain(locator: locator, store: engine.managedTools)
         ).install(bundlePath: path, serial: serial)
+    }
+
+    /// One value type over the client and the monitor, built per call like the
+    /// rest — the connect/pair verbs hold no state, they only invalidate the
+    /// monitor's cache so a new device shows up without waiting for a poll.
+    private var connection: ConnectionService {
+        ConnectionService(client: client, monitor: monitor)
+    }
+
+    public func pairWireless(
+        host: String, port: String, code: String
+    ) async throws -> FeatureResult {
+        try await connection.pair(host: host, port: port, code: code)
+    }
+
+    public func discoverConnectEndpoint(host: String) async -> WirelessEndpoint? {
+        await connection.discoverConnectEndpoint(host: host)
+    }
+
+    public func connectWireless(host: String, port: String) async throws -> FeatureResult {
+        try await connection.connect(host: host, port: port)
+    }
+
+    public func disconnectWireless(target: String?) async throws -> FeatureResult {
+        try await connection.disconnect(target: target)
+    }
+
+    public func enableTcpip(serial: String) async throws -> FeatureResult {
+        try await connection.enableTcpip(serial: serial)
+    }
+
+    public func deepLinks(packageId: String) async -> [DeepLink] {
+        await deepLinkStore.load()[packageId] ?? []
+    }
+
+    public func writeDeepLinks(packageId: String, links: [DeepLink]) async throws {
+        // One key of the map at a time, atomically — the Mac's own `persist`,
+        // so two apps writing different apps' links cannot lose each other's.
+        try await deepLinkStore.update { $0[packageId] = links }
+    }
+
+    public func launchDeepLink(serial: String, url: String) async throws -> FeatureResult {
+        try await AppControlService(client: client).launchDeepLink(serial: serial, url: url)
+    }
+
+    public func createBugReport(
+        serial: String, packageId: String?, destination: String
+    ) async throws -> String {
+        try await BugReportService(client: client).create(
+            serial: serial, packageId: packageId,
+            into: URL(fileURLWithPath: destination)
+        ).path
+    }
+
+    public func detectTools() async -> [Tool: ToolStatus] {
+        await ToolDetectionService(locator: locator).detectAll()
     }
 
     private func waitForShutdown(serial: String) async {
@@ -746,6 +833,25 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
         case .installRun:
             return Self.answer(await InstallRoutes.install(
                 body: Data(body.readableBytesView), backend: backend))
+
+        case .wirelessAction:
+            return Self.answer(await ConnectionRoutes.action(
+                body: Data(body.readableBytesView), backend: backend))
+
+        case .deepLinksRead:
+            return Self.answer(await DiagnosticsRoutes.linksRead(
+                body: Data(body.readableBytesView), backend: backend))
+        case .deepLinksWrite:
+            return Self.answer(await DiagnosticsRoutes.linksWrite(
+                body: Data(body.readableBytesView), backend: backend))
+        case .deepLinksLaunch:
+            return Self.answer(await DiagnosticsRoutes.linksLaunch(
+                body: Data(body.readableBytesView), backend: backend))
+        case .bugReportCreate:
+            return Self.answer(await DiagnosticsRoutes.bugReport(
+                body: Data(body.readableBytesView), backend: backend))
+        case .toolsDetect:
+            return Self.answer(await DiagnosticsRoutes.tools(backend: backend))
 
         case .actionsRun:
             let raw = Data(body.readableBytesView)

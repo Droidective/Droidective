@@ -80,6 +80,12 @@ private let hasWebSocketClient: Bool = {
         func netspeed(serial: String) async -> AsyncStream<NetSample> {
             AsyncStream { $0.finish() }
         }
+
+        /// This suite is about the socket, not the terminal. The pty's own
+        /// lifecycle is in `StreamSessionTests`, against a fake channel.
+        func openPty(serial: String?, size: PtySize) throws -> any PtyChannel {
+            throw PtyError.unsupportedPlatform
+        }
     }
 
     private static func device(_ serial: String) -> Device {

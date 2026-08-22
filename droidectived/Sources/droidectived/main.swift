@@ -42,7 +42,10 @@ let server = DaemonServer(
     backend: LiveBackend(
         monitor: monitor, engine: engine, client: client,
         emulators: EmulatorService(client: client, locator: locator),
-        locator: locator),
+        locator: locator,
+        // The Mac's own file, in the same shared support dir as the overrides
+        // above — a developer running both apps has one store, not two.
+        deepLinks: JSONStore<DeepLinksMap>(filename: "deep-links.json", default: [:])),
     token: token,
     streamSource: LiveStreamSource(
         monitor: monitor, streamer: LogcatStreamer(client: client),

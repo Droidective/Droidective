@@ -26,6 +26,13 @@ public protocol StreamSource: Sendable {
     /// `performance` is: the counters are cumulative and throughput is the
     /// difference between two reads.
     func netspeed(serial: String) async -> AsyncStream<NetSample>
+    /// Starts a shell on a pseudo-terminal. `serial` only scopes the shell's
+    /// `ANDROID_SERIAL`; a terminal opens with no device connected.
+    ///
+    /// Throws rather than returning an optional so the reason reaches the
+    /// client: on Windows there is no pty at all, and "your terminal did not
+    /// open" is worth far less than being told why.
+    func openPty(serial: String?, size: PtySize) throws -> any PtyChannel
 }
 
 /// One WebSocket connection's worth of subscriptions.
@@ -44,6 +51,9 @@ public actor StreamSession {
     private struct Subscription {
         let topic: StreamProtocol.Topic
         let serial: String?
+        /// The shell, for a `pty` subscription. Where a write and a resize go,
+        /// and what has to be hung up when the subscription ends.
+        let pty: (any PtyChannel)?
         var buffer: StreamBuffer<Data>
         /// The newest unsent snapshot, for a `isSnapshot` topic. Kept apart
         /// from `buffer` because a snapshot replaces rather than accumulates —
@@ -88,7 +98,7 @@ public actor StreamSession {
             return
         }
 
-        if let error = StreamProtocol.validate(command, activeIDs: Set(subscriptions.keys)) {
+        if let error = StreamProtocol.validate(command, active: activeTopics) {
             await sink.send(
                 StreamFrame.encode(
                     StreamProtocol.Event<LogLinePayload>.failed(
@@ -101,7 +111,20 @@ public actor StreamSession {
             await subscribe(command)
         case .unsubscribe:
             await end(command.id, reason: .unsubscribed)
+        case .write:
+            // Validation established both the subscription and the bytes; the
+            // guard is what makes that a compile-time fact rather than a
+            // comment. Unacknowledged on purpose — see `Operation.write`.
+            guard let bytes = command.params?.bytes else { return }
+            subscriptions[command.id]?.pty?.write(bytes)
+        case .resize:
+            guard let size = command.params?.size else { return }
+            subscriptions[command.id]?.pty?.resize(to: size)
         }
+    }
+
+    private var activeTopics: [Int: StreamProtocol.Topic] {
+        subscriptions.mapValues(\.topic)
     }
 
     /// Tears every subscription down. Idempotent, so a close racing an error
@@ -120,8 +143,29 @@ public actor StreamSession {
     private func subscribe(_ command: StreamProtocol.Command) async {
         guard let topic = command.topic else { return }
         let id = command.id
+
+        // The shell is started *before* the subscription is announced. Sending
+        // `subscribed` first means awaiting the sink, which yields the actor —
+        // so a client that types the moment it is acknowledged could otherwise
+        // reach a subscription whose shell does not exist yet, and the
+        // keystrokes would go nowhere without a word.
+        var channel: (any PtyChannel)?
+        if topic == .pty {
+            do {
+                channel = try source.openPty(
+                    serial: command.params?.serial,
+                    size: command.params?.size ?? .standard)
+            } catch {
+                await sink.send(
+                    StreamFrame.encode(
+                        StreamProtocol.Event<LogLinePayload>.failed(
+                            id: id, message: "\(error)")))
+                return
+            }
+        }
+
         subscriptions[id] = Subscription(
-            topic: topic, serial: command.params?.serial,
+            topic: topic, serial: command.params?.serial, pty: channel,
             buffer: StreamBuffer(capacity: capacity))
         await sink.send(
             StreamFrame.encode(StreamProtocol.Event<LogLinePayload>.subscribed(id: id)))
@@ -183,6 +227,22 @@ public actor StreamSession {
                 }
                 await self?.end(id, reason: .deviceDisconnected)
             }
+
+        case .pty:
+            guard let channel else { return }
+            let stream = channel.output()
+            subscriptions[id]?.pump = Task { [weak self] in
+                for await chunk in stream {
+                    await self?.enqueue(
+                        id: id,
+                        items: [try? DaemonProtocol.encode(PtyChunkPayload(chunk))]
+                            .compactMap { $0 })
+                }
+                // The stream finishing *is* the shell exiting — including the
+                // case where it never started, because a failed `exec` reaches
+                // the parent as the terminal hanging up rather than as a throw.
+                await self?.end(id, reason: .processExited)
+            }
         }
     }
 
@@ -191,6 +251,9 @@ public actor StreamSession {
     ) async {
         guard let subscription = subscriptions.removeValue(forKey: id) else { return }
         subscription.pump?.cancel()
+        // Cancelling the pump only stops the reading; the shell is a child
+        // process and has to be hung up, or every closed tab leaks one.
+        subscription.pty?.terminate()
         // ADBKit kills the adb child on task cancellation, but the streamer
         // owns the process, so it needs telling too.
         if subscription.topic == .logcat, let serial = subscription.serial {
@@ -331,5 +394,18 @@ public struct LiveStreamSource: StreamSource {
             }
             continuation.onTermination = { _ in task.cancel() }
         }
+    }
+
+    /// A login shell, matching the Mac's terminal: `-l`, so the rc files that
+    /// define someone's aliases and PATH are read.
+    public func openPty(serial: String?, size: PtySize) throws -> any PtyChannel {
+        #if os(Windows)
+        // ConPTY is a different API rather than a variation on this one, so the
+        // subsystem is absent rather than stubbed and this is where a client
+        // finds out. See `Pty`.
+        throw PtyError.unsupportedPlatform
+        #else
+        return try Pty.spawn(environment: Pty.childEnvironment(serial: serial), size: size)
+        #endif
     }
 }

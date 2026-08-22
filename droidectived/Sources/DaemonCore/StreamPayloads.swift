@@ -26,6 +26,25 @@ public struct LogLinePayload: Codable, Equatable, Sendable {
     }
 }
 
+/// Whatever the shell just wrote, base64.
+///
+/// Base64 because this is the one payload that is *bytes* rather than a record.
+/// A read from a pty splits wherever the buffer filled, which is as likely as
+/// not to be the middle of a multi-byte character or an escape sequence — so
+/// decoding here would corrupt output that is perfectly fine once the client
+/// reassembles it, and it would do so only sometimes, on non-ASCII, which is
+/// the worst way to find out.
+///
+/// An object rather than a bare string so a client's frame handling stays the
+/// same shape for every topic.
+public struct PtyChunkPayload: Codable, Equatable, Sendable {
+    public let data: String
+
+    public init(_ chunk: Data) {
+        data = chunk.base64EncodedString()
+    }
+}
+
 /// One performance sample.
 ///
 /// A DTO for the same reason `LogLinePayload` is: `PerfPoll` and the models

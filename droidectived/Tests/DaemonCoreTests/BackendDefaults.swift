@@ -137,4 +137,36 @@ extension DaemonBackend {
     func installPackage(path: String, serial: String) async throws -> FeatureResult {
         FeatureResult(ok: true, message: "stub")
     }
+
+    func pairWireless(host: String, port: String, code: String) async throws -> FeatureResult {
+        FeatureResult(ok: true, message: "stub")
+    }
+
+    func discoverConnectEndpoint(host: String) async -> WirelessEndpoint? { nil }
+
+    func connectWireless(host: String, port: String) async throws -> FeatureResult {
+        FeatureResult(ok: true, message: "stub")
+    }
+
+    func disconnectWireless(target: String?) async throws -> FeatureResult {
+        FeatureResult(ok: true, message: "stub")
+    }
+
+    func enableTcpip(serial: String) async throws -> FeatureResult {
+        FeatureResult(ok: true, message: "stub")
+    }
+
+    func deepLinks(packageId: String) async -> [DeepLink] { [] }
+
+    func writeDeepLinks(packageId: String, links: [DeepLink]) async throws {}
+
+    func launchDeepLink(serial: String, url: String) async throws -> FeatureResult {
+        FeatureResult(ok: true, message: "stub")
+    }
+
+    func createBugReport(
+        serial: String, packageId: String?, destination: String
+    ) async throws -> String { destination }
+
+    func detectTools() async -> [Tool: ToolStatus] { [:] }
 }
