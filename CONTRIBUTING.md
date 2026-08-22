@@ -22,7 +22,7 @@ All logic lives in **`ADBKit/`** (a SwiftPM package with no UI imports); the
 SwiftUI shell lives in **`App/`**. When you add a feature:
 
 1. Put the adb/Process logic in an `ADBKit` service, with a parser/runner test.
-2. Add the feature to `FeatureRegistry` and a how-it-works note to `FeatureNotes`.
+2. Add the feature to `FeatureRegistry` (unique `id`, title, keywords, category, `kind`).
 3. Add the SwiftUI view under `App/Sources/FeatureDetail/Views/`.
 
 Never call `adb`/`Process` directly from a SwiftUI view — go through `ADBKit`.

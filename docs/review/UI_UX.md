@@ -32,12 +32,11 @@ touches layout:
 
 Every feature ships a complete, consistent experience:
 
-- [ ] A **how-it-works note** (`FeatureNotes`) renders inline beneath the
-      content, and a **command reference** (`FeatureCommands`) powers the
-      Commands tab. Every feature has both; tests enforce them.
-- [ ] For a `view` feature, the `FeatureDetailView.detailByKind` case exists —
-      a missing case renders a **"Coming Soon"** placeholder *silently* (no test
-      catches it), so confirm the real view shows.
+- [ ] For a `view` feature, the id has a `FeatureDetailRoute` case and a
+      matching `FeatureDetailView.pane` case. `pane` is exhaustive over the
+      enum, so a route with no view is a build error; an id with no route falls
+      through to a **"Coming Soon"** placeholder, which
+      `FeatureDetailRouteTests` catches. Confirm the real view shows.
 - [ ] A **hotkey** is registered (every feature has one; hub-absorbed features
       appear under "Hidden features" in the Hotkeys tab).
 - [ ] **Discoverable in search** — keywords are set; hub members fold their
@@ -76,6 +75,6 @@ Every feature ships a complete, consistent experience:
 - [ ] You ran the app and saw the change.
 - [ ] Loading/empty/error states all handled and tested live.
 - [ ] No toolbar-floats / under-device-bar / title-bar-strip regression.
-- [ ] FeatureNotes + hotkey + search keywords + Recent-tab wiring present.
+- [ ] Hotkey + search keywords + Recent-tab wiring present.
 - [ ] Destructive actions confirm; pulls ask for a destination.
 - [ ] Screenshot/GIF attached for visible changes.

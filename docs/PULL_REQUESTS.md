@@ -36,13 +36,12 @@ A feature's string `id` is a contract spread across several files, and most
 omissions fail *silently* (a "Coming Soon" screen, an empty Recent tab), not at
 compile time. **`CLAUDE.md` → "Adding a feature — the checklist" is the
 authoritative step-by-step** — follow it in order rather than working from
-memory. In short: define the `FeatureDef` in `FeatureRegistry`, add a
-`FeatureNotes` how-it-works note and a `FeatureCommands` reference, then either
+memory. In short: define the `FeatureDef` in `FeatureRegistry`, then either
 wire the runner (`FeatureEngine.dispatch` + `implementedIDs` + an arg-vector
-test) for an action, or build the view (`App/Sources/FeatureDetail/Views/` +
-`FeatureDetailView.detailByKind` + `implementedIDs`) for a view feature. Several
-of those steps have enforcing tests; the silent ones you verify by opening the
-feature.
+test) for an action, or build the view (`App/Sources/FeatureDetail/Views/` + a
+`FeatureDetailRoute` case + its `FeatureDetailView.pane` case +
+`implementedIDs`) for a view feature. Several of those steps have enforcing
+tests; the silent ones you verify by opening the feature.
 
 ## 4. Commits
 
@@ -64,8 +63,7 @@ This is exactly what the PR template asks you to confirm.
 - [ ] New/changed parsers and command construction have tests
       ([review/TESTING.md](review/TESTING.md)).
 - [ ] New feature follows the `CLAUDE.md` "Adding a feature" checklist
-      (`FeatureRegistry` + `FeatureNotes` + `FeatureCommands`, then runner or
-      view wiring).
+      (`FeatureRegistry`, then runner or view wiring).
 - [ ] `prek run` passes (the gitleaks secret scan in particular).
 - [ ] You ran the app and verified the change live if it touches UI or
       device behavior — tests don't cover rendering or real adb output.

@@ -510,6 +510,11 @@ Recorded because they're the kind that repeat.
 
 ## 10. Roadmap
 
+> **Dated plan.** Phases 1 and 2 have since landed, and the daemon ships loopback
+> HTTP + WebSocket rather than the stdio JSON-RPC this section proposes — see
+> [droidectived-protocol.md](droidectived-protocol.md) and
+> [cross-platform.md](cross-platform.md) for current state.
+
 Estimates in working sessions, from the approved plan and partly validated by
 this session's throughput (Phase A + Phase 0 + 6 fix PRs in one).
 
@@ -541,6 +546,12 @@ it needs no Linux desktop and no certificate.
 commitment.
 
 ### Why stdio and not localhost HTTP
+
+> **Superseded — not what shipped.** The daemon that landed uses loopback HTTP +
+> WebSocket with a token file, per
+> [droidectived-protocol.md](droidectived-protocol.md) §3: `droidectived --port 0
+> --token-file <path>`, 127.0.0.1 only. The argument below is kept as the record
+> of what was considered; read the protocol doc for the contract.
 
 The original port doc proposed HTTP + WebSocket with a token file. stdio sidesteps
 the hardest blocker: swift-nio's Windows support is partial and #3647 blocks
