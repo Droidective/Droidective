@@ -50,7 +50,11 @@ let server = DaemonServer(
     streamSource: LiveStreamSource(
         monitor: monitor, streamer: LogcatStreamer(client: client),
         performance: PerformanceService(client: client),
-        networkSpeed: NetworkSpeedService(client: client)))
+        networkSpeed: NetworkSpeedService(client: client),
+        // One relay for the whole process, matching how the Mac keeps a single
+        // one on `AppCore` for every window. It starts when something subscribes
+        // to the topic and stops when the last subscriber goes.
+        reactotron: ReactotronRelay()))
 
 do {
     let bound = try await server.start(port: options.port)

@@ -64,6 +64,8 @@ public enum DaemonProtocol {
         /// Which external tools are on this machine, for Settings ▸ Doctor and
         /// the device bar's adb warning.
         case toolsDetect = "/v1/tools/detect"
+        case reactotronReverse = "/v1/reactotron/reverse"
+        case reactotronUnreverse = "/v1/reactotron/unreverse"
     }
 
     /// The multiplexed stream socket. Not a `Route`: it is a WebSocket upgrade

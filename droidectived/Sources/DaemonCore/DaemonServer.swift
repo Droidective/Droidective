@@ -120,6 +120,12 @@ public protocol DaemonBackend: Sendable {
     func disconnectWireless(target: String?) async throws -> FeatureResult
     /// `adb tcpip 5555` on a USB device, then connect to its Wi-Fi address.
     func enableTcpip(serial: String) async throws -> FeatureResult
+    /// `adb reverse tcp:<port> tcp:<port>` on one device, or its removal.
+    ///
+    /// Narrow on purpose. What the Reactotron relay needs is this one tunnel,
+    /// and a general "run any adb command" on the backend would be a far wider
+    /// surface than any screen asks for.
+    func reverseTcp(serial: String, port: Int, remove: Bool) async -> AdbResult
     /// One app's saved deep links. Best-effort: a store that will not load
     /// reads as no links rather than failing the screen.
     func deepLinks(packageId: String) async -> [DeepLink]
@@ -451,6 +457,20 @@ public struct LiveBackend: DaemonBackend {
 
     public func disconnectWireless(target: String?) async throws -> FeatureResult {
         try await connection.disconnect(target: target)
+    }
+
+    public func reverseTcp(serial: String, port: Int, remove: Bool) async -> AdbResult {
+        let arguments =
+            remove
+            ? ["reverse", "--remove", "tcp:\(port)"]
+            : ["reverse", "tcp:\(port)", "tcp:\(port)"]
+        do {
+            return try await client.run(on: serial, arguments)
+        } catch {
+            // Only `.adbNotFound` throws, and a Doctor that cannot find adb is a
+            // better place to say so than a tunnel that failed for it.
+            return AdbResult(stdout: "", stderr: "\(error)", exitCode: nil, timedOut: false)
+        }
     }
 
     public func enableTcpip(serial: String) async throws -> FeatureResult {
@@ -852,6 +872,13 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
                 body: Data(body.readableBytesView), backend: backend))
         case .toolsDetect:
             return Self.answer(await DiagnosticsRoutes.tools(backend: backend))
+
+        case .reactotronReverse:
+            return Self.answer(await ReactotronRoutes.reverse(
+                body: Data(body.readableBytesView), backend: backend))
+        case .reactotronUnreverse:
+            return Self.answer(await ReactotronRoutes.unreverse(
+                body: Data(body.readableBytesView), backend: backend))
 
         case .actionsRun:
             let raw = Data(body.readableBytesView)

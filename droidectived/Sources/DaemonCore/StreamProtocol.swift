@@ -14,6 +14,10 @@ public enum StreamProtocol {
         /// `performance`, because the Network Speed screen samples while
         /// nothing is being recorded and Performance deliberately does not.
         case netspeed
+        /// Everything the Reactotron relay sees: clients connecting, their
+        /// commands, and their going away. Host-scoped — the relay listens on
+        /// *this* machine and a device reaches it through `adb reverse`.
+        case reactotron
         /// A shell on a pseudo-terminal. The first two-way topic: the
         /// subscription carries the shell's output out and the client's
         /// keystrokes back in, which is why `Operation` has more than
@@ -255,7 +259,7 @@ extension StreamProtocol.Topic {
     /// someone most wants one.
     public var needsSerial: Bool {
         switch self {
-        case .devices, .pty: return false
+        case .devices, .pty, .reactotron: return false
         case .logcat, .performance, .netspeed: return true
         }
     }
@@ -267,7 +271,7 @@ extension StreamProtocol.Topic {
     public var acceptsInput: Bool {
         switch self {
         case .pty: return true
-        case .devices, .logcat, .performance, .netspeed: return false
+        case .devices, .logcat, .performance, .netspeed, .reactotron: return false
         }
     }
 
@@ -300,7 +304,7 @@ extension StreamProtocol.Topic {
     public var isSnapshot: Bool {
         switch self {
         case .devices: return true
-        case .logcat, .performance, .netspeed, .pty: return false
+        case .logcat, .performance, .netspeed, .pty, .reactotron: return false
         }
     }
 }

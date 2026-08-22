@@ -26,6 +26,16 @@ public protocol StreamSource: Sendable {
     /// `performance` is: the counters are cumulative and throughput is the
     /// difference between two reads.
     func netspeed(serial: String) async -> AsyncStream<NetSample>
+    /// Everything the Reactotron relay sees, from the moment it is listening.
+    ///
+    /// Starting the relay is part of subscribing: a client that asked for the
+    /// topic wants the relay up, and a separate "start" call would let the two
+    /// disagree about whether it is. Throws when the port is taken, which is the
+    /// one failure worth a message rather than an empty feed.
+    func reactotron() async throws -> AsyncStream<ReactotronRelay.Event>
+    /// Called when the last `reactotron` subscription ends, so the relay stops
+    /// listening rather than holding port 9090 for nobody.
+    func stopReactotron() async
     /// Starts a shell on a pseudo-terminal. `serial` only scopes the shell's
     /// `ANDROID_SERIAL`; a terminal opens with no device connected.
     ///
@@ -228,6 +238,29 @@ public actor StreamSession {
                 await self?.end(id, reason: .deviceDisconnected)
             }
 
+        case .reactotron:
+            do {
+                let stream = try await source.reactotron()
+                subscriptions[id]?.pump = Task { [weak self] in
+                    for await event in stream {
+                        await self?.enqueue(
+                            id: id,
+                            items: [try? DaemonProtocol.encode(ReactotronEventPayload(event))]
+                                .compactMap { $0 })
+                    }
+                    await self?.end(id, reason: .serverStopping)
+                }
+            } catch {
+                // The port being taken is the common one, and it is actionable:
+                // another Reactotron is running. Reported rather than left as a
+                // feed that never produces anything.
+                subscriptions[id] = nil
+                await sink.send(
+                    StreamFrame.encode(
+                        StreamProtocol.Event<LogLinePayload>.failed(
+                            id: id, message: "\(error)")))
+            }
+
         case .pty:
             guard let channel else { return }
             let stream = channel.output()
@@ -258,6 +291,13 @@ public actor StreamSession {
         // owns the process, so it needs telling too.
         if subscription.topic == .logcat, let serial = subscription.serial {
             await source.stopLogcat(serial: serial)
+        }
+        // The relay is host-wide and shared, so it stops only when the last
+        // subscriber goes — a second window watching the timeline must not have
+        // its feed cut by the first one closing.
+        if subscription.topic == .reactotron,
+           !subscriptions.values.contains(where: { $0.topic == .reactotron }) {
+            await source.stopReactotron()
         }
         if notify {
             await sink.send(
@@ -324,15 +364,17 @@ public struct LiveStreamSource: StreamSource {
     private let streamer: LogcatStreamer
     private let performanceService: PerformanceService
     private let networkService: NetworkSpeedService
+    private let relay: ReactotronRelay
 
     public init(
         monitor: DeviceMonitor, streamer: LogcatStreamer, performance: PerformanceService,
-        networkSpeed: NetworkSpeedService
+        networkSpeed: NetworkSpeedService, reactotron: ReactotronRelay
     ) {
         self.monitor = monitor
         self.streamer = streamer
         performanceService = performance
         networkService = networkSpeed
+        relay = reactotron
     }
 
     public func devices() async -> AsyncStream<[Device]> { await monitor.updates() }
@@ -394,6 +436,21 @@ public struct LiveStreamSource: StreamSource {
             }
             continuation.onTermination = { _ in task.cancel() }
         }
+    }
+
+    /// The relay's events, with the relay started if it was not.
+    ///
+    /// The stream is taken *before* `start()` so a subscriber cannot miss the
+    /// `listening` event it is waiting for — the other way round, a fast bind
+    /// emits into no listeners and the UI never learns the port.
+    public func reactotron() async throws -> AsyncStream<ReactotronRelay.Event> {
+        let stream = await relay.events()
+        try await relay.start()
+        return stream
+    }
+
+    public func stopReactotron() async {
+        await relay.stop()
     }
 
     /// A login shell, matching the Mac's terminal: `-l`, so the rc files that

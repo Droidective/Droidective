@@ -236,7 +236,8 @@ import Testing
         for topic in StreamProtocol.Topic.allCases {
             switch topic {
             case .pty: #expect(topic.acceptsInput)
-            case .devices, .logcat, .performance, .netspeed: #expect(!topic.acceptsInput)
+            case .devices, .logcat, .performance, .netspeed, .reactotron:
+                #expect(!topic.acceptsInput)
             }
         }
     }

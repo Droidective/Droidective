@@ -29,6 +29,10 @@ extension DaemonBackend {
 
     func deviceProperties(serial: String) async throws -> [String: String] { [:] }
 
+    func reverseTcp(serial: String, port: Int, remove: Bool) async -> AdbResult {
+        AdbResult(stdout: "", stderr: "", exitCode: 0, timedOut: false)
+    }
+
     func rootStatus(serial: String) async -> RootStatus {
         RootStatus(hasRootShell: false, likelyRooted: false, summary: "stub", signals: [])
     }

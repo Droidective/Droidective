@@ -45,6 +45,63 @@ public struct PtyChunkPayload: Codable, Equatable, Sendable {
     }
 }
 
+/// One thing the Reactotron relay saw.
+///
+/// A flat envelope with an optional command rather than four payload types,
+/// because the timeline renders them as one list and a client switching on a
+/// `kind` string is simpler than a client decoding four shapes off one topic.
+///
+/// The command travels as the raw `ReactotronCommand` it decoded to: unlike
+/// `LogLine`, that type *is* the protocol — it mirrors upstream's wire format
+/// and `ReactotronCommandType` is derived from it — so a DTO here would be a
+/// second spelling of a contract that is not ours to reshape.
+public struct ReactotronEventPayload: Codable, Sendable {
+    /// "listening", "connected", "command" or "disconnected".
+    public let kind: String
+    /// Which client. Absent for `listening`, which is about the relay itself.
+    public let connection: Int?
+    public let port: Int?
+    /// What the app called itself in its `client.intro`, when it said.
+    public let clientId: String?
+    public let command: ReactotronCommand?
+    /// Why a client went away, when the transport said. Absent for an ordinary
+    /// close, which needs no explanation.
+    public let reason: String?
+
+    public init(_ event: ReactotronRelay.Event) {
+        switch event {
+        case .listening(let port):
+            kind = "listening"
+            connection = nil
+            self.port = port
+            clientId = nil
+            command = nil
+            reason = nil
+        case .connected(let connection, let clientId, let command):
+            kind = "connected"
+            self.connection = connection
+            port = nil
+            self.clientId = clientId
+            self.command = command
+            reason = nil
+        case .command(let connection, let command):
+            kind = "command"
+            self.connection = connection
+            port = nil
+            clientId = nil
+            self.command = command
+            reason = nil
+        case .disconnected(let connection, let reason):
+            kind = "disconnected"
+            self.connection = connection
+            port = nil
+            clientId = nil
+            command = nil
+            self.reason = reason
+        }
+    }
+}
+
 /// One performance sample.
 ///
 /// A DTO for the same reason `LogLinePayload` is: `PerfPoll` and the models

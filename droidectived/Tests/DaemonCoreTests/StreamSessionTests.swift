@@ -119,6 +119,8 @@ import Testing
         var perfSamples: [PerformanceService.PerfPoll] = []
         var netSamples: [NetSample] = []
         var logcatError: (any Error)?
+        var reactotronEvents: [ReactotronRelay.Event] = []
+        var reactotronError: (any Error)?
         /// Handed out by `openPty`, so a test can drive the shell it opened.
         var channel: FakeChannel?
         var ptyError: (any Error)?
@@ -139,6 +141,20 @@ import Testing
                 lock.unlock()
             }
         }
+
+        /// The relay has its own suite against real sockets; what the session
+        /// layer owes it is the start/stop pairing, which a scripted stream
+        /// exercises without binding a port.
+        func reactotron() async throws -> AsyncStream<ReactotronRelay.Event> {
+            if let reactotronError { throw reactotronError }
+            let events = reactotronEvents
+            return AsyncStream { continuation in
+                for event in events { continuation.yield(event) }
+                continuation.finish()
+            }
+        }
+
+        func stopReactotron() async { stopped.record("reactotron") }
 
         func openPty(serial: String?, size: PtySize) throws -> any PtyChannel {
             ptyRequests.record(serial, size)
@@ -316,9 +332,10 @@ import Testing
             case .devices:
                 #expect(!topic.needsSerial)
                 #expect(topic.isSnapshot)
-            case .pty:
-                // Host-wide: a shell runs here, and a serial only exports
-                // ANDROID_SERIAL into it.
+            case .pty, .reactotron:
+                // Host-wide, both: a shell runs here, and so does the relay a
+                // device reaches through `adb reverse`. A serial only exports
+                // ANDROID_SERIAL into a shell.
                 #expect(!topic.needsSerial)
                 #expect(!topic.isSnapshot)
             case .logcat, .performance, .netspeed:
