@@ -1298,7 +1298,7 @@ struct ReactotronView: View {
         }
     }
 
-    private static let timeFormatter: DateFormatter = {
+    fileprivate static let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "HH:mm:ss"
         return formatter
@@ -1840,6 +1840,10 @@ private struct TimelineFilterSheet: View {
 /// time. Filter, API refinements, search, and sort order are
 /// UserDefaults-backed per pane index, so each pane keeps its slice — and its
 /// direction — across feature switches and relaunches.
+/// The feed's coordinate space: rows report their frames in it and a drag reads
+/// them back, which is the only way a row can know what a drag has crossed.
+private let rtFeedSpace = "rt-feed"
+
 private struct TimelinePane: View {
     /// 0 = the single/left pane, 1 = the right split pane — keys the persisted
     /// filters and picks the clear button's wording (the right pane's clear is
@@ -1876,6 +1880,27 @@ private struct TimelinePane: View {
     @AppStorage private var methodFilter: String?
     @AppStorage private var statusFilter: HTTPStatusClass?
     @State private var showFilterSheet = false
+    /// A hidden keep-alive tab keeps this pane mounted; its mouse monitor must
+    /// stay out of the visible pane's way.
+    @Environment(\.tabIsActive) private var tabIsActive
+    /// Rows the reader picked out — ⌘-click one, ⇧-click a range, or drag across
+    /// them — so a handful of events can be copied out of a busy timeline. The
+    /// model is `RowSelection` in ADBKit (pure, tested).
+    @State private var selection = RowSelection<RtItem.ID>()
+    /// Each visible row's frame in the feed's own space, so a drag can tell
+    /// which rows it has crossed. A plain box, not state: rows report this on
+    /// every scroll and layout pass, and putting it in `@State` would re-render
+    /// the feed per pixel.
+    @State private var rowFrames = LogRowFrames<RtItem.ID>()
+    /// A sweep ends with a mouse-up that AppKit also delivers as a click; without
+    /// this the row would read it as a plain click and drop the selection just
+    /// made.
+    @State private var suppressNextPlainClick = false
+    /// The row a sweep started on, fixed when the button went down. Held as an
+    /// *id*, not a y: this feed streams, so the row under a given y changes while
+    /// the pointer is still held — which made a sweep start from whatever row had
+    /// drifted under the press point.
+    @State private var sweepAnchor: RtItem.ID?
     /// Newest at the top (the Reactotron app's order) unless this pane's
     /// reverse button flips its feed to chronological. Persisted per pane, so
     /// each side of a split orders independently.
@@ -1986,6 +2011,10 @@ private struct TimelinePane: View {
                     .foregroundStyle(.textMuted)
             }
 
+            if !selection.isEmpty {
+                selectionControls(visible: visible)
+            }
+
             Button {
                 newestFirst.toggle()
             } label: {
@@ -2068,18 +2097,141 @@ private struct TimelinePane: View {
         Group {
             if newestFirst {
                 LogTailViewV2(entries: visible.reversed(), newestEdge: .top) { item in
-                    RtRow(item: item)
+                    row(item, in: visible)
                     Divider()
                 }
             } else {
                 LogTailViewV2(entries: visible, newestEdge: .bottom) { item in
-                    RtRow(item: item)
+                    row(item, in: visible)
                     Divider()
                 }
             }
         }
+        // A drag has to know where every row is, and rows only know their own
+        // frame — they report it into `rowFrames` in this space.
+        .coordinateSpace(name: rtFeedSpace)
+        // Behind the rows, purely to read the mouse: a SwiftUI gesture can't be
+        // relied on over selectable text (see `LogSelectionMouse`), and this feed
+        // has plenty of it once a row is expanded.
+        .background(
+            LogSelectionMouse(
+                isActive: tabIsActive,
+                onPress: { y in beginSweep(atY: y, in: visible) },
+                onClick: { y, click in clickRow(atY: y, in: visible, click: click) },
+                onSweep: { y, additive in sweep(toY: y, additive: additive, in: visible) },
+                onSweepEnd: { suppressNextPlainClick = true }
+            )
+        )
         .translucentFeedBackground()
         .overlay { emptyOverlay }
+        // A selection over rows that have since been cleared, filtered out or
+        // trimmed would copy events nobody can see. Keyed on the count, not the
+        // ids: mapping every id per render is a per-flush allocation on a feed
+        // that streams.
+        .onChange(of: visible.count) { _, _ in
+            guard !selection.isEmpty else { return }
+            selection.retain(in: visible.map(\.id))
+        }
+    }
+
+    private func row(_ item: RtItem, in visible: [RtItem]) -> some View {
+        RtRow(
+            item: item,
+            isSelected: selection.contains(item.id),
+            onSelect: { click in select(item, in: visible, click: click) },
+            onCopySelection: { copySelection(visible: visible, asJSON: $0) },
+            selectionCount: selection.count
+        )
+        .reportingRowFrame(item.id, in: rtFeedSpace, into: rowFrames)
+    }
+
+    /// A click on a row, with the modifiers it was made with. Plain clicks stay
+    /// the row's own business (expand/collapse) and only clear a selection.
+    /// Returns true when the pane took the click, so the row leaves its own
+    /// expand/collapse alone.
+    private func select(_ item: RtItem, in visible: [RtItem], click: LogRowClick) -> Bool {
+        switch click {
+        case .toggle:
+            selection.toggle(item.id)
+            return true
+        case .extend:
+            selection.extend(to: item.id, in: visible.map(\.id))
+            return true
+        case .plain:
+            if suppressNextPlainClick {
+                suppressNextPlainClick = false
+                return true             // the click that ended a sweep
+            }
+            let had = !selection.isEmpty
+            selection.clear()
+            // Dropping a selection is what that click did; also expanding the
+            // row would be a second, unasked-for action.
+            return had
+        }
+    }
+
+    /// A ⌘/⇧-click from the mouse monitor, which knows a y position rather than a
+    /// row — resolved through the same frames the sweep uses.
+    private func clickRow(atY y: CGFloat, in visible: [RtItem], click: LogRowClick) {
+        let ids = visible.map(\.id)
+        guard let id = rowFrames.row(at: y, among: ids),
+              let item = visible.first(where: { $0.id == id }) else { return }
+        _ = select(item, in: visible, click: click)
+    }
+
+    /// A drag across the feed: `from`/`to` are y positions in the feed's space.
+    /// The button went down: fix the sweep's anchor row, and drop a suppression
+    /// left over from a sweep whose closing click never landed on a row (it would
+    /// otherwise eat this press's click).
+    private func beginSweep(atY y: CGFloat, in visible: [RtItem]) {
+        sweepAnchor = rowFrames.row(at: y, among: visible.map(\.id))
+        suppressNextPlainClick = false
+    }
+
+    /// The pointer moved while sweeping: the span runs from the anchor row to
+    /// whatever row is under the pointer *now*.
+    private func sweep(toY y: CGFloat, additive: Bool, in visible: [RtItem]) {
+        let ids = visible.map(\.id)
+        guard let anchor = sweepAnchor, let end = rowFrames.row(at: y, among: ids) else { return }
+        selection.select(from: anchor, to: end, in: ids, additive: additive)
+    }
+
+    private func copySelection(visible: [RtItem], asJSON: Bool) {
+        let picked = selection.ordered(in: visible.map(\.id))
+        let items = visible.filter { picked.contains($0.id) }
+        guard !items.isEmpty else { return }
+        if asJSON {
+            onCopyExport(items)
+        } else {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(RtRow.plainText(of: items), forType: .string)
+        }
+    }
+
+    @ViewBuilder
+    private func selectionControls(visible: [RtItem]) -> some View {
+        Text("\(selection.count) selected")
+            .font(.app(.caption))
+            .foregroundStyle(.textMuted)
+        Menu {
+            Button("Copy") { copySelection(visible: visible, asJSON: false) }
+            Button("Copy as JSON") { copySelection(visible: visible, asJSON: true) }
+            Divider()
+            Button("Deselect") { selection.clear() }
+        } label: {
+            Image(systemName: "doc.on.doc")
+        }
+        .buttonStyle(IconButtonStyle())
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Copy the selected events (⌘C) — ⌘-click to pick rows, ⇧-click or drag for a range")
+        // ⌘C while rows are picked. Disabled with an empty selection, so it
+        // never shadows copying text out of the search field or an open payload.
+        Button("") { copySelection(visible: visible, asJSON: false) }
+            .keyboardShortcut("c", modifiers: .command)
+            .opacity(0)
+            .frame(width: 0)
+            .accessibilityHidden(true)
     }
 
     /// Empty-state overlays appear only over an *empty* timeline — a device
@@ -2116,6 +2268,15 @@ private struct TimelinePane: View {
 
 private struct RtRow: View {
     let item: RtItem
+    /// Picked out by ⌘-click, ⇧-click or a drag — see `RowSelection`.
+    var isSelected = false
+    /// A click on the row, with the modifiers it carried. The pane decides what
+    /// they mean; the row only keeps its own expand/collapse for a plain click.
+    /// Returns true when the pane took the click and the row should do nothing.
+    var onSelect: (LogRowClick) -> Bool = { _ in false }
+    /// Copy the pane's whole selection — plain text, or the wire JSON.
+    var onCopySelection: (Bool) -> Void = { _ in }
+    var selectionCount = 0
     @Environment(\.logTailPauseFollow) private var pauseFollow
     @State private var expanded = false
     @State private var apiTab: ApiTab = .response
@@ -2148,11 +2309,16 @@ private struct RtRow: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(item.important ? Color.orange.opacity(0.06) : Color.clear)
+        .background(rowTint)
         .overlay(alignment: .leading) {
             if item.important { Rectangle().fill(.orange).frame(width: 3) }
         }
         .contextMenu {
+            if selectionCount > 1 {
+                Button("Copy \(selectionCount) Selected Events") { onCopySelection(false) }
+                Button("Copy \(selectionCount) Selected as JSON") { onCopySelection(true) }
+                Divider()
+            }
             if let object {
                 Button("Copy object") { copyToPasteboard(object.prettyJSON) }
             }
@@ -2177,12 +2343,20 @@ private struct RtRow: View {
                     .foregroundStyle(.secondary)
                     .frame(width: 16)
                     .opacity(canExpand ? 1 : 0)
-                Text(Self.timeFormatter.string(from: item.receivedAt))
+                Text(RtRow.timeFormatter.string(from: item.receivedAt))
                     .font(.app(size: 11, design: .monospaced))
                     .foregroundStyle(.textMuted)
                 Text(presentation.badge)
                     .font(.app(size: 10, weight: .bold))
                     .foregroundStyle(presentation.badgeColor)
+                if let status = presentation.status {
+                    // A request that never got a response reports 0 — say so
+                    // rather than showing a status that doesn't exist.
+                    Text(status == 0 ? "ERR" : "\(status)")
+                        .font(.app(size: 11, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(rtStatusColor(status))
+                        .help(status == 0 ? "The request failed before a response" : "HTTP \(status)")
+                }
             }
             // Incompressible: without this, HStack treats the wrappable time
             // Text as flexible and squeezes the whole cluster — the timestamp
@@ -2222,8 +2396,40 @@ private struct RtRow: View {
         .padding(.horizontal, 14)
         .frame(minHeight: 36)
         .contentShape(Rectangle())
-        .onTapGesture { toggleExpanded() }
+        // ⌘/⇧-clicks and sweeps never reach here — the mouse monitor takes them
+        // first (`LogSelectionMouse`). This is the plain click: the pane gets
+        // first refusal (dropping a selection, or absorbing the click that ended
+        // a sweep), and otherwise the row expands as it always did.
+        .onTapGesture {
+            guard !onSelect(.plain) else { return }
+            toggleExpanded()
+        }
         .onHover { hovering = $0 }
+    }
+
+    /// Selection wins over the important-event wash: the reader is looking at
+    /// what they picked, and two tints stacked read as neither.
+    private var rowTint: Color {
+        if isSelected { return .brandAccent.opacity(0.22) }
+        return item.important ? Color.orange.opacity(0.06) : .clear
+    }
+
+    /// The selected rows as text: each row's own line, then the event's *whole*
+    /// payload. The point of copying an API call is its body and its response,
+    /// and an action or a saga is its arguments — a list of one-line summaries
+    /// would leave the reader pasting the part they can already see.
+    ///
+    /// The payload is the wire form, so a stringified body stays the string the
+    /// app sent (what the row's `raw` toggle shows). "Copy as JSON" is the same
+    /// events as the export's array of commands.
+    static func plainText(of items: [RtItem]) -> String {
+        items.map { item in
+            let line = "\(RtRow.timeFormatter.string(from: item.receivedAt)) "
+                + item.event.presentation.copyText
+            guard let payload = item.command.payload, !payload.isNull else { return line }
+            return "\(line)\n\(payload.prettyJSON)"
+        }
+        .joined(separator: "\n\n")
     }
 
     /// Expanding an item means the user is reading it — pause tail-follow so
@@ -2288,7 +2494,7 @@ private struct RtRow: View {
         VStack(alignment: .leading, spacing: 8) {
             urlLine(url)
             VStack(alignment: .leading, spacing: 3) {
-                metaRow("Status", "\(status)", color: statusColor(status))
+                metaRow("Status", "\(status)", color: rtStatusColor(status))
                 metaRow("Method", method.uppercased(), color: .rtNumber)
                 metaRow("Duration", "\(formatMs(duration)) ms", color: .rtNumber)
             }
@@ -2451,15 +2657,6 @@ private struct RtRow: View {
 
     private func formatMs(_ ms: Double) -> String {
         ms < 10 ? String(format: "%.2f", ms) : String(Int(ms.rounded()))
-    }
-
-    private func statusColor(_ status: Int) -> Color {
-        switch status {
-        case 200..<300: .green
-        case 400..<500: .orange
-        case 500...: .red
-        default: .rtNumber
-        }
     }
 
     private func copyToPasteboard(_ text: String) {
@@ -3580,8 +3777,30 @@ private struct RtPresentation {
     let badgeColor: Color
     let primary: String
     let primaryColor: Color
+    /// An API event's HTTP status, shown on the collapsed row — reading a
+    /// timeline is mostly looking for the one call that didn't return 200, and
+    /// that meant expanding each row. nil for every other event.
+    var status: Int?
 
-    var copyText: String { "\(badge) \(primary)".trimmingCharacters(in: .whitespaces) }
+    var copyText: String {
+        [badge, status.map(String.init), primary]
+            .compactMap { $0 }
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespaces)
+    }
+}
+
+/// The status code's tint: green for 2xx, orange for a client error, red for a
+/// server error, and the number tint for anything else (a redirect, or the 0 a
+/// failed request reports). Only the code is coloured — colouring the row would
+/// drown the timeline's own badge colours.
+private func rtStatusColor(_ status: Int) -> Color {
+    switch HTTPStatusClass(status: status) {
+    case .success: .green
+    case .clientError: .orange
+    case .serverError: .red
+    case .redirect, .failure, nil: .rtNumber
+    }
 }
 
 /// Path (+ trimmed query) of an API URL for the compact list row; the full URL
@@ -3633,10 +3852,11 @@ private extension ReactotronEvent {
             )
         case let .image(_, _, caption, _, _):
             return RtPresentation(badge: "IMAGE", badgeColor: .rtBadge, primary: caption ?? "", primaryColor: .primary)
-        case let .apiResponse(method, url, _, _, _, _):
+        case let .apiResponse(method, url, status, _, _, _):
             return RtPresentation(
                 badge: "API", badgeColor: .rtBadge,
-                primary: "\(method.uppercased()) \(rtShortPath(url))", primaryColor: .primary
+                primary: "\(method.uppercased()) \(rtShortPath(url))", primaryColor: .primary,
+                status: status
             )
         case let .benchmark(title, _):
             return RtPresentation(badge: "BENCHMARK", badgeColor: .rtBadge, primary: title, primaryColor: .rtName)

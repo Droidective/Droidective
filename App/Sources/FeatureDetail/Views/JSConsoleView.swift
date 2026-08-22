@@ -1132,6 +1132,10 @@ extension CDPTarget {
 
 // MARK: - View
 
+/// The console feed's coordinate space: rows report their frames in it and a
+/// drag reads them back to work out which rows it crossed.
+let jsFeedSpace = "js-feed"
+
 struct JSConsoleView: View {
     @Environment(AppState.self) private var state
     @State private var input = ""
@@ -1143,6 +1147,21 @@ struct JSConsoleView: View {
     @State private var showLevels = false
     /// The "Clear data and restart" confirmation (it signs the user out).
     @State private var confirmClearDataRestart = false
+    /// Rows the reader picked out — ⌘-click one, ⇧-click a range, drag across
+    /// them — so a handful of logs can be copied out of a streaming console.
+    /// `RowSelection` in ADBKit holds the rules.
+    @State private var selection = RowSelection<JSEntry.ID>()
+    /// Each visible row's frame in the feed's space, for the drag's hit-testing.
+    @State private var rowFrames = LogRowFrames<JSEntry.ID>()
+    /// A sweep ends with a mouse-up that AppKit also delivers as a click; without
+    /// this the row would read it as a plain click and drop the selection just
+    /// made.
+    @State private var suppressNextPlainClick = false
+    /// The row a sweep started on, fixed when the button went down. Held as an
+    /// *id*, not a y: this feed streams, so the row under a given y changes while
+    /// the pointer is still held — which made a sweep start from whatever row had
+    /// drifted under the press point.
+    @State private var sweepAnchor: JSEntry.ID?
     @FocusState private var findFocused: Bool
     /// This tab stays mounted when the user switches away (see `TabHostView`).
     /// The input is a bare `NSTextView`, which `installFocusRelease` can't
@@ -1417,6 +1436,9 @@ struct JSConsoleView: View {
                     .frame(minWidth: 120, maxWidth: 240)
             }
             Spacer(minLength: 8)
+            if !selection.isEmpty {
+                selectionControls(session.filteredEntries)
+            }
             levelFilter
             Button {
                 session.openFind()
@@ -1462,16 +1484,20 @@ struct JSConsoleView: View {
     /// What Export writes: exactly the rows the feed is showing — the level
     /// and text filters apply, in display (chronological) order.
     private var exportJSON: String? {
-        ConsoleExport.json(session.filteredEntries.map { entry in
-            let (type, level): (String, String?) = switch entry.kind {
-            case .input: ("input", nil)
-            case .result: ("result", nil)
-            case .evalError: ("error", nil)
-            case .notice: ("notice", nil)
-            case let .log(logLevel, _, _, _): ("log", logLevel.rawValue)
-            }
-            return ConsoleExportEntry(at: entry.at, type: type, level: level, text: jsEntryPlainText(entry.kind))
-        })
+        ConsoleExport.json(session.filteredEntries.map(exportEntry))
+    }
+
+    /// One entry in the export's shape — shared with copying a selection as JSON
+    /// so both produce the same records.
+    private func exportEntry(_ entry: JSEntry) -> ConsoleExportEntry {
+        let (type, level): (String, String?) = switch entry.kind {
+        case .input: ("input", nil)
+        case .result: ("result", nil)
+        case .evalError: ("error", nil)
+        case .notice: ("notice", nil)
+        case let .log(logLevel, _, _, _): ("log", logLevel.rawValue)
+        }
+        return ConsoleExportEntry(at: entry.at, type: type, level: level, text: jsEntryPlainText(entry.kind))
     }
 
     private func exportToFile() {
@@ -1596,30 +1622,166 @@ struct JSConsoleView: View {
     /// drives the ⌘F match into view via `focusID`.
     @ViewBuilder
     private func scrollingLog(_ visible: [JSEntry]) -> some View {
+        feed(visible)
+            // A drag has to know where every row is, and a row only knows its
+            // own frame — they report into `rowFrames` in this space.
+            .coordinateSpace(name: jsFeedSpace)
+            // Behind the rows, purely to read the mouse: the console's lines are
+            // selectable text end to end, so a SwiftUI gesture behind them never
+            // gets the click (see `LogSelectionMouse`).
+            .background(
+                LogSelectionMouse(
+                    isActive: tabIsActive,
+                    onPress: { y in beginSweep(atY: y, in: visible) },
+                    onClick: { y, click in clickRow(atY: y, in: visible, click: click) },
+                    onSweep: { y, additive in sweep(toY: y, additive: additive, in: visible) },
+                    onSweepEnd: { suppressNextPlainClick = true }
+                )
+            )
+            // A selection over rows the feed no longer has (cleared, filtered
+            // out, trimmed) would copy logs nobody can see. Keyed on the count,
+            // not the ids: mapping 2000 ids per render is the kind of per-flush
+            // allocation this console has been burned by before.
+            .onChange(of: visible.count) { _, _ in
+                guard !selection.isEmpty else { return }
+                selection.retain(in: visible.map(\.id))
+            }
+    }
+
+    @ViewBuilder
+    private func feed(_ visible: [JSEntry]) -> some View {
         // No connection gate on the jump buttons: the buffer outlives the
         // connection, and scrolling those logs is exactly what a disconnected
         // session is for.
         if session.newestFirst {
             LogTailViewV2(entries: visible.reversed(), newestEdge: .top,
-                          focusID: session.currentFindID) { jsRow($0) }
+                          focusID: session.currentFindID) { jsRow($0, in: visible) }
         } else {
             LogTailViewV2(entries: visible, newestEdge: .bottom,
-                          focusID: session.currentFindID) { jsRow($0) }
+                          focusID: session.currentFindID) { jsRow($0, in: visible) }
         }
     }
 
     @ViewBuilder
-    private func jsRow(_ entry: JSEntry) -> some View {
+    private func jsRow(_ entry: JSEntry, in visible: [JSEntry]) -> some View {
         let band = levelBand(entry)
-        JSEntryRow(entry: entry, session: session)
+        JSEntryRow(
+            entry: entry, session: session,
+            isSelected: selection.contains(entry.id),
+            onSelect: { click in select(entry, in: visible, click: click) },
+            onCopySelection: { copySelection(visible: visible, asJSON: $0) },
+            selectionCount: selection.count
+        )
             .padding(.horizontal, 12)
             .padding(.vertical, 5)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(band?.fill ?? .clear)
+            // Selection wins over the level band: the reader is looking at what
+            // they picked, and two washes stacked read as neither.
+            .background(selection.contains(entry.id)
+                ? Color.brandAccent.opacity(0.22)
+                : (band?.fill ?? .clear))
+            .reportingRowFrame(entry.id, in: jsFeedSpace, into: rowFrames)
             .overlay(alignment: .leading) {
                 if let band { Rectangle().fill(band.rule).frame(width: 3) }
             }
         Divider().opacity(0.18)
+    }
+
+    /// Returns true when the pane took the click, so the row leaves its own
+    /// behaviour (opening the first object) alone.
+    private func select(_ entry: JSEntry, in visible: [JSEntry], click: LogRowClick) -> Bool {
+        switch click {
+        case .toggle:
+            selection.toggle(entry.id)
+            return true
+        case .extend:
+            selection.extend(to: entry.id, in: visible.map(\.id))
+            return true
+        case .plain:
+            if suppressNextPlainClick {
+                suppressNextPlainClick = false
+                return true             // the click that ended a sweep
+            }
+            let had = !selection.isEmpty
+            selection.clear()
+            // Dropping a selection is itself what the click did; opening an
+            // object on the way out would be a second, unasked-for action.
+            return had
+        }
+    }
+
+    /// A ⌘/⇧-click from the mouse monitor, which knows a y position rather than a
+    /// row — resolve it through the same frames the sweep uses.
+    private func clickRow(atY y: CGFloat, in visible: [JSEntry], click: LogRowClick) {
+        let ids = visible.map(\.id)
+        guard let id = rowFrames.row(at: y, among: ids),
+              let entry = visible.first(where: { $0.id == id }) else { return }
+        _ = select(entry, in: visible, click: click)
+    }
+
+    /// The button went down: fix the sweep's anchor row, and drop a suppression
+    /// left over from a sweep whose closing click never landed on a row (it would
+    /// otherwise eat this press's click).
+    private func beginSweep(atY y: CGFloat, in visible: [JSEntry]) {
+        sweepAnchor = rowFrames.row(at: y, among: visible.map(\.id))
+        suppressNextPlainClick = false
+    }
+
+    /// The pointer moved while sweeping: the span runs from the anchor row to
+    /// whatever row is under the pointer *now*.
+    private func sweep(toY y: CGFloat, additive: Bool, in visible: [JSEntry]) {
+        let ids = visible.map(\.id)
+        guard let anchor = sweepAnchor, let end = rowFrames.row(at: y, among: ids) else { return }
+        selection.select(from: anchor, to: end, in: ids, additive: additive)
+    }
+
+    /// Copy the picked rows. The text form resolves every object through the
+    /// runtime (`jsEntryCompleteText`), because `{…}` is the one part of a
+    /// pasted log nobody can act on; the JSON form matches Export.
+    private func copySelection(visible: [JSEntry], asJSON: Bool) {
+        let picked = Set(selection.ids)
+        let entries = visible.filter { picked.contains($0.id) }
+        guard !entries.isEmpty else { return }
+        if asJSON {
+            guard let json = ConsoleExport.json(entries.map(exportEntry)) else { return }
+            copyToPasteboard(json)
+            state.showToast(Toast(message: "Copied \(entries.count) logs as JSON", ok: true))
+            return
+        }
+        Task {
+            var lines: [String] = []
+            for entry in entries {
+                lines.append(await jsEntryCompleteText(entry, session: session))
+            }
+            copyToPasteboard(lines.joined(separator: "\n\n"))
+            state.showToast(Toast(message: "Copied \(entries.count) logs", ok: true))
+        }
+    }
+
+    @ViewBuilder
+    private func selectionControls(_ visible: [JSEntry]) -> some View {
+        Text("\(selection.count) selected")
+            .font(.app(.caption))
+            .foregroundStyle(.textMuted)
+        Menu {
+            Button("Copy") { copySelection(visible: visible, asJSON: false) }
+            Button("Copy as JSON") { copySelection(visible: visible, asJSON: true) }
+            Divider()
+            Button("Deselect") { selection.clear() }
+        } label: {
+            Image(systemName: "doc.on.doc")
+        }
+        .buttonStyle(IconButtonStyle())
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Copy the selected logs (⌘C) — ⌘-click to pick rows, ⇧-click or drag for a range")
+        // ⌘C only while rows are picked, so it never shadows copying text out of
+        // the input field, the filter, or an expanded value.
+        Button("") { copySelection(visible: visible, asJSON: false) }
+            .keyboardShortcut("c", modifiers: .command)
+            .opacity(0)
+            .frame(width: 0)
+            .accessibilityHidden(true)
     }
 
     /// The Chrome-style row band (fill + left rule) for error and warning rows;

@@ -223,7 +223,7 @@ struct RootView: View {
         // Every window can open another; refreshed each time because a
         // SwiftUI action captured from a closed window is not worth trusting.
         state.core.windowOpenerReady {
-            openWindow(id: "main")
+            openWindow(id: mainWindowID)
         }
         applyStoredTheme()
         // Anything below is app-wide and must run once, not once per window.

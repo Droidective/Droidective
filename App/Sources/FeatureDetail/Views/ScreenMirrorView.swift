@@ -226,6 +226,7 @@ struct ScreenMirrorView: View {
         // The windows read their adb client and toasts from whichever workspace
         // popped one out; the device rides in the window's own presented value.
         state.core.mirrorWindowOwner = state.id
+        state.core.noteMirrorWindowRequested(serial)
         openWindow(id: MirrorWindow.windowID, value: serial)
         state.closeTab(tabFeatureID)
     }

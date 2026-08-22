@@ -417,6 +417,7 @@ struct MirrorWallView: View {
     /// back when the window closes.
     private func popOut(_ serial: String) {
         state.core.mirrorWindowOwner = state.id
+        state.core.noteMirrorWindowRequested(serial)
         openWindow(id: MirrorWindow.windowID, value: serial)
     }
 

@@ -218,6 +218,9 @@ targets:
       - App/Sources/FeatureDetail/Views/TourPaging.swift
       - App/Sources/FeatureDetail/Views/ConsoleLinkSpanMemo.swift
       - App/Sources/FeatureDetail/Views/ConsoleRateBucket.swift
+      # Which log row a click's y lands on — the rule behind ⌘-click and
+      # drag-select in the Reactotron and JS Console feeds.
+      - App/Sources/FeatureDetail/LogRowFrames.swift
       # The alternate-screen margin repair, tested against real SwiftTerm so a
       # dependency bump can't silently change the behavior it works around.
       - App/Sources/FeatureDetail/TerminalCompat.swift
