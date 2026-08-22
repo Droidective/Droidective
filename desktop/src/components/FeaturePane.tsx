@@ -6,7 +6,9 @@ import { HomeView } from "@/components/HomeView"
 import {
   AppInfoPane,
   AppsPane,
+  BugReportPane,
   CrashPane,
+  DeepLinksPane,
   DeviceInfoPane,
   DevSettingsPane,
   EmulatorsPane,
@@ -22,6 +24,7 @@ import {
   RestrictionsPane,
   RootStatusPane,
   SandboxPane,
+  TerminalPane,
   WifiPane,
 } from "@/components/panes"
 import { ABOUT_TAB, CATALOG_TAB, HOME_TAB } from "@/lib/layout"
@@ -97,6 +100,10 @@ export function FeaturePane(props: FeaturePaneProps) {
       return <FileExplorerPane device={props.device} />
     case "crash-catcher":
       return <CrashPane device={props.device} />
+    case "bug-report":
+      return <BugReportPane device={props.device} packageId={props.packageId} />
+    case "deep-link":
+      return <DeepLinksPane device={props.device} packageId={props.packageId} />
     case "performance":
       return <PerformancePane device={props.device} packageId={props.packageId} />
     case "root-status":
@@ -115,6 +122,11 @@ export function FeaturePane(props: FeaturePaneProps) {
     // screen's whole job is launching one when none is connected.
     case "emulators":
       return <EmulatorsPane />
+    // A serial rather than a device, and for the same reason: a shell runs on
+    // this machine. The selection only decides what `ANDROID_SERIAL` says in
+    // the next shell opened, so the terminal works with nothing connected.
+    case "terminal":
+      return <TerminalPane serial={props.device?.serial ?? null} />
     case "install-app":
       return <InstallAppPane device={props.device} />
     case "app-info":

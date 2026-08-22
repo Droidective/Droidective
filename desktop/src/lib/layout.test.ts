@@ -26,6 +26,10 @@ describe("loadLayout", () => {
       collapsedCategories: ["input"],
       favorites: ["logcat"],
       disabledFeatures: ["monkey"],
+      hotkeys: { logcat: { code: "KeyL", ctrl: true, alt: true, shift: false, meta: false } },
+      runOnAll: true,
+      sidebarAutoHide: true,
+      zoomStep: 4,
       panes: [
         { tabs: [HOME_TAB, "logcat"], activeTab: "logcat" },
         { tabs: ["apps"], activeTab: "apps" },
@@ -53,6 +57,11 @@ describe("loadLayout", () => {
       collapsedCategories: [{ nope: true }],
       favorites: null,
       disabledFeatures: 42,
+      hotkeys: "none",
+      runOnAll: "yes",
+      sidebarAutoHide: 1,
+      // A step from a build with a different number of them.
+      zoomStep: 99,
       panes: [{ tabs: [HOME_TAB, 3], activeTab: 9 }, "not a pane", { tabs: [] }],
       focusedPane: "second",
       splitFraction: "half",
@@ -63,9 +72,30 @@ describe("loadLayout", () => {
       collapsedCategories: [],
       favorites: [],
       disabledFeatures: [],
+      hotkeys: {},
+      runOnAll: false,
+      sidebarAutoHide: false,
+      zoomStep: 7,
       panes: [{ tabs: [HOME_TAB], activeTab: null }],
       focusedPane: 0,
       splitFraction: 0.5,
+    })
+  })
+
+  it("keeps the whole shortcuts and drops the broken ones", () => {
+    // A binding with no key would match a keydown that reported no code.
+    const stored = JSON.stringify({
+      ...emptyLayout(),
+      hotkeys: {
+        logcat: { code: "KeyL", ctrl: true },
+        keyless: { ctrl: true },
+        empty: { code: "" },
+        notAnObject: "KeyZ",
+      },
+    })
+    expect(loadLayout(fakeStorage(stored)).hotkeys).toEqual({
+      // Absent flags read as false rather than making the entry unusable.
+      logcat: { code: "KeyL", ctrl: true, alt: false, shift: false, meta: false },
     })
   })
 

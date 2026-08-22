@@ -7,14 +7,18 @@ import {
   type LayoutState,
 } from "@/lib/layout"
 import { withEnabled, withGroupEnabled } from "@/lib/catalog"
+import { withHotkey, type Hotkey } from "@/lib/hotkeys"
 import { clampedFraction } from "@/lib/panes"
 import { togglePinned } from "@/lib/palette"
 import { toggleCollapsed } from "@/lib/sidebar"
 import type { FeatureSummary } from "@/lib/wire"
+import { clampZoomStep, DEFAULT_ZOOM_STEP } from "@/lib/zoom"
 import {
   activateAt,
   close,
   closeOthers,
+  cycleBackward,
+  cycleForward,
   drop,
   focus,
   move,
@@ -35,6 +39,8 @@ export interface WorkspaceController {
   moveToOtherPane: (id: string) => void
   focusPane: (pane: number) => void
   activateIndex: (index: number) => void
+  /** +1 for the next tab in the focused pane, -1 for the previous. */
+  cycleTab: (by: 1 | -1) => void
   setSplitFraction: (fraction: number) => void
   setSidebarOrder: (order: string[]) => void
   setCategoryOrder: (order: string[]) => void
@@ -44,6 +50,14 @@ export interface WorkspaceController {
   setFeatureEnabled: (id: string, enabled: boolean) => void
   /** A whole category at once — the Mac's right-click on a group header. */
   setGroupEnabled: (members: FeatureSummary[], enabled: boolean) => void
+  /** Binds a feature's shortcut, or clears it with null. */
+  setHotkey: (id: string, hotkey: Hotkey | null) => void
+  /** The device bar's Run on all switch. */
+  setRunOnAll: (on: boolean) => void
+  /** Pinned sidebar or Dock-style auto-hide. */
+  setSidebarAutoHide: (autoHide: boolean) => void
+  /** +1 zooms in, -1 out, 0 back to Actual Size. */
+  zoom: (direction: -1 | 0 | 1) => void
 }
 
 /**
@@ -91,6 +105,7 @@ export function useWorkspace(features: FeatureSummary[]): WorkspaceController {
   return {
     workspace,
     layout,
+    ...useLayoutEditors(setLayout),
     open: useCallback((id: string) => {
       edit((current) => open(current, id))
     }, [edit]),
@@ -118,35 +133,114 @@ export function useWorkspace(features: FeatureSummary[]): WorkspaceController {
     activateIndex: useCallback((index: number) => {
       edit((current) => activateAt(current, index))
     }, [edit]),
-    setSplitFraction: useCallback((splitFraction: number) => {
-      setLayout((current) => ({ ...current, splitFraction: clampedFraction(splitFraction) }))
-    }, []),
-    setSidebarOrder: useCallback((sidebarOrder: string[]) => {
-      setLayout((current) => ({ ...current, sidebarOrder }))
-    }, []),
-    setCategoryOrder: useCallback((categoryOrder: string[]) => {
-      setLayout((current) => ({ ...current, categoryOrder }))
-    }, []),
-    togglePin: useCallback((id: string) => {
-      setLayout((current) => ({ ...current, favorites: togglePinned(current.favorites, id) }))
-    }, []),
-    setFeatureEnabled: useCallback((id: string, enabled: boolean) => {
-      setLayout((current) => ({
-        ...current,
-        disabledFeatures: withEnabled(current.disabledFeatures, id, enabled),
-      }))
-    }, []),
-    setGroupEnabled: useCallback((members: FeatureSummary[], enabled: boolean) => {
-      setLayout((current) => ({
-        ...current,
-        disabledFeatures: withGroupEnabled(current.disabledFeatures, members, enabled),
-      }))
-    }, []),
-    toggleCategory: useCallback((category: string) => {
-      setLayout((current) => ({
-        ...current,
-        collapsedCategories: toggleCollapsed(current.collapsedCategories, category),
-      }))
-    }, []),
+    cycleTab: useCallback((by: 1 | -1) => {
+      edit((current) => (by === 1 ? cycleForward(current) : cycleBackward(current)))
+    }, [edit]),
+  }
+}
+
+/**
+ * Everything that edits the persisted layout rather than the open tabs.
+ *
+ * Split from the workspace above because they are two different things sharing
+ * one hook: the tab operations transform a `Workspace`, and these all patch one
+ * field of `LayoutState`.
+ */
+function useLayoutEditors(
+  setLayout: React.Dispatch<React.SetStateAction<LayoutState>>,
+): Pick<
+  WorkspaceController,
+  | "setSplitFraction"
+  | "setSidebarOrder"
+  | "setCategoryOrder"
+  | "togglePin"
+  | "setFeatureEnabled"
+  | "setGroupEnabled"
+  | "setHotkey"
+  | "setRunOnAll"
+  | "setSidebarAutoHide"
+  | "zoom"
+  | "toggleCategory"
+> {
+  return {
+    setSplitFraction: useCallback(
+      (splitFraction: number) => {
+        setLayout((current) => ({ ...current, splitFraction: clampedFraction(splitFraction) }))
+      },
+      [setLayout],
+    ),
+    setSidebarOrder: useCallback(
+      (sidebarOrder: string[]) => {
+        setLayout((current) => ({ ...current, sidebarOrder }))
+      },
+      [setLayout],
+    ),
+    setCategoryOrder: useCallback(
+      (categoryOrder: string[]) => {
+        setLayout((current) => ({ ...current, categoryOrder }))
+      },
+      [setLayout],
+    ),
+    togglePin: useCallback(
+      (id: string) => {
+        setLayout((current) => ({ ...current, favorites: togglePinned(current.favorites, id) }))
+      },
+      [setLayout],
+    ),
+    setFeatureEnabled: useCallback(
+      (id: string, enabled: boolean) => {
+        setLayout((current) => ({
+          ...current,
+          disabledFeatures: withEnabled(current.disabledFeatures, id, enabled),
+        }))
+      },
+      [setLayout],
+    ),
+    setGroupEnabled: useCallback(
+      (members: FeatureSummary[], enabled: boolean) => {
+        setLayout((current) => ({
+          ...current,
+          disabledFeatures: withGroupEnabled(current.disabledFeatures, members, enabled),
+        }))
+      },
+      [setLayout],
+    ),
+    setHotkey: useCallback(
+      (id: string, hotkey: Hotkey | null) => {
+        setLayout((current) => ({ ...current, hotkeys: withHotkey(current.hotkeys, id, hotkey) }))
+      },
+      [setLayout],
+    ),
+    setRunOnAll: useCallback(
+      (runOnAll: boolean) => {
+        setLayout((current) => ({ ...current, runOnAll }))
+      },
+      [setLayout],
+    ),
+    setSidebarAutoHide: useCallback(
+      (sidebarAutoHide: boolean) => {
+        setLayout((current) => ({ ...current, sidebarAutoHide }))
+      },
+      [setLayout],
+    ),
+    zoom: useCallback(
+      (direction: -1 | 0 | 1) => {
+        setLayout((current) => ({
+          ...current,
+          zoomStep:
+            direction === 0 ? DEFAULT_ZOOM_STEP : clampZoomStep(current.zoomStep + direction),
+        }))
+      },
+      [setLayout],
+    ),
+    toggleCategory: useCallback(
+      (category: string) => {
+        setLayout((current) => ({
+          ...current,
+          collapsedCategories: toggleCollapsed(current.collapsedCategories, category),
+        }))
+      },
+      [setLayout],
+    ),
   }
 }

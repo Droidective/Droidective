@@ -34,6 +34,8 @@ export interface SectionProps {
   onHover: (slot: DropSlot) => void
   onDropFeature: (target: string, after: boolean, group: readonly string[]) => void
   onDropCategory: (target: string, after: boolean) => void
+  /** A row's right-click — Pin, Disable, Set Hotkey… */
+  onContextMenu: (id: string, x: number, y: number) => void
 }
 
 /** One category of the sidebar: a collapsible header over its feature rows. */
@@ -121,6 +123,10 @@ export function SidebarSection(props: SectionProps) {
                 event.preventDefault()
                 props.onDropFeature(feature.id, pastMidpointY(event), group)
               }}
+              onContextMenu={(event) => {
+                event.preventDefault()
+                props.onContextMenu(feature.id, event.clientX, event.clientY)
+              }}
             />
           ))}
     </section>
@@ -139,6 +145,7 @@ function Row({
   onDragStart,
   onDragOver,
   onDrop,
+  onContextMenu,
 }: {
   feature: FeatureSummary
   active: boolean
@@ -152,6 +159,7 @@ function Row({
   onDragStart: (event: React.DragEvent<HTMLElement>) => void
   onDragOver: (event: React.DragEvent<HTMLElement>) => void
   onDrop: (event: React.DragEvent<HTMLElement>) => void
+  onContextMenu: (event: React.MouseEvent<HTMLElement>) => void
 }) {
   const Icon = iconForFeature(feature.id, feature.category)
   return (
@@ -160,6 +168,7 @@ function Row({
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDrop={onDrop}
+      onContextMenu={onContextMenu}
       className={cn(
         "group relative flex w-full items-start gap-2.5 px-3 py-1.5 transition-colors",
         active ? "bg-accent/12" : "hover:bg-white/[0.04]",

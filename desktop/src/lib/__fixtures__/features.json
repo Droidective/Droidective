@@ -27,6 +27,7 @@
             "needsBundle": false,
             "needsDevice": true,
             "subtitle": "Type text, URLs, or symbols on the device",
+            "supportsRunAll": true,
             "title": "Send Text"
         },
         {
@@ -47,6 +48,7 @@
             "needsBundle": false,
             "needsDevice": true,
             "subtitle": "Get the Wi-Fi IP address and copy it",
+            "supportsRunAll": false,
             "title": "Copy Device IP"
         },
         {
@@ -86,6 +88,7 @@
             "needsBundle": false,
             "needsDevice": false,
             "subtitle": "Copy IP, reverse port, disconnect, DNS & wireless setup",
+            "supportsRunAll": false,
             "title": "Connection"
         },
         {
@@ -116,6 +119,7 @@
             "needsBundle": false,
             "needsDevice": true,
             "subtitle": "Forward a device port to your machine (Metro 8081)",
+            "supportsRunAll": false,
             "title": "Reverse Port"
         },
         {
@@ -137,6 +141,7 @@
             "needsBundle": false,
             "needsDevice": false,
             "subtitle": "Connect over Wi-Fi (tcpip + Android 11 pairing)",
+            "supportsRunAll": false,
             "title": "Wireless ADB"
         },
         {
@@ -161,6 +166,7 @@
             "needsBundle": false,
             "needsDevice": false,
             "subtitle": "Launch and stop Android emulators & iOS Simulators",
+            "supportsRunAll": false,
             "title": "Emulators & Simulators"
         },
         {
@@ -189,6 +195,7 @@
             "needsBundle": false,
             "needsDevice": true,
             "subtitle": "Live download & upload throughput with recording",
+            "supportsRunAll": false,
             "title": "Network Speed"
         },
         {
@@ -217,6 +224,7 @@
             "needsBundle": false,
             "needsDevice": true,
             "subtitle": "Connection details, toggle, saved networks & passwords",
+            "supportsRunAll": false,
             "title": "Wi-Fi"
         },
         {
@@ -240,6 +248,7 @@
             "needsBundle": false,
             "needsDevice": true,
             "subtitle": "Off, automatic, or a DNS-over-TLS provider",
+            "supportsRunAll": false,
             "title": "Private DNS"
         },
         {
@@ -278,6 +287,7 @@
             "needsBundle": false,
             "needsDevice": false,
             "subtitle": "Dev menu, reload, deep links, dev server, process death",
+            "supportsRunAll": true,
             "title": "React Native"
         },
         {
@@ -298,6 +308,7 @@
             "needsBundle": false,
             "needsDevice": true,
             "subtitle": "Open the React Native developer menu",
+            "supportsRunAll": false,
             "title": "Open Dev Menu"
         },
         {
@@ -318,6 +329,7 @@
             "needsBundle": false,
             "needsDevice": true,
             "subtitle": "Reload the JS bundle (double-tap R)",
+            "supportsRunAll": false,
             "title": "Reload JS"
         },
         {
@@ -338,6 +350,7 @@
             "needsBundle": true,
             "needsDevice": true,
             "subtitle": "Launch and save deep links per app",
+            "supportsRunAll": false,
             "title": "Deep Links"
         },
         {
@@ -358,6 +371,7 @@
             "needsBundle": false,
             "needsDevice": true,
             "subtitle": "Background then kill the app to test restoration",
+            "supportsRunAll": false,
             "title": "Simulate Process Death"
         },
         {
@@ -387,6 +401,7 @@
             "needsBundle": false,
             "needsDevice": true,
             "subtitle": "Point the app at a different Metro host",
+            "supportsRunAll": false,
             "title": "Set Dev Server Host"
         },
         {
@@ -423,6 +438,7 @@
             "needsBundle": false,
             "needsDevice": false,
             "subtitle": "Live React Native inspector \u2014 logs, network, state, custom display",
+            "supportsRunAll": false,
             "title": "Reactotron"
         },
         {
@@ -456,6 +472,7 @@
             "needsBundle": false,
             "needsDevice": false,
             "subtitle": "Hermes REPL + live console over the Metro debugger",
+            "supportsRunAll": false,
             "title": "JS Console"
         },
         {
@@ -479,7 +496,34 @@
             "needsBundle": false,
             "needsDevice": true,
             "subtitle": "Mirror and control the device with scrcpy",
+            "supportsRunAll": false,
             "title": "Mirror Screen"
+        },
+        {
+            "category": "screen",
+            "fields": [],
+            "id": "mirror-wall",
+            "implemented": true,
+            "isAbsorbedByHub": false,
+            "isDestructive": false,
+            "keywords": [
+                "mirror",
+                "wall",
+                "grid",
+                "multi",
+                "devices",
+                "all",
+                "scrcpy",
+                "side by side",
+                "several",
+                "farm"
+            ],
+            "kind": "view",
+            "needsBundle": false,
+            "needsDevice": false,
+            "subtitle": "Mirror up to six devices side by side",
+            "supportsRunAll": false,
+            "title": "Mirror Wall"
         },
         {
             "category": "screen",
@@ -499,6 +543,7 @@
             "needsBundle": false,
             "needsDevice": true,
             "subtitle": "Capture the screen and save it to your Mac",
+            "supportsRunAll": false,
             "title": "Screenshot"
         },
         {
@@ -521,6 +566,7 @@
             "needsBundle": false,
             "needsDevice": true,
             "subtitle": "Record via scrcpy \u2014 no time limit, with audio",
+            "supportsRunAll": false,
             "title": "Screen Record"
         },
         {
@@ -548,6 +594,7 @@
             "needsBundle": false,
             "needsDevice": false,
             "subtitle": "Trim, rotate, crop, convert & compress video",
+            "supportsRunAll": false,
             "title": "Video Editor"
         },
         {
@@ -569,6 +616,7 @@
             "needsBundle": false,
             "needsDevice": true,
             "subtitle": "Clean status bar for store screenshots",
+            "supportsRunAll": false,
             "title": "Demo Mode"
         },
         {
@@ -592,6 +640,7 @@
             "needsBundle": false,
             "needsDevice": true,
             "subtitle": "Browse device storage \u2014 copy, move, delete, pull",
+            "supportsRunAll": false,
             "title": "File Explorer"
         },
         {
@@ -613,6 +662,7 @@
             "needsBundle": false,
             "needsDevice": true,
             "subtitle": "Browse and search every device property",
+            "supportsRunAll": false,
             "title": "Device Info"
         },
         {
@@ -636,6 +686,7 @@
             "needsBundle": false,
             "needsDevice": true,
             "subtitle": "Check whether the device is rooted, and how",
+            "supportsRunAll": false,
             "title": "Root Status"
         },
         {
@@ -662,6 +713,7 @@
             "needsBundle": false,
             "needsDevice": true,
             "subtitle": "Dev toggles \u2014 verifier, hidden APIs, SELinux (root)",
+            "supportsRunAll": false,
             "title": "System Restrictions"
         },
         {
@@ -691,6 +743,7 @@
             "needsBundle": false,
             "needsDevice": true,
             "subtitle": "Layout bounds, overdraw, taps, animation scales & more",
+            "supportsRunAll": false,
             "title": "Developer Settings"
         },
         {
@@ -744,6 +797,7 @@
             "needsBundle": false,
             "needsDevice": false,
             "subtitle": "Fake battery, appearance, locale, network & proxy",
+            "supportsRunAll": true,
             "title": "Simulate"
         },
         {
@@ -784,6 +838,7 @@
             "needsBundle": false,
             "needsDevice": true,
             "subtitle": "Set a fake battery level and unplugged state",
+            "supportsRunAll": false,
             "title": "Fake Battery"
         },
         {
@@ -804,6 +859,7 @@
             "needsBundle": false,
             "needsDevice": true,
             "subtitle": "Toggle system dark mode",
+            "supportsRunAll": false,
             "title": "Dark Mode"
         },
         {
@@ -861,6 +917,7 @@
             "needsBundle": false,
             "needsDevice": true,
             "subtitle": "Deliver a test APNS push to a simulator app",
+            "supportsRunAll": false,
             "title": "Push Notification"
         },
         {
@@ -902,6 +959,7 @@
             "needsBundle": false,
             "needsDevice": true,
             "subtitle": "Override font scale and display density",
+            "supportsRunAll": false,
             "title": "Font & Density"
         },
         {
@@ -923,6 +981,7 @@
             "needsBundle": false,
             "needsDevice": true,
             "subtitle": "Set animation scales to 0\u00d7 or 1\u00d7",
+            "supportsRunAll": false,
             "title": "Animation Scale"
         },
         {
@@ -1001,6 +1060,7 @@
             "needsBundle": false,
             "needsDevice": true,
             "subtitle": "Switch device language for i18n testing",
+            "supportsRunAll": false,
             "title": "Change Locale"
         },
         {
@@ -1047,6 +1107,7 @@
             "needsBundle": false,
             "needsDevice": true,
             "subtitle": "Toggle Wi-Fi, mobile data, and airplane mode",
+            "supportsRunAll": false,
             "title": "Network Toggles"
         },
         {
@@ -1077,6 +1138,7 @@
             "needsBundle": false,
             "needsDevice": true,
             "subtitle": "Set or clear the global proxy (Charles, Proxyman)",
+            "supportsRunAll": false,
             "title": "HTTP Proxy"
         },
         {
@@ -1116,6 +1178,7 @@
             "needsBundle": false,
             "needsDevice": true,
             "subtitle": "All installed & system apps \u2014 manage, permissions, info",
+            "supportsRunAll": false,
             "title": "Apps"
         },
         {
@@ -1134,12 +1197,23 @@
                 "drop",
                 "install app",
                 "add app",
-                "package"
+                "package",
+                "apks",
+                "xapk",
+                "apkm",
+                "split",
+                "split apk",
+                "splits",
+                "obb",
+                "expansion",
+                "apkpure",
+                "apkmirror"
             ],
             "kind": "view",
             "needsBundle": false,
             "needsDevice": true,
-            "subtitle": "Install an APK \u2014 drag and drop or pick a file",
+            "subtitle": "Install an APK, APKS, XAPK, or APKM \u2014 drag and drop or pick a file",
+            "supportsRunAll": true,
             "title": "Install App"
         },
         {
@@ -1203,6 +1277,7 @@
             "needsBundle": false,
             "needsDevice": false,
             "subtitle": "Inspect, decompile, recompile, and sign APKs in one place",
+            "supportsRunAll": false,
             "title": "APK Studio"
         },
         {
@@ -1237,6 +1312,7 @@
             "needsBundle": false,
             "needsDevice": false,
             "subtitle": "Inspect an APK \u2014 manifest, permissions, SDK, signing",
+            "supportsRunAll": false,
             "title": "APK Inspector"
         },
         {
@@ -1266,6 +1342,7 @@
             "needsBundle": false,
             "needsDevice": false,
             "subtitle": "Zipalign and sign an APK \u2014 debug key or your keystore",
+            "supportsRunAll": false,
             "title": "Sign APK"
         },
         {
@@ -1296,6 +1373,7 @@
             "needsBundle": false,
             "needsDevice": false,
             "subtitle": "Browse Java (jadx) or smali + resources (apktool)",
+            "supportsRunAll": false,
             "title": "Decompile APK"
         },
         {
@@ -1322,6 +1400,7 @@
             "needsBundle": false,
             "needsDevice": false,
             "subtitle": "Convert an Android App Bundle into an installable APK",
+            "supportsRunAll": false,
             "title": "AAB to APK"
         },
         {
@@ -1353,6 +1432,7 @@
             "needsBundle": false,
             "needsDevice": true,
             "subtitle": "Set up frida-server or frida-gadget for instrumentation",
+            "supportsRunAll": false,
             "title": "Frida"
         },
         {
@@ -1374,6 +1454,7 @@
             "needsBundle": true,
             "needsDevice": true,
             "subtitle": "Open, stop, clear, or uninstall an app",
+            "supportsRunAll": false,
             "title": "Manage App"
         },
         {
@@ -1394,6 +1475,7 @@
             "needsBundle": true,
             "needsDevice": true,
             "subtitle": "Grant or revoke runtime permissions",
+            "supportsRunAll": false,
             "title": "Permissions"
         },
         {
@@ -1415,6 +1497,7 @@
             "needsBundle": true,
             "needsDevice": true,
             "subtitle": "Version, target SDK, size \u2014 and pull the APK",
+            "supportsRunAll": false,
             "title": "App Info"
         },
         {
@@ -1436,6 +1519,7 @@
             "needsBundle": false,
             "needsDevice": true,
             "subtitle": "Show the foreground Activity right now",
+            "supportsRunAll": false,
             "title": "Copy Current Activity"
         },
         {
@@ -1456,6 +1540,7 @@
             "needsBundle": false,
             "needsDevice": true,
             "subtitle": "Get the package id of the app on screen now",
+            "supportsRunAll": false,
             "title": "Copy Foreground Bundle ID"
         },
         {
@@ -1476,6 +1561,7 @@
             "needsBundle": true,
             "needsDevice": true,
             "subtitle": "Live memory usage for an app",
+            "supportsRunAll": false,
             "title": "Memory Usage"
         },
         {
@@ -1497,6 +1583,7 @@
             "needsBundle": true,
             "needsDevice": true,
             "subtitle": "Browse and pull app files (debug builds)",
+            "supportsRunAll": false,
             "title": "Sandbox Browser"
         },
         {
@@ -1528,6 +1615,7 @@
             "needsBundle": true,
             "needsDevice": true,
             "subtitle": "Fire random events to hunt for crashes",
+            "supportsRunAll": false,
             "title": "Monkey Test"
         },
         {
@@ -1549,6 +1637,7 @@
             "needsBundle": false,
             "needsDevice": true,
             "subtitle": "Live log stream with search and filters",
+            "supportsRunAll": false,
             "title": "Logcat"
         },
         {
@@ -1573,6 +1662,7 @@
             "needsBundle": false,
             "needsDevice": true,
             "subtitle": "Live simulator log stream (unified log)",
+            "supportsRunAll": false,
             "title": "iOS Logs"
         },
         {
@@ -1597,6 +1687,7 @@
             "needsBundle": false,
             "needsDevice": true,
             "subtitle": "Browse device crashes \u2014 watch, filter, copy for Slack/Jira",
+            "supportsRunAll": false,
             "title": "Crash Catcher"
         },
         {
@@ -1617,6 +1708,7 @@
             "needsBundle": false,
             "needsDevice": true,
             "subtitle": "Zip screenshot + logs + device info + version",
+            "supportsRunAll": false,
             "title": "Bug Report"
         },
         {
@@ -1651,6 +1743,7 @@
             "needsBundle": false,
             "needsDevice": true,
             "subtitle": "Live CPU, RAM & FPS with recording and export",
+            "supportsRunAll": false,
             "title": "Performance Monitor"
         },
         {
@@ -1713,6 +1806,7 @@
             "needsBundle": false,
             "needsDevice": false,
             "subtitle": "Send HTTP requests, import Postman collections, assert on responses",
+            "supportsRunAll": false,
             "title": "API Testing"
         },
         {
@@ -1735,6 +1829,7 @@
             "needsBundle": false,
             "needsDevice": false,
             "subtitle": "Real shell tabs with the device on ANDROID_SERIAL",
+            "supportsRunAll": false,
             "title": "Terminal"
         },
         {
@@ -1759,6 +1854,7 @@
             "needsBundle": false,
             "needsDevice": false,
             "subtitle": "Your own adb, terminal, and script actions",
+            "supportsRunAll": false,
             "title": "Custom Commands"
         }
     ]

@@ -2,7 +2,9 @@ import { useState } from "react"
 import { CheckCircle2, Download, XCircle } from "lucide-react"
 import { Button } from "@/components/Controls"
 import { useNotifications } from "@/hooks/useNotifications"
+import { useTargets } from "@/hooks/useTargets"
 import { asDaemonError, pickAndInstall } from "@/lib/daemon"
+import { summarise } from "@/lib/targets"
 import type { Device, InstallOutcome } from "@/lib/wire"
 
 /**
@@ -15,18 +17,18 @@ import type { Device, InstallOutcome } from "@/lib/wire"
  * the two have to be made to coexist (backlog 17). The zone says so rather
  * than looking droppable and silently doing nothing.
  *
- * It installs onto the selected device. The Mac installs onto every targeted
- * one when run-on-all is set, but this app's device bar selects a single
- * device — run-on-all is part of the device-bar work (backlog 6), and the
- * route already takes a list for when it lands.
+ * It installs onto every targeted device, which with the bar's Run on all
+ * switch off is the selected one — `install-app` is one of the four features
+ * the registry marks `supportsRunAll`, and the outcome list below is per
+ * device because installing onto three where one is out of space is a partial
+ * success, not a single verdict.
  */
 export function InstallAppPane({ device }: { device: Device | null }) {
   const { show } = useNotifications()
+  const { serials, runningOnAll } = useTargets()
   const [installing, setInstalling] = useState(false)
   const [outcomes, setOutcomes] = useState<InstallOutcome[]>([])
   const [fileName, setFileName] = useState<string | null>(null)
-
-  const serials = device === null ? [] : [device.serial]
 
   const choose = () => {
     if (serials.length === 0) {
@@ -42,11 +44,11 @@ export function InstallAppPane({ device }: { device: Device | null }) {
         if (response === null) return
         setOutcomes(response.outcomes)
         setFileName(response.fileName)
-        const failed = response.outcomes.filter((outcome) => !outcome.ok)
+        const summary = summarise(response.outcomes)
         show(
-          failed.length === 0
+          summary.ok
             ? { ok: true, message: `Installed ${response.fileName}` }
-            : { ok: false, message: `${response.fileName} — ${failed[0]?.message ?? "failed"}` },
+            : { ok: false, message: `${response.fileName} — ${summary.message}` },
         )
       } catch (thrown) {
         show({ ok: false, message: asDaemonError(thrown).message })
@@ -99,9 +101,14 @@ export function InstallAppPane({ device }: { device: Device | null }) {
         </div>
       )}
 
-      <p className="text-[11.5px] text-text-tertiary">
-        {device === null ? "Connect a device to install onto" : `Installs on ${device.label}`}
-      </p>
+      <p className="text-[11.5px] text-text-tertiary">{destination(device, serials, runningOnAll)}</p>
     </div>
   )
+}
+
+/** Where this is about to install, so a fan-out is never a surprise. */
+function destination(device: Device | null, serials: string[], runningOnAll: boolean): string {
+  if (serials.length === 0) return "Connect a device to install onto"
+  if (runningOnAll && serials.length > 1) return `Installs on ${String(serials.length)} devices`
+  return `Installs on ${device?.label ?? serials[0] ?? ""}`
 }

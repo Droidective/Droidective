@@ -1,4 +1,4 @@
-import { Channel, invoke } from "@tauri-apps/api/core"
+import { invoke } from "@tauri-apps/api/core"
 import { listen, type UnlistenFn } from "@tauri-apps/api/event"
 import type {
   AppsResponse,
@@ -12,12 +12,8 @@ import type {
   FileOperation,
   FilePullResponse,
   FilesListResponse,
-  LogLine,
-  NetSample,
-  PerfSample,
   RootStatusResponse,
   RunResponse,
-  StreamUpdate,
 } from "@/lib/wire"
 
 /**
@@ -164,69 +160,6 @@ export function exportText(name: string, contents: string): Promise<string> {
   return invoke<string>("export_text", { name, contents })
 }
 
-/** A live subscription. Always `stop()` it when the view goes away. */
-export interface Subscription {
-  id: number
-  stop: () => Promise<void>
-}
-
-async function subscribe<Item>(
-  command: "watch_devices" | "watch_logcat" | "watch_netspeed" | "watch_performance",
-  args: Record<string, unknown>,
-  onUpdate: (update: StreamUpdate<Item>) => void,
-): Promise<Subscription> {
-  const channel = new Channel<StreamUpdate<Item>>()
-  // Tauri's Channel is an IPC handle, not an EventTarget; `onmessage` is
-  // the whole API it offers.
-  // oxlint-disable-next-line unicorn/prefer-add-event-listener
-  channel.onmessage = onUpdate
-  const id = await invoke<number>(command, { ...args, onEvent: channel })
-  return {
-    id,
-    stop: async () => {
-      // Detach first: a batch already in flight must not reach a view that
-      // has unmounted.
-      // oxlint-disable-next-line unicorn/prefer-add-event-listener
-      channel.onmessage = () => {}
-      await invoke("stop_watching", { id })
-    },
-  }
-}
-
-export function watchDevices(
-  onUpdate: (update: StreamUpdate<Device>) => void,
-): Promise<Subscription> {
-  return subscribe("watch_devices", {}, onUpdate)
-}
-
-export function watchLogcat(
-  serial: string,
-  onUpdate: (update: StreamUpdate<LogLine>) => void,
-): Promise<Subscription> {
-  return subscribe("watch_logcat", { serial, filter: null }, onUpdate)
-}
-
-/**
- * One performance sample a second until stopped.
- *
- * `processes` is opt-in because it costs two extra `dumpsys` calls per sample
- * — enough that leaving it on would show up in the numbers being measured.
- */
-export function watchPerformance(
-  args: { serial: string; packageId: string | null; processes: boolean },
-  onUpdate: (update: StreamUpdate<PerfSample>) => void,
-): Promise<Subscription> {
-  return subscribe("watch_performance", args, onUpdate)
-}
-
-/** Live `/proc/net/dev` throughput, one sample a second. */
-export function watchNetspeed(
-  serial: string,
-  onUpdate: (update: StreamUpdate<NetSample>) => void,
-): Promise<Subscription> {
-  return subscribe("watch_netspeed", { serial }, onUpdate)
-}
-
 /**
  * Normalises whatever `invoke` rejected with.
  *
@@ -246,13 +179,31 @@ export function asDaemonError(error: unknown): DaemonError {
   return { code: "unknown", message: String(error), detail: null }
 }
 
-// The per-device settings calls live next door, so this file stays inside its
-// line budget; `@/lib/daemon` remains the one import for all of them.
+// The stream subscriptions and the per-device settings calls live next door, so
+// this file stays inside its line budget; `@/lib/daemon` remains the one import
+// for all of them.
+export type { Subscription, TerminalSession } from "@/lib/daemon-stream"
+export {
+  openTerminal,
+  watchDevices,
+  watchLogcat,
+  watchNetspeed,
+  watchPerformance,
+} from "@/lib/daemon-stream"
 export {
   appInfo,
+  connectWireless,
+  createBugReport,
+  deepLinks,
+  detectTools,
   devSettings,
+  disconnectWireless,
   emulatorAction,
   emulators,
+  enableTcpip,
+  launchDeepLink,
+  pairWireless,
+  writeDeepLinks,
   pickAndInstall,
   meminfo,
   permissions,

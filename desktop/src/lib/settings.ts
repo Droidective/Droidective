@@ -31,13 +31,7 @@ export const SETTINGS_TABS: readonly SettingsTabDef[] = [
   { id: "general", label: "General", icon: Settings2 },
   { id: "appearance", label: "Appearance", icon: Palette },
   { id: "privacy", label: "Privacy", icon: Info },
-  {
-    id: "doctor",
-    label: "Doctor",
-    icon: Bug,
-    blockedBy:
-      "The toolchain check needs a daemon route over ToolDetection. Tracked as part of the Doctor item in docs/desktop-parity.md.",
-  },
+  { id: "doctor", label: "Doctor", icon: Bug },
   {
     id: "tools",
     label: "Tools",
@@ -45,13 +39,7 @@ export const SETTINGS_TABS: readonly SettingsTabDef[] = [
     blockedBy:
       "The managed-tool store — jadx, apktool, frida, a bundled JRE — is not ported yet. It arrives with the APK features.",
   },
-  {
-    id: "hotkeys",
-    label: "Hotkeys",
-    icon: Keyboard,
-    blockedBy:
-      "Per-feature hotkeys and their recorder are backlog item 5 in docs/desktop-parity.md.",
-  },
+  { id: "hotkeys", label: "Hotkeys", icon: Keyboard },
   {
     id: "mcp",
     label: "MCP",

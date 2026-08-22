@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react"
 import { X } from "lucide-react"
-import { AppearanceTab } from "@/components/settings/AppearanceTab"
+import { AppearanceTab, type AppearanceTabProps } from "@/components/settings/AppearanceTab"
+import { DoctorTab } from "@/components/settings/DoctorTab"
 import { GeneralTab } from "@/components/settings/GeneralTab"
+import { HotkeysTab, type HotkeysTabProps } from "@/components/settings/HotkeysTab"
 import { PrivacyTab } from "@/components/settings/PrivacyTab"
 import { SETTINGS_TABS, type SettingsTab } from "@/lib/settings"
 import { cn } from "@/lib/cn"
@@ -19,11 +21,23 @@ import { cn } from "@/lib/cn"
  * is not ported yet. A tab that simply vanished would be a silent difference;
  * one that says what it is waiting on is a visible, checkable one.
  */
-export function SettingsWindow({ onDismiss }: { onDismiss: () => void }) {
+export function SettingsWindow({
+  onDismiss,
+  hotkeys,
+  appearance,
+}: {
+  onDismiss: () => void
+  /** Everything Settings ▸ Hotkeys needs, forwarded from the workspace. */
+  hotkeys: HotkeysTabProps
+  /** The two Window controls, which live on the workspace's layout. */
+  appearance: AppearanceTabProps
+}) {
   const [tab, setTab] = useState<SettingsTab>("general")
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      // A recording swallows its own keys in capture, so Esc reaches here only
+      // when nothing is being recorded.
       if (event.key === "Escape") onDismiss()
     }
     globalThis.addEventListener("keydown", onKeyDown)
@@ -69,7 +83,7 @@ export function SettingsWindow({ onDismiss }: { onDismiss: () => void }) {
         </nav>
 
         <div className="min-w-0 flex-1 overflow-y-auto p-5">
-          <Pane tab={tab} />
+          <Pane tab={tab} hotkeys={hotkeys} appearance={appearance} />
         </div>
 
         <button
@@ -85,14 +99,26 @@ export function SettingsWindow({ onDismiss }: { onDismiss: () => void }) {
   )
 }
 
-function Pane({ tab }: { tab: SettingsTab }) {
+function Pane({
+  tab,
+  hotkeys,
+  appearance,
+}: {
+  tab: SettingsTab
+  hotkeys: HotkeysTabProps
+  appearance: AppearanceTabProps
+}) {
   switch (tab) {
     case "general":
       return <GeneralTab />
     case "appearance":
-      return <AppearanceTab />
+      return <AppearanceTab {...appearance} />
     case "privacy":
       return <PrivacyTab />
+    case "hotkeys":
+      return <HotkeysTab {...hotkeys} />
+    case "doctor":
+      return <DoctorTab />
     default:
       return <NotYet tab={tab} />
   }
