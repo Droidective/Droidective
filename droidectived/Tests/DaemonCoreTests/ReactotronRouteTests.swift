@@ -128,6 +128,17 @@ import Testing
         #expect(response.command == "adb reverse --remove tcp:9090")
     }
 
+    @Test func aSuccessfulRemovalCarriesNoDetail() async throws {
+        // adb prints nothing when a removal works, so the generic fallback would
+        // fill this with "exit 0" — a detail that reads like a diagnostic and
+        // says nothing. Spotted against a real emulator.
+        let backend = Backend(script: [Self.ok()])
+        let response = try decode(
+            await ReactotronRoutes.unreverse(body: try request(["R58M"]), backend: backend))
+        #expect(response.results.first?.ok == true)
+        #expect(response.results.first?.detail.isEmpty == true)
+    }
+
     @Test func noDevicesIsAnEmptyResultRatherThanARefusal() async throws {
         // The button exists with nothing connected; answering 400 would make the
         // UI show an error for a state that is simply "nothing to do".

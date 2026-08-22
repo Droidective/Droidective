@@ -90,7 +90,12 @@ public enum ReactotronRoutes {
             let result = await backend.reverseTcp(serial: serial, port: port, remove: true)
             results.append(
                 ReactotronProtocolRoutes.ReverseResult(
-                    serial: serial, ok: result.succeeded, detail: detail(of: result)))
+                    serial: serial, ok: result.succeeded,
+                    // Empty on success, matching `reverse`. adb prints nothing
+                    // when a removal works, and `detail(of:)` would fall through
+                    // to "exit 0" — a detail that reads like a diagnostic and
+                    // says nothing.
+                    detail: result.succeeded ? "" : detail(of: result)))
         }
         return (200, DaemonProtocol.encoded(
             ReactotronProtocolRoutes.ReverseResponse(
