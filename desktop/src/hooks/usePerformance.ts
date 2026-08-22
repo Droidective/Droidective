@@ -43,11 +43,17 @@ export function usePerformance({
 
   // A recording belongs to one device and one app; changing either ends it
   // rather than splicing two devices' numbers into one chart.
+  //
+  // `processes` is deliberately NOT here: it changes what the *next* sample
+  // carries, not whose numbers these are, so discarding the run over it threw
+  // minutes of data away with no confirmation, bypassing the Stop button's
+  // "Export before stopping?" guard. The subscription effect still re-keys on
+  // it, so the flag takes effect from the next sample on.
   useEffect(() => {
     setSamples([])
     setPhase("idle")
     setDropped(0)
-  }, [serial, packageId, processes])
+  }, [serial, packageId])
 
   useEffect(() => {
     if (phase !== "recording" || serial === null) return

@@ -21,7 +21,6 @@ export interface Netspeed {
   dropped: number
   startRecording: () => void
   stopRecording: () => void
-  discard: () => void
 }
 
 /**
@@ -144,15 +143,14 @@ export function useNetspeed(serial: string | null): Netspeed {
       setRecording(true)
     }, []),
 
+    // Only flips the flag; the samples stay exportable, as they do on the Mac.
+    // There is no `discard` here on purpose — nothing in the UI throws a
+    // recording away, and the one that used to (a successful export) was the
+    // bug. The Mac's exit guard offers a real discard; when that lands here,
+    // it comes back with a caller.
     stopRecording: useCallback(() => {
       isRecording.current = false
       setRecording(false)
-    }, []),
-
-    discard: useCallback(() => {
-      isRecording.current = false
-      setRecording(false)
-      setRecorded([])
     }, []),
   }
 }
