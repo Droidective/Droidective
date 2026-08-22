@@ -32,6 +32,13 @@ for block in blocks[1:]:
 
 swift_files = {p.stem: p for p in APP.rglob("*.swift")}
 
+# Which features the desktop app has a hand-built pane for, read from the pane
+# router rather than listed here. This used to be a literal list of five ids and
+# went stale the moment the sixth screen landed — which is exactly the drift
+# this whole file exists to avoid, so it is derived on both sides now.
+PANE_ROUTER = ROOT / "desktop/src/components/FeaturePane.tsx"
+ported_ids = set(re.findall(r'case\s+"([^"]+)":', PANE_ROUTER.read_text()))
+
 
 def affordances(view_name):
     """User-visible controls in a view, as evidence rather than recollection."""
@@ -133,7 +140,7 @@ for category, features in by_category.items():
         elif fid in BLOCKED:
             status, note = "⬜ todo", BLOCKED[fid]
             counts["todo"] += 1
-        elif fid in ("apps", "logcat", "file-explorer", "crash-catcher", "device-info"):
+        elif fid in ported_ids:
             status, note = "🟡 partial", "A pane exists; the checklist below is what it is missing."
             counts["partial"] += 1
         elif kind in ("instantAction", "formAction", "toggleAction") and f["implemented"]:

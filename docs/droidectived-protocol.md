@@ -244,7 +244,9 @@ would otherwise hold three sockets with three lifecycles.
 ```
 
 Topics for phase 2: `devices`, `logcat`, `performance`, `networkSpeed`,
-`iosLogs`. Each maps to an ADBKit `AsyncStream` that already exists.
+`iosLogs`. Each maps to an ADBKit `AsyncStream` that already exists. `pty`
+(§5.2) came later and is the one that does not — it is a shell this process
+starts, not a stream it forwards.
 
 Three properties worth pinning now, because each one is a bug the Mac app
 already had to solve:
@@ -288,6 +290,56 @@ that the first Tauri client hit immediately:
   worthless once a newer one exists, so a snapshot topic can never emit
   `dropped`. Handing a client stale state plus a "you missed 16 device lists"
   marker would be worse than useless: there is nothing to do with the gap.
+
+### 5.2 The `pty` topic — the socket goes both ways
+
+The Terminal needed the first topic a client can *send into*, so `Operation`
+grew `write` and `resize` beside `subscribe`/`unsubscribe`. Both act on a
+subscription that already exists and are answered only when they are refused —
+a terminal that acknowledged every keypress would spend most of a paste talking
+about itself.
+
+```jsonc
+// client → server: open a shell. Host-scoped, so no serial is required.
+{ "op": "subscribe", "id": 3, "topic": "pty",
+  "params": { "serial": "R58M", "columns": 120, "rows": 40 } }
+// server → client: whatever the shell wrote, base64
+{ "id": 3, "event": "batch", "items": [ { "data": "aGVsbG8NCg==" } ] }
+// client → server: keystrokes (base64) and the window
+{ "op": "write",  "id": 3, "params": { "data": "bHMK" } }
+{ "op": "resize", "id": 3, "params": { "columns": 100, "rows": 30 } }
+// server → client: the shell exited
+{ "id": 3, "event": "ended", "reason": "process_exited" }
+```
+
+Four decisions, each of which is a bug if taken the other way:
+
+- **Base64 both directions, because this is the one payload that is bytes.** A
+  pty read ends wherever its buffer filled, so a chunk can stop mid-character;
+  a JSON string would replace the half with U+FFFD and only on non-ASCII, which
+  is how that ships. The same reasoning runs inbound: terminal input includes
+  the control codes a JSON string cannot carry — Ctrl-C is `0x03`, and it is the
+  single most important key a terminal has to deliver.
+- **Host-scoped, not device-scoped.** A shell runs on the machine; `serial` only
+  exports `ANDROID_SERIAL` into it, so adb inside needs no `-s` — the way the
+  Mac scopes a terminal tab. `needsSerial` is false because a terminal must open
+  with nothing connected, which is when one is most wanted.
+- **`process_exited` is its own end reason.** Typing `exit` is how a terminal is
+  meant to end, and calling it `device_disconnected` would have the pane render
+  a fault. A failed `exec` arrives the same way, because it reaches the parent as
+  the terminal hanging up rather than as an error.
+- **Input against the wrong subscription is refused, not discarded.** Unlike
+  `unsubscribe`, which is lenient so a client racing its own teardown sees no
+  spurious failure, a `write` to an unknown id or to a topic that only observes
+  answers `failed`. A write that lands nowhere presents as a terminal ignoring
+  the keyboard, which is a bug worth hours; the narrow race — a keystroke just
+  after the shell exited — is one the client already knows about from `ended`.
+
+The shell itself is `Pty` over a small `CPty` C target: `fork` plus
+`ioctl(TIOCSCTTY)` is the only way a child acquires a controlling terminal, and
+Swift marks `fork` unavailable because only async-signal-safe calls are legal
+between it and `exec`. Windows has no pty here — ConPTY is a different API
+rather than a variation — so `openPty` throws and the client renders the reason.
 
 ## 6. Lifecycle
 
