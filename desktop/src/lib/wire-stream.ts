@@ -4,9 +4,11 @@
  * Split out of `wire.ts` when it outgrew its line budget, and split *here*
  * because these are the topics rather than the request/response calls: a log
  * line, a performance sample, a throughput sample, a chunk of terminal output,
- * and the event envelope all five ride in. Every one is re-exported from
- * `@/lib/wire`, so no import moved.
+ * a Reactotron frame, and the event envelope all six ride in. Every one is
+ * re-exported from `@/lib/wire`, so no import moved.
  */
+
+import type { JsonValue } from "@/lib/json"
 
 /** A subscription update, shaped like the daemon's own stream event. */
 export type StreamUpdate<Item> =
@@ -34,6 +36,59 @@ export interface LogLine {
   level: string
   tag: string
   message: string
+}
+
+/**
+ * One Reactotron frame, as the relay decoded it.
+ *
+ * The envelope is fixed and the payload's shape depends on `type` — that is
+ * upstream's contract, not ours, so the payload stays a bare JSON value and
+ * `lib/reactotron.ts` picks fields out of it per type. `important` arrives as a
+ * real boolean because the daemon already repaired the client's
+ * `"~~~ false ~~~"` spelling of one.
+ */
+export interface ReactotronCommand {
+  type: string
+  payload?: JsonValue | undefined
+  important?: boolean | undefined
+  date?: string | undefined
+  deltaTime?: number | undefined
+}
+
+/**
+ * One thing the relay saw, off the `reactotron` topic.
+ *
+ * A flat envelope with a `kind` string rather than four payload types, because
+ * the timeline renders them as one list. `listening` is about the relay itself
+ * and carries neither a connection nor a frame.
+ */
+export interface ReactotronFrame {
+  kind: "listening" | "connected" | "command" | "disconnected"
+  connection?: number | undefined
+  port?: number | undefined
+  /** What the app called itself in its `client.intro`, when it said. */
+  clientId?: string | undefined
+  command?: ReactotronCommand | undefined
+  /** Why a client went away, when the transport said. */
+  reason?: string | undefined
+  /**
+   * The WebSocket close status, when the client sent one.
+   *
+   * 1001 is the one worth acting on: Android's WebSocket closes *itself*
+   * going-away once 16 MB are queued, so 1001 does not mean the app quit — it
+   * means the app out-produced the connection, which has a fix nobody guesses
+   * from the word "disconnected".
+   */
+  code?: number | undefined
+  /**
+   * The frame's own size on the wire, for the frames that had one.
+   *
+   * It travels because this side cannot recover it: the timeline bounds itself
+   * by retained bytes as well as by row count, and the only other way to a size
+   * is re-serializing every payload as it arrives — the exact walk the feed is
+   * built to avoid.
+   */
+  bytes?: number | undefined
 }
 
 /** One performance sample, from `/v1/stream`'s `performance` topic. */
