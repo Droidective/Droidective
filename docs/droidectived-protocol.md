@@ -353,9 +353,11 @@ so it is a route.
 // server -> client: one envelope per thing the relay saw
 { "id": 4, "event": "batch", "items": [
   { "kind": "listening",    "port": 9090 },
-  { "kind": "connected",    "connection": 1, "clientId": "my-app", "command": { … } },
-  { "kind": "command",      "connection": 1, "command": { "type": "log", … } },
-  { "kind": "disconnected", "connection": 1, "reason": "client closed" }
+  { "kind": "connected",    "connection": 1, "clientId": "my-app", "bytes": 214,
+    "command": { … } },
+  { "kind": "command",      "connection": 1, "bytes": 88,
+    "command": { "type": "log", … } },
+  { "kind": "disconnected", "connection": 1, "reason": "client closed", "code": 1001 }
 ] }
 ```
 
@@ -388,6 +390,19 @@ Decisions worth keeping:
   `ReactotronCommand`: unlike `LogLine`, that type *is* the protocol — it mirrors
   upstream's wire format — so a DTO would be a second spelling of a contract that
   is not ours to reshape.
+- **Two fields travel that the client could not work out for itself**, and both
+  are there because recovering them client-side costs more than sending them:
+  - `bytes` is the frame's own size on the wire. The timeline bounds itself by
+    retained memory as well as by row count — one base64 display image outweighs
+    a thousand log lines — and the only other route to a size is re-serializing
+    every payload as it arrives, which is the exact walk a streaming feed is
+    built to avoid. Absent on `listening` and `disconnected`, which are not
+    frames.
+  - `code` is the WebSocket close status. 1001 is not a generic goodbye:
+    Android's WebSocket closes *itself* going-away once 16 MB are queued, so
+    1001 means the app out-produced the connection, and the fix is in the app's
+    logging (log ids, not whole objects). Without the code a client can only say
+    the app went away, which is the least useful true thing to say.
 - **The tunnel retries three times.** A freshly attached or just-booted device
   rejects `reverse` for a moment, and the Mac retries for the same reason: one
   attempt makes "plug in and open Reactotron" fail about as often as it works.

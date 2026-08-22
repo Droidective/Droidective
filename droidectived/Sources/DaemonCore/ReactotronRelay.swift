@@ -46,9 +46,21 @@ public actor ReactotronRelay {
     public enum Event: Sendable {
         case listening(port: Int)
         /// A client completed its `client.intro` handshake.
-        case connected(connection: Int, clientId: String?, command: ReactotronCommand)
-        case command(connection: Int, command: ReactotronCommand)
-        case disconnected(connection: Int, reason: String?)
+        case connected(connection: Int, clientId: String?, command: ReactotronCommand, bytes: Int)
+        /// `bytes` is the frame's own size on the wire, which only the relay
+        /// knows: a client reading decoded envelopes could only get it back by
+        /// re-serializing the payload, and re-serializing every frame is the
+        /// stall a streaming timeline is built to avoid. It travels so the
+        /// timeline can bound itself by memory as well as by count — one
+        /// base64 display image outweighs a thousand log lines.
+        case command(connection: Int, command: ReactotronCommand, bytes: Int)
+        /// `code` is the WebSocket close status, when the client sent a close
+        /// frame carrying one. It matters because 1001 is not a generic
+        /// goodbye: Android's WebSocket closes *itself* going-away once 16 MB
+        /// are queued, so 1001 means the app produced events faster than the
+        /// connection could drain them — a diagnosis with an actual fix (log
+        /// ids, not whole objects), and one nothing else on the wire reveals.
+        case disconnected(connection: Int, reason: String?, code: Int?)
     }
 
     private let port: Int
@@ -191,11 +203,11 @@ public actor ReactotronRelay {
         connections[id] = channel
     }
 
-    fileprivate func drop(_ id: Int, reason: String?) {
+    fileprivate func drop(_ id: Int, reason: String?, code: Int?) {
         guard closed.insert(id).inserted else { return }
         connections[id] = nil
         introduced.remove(id)
-        emit(.disconnected(connection: id, reason: reason))
+        emit(.disconnected(connection: id, reason: reason, code: code))
     }
 
     /// One decoded frame.
@@ -206,24 +218,27 @@ public actor ReactotronRelay {
     /// makes it look like the relay is not receiving anything at all.
     fileprivate func receive(_ id: Int, text: String) {
         guard !closed.contains(id) else { return }
+        let bytes = text.utf8.count
         guard let command = try? ReactotronCommand.decode(text) else {
             emit(.command(
                 connection: id,
                 command: ReactotronCommand(
-                    type: "(undecodable)", payload: .string(String(text.prefix(300))))))
+                    type: "(undecodable)", payload: .string(String(text.prefix(300)))),
+                bytes: bytes))
             return
         }
         guard command.commandType == .clientIntro else {
-            emit(.command(connection: id, command: command))
+            emit(.command(connection: id, command: command, bytes: bytes))
             return
         }
         // A second intro on one connection is the same client saying hello
         // again; reporting it as a new connection would double the client list.
         guard introduced.insert(id).inserted else {
-            emit(.command(connection: id, command: command))
+            emit(.command(connection: id, command: command, bytes: bytes))
             return
         }
-        emit(.connected(connection: id, clientId: clientId(of: command), command: command))
+        emit(.connected(
+            connection: id, clientId: clientId(of: command), command: command, bytes: bytes))
     }
 
     /// The `clientId` an intro declares, if it declared one.
@@ -283,7 +298,7 @@ private final class RelayConnectionHandler: ChannelInboundHandler, @unchecked Se
         let frame = unwrapInboundIn(data)
         switch frame.opcode {
         case .connectionClose:
-            end(reason: "client closed")
+            end(reason: "client closed", code: Self.closeCode(frame))
         case .ping:
             var pong = frame
             pong.opcode = .pong
@@ -302,21 +317,30 @@ private final class RelayConnectionHandler: ChannelInboundHandler, @unchecked Se
     }
 
     func channelInactive(context: ChannelHandlerContext) {
-        end(reason: nil)
+        end(reason: nil, code: nil)
         context.fireChannelInactive()
+    }
+
+    /// A close frame's status code. RFC 6455 puts it in the first two bytes,
+    /// big-endian, and makes it optional — a bare close frame carries none, and
+    /// the code that matters here (1001) is always sent.
+    private static func closeCode(_ frame: WebSocketFrame) -> Int? {
+        var payload = frame.unmaskedData
+        guard let code: UInt16 = payload.readInteger() else { return nil }
+        return Int(code)
     }
 
     /// Finishes the frame stream rather than cancelling it, so frames that
     /// arrived before the close still reach the timeline — then reports the
     /// disconnect after them, in order.
-    private func end(reason: String?) {
+    private func end(reason: String?, code: Int?) {
         frames.finish()
         let relay = self.relay
         let id = self.id
         let pump = self.pump
         Task {
             await pump.value
-            await relay.drop(id, reason: reason)
+            await relay.drop(id, reason: reason, code: code)
         }
     }
 }

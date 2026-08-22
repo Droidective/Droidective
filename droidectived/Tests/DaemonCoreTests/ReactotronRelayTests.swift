@@ -106,7 +106,7 @@ import Testing
 
         #expect(await collected.wait { events in
             events.contains { event in
-                if case .connected(_, let clientId, _) = event { return clientId == "demo-app" }
+                if case .connected(_, let clientId, _, _) = event { return clientId == "demo-app" }
                 return false
             }
         })
@@ -127,7 +127,7 @@ import Testing
 
         #expect(await collected.wait { events in
             events.contains { event in
-                if case .connected(_, let clientId, _) = event { return clientId == nil }
+                if case .connected(_, let clientId, _, _) = event { return clientId == nil }
                 return false
             }
         })
@@ -167,7 +167,7 @@ import Testing
 
         #expect(await collected.wait { events in
             events.contains { event in
-                guard case .command(_, let command) = event else { return false }
+                guard case .command(_, let command, _) = event else { return false }
                 return command.commandType == .log && command.isImportant
             }
         })
@@ -202,13 +202,38 @@ import Testing
 
         #expect(await collected.wait { $0.filter { isCommand($0) }.count == 40 })
         let messages = await collected.events.compactMap { event -> String? in
-            guard case .command(_, let command) = event,
+            guard case .command(_, let command, _) = event,
                   case .object(let payload) = command.payload,
                   case .string(let message) = payload["message"]
             else { return nil }
             return message
         }
         #expect(messages == (0 ..< 40).map { "item\($0)" })
+    }
+
+    @Test func reportsEachFramesSizeSoTheTimelineCanBoundItself() async throws {
+        // The size has to be the frame's own bytes. A client can only get back
+        // to one by re-serializing the payload it just decoded, and doing that
+        // per frame is the stall the feed exists to avoid — so if this arrives
+        // wrong, the timeline's memory bound is wrong with it.
+        let (relay, events, port) = try await relay()
+        defer { Task { await relay.stop() } }
+        let (collected, reader) = collect(events)
+        defer { reader.cancel() }
+
+        let socket = client(port: port)
+        defer { socket.cancel() }
+        // Multi-byte on purpose: bytes, not characters. "é" is two.
+        let frame = #"{"type":"log","payload":{"message":"café"}}"#
+        try await socket.send(.string(frame))
+
+        #expect(await collected.wait { events in
+            events.contains { event in
+                guard case .command(_, _, let bytes) = event else { return false }
+                return bytes == frame.utf8.count
+            }
+        })
+        #expect(frame.utf8.count != frame.count, "otherwise the test proves nothing about bytes")
     }
 
     @Test func reportsAFrameItCouldNotDecodeRatherThanDroppingIt() async throws {
@@ -225,7 +250,7 @@ import Testing
 
         #expect(await collected.wait { events in
             events.contains { event in
-                guard case .command(_, let command) = event else { return false }
+                guard case .command(_, let command, _) = event else { return false }
                 return command.type == "(undecodable)"
             }
         })
@@ -244,10 +269,16 @@ import Testing
         #expect(await collected.wait { $0.contains { isConnected($0) } })
         socket.cancel(with: .goingAway, reason: nil)
 
+        // 1001 rather than any close: Android's own WebSocket sends going-away
+        // when 16 MB of Reactotron events have queued up behind it, which is a
+        // diagnosis with a fix ("log ids, not whole objects"). Without the code
+        // the timeline can only say the app went away, so this asserts the
+        // number travels — read off a real client's close frame, which is the
+        // only place the two-byte big-endian layout can be got wrong.
         #expect(await collected.wait { events in
             events.contains { event in
-                if case .disconnected = event { return true }
-                return false
+                guard case .disconnected(_, _, let code) = event else { return false }
+                return code == 1001
             }
         })
     }
@@ -268,7 +299,7 @@ import Testing
 
         #expect(await collected.wait { events in
             events.contains { event in
-                guard case .command(_, let command) = event,
+                guard case .command(_, let command, _) = event,
                       case .object(let payload) = command.payload,
                       case .string(let message) = payload["message"]
                 else { return false }
@@ -324,14 +355,19 @@ import Testing
         #expect(try encoded(.listening(port: 9090)).contains(#""port":9090"#))
 
         let command = ReactotronCommand(type: "log", payload: .string("hi"))
-        let connected = try encoded(.connected(connection: 2, clientId: "app", command: command))
+        let connected = try encoded(.connected(connection: 2, clientId: "app", command: command, bytes: 41))
         #expect(connected.contains(#""kind":"connected""#))
         #expect(connected.contains(#""clientId":"app""#))
         #expect(connected.contains(#""connection":2"#))
 
-        #expect(try encoded(.command(connection: 2, command: command)).contains(#""type":"log""#))
-        let gone = try encoded(.disconnected(connection: 2, reason: "client closed"))
+        #expect(try encoded(.command(connection: 2, command: command, bytes: 41)).contains(#""type":"log""#))
+        #expect(try encoded(.command(connection: 2, command: command, bytes: 41)).contains(#""bytes":41"#))
+        // `listening` and `disconnected` carry no frame, so they carry no size
+        // rather than a zero the client would have to know to ignore.
+        #expect(!(try encoded(.listening(port: 9090)).contains("bytes")))
+        let gone = try encoded(.disconnected(connection: 2, reason: "client closed", code: 1001))
         #expect(gone.contains(#""reason":"client closed""#))
+        #expect(gone.contains(#""code":1001"#))
     }
 
     private func isConnected(_ event: ReactotronRelay.Event) -> Bool {
