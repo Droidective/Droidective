@@ -795,13 +795,34 @@ after the screens rather than instead of them.
        double-mount did it on the very first open, so the pane failed every
        time. Fixed with an explicit phase, and pinned by two tests that used to
        hang the suite rather than fail it.
-    3. **The detail side.** JSON trees over `embedded-json.ts`, find-in-object
-       over `json-search.ts` (whose ordinal paths already follow the render
-       order the tree has to use — object children sorted by key, array items in
-       order — so a clicked result expands to the right row), the collapse in
-       CSS rather than ported pixel maths, the cURL builder (`ReactotronCurl`,
-       already portable), and the copy verbs the Mac has: copy, copy as JSON,
-       copy object, copy line, copy value.
+    3. ~~**The detail side.**~~ **Landed.** A row expands into its payload:
+       `json-tree.ts` flattens a value into rows (pure, so the two things that
+       are easy to get subtly wrong are testable — the render order, and the
+       grafting of a stringified payload's rows in the string's place),
+       `JsonTree` renders them with find-in-object over `json-search.ts`, and
+       `ReactotronDetail` dispatches per event kind. `ReactotronApiDetail` adds
+       the whole URL, the status/method/duration lines, the four payload tabs
+       and Copy as cURL; `reactotron-curl.ts` is `ReactotronCurl` ported
+       decision for decision, including all four repairs — the explicit verb so
+       a GET carrying a body does not become a POST, the params a rewritten
+       `responseURL` lost, the FormData rebuild, and `--form-string` so a value
+       starting with `@` is not read as a file. The copy verbs are
+       `reactotron-copy.ts`: line, object, value, and events-as-JSON.
+
+       The ordinal paths are the coupling that makes a search result clickable:
+       `json-tree.ts` and `json-search.ts` agree on one scheme — object children
+       sorted by key, array items in order — and a test asserts the coupling
+       rather than each side alone. The collapse is CSS, not the ported pixel
+       maths (see step 1).
+
+       Verified live against **StreamLab**, a real React Native app with
+       `reactotron-react-native`, `reactotron-redux` and `reactotron-redux-saga`
+       wired up. Two things only a real client showed: its config calls
+       `clear()` on startup, which exercised the per-connection clear scoping
+       and exposed an empty state that claimed a filter was hiding events when
+       there were none; and a real `api.response` body arrives as a *string* of
+       JSON, so the Response tab showing ten user objects is `parseEmbedded`
+       grafting rather than a wall of escaped text.
     4. **Export and the restarts.** Filter-aware export to file and clipboard,
        then the split Restart button — the bounded `pm clear --cache-only` and
        the confirmed clear-data variant (`RestartClearScope`).
@@ -995,7 +1016,7 @@ job, and the checklist now says which.
 #### `reactotron` — Reactotron  ·  🟡 partial
 > Live React Native inspector — logs, network, state, custom display
 - **Kind** `view`
-- **Note** Feed pane landed — the relay, the timeline model, the toolbar, the filter dialog and the waiting screen with its `adb reverse` button. Still to come: the JSON detail side, export, and the restart verbs. Backlog 24.
+- **Note** Feed and detail landed — the relay, the timeline model, the toolbar and filter dialog, the waiting screen with its `adb reverse` button, expandable rows with JSON trees, find-in-object, the API tabs, Copy as cURL and the copy verbs. Still to come: export and the restart verbs. Backlog 24.
 - **macOS view** `ReactotronView` — `App/Sources/FeatureDetail/Views/ReactotronView.swift`
 - **Must replicate**
   - [ ] button: OK
