@@ -41,6 +41,33 @@ export function arrayField(value: JsonValue | undefined, key: string): JsonValue
 }
 
 /**
+ * Indented JSON with sorted keys — what a "copy object" hands over.
+ *
+ * The replacer rebuilds each object in key order because `JSON.stringify` has
+ * no sort of its own and emits insertion order. That costs a copy of the value,
+ * which is fine here: this runs when someone reaches for the clipboard, never
+ * while a row renders. `compactPreview` is the one for the render path.
+ *
+ * Sorted for the reason ADBKit's `prettyJSON` is: two copies of the same
+ * payload should be the same text, and a wire object's key order is whatever
+ * the client's serializer felt like.
+ */
+export function prettyJson(value: JsonValue): string {
+  return JSON.stringify(value, sortKeys, 2)
+}
+
+/** The same thing on one line, for a value that has to sit inside a row. */
+export function compactJson(value: JsonValue): string {
+  return JSON.stringify(value, sortKeys)
+}
+
+function sortKeys(_key: string, value: unknown): unknown {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return value
+  const source = value as Record<string, unknown>
+  return Object.fromEntries(Object.keys(source).toSorted().map((key) => [key, source[key]]))
+}
+
+/**
  * Longest sentinel worth inspecting. Past this the string is a payload that
  * happens to start with tildes, and lowercasing it to find out costs a copy.
  */
