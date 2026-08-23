@@ -80,6 +80,19 @@ private let hasWebSocketClient: Bool = {
         func netspeed(serial: String) async -> AsyncStream<NetSample> {
             AsyncStream { $0.finish() }
         }
+
+        /// This suite is about the socket, not the terminal or the relay. Their
+        /// own lifecycles are in `StreamSessionTests` and
+        /// `ReactotronRelayTests`.
+        func openPty(serial: String?, size: PtySize) throws -> any PtyChannel {
+            throw PtyError.unsupportedPlatform
+        }
+
+        func reactotron() async throws -> AsyncStream<ReactotronRelay.Event> {
+            AsyncStream { $0.finish() }
+        }
+
+        func stopReactotron() async {}
     }
 
     private static func device(_ serial: String) -> Device {

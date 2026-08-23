@@ -32,6 +32,8 @@ its own.
 | `src/lib/tabs.ts` | the open tabs and what gets focus on close — ADBKit's `TabState` |
 | `src/lib/workspace.ts` | one or two panes and the rules between them — ADBKit's `Workspace` |
 | `src/lib/panes.ts` | the split's clamp and divider geometry — ADBKit's `PaneSplit` |
+| `src/lib/terminal.ts` | terminal panes — ADBKit's `TerminalSplitTree` — plus the pty's base64 |
+| `src/lib/menuKeys.ts` | which keystrokes the native menu owns, so the page defers |
 | `src/lib/ordering.ts` | drag-reorder math — ADBKit's `SidebarOrdering` |
 | `src/lib/layout.ts` | what the window remembers between launches |
 | `src/lib/icons.ts` | one lucide glyph per registry id — the wire carries none |
@@ -39,6 +41,14 @@ its own.
 | `src/lib/files.ts` | the File Explorer's rules — paths, selection, batches |
 | `src/lib/crashes.ts` | the Crash Catcher's rules — filters, the clear watermark |
 | `src/lib/fields.ts` | form values → run parameters |
+| `src/lib/targets.ts` | who an action runs on — ADBKit's `targetSerials` and its guards |
+| `src/lib/runner.ts` | running one feature across one or many devices, as one answer |
+| `src/lib/hotkeys.ts` | recording, matching and formatting a shortcut |
+| `src/lib/sidebarMode.ts` | pinned or Dock-style — ADBKit's `SidebarVisibility` |
+| `src/lib/zoom.ts` | the ⌘=/⌘- steps, the Mac's own |
+| `src/lib/endpoint.ts` | when a wireless button lights up (the daemon owns the real answer) |
+| `src/lib/deeplinks.ts` | editing one app's saved links, and how a launch reads |
+| `src/lib/doctor.ts` | which tools the Doctor checks, and what a report adds up to |
 | `src-tauri/src/daemon/` | spawning, the HTTP client, and the stream socket |
 
 The pure modules are where the logic lives and where the tests are, mirroring
@@ -69,6 +79,25 @@ most of the registry works with no per-feature code. The screens built by hand
 so far are the installed-app browser with its verbs, live logcat with visible
 gap markers, every device property searchable, the file explorer, and the
 crash catcher.
+
+**Deep links share the Mac's file.** The daemon owns the store, under the same
+support dir the Mac app uses, so a developer running both has one
+`deep-links.json` rather than two. The Mac keys it by saved-bundle id and this
+keys it by package id — the two sets sit side by side without merging, which is
+the honest state of it until this app grows a bundle store of its own. An edit
+writes the whole list for that one key, atomically, so neither app can lose the
+other's entries in a swap.
+
+**Wireless adb** goes over one route with the verb in the body, and the endpoint
+travels as the phone displays it: `ConnectionService.parseEndpoint` is the
+authority on what adb accepts — bracketed and bare IPv6, a truncated IPv4, a
+port out of range — so it stays daemon-side and the two apps cannot disagree.
+This side only decides when a button lights up, deliberately permissively
+(`lib/endpoint.ts`); anything it lets through comes back as adb's own refusal,
+which says more than a greyed-out button. Pairing insists on the explicit
+pairing port, because that port is random per session and defaulting it would
+target the wrong one; a successful pair carries the endpoint the device then
+advertised over mDNS, so there is usually nothing left to type.
 
 The file explorer is the first screen here that **writes** to a device.
 Everything on it — a new folder, a delete, a copy or move, a pull — goes over
@@ -107,11 +136,51 @@ shell, and this is the binding VS Code already trained everyone on), by a tab's
 right-click menu, or by dragging a tab onto the trailing edge of the pane. The
 divider clamps to 30–70% and its position is saved.
 
-Not yet: hotkeys, and most of the full-screen views (performance, the
-device-state screens…), which are `kind: "view"` in the registry and need whole
-panels.
-They are listed in the sidebar and open a tab that says so, rather than being
-hidden — a feature the Mac has and this app does not is worth knowing about.
+The sidebar can be pinned or Dock-style: the device bar's leading button
+switches, hovering the window's left edge peeks, and **Ctrl/⌘ + B** toggles.
+**Ctrl/⌘ + = / −** zooms the whole UI through the Mac's own eight steps, with
+Ctrl/⌘ + 0 for Actual Size.
+
+**Per-feature shortcuts** are recorded in Settings ▸ Hotkeys or from a sidebar
+row's right-click, with the Mac's rules — one of Ctrl/Alt/⌘ at minimum, Esc
+cancels, Backspace clears, an instant action runs where anything else opens.
+Two differences the recorder states outright: they fire while this window has
+focus (the OS registration arrives with the Quick Actions panel) and a toggle
+opens rather than running, because the Mac flips it from override state this app
+does not track. Combinations the shell owns are refused *by name* — a window
+shortcut cannot outrank the shell the way an OS-registered one does — and the
+one list of them lives in `lib/hotkeys.ts` beside `useShellShortcuts`.
+
+The device bar is the Mac's: a dropdown with the devices, the AVDs that are not
+already running, wireless pair/connect, and Manage emulators; a disconnect
+button beside a wireless device; and **Run on all**, which appears only with
+more than one ready device *and* a focused feature the registry says fans out.
+
+**The menu bar is native, and it owns its accelerators.** A webview has no menu
+of its own, so `src-tauri/src/menu.rs` declares one — File / Edit / View / Tab /
+Help / Go, mirroring `ADTApp.swift`'s `.commands` block — and forwards each click
+to the page, which is where the state lives (`useMenuCommands`). The page
+*defers* on the keys the menu binds (`lib/menuKeys.ts`), because both answering
+Ctrl+W would close two tabs; `menuKeys.test.ts` reads the Rust table to keep the
+two lists identical. The terminal's items grey out with no terminal open. Three
+accelerators moved for platform reasons and `docs/desktop-parity.md` item 16 has
+the table.
+
+**The Terminal is real shells, not a log view.** `openTerminal` subscribes to
+the daemon's `pty` topic and xterm.js draws it: a login shell per tab, panes
+split from the ported `TerminalSplitTree`, the size sent on the open so nothing
+re-wraps after the first prompt, and the selected device exported as
+`ANDROID_SERIAL` so adb inside needs no `-s`. Bytes ride base64 both ways —
+output because a pty read can stop mid-character, input because Ctrl-C is a byte
+no JSON string carries. Hidden tabs stay mounted: unmounting one would hang up
+its shell. Shortcuts are Ctrl+Shift+T/W/D/E, and the Shift is the platform's
+doing — a bare Ctrl+letter belongs to the program in the terminal. Windows has
+no pty yet (ConPTY is a different API) and the pane says so.
+
+Not yet: most of the full-screen views (the mirror, Reactotron, the JS console…),
+which are `kind: "view"` in the registry and need whole panels. They are listed
+in the sidebar and open a tab that says so, rather than being hidden — a feature
+the Mac has and this app does not is worth knowing about.
 `docs/desktop-parity.md` is the tracker.
 
 ## Two platform requirements for drag and drop

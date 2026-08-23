@@ -110,6 +110,11 @@ public enum ActionProtocol {
         /// show it standalone is the client's call, but it cannot make that
         /// call if the registry's answer never reaches it.
         public let isAbsorbedByHub: Bool
+        /// Whether running this on every connected device at once makes sense.
+        /// The registry's answer, because it is a property of the runner: a
+        /// screenshot of five devices is five files, while pulling one file
+        /// five times to one path is not five of anything.
+        public let supportsRunAll: Bool
         public let fields: [Field]
 
         public struct Field: Codable, Equatable, Sendable {
@@ -162,6 +167,7 @@ public enum ActionProtocol {
                     needsBundle: def.needsBundle,
                     isDestructive: def.isDestructive,
                     isAbsorbedByHub: def.isAbsorbedByHub,
+                    supportsRunAll: def.supportsRunAll,
                     fields: def.fields.map { field in
                         FeatureSummary.Field(
                             name: field.name, label: field.label,

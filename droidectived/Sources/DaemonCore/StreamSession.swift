@@ -26,6 +26,23 @@ public protocol StreamSource: Sendable {
     /// `performance` is: the counters are cumulative and throughput is the
     /// difference between two reads.
     func netspeed(serial: String) async -> AsyncStream<NetSample>
+    /// Everything the Reactotron relay sees, from the moment it is listening.
+    ///
+    /// Starting the relay is part of subscribing: a client that asked for the
+    /// topic wants the relay up, and a separate "start" call would let the two
+    /// disagree about whether it is. Throws when the port is taken, which is the
+    /// one failure worth a message rather than an empty feed.
+    func reactotron() async throws -> AsyncStream<ReactotronRelay.Event>
+    /// Called when the last `reactotron` subscription ends, so the relay stops
+    /// listening rather than holding port 9090 for nobody.
+    func stopReactotron() async
+    /// Starts a shell on a pseudo-terminal. `serial` only scopes the shell's
+    /// `ANDROID_SERIAL`; a terminal opens with no device connected.
+    ///
+    /// Throws rather than returning an optional so the reason reaches the
+    /// client: on Windows there is no pty at all, and "your terminal did not
+    /// open" is worth far less than being told why.
+    func openPty(serial: String?, size: PtySize) throws -> any PtyChannel
 }
 
 /// One WebSocket connection's worth of subscriptions.
@@ -44,6 +61,9 @@ public actor StreamSession {
     private struct Subscription {
         let topic: StreamProtocol.Topic
         let serial: String?
+        /// The shell, for a `pty` subscription. Where a write and a resize go,
+        /// and what has to be hung up when the subscription ends.
+        let pty: (any PtyChannel)?
         var buffer: StreamBuffer<Data>
         /// The newest unsent snapshot, for a `isSnapshot` topic. Kept apart
         /// from `buffer` because a snapshot replaces rather than accumulates —
@@ -88,7 +108,7 @@ public actor StreamSession {
             return
         }
 
-        if let error = StreamProtocol.validate(command, activeIDs: Set(subscriptions.keys)) {
+        if let error = StreamProtocol.validate(command, active: activeTopics) {
             await sink.send(
                 StreamFrame.encode(
                     StreamProtocol.Event<LogLinePayload>.failed(
@@ -101,7 +121,20 @@ public actor StreamSession {
             await subscribe(command)
         case .unsubscribe:
             await end(command.id, reason: .unsubscribed)
+        case .write:
+            // Validation established both the subscription and the bytes; the
+            // guard is what makes that a compile-time fact rather than a
+            // comment. Unacknowledged on purpose — see `Operation.write`.
+            guard let bytes = command.params?.bytes else { return }
+            subscriptions[command.id]?.pty?.write(bytes)
+        case .resize:
+            guard let size = command.params?.size else { return }
+            subscriptions[command.id]?.pty?.resize(to: size)
         }
+    }
+
+    private var activeTopics: [Int: StreamProtocol.Topic] {
+        subscriptions.mapValues(\.topic)
     }
 
     /// Tears every subscription down. Idempotent, so a close racing an error
@@ -120,8 +153,29 @@ public actor StreamSession {
     private func subscribe(_ command: StreamProtocol.Command) async {
         guard let topic = command.topic else { return }
         let id = command.id
+
+        // The shell is started *before* the subscription is announced. Sending
+        // `subscribed` first means awaiting the sink, which yields the actor —
+        // so a client that types the moment it is acknowledged could otherwise
+        // reach a subscription whose shell does not exist yet, and the
+        // keystrokes would go nowhere without a word.
+        var channel: (any PtyChannel)?
+        if topic == .pty {
+            do {
+                channel = try source.openPty(
+                    serial: command.params?.serial,
+                    size: command.params?.size ?? .standard)
+            } catch {
+                await sink.send(
+                    StreamFrame.encode(
+                        StreamProtocol.Event<LogLinePayload>.failed(
+                            id: id, message: "\(error)")))
+                return
+            }
+        }
+
         subscriptions[id] = Subscription(
-            topic: topic, serial: command.params?.serial,
+            topic: topic, serial: command.params?.serial, pty: channel,
             buffer: StreamBuffer(capacity: capacity))
         await sink.send(
             StreamFrame.encode(StreamProtocol.Event<LogLinePayload>.subscribed(id: id)))
@@ -183,6 +237,45 @@ public actor StreamSession {
                 }
                 await self?.end(id, reason: .deviceDisconnected)
             }
+
+        case .reactotron:
+            do {
+                let stream = try await source.reactotron()
+                subscriptions[id]?.pump = Task { [weak self] in
+                    for await event in stream {
+                        await self?.enqueue(
+                            id: id,
+                            items: [try? DaemonProtocol.encode(ReactotronEventPayload(event))]
+                                .compactMap { $0 })
+                    }
+                    await self?.end(id, reason: .serverStopping)
+                }
+            } catch {
+                // The port being taken is the common one, and it is actionable:
+                // another Reactotron is running. Reported rather than left as a
+                // feed that never produces anything.
+                subscriptions[id] = nil
+                await sink.send(
+                    StreamFrame.encode(
+                        StreamProtocol.Event<LogLinePayload>.failed(
+                            id: id, message: "\(error)")))
+            }
+
+        case .pty:
+            guard let channel else { return }
+            let stream = channel.output()
+            subscriptions[id]?.pump = Task { [weak self] in
+                for await chunk in stream {
+                    await self?.enqueue(
+                        id: id,
+                        items: [try? DaemonProtocol.encode(PtyChunkPayload(chunk))]
+                            .compactMap { $0 })
+                }
+                // The stream finishing *is* the shell exiting — including the
+                // case where it never started, because a failed `exec` reaches
+                // the parent as the terminal hanging up rather than as a throw.
+                await self?.end(id, reason: .processExited)
+            }
         }
     }
 
@@ -191,10 +284,20 @@ public actor StreamSession {
     ) async {
         guard let subscription = subscriptions.removeValue(forKey: id) else { return }
         subscription.pump?.cancel()
+        // Cancelling the pump only stops the reading; the shell is a child
+        // process and has to be hung up, or every closed tab leaks one.
+        subscription.pty?.terminate()
         // ADBKit kills the adb child on task cancellation, but the streamer
         // owns the process, so it needs telling too.
         if subscription.topic == .logcat, let serial = subscription.serial {
             await source.stopLogcat(serial: serial)
+        }
+        // The relay is host-wide and shared, so it stops only when the last
+        // subscriber goes — a second window watching the timeline must not have
+        // its feed cut by the first one closing.
+        if subscription.topic == .reactotron,
+           !subscriptions.values.contains(where: { $0.topic == .reactotron }) {
+            await source.stopReactotron()
         }
         if notify {
             await sink.send(
@@ -261,15 +364,17 @@ public struct LiveStreamSource: StreamSource {
     private let streamer: LogcatStreamer
     private let performanceService: PerformanceService
     private let networkService: NetworkSpeedService
+    private let relay: ReactotronRelay
 
     public init(
         monitor: DeviceMonitor, streamer: LogcatStreamer, performance: PerformanceService,
-        networkSpeed: NetworkSpeedService
+        networkSpeed: NetworkSpeedService, reactotron: ReactotronRelay
     ) {
         self.monitor = monitor
         self.streamer = streamer
         performanceService = performance
         networkService = networkSpeed
+        relay = reactotron
     }
 
     public func devices() async -> AsyncStream<[Device]> { await monitor.updates() }
@@ -331,5 +436,33 @@ public struct LiveStreamSource: StreamSource {
             }
             continuation.onTermination = { _ in task.cancel() }
         }
+    }
+
+    /// The relay's events, with the relay started if it was not.
+    ///
+    /// The stream is taken *before* `start()` so a subscriber cannot miss the
+    /// `listening` event it is waiting for — the other way round, a fast bind
+    /// emits into no listeners and the UI never learns the port.
+    public func reactotron() async throws -> AsyncStream<ReactotronRelay.Event> {
+        let stream = await relay.events()
+        try await relay.start()
+        return stream
+    }
+
+    public func stopReactotron() async {
+        await relay.stop()
+    }
+
+    /// A login shell, matching the Mac's terminal: `-l`, so the rc files that
+    /// define someone's aliases and PATH are read.
+    public func openPty(serial: String?, size: PtySize) throws -> any PtyChannel {
+        #if os(Windows)
+        // ConPTY is a different API rather than a variation on this one, so the
+        // subsystem is absent rather than stubbed and this is where a client
+        // finds out. See `Pty`.
+        throw PtyError.unsupportedPlatform
+        #else
+        return try Pty.spawn(environment: Pty.childEnvironment(serial: serial), size: size)
+        #endif
     }
 }

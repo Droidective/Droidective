@@ -74,6 +74,20 @@ public enum AppProtocol {
         }
     }
 
+    /// Which app is in front, when one is.
+    ///
+    /// Nullable rather than an error: the launcher is in front more often than
+    /// not, and "nothing worth naming" is a real answer rather than a failure
+    /// to report. The caller decides what to do with it — a debug tool's
+    /// restart uses it as a *guess*, which is why it never stands alone.
+    public struct ForegroundResponse: Codable, Equatable, Sendable {
+        public let packageId: String?
+
+        public init(packageId: String?) {
+            self.packageId = packageId
+        }
+    }
+
     /// The verbs a client may offer, so a UI renders the set the daemon
     /// actually accepts instead of a hardcoded list that can drift.
     public static var actions: [ActionDescriptor] {

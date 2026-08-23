@@ -18,6 +18,15 @@ export interface Session {
   features: FeatureSummary[]
   selected: Device | null
   select: (serial: string) => void
+  /**
+   * Ask adb again, now.
+   *
+   * The stream publishes on change, so a device that never appears produces no
+   * event to wait for — which is the situation the device bar's refresh button
+   * exists for. The Mac reaches the same place by refreshing as its dropdown
+   * opens.
+   */
+  refresh: () => Promise<void>
   error: DaemonError | null
 }
 
@@ -109,6 +118,15 @@ export function useSession(): Session {
     setSerial(next)
   }, [])
 
+  const refresh = useCallback(async () => {
+    try {
+      setDevices(await listDevices())
+      setDevicesLoaded(true)
+    } catch (thrown) {
+      setError(asDaemonError(thrown))
+    }
+  }, [])
+
   return {
     status,
     devices,
@@ -116,6 +134,7 @@ export function useSession(): Session {
     features,
     selected: devices.find((device) => device.serial === serial) ?? null,
     select,
+    refresh,
     error,
   }
 }

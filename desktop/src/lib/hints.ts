@@ -37,6 +37,8 @@ const HINTS: Readonly<Record<string, string>> = {
   "file-explorer": "Connect a device to browse its storage.",
   "device-info": "Connect a device to read its properties.",
   "crash-catcher": "Connect a device to catch crashes.",
+  "bug-report": "Connect a device to collect a bug report.",
+  "deep-link": "Connect a device to launch deep links on it.",
   performance: "Connect a device to monitor its performance.",
   "root-status": "Connect a device to check its root status.",
   "dev-settings": "Connect a device to change its developer settings.",

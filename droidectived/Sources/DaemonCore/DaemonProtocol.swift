@@ -13,6 +13,8 @@ public enum DaemonProtocol {
         case actionsRun = "/v1/actions/run"
         case appsList = "/v1/apps/list"
         case appsControl = "/v1/apps/control"
+        /// Which package is in front, for a caller that has to guess at one.
+        case appsForeground = "/v1/apps/foreground"
         case deviceProps = "/v1/device/props"
         case deviceRoot = "/v1/device/root"
         case filesList = "/v1/files/list"
@@ -50,6 +52,22 @@ public enum DaemonProtocol {
         case emulatorsAction = "/v1/emulators/action"
         case installFormats = "/v1/install/formats"
         case installRun = "/v1/install/run"
+        /// Wireless adb — pair, connect, disconnect, and the USB→Wi-Fi
+        /// bootstrap — with the verb in the body.
+        case wirelessAction = "/v1/wireless/action"
+        /// The saved deep links: read one app's list, replace it, launch one.
+        /// The write takes the whole list rather than an add/edit/delete verb —
+        /// the client holds what it is showing, and three routes would each
+        /// have to re-derive it.
+        case deepLinksRead = "/v1/deeplinks/read"
+        case deepLinksWrite = "/v1/deeplinks/write"
+        case deepLinksLaunch = "/v1/deeplinks/launch"
+        case bugReportCreate = "/v1/bugreport/create"
+        /// Which external tools are on this machine, for Settings ▸ Doctor and
+        /// the device bar's adb warning.
+        case toolsDetect = "/v1/tools/detect"
+        case reactotronReverse = "/v1/reactotron/reverse"
+        case reactotronUnreverse = "/v1/reactotron/unreverse"
     }
 
     /// The multiplexed stream socket. Not a `Route`: it is a WebSocket upgrade

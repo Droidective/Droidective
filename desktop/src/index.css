@@ -21,6 +21,19 @@
   --color-accent-fg: #10240a;
   --color-danger: #ff5f56;
   --color-warn: #e2b341;
+  /* Reactotron's own palette, converted from the `Color(red:green:blue:)`
+     literals in App/Sources/FeatureDetail/Views/ReactotronView.swift — sRGB
+     components times 255, so these are the Mac's colours rather than a
+     reinterpretation of them. The timeline is read by scanning badge colour,
+     which only works if the two apps agree on what each colour means. */
+  --color-rt-badge: #e8755c;
+  --color-rt-name: #f2c76b;
+  --color-rt-key: #75c2db;
+  --color-rt-number: #ed9966;
+  --color-rt-special: #e6857a;
+  /* SwiftUI's `.green`, which the CONNECT badge uses — not the brand accent,
+     which is a different green and already means "the thing you clicked". */
+  --color-rt-ok: #28cd41;
 }
 
 html,

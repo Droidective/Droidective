@@ -183,3 +183,50 @@ export interface InstallResponse {
   outcomes: InstallOutcome[]
   fileName: string
 }
+
+// MARK: - deep links, the bug report, and the toolchain
+
+/**
+ * One saved deep link.
+ *
+ * `id` travels back unchanged so an edit updates rather than duplicating, and
+ * `createdAt` is epoch millis — the store's own shape, shared with the Mac.
+ */
+export interface DeepLink {
+  id: string
+  label: string
+  url: string
+  createdAt: number
+}
+
+/** One device's answer to a launch. Per device, as an install's outcomes are. */
+export interface LaunchOutcome {
+  serial: string
+  ok: boolean
+  message: string
+}
+
+export interface LaunchResponse {
+  outcomes: LaunchOutcome[]
+}
+
+export interface BugReportResponse {
+  /** Where the zip landed, for the Show in folder button. */
+  path: string
+}
+
+/** One external tool, as the Doctor reports it. */
+export interface ToolReport {
+  /** adb, scrcpy, ffmpeg, emulator. */
+  id: string
+  installed: boolean
+  path: string | null
+  version: string | null
+  /** Where to get it. Neither app ever installs a tool itself. */
+  installHint: string
+}
+
+export interface ToolsResponse {
+  /** In the registry's own order, so the Doctor's rows do not shuffle. */
+  tools: ToolReport[]
+}

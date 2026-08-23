@@ -10,6 +10,8 @@
 import { invoke } from "@tauri-apps/api/core"
 import type {
   AppInfoResponse,
+  BugReportResponse,
+  DeepLink,
   EmulatorAction,
   EmulatorsResponse,
   InstallResponse,
@@ -17,12 +19,15 @@ import type {
   DevSettingsResponse,
   DnsMode,
   DnsResponse,
+  LaunchResponse,
   MemInfoResponse,
+  PairResponse,
   PermissionsResponse,
   RestrictionKey,
   RestrictionsResponse,
   RunResponse,
   SandboxResponse,
+  ToolsResponse,
   WifiResponse,
 } from "@/lib/wire"
 
@@ -199,4 +204,73 @@ export function emulatorAction(args: {
  */
 export function pickAndInstall(serials: string[]): Promise<InstallResponse | null> {
   return invoke<InstallResponse | null>("pick_and_install", { serials })
+}
+
+// MARK: - wireless adb
+
+/**
+ * Android 11+ pairing.
+ *
+ * `endpoint` goes over as the phone displays it — the daemon parses it, because
+ * `ConnectionService.parseEndpoint` already knows what adb accepts and a second
+ * opinion here would drift from it. The pairing port is not the connection
+ * port, so it has to be given: the reply carries the connection endpoint the
+ * device then advertised, when it advertised one.
+ */
+export function pairWireless(endpoint: string, code: string): Promise<PairResponse> {
+  return invoke<PairResponse>("pair_wireless", { endpoint, code })
+}
+
+/** `adb connect`. A bare host gets adb's own default port, daemon-side. */
+export function connectWireless(endpoint: string): Promise<RunResponse> {
+  return invoke<RunResponse>("connect_wireless", { endpoint })
+}
+
+/** `adb disconnect`. No serial means every wireless device. */
+export function disconnectWireless(serial?: string): Promise<RunResponse> {
+  return invoke<RunResponse>("disconnect_wireless", { serial: serial ?? null })
+}
+
+/** `adb tcpip 5555` on a USB device, then connect to its Wi-Fi address. */
+export function enableTcpip(serial: string): Promise<RunResponse> {
+  return invoke<RunResponse>("enable_tcpip", { serial })
+}
+
+// MARK: - deep links, the bug report, and the toolchain
+
+/** One app's saved deep links, keyed by package id. */
+export function deepLinks(packageId: string): Promise<{ links: DeepLink[] }> {
+  return invoke<{ links: DeepLink[] }>("deep_links", { packageId })
+}
+
+/**
+ * Replaces one app's list.
+ *
+ * The whole list rather than add/edit/delete: the screen holds what it is
+ * showing, and the daemon writes that one key of the shared map atomically, so
+ * another app's links cannot be lost in the swap.
+ */
+export function writeDeepLinks(
+  packageId: string,
+  links: DeepLink[],
+): Promise<{ links: DeepLink[] }> {
+  return invoke<{ links: DeepLink[] }>("write_deep_links", { packageId, links })
+}
+
+/** Launches one url on every targeted device, answering per device. */
+export function launchDeepLink(serials: string[], url: string): Promise<LaunchResponse> {
+  return invoke<LaunchResponse>("launch_deep_link", { serials, url })
+}
+
+/** Builds the bug-report zip and answers where it landed. */
+export function createBugReport(
+  serial: string,
+  packageId: string | null,
+): Promise<BugReportResponse> {
+  return invoke<BugReportResponse>("create_bug_report", { serial, packageId })
+}
+
+/** Which external tools are on this machine, with a hint for each missing one. */
+export function detectTools(): Promise<ToolsResponse> {
+  return invoke<ToolsResponse>("detect_tools")
 }

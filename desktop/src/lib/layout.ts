@@ -1,4 +1,6 @@
+import type { Hotkey } from "@/lib/hotkeys"
 import { restoreWorkspace, type Workspace } from "@/lib/workspace"
+import { clampZoomStep, DEFAULT_ZOOM_STEP } from "@/lib/zoom"
 
 /**
  * What the window remembers between launches: how the sidebar is arranged and
@@ -46,6 +48,26 @@ export interface LayoutState {
    * the enabled set and running `adoptNewDefaults()` over it.
    */
   disabledFeatures: string[]
+  /**
+   * Feature id → its keyboard shortcut.
+   *
+   * The Mac keeps these in `KeyboardShortcuts`' own defaults rather than in
+   * `LayoutState`, because the library owns the OS registration. Nothing owns
+   * them here, so they live with the rest of what the window remembers.
+   */
+  hotkeys: Record<string, Hotkey>
+  /**
+   * The device bar's Run on all switch.
+   *
+   * Persisted as the Mac persists it. Safe to carry across launches because
+   * `effectiveRunOnAll` gates it on the focused feature supporting a fan-out,
+   * so a stale `true` cannot reach a single-device action.
+   */
+  runOnAll: boolean
+  /** Dock-style sidebar rather than a pinned one. The Mac's `sidebarAutoHide`. */
+  sidebarAutoHide: boolean
+  /** An index into `ZOOM_STEPS`, so the chosen size survives a relaunch. */
+  zoomStep: number
   /** One entry per open pane, left to right. */
   panes: SavedPane[]
   focusedPane: number
@@ -62,6 +84,10 @@ export function emptyLayout(): LayoutState {
     collapsedCategories: [],
     favorites: [],
     disabledFeatures: [],
+    hotkeys: {},
+    runOnAll: false,
+    sidebarAutoHide: false,
+    zoomStep: DEFAULT_ZOOM_STEP,
     panes: [{ tabs: [HOME_TAB], activeTab: HOME_TAB }],
     focusedPane: 0,
     splitFraction: 0.5,
@@ -94,10 +120,41 @@ export function loadLayout(storage: Pick<Storage, "getItem">): LayoutState {
     collapsedCategories: stringArray(saved.collapsedCategories),
     favorites: stringArray(saved.favorites),
     disabledFeatures: stringArray(saved.disabledFeatures),
+    hotkeys: savedHotkeys(saved.hotkeys),
+    runOnAll: saved.runOnAll === true,
+    sidebarAutoHide: saved.sidebarAutoHide === true,
+    // Clamped rather than trusted: a step from a build with a different number
+    // of them would otherwise index off the end of the list.
+    zoomStep: clampZoomStep(typeof saved.zoomStep === "number" ? saved.zoomStep : DEFAULT_ZOOM_STEP),
     panes: panes.length === 0 ? emptyLayout().panes : panes,
     focusedPane: typeof saved.focusedPane === "number" ? saved.focusedPane : 0,
     splitFraction: typeof saved.splitFraction === "number" ? saved.splitFraction : 0.5,
   }
+}
+
+/**
+ * The saved shortcuts, keeping only the entries that are still whole.
+ *
+ * A half-written binding is worse than none: a `Hotkey` missing its `code`
+ * would match a `keydown` whose own code was somehow absent, so every field is
+ * checked rather than cast. One bad entry drops itself and the rest survive.
+ */
+function savedHotkeys(value: unknown): Record<string, Hotkey> {
+  if (typeof value !== "object" || value === null) return {}
+  const hotkeys: Record<string, Hotkey> = {}
+  for (const [id, entry] of Object.entries(value)) {
+    if (typeof entry !== "object" || entry === null) continue
+    const saved = entry as Partial<Record<keyof Hotkey, unknown>>
+    if (typeof saved.code !== "string" || saved.code === "") continue
+    hotkeys[id] = {
+      code: saved.code,
+      ctrl: saved.ctrl === true,
+      alt: saved.alt === true,
+      shift: saved.shift === true,
+      meta: saved.meta === true,
+    }
+  }
+  return hotkeys
 }
 
 function savedPanes(value: unknown): SavedPane[] {

@@ -83,6 +83,10 @@ pub struct FeatureSummary {
     /// but the flag has to survive the wire for that to stay a decision.
     #[serde(rename = "isAbsorbedByHub")]
     pub is_absorbed_by_hub: bool,
+    /// Whether running this on every connected device at once makes sense. The
+    /// registry's answer: it is a property of the runner, not of the UI.
+    #[serde(rename = "supportsRunAll")]
+    pub supports_run_all: bool,
     pub fields: Vec<FeatureField>,
 }
 
@@ -612,6 +616,165 @@ pub struct InstallFormatsResponse {
     pub extensions: Vec<String>,
 }
 
+// MARK: - wireless adb
+
+/// Pair, connect, disconnect, or the USB→Wi-Fi bootstrap, with the verb in the
+/// body. `endpoint` travels as the phone displays it: the daemon parses it,
+/// because `ConnectionService.parseEndpoint` already knows what adb accepts —
+/// bracketed and bare IPv6, a truncated IPv4, a port out of range — and a
+/// second opinion here would drift from it.
+#[derive(Debug, Clone, Serialize)]
+pub struct WirelessActionRequest {
+    pub action: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub endpoint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub serial: Option<String>,
+}
+
+/// The connect endpoint a freshly paired device advertised over mDNS.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct Discovered {
+    pub name: String,
+    pub host: String,
+    pub port: String,
+}
+
+/// Pairing's answer. `discovered` is absent when this adb has mDNS off or
+/// nothing turned up in time — the sheet then asks for the connection port,
+/// which is the only thing it can do.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PairResponse {
+    pub result: RunResponse,
+    pub discovered: Option<Discovered>,
+}
+
+// MARK: - deep links, the bug report, and the toolchain
+
+/// One saved deep link. `id` travels back unchanged so an edit updates rather
+/// than duplicating.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct DeepLink {
+    pub id: String,
+    pub label: String,
+    pub url: String,
+    /// Epoch millis, as the store keeps it.
+    #[serde(rename = "createdAt")]
+    pub created_at: f64,
+}
+
+/// Which app's links. Keyed by **package id** here; the Mac keys the same
+/// on-disk map by saved-bundle id (a UUID), so entries from the two apps sit in
+/// one file without colliding and without being shared.
+#[derive(Debug, Clone, Serialize)]
+pub struct DeepLinksRequest {
+    #[serde(rename = "packageId")]
+    pub package_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct DeepLinksResponse {
+    pub links: Vec<DeepLink>,
+}
+
+/// The whole list for one app, written as one value — the client holds what it
+/// is showing, so add/edit/delete verbs would each re-derive the same thing.
+#[derive(Debug, Clone, Serialize)]
+pub struct DeepLinksWriteRequest {
+    #[serde(rename = "packageId")]
+    pub package_id: String,
+    pub links: Vec<DeepLink>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DeepLinkLaunchRequest {
+    pub serials: Vec<String>,
+    pub url: String,
+}
+
+/// One answer per device, the shape an install already uses.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct LaunchResponse {
+    pub outcomes: Vec<InstallOutcome>,
+}
+
+/// `destination` is a **host** folder this process chose, as a pull's is.
+#[derive(Debug, Clone, Serialize)]
+pub struct BugReportRequest {
+    pub serial: String,
+    #[serde(rename = "packageId", skip_serializing_if = "Option::is_none")]
+    pub package_id: Option<String>,
+    pub destination: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct BugReportResponse {
+    /// Where the zip landed, for the Show in folder button.
+    pub path: String,
+}
+
+/// Which app is in front, when one is.
+///
+/// Nullable because the launcher is in front more often than any app is, and
+/// "nothing worth naming" is a real answer rather than a failure to report. The
+/// daemon omits the key entirely in that case, which serde reads as None.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ForegroundResponse {
+    #[serde(rename = "packageId")]
+    pub package_id: Option<String>,
+}
+
+/// Which devices should be able to reach the Reactotron relay, and on what
+/// port.
+///
+/// `port` travels rather than being assumed 9090: the relay reports the port it
+/// actually bound in its `listening` frame, and tunnelling to a port nothing is
+/// listening on is the failure that reads as the feature being broken.
+#[derive(Debug, Clone, Serialize)]
+pub struct ReactotronReverseRequest {
+    pub serials: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub port: Option<u16>,
+}
+
+/// One device's outcome. The adb error travels rather than a bare false —
+/// "device offline" and "more than one device" want different things done.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ReactotronReverseResult {
+    pub serial: String,
+    pub ok: bool,
+    pub detail: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ReactotronReverseResponse {
+    pub results: Vec<ReactotronReverseResult>,
+    /// The exact command the daemon ran, which the pane shows: both apps name
+    /// the tunnel the same way, because it is the thing a user retypes by hand
+    /// when they want to check it.
+    pub command: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ToolReport {
+    /// adb, scrcpy, ffmpeg, emulator.
+    pub id: String,
+    pub installed: bool,
+    pub path: Option<String>,
+    pub version: Option<String>,
+    /// Where to get it. The app never installs a tool itself.
+    #[serde(rename = "installHint")]
+    pub install_hint: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ToolsResponse {
+    /// In the registry's own order, so the Doctor's rows do not shuffle.
+    pub tools: Vec<ToolReport>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct AppControlRequest {
     pub serial: String,
@@ -638,18 +801,21 @@ pub struct ErrorPayload {
 
 // MARK: - the stream socket
 
+/// A client frame. Named for the socket rather than for `subscribe` because
+/// the terminal made it two-way: `write` and `resize` act on a subscription
+/// that already exists.
 #[derive(Debug, Clone, Serialize)]
-pub struct SubscribeCommand {
+pub struct StreamCommand {
     pub op: &'static str,
     pub id: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub topic: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub params: Option<SubscribeParams>,
+    pub params: Option<StreamParams>,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
-pub struct SubscribeParams {
+pub struct StreamParams {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub serial: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -661,10 +827,19 @@ pub struct SubscribeParams {
     /// sample, so it is asked for rather than assumed.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub processes: Option<bool>,
+    /// Base64 keystrokes, for `write`. Base64 because terminal input is bytes,
+    /// control codes included — see the daemon's `Command.Params.data`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<String>,
+    /// The terminal window. Both or neither; the daemon refuses half a size.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub columns: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rows: Option<u16>,
 }
 
-impl SubscribeCommand {
-    pub fn subscribe(id: i64, topic: &'static str, params: Option<SubscribeParams>) -> Self {
+impl StreamCommand {
+    pub fn subscribe(id: i64, topic: &'static str, params: Option<StreamParams>) -> Self {
         Self {
             op: "subscribe",
             id,
@@ -680,6 +855,32 @@ impl SubscribeCommand {
             id,
             topic: None,
             params: None,
+        }
+    }
+
+    /// Keystrokes into a terminal, already base64.
+    pub fn write(id: i64, data: String) -> Self {
+        Self {
+            op: "write",
+            id,
+            topic: None,
+            params: Some(StreamParams {
+                data: Some(data),
+                ..StreamParams::default()
+            }),
+        }
+    }
+
+    pub fn resize(id: i64, columns: u16, rows: u16) -> Self {
+        Self {
+            op: "resize",
+            id,
+            topic: None,
+            params: Some(StreamParams {
+                columns: Some(columns),
+                rows: Some(rows),
+                ..StreamParams::default()
+            }),
         }
     }
 }

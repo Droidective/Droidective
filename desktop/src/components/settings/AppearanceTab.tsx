@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Banner, Button, TextInput } from "@/components/Controls"
+import { Banner, Button, Switch, TextInput } from "@/components/Controls"
 import { Row, Section } from "@/components/settings/SettingsKit"
 import { useAppearance } from "@/hooks/useAppearance"
 import {
@@ -11,6 +11,7 @@ import {
   THEMES,
 } from "@/lib/appearance"
 import { cn } from "@/lib/cn"
+import { ZOOM_STEPS, zoomLabel } from "@/lib/zoom"
 
 /**
  * Settings ▸ Appearance — the Mac's Theme and Accent controls.
@@ -20,11 +21,19 @@ import { cn } from "@/lib/cn"
  * in three different forms — a vague preference, a swatch, or a brand hex —
  * and making them convert is the friction.
  *
- * The window opacity, blur and grain sliders are not here: they drive
- * `WindowEffects` and a compositor-level blur that Windows and Linux each need
+ * The Window section carries the sidebar mode and the UI size — the same two
+ * the Mac keeps there — and says outright that opacity, blur and grain are not
+ * ported, since blur is a compositor-level effect Windows and Linux each need
  * their own answer for (backlog 15).
  */
-export function AppearanceTab() {
+export interface AppearanceTabProps {
+  sidebarAutoHide: boolean
+  onSidebarAutoHide: (autoHide: boolean) => void
+  zoomStep: number
+  onZoom: (direction: -1 | 0 | 1) => void
+}
+
+export function AppearanceTab(props: AppearanceTabProps) {
   const { theme, setTheme } = useAppearance()
   return (
     <div className="flex flex-col gap-5">
@@ -52,6 +61,73 @@ export function AppearanceTab() {
       </Section>
 
       <AccentSection />
+
+      <Section title="Window">
+        <Row
+          label="Auto-hide the sidebar"
+          detail="Dock-style: hover the window's left edge to peek, or Ctrl/⌘ + B."
+        >
+          <Switch
+            checked={props.sidebarAutoHide}
+            onChange={props.onSidebarAutoHide}
+            ariaLabel="Auto-hide the sidebar"
+          />
+        </Row>
+        <Row
+          label="UI size"
+          detail="Ctrl/⌘ + = and Ctrl/⌘ + − step it; Ctrl/⌘ + 0 is Actual Size."
+        >
+          <ZoomControl step={props.zoomStep} onZoom={props.onZoom} />
+        </Row>
+        <Row
+          label="Opacity, blur and grain"
+          detail="The Mac's translucent window. Blur needs a per-platform answer (Mica on Windows, a compositor effect on Linux) — backlog 15."
+        >
+          <span className="text-[11.5px] text-text-tertiary">Not yet</span>
+        </Row>
+      </Section>
+    </div>
+  )
+}
+
+/** Minus, the current percentage, plus — the same steps ⌘=/⌘- walk. */
+function ZoomControl({
+  step,
+  onZoom,
+}: {
+  step: number
+  onZoom: (direction: -1 | 0 | 1) => void
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <Button
+        onClick={() => {
+          onZoom(-1)
+        }}
+        disabled={step === 0}
+        title="Zoom out"
+      >
+        −
+      </Button>
+      <button
+        type="button"
+        onClick={() => {
+          onZoom(0)
+        }}
+        title="Actual Size"
+        className="w-12 text-center tabular-nums text-text-secondary hover:text-text-primary"
+      >
+        {zoomLabel(step)}
+      </button>
+      <Button
+        onClick={() => {
+          onZoom(1)
+        }}
+        disabled={step === ZOOM_STEPS.length - 1}
+        title="Zoom in"
+      >
+        +
+      </Button>
     </div>
   )
 }

@@ -1,15 +1,13 @@
 import { useMemo } from "react"
+import { AppWindow } from "@/components/AppWindow"
 import { Banner } from "@/components/Controls"
-import { DeviceBar } from "@/components/DeviceBar"
-import { NotificationPanel } from "@/components/NotificationPanel"
-import { ToastOverlay } from "@/components/ToastOverlay"
-import { WorkspaceShell } from "@/components/WorkspaceShell"
 import { AppearanceProvider } from "@/hooks/useAppearance"
 import { NotificationsProvider } from "@/hooks/useNotifications"
 import { useSession } from "@/hooks/useSession"
+import { ToolchainProvider } from "@/hooks/useToolchain"
 import { sidebarFeatures } from "@/lib/sidebar"
 
-/** Getting the daemon up, and the device bar over whatever it serves. */
+/** Getting the daemon up, and the window over whatever it serves. */
 export function App() {
   const session = useSession()
   const features = useMemo(() => sidebarFeatures(session.features), [session.features])
@@ -31,27 +29,9 @@ export function App() {
   return (
     <AppearanceProvider>
       <NotificationsProvider>
-      <div className="flex h-full flex-col">
-        <DeviceBar
-          devices={session.devices}
-          devicesLoaded={session.devicesLoaded}
-          selected={session.selected}
-          onSelect={session.select}
-        />
-        {session.error ? (
-          <div className="px-3 pt-3">
-            <Banner tone="error">{session.error.message}</Banner>
-          </div>
-        ) : null}
-        {/* The panel is a sibling of the workspace, not an overlay: it is a
-            persistent column, the way `NotificationPanelView` sits in the
-            Mac's window. */}
-        <div className="flex min-h-0 flex-1">
-          <WorkspaceShell features={features} device={session.selected} />
-          <NotificationPanel />
-        </div>
-        <ToastOverlay />
-      </div>
+        <ToolchainProvider>
+          <AppWindow session={session} features={features} />
+        </ToolchainProvider>
       </NotificationsProvider>
     </AppearanceProvider>
   )

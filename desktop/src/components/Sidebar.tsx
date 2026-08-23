@@ -24,6 +24,8 @@ export interface SidebarProps {
   disabledFeatures: string[]
   /** The sidebar footer's three destinations. */
   onOpenSettings: () => void
+  /** A row's right-click, positioned by the pointer. */
+  onContextMenu: (id: string, x: number, y: number) => void
 }
 
 /**
@@ -175,6 +177,7 @@ function Rows({
           onHover={onHover}
           onDropFeature={onDropFeature}
           onDropCategory={onDropCategory}
+          onContextMenu={props.onContextMenu}
         />
       ))}
     </>

@@ -26,6 +26,101 @@ public struct LogLinePayload: Codable, Equatable, Sendable {
     }
 }
 
+/// Whatever the shell just wrote, base64.
+///
+/// Base64 because this is the one payload that is *bytes* rather than a record.
+/// A read from a pty splits wherever the buffer filled, which is as likely as
+/// not to be the middle of a multi-byte character or an escape sequence — so
+/// decoding here would corrupt output that is perfectly fine once the client
+/// reassembles it, and it would do so only sometimes, on non-ASCII, which is
+/// the worst way to find out.
+///
+/// An object rather than a bare string so a client's frame handling stays the
+/// same shape for every topic.
+public struct PtyChunkPayload: Codable, Equatable, Sendable {
+    public let data: String
+
+    public init(_ chunk: Data) {
+        data = chunk.base64EncodedString()
+    }
+}
+
+/// One thing the Reactotron relay saw.
+///
+/// A flat envelope with an optional command rather than four payload types,
+/// because the timeline renders them as one list and a client switching on a
+/// `kind` string is simpler than a client decoding four shapes off one topic.
+///
+/// The command travels as the raw `ReactotronCommand` it decoded to: unlike
+/// `LogLine`, that type *is* the protocol — it mirrors upstream's wire format
+/// and `ReactotronCommandType` is derived from it — so a DTO here would be a
+/// second spelling of a contract that is not ours to reshape.
+public struct ReactotronEventPayload: Codable, Sendable {
+    /// "listening", "connected", "command" or "disconnected".
+    public let kind: String
+    /// Which client. Absent for `listening`, which is about the relay itself.
+    public let connection: Int?
+    public let port: Int?
+    /// What the app called itself in its `client.intro`, when it said.
+    public let clientId: String?
+    public let command: ReactotronCommand?
+    /// Why a client went away, when the transport said. Absent for an ordinary
+    /// close, which needs no explanation.
+    public let reason: String?
+    /// The WebSocket close status, when the client sent one. 1001 is the one
+    /// worth acting on — see `ReactotronRelay.Event.disconnected`.
+    public let code: Int?
+    /// The frame's size on the wire, for the frames that had one.
+    ///
+    /// It travels because the client cannot recover it: the timeline bounds
+    /// itself by retained bytes as well as by row count — one base64 display
+    /// image outweighs a thousand log lines — and the only other way to a size
+    /// is re-serializing every payload as it arrives, which is the stall the
+    /// whole feed is built to avoid.
+    public let bytes: Int?
+
+    public init(_ event: ReactotronRelay.Event) {
+        switch event {
+        case .listening(let port):
+            kind = "listening"
+            connection = nil
+            self.port = port
+            clientId = nil
+            command = nil
+            reason = nil
+            code = nil
+            bytes = nil
+        case .connected(let connection, let clientId, let command, let bytes):
+            kind = "connected"
+            self.connection = connection
+            port = nil
+            self.clientId = clientId
+            self.command = command
+            reason = nil
+            code = nil
+            self.bytes = bytes
+        case .command(let connection, let command, let bytes):
+            kind = "command"
+            self.connection = connection
+            port = nil
+            clientId = nil
+            self.command = command
+            reason = nil
+            code = nil
+            self.bytes = bytes
+        case .disconnected(let connection, let reason, let code):
+            kind = "disconnected"
+            self.connection = connection
+            port = nil
+            clientId = nil
+            command = nil
+            self.reason = reason
+            self.code = code
+            bytes = nil
+        }
+    }
+}
+
 /// One performance sample.
 ///
 /// A DTO for the same reason `LogLinePayload` is: `PerfPoll` and the models

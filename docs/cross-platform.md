@@ -106,12 +106,33 @@ and then quietly forgotten.
 ## Phase 3 (started): the Windows/Linux app
 
 `desktop/` — Tauri 2 + React 19 + Vite + Tailwind v4 over `droidectived`; see
-`desktop/README.md`. Working today: the device picker, the action palette
-(search, forms, toggles, destructive confirmation), the installed-app browser
-with its verbs, and live logcat with visible gap markers. Still to come: the
-remaining full-screen view features and files, then the terminal via xterm.js
-against a daemon PTY endpoint.
-Mirroring stays with the scrcpy desktop app.
+`desktop/README.md`. The shell is there: a grouped sidebar that drags to
+reorder and auto-hides Dock-style, feature tabs, split panes, the command
+palette, per-feature hotkeys, UI zoom, toasts and the notification panel, the
+catalog, About, and a Settings window. The device bar carries the dropdown, the
+wireless pair/connect sheet, run-on-all and launching an emulator.
+Twenty-two screens are ported, from logcat and the file explorer to the per-app
+and device-state panels, deep links, the bug report and the **Terminal** — plus
+Settings ▸ Doctor over `ToolDetectionService`. The window menu landed with it:
+native, declared as a table in Rust, forwarding each click to the page, and
+owning its accelerators so the page's key handler cannot answer them twice.
+Still to come: the rest of the full-screen views, multi-window, Quick Actions
+with its global hotkey, the updater and Reactotron.
+
+The Terminal is the daemon's first two-way topic: `pty` carries the shell's
+output out and the client's keystrokes back in, base64 in both directions
+because a pty read can stop mid-character and terminal input includes the
+control codes a JSON string cannot hold (protocol §5.2). The shell itself is
+`Pty` over a small `CPty` C target — `fork` + `ioctl(TIOCSCTTY)` is the only way
+a child acquires a controlling terminal, and Swift marks `fork` unavailable
+because only async-signal-safe calls are legal before `exec`. The pane is
+xterm.js with `TerminalSplitTree` ported to `desktop/src/lib/terminal.ts`.
+Windows has no pty here (ConPTY is a different API, not a variation), so
+`openPty` throws and the pane says so. `docs/desktop-parity.md` records the
+eight platform traps that cost the most to find, and tracks the rest feature by
+feature.
+Mirroring is a decode/render stack to write off Apple, not a feature to drop —
+scrcpy's own server speaks the same protocol to any host.
 
 Two decisions worth keeping:
 

@@ -5,6 +5,15 @@ public struct ToolStatus: Sendable, Equatable {
     public let path: String?
     public let version: String?
     public let installHint: String
+
+    /// Public so a caller outside ADBKit can script a report — the daemon's
+    /// route tests stand up a toolchain rather than requiring one on the host.
+    public init(installed: Bool, path: String?, version: String?, installHint: String) {
+        self.installed = installed
+        self.path = path
+        self.version = version
+        self.installHint = installHint
+    }
 }
 
 /// Detects whether the external tools are installed, with an install hint

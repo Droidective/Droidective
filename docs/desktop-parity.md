@@ -11,21 +11,25 @@ rewriting one when something turns out to be more work than it looked.
 
 | | Count |
 | --- | --- |
-| ⬜ Not started | 19 |
-| 🟡 Partial | 40 |
+| ⬜ Not started | 17 |
+| 🟡 Partial | 42 |
 | ⛔ Not applicable off-Apple | 2 |
 | **Total registry features** | **61** |
 
-"Partial" is doing a lot of work in that table: 19 of the 37 are actions that
-run from the palette but have no screen of their own, and the 18 that do have
+"Partial" is doing a lot of work in that table: 19 of the 42 are actions that
+run from the palette but have no screen of their own, and the 23 that do have
 screens are each missing something the Mac version offers. Read it as *nothing
 is finished*, not as *most of it is done*.
 
-**Screens with a real pane today** (18): Apps, Logcat, Device Info, File
-Explorer, Crash Catcher, Performance, Root Status, Developer Settings, System
-Restrictions, Wi-Fi, Private DNS, App Info, Permissions, Memory Usage, Sandbox
-Browser, Manage App, Network Speed, Emulators, Install App — plus the two
-app-chrome screens, the catalog and About.
+**Screens with a real pane today** (23): Terminal, Apps, Logcat, Device Info, File
+Explorer, Crash Catcher, Bug Report, Performance, Root Status, Developer
+Settings, System Restrictions, Wi-Fi, Private DNS, Network Speed, Emulators,
+Install App, App Info, Permissions, Memory Usage, Sandbox Browser, Manage App,
+Deep Links, Reactotron — plus the two app-chrome screens, the catalog and
+About. That list is not written here twice:
+`scripts/generate-parity-tracker.py` reads it out of the desktop app's pane
+router, so a screen that lands is partial in the checklist below without anyone
+remembering to say so.
 
 **Only two features are out of scope**, and only because they drive an Apple
 toolchain rather than a device: `ios-logs` and `push-notification` are `xcrun
@@ -48,9 +52,10 @@ modifier has no Windows/Linux equivalent, and a label that names a platform
 
 The per-feature sections are **generated from the sources**, not written from
 memory: the registry as `/v1/features/list` serves it, the id → view mapping
-from `FeatureDetailRoute` + `FeatureDetailView.pane`, and the "must replicate"
-lists from the actual `Button`/`Toggle`/`Picker`/`Menu`/`TextField`/`.help`/
-`.searchable`/`.keyboardShortcut` calls in each SwiftUI view.
+from `FeatureDetailRoute` + `FeatureDetailView.pane`, the "must replicate" lists
+from the actual `Button`/`Toggle`/`Picker`/`Menu`/`TextField`/`.help`/
+`.searchable`/`.keyboardShortcut` calls in each SwiftUI view, and which screens
+this app already has from the desktop pane router itself.
 
 That means the lists are **evidence, not a specification**. They are a floor:
 an affordance that is not a literal string in the view (a gesture, a drag, an
@@ -75,9 +80,11 @@ split panes and no palette produces something that looks like Droidective in a
 screenshot and does not feel like it in use — and every screen ported before
 the shell exists will need reworking to live inside it.
 
-The sidebar, the tab strip, split panes and the palette have landed, so a screen
-ported now opens in a tab, splits, and is reachable from the palette without
-being reworked for any of it. Hotkeys and the chrome are still outstanding.
+The sidebar, the tab strip, split panes, the palette, per-feature hotkeys, the
+UI zoom and the device bar have landed, so a screen ported now opens in a tab,
+splits, takes a shortcut and reports through the toasts without being reworked
+for any of it. What is left of the shell is the menu bar, multi-window, and the
+window translucency.
 
 1. **Shell parity** (below) — tabs, split panes, sidebar, palette, hotkeys.
 2. **The screens people open every day** — logcat, file explorer, device info,
@@ -108,7 +115,14 @@ the chrome and the device bar have not.
       HTML5 drag) and WebKit needs `-webkit-user-drag: element`, because the
       app sets `user-select: none` and WebKit will not drag unselectable
       content.
-- [ ] **Auto-hiding sidebar** (Dock-style).
+- [x] **Auto-hiding sidebar** (Dock-style) — the device bar's leading button
+      switches between the pinned sidebar and auto-hide, hovering the window's
+      left edge peeks it, and Ctrl/⌘ + B toggles. ADBKit's `SidebarVisibility`
+      is ported to `lib/sidebarMode.ts` with its two transitions intact,
+      including the one worth keeping: with the pinned sidebar evicted by a
+      split-resize, the button brings it back rather than switching a mode
+      nobody could see. Only the *mode* is persisted; whether it happens to be
+      peeked right now is a fact about this session.
 - [x] **Feature tabs** — a permanent Home tab leading the strip, drag to
       reorder, ⌘W / Ctrl+W to close, ⌘1–⌘9 to jump. Open tabs stay mounted and
       hidden rather than unmounted, so a background tab keeps its log stream and
@@ -129,7 +143,13 @@ the chrome and the device bar have not.
       what makes the *tab* drags work at all, so the two have to coexist rather
       than one being switched off for the other.
 - [ ] **Multi-window** (`docs/multi-window.md`).
-- [ ] **⌘= / ⌘- zoom** of the whole UI.
+- [x] **⌘= / ⌘- zoom** of the whole UI, with ⌘0 for Actual Size and the same
+      eight steps the Mac walks, so the same number of presses lands on the same
+      size in both apps. The content is laid out at `size / scale` and scaled up
+      — the Mac's own description of its `scaleEffect` — and the sizing is
+      explicit rather than left to the engine, because `zoom` on the root
+      behaves like page zoom only where the standardised version shipped and
+      this app also runs on WebKitGTK. Also in Settings ▸ Appearance ▸ Window.
 
 ### Finding things
 
@@ -138,7 +158,18 @@ the chrome and the device bar have not.
       opens, Ctrl/⌘ + P pins. With no query it opens on the pinned list; with
       one, relevance decides and pins are not promoted. Commands are not in it
       yet — this app has no custom commands to offer.
-- [ ] **Per-feature hotkeys**, recordable, with a live-preview recorder.
+- [x] **Per-feature hotkeys**, recordable, with a live-preview recorder — from
+      Settings ▸ Hotkeys or a sidebar row's right-click. The Mac's rules: at
+      least one of Ctrl/Alt/⌘, Esc cancels, Backspace clears, an instant action
+      runs where anything else opens. Two differences, both stated where they
+      occur. They fire **while the window has focus**, not globally: the OS
+      registration arrives with the Quick Actions panel below, and the recorder
+      says so rather than promising it now. And a **toggle opens rather than
+      running** — the Mac flips it from the override state it tracks, which this
+      app does not keep, so it would have to guess a direction and write it to a
+      device. The combinations the shell owns (⌘K/T/W/\\/,/1–9) are refused with
+      the name of the command that holds them, because a window shortcut cannot
+      outrank the shell the way an OS-registered one does.
 - [ ] **Global hotkey → Quick Actions panel** — the non-activating mini app:
       grid of every runnable action, pinned first, custom commands, pick-device
       interstitial, ⌘⏎ run-on-all.
@@ -151,12 +182,37 @@ the chrome and the device bar have not.
 
 ### Device bar
 
-- [ ] Device **dropdown** with model, state and enrichment (already close).
-- [ ] **Wireless pair & connect sheet** — pairing code, direct `ip:port`, and
-      the one-click USB→Wi-Fi bootstrap.
-- [ ] **Run-on-all** across connected devices for `supportsRunAll` features.
-- [ ] **Launch an emulator** from the bar.
-- [ ] **Pull progress strip** in the window's safe-area inset.
+- [x] Device **dropdown** with model, state and enrichment — a popover rather
+      than a `<select>`, because the Mac's menu is where an emulator gets
+      launched and a device gets paired, and a native select cannot hold
+      sections that *do* things. Its sections in its order: the devices, the
+      AVDs not already running, Wireless debugging, Manage emulators. The
+      leading status icon carries the colour and the tooltip, outside the menu,
+      as the Mac splits them. **Absent:** the Windows section (multi-window,
+      backlog 21) and the iOS Simulators section (`simctl`).
+- [x] **Wireless pair & connect sheet** — the Mac's three tabs, its numbered
+      steps and its wording: Android 11+ pairing with the code and the
+      *pairing* port, a plain connect that takes a bare host at adb's own 5555,
+      and the one-click USB→Wi-Fi bootstrap. Endpoints are parsed
+      **daemon-side** by `ConnectionService.parseEndpoint`, so the two apps
+      cannot disagree about what adb accepts; this side only decides when a
+      button lights up (`lib/endpoint.ts`, deliberately permissive). A
+      successful pair carries the endpoint the device then advertised over mDNS,
+      so it connects without asking for a port the phone never showed.
+- [x] **Run-on-all** across connected devices for `supportsRunAll` features —
+      the switch appears only with more than one ready device *and* a focused
+      feature the registry says fans out, and `effectiveRunOnAll` gates the
+      fan-out on both, so a switch left on from Send Text can never reach a
+      single-device action. The device pill is pinned while it is in effect.
+      Send Text and Install App are the two ported features it applies to.
+- [x] **Launch an emulator** from the bar — the AVDs with no running serial,
+      re-read whenever the device set changes.
+- [x] **Disconnect a wireless device** from the bar, as the Mac offers beside a
+      wireless device's pill.
+- [ ] **Pull progress strip** in the window's safe-area inset. Needs the
+      protocol to grow a pull that *reports* — today `/v1/files/pull` either
+      answers or does not — so it is not UI work, and it sits with the other
+      pull gaps below.
 
 ### Chrome and feel
 
@@ -187,17 +243,27 @@ memory — the file each item names is the thing to replicate.
       arrives with, rather than showing switches that control nothing.
 - [x] **Appearance** — Theme (light/dark/system) and Accent as presets *and* a
       colour well *and* a hex field with Reset, plus the light theme itself
-      and the low-contrast warning. **Still missing:** Background and Text
-      colour, Font family and Text size, the Window opacity/blur/grain
-      sliders, and the Developer self-metrics overlay.
+      and the low-contrast warning. A Window section carries the sidebar mode
+      and the UI size. **Still missing:** Background and Text colour, Font
+      family, the Window opacity/blur/grain sliders (which the section names as
+      not ported), and the Developer self-metrics overlay.
 - [x] **Privacy** — Data & Storage ▸ the captures and pulls folder, with Open.
       Telemetry says outright that this app sends nothing, which is true and
       worth stating rather than leaving as an unchecked box. **Still
       missing:** Change…/Reset for the folder, and the Command Log.
-- [ ] **Doctor** — the toolchain check, with the install source for anything
-      missing. The app never installs a tool itself.
+- [x] **Doctor** — the toolchain check over `ToolDetectionService`: a verdict,
+      then adb and emulator with their version and path, and the install source
+      for anything missing. The Mac's own two checks — scrcpy and ffmpeg are
+      detected but not *checked*, because on the Mac they are bundled and here
+      the features that would need them are not ported yet. The app never
+      installs a tool itself, on either platform. The device bar carries the
+      "adb not found" warning off the same one detection.
 - [ ] **Tools** — the managed-tool store: download, size, remove, upgrade.
-- [ ] **Hotkeys** — the Global section plus a per-feature recorder.
+- [x] **Hotkeys** — every feature in sidebar order with a live-preview
+      recorder, plus the Mac's "Hidden features with shortcuts" section, since a
+      feature turned off in the catalog keeps its shortcut and would otherwise
+      be unbindable. The Global pair names what it waits on rather than showing
+      a recorder that controls nothing.
 - [ ] **MCP** — shown conditionally on the Mac; the Reactotron MCP server's
       switches. Follows Reactotron (backlog 23).
 
@@ -223,8 +289,8 @@ memory — the file each item names is the thing to replicate.
       two Quick Actions pages and the confetti finale.
 - [ ] **What's New** (`WhatsNewPresenter`) — on first launch of a new version.
 - [ ] **Star prompt** (`StarPromptView`) — the recurring, capped GitHub nudge.
-- [ ] **Wireless connect sheet** (`WirelessConnectSheet`) — the three-tab
-      pairing / connect / tcpip bootstrap.
+- [x] **Wireless connect sheet** (`WirelessConnectSheet`) — the three-tab
+      pairing / connect / tcpip bootstrap, opened from the device dropdown.
 - [ ] **Installed-apps picker** (`InstalledAppsPickerView`) and the **bundle
       manager** (`BundleManagerView`).
 - [ ] **Overrides pill** (`OverridesPillView`) — the standing reminder that a
@@ -260,7 +326,9 @@ somebody already has in their fingers.
       follows it.
 - [x] **Custom accent**, with the low-contrast warning. **Background and text
       colour are still missing**, as is the luminance-following scheme.
-- [ ] **Font family and text-size scale**, and the ⌘= / ⌘- zoom.
+- [x] **The ⌘= / ⌘- zoom.** **Font family and the text-size scale are still
+      missing** — the zoom scales everything together, where the Mac also lets
+      the text size move on its own.
 - [x] **Empty states per feature** ("connect a device") — the Mac's
       `NoDeviceView` shape, with its per-feature copy table ported.
 - [ ] **Native notifications** — a finished background install, a crash caught
@@ -330,6 +398,10 @@ Tick an item here when its PR merges; the detail stays in the sections above.
 | ✅ | Sidebar footer, catalog, About, Settings, light theme | #265 |
 | ✅ | Network Speed | #265 |
 | ✅ | Emulators and Install App | #265 |
+| ✅ | Per-feature hotkeys and their recorder | — |
+| ✅ | Device bar: dropdown, wireless sheet, run-on-all, launch an emulator | — |
+| ✅ | Auto-hiding sidebar and the ⌘= / ⌘- UI zoom | — |
+| ✅ | Deep links, Bug Report, and Settings ▸ Doctor | — |
 
 **Next, in order.** Everything from *File explorer* down needs four layers, not
 one — a daemon route in Swift, a Rust command, a pane, and tests at both ends.
@@ -353,10 +425,16 @@ often someone opens them rather than by how hard they look.
    watermark so the main-buffer fallback cannot resurface what it cleared.
 4. ~~**Performance monitor.**~~ Landed — record-first as `PerformanceView` is,
    with the Stop-then-export dialog and both export formats.
-5. **Per-feature hotkeys** with a live-preview recorder. Client-side, and the
-   only shell item left that people will miss daily.
-6. **Device bar parity** — wireless pair and connect, run-on-all for
-   `supportsRunAll`, launch an emulator, the pull-progress strip.
+5. ~~**Per-feature hotkeys** with a live-preview recorder.~~ Landed —
+   client-side, from Settings ▸ Hotkeys and a sidebar row's right-click. Window
+   shortcuts, not OS-registered ones; the global half arrives with item 19.
+6. ~~**Device bar parity**~~ — landed: the dropdown with its sections, the
+   wireless pair/connect sheet, run-on-all for `supportsRunAll`, launching an
+   emulator, and disconnecting a wireless device. `supportsRunAll` is a new
+   field on the wire; the endpoint parsing stayed daemon-side on purpose. **The
+   pull-progress strip did not**: it needs a pull that reports progress, which
+   the protocol has no shape for yet, so it moved to the gaps below beside the
+   other pull limitations.
 7. ~~**The notification surfaces.**~~ Landed — `ToastOverlay` and the history
    panel behind the device bar's bell, with every ported screen converted off
    its inline banner. The Command Log sheet is still outstanding: it needs the
@@ -391,13 +469,60 @@ often someone opens them rather than by how hard they look.
     because a webview drag hands over a `File` with no path — **so it has no
     drag and drop yet**, and the zone says so. It also installs onto one
     device rather than every targeted one, pending run-on-all (item 6).
-14. **Deep links and bug report.**
-15. **Auto-hiding sidebar, UI zoom, window translucency** — `WindowEffects` is
-    already pure-tested in ADBKit; blur needs a per-platform answer.
-16. **The menu bar** — Tauri's native menu and its accelerators, over the same
-    File / Terminal / Tab / Go / View / Edit / Help commands `ADTApp.swift`
-    declares. A webview has no menu of its own, and every item there is a
-    shortcut somebody already has in their fingers.
+14. ~~**Deep links and bug report.**~~ Landed, with the Doctor tab alongside
+    them since it is one route over a service that already existed. Deep links
+    live in the daemon's store — **the same file the Mac app writes**, under the
+    shared support dir — so a developer running both has one store; the Mac keys
+    it by saved-bundle id and this keys it by package id, so the two sets sit
+    side by side rather than merging, and that is the honest state of it until
+    this app grows a bundle store. The bug report needed one gated ADBKit
+    change: its zip step went through `HostArchive`, so Windows uses the system
+    bsdtar while the POSIX argument vector is byte-identical to what it always
+    ran.
+15. **Window translucency** — the auto-hiding sidebar and the UI zoom have
+    landed; translucency has not. `WindowEffects` is already pure-tested in
+    ADBKit, so the *math* is done, but the blur needs a per-platform answer
+    (Mica on Windows, a compositor effect on Linux) and Settings ▸ Appearance ▸
+    Window says so rather than showing sliders that move nothing.
+16. **The menu bar** — landed. `src-tauri/src/menu.rs` declares File / Edit /
+    View / Tab / Help / Go as a table and Rust forwards each click to the page,
+    which is where everything they act on lives (`useMenuCommands`). Two
+    invariants are tests rather than intentions: `menu.rs`'s own suite refuses a
+    duplicate id, an accelerator bound twice, and a terminal command without
+    Shift; `useMenuCommands.test.ts` reads that table and fails on an item with
+    no handler *or* a handler with no item. The terminal's six state-dependent
+    items grey out when no terminal is open, the way
+    `.disabled(!terminalCommandsEnabled)` does on the Mac.
+
+    **The menu owns its accelerators and the page defers.** Both answering one
+    would run it twice — Ctrl+W closing two tabs — so `lib/menuKeys.ts` lists
+    what the menu binds, `useShellShortcuts` returns early on it, and
+    `menuKeys.test.ts` reads `menu.rs` to keep the two lists identical, labels
+    included. That is the Mac's own arrangement (`NSMenu` sees a key before any
+    view) and it fails in the recoverable direction: a platform that failed to
+    deliver an accelerator leaves the command one click away, where a
+    double-fire silently destroys work. `reservedCommand` now refuses the
+    menu's combinations too, so a feature hotkey can no longer be bound to
+    something the platform would shadow.
+
+    Still to come here: **New Window** and **New Window for Device** (they need
+    multi-window, item 21), **Find in Terminal / Find Next / Find Previous**
+    (the xterm search addon and the Mac's find bar), and **Full View** (⇧⌘F).
+    Omitted rather than added as items that do nothing.
+
+    **Three accelerators had to move, each forced rather than chosen:**
+
+    | Mac | here | why |
+    | --- | --- | --- |
+    | ⌘N New Terminal | Ctrl+**Shift**+N | Ctrl+N is the shell's next-history-line |
+    | ⌘D / ⇧⌘D splits | Ctrl+Shift+D / Ctrl+Shift+**E** | Ctrl+D is end-of-input; D is taken by the first axis, and GNOME Terminal splits with E |
+    | ⇧⌘W Close Terminal | Ctrl+Shift+W | unchanged in shape, listed because Ctrl+W alone deletes a word |
+    | ⌘1–9 Go rows | **Alt**+1–9, Alt+0 | the Mac has ⌘ *and* ⌃ for two meanings; here Ctrl+digit stays the tabs, as it is in every browser |
+
+    ⌘T is *not* a divergence: the Mac's "New Tab" opens the search palette and
+    the chosen feature lands in a tab, which is exactly what Ctrl+T has always
+    done here. It was nearly "fixed" the wrong way — reading `ADTApp.swift`
+    rather than trusting the label is what caught it.
 
 **Known gaps inside work already called done.**
 
@@ -419,8 +544,10 @@ often someone opens them rather than by how hard they look.
   already there when someone wants it.
 
 - **No ⌘C / ⌘X / ⌘V in the File Explorer, and no keyboard navigation.** The
-  buttons do all of it; the shortcuts wait on the hotkey work in item 5, which
-  is where key handling should live rather than one screen growing its own.
+  buttons do all of it. The hotkey work in item 5 built the *recorder* and the
+  per-feature dispatch, not a per-screen key map, so this is still open — and it
+  belongs to the screen rather than the shell, since only the explorer knows
+  what a selection is.
 
 - **A pull overwrites a same-named file** in `~/Downloads/Droidective` without
   asking, as `export_text` already does. The Mac asks for a save location; a
@@ -430,7 +557,9 @@ often someone opens them rather than by how hard they look.
 - **A pull cannot be cancelled, and shows no progress.** The Mac's pull
   progress strip lives in the window's safe-area inset and polls the
   destination file's size against the known source size. Here a pull is a
-  request that either answers or does not.
+  request that either answers or does not — so the strip is a *protocol* gap
+  rather than a UI one, and it is the one part of the device-bar item (6) that
+  did not land with the rest.
 
 - **App Info's Pull APK saves to `~/Downloads/Droidective`** rather than asking
   where. Same rule as every other pull here, and the same gap.
@@ -440,14 +569,32 @@ often someone opens them rather than by how hard they look.
   polling, which the Mac pauses via `tabIsActive`. It needs the pane to know
   whether it is the visible one.
 
-- **Settings has no role picker, no Command Log, no Doctor, no Tools, no
-  Hotkeys and no MCP tab.** Each names its blocker in the tab itself.
+- **Settings has no role picker, no Command Log, no Tools and no MCP tab.** Each
+  names its blocker in the tab itself. Hotkeys and Doctor have landed.
+
+- **A bug report needs `zip` on a Linux host.** macOS ships it and Windows uses
+  the system bsdtar, but on Linux it is a package that may not be installed —
+  so the failure names the archiver it could not run rather than blaming the
+  device. Writing a zip without an external tool would mean a new dependency for
+  one button.
+
+- **No global hotkeys.** The recorded shortcuts are window shortcuts: they fire
+  while Droidective has focus, where the Mac registers them with the OS and they
+  fire from anywhere. The recorder and the Hotkeys tab both say so. It arrives
+  with the Quick Actions panel (backlog 19), which needs the same
+  `tauri-plugin-global-shortcut`.
+
+- **A hotkey on a toggle opens it rather than running it.** The Mac flips a
+  state override from `activeOverrides`, which it tracks and this app does not,
+  so running one would mean guessing a direction and writing it to a device. An
+  instant action runs, exactly as on the Mac.
 
 - **Install App has no drag and drop and no live stage line.** The drop is
   backlog 17. The stage line — "Unpacking", "Reading device", "Installing 4
   APKs" — needs the install's `onStage` callback to reach the client, which
   means a stream rather than the request/response route it has; for a large
-  `.xapk` that is a minute with no feedback beyond "Installing…".
+  `.xapk` that is a minute with no feedback beyond "Installing…". It *does*
+  install onto every targeted device now.
 
 - **Emulators lists no iOS Simulators.** Deliberate: `xcrun simctl` is one of
   the two genuinely unportable things. The section is absent rather than
@@ -456,6 +603,75 @@ often someone opens them rather than by how hard they look.
 - **The Crash Catcher's failed empty state has no Try Again button.** Refresh
   sits in the toolbar above it and is never hidden, so a second button beside
   it would be two names for one action.
+
+**Landed: the Terminal.** Real login shells over the daemon's `pty` topic,
+drawn by xterm.js. Tabs with a Chrome-style top strip (the Mac's default since
+v3.1.0), panes split from the `TerminalSplitTree` model ported to
+`desktop/src/lib/terminal.ts` with its ADBKit tests translated alongside it, and
+the device on the bar exported as `ANDROID_SERIAL` into each new shell so adb
+inside needs no `-s`. Protocol details are in `docs/droidectived-protocol.md`
+§5.2. Eight things were learned the hard way and are worth not rediscovering:
+
+- **`TIOCSWINSZ` on the master fails on macOS** with ENOTTY. The window size
+  goes on the *slave*, and a terminal whose size never took reports 0×0 — which
+  makes every full-screen program draw into nothing.
+- **The slave descriptor is held for the pty's whole life.** Closing the last
+  slave hangs the master up, so opening one per resize races the child's own
+  open and kills the shell before it prints a prompt. Closing it when the child
+  is reaped is what makes the master report EOF.
+- **`close()` does not interrupt a blocking `read`** on Darwin — it waits for
+  it. Since the reader is blocked whenever the shell is idle, closing from
+  another thread hung the caller; the reader is woken through a pipe and owns
+  closing the master itself.
+- **`fork` is required, not `posix_spawn`.** The child needs
+  `ioctl(TIOCSCTTY)`, which no spawn file action can express, and without it the
+  shell reads a terminal it does not control, takes SIGTTIN and stops — alive,
+  echoing every keystroke through the tty driver, running nothing. That failure
+  looks exactly like a working terminal until you press Return. The `fork` is in
+  C because between fork and exec only async-signal-safe calls are allowed,
+  which is why Swift marks `fork` unavailable in the first place.
+- **The size is set in one place, the parent.** Setting it in the child raced a
+  caller's immediate resize and restored 80×24 about one run in three — only
+  under `make verify` load, which is the worst way to find a race.
+- **Base64 in both directions, because the payload is bytes.** A pty read ends
+  wherever its buffer filled, so a chunk can stop mid-character and a JSON
+  string would substitute U+FFFD — on non-ASCII only, which is how that ships.
+  Inbound it is the control codes: Ctrl-C is `0x03`, and no JSON string carries
+  it. `encodeInput` also avoids `String.fromCharCode(...bytes)`, which throws on
+  a paste of a few tens of thousands of characters.
+- **A React effect opens the first shell *once*, tracked in a ref.** Guarding on
+  "are there no tabs?" opens two: development runs an effect twice and both
+  passes see the same empty list, so the feature opened with two ptys and two
+  prompts for one click. Visible in a screenshot, invisible in the unit tests.
+- **The shell starts in `$HOME`, not the daemon's working directory.** The
+  sidecar inherits the launching app's cwd, which in a development build is the
+  build folder — so every session began with a `cd`. `Pty.spawn` takes a
+  directory and the C shim `chdir`s in the child, unchecked, because a deleted
+  directory must not cost someone their terminal.
+
+**Keyboard, and why it diverges.** ⌘T/⌘W/⌘D/⇧⌘D become **Ctrl+Shift+T / W / D /
+E**, and the Shift is forced rather than preferred: ⌘ is a modifier no shell has
+ever seen, while a bare Ctrl+letter belongs to the program in the terminal —
+Ctrl+D is end-of-input, Ctrl+W deletes a word, Ctrl+T transposes. E is the
+second split axis because GNOME Terminal already splits with it. The pane
+catches these in the capture phase and stops them, so neither xterm nor the
+window's own shortcuts see them: the pane with focus wins, which is how every
+terminal behaves.
+
+**What the pane still owes the Mac.** Tab *groups* (New Group, Close Group, New
+Terminal Here), the right-click context menu, dragging a tab
+between panes, drag-and-drop of a file to insert its quoted path
+(`TerminalText.droppedPathsInsertion`), the collapsed-rail badges
+(`TerminalText.railBadge`), the left-rail alternative to the top strip, the find
+bar (⌘F/⌘G), and drag-resizable pane dividers — the panes are equal siblings
+today, which is what the split model produces but not what the Mac lets you
+adjust. Renaming a tab landed with the menu (double-click it, or ⇧⌘R), as did
+Next/Previous Terminal. `TerminalResume`'s reopen-where-you-left-off is deferred on purpose: it
+needs the shell's *live* cwd read out of the kernel (`proc_pidinfo` on the Mac,
+`/proc/<pid>/cwd` on Linux, nothing on Windows), and restoring tabs without
+their directories would look like the Mac and behave differently. **Windows has
+no pty here** — ConPTY is a different API, so `openPty` throws and the pane
+renders the reason rather than appearing and failing silently.
 
 **The subsystems, after the screens.** These were once listed as "not planned".
 They are planned: the goal is that someone moving between the two apps does not
@@ -489,15 +705,215 @@ after the screens rather than instead of them.
 22. **The welcome tour** on first run.
 23. **The updater** — Sparkle is macOS-only, so this is `tauri-plugin-updater`
     behind the same "Relaunch to update" pill and What's New sheet.
-24. **Reactotron** — blocked only on the relay's `Network.framework` listener
-    being ported to NIO. `ReactotronMCP` already proves the NIO listener works;
-    this is the same job for the relay socket.
-25. **Mirror, screen record, and the video editor.** The Mac's pipeline is
-    VideoToolbox + AVFoundation + a `Network.framework` socket, none of which
-    exists off Apple — but the *capability* is not Apple-only. scrcpy's own
-    server speaks the same protocol to any host, and the bundled ffmpeg already
-    builds for Windows and Linux. This is a decode/render stack to write, not a
-    feature to drop.
+24. **Reactotron** — **the relay has landed; the pane has not.**
+    `ReactotronRelay` in the daemon is a NIO WebSocket listener speaking
+    upstream's protocol, feeding the portable `ReactotronCommand` decoders that
+    ADBKit already shares with the Mac. It reaches a client as the `reactotron`
+    stream topic (protocol §5.3), and `POST /v1/reactotron/reverse` opens the
+    `adb reverse tcp:9090` tunnel that lets a device find it — with the same
+    three retries the Mac uses, because a just-attached device refuses the first
+    one.
+
+    Proven against real sockets rather than a fake: thirteen tests drive a
+    `URLSessionWebSocketTask` through the handshake, command decoding, frame
+    ordering, an undecodable frame, a disconnect, and the port being taken. A
+    mock would have proved nothing here — the whole class is a listener, and the
+    masking and reassembly are exactly what does not survive being faked.
+
+    **What is left, in order.** Each step stands on its own, which is why they
+    are separate — and the pure layers come first because they are the ones that
+    can be tested without a renderer, which is all this app has.
+
+    1. ~~**The timeline model, in `lib/`.**~~ **Landed.** Seven modules and 112
+       tests: `json.ts` (the sentinel repair and the bounded preview),
+       `embedded-json.ts`, `json-search.ts`, `reactotron.ts` (the wire types
+       decoded to a tagged event), `reactotron-rows.ts` (badge, headline,
+       filterable kind), `reactotron-buffer.ts` (the bounded ring and the frame
+       reducer) and `reactotron-filter.ts`. The caps are the Mac's own —
+       `ReactotronTimeline`'s 2000 rows and 128 MiB, trimmed oldest-first with
+       7/8 hysteresis — for the Mac's reason: a React Native client streams
+       frames of arbitrary size, so a count cap alone still lets the retained
+       timeline reach gigabytes.
+
+       Three things came out differently from the plan, each on purpose:
+
+       - **`JSONValue` does not come across.** Swift needs a tagged union to
+         hold an arbitrary payload; TypeScript already has one. Every *decision*
+         in ADBKit's enum is ported, and its tests came with them, but
+         `case .string(let text)` is just `typeof value === "string"`.
+       - **`JSONTreeLayout` does not come across either.** It is pixel
+         arithmetic — SF Mono's 0.6 em advance, a 14 pt disclosure column —
+         computing how many characters fit a wrapped line, because SwiftUI's
+         `lineLimit` is "a drawing instruction the height doesn't always
+         follow". A DOM wraps text natively and `-webkit-line-clamp` collapses
+         it correctly, so porting the maths would be porting the workaround, not
+         the behaviour. The behaviour — three wrapped lines collapsed, a
+         disclosure when the value overflows them — is step 3's, in CSS.
+       - **Two fields were added to the `reactotron` envelope** (protocol §5.3),
+         because the model is wrong without them: `bytes`, since a client can
+         only recover a frame's size by re-serializing every payload as it
+         arrives, and `code`, since the Mac's most useful disconnect notice —
+         1001 means the app out-produced the connection, log ids not whole
+         objects — cannot be written without the close status. Both are proven
+         off a real client's frames in `ReactotronRelayTests`.
+    2. ~~**The feed pane.**~~ **Landed.** `ReactotronPane` over
+       `useReactotron`, with the toolbar's filter/search/sort/clear, the status
+       strip, the row, Reactotron's own four-section filter dialog, and the
+       waiting screen that carries the `adb reverse` button — because a relay
+       listening with no tunnel is the failure that reads as the feature being
+       broken. The relay's `bytes` and `code` fields are what let the row bound
+       itself and the disconnect notice name its cause.
+
+       It takes a device rather than requiring one, which is the difference from
+       every other feed here, so it joins `emulators` and `terminal` in
+       `FeaturePane`'s `hostPane` — all three run against *this* machine and
+       work with nothing connected. `hints.test.ts` reads the router to decide
+       which panes need a connect-a-device line, so it now cuts at `hostPane`:
+       `reactotron` is *handed* a device and still must not be on that list.
+
+       Verified live against a stand-in React Native client: the badge tones,
+       the API statuses (200/201/304/500/401 and `ERR` for the 0 a failed
+       request reports), a logged object previewed as compact JSON, the four
+       filter sections offering only the methods the app actually sent, and the
+       1001 disconnect notice with its amber edge bar.
+
+       **Two divergences from the Mac, both deliberate.** A headline truncates
+       at the end rather than in the middle — CSS has no middle ellipsis, and
+       `shortPath` already trims a URL to path plus query, so the interesting
+       part survives. And the per-pane split (with its own filter and
+       `reactotronPane<n>NewestFirst` per pane) is not here: the split-pane
+       model is backlog 20's, so this is one pane whose sort is per tab.
+
+       **One bug found and fixed on the way**, in the relay this depends on: an
+       actor is not a lock across a suspension, and both `start` and `stop`
+       suspend. A start landing mid-stop saw a nil channel, bound the same port
+       and got EADDRINUSE from a socket that was still open — reporting "another
+       Reactotron is probably running" with nothing else on the port; a stop
+       landing mid-start shut down the event-loop group the bind was waiting on,
+       which never completes, wedging the relay for the life of the process. The
+       first is what closing a timeline tab and reopening it did, and React's
+       double-mount did it on the very first open, so the pane failed every
+       time. Fixed with an explicit phase, and pinned by two tests that used to
+       hang the suite rather than fail it.
+    3. ~~**The detail side.**~~ **Landed.** A row expands into its payload:
+       `json-tree.ts` flattens a value into rows (pure, so the two things that
+       are easy to get subtly wrong are testable — the render order, and the
+       grafting of a stringified payload's rows in the string's place),
+       `JsonTree` renders them with find-in-object over `json-search.ts`, and
+       `ReactotronDetail` dispatches per event kind. `ReactotronApiDetail` adds
+       the whole URL, the status/method/duration lines, the four payload tabs
+       and Copy as cURL; `reactotron-curl.ts` is `ReactotronCurl` ported
+       decision for decision, including all four repairs — the explicit verb so
+       a GET carrying a body does not become a POST, the params a rewritten
+       `responseURL` lost, the FormData rebuild, and `--form-string` so a value
+       starting with `@` is not read as a file. The copy verbs are
+       `reactotron-copy.ts`: line, object, value, and events-as-JSON.
+
+       The ordinal paths are the coupling that makes a search result clickable:
+       `json-tree.ts` and `json-search.ts` agree on one scheme — object children
+       sorted by key, array items in order — and a test asserts the coupling
+       rather than each side alone. The collapse is CSS, not the ported pixel
+       maths (see step 1).
+
+       Verified live against **StreamLab**, a real React Native app with
+       `reactotron-react-native`, `reactotron-redux` and `reactotron-redux-saga`
+       wired up. Two things only a real client showed: its config calls
+       `clear()` on startup, which exercised the per-connection clear scoping
+       and exposed an empty state that claimed a filter was hiding events when
+       there were none; and a real `api.response` body arrives as a *string* of
+       JSON, so the Response tab showing ten user objects is `parseEmbedded`
+       grafting rather than a wall of escaped text.
+    4. ~~**Export and the restarts.**~~ **Landed.** The toolbar's export menu
+       saves or copies what is *shown*, so a filter narrows the export as well
+       as the view, and both verbs hand over the same thing: the **raw wire
+       commands**. Raw rather than enriched, matching the Mac — a badge and a
+       headline are this app's rendering choices, and a machine-readable export
+       must not invite a script to depend on something free to change.
+
+       The split Restart button restarts on a press and offers the two clearing
+       variants behind its chevron: `pm clear --cache-only`, raced against a
+       10-second timeout because it never returns on some images (observed on
+       the API 36 emulator), and `pm clear`, always behind a confirmation
+       because it signs you out. A failed clear is reported rather than fatal —
+       the restart proceeds and the wording says which happened.
+
+       Picking the app to restart is `lib/reactotron-restart.ts`, pure and
+       tested: the client's own name first (the only signal naming the app that
+       is actually talking to us), then the foreground app but *only* when it is
+       something we can see installed, then ask. That middle step needed a new
+       daemon route, `POST /v1/apps/foreground`, whose absent answer is an
+       omitted key rather than an error — the launcher is in front more often
+       than any app is.
+
+       Verified live against StreamLab: **the export copied 11 real events** in
+       the wire shape with no presentation leaked, and **Restart app moved the
+       app's pid** (20890 → 21121) with the notice reading
+       "Restarting com.streamlab…" and the strip flipping to "no app
+       connected" until it came back.
+
+    **What item 24 still lacks**, both named rather than implied: the Mac opens
+    a **picker sheet** when it cannot work out which app to restart, where this
+    reports the reason and points at the Apps screen; and the **per-pane split**
+    (two timelines side by side, each with its own filter and
+    `reactotronPane<n>NewestFirst`) belongs to backlog 20's split-pane model, so
+    the sort here is per tab.
+
+    Deliberately later: the **MCP server** over the relay. `ReactotronMCP` is a
+    separate package that depends on the Mac-gated `ReactotronServer`, so
+    pointing it at this relay is its own change rather than part of the pane.
+
+    One thing to know before debugging it: **two Reactotrons can both bind
+    9090.** `portInUse` catches the collision when the address families match,
+    but observed on a Mac running both apps, the Mac app held the IPv6 wildcard
+    while the daemon took IPv4 loopback and neither failed — so the device's
+    traffic goes to whichever owns IPv4 loopback. The Mac has the same property
+    against upstream's Electron app, so it is parity, not a regression.
+25. **Mirror, screen record, and the video editor.** Smaller than it looks.
+    The instinct is "a decode/render stack to write from scratch", but counting
+    the files says otherwise: of the eighteen in `ADBKit/Services/Mirror`,
+    **thirteen are already portable** — `ScrcpyStreamDecoder`,
+    `ScrcpyAudioStreamDecoder`, `ScrcpyControlMessage`, `ScrcpyDeviceMessage`,
+    `ScrcpyServerParams`, `ScrcpyServerLocator`, `H264Format`, `H264NAL`,
+    `PCMMixdown`, `MirrorAudioFallback`, `ShowTouches`, plus `MirrorWall`'s
+    layout maths. scrcpy's own server speaks the same protocol to any host, and
+    the bundled ffmpeg already builds for Windows and Linux.
+
+    **Five files are gated, and they are the whole job:**
+
+    | Gated on | What it does | The portable answer |
+    | --- | --- | --- |
+    | `MirrorTransport` | `Network.framework` socket to the scrcpy server over `adb forward` | NIO, exactly the move `ReactotronRelay` already made |
+    | `MirrorSession` | the orchestrator — gated only because it holds the two below | falls out once they are |
+    | `H264Decoder` | VideoToolbox | the open question, below |
+    | `MirrorAudioPlayer` | AVFoundation playback | a Rust audio crate, or ffmpeg |
+    | `MirrorRecorder` | AVFoundation writer | ffmpeg, which the release already ships |
+
+    **Step 0 is a decision, not code.** Where does H.264 decoding happen? The
+    three candidates are genuinely different products, so this is worth settling
+    before anything is written:
+
+    1. **In the webview, via WebCodecs `VideoDecoder`.** The browser already has
+       a hardware decoder and a `canvas` to paint on, so the daemon only relays
+       the stream it already parses. Cheapest by far *if* it holds on both
+       targets — WebView2 is Chromium and certainly has it; **WebKitGTK is the
+       one to check first**, and if it does not, this option is dead on Linux.
+    2. **In Rust, painting a native surface.** Full control and no webview
+       dependency, at the cost of a decoder crate, a surface, and getting input
+       forwarding to line up with a region the webview does not own.
+    3. **In the daemon, streaming decoded frames.** Rejected on arithmetic
+       rather than taste: a 1080p60 raw stream is ~370 MB/s over the local
+       socket, which is not a thing to send through JSON framing.
+
+    Then, in order: the transport on NIO (it is the same shape as the relay, and
+    the `adb forward` tunnel *must* be torn down — see the mirror-teardown
+    convention, which the Mac learned by leaking one per quit); the session; one
+    tile; then the wall, whose layout is already ported. Screen record and the
+    video editor ride the session, so they follow rather than lead.
+
+    Two things the Mac learned the hard way and this must not relearn: a
+    session's teardown has to be **awaited** at quit or its `adb forward`
+    survives the process, and a new session for the same on-screen tile has to
+    **adopt the new display layer** or the tile keeps drawing the stopped one.
 
 **What genuinely cannot be ported.** Two features, and only for the reason
 that they drive an Apple toolchain rather than a device: `ios-logs` and
@@ -507,8 +923,7 @@ job, and the checklist now says which.
 
 ---
 
-## Per-feature checklists
-### Input & Clipboard
+## Per-feature checklists### Input & Clipboard
 #### `send-text` — Send Text  ·  🟡 partial
 > Type text, URLs, or symbols on the device
 - **Kind** `formAction`
@@ -527,10 +942,10 @@ job, and the checklist now says which.
   - [ ] label: Copy IP
   - [ ] tooltip: Refresh
 
-#### `emulators` — Emulators & Simulators  ·  ⬜ todo
+#### `emulators` — Emulators & Simulators  ·  🟡 partial
 > Launch and stop Android emulators & iOS Simulators
 - **Kind** `view`
-- **Note** Not started on Windows/Linux.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `EmulatorsView` — `App/Sources/FeatureDetail/Views/EmulatorsView.swift`
 - **Must replicate**
   - [ ] button: Wipe Data
@@ -550,20 +965,20 @@ job, and the checklist now says which.
 - **Kind** `instantAction`
 - **Note** Runs from the palette; no dedicated screen.
 
-#### `network-speed` — Network Speed  ·  ⬜ todo
+#### `network-speed` — Network Speed  ·  🟡 partial
 > Live download & upload throughput with recording
 - **Kind** `view`
-- **Note** Not started on Windows/Linux.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `NetworkView` — `App/Sources/FeatureDetail/Views/NetworkView.swift`
 - **Must replicate**
   - [ ] label: Export
   - [ ] label: seconds
   - [ ] tooltip: Export the recording as JSON + CSV
 
-#### `private-dns` — Private DNS  ·  ⬜ todo
+#### `private-dns` — Private DNS  ·  🟡 partial
 > Off, automatic, or a DNS-over-TLS provider
 - **Kind** `view` · **hub member**
-- **Note** Not started on Windows/Linux.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `PrivateDnsView` — `App/Sources/FeatureDetail/Views/PrivateDnsView.swift`
 - **Must replicate**
   - [ ] button: Apply
@@ -576,10 +991,10 @@ job, and the checklist now says which.
 - **Note** Runs from the palette; no dedicated screen.
 - **Parameters** `port` (preset)
 
-#### `wifi` — Wi-Fi  ·  ⬜ todo
+#### `wifi` — Wi-Fi  ·  🟡 partial
 > Connection details, toggle, saved networks & passwords
 - **Kind** `view`
-- **Note** Not started on Windows/Linux.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `WiFiView` — `App/Sources/FeatureDetail/Views/WiFiView.swift`
 - **Must replicate**
   - [ ] button: Connect
@@ -601,10 +1016,10 @@ job, and the checklist now says which.
 
 
 ### React Native
-#### `deep-link` — Deep Links  ·  ⬜ todo
+#### `deep-link` — Deep Links  ·  🟡 partial
 > Launch and save deep links per app
 - **Kind** `view` · **hub member** · **needs an app**
-- **Note** Not started on Windows/Linux.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `DeepLinksView` — `App/Sources/FeatureDetail/Views/DeepLinksView.swift`
 - **Must replicate**
   - [ ] button: Delete
@@ -669,10 +1084,10 @@ job, and the checklist now says which.
   - [ ] button: Forward
   - [ ] button: Set
 
-#### `reactotron` — Reactotron  ·  ⬜ todo
+#### `reactotron` — Reactotron  ·  🟡 partial
 > Live React Native inspector — logs, network, state, custom display
 - **Kind** `view`
-- **Note** Not started — blocked on porting the relay's Network.framework listener to NIO, which ReactotronMCP already proves out. Backlog 24.
+- **Note** Built, with two named gaps — the relay, the timeline model, the toolbar and filter dialog, the waiting screen with its `adb reverse` button, expandable rows with JSON trees, find-in-object, the API tabs, Copy as cURL, the copy verbs, the filter-aware export and the split Restart button. Missing: the restart's picker sheet, and the per-pane split (backlog 20's model). Backlog 24.
 - **macOS view** `ReactotronView` — `App/Sources/FeatureDetail/Views/ReactotronView.swift`
 - **Must replicate**
   - [ ] button: OK
@@ -820,10 +1235,10 @@ job, and the checklist now says which.
 - **Kind** `toggleAction` · **hub member**
 - **Note** Runs from the palette; no dedicated screen.
 
-#### `dev-settings` — Developer Settings  ·  ⬜ todo
+#### `dev-settings` — Developer Settings  ·  🟡 partial
 > Layout bounds, overdraw, taps, animation scales & more
 - **Kind** `view`
-- **Note** Not started on Windows/Linux.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `DeveloperSettingsView` — `App/Sources/FeatureDetail/Views/DeveloperSettingsView.swift`
 - **Must replicate**
   - [ ] tooltip: Refresh from the device
@@ -909,10 +1324,10 @@ job, and the checklist now says which.
   - [ ] button: Set
   - [ ] button: Clear
 
-#### `system-restrictions` — System Restrictions  ·  ⬜ todo
+#### `system-restrictions` — System Restrictions  ·  🟡 partial
 > Dev toggles — verifier, hidden APIs, SELinux (root)
 - **Kind** `view`
-- **Note** Not started on Windows/Linux.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `SystemRestrictionsView` — `App/Sources/FeatureDetail/Views/SystemRestrictionsView.swift`
 - **Must replicate**
   - [ ] button: Remount /system read-write
@@ -920,10 +1335,10 @@ job, and the checklist now says which.
 
 
 ### Logs & Diagnostics
-#### `bug-report` — Bug Report  ·  ⬜ todo
+#### `bug-report` — Bug Report  ·  🟡 partial
 > Zip screenshot + logs + device info + version
 - **Kind** `view`
-- **Note** Not started on Windows/Linux.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `BugReportView` — `App/Sources/FeatureDetail/Views/BugReportView.swift`
 - **Must replicate**
   - [ ] button: Open in Finder
@@ -978,10 +1393,10 @@ job, and the checklist now says which.
   - [ ] tooltip: Remove tag filter
   - [ ] export: save/export to a file
 
-#### `performance` — Performance Monitor  ·  ⬜ todo
+#### `performance` — Performance Monitor  ·  🟡 partial
 > Live CPU, RAM & FPS with recording and export
 - **Kind** `view`
-- **Note** Not started on Windows/Linux.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `PerformanceView` — `App/Sources/FeatureDetail/Views/PerformanceView.swift`
 - **Must replicate**
   - [ ] button: Export…
@@ -995,10 +1410,10 @@ job, and the checklist now says which.
   - [ ] tooltip: Stop recording
   - [ ] tooltip: Export the recording as JSON + CSV
 
-#### `root-status` — Root Status  ·  ⬜ todo
+#### `root-status` — Root Status  ·  🟡 partial
 > Check whether the device is rooted, and how
 - **Kind** `view`
-- **Note** Not started on Windows/Linux.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `RootStatusView` — `App/Sources/FeatureDetail/Views/RootStatusView.swift`
 - **Must replicate**
   - [ ] label: Re-check
@@ -1072,18 +1487,18 @@ job, and the checklist now says which.
   - [ ] button: Sign the rebuilt APK
   - [ ] button: Open in Finder
 
-#### `app-info` — App Info  ·  ⬜ todo
+#### `app-info` — App Info  ·  🟡 partial
 > Version, target SDK, size — and pull the APK
 - **Kind** `view` · **hub member** · **needs an app**
-- **Note** Not started on Windows/Linux.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `AppInfoView` — `App/Sources/FeatureDetail/Views/AppInfoView.swift`
 - **Must replicate**
   - [ ] export: save/export to a file
 
-#### `app-management` — Manage App  ·  ⬜ todo
+#### `app-management` — Manage App  ·  🟡 partial
 > Open, stop, clear, or uninstall an app
 - **Kind** `view` · **hub member** · **needs an app**
-- **Note** Not started on Windows/Linux.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `AppManagementView` — `App/Sources/FeatureDetail/Views/AppManagementView.swift`
 - **Must replicate**
   - [ ] button: Cancel
@@ -1128,19 +1543,19 @@ job, and the checklist now says which.
 - **Must replicate**
   - [ ] button: Stop frida-server
 
-#### `install-app` — Install App  ·  ⬜ todo
+#### `install-app` — Install App  ·  🟡 partial
 > Install an APK, APKS, XAPK, or APKM — drag and drop or pick a file
 - **Kind** `view`
-- **Note** Not implemented on macOS either.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `InstallAppView` — `App/Sources/FeatureDetail/Views/InstallAppView.swift`
 - **Must replicate**
   - [ ] button: Choose File…
   - [ ] label: Connect a device to install onto
 
-#### `meminfo` — Memory Usage  ·  ⬜ todo
+#### `meminfo` — Memory Usage  ·  🟡 partial
 > Live memory usage for an app
 - **Kind** `view` · **needs an app**
-- **Note** Not started on Windows/Linux.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `MeminfoView` — `App/Sources/FeatureDetail/Views/MeminfoView.swift`
 - **Must replicate**
   - [ ] label: seconds
@@ -1151,17 +1566,17 @@ job, and the checklist now says which.
 - **Note** Runs from the palette; no dedicated screen.
 - **Parameters** `count` (number)
 
-#### `permissions` — Permissions  ·  ⬜ todo
+#### `permissions` — Permissions  ·  🟡 partial
 > Grant or revoke runtime permissions
 - **Kind** `view` · **hub member** · **needs an app**
-- **Note** Not started on Windows/Linux.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `PermissionsView` — `App/Sources/FeatureDetail/Views/PermissionsView.swift`
   - [ ] *(no controls auto-detected — audit by hand)*
 
-#### `sandbox-browser` — Sandbox Browser  ·  ⬜ todo
+#### `sandbox-browser` — Sandbox Browser  ·  🟡 partial
 > Browse and pull app files (debug builds)
 - **Kind** `view` · **needs an app**
-- **Note** Not started on Windows/Linux.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `SandboxBrowserView` — `App/Sources/FeatureDetail/Views/SandboxBrowserView.swift`
 - **Must replicate**
   - [ ] button: Home
@@ -1222,22 +1637,25 @@ job, and the checklist now says which.
   - [ ] shortcut: .cancelAction
   - [ ] shortcut: .return, modifiers: .command
 
-#### `terminal` — Terminal  ·  ⬜ todo
+#### `terminal` — Terminal  ·  🟡 partial
 > Real shell tabs with the device on ANDROID_SERIAL
 - **Kind** `system`
-- **Note** Not started on Windows/Linux.
+- **Note** A pane exists; the checklist below is what it is missing. Tabs,
+  splits and the shell work; the per-tab rename, the tab groups, the context
+  menu and dragging a tab between panes do not, and `TerminalResume`'s
+  reopen-where-you-left-off is deferred with the cwd read it needs.
 - **macOS view** `TerminalView` — `App/Sources/FeatureDetail/Views/TerminalView.swift`
 - **Must replicate**
   - [ ] button: Rename
   - [ ] button: Cancel
   - [ ] button: Rename…
   - [ ] button: New Group…
-  - [ ] button: Split Vertically
-  - [ ] button: Split Horizontally
-  - [ ] button: Close Terminal
+  - [x] button: Split Vertically
+  - [x] button: Split Horizontally
+  - [x] button: Close Terminal
   - [ ] button: New Terminal Here
   - [ ] button: Close Group
-  - [ ] button: plus
+  - [x] button: plus
   - [ ] field: Name
   - [ ] tooltip: Close this terminal (kills its shell)
   - [ ] tooltip: Close this pane (kills its shell)
@@ -1245,4 +1663,4 @@ job, and the checklist now says which.
   - [ ] drag: drag and drop
 
 
-<!-- counts: {'done': 0, 'partial': 24, 'todo': 35, 'gated': 2} -->
+<!-- counts: {'done': 0, 'partial': 42, 'todo': 17, 'gated': 2} -->

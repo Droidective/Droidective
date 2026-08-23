@@ -23,11 +23,17 @@ extension DaemonBackend {
 
     func listApps(serial: String) async throws -> [AppListing] { [] }
 
+    func foregroundPackage(serial: String) async throws -> String? { nil }
+
     func controlApp(
         serial: String, packageId: String, action: AppControlService.AppAction
     ) async throws -> FeatureResult { FeatureResult(ok: true, message: "stub") }
 
     func deviceProperties(serial: String) async throws -> [String: String] { [:] }
+
+    func reverseTcp(serial: String, port: Int, remove: Bool) async -> AdbResult {
+        AdbResult(stdout: "", stderr: "", exitCode: 0, timedOut: false)
+    }
 
     func rootStatus(serial: String) async -> RootStatus {
         RootStatus(hasRootShell: false, likelyRooted: false, summary: "stub", signals: [])
@@ -137,4 +143,36 @@ extension DaemonBackend {
     func installPackage(path: String, serial: String) async throws -> FeatureResult {
         FeatureResult(ok: true, message: "stub")
     }
+
+    func pairWireless(host: String, port: String, code: String) async throws -> FeatureResult {
+        FeatureResult(ok: true, message: "stub")
+    }
+
+    func discoverConnectEndpoint(host: String) async -> WirelessEndpoint? { nil }
+
+    func connectWireless(host: String, port: String) async throws -> FeatureResult {
+        FeatureResult(ok: true, message: "stub")
+    }
+
+    func disconnectWireless(target: String?) async throws -> FeatureResult {
+        FeatureResult(ok: true, message: "stub")
+    }
+
+    func enableTcpip(serial: String) async throws -> FeatureResult {
+        FeatureResult(ok: true, message: "stub")
+    }
+
+    func deepLinks(packageId: String) async -> [DeepLink] { [] }
+
+    func writeDeepLinks(packageId: String, links: [DeepLink]) async throws {}
+
+    func launchDeepLink(serial: String, url: String) async throws -> FeatureResult {
+        FeatureResult(ok: true, message: "stub")
+    }
+
+    func createBugReport(
+        serial: String, packageId: String?, destination: String
+    ) async throws -> String { destination }
+
+    func detectTools() async -> [Tool: ToolStatus] { [:] }
 }

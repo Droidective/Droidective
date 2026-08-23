@@ -58,6 +58,14 @@ export interface FeatureSummary {
   needsBundle: boolean
   isDestructive: boolean
   isAbsorbedByHub: boolean
+  /**
+   * Whether running this on every connected device at once makes sense.
+   *
+   * The registry's answer, because it is a property of the runner: a screenshot
+   * of five devices is five files, while pulling one file five times to one
+   * path is not five of anything.
+   */
+  supportsRunAll: boolean
   fields: FeatureField[]
 }
 
@@ -197,65 +205,29 @@ export interface CrashListResponse {
   crashes: CrashReport[]
 }
 
-/** One performance sample, from `/v1/stream`'s `performance` topic. */
-export interface PerfSample {
-  /**
-   * Empty on the first sample: a CPU percentage is a delta and there is
-   * nothing yet to subtract from. `-1` is the all-cores aggregate.
-   */
-  cores: { core: number; label: string; usagePercent: number }[]
-  ramTotalKb: number | null
-  ramUsedKb: number | null
-  appFps: number | null
-  /** Percent of frames that missed the deadline, when any were drawn. */
-  appJankPercent: number | null
-  appPssKb: number | null
-  downloadBytesPerSec: number | null
-  uploadBytesPerSec: number | null
-  processes: { pid: number; name: string; cpuPercent: number | null; pssKb: number | null }[]
+/** The connect endpoint a freshly paired device advertised over mDNS. */
+export interface Discovered {
+  name: string
+  host: string
+  port: string
 }
 
-/** One `/proc/net/dev` sample, as the daemon differenced it. */
-export interface NetSample {
-  downloadBytesPerSec: number
-  uploadBytesPerSec: number
-  /**
-   * Since the device booted, not since the stream started — the screen
-   * derives its own session totals by differencing against the first sample,
-   * which is the only way a mid-session subscribe reads right.
-   */
-  totalRxBytes: number
-  totalTxBytes: number
-  interfaces: {
-    name: string
-    downloadBytesPerSec: number
-    uploadBytesPerSec: number
-    rxBytes: number
-    txBytes: number
-  }[]
+/**
+ * What pairing answered.
+ *
+ * `discovered` is null when this adb has mDNS off, or nothing matching turned
+ * up in time. Pairing still worked; the sheet asks for the connection port,
+ * which is the only thing it can do.
+ */
+export interface PairResponse {
+  result: RunResponse
+  discovered: Discovered | null
 }
 
 export type DaemonStatus =
   | { state: "starting" }
   | { state: "ready"; port: number }
   | { state: "failed"; message: string }
-
-/** A subscription update, shaped like the daemon's own stream event. */
-export type StreamUpdate<Item> =
-  | { event: "subscribed" }
-  | { event: "batch"; items: Item[] }
-  | { event: "dropped"; count: number }
-  | { event: "ended"; reason: string }
-  | { event: "failed"; message: string }
-
-export interface LogLine {
-  time: string
-  pid: string
-  tid: string
-  level: string
-  tag: string
-  message: string
-}
 
 /** The daemon's error payload, widened with the failures Rust reports. */
 export interface DaemonError {
@@ -264,6 +236,7 @@ export interface DaemonError {
   detail: string | null
 }
 
-// The device-state and network shapes live next door, so this file stays
-// inside its line budget; `@/lib/wire` remains the one import for all of them.
+// The device-state, network and streaming shapes live next door, so this file
+// stays inside its line budget; `@/lib/wire` remains the one import for all.
 export type * from "@/lib/wire-settings"
+export type * from "@/lib/wire-stream"

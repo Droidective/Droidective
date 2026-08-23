@@ -108,42 +108,138 @@ import Testing
     @Test func acceptsAWellFormedSubscription() {
         #expect(
             StreamProtocol.validate(
-                subscribe(id: 1, topic: .logcat, serial: "emulator-5554"), activeIDs: [])
+                subscribe(id: 1, topic: .logcat, serial: "emulator-5554"), active: [:])
                 == nil)
-        #expect(StreamProtocol.validate(subscribe(id: 1, topic: .devices), activeIDs: []) == nil)
+        #expect(StreamProtocol.validate(subscribe(id: 1, topic: .devices), active: [:]) == nil)
     }
 
     @Test func rejectsAReusedID() {
         // Correlation ids are how one socket serves many streams; reusing a
         // live one would silently cross two streams' events.
         #expect(
-            StreamProtocol.validate(subscribe(id: 7, topic: .devices), activeIDs: [7])
+            StreamProtocol.validate(subscribe(id: 7, topic: .devices), active: [7: .devices])
                 == .duplicateID)
     }
 
     @Test func rejectsASubscribeWithNoTopic() {
-        #expect(StreamProtocol.validate(subscribe(id: 1, topic: nil), activeIDs: []) == .missingTopic)
+        #expect(StreamProtocol.validate(subscribe(id: 1, topic: nil), active: [:]) == .missingTopic)
     }
 
     @Test func rejectsADeviceScopedTopicWithNoSerial() {
         #expect(
-            StreamProtocol.validate(subscribe(id: 1, topic: .logcat), activeIDs: [])
+            StreamProtocol.validate(subscribe(id: 1, topic: .logcat), active: [:])
                 == .missingSerial)
         #expect(
-            StreamProtocol.validate(subscribe(id: 1, topic: .logcat, serial: ""), activeIDs: [])
+            StreamProtocol.validate(subscribe(id: 1, topic: .logcat, serial: ""), active: [:])
                 == .missingSerial)
     }
 
     @Test func hostWideTopicsNeedNoSerial() {
         #expect(!StreamProtocol.Topic.devices.needsSerial, "the device list is the host's, not a device's")
         #expect(StreamProtocol.Topic.logcat.needsSerial)
+        // A shell runs on the host. Requiring a device would mean no terminal
+        // until something is plugged in, which is when one is most wanted.
+        #expect(!StreamProtocol.Topic.pty.needsSerial)
     }
 
     @Test func unsubscribingAnUnknownIDIsNotAnError() {
         // A client racing its own teardown against an `ended` event is doing
         // the right thing and must not see a spurious failure.
         let command = StreamProtocol.Command(op: .unsubscribe, id: 99)
-        #expect(StreamProtocol.validate(command, activeIDs: []) == nil)
+        #expect(StreamProtocol.validate(command, active: [:]) == nil)
+    }
+
+    // MARK: - writing into a subscription
+
+    private func write(id: Int, data: String?) -> StreamProtocol.Command {
+        StreamProtocol.Command(
+            op: .write, id: id, params: StreamProtocol.Command.Params(data: data))
+    }
+
+    private func resize(id: Int, columns: Int?, rows: Int?) -> StreamProtocol.Command {
+        StreamProtocol.Command(
+            op: .resize, id: id,
+            params: StreamProtocol.Command.Params(columns: columns, rows: rows))
+    }
+
+    @Test func acceptsAWriteAndAResizeAgainstATerminal() {
+        let active: [Int: StreamProtocol.Topic] = [3: .pty]
+        #expect(StreamProtocol.validate(write(id: 3, data: "bHM=" /* ls */), active: active) == nil)
+        #expect(StreamProtocol.validate(resize(id: 3, columns: 120, rows: 40), active: active) == nil)
+    }
+
+    @Test func rejectsInputAgainstATopicThatOnlyObserves() {
+        // Typing at a logcat stream has no meaning to fall back on, and a
+        // client doing it has the wrong id — worth saying so.
+        #expect(
+            StreamProtocol.validate(write(id: 3, data: "bHM="), active: [3: .logcat])
+                == .notInteractive)
+        #expect(
+            StreamProtocol.validate(resize(id: 3, columns: 80, rows: 24), active: [3: .devices])
+                == .notInteractive)
+    }
+
+    @Test func rejectsInputAgainstAnIDThatIsNotSubscribed() {
+        // Unlike `unsubscribe`, which is lenient on purpose: a write that lands
+        // nowhere presents as a terminal ignoring the keyboard.
+        #expect(StreamProtocol.validate(write(id: 3, data: "bHM="), active: [:]) == .unknownSubscription)
+        #expect(
+            StreamProtocol.validate(resize(id: 3, columns: 80, rows: 24), active: [:])
+                == .unknownSubscription)
+    }
+
+    @Test func rejectsAWriteWithNothingToWrite() {
+        #expect(StreamProtocol.validate(write(id: 3, data: nil), active: [3: .pty]) == .missingData)
+        #expect(StreamProtocol.validate(write(id: 3, data: ""), active: [3: .pty]) == .missingData)
+    }
+
+    @Test func rejectsAWriteThatIsNotBase64() {
+        // The failure this catches is a client that forgot to encode: the bytes
+        // would otherwise be dropped, and only for input that happened not to
+        // be valid base64 by accident.
+        #expect(
+            StreamProtocol.validate(write(id: 3, data: "not base64!"), active: [3: .pty])
+                == .invalidData)
+    }
+
+    @Test func rejectsAResizeMissingHalfOfTheSize() {
+        #expect(
+            StreamProtocol.validate(resize(id: 3, columns: 120, rows: nil), active: [3: .pty])
+                == .missingSize)
+        #expect(
+            StreamProtocol.validate(resize(id: 3, columns: nil, rows: 40), active: [3: .pty])
+                == .missingSize)
+    }
+
+    @Test func aWritesBytesAreDecodedOnce() {
+        // Validation and the write itself must not disagree about what arrived,
+        // which is why one computed property answers for both.
+        let params = StreamProtocol.Command.Params(data: Data("ls -la\n".utf8).base64EncodedString())
+        #expect(params.bytes == Data("ls -la\n".utf8))
+        // Base64 carries the control codes a JSON string could not: this is
+        // Ctrl-C, which is the whole reason the field is not plain text.
+        let interrupt = StreamProtocol.Command.Params(data: Data([0x03]).base64EncodedString())
+        #expect(interrupt.bytes == Data([0x03]))
+    }
+
+    @Test func aRequestedSizeIsClampedByTheTimeItIsRead() {
+        #expect(
+            StreamProtocol.Command.Params(columns: 0, rows: 0).size
+                == PtySize(columns: 1, rows: 1))
+        #expect(StreamProtocol.Command.Params(columns: nil, rows: 24).size == nil)
+    }
+
+    @Test func onlyTheTerminalTakesInput() {
+        // The registry-invariant shape: a new topic that forgot to answer would
+        // fall into whichever arm it was added to, and the default is wrong for
+        // exactly one of them.
+        for topic in StreamProtocol.Topic.allCases {
+            switch topic {
+            case .pty: #expect(topic.acceptsInput)
+            case .devices, .logcat, .performance, .netspeed, .reactotron:
+                #expect(!topic.acceptsInput)
+            }
+        }
     }
 
     @Test func commandsRoundTripThroughJSON() throws {
@@ -156,6 +252,27 @@ import Testing
         #expect(decoded.topic == .logcat)
         #expect(decoded.params?.serial == "R58M")
         #expect(decoded.params?.filter == "E")
+    }
+
+    @Test func terminalCommandsRoundTripThroughJSON() throws {
+        let opened = try JSONDecoder().decode(
+            StreamProtocol.Command.self,
+            from: Data(
+                #"{"op":"subscribe","id":1,"topic":"pty","params":{"columns":120,"rows":40}}"#.utf8))
+        #expect(opened.topic == .pty)
+        #expect(opened.params?.size == PtySize(columns: 120, rows: 40))
+
+        let typed = try JSONDecoder().decode(
+            StreamProtocol.Command.self,
+            from: Data(#"{"op":"write","id":1,"params":{"data":"bHMK"}}"#.utf8))
+        #expect(typed.op == .write)
+        #expect(typed.params?.bytes == Data("ls\n".utf8))
+
+        let resized = try JSONDecoder().decode(
+            StreamProtocol.Command.self,
+            from: Data(#"{"op":"resize","id":1,"params":{"columns":80,"rows":24}}"#.utf8))
+        #expect(resized.op == .resize)
+        #expect(resized.params?.size == .standard)
     }
 
     @Test func eventsEncodeTheShapeTheUIParses() throws {

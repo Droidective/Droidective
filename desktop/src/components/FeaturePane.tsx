@@ -6,7 +6,9 @@ import { HomeView } from "@/components/HomeView"
 import {
   AppInfoPane,
   AppsPane,
+  BugReportPane,
   CrashPane,
+  DeepLinksPane,
   DeviceInfoPane,
   DevSettingsPane,
   EmulatorsPane,
@@ -19,9 +21,11 @@ import {
   PerformancePane,
   PermissionsPane,
   PrivateDnsPane,
+  ReactotronPane,
   RestrictionsPane,
   RootStatusPane,
   SandboxPane,
+  TerminalPane,
   WifiPane,
 } from "@/components/panes"
 import { ABOUT_TAB, CATALOG_TAB, HOME_TAB } from "@/lib/layout"
@@ -80,6 +84,9 @@ export function FeaturePane(props: FeaturePaneProps) {
   if (props.id === ABOUT_TAB) return <AboutPane />
   if (props.feature === null) return <NotHere title={props.id} />
 
+  const hostSide = hostPane(props.id, props.device)
+  if (hostSide !== null) return hostSide
+
   switch (props.id) {
     case "apps":
       return (
@@ -97,6 +104,10 @@ export function FeaturePane(props: FeaturePaneProps) {
       return <FileExplorerPane device={props.device} />
     case "crash-catcher":
       return <CrashPane device={props.device} />
+    case "bug-report":
+      return <BugReportPane device={props.device} packageId={props.packageId} />
+    case "deep-link":
+      return <DeepLinksPane device={props.device} packageId={props.packageId} />
     case "performance":
       return <PerformancePane device={props.device} packageId={props.packageId} />
     case "root-status":
@@ -111,10 +122,6 @@ export function FeaturePane(props: FeaturePaneProps) {
       return <PrivateDnsPane device={props.device} />
     case "network-speed":
       return <NetspeedPane device={props.device} />
-    // No device prop: an emulator is a thing on *this* machine, and the
-    // screen's whole job is launching one when none is connected.
-    case "emulators":
-      return <EmulatorsPane />
     case "install-app":
       return <InstallAppPane device={props.device} />
     case "app-info":
@@ -137,6 +144,29 @@ export function FeaturePane(props: FeaturePaneProps) {
       ) : (
         <NotHere title={props.feature.title} subtitle={props.feature.subtitle} />
       )
+  }
+}
+
+/**
+ * The screens that run against *this* machine rather than a device.
+ *
+ * All three work with nothing connected, and each takes the selection
+ * differently for a reason worth stating once: an emulator is a thing here and
+ * the screen's whole job is launching one; a shell runs here and the selection
+ * only decides what `ANDROID_SERIAL` says in the next tab; the Reactotron relay
+ * listens here, and a device matters only for the reverse tunnel its waiting
+ * screen offers.
+ */
+function hostPane(id: string, device: Device | null) {
+  switch (id) {
+    case "emulators":
+      return <EmulatorsPane />
+    case "terminal":
+      return <TerminalPane serial={device?.serial ?? null} />
+    case "reactotron":
+      return <ReactotronPane device={device} />
+    default:
+      return null
   }
 }
 

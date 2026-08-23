@@ -18,6 +18,7 @@ import {
   FolderOpen,
   Gauge,
   Globe,
+  Grid2x2,
   HardDrive,
   Info,
   Keyboard,
@@ -104,6 +105,8 @@ const BY_FEATURE: Record<string, LucideIcon> = {
 
   // Screen & Capture
   scrcpy: Monitor,
+  // The Mac's `square.grid.2x2` — several screens at once, not one.
+  "mirror-wall": Grid2x2,
   screenshot: Camera,
   "screen-record": Video,
   "video-editor": Film,

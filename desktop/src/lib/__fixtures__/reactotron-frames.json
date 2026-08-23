@@ -1,0 +1,166 @@
+[
+  {
+    "kind": "listening",
+    "port": 9090
+  },
+  {
+    "bytes": 93,
+    "clientId": "probe",
+    "command": {
+      "payload": {
+        "clientId": "probe",
+        "name": "ProbeApp",
+        "platform": "android"
+      },
+      "type": "client.intro"
+    },
+    "connection": 3,
+    "kind": "connected"
+  },
+  {
+    "bytes": 63,
+    "command": {
+      "payload": {
+        "level": "warn",
+        "message": "café ☕"
+      },
+      "type": "log"
+    },
+    "connection": 3,
+    "kind": "command"
+  },
+  {
+    "bytes": 87,
+    "command": {
+      "important": false,
+      "payload": {
+        "level": "error",
+        "message": "boom"
+      },
+      "type": "log"
+    },
+    "connection": 3,
+    "kind": "command"
+  },
+  {
+    "bytes": 258,
+    "command": {
+      "payload": {
+        "duration": 812.4,
+        "request": {
+          "data": "{\"id\":\"graphData_v1.3\",\"params\":{\"storeId\":\"8052321\"}}",
+          "method": "post",
+          "url": "https://api.example.test/v1/stats?window=7d"
+        },
+        "response": {
+          "body": "upstream timeout",
+          "status": 500
+        }
+      },
+      "type": "api.response"
+    },
+    "connection": 3,
+    "kind": "command"
+  },
+  {
+    "bytes": 75,
+    "command": {
+      "payload": {
+        "ms": 1.2,
+        "name": "user/setName"
+      },
+      "type": "state.action.complete"
+    },
+    "connection": 3,
+    "kind": "command"
+  },
+  {
+    "bytes": 89,
+    "command": {
+      "payload": {
+        "changes": [
+          {
+            "path": "user.name",
+            "value": "ada"
+          }
+        ]
+      },
+      "type": "state.values.change"
+    },
+    "connection": 3,
+    "kind": "command"
+  },
+  {
+    "bytes": 86,
+    "command": {
+      "payload": {
+        "action": "setItem",
+        "data": {
+          "key": "token"
+        }
+      },
+      "type": "asyncStorage.mutation"
+    },
+    "connection": 3,
+    "kind": "command"
+  },
+  {
+    "bytes": 106,
+    "command": {
+      "payload": {
+        "steps": [
+          {
+            "delta": 12,
+            "time": 12,
+            "title": "mount"
+          }
+        ],
+        "title": "startup"
+      },
+      "type": "benchmark.report"
+    },
+    "connection": 3,
+    "kind": "command"
+  },
+  {
+    "bytes": 87,
+    "command": {
+      "payload": {
+        "name": "Session",
+        "preview": "3 items",
+        "value": {
+          "items": 3
+        }
+      },
+      "type": "display"
+    },
+    "connection": 3,
+    "kind": "command"
+  },
+  {
+    "bytes": 60,
+    "command": {
+      "payload": {
+        "name": "fetchUser"
+      },
+      "type": "saga.task.complete"
+    },
+    "connection": 3,
+    "kind": "command"
+  },
+  {
+    "bytes": 16,
+    "command": {
+      "payload": "{not json at all",
+      "type": "(undecodable)"
+    },
+    "connection": 3,
+    "kind": "command"
+  },
+  {
+    "code": 1001,
+    "connection": 3,
+    "kind": "disconnected",
+    "reason": "client closed"
+  }
+]
