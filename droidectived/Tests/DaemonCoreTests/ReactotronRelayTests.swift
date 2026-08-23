@@ -324,6 +324,47 @@ import Testing
         await second.stop()
     }
 
+    @Test func aStartRightAfterAStopBindsRatherThanReportingItsOwnPortTaken() async throws {
+        // The sequence a timeline tab makes every time it is closed and
+        // reopened, and the one React's double-mount makes on the very first
+        // open: unsubscribe (stop) immediately followed by subscribe (start).
+        //
+        // Both suspend — a graceful shutdown and a bind are each async — and an
+        // actor is reentrant across a suspension. So a `start` arriving while a
+        // `stop` is mid-close used to see a nil channel, bind the same port
+        // again, and get EADDRINUSE from the socket the stop had not finished
+        // releasing. The feature then reported "another Reactotron is probably
+        // running" with nothing else on the port at all.
+        let relay = ReactotronRelay(port: 0)
+        try await relay.start()
+        let first = try #require(await relay.boundPort)
+        defer { Task { await relay.stop() } }
+
+        for _ in 0 ..< 5 {
+            async let stopped: Void = relay.stop()
+            async let started: Void = relay.start()
+            await stopped
+            try await started
+            #expect(await relay.isRunning, "the start won the race and must have bound")
+            #expect(await relay.boundPort != nil)
+        }
+        #expect(first > 0)
+    }
+
+    @Test func aStopRightAfterAStartLeavesNothingListening() async throws {
+        // The mirror of the race above: a stop that overtakes a start used to
+        // tear down a relay that had not bound yet, and the start then
+        // published its channel into a relay everything thought was stopped —
+        // a listener on 9090 that nothing owns and nothing can close.
+        let relay = ReactotronRelay(port: 0)
+        async let started: Void = relay.start()
+        async let stopped: Void = relay.stop()
+        try await started
+        await stopped
+        #expect(await relay.isRunning == false)
+        #expect(await relay.boundPort == nil)
+    }
+
     @Test func aSecondStartIsANoOpRatherThanASecondListener() async throws {
         let (relay, _, port) = try await relay()
         defer { Task { await relay.stop() } }

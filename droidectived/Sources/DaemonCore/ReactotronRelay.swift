@@ -87,9 +87,49 @@ public actor ReactotronRelay {
     /// arrives twice does not report a second client.
     private var introduced: Set<Int> = []
 
+    /// Where the relay is between idle and listening.
+    ///
+    /// An actor is not a lock across a suspension, and both transitions suspend:
+    /// `start` awaits a bind, `stop` awaits a channel close and a graceful
+    /// shutdown. So the two can interleave, and both orders were broken —
+    /// a start landing mid-stop saw a nil channel, bound the same port, and got
+    /// EADDRINUSE from a socket that was still open ("another Reactotron is
+    /// probably running", with nothing else on the port); a stop landing
+    /// mid-start shut down the event-loop group the bind was still waiting on,
+    /// which never completes, wedging the relay for the life of the process.
+    ///
+    /// The sequence that provokes it is ordinary: closing a timeline tab and
+    /// reopening it, or React's double-mount on the first open.
+    private enum Phase {
+        case idle
+        case transitioning
+        case running
+    }
+
+    private var phase: Phase = .idle
+    /// Callers waiting for a transition to finish, resumed in `settle(into:)`.
+    /// A list of continuations rather than a spin: the waiter has nothing to do
+    /// until the socket is genuinely free or genuinely bound.
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+
     public init(port: Int = ReactotronRelay.defaultPort, loopbackOnly: Bool = true) {
         self.port = port
         self.loopbackOnly = loopbackOnly
+    }
+
+    /// Suspends until no start or stop is in flight.
+    private func quiesce() async {
+        while phase == .transitioning {
+            await withCheckedContinuation { waiting.append($0) }
+        }
+    }
+
+    /// Ends a transition and wakes everyone who was waiting on it.
+    private func settle(into next: Phase) {
+        phase = next
+        let pending = waiting
+        waiting.removeAll()
+        for continuation in pending { continuation.resume() }
     }
 
     /// The port actually bound, which is the requested one unless it was 0.
@@ -99,11 +139,16 @@ public actor ReactotronRelay {
 
     public var isRunning: Bool { channel != nil }
 
-    /// Starts listening. Idempotent: a second call while running is a no-op, so
-    /// a UI that asks twice does not end up with two listeners fighting for the
-    /// port.
+    /// Starts listening.
+    ///
+    /// Idempotent: a second call while running is a no-op, so a UI that asks
+    /// twice does not end up with two listeners fighting for the port. A call
+    /// arriving mid-stop waits for the socket to be released first rather than
+    /// binding over it — see `Phase`.
     public func start() async throws {
+        await quiesce()
         guard channel == nil else { return }
+        phase = .transitioning
         let group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
         self.group = group
         let bootstrap = ServerBootstrap(group: group)
@@ -126,11 +171,13 @@ public actor ReactotronRelay {
             // Reactotron is probably running" is.
             self.group = nil
             try? await group.shutdownGracefully()
+            settle(into: .idle)
             if let io = error as? IOError, io.errnoCode == EADDRINUSE {
                 throw RelayError.portInUse(port)
             }
             throw RelayError.bindFailed("\(error)")
         }
+        settle(into: .running)
         emit(.listening(port: boundPort ?? port))
     }
 
@@ -147,8 +194,14 @@ public actor ReactotronRelay {
         return stream
     }
 
-    /// Stops listening and drops every client. Idempotent.
+    /// Stops listening and drops every client.
+    ///
+    /// Idempotent, and it waits out a start rather than tearing down a relay
+    /// that has not finished binding — shutting down the event-loop group a bind
+    /// is still waiting on is a future that never completes.
     public func stop() async {
+        await quiesce()
+        phase = .transitioning
         for (id, connection) in connections {
             closed.insert(id)
             try? await connection.close().get()
@@ -163,6 +216,7 @@ public actor ReactotronRelay {
         try? await running?.shutdownGracefully()
         for continuation in listeners.values { continuation.finish() }
         listeners.removeAll()
+        settle(into: .idle)
     }
 
     // MARK: - the pipeline
