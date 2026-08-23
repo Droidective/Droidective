@@ -1,5 +1,7 @@
 import { useRef, useState } from "react"
 import { ReactotronRow } from "@/components/ReactotronRow"
+import { ReactotronRowMenu, type RowMenuTarget } from "@/components/ReactotronRowMenu"
+import { copyText } from "@/lib/daemon"
 import type { TimelineRow } from "@/lib/reactotron-rows"
 
 /** How many rows go into the DOM. The buffer holds more; this is what renders. */
@@ -23,6 +25,7 @@ export function ReactotronFeed({
   total: number
 }) {
   const [following, setFollowing] = useState(true)
+  const [menu, setMenu] = useState<RowMenuTarget | null>(null)
   const scroller = useRef<HTMLDivElement | null>(null)
   const window = rows.slice(Math.max(0, rows.length - RENDER_WINDOW))
   const rendered = newestFirst ? window.toReversed() : window
@@ -47,13 +50,39 @@ export function ReactotronFeed({
       data-selectable
     >
       {rendered.map((row) => (
-        <ReactotronRow key={row.id} row={row} hit={false} />
+        <ReactotronRow
+          key={row.id}
+          row={row}
+          hit={false}
+          onMenu={(at, target) => {
+            setMenu({ ...at, row: target })
+          }}
+        />
       ))}
       {rows.length === 0 ? (
         <p className="p-8 text-center text-text-tertiary">
-          Nothing matches. {total.toLocaleString()} events are hidden by the filter.
+          {/* Two different empty states, and conflating them misleads: an app
+              that has sent nothing yet is not a filter hiding everything. A
+              connected app really can show zero — Reactotron's own client calls
+              `clear()` as it starts up. */}
+          {total === 0
+            ? "Connected, and nothing sent yet. Events appear here as your app logs them."
+            : `Nothing matches. All ${total.toLocaleString()} events are hidden by the filter.`}
         </p>
       ) : null}
+      {menu === null ? null : (
+        <ReactotronRowMenu
+          at={menu}
+          row={menu.row}
+          onDismiss={() => {
+            setMenu(null)
+          }}
+          onCopy={(text) => {
+            setMenu(null)
+            void copyText(text)
+          }}
+        />
+      )}
     </div>
   )
 }
