@@ -13,6 +13,8 @@ public enum DaemonProtocol {
         case actionsRun = "/v1/actions/run"
         case appsList = "/v1/apps/list"
         case appsControl = "/v1/apps/control"
+        /// Which package is in front, for a caller that has to guess at one.
+        case appsForeground = "/v1/apps/foreground"
         case deviceProps = "/v1/device/props"
         case deviceRoot = "/v1/device/root"
         case filesList = "/v1/files/list"

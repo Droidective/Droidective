@@ -64,6 +64,10 @@ import FoundationNetworking
             return result
         }
 
+        func foregroundPackage(serial: String) async throws -> String? {
+            serial == "EMPTY" ? nil : "com.example.weather"
+        }
+
         func deviceProperties(serial: String) async throws -> [String: String] {
             ["ro.product.model": "Pixel", "ro.build.version.release": "14"]
         }
@@ -263,6 +267,37 @@ import FoundationNetworking
                     await log.lastApp?.action.isDestructive == action.isDestructive,
                     "the advertised destructive flag must be the runner's own")
             }
+        }
+    }
+
+    @Test func namesTheForegroundApp() async throws {
+        // A debug tool's restart has to guess which app to restart. The guess is
+        // only a guess, which is why it travels as a nullable name rather than
+        // an error the caller has to interpret.
+        try await withServer { port, token, _ in
+            let (status, body) = try await self.post(
+                port: port, path: "/v1/apps/foreground", token: token,
+                json: #"{"serial":"S1"}"#)
+            #expect(status == 200)
+            #expect(body.contains(#""packageId":"com.example.weather""#))
+        }
+    }
+
+    @Test func nothingInFrontIsAnAnswerRatherThanAFailure() async throws {
+        // The launcher is in front more often than any app is, and a caller that
+        // had to treat that as an error would show a failure for the normal case.
+        //
+        // The absent name is an *omitted* key rather than an explicit null,
+        // which is this protocol's convention throughout (see the relay's
+        // `bytes`). A client reads a missing `packageId` as "nothing to guess
+        // at", which is exactly what it means.
+        try await withServer { port, token, _ in
+            let (status, body) = try await self.post(
+                port: port, path: "/v1/apps/foreground", token: token,
+                json: #"{"serial":"EMPTY"}"#)
+            #expect(status == 200)
+            #expect(body == "{}")
+            #expect(!body.contains("packageId"))
         }
     }
 

@@ -19,6 +19,10 @@ public protocol DaemonBackend: Sendable {
     ) async -> FeatureResult
     /// Every installed app on the device, user and system.
     func listApps(serial: String) async throws -> [AppListing]
+    /// The package of the frontmost activity, or nil when there is nothing
+    /// worth naming. Not an error when absent: the launcher is in front more
+    /// often than any app is.
+    func foregroundPackage(serial: String) async throws -> String?
     /// One verb against one package.
     func controlApp(
         serial: String, packageId: String, action: AppControlService.AppAction
@@ -180,6 +184,10 @@ public struct LiveBackend: DaemonBackend {
 
     public func listApps(serial: String) async throws -> [AppListing] {
         try await AppsExplorerService(client: client).listAll(serial: serial)
+    }
+
+    public func foregroundPackage(serial: String) async throws -> String? {
+        try await AppInspectionService(client: client).getForegroundPackage(serial: serial)
     }
 
     public func controlApp(
@@ -919,6 +927,20 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
                 // goes out as a 502 carrying adb's own words.
                 return (.badGateway, encoded(DaemonProtocol.ErrorBody(
                     code: "adb_failed", message: "Could not list apps.",
+                    detail: "\(error)")))
+            }
+
+        case .appsForeground:
+            let raw = Data(body.readableBytesView)
+            guard let request = try? JSONDecoder().decode(
+                AppProtocol.ListRequest.self, from: raw)
+            else { return (.badRequest, encoded(DaemonProtocol.badRequest)) }
+            do {
+                let package = try await backend.foregroundPackage(serial: request.serial)
+                return (.ok, encoded(AppProtocol.ForegroundResponse(packageId: package)))
+            } catch {
+                return (.badGateway, encoded(DaemonProtocol.ErrorBody(
+                    code: "adb_failed", message: "Could not read the foreground app.",
                     detail: "\(error)")))
             }
 

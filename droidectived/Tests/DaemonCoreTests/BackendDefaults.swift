@@ -23,6 +23,8 @@ extension DaemonBackend {
 
     func listApps(serial: String) async throws -> [AppListing] { [] }
 
+    func foregroundPackage(serial: String) async throws -> String? { nil }
+
     func controlApp(
         serial: String, packageId: String, action: AppControlService.AppAction
     ) async throws -> FeatureResult { FeatureResult(ok: true, message: "stub") }
