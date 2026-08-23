@@ -11,22 +11,22 @@ rewriting one when something turns out to be more work than it looked.
 
 | | Count |
 | --- | --- |
-| ⬜ Not started | 19 |
-| 🟡 Partial | 40 |
+| ⬜ Not started | 17 |
+| 🟡 Partial | 42 |
 | ⛔ Not applicable off-Apple | 2 |
 | **Total registry features** | **61** |
 
-"Partial" is doing a lot of work in that table: 19 of the 41 are actions that
-run from the palette but have no screen of their own, and the 22 that do have
+"Partial" is doing a lot of work in that table: 19 of the 42 are actions that
+run from the palette but have no screen of their own, and the 23 that do have
 screens are each missing something the Mac version offers. Read it as *nothing
 is finished*, not as *most of it is done*.
 
-**Screens with a real pane today** (22): Terminal, Apps, Logcat, Device Info, File
+**Screens with a real pane today** (23): Terminal, Apps, Logcat, Device Info, File
 Explorer, Crash Catcher, Bug Report, Performance, Root Status, Developer
 Settings, System Restrictions, Wi-Fi, Private DNS, Network Speed, Emulators,
 Install App, App Info, Permissions, Memory Usage, Sandbox Browser, Manage App,
-Deep Links — plus the two app-chrome screens, the catalog and About. That list
-is not written here twice:
+Deep Links, Reactotron — plus the two app-chrome screens, the catalog and
+About. That list is not written here twice:
 `scripts/generate-parity-tracker.py` reads it out of the desktop app's pane
 router, so a screen that lands is partial in the checklist below without anyone
 remembering to say so.
@@ -756,11 +756,45 @@ after the screens rather than instead of them.
          1001 means the app out-produced the connection, log ids not whole
          objects — cannot be written without the close status. Both are proven
          off a real client's frames in `ReactotronRelayTests`.
-    2. **The feed pane.** Rows by type (log, api.response, state change, display,
-       benchmark), the level and type filters, the per-pane newest-first toggle
-       (`reactotronPane<n>NewestFirst` on the Mac), and the connect banner —
-       which is where the `adb reverse` button lives, because a relay listening
-       with no tunnel is the failure that reads as the feature being broken.
+    2. ~~**The feed pane.**~~ **Landed.** `ReactotronPane` over
+       `useReactotron`, with the toolbar's filter/search/sort/clear, the status
+       strip, the row, Reactotron's own four-section filter dialog, and the
+       waiting screen that carries the `adb reverse` button — because a relay
+       listening with no tunnel is the failure that reads as the feature being
+       broken. The relay's `bytes` and `code` fields are what let the row bound
+       itself and the disconnect notice name its cause.
+
+       It takes a device rather than requiring one, which is the difference from
+       every other feed here, so it joins `emulators` and `terminal` in
+       `FeaturePane`'s `hostPane` — all three run against *this* machine and
+       work with nothing connected. `hints.test.ts` reads the router to decide
+       which panes need a connect-a-device line, so it now cuts at `hostPane`:
+       `reactotron` is *handed* a device and still must not be on that list.
+
+       Verified live against a stand-in React Native client: the badge tones,
+       the API statuses (200/201/304/500/401 and `ERR` for the 0 a failed
+       request reports), a logged object previewed as compact JSON, the four
+       filter sections offering only the methods the app actually sent, and the
+       1001 disconnect notice with its amber edge bar.
+
+       **Two divergences from the Mac, both deliberate.** A headline truncates
+       at the end rather than in the middle — CSS has no middle ellipsis, and
+       `shortPath` already trims a URL to path plus query, so the interesting
+       part survives. And the per-pane split (with its own filter and
+       `reactotronPane<n>NewestFirst` per pane) is not here: the split-pane
+       model is backlog 20's, so this is one pane whose sort is per tab.
+
+       **One bug found and fixed on the way**, in the relay this depends on: an
+       actor is not a lock across a suspension, and both `start` and `stop`
+       suspend. A start landing mid-stop saw a nil channel, bound the same port
+       and got EADDRINUSE from a socket that was still open — reporting "another
+       Reactotron is probably running" with nothing else on the port; a stop
+       landing mid-start shut down the event-loop group the bind was waiting on,
+       which never completes, wedging the relay for the life of the process. The
+       first is what closing a timeline tab and reopening it did, and React's
+       double-mount did it on the very first open, so the pane failed every
+       time. Fixed with an explicit phase, and pinned by two tests that used to
+       hang the suite rather than fail it.
     3. **The detail side.** JSON trees over `embedded-json.ts`, find-in-object
        over `json-search.ts` (whose ordinal paths already follow the render
        order the tree has to use — object children sorted by key, array items in
@@ -958,10 +992,10 @@ job, and the checklist now says which.
   - [ ] button: Forward
   - [ ] button: Set
 
-#### `reactotron` — Reactotron  ·  ⬜ todo
+#### `reactotron` — Reactotron  ·  🟡 partial
 > Live React Native inspector — logs, network, state, custom display
 - **Kind** `view`
-- **Note** No pane yet, but no longer blocked: the NIO relay, the `reactotron` topic and the timeline model (seven pure modules in desktop/src/lib) have landed, so what is left is the screen. Backlog 24.
+- **Note** Feed pane landed — the relay, the timeline model, the toolbar, the filter dialog and the waiting screen with its `adb reverse` button. Still to come: the JSON detail side, export, and the restart verbs. Backlog 24.
 - **macOS view** `ReactotronView` — `App/Sources/FeatureDetail/Views/ReactotronView.swift`
 - **Must replicate**
   - [ ] button: OK
@@ -1537,4 +1571,4 @@ job, and the checklist now says which.
   - [ ] drag: drag and drop
 
 
-<!-- counts: {'done': 0, 'partial': 41, 'todo': 18, 'gated': 2} -->
+<!-- counts: {'done': 0, 'partial': 42, 'todo': 17, 'gated': 2} -->
