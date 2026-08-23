@@ -114,40 +114,45 @@ describe("copyValue", () => {
 
 describe("copyEventsAsJson", () => {
   const rows = [
-    row({ type: "log", payload: { level: "error", message: "boom" } }, 1_700_000_000_000),
-    row({ type: "clear" }, 1_700_000_001_000),
+    row({ type: "log", payload: { level: "error", message: "boom" }, important: true }),
+    row({ type: "clear" }),
   ]
 
-  it("keeps upstream's own field names", () => {
-    // A script reading an export should not have to learn a second spelling of
-    // a contract that is not ours.
+  it("is the raw wire commands, with upstream's own field names", () => {
+    // Raw rather than enriched: a badge and a headline are this app's rendering
+    // choices, and a script reading an export must not come to depend on
+    // something that is free to change. What the app sent is not.
+    expect(JSON.parse(copyEventsAsJson(rows))).toEqual([
+      { type: "log", payload: { level: "error", message: "boom" }, important: true },
+      { type: "clear" },
+    ])
+  })
+
+  it("carries none of the presentation", () => {
+    const text = copyEventsAsJson(rows)
+    for (const ours of ["badge", "summary", "receivedAt", "connection"]) {
+      expect(text, ours).not.toContain(ours)
+    }
+  })
+
+  it("omits an absent field rather than sending null", () => {
+    // So the export reads like the frame that produced it.
     const parsed = JSON.parse(copyEventsAsJson(rows)) as Record<string, unknown>[]
-    expect(parsed).toHaveLength(2)
-    expect(parsed[0]).toMatchObject({
-      type: "log",
-      badge: "ERROR",
-      summary: "boom",
-      connection: 2,
-      payload: { level: "error", message: "boom" },
-    })
+    expect(parsed[1]).toEqual({ type: "clear" })
+    expect(parsed[0]).not.toHaveProperty("date")
   })
 
-  it("stamps an absolute time rather than a relative one", () => {
-    const parsed = JSON.parse(copyEventsAsJson(rows)) as { receivedAt: string }[]
-    expect(parsed[0]?.receivedAt).toBe(new Date(1_700_000_000_000).toISOString())
+  it("keeps the client's own date and deltaTime when it sent them", () => {
+    const timed = row({ type: "log", date: "2026-08-23T07:00:00.000Z", deltaTime: 12.5 })
+    expect(JSON.parse(copyEventsAsJson([timed]))).toEqual([
+      { type: "log", date: "2026-08-23T07:00:00.000Z", deltaTime: 12.5 },
+    ])
   })
 
-  it("omits the fields a row does not have", () => {
-    const parsed = JSON.parse(copyEventsAsJson(rows)) as Record<string, unknown>[]
-    expect(parsed[1]).not.toHaveProperty("payload")
-    expect(parsed[1]).not.toHaveProperty("status")
-    expect(parsed[0]).not.toHaveProperty("important")
-  })
-
-  it("marks an important row so a filter can find it again", () => {
-    const notice = row({ type: "disconnected", payload: "gone", important: true })
-    const parsed = JSON.parse(copyEventsAsJson([notice])) as Record<string, unknown>[]
-    expect(parsed[0]).toMatchObject({ important: true })
+  it("is indented and key-sorted, so two exports of the same events match", () => {
+    expect(copyEventsAsJson([row({ type: "log", payload: { b: 1, a: 2 } })])).toBe(
+      `[\n  {\n    "payload": {\n      "a": 2,\n      "b": 1\n    },\n    "type": "log"\n  }\n]`,
+    )
   })
 
   it("is valid JSON for an empty selection", () => {

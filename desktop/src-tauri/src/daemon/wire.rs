@@ -715,6 +715,17 @@ pub struct BugReportResponse {
     pub path: String,
 }
 
+/// Which app is in front, when one is.
+///
+/// Nullable because the launcher is in front more often than any app is, and
+/// "nothing worth naming" is a real answer rather than a failure to report. The
+/// daemon omits the key entirely in that case, which serde reads as None.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ForegroundResponse {
+    #[serde(rename = "packageId")]
+    pub package_id: Option<String>,
+}
+
 /// Which devices should be able to reach the Reactotron relay, and on what
 /// port.
 ///

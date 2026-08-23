@@ -41,9 +41,13 @@ export function copyValue(row: TreeRow): string {
 }
 
 /**
- * A run of rows as JSON — the shape the Mac's "Copy as JSON" produces, and the
- * same shape the export writes to a file, so a pasted selection and a saved
- * file can be read by the same script.
+ * A run of rows as JSON: the **raw wire commands**, indented.
+ *
+ * One shape for the file, the clipboard and a selection, as on the Mac. Raw
+ * rather than enriched on purpose — a badge and a headline are this app's
+ * rendering choices, and putting them in a machine-readable export invites a
+ * script to depend on something that is free to change. What the app sent is
+ * not.
  */
 export function copyEventsAsJson(rows: readonly TimelineRow[]): string {
   return prettyJson(rows.map((row) => wireShape(row)))
@@ -55,23 +59,18 @@ export function copyEventsAsText(rows: readonly TimelineRow[]): string {
 }
 
 /**
- * One row as the wire saw it, plus what the app knows and the wire does not:
- * when it arrived here, and which client sent it.
+ * One row as the wire saw it.
  *
- * `type` and `payload` keep upstream's own names — a script reading an export
- * should not have to learn a second spelling of a contract that is not ours.
+ * Upstream's own field names, unchanged — a script reading an export should not
+ * have to learn a second spelling of a contract that is not ours. The optional
+ * fields are omitted rather than sent as null, so the export reads like the
+ * frame that produced it.
  */
 function wireShape(row: TimelineRow): JsonValue {
-  const shown = presentation(row.event)
-  const record: Record<string, JsonValue> = {
-    type: row.command.type,
-    receivedAt: new Date(row.receivedAt).toISOString(),
-    connection: row.connection,
-    badge: shown.badge,
-    summary: shown.primary,
-  }
-  if (shown.status !== undefined) record["status"] = shown.status
-  if (row.important) record["important"] = true
+  const record: Record<string, JsonValue> = { type: row.command.type }
   if (row.command.payload !== undefined) record["payload"] = row.command.payload
+  if (row.command.important !== undefined) record["important"] = row.command.important
+  if (row.command.date !== undefined) record["date"] = row.command.date
+  if (row.command.deltaTime !== undefined) record["deltaTime"] = row.command.deltaTime
   return record
 }

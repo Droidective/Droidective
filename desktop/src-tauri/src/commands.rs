@@ -21,11 +21,11 @@ use crate::daemon::wire::{
     DeepLinksResponse, DeepLinksWriteRequest, DevSettingsResponse, DevSettingsWriteRequest, Device,
     DevicePropsResponse, DnsResponse, DnsWriteRequest, EmulatorActionRequest, EmulatorsResponse,
     FeatureSummary, FileInfoRequest, FileInfoResponse, FileOperationRequest, FilePullRequest,
-    FilePullResponse, FilesListRequest, FilesListResponse, InstallRequest, InstallResponse,
-    LaunchResponse, MemInfoResponse, PairResponse, PermissionWriteRequest, PermissionsResponse,
-    ReactotronReverseRequest, ReactotronReverseResponse, RestrictionWriteRequest,
-    RestrictionsResponse, RootStatusResponse, RunRequest, RunResponse, SandboxRequest,
-    SandboxResponse, StreamParams, ToolsResponse, WifiResponse, WifiWriteRequest,
+    FilePullResponse, FilesListRequest, FilesListResponse, ForegroundResponse, InstallRequest,
+    InstallResponse, LaunchResponse, MemInfoResponse, PairResponse, PermissionWriteRequest,
+    PermissionsResponse, ReactotronReverseRequest, ReactotronReverseResponse,
+    RestrictionWriteRequest, RestrictionsResponse, RootStatusResponse, RunRequest, RunResponse,
+    SandboxRequest, SandboxResponse, StreamParams, ToolsResponse, WifiResponse, WifiWriteRequest,
     WirelessActionRequest,
 };
 use crate::daemon::{DaemonStatus, Supervisor};
@@ -968,6 +968,19 @@ pub async fn watch_netspeed(
         }),
         forward(on_event),
     )
+}
+
+/// The frontmost app on the device, when there is one worth naming.
+///
+/// A guess, and only ever used as one: a debug tool's restart has to pick an app
+/// and the connected client's own name is the better signal. This is the
+/// fallback for when that name matches nothing installed.
+#[tauri::command]
+pub async fn foreground_app(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+) -> Result<ForegroundResponse, DaemonError> {
+    supervisor.client().await?.foreground_app(serial).await
 }
 
 /// Everything the Reactotron relay sees, until `stop_watching`.

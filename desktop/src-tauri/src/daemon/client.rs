@@ -11,11 +11,12 @@ use crate::daemon::wire::{
     DevicePropsResponse, DeviceRequest, DevicesResponse, DnsResponse, DnsWriteRequest,
     EmulatorActionRequest, EmulatorsResponse, ErrorEnvelope, FeatureSummary, FeaturesResponse,
     FileInfoRequest, FileInfoResponse, FileOperationRequest, FilePullRequest, FilePullResponse,
-    FilesListRequest, FilesListResponse, InstallFormatsResponse, InstallRequest, InstallResponse,
-    LaunchResponse, MemInfoResponse, PairResponse, PermissionWriteRequest, PermissionsResponse,
-    ReactotronReverseRequest, ReactotronReverseResponse, RestrictionWriteRequest,
-    RestrictionsResponse, RootStatusResponse, RunRequest, RunResponse, SandboxRequest,
-    SandboxResponse, ToolsResponse, WifiResponse, WifiWriteRequest, WirelessActionRequest,
+    FilesListRequest, FilesListResponse, ForegroundResponse, InstallFormatsResponse,
+    InstallRequest, InstallResponse, LaunchResponse, MemInfoResponse, PairResponse,
+    PermissionWriteRequest, PermissionsResponse, ReactotronReverseRequest,
+    ReactotronReverseResponse, RestrictionWriteRequest, RestrictionsResponse, RootStatusResponse,
+    RunRequest, RunResponse, SandboxRequest, SandboxResponse, ToolsResponse, WifiResponse,
+    WifiWriteRequest, WirelessActionRequest,
 };
 use crate::error::DaemonError;
 
@@ -260,6 +261,12 @@ impl DaemonClient {
         request: &BugReportRequest,
     ) -> Result<BugReportResponse, DaemonError> {
         self.post("/v1/bugreport/create", request).await
+    }
+
+    /// The frontmost app's package, when there is one worth naming.
+    pub async fn foreground_app(&self, serial: String) -> Result<ForegroundResponse, DaemonError> {
+        self.post("/v1/apps/foreground", &DeviceRequest { serial })
+            .await
     }
 
     pub async fn detect_tools(&self) -> Result<ToolsResponse, DaemonError> {

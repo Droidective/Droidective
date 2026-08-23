@@ -38,6 +38,17 @@ export interface LogLine {
   message: string
 }
 
+/**
+ * Which app is in front, when one is.
+ *
+ * The key is absent rather than null when there is nothing worth naming — the
+ * daemon omits nil optionals throughout — and the launcher being in front is the
+ * common case, not a failure.
+ */
+export interface ForegroundResponse {
+  packageId?: string | undefined
+}
+
 /** One device's `adb reverse` outcome. */
 export interface ReactotronReverseResult {
   serial: string

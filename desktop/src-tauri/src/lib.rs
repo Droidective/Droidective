@@ -71,6 +71,7 @@ pub fn run() -> tauri::Result<()> {
             commands::watch_logcat,
             commands::watch_performance,
             commands::watch_netspeed,
+            commands::foreground_app,
             commands::watch_reactotron,
             commands::reactotron_reverse,
             commands::reactotron_unreverse,

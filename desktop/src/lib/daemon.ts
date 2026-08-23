@@ -12,6 +12,7 @@ import type {
   FileOperation,
   FilePullResponse,
   FilesListResponse,
+  ForegroundResponse,
   RootStatusResponse,
   RunResponse,
 } from "@/lib/wire"
@@ -62,6 +63,11 @@ export function listApps(serial: string): Promise<AppsResponse> {
 /** Everything `getprop` printed, as the daemon passed it through. */
 export function deviceProps(serial: string): Promise<{ properties: Record<string, string> }> {
   return invoke<{ properties: Record<string, string> }>("device_props", { serial })
+}
+
+/** The frontmost app on the device, when there is one worth naming. */
+export function foregroundApp(serial: string): Promise<ForegroundResponse> {
+  return invoke<ForegroundResponse>("foreground_app", { serial })
 }
 
 export function controlApp(args: {
