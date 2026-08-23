@@ -875,40 +875,99 @@ after the screens rather than instead of them.
     `ScrcpyAudioStreamDecoder`, `ScrcpyControlMessage`, `ScrcpyDeviceMessage`,
     `ScrcpyServerParams`, `ScrcpyServerLocator`, `H264Format`, `H264NAL`,
     `PCMMixdown`, `MirrorAudioFallback`, `ShowTouches`, plus `MirrorWall`'s
-    layout maths. scrcpy's own server speaks the same protocol to any host, and
-    the bundled ffmpeg already builds for Windows and Linux.
+    layout maths. scrcpy's own server speaks the same protocol to any host.
+    ffmpeg builds for Windows and Linux, but nothing in this repo provisions it
+    for either yet: `App/Resources/ffmpeg` is a committed macOS universal binary
+    and `scripts/unpack-ffmpeg.sh` verifies it with `lipo`. Screen record and the
+    video editor need that gap closed first — the mirror itself does not.
 
     **Five files are gated, and they are the whole job:**
 
     | Gated on | What it does | The portable answer |
     | --- | --- | --- |
-    | `MirrorTransport` | `Network.framework` socket to the scrcpy server over `adb forward` | NIO, exactly the move `ReactotronRelay` already made |
+    | `MirrorTransport` | `Network.framework` socket to the scrcpy server over `adb forward` | NIO **in the daemon**, exactly the move `ReactotronRelay` already made — see below |
     | `MirrorSession` | the orchestrator — gated only because it holds the two below | falls out once they are |
-    | `H264Decoder` | VideoToolbox | the open question, below |
-    | `MirrorAudioPlayer` | AVFoundation playback | a Rust audio crate, or ffmpeg |
-    | `MirrorRecorder` | AVFoundation writer | ffmpeg, which the release already ships |
+    | `H264Decoder` | VideoToolbox | settled: the webview's `VideoDecoder` — see below |
+    | `MirrorAudioPlayer` | AVFoundation playback | the webview's `AudioDecoder`, or a Rust audio crate |
+    | `MirrorRecorder` | AVFoundation writer | ffmpeg, once it is provisioned off-Apple |
 
-    **Step 0 is a decision, not code.** Where does H.264 decoding happen? The
-    three candidates are genuinely different products, so this is worth settling
-    before anything is written:
+    **The transport goes in the daemon, not ADBKit.** "The same move as
+    `ReactotronRelay`" means its *location* too, and that file's own header says
+    why: ADBKit's graph staying free of swift-nio is what lets `swift test` run
+    on Windows, so the Apple-only listener stays gated in ADBKit and the
+    portable counterpart lives in `DaemonCore`, with everything above it — the
+    decoders, `ScrcpyServerParams`, `ScrcpyControlMessage` — as the shared
+    portable code. The mirror is the same shape: `MirrorTransport` keeps its
+    `#if canImport(Network)` gate for the Mac, and the daemon gets the NIO one.
 
-    1. **In the webview, via WebCodecs `VideoDecoder`.** The browser already has
-       a hardware decoder and a `canvas` to paint on, so the daemon only relays
-       the stream it already parses. Cheapest by far *if* it holds on both
-       targets — WebView2 is Chromium and certainly has it; **WebKitGTK is the
-       one to check first**, and if it does not, this option is dead on Linux.
-    2. **In Rust, painting a native surface.** Full control and no webview
-       dependency, at the cost of a decoder crate, a surface, and getting input
-       forwarding to line up with a region the webview does not own.
-    3. **In the daemon, streaming decoded frames.** Rejected on arithmetic
-       rather than taste: a 1080p60 raw stream is ~370 MB/s over the local
-       socket, which is not a thing to send through JSON framing.
+    **`H264Decoder` is not the decode path**, which makes the job larger than
+    its 62 lines suggest. Its own comment says it exists *only to keep the
+    latest decoded frame for screenshots*; live display feeds **compressed**
+    buffers straight to `AVSampleBufferDisplayLayer`. So the port owes both a
+    live present and a still grab. A `canvas` gives both — draw the
+    `VideoFrame`, `toBlob()` for the capture.
 
-    Then, in order: the transport on NIO (it is the same shape as the relay, and
-    the `adb forward` tunnel *must* be torn down — see the mirror-teardown
-    convention, which the Mac learned by leaking one per quit); the session; one
-    tile; then the wall, whose layout is already ported. Screen record and the
-    video editor ride the session, so they follow rather than lead.
+    **Step 0 is settled: decode in the webview, via WebCodecs `VideoDecoder`,
+    behind a runtime probe.** The daemon relays the stream it already parses;
+    the canvas is a DOM node, so it inherits the Mirror Wall's grid layout,
+    caption-strip drag, breakout and Full View for free. The rejected pair:
+    **Rust with a native surface** — no codec dependency, but six native
+    surfaces positioned over a scrolling webview and re-synced on every resize,
+    reorder and breakout, with Wayland and X11 differing, which is the class of
+    thing that works in dev and breaks on real hardware; and **decoded frames
+    through the daemon** — 1080p60 raw is ~370 MB/s, which is not a thing to
+    send through JSON framing.
+
+    The gating question was whether WebKitGTK has it. **Measured, not assumed** —
+    a real `WebKitWebView` on Ubuntu 24.04 (WebKitGTK 2.52.3), asking
+    `VideoDecoder.isConfigSupported` directly, by
+    `scripts/probe-webkit-webcodecs.sh`, which re-runs the whole table when a
+    distro bumps its webview:
+
+    | | `avc1.42E01E` | `avc1.4D401F` | `avc1.640028` | `vp8` |
+    | --- | --- | --- | --- | --- |
+    | stock `libwebkit2gtk-4.1-0` | ❌ | ❌ | ❌ | ✅ |
+    | `+ gstreamer1.0-libav` | ✅ | ✅ | ✅ | ✅ |
+
+    So the API is there — `VideoDecoder`, `VideoFrame`, `EncodedVideoChunk` all
+    defined, `isSecureContext` true (wry registers its scheme as secure, in
+    `webkitgtk/web_context.rs`) — but **H.264 is a GStreamer plugin the app does
+    not ship**, and `gstreamer1.0-libav` is not a dependency of
+    `libwebkit2gtk-4.1-0`. Two consequences worth writing down:
+
+    - **The probe is part of the feature, not a diagnostic.** One
+      `isConfigSupported` call decides between a working mirror and a precise
+      "install *this*" message. Without it the failure is a black rectangle.
+    - **Per artifact, the fix differs.** A `.deb` can `depends` on it, the way
+      the bundle already depends on `android-tools-adb`. An AppImage has
+      `bundle.linux.appimage.bundleMediaFramework`. The tarball that
+      `docs/release-channels.md` describes has no package manager at all, so
+      there the probe's message *is* the answer. Fedora's decoder lives outside
+      the default repos (RPM Fusion, or the Cisco openh264 repo), so a hard
+      `Requires:` would make an RPM uninstallable on a stock system — do not add
+      one.
+
+    Also worth correcting: on Linux this is **software** decode via
+    `avdec_h264`; hardware would need the VA-API plugins on top. Only
+    Windows/WebView2 gets hardware decode for free.
+
+    Then, in order: the transport on NIO in the daemon (the `adb forward` tunnel
+    *must* be torn down — see the mirror-teardown convention, which the Mac
+    learned by leaking one per quit); the session; one tile; then the wall, whose
+    layout is already ported. Screen record and the video editor ride the
+    session, so they follow rather than lead.
+
+    **The wire is cheap, but its drop policy is not.** The 370 MB/s above is
+    *decoded* frames; the encoded stream is scrcpy's bitrate, ~1–8 Mbps, so
+    base64 over the existing text protocol costs a third of about a megabyte a
+    second and needs no second encoding path in `WebSocketBridge` (whose
+    text-only comment gives "no client wants it" as the reason, and this is the
+    first client that might). scrcpy sends **Annex-B** with periodic SPS/PPS,
+    which is exactly what `VideoDecoder` wants when `description` is absent — no
+    AVCC repackaging. What does need thought at the session step:
+    `StreamSession`'s bounded buffer drops frames under load, and dropping an
+    arbitrary NAL corrupts the picture until the next keyframe, so a video
+    stream's drop policy has to be keyframe-aware rather than inherited.
 
     Two things the Mac learned the hard way and this must not relearn: a
     session's teardown has to be **awaited** at quit or its `adb forward`
