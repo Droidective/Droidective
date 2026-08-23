@@ -23,8 +23,9 @@ use crate::daemon::wire::{
     FeatureSummary, FileInfoRequest, FileInfoResponse, FileOperationRequest, FilePullRequest,
     FilePullResponse, FilesListRequest, FilesListResponse, InstallRequest, InstallResponse,
     LaunchResponse, MemInfoResponse, PairResponse, PermissionWriteRequest, PermissionsResponse,
-    RestrictionWriteRequest, RestrictionsResponse, RootStatusResponse, RunRequest, RunResponse,
-    SandboxRequest, SandboxResponse, StreamParams, ToolsResponse, WifiResponse, WifiWriteRequest,
+    ReactotronReverseRequest, ReactotronReverseResponse, RestrictionWriteRequest,
+    RestrictionsResponse, RootStatusResponse, RunRequest, RunResponse, SandboxRequest,
+    SandboxResponse, StreamParams, ToolsResponse, WifiResponse, WifiWriteRequest,
     WirelessActionRequest,
 };
 use crate::daemon::{DaemonStatus, Supervisor};
@@ -967,6 +968,51 @@ pub async fn watch_netspeed(
         }),
         forward(on_event),
     )
+}
+
+/// Everything the Reactotron relay sees, until `stop_watching`.
+///
+/// Subscribing is what starts the relay and the last unsubscribe stops it, so
+/// this is also how the feature is turned on: there is no separate start call
+/// for the two to disagree about.
+#[tauri::command]
+pub async fn watch_reactotron(
+    supervisor: State<'_, Supervisor>,
+    on_event: Channel<StreamUpdate>,
+) -> Result<i64, DaemonError> {
+    let stream = supervisor.stream().await?;
+    stream.subscribe("reactotron", None, forward(on_event))
+}
+
+/// Opens the `adb reverse` tunnel that lets a device find the relay.
+///
+/// Separate from the subscription because it is a different question: the relay
+/// listens on this machine whatever is plugged in, and which devices should be
+/// able to reach it is the user's choice.
+#[tauri::command]
+pub async fn reactotron_reverse(
+    supervisor: State<'_, Supervisor>,
+    serials: Vec<String>,
+    port: Option<u16>,
+) -> Result<ReactotronReverseResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .reactotron_reverse(&ReactotronReverseRequest { serials, port })
+        .await
+}
+
+#[tauri::command]
+pub async fn reactotron_unreverse(
+    supervisor: State<'_, Supervisor>,
+    serials: Vec<String>,
+    port: Option<u16>,
+) -> Result<ReactotronReverseResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .reactotron_unreverse(&ReactotronReverseRequest { serials, port })
+        .await
 }
 
 #[tauri::command]

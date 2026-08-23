@@ -715,6 +715,37 @@ pub struct BugReportResponse {
     pub path: String,
 }
 
+/// Which devices should be able to reach the Reactotron relay, and on what
+/// port.
+///
+/// `port` travels rather than being assumed 9090: the relay reports the port it
+/// actually bound in its `listening` frame, and tunnelling to a port nothing is
+/// listening on is the failure that reads as the feature being broken.
+#[derive(Debug, Clone, Serialize)]
+pub struct ReactotronReverseRequest {
+    pub serials: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub port: Option<u16>,
+}
+
+/// One device's outcome. The adb error travels rather than a bare false —
+/// "device offline" and "more than one device" want different things done.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ReactotronReverseResult {
+    pub serial: String,
+    pub ok: bool,
+    pub detail: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ReactotronReverseResponse {
+    pub results: Vec<ReactotronReverseResult>,
+    /// The exact command the daemon ran, which the pane shows: both apps name
+    /// the tunnel the same way, because it is the thing a user retypes by hand
+    /// when they want to check it.
+    pub command: String,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ToolReport {
     /// adb, scrcpy, ffmpeg, emulator.

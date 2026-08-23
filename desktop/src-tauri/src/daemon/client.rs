@@ -13,9 +13,9 @@ use crate::daemon::wire::{
     FileInfoRequest, FileInfoResponse, FileOperationRequest, FilePullRequest, FilePullResponse,
     FilesListRequest, FilesListResponse, InstallFormatsResponse, InstallRequest, InstallResponse,
     LaunchResponse, MemInfoResponse, PairResponse, PermissionWriteRequest, PermissionsResponse,
-    RestrictionWriteRequest, RestrictionsResponse, RootStatusResponse, RunRequest, RunResponse,
-    SandboxRequest, SandboxResponse, ToolsResponse, WifiResponse, WifiWriteRequest,
-    WirelessActionRequest,
+    ReactotronReverseRequest, ReactotronReverseResponse, RestrictionWriteRequest,
+    RestrictionsResponse, RootStatusResponse, RunRequest, RunResponse, SandboxRequest,
+    SandboxResponse, ToolsResponse, WifiResponse, WifiWriteRequest, WirelessActionRequest,
 };
 use crate::error::DaemonError;
 
@@ -264,6 +264,23 @@ impl DaemonClient {
 
     pub async fn detect_tools(&self) -> Result<ToolsResponse, DaemonError> {
         self.post("/v1/tools/detect", &EMPTY).await
+    }
+
+    /// Opens `adb reverse tcp:<port> tcp:<port>` so a device's own localhost
+    /// reaches the relay. The daemon retries per device — a just-attached one
+    /// refuses the first attempt — so this side asks once.
+    pub async fn reactotron_reverse(
+        &self,
+        request: &ReactotronReverseRequest,
+    ) -> Result<ReactotronReverseResponse, DaemonError> {
+        self.post("/v1/reactotron/reverse", request).await
+    }
+
+    pub async fn reactotron_unreverse(
+        &self,
+        request: &ReactotronReverseRequest,
+    ) -> Result<ReactotronReverseResponse, DaemonError> {
+        self.post("/v1/reactotron/unreverse", request).await
     }
 
     /// One request path, so every route shares one error contract.
