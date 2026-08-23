@@ -1,3 +1,15 @@
+// Before any include, and before the header that pulls in <stdlib.h>: glibc
+// hides `posix_openpt`, `grantpt`, `unlockpt` and `ptsname` unless a feature
+// test asks for them, so on Linux they compile as implicit declarations and
+// `ptsname` — which returns `char *` — is read as returning `int`. Darwin
+// declares all four unconditionally, which is why this only shows up on the
+// platform the app actually ships to. `_GNU_SOURCE` rather than a bare
+// `_XOPEN_SOURCE 600` because the same file needs `TIOCSCTTY`, which the strict
+// XOPEN view hides in turn; Darwin ignores both.
+#if defined(__linux__)
+#define _GNU_SOURCE 1
+#endif
+
 #include "include/cpty.h"
 
 #if defined(_WIN32)
