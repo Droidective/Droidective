@@ -109,16 +109,31 @@ describe("the pane layout inside a tab", () => {
   })
 })
 
+/**
+ * Byte comparisons go through a spread.
+ *
+ * `toEqual` on two `Uint8Array`s compares their prototypes as well as their
+ * contents, and under jsdom the one `TextEncoder` returns comes from a
+ * different realm than the one `decodeChunk` builds — identical bytes, and
+ * vitest reports "no visual difference" while failing. Spreading asks the
+ * question the test actually means.
+ */
+function bytes(value: Uint8Array): number[] {
+  return [...value]
+}
+
 describe("the bytes on the wire", () => {
   it("round-trips ASCII", () => {
-    expect(decodeChunk(encodeInput("ls -la\n"))).toEqual(new TextEncoder().encode("ls -la\n"))
+    expect(bytes(decodeChunk(encodeInput("ls -la\n")))).toEqual(
+      bytes(new TextEncoder().encode("ls -la\n")),
+    )
   })
 
   it("carries a control code, which is why the field is not plain text", () => {
     // Ctrl-C, as an escape rather than a literal ETX byte in the source: the
     // most important key a terminal has to deliver should not be invisible in
     // the test that proves it arrives.
-    expect(decodeChunk(encodeInput("\u0003"))).toEqual(new Uint8Array([0x03]))
+    expect(bytes(decodeChunk(encodeInput("\u0003")))).toEqual([0x03])
     // Escape, tab, backspace and carriage return, none of which a JSON string
     // could hold either.
     expect([...decodeChunk(encodeInput("\u001B\t\b\r"))]).toEqual([0x1b, 0x09, 0x08, 0x0d])
@@ -128,8 +143,10 @@ describe("the bytes on the wire", () => {
     // `btoa` throws on a code unit above 255, so a pasted emoji would take the
     // terminal down instead of being typed.
     const emoji = "🎉"
-    expect(decodeChunk(encodeInput(emoji))).toEqual(new TextEncoder().encode(emoji))
-    expect(decodeChunk(encodeInput("héllo"))).toEqual(new TextEncoder().encode("héllo"))
+    expect(bytes(decodeChunk(encodeInput(emoji)))).toEqual(bytes(new TextEncoder().encode(emoji)))
+    expect(bytes(decodeChunk(encodeInput("héllo")))).toEqual(
+      bytes(new TextEncoder().encode("héllo")),
+    )
   })
 
   it("survives a paste far bigger than an argument list", () => {

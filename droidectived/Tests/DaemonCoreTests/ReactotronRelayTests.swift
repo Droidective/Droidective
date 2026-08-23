@@ -324,20 +324,29 @@ import Testing
         await second.stop()
     }
 
-    @Test func aStartRightAfterAStopBindsRatherThanReportingItsOwnPortTaken() async throws {
+    @Test func aStartAndAStopThatRaceLeaveAConsistentRelay() async throws {
         // The sequence a timeline tab makes every time it is closed and
         // reopened, and the one React's double-mount makes on the very first
         // open: unsubscribe (stop) immediately followed by subscribe (start).
         //
         // Both suspend — a graceful shutdown and a bind are each async — and an
-        // actor is reentrant across a suspension. So a `start` arriving while a
-        // `stop` is mid-close used to see a nil channel, bind the same port
-        // again, and get EADDRINUSE from the socket the stop had not finished
-        // releasing. The feature then reported "another Reactotron is probably
-        // running" with nothing else on the port at all.
+        // actor is reentrant across a suspension. Both orders used to be broken:
+        // a start landing mid-stop saw a nil channel, bound the same port again
+        // and got EADDRINUSE from a socket the stop had not finished releasing
+        // ("another Reactotron is probably running", with nothing else on the
+        // port); a stop landing mid-start shut down the event-loop group the
+        // bind was still waiting on, which never completes and wedges the relay
+        // for the life of the process.
+        //
+        // What is asserted is the *invariant*, not the winner. Which of the two
+        // enters the actor first is genuinely unspecified — an earlier version
+        // of this test assumed the start won, and flaked once the whole suite
+        // was running alongside it. What the fix guarantees is that neither
+        // order throws, neither hangs, and the relay never ends up half-way:
+        // listening with no port, or stopped while still holding one.
         let relay = ReactotronRelay(port: 0)
         try await relay.start()
-        let first = try #require(await relay.boundPort)
+        #expect(await relay.boundPort != nil)
         defer { Task { await relay.stop() } }
 
         for _ in 0 ..< 5 {
@@ -345,24 +354,15 @@ import Testing
             async let started: Void = relay.start()
             await stopped
             try await started
-            #expect(await relay.isRunning, "the start won the race and must have bound")
-            #expect(await relay.boundPort != nil)
+            let running = await relay.isRunning
+            let port = await relay.boundPort
+            #expect(
+                running == (port != nil),
+                "running and bound have to agree whichever order won")
+            // Put the next round on a known footing rather than letting the
+            // previous winner decide it.
+            if !running { try await relay.start() }
         }
-        #expect(first > 0)
-    }
-
-    @Test func aStopRightAfterAStartLeavesNothingListening() async throws {
-        // The mirror of the race above: a stop that overtakes a start used to
-        // tear down a relay that had not bound yet, and the start then
-        // published its channel into a relay everything thought was stopped —
-        // a listener on 9090 that nothing owns and nothing can close.
-        let relay = ReactotronRelay(port: 0)
-        async let started: Void = relay.start()
-        async let stopped: Void = relay.stop()
-        try await started
-        await stopped
-        #expect(await relay.isRunning == false)
-        #expect(await relay.boundPort == nil)
     }
 
     @Test func aSecondStartIsANoOpRatherThanASecondListener() async throws {

@@ -1,3 +1,9 @@
+// @vitest-environment node
+//
+// A source-reading test, so it runs in node rather than the project's default
+// jsdom: jsdom rewrites `import.meta.url` to an http URL, and `readFileSync`
+// then refuses it ("The URL must be of scheme file"). Nothing here touches a
+// DOM, so the override costs nothing.
 import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 import {
