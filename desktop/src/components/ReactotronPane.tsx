@@ -1,21 +1,26 @@
 import { useMemo, useState } from "react"
-import { ReactotronFeed, RENDER_WINDOW } from "@/components/ReactotronFeed"
-import { ReactotronFilterSheet } from "@/components/ReactotronFilterSheet"
-import { ReactotronNotices, ReactotronStatus } from "@/components/ReactotronStatus"
-import { ReactotronToolbar } from "@/components/ReactotronToolbar"
-import { ReactotronWaiting } from "@/components/ReactotronWaiting"
+import {
+  ReactotronFeed,
+  ReactotronFilterSheet,
+  ReactotronNotices,
+  ReactotronRestartMenu,
+  ReactotronStatus,
+  ReactotronToolbar,
+  ReactotronWaiting,
+  RENDER_WINDOW,
+} from "@/components/reactotron"
 import { useReactotron } from "@/hooks/useReactotron"
-import { asDaemonError, reactotronReverse } from "@/lib/daemon"
+import { useReactotronActions } from "@/hooks/useReactotronActions"
 import { emptyFilter, filterRows, seenMethods, type TimelineFilter } from "@/lib/reactotron-filter"
-import type { Device, ReactotronReverseResponse } from "@/lib/wire"
+import type { Device } from "@/lib/wire"
 
 /**
  * The Reactotron timeline — a live feed of what a React Native app reports.
  *
  * It takes a device rather than requiring one, which is the difference from
  * every other feed here: the relay is a listener on *this* machine and runs
- * with nothing plugged in. A device only matters for the reverse tunnel, and
- * the waiting screen is where that is offered.
+ * with nothing plugged in. A device only matters for the reverse tunnel and the
+ * restart, and the waiting screen is where the tunnel is offered.
  *
  * Mounting subscribes, which is what starts the relay; unmounting stops it.
  */
@@ -24,8 +29,6 @@ export function ReactotronPane({ device }: { device: Device | null }) {
   const [filter, setFilter] = useState<TimelineFilter>(emptyFilter)
   const [filtering, setFiltering] = useState(false)
   const [newestFirst, setNewestFirst] = useState(false)
-  const [tunnel, setTunnel] = useState<ReactotronReverseResponse | null>(null)
-  const [failure, setFailure] = useState<string | null>(null)
 
   const { timeline } = feed
   const visible = useMemo(() => filterRows(timeline.rows, filter), [timeline.rows, filter])
@@ -33,14 +36,7 @@ export function ReactotronPane({ device }: { device: Device | null }) {
     () => seenMethods(timeline.rows, filter.method),
     [timeline.rows, filter.method],
   )
-
-  const openTunnel = () => {
-    if (device === null) return
-    setFailure(null)
-    reactotronReverse([device.serial], timeline.port).then(setTunnel, (thrown: unknown) => {
-      setFailure(asDaemonError(thrown).message)
-    })
-  }
+  const actions = useReactotronActions({ device, port: timeline.port, visible })
 
   // The waiting screen gives way only once there is something to read. A relay
   // whose app has since disconnected still has rows, and those last events are
@@ -53,9 +49,9 @@ export function ReactotronPane({ device }: { device: Device | null }) {
           port={timeline.port}
           error={feed.error?.message ?? feed.ended}
           hasDevice={device !== null}
-          tunnel={tunnel}
-          failure={failure}
-          onReverse={openTunnel}
+          tunnel={actions.tunnel}
+          failure={actions.failure}
+          onReverse={actions.openTunnel}
           onRestart={feed.restart}
         />
       </div>
@@ -75,6 +71,15 @@ export function ReactotronPane({ device }: { device: Device | null }) {
           setFiltering(true)
         }}
         onClear={feed.clear}
+        onExport={actions.exportShown}
+        onCopyAll={actions.copyShown}
+        trailing={
+          <ReactotronRestartMenu
+            serial={device?.serial ?? null}
+            clientName={timeline.clients[0]?.name ?? null}
+            onReport={actions.report}
+          />
+        }
       />
       <ReactotronStatus
         relay={feed.relay}
@@ -85,13 +90,14 @@ export function ReactotronPane({ device }: { device: Device | null }) {
         rendered={Math.min(visible.length, RENDER_WINDOW)}
         renderWindow={RENDER_WINDOW}
         hasDevice={device !== null}
-        onReverse={openTunnel}
+        onReverse={actions.openTunnel}
       />
       <ReactotronNotices
         error={feed.error?.message ?? null}
         ended={feed.ended}
-        failure={failure}
-        tunnel={tunnel}
+        failure={actions.failure}
+        notice={actions.notice}
+        tunnel={actions.tunnel}
       />
       <ReactotronFeed rows={visible} newestFirst={newestFirst} total={timeline.rows.length} />
 

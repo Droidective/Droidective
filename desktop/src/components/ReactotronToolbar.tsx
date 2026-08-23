@@ -1,4 +1,6 @@
-import { ArrowDownUp, Eraser, ListFilter, Search } from "lucide-react"
+import { useRef, useState } from "react"
+import { ArrowDownUp, Eraser, ListFilter, Search, Upload } from "lucide-react"
+import { useDismissOnOutside } from "@/hooks/useDismissOnOutside"
 import { cn } from "@/lib/cn"
 import { isFiltering, type TimelineFilter } from "@/lib/reactotron-filter"
 
@@ -20,6 +22,9 @@ export function ReactotronToolbar({
   onNewestFirst,
   onOpenFilters,
   onClear,
+  onExport,
+  onCopyAll,
+  trailing,
 }: {
   filter: TimelineFilter
   onFilter: (filter: TimelineFilter) => void
@@ -29,6 +34,12 @@ export function ReactotronToolbar({
   onNewestFirst: (newestFirst: boolean) => void
   onOpenFilters: () => void
   onClear: () => void
+  /** Save what is shown as a JSON file. */
+  onExport: () => void
+  /** Copy what is shown as JSON. */
+  onCopyAll: () => void
+  /** The restart control, which the pane owns because it needs a device. */
+  trailing?: React.ReactNode
 }) {
   const narrowing = isFiltering(filter) || filter.search.trim() !== ""
   return (
@@ -76,12 +87,74 @@ export function ReactotronToolbar({
           onNewestFirst(!newestFirst)
         }}
       />
+      <ExportMenu disabled={visible === 0} onExport={onExport} onCopy={onCopyAll} />
       <IconButton
         icon={Eraser}
         label="Clear the timeline"
         disabled={total === 0}
         onClick={onClear}
       />
+      {trailing}
+    </div>
+  )
+}
+
+/**
+ * Save-or-copy, as one menu.
+ *
+ * Both hand over the same thing — the raw wire commands of what is *shown*, so
+ * a filter narrows the export as well as the view. Disabled when nothing is
+ * shown: an empty file is not a useful answer to "export this".
+ */
+function ExportMenu({
+  disabled,
+  onExport,
+  onCopy,
+}: {
+  disabled: boolean
+  onExport: () => void
+  onCopy: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const menu = useRef<HTMLDivElement | null>(null)
+
+  useDismissOnOutside(menu, setOpen)
+
+  return (
+    <div ref={menu} className="relative shrink-0">
+      <IconButton
+        icon={Upload}
+        label="Export what is shown — save as JSON, or copy to the clipboard"
+        disabled={disabled}
+        active={open}
+        onClick={() => {
+          setOpen(!open)
+        }}
+      />
+      {open ? (
+        <div
+          role="menu"
+          className="absolute top-full right-0 z-40 mt-1 min-w-[180px] rounded-md border border-border-subtle bg-bg-raised py-1 shadow-2xl"
+        >
+          {[
+            { label: "Save as JSON…", run: onExport },
+            { label: "Copy to clipboard", run: onCopy },
+          ].map((entry) => (
+            <button
+              key={entry.label}
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false)
+                entry.run()
+              }}
+              className="block w-full px-3 py-1 text-left text-[12.5px] text-text-primary hover:bg-accent/20"
+            >
+              {entry.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   )
 }

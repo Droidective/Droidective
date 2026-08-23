@@ -75,17 +75,21 @@ export function ReactotronNotices({
   error,
   ended,
   failure,
+  notice,
   tunnel,
 }: {
   error: string | null
   ended: string | null
   failure: string | null
+  /** Something that went right and is worth saying — an export, a restart. */
+  notice?: string | null
   tunnel: ReactotronReverseResponse | null
 }) {
   const notices: { tone: "error" | "warn" | "ok"; text: string }[] = []
   if (error !== null) notices.push({ tone: "error", text: error })
   else if (ended !== null) notices.push({ tone: "warn", text: `The relay stopped (${ended}).` })
   if (failure !== null) notices.push({ tone: "error", text: failure })
+  if (notice !== null && notice !== undefined) notices.push({ tone: "ok", text: notice })
   for (const result of tunnel?.results ?? []) {
     // adb's own words, because "device offline" and "more than one device" want
     // different things done about them.
@@ -98,9 +102,9 @@ export function ReactotronNotices({
   if (notices.length === 0) return null
   return (
     <div className="flex shrink-0 flex-col gap-2 px-3 pt-3">
-      {notices.map((notice) => (
-        <Banner key={notice.text} tone={notice.tone}>
-          {notice.text}
+      {notices.map((entry) => (
+        <Banner key={entry.text} tone={entry.tone}>
+          {entry.text}
         </Banner>
       ))}
     </div>
