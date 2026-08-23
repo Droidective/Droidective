@@ -229,15 +229,24 @@ import Testing
         #expect(StreamProtocol.Command.Params(columns: nil, rows: 24).size == nil)
     }
 
-    @Test func onlyTheTerminalTakesInput() {
+    @Test func onlyTheTerminalAndTheMirrorTakeInput() {
         // The registry-invariant shape: a new topic that forgot to answer would
         // fall into whichever arm it was added to, and the default is wrong for
         // exactly one of them.
         for topic in StreamProtocol.Topic.allCases {
             switch topic {
-            case .pty: #expect(topic.acceptsInput)
+            case .pty:
+                #expect(topic.acceptsInput)
+                #expect(topic.acceptsResize)
+            case .mirror:
+                // Takes taps and keys, but not a resize: scrcpy negotiates the
+                // size once for the session, so a resize here would validate
+                // and then do nothing.
+                #expect(topic.acceptsInput)
+                #expect(!topic.acceptsResize)
             case .devices, .logcat, .performance, .netspeed, .reactotron:
                 #expect(!topic.acceptsInput)
+                #expect(!topic.acceptsResize)
             }
         }
     }

@@ -234,3 +234,74 @@ public struct NetSamplePayload: Codable, Equatable, Sendable {
         }
     }
 }
+
+/// One mirror frame, or the configuration that has to precede them.
+///
+/// Two kinds in one payload rather than two topics, because the ordering
+/// matters and is only free if both travel the same subscription: a client
+/// cannot decode a frame before it has configured a decoder, and a second
+/// topic would make that a race it had to sequence itself.
+///
+/// The bytes are **Annex-B**, which is what `VideoDecoder` decodes when
+/// `description` is absent — scrcpy's own framing, passed through rather than
+/// repackaged as AVCC. Keyframes carry the SPS/PPS ahead of them (see
+/// `MirrorStreamMapper`), so the stream stays self-describing.
+public struct MirrorFramePayload: Codable, Equatable, Sendable {
+    /// "config" or "frame".
+    public let kind: String
+    /// `config`: the RFC 6381 string `VideoDecoder.configure` takes, read out
+    /// of the SPS rather than assumed — the device picks the profile.
+    public let codec: String?
+    /// `config`: the size scrcpy negotiated, for laying the tile out before a
+    /// frame has arrived.
+    ///
+    /// A hint, not the truth. It is the session's opening dimensions, and the
+    /// device can rotate later without the daemon knowing the new geometry —
+    /// reading it out of a rotated SPS would mean a full exp-Golomb parse. A
+    /// decoded `VideoFrame` carries its own `displayWidth`/`displayHeight`, so
+    /// a client should size itself from the frames and use this only to avoid
+    /// a zero-sized first layout.
+    public let width: Int?
+    public let height: Int?
+    /// `config`: the device's own name, for the tile caption.
+    public let deviceName: String?
+    /// `frame`: a keyframe, which is `EncodedVideoChunk`'s `type: "key"`. The
+    /// distinction is not cosmetic — a decoder fed a delta frame first has
+    /// nothing to apply it to.
+    public let key: Bool?
+    /// `frame`: presentation timestamp in microseconds, on the *device's*
+    /// clock. Passed through rather than restamped: it is what the recorder
+    /// would mux by, and a host-clock guess would drift over a long session.
+    public let pts: UInt64?
+    /// `frame`: base64 Annex-B bytes.
+    public let data: String?
+
+    /// The configuration a client needs before any frame can be decoded.
+    public static func config(
+        codec: String, width: Int, height: Int, deviceName: String?
+    ) -> Self {
+        .init(
+            kind: "config", codec: codec, width: width, height: height,
+            deviceName: deviceName, key: nil, pts: nil, data: nil)
+    }
+
+    public static func frame(_ bytes: Data, key: Bool, pts: UInt64) -> Self {
+        .init(
+            kind: "frame", codec: nil, width: nil, height: nil, deviceName: nil,
+            key: key, pts: pts, data: bytes.base64EncodedString())
+    }
+
+    private init(
+        kind: String, codec: String?, width: Int?, height: Int?, deviceName: String?,
+        key: Bool?, pts: UInt64?, data: String?
+    ) {
+        self.kind = kind
+        self.codec = codec
+        self.width = width
+        self.height = height
+        self.deviceName = deviceName
+        self.key = key
+        self.pts = pts
+        self.data = data
+    }
+}

@@ -58,6 +58,23 @@ public enum H264NAL {
         return out
     }
 
+    /// The RFC 6381 codec parameter for an SPS — `avc1.PPCCLL`, which is the
+    /// string WebCodecs' `VideoDecoder.configure` wants.
+    ///
+    /// The three bytes are `profile_idc`, the constraint-flags byte and
+    /// `level_idc`, and they sit immediately after the SPS's own NAL header
+    /// byte. Reading them out beats hard-coding a profile: the daemon has to
+    /// hand the webview a string its decoder will actually accept, and the
+    /// device picks the profile, not us.
+    ///
+    /// Uppercase hex. Both cases parse, and this is the spelling proved against
+    /// a real WebKitGTK by `scripts/probe-webkit-webcodecs.sh`.
+    public static func avcCodecString(sps: Data) -> String? {
+        let bytes = [UInt8](sps)
+        guard bytes.count >= 4, type(of: sps) == spsType else { return nil }
+        return String(format: "avc1.%02X%02X%02X", bytes[1], bytes[2], bytes[3])
+    }
+
     /// Extract the first SPS and PPS NAL payloads from an Annex-B config blob.
     public static func parameterSets(fromAnnexB data: Data) -> (sps: Data, pps: Data)? {
         var sps: Data?

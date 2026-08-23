@@ -23,6 +23,14 @@ public enum StreamProtocol {
         /// keystrokes back in, which is why `Operation` has more than
         /// subscribe and unsubscribe.
         case pty
+        /// A device's screen, as the H.264 frames scrcpy produces, with the
+        /// client's taps and keys going back the other way.
+        ///
+        /// The second two-way topic, and the only one whose payload is a media
+        /// stream. The frames are Annex-B and the webview decodes them — see
+        /// `MirrorFramePayload` and backlog 25's step 0 in
+        /// `docs/desktop-parity.md`.
+        case mirror
     }
 
     // MARK: client → server
@@ -223,29 +231,32 @@ public enum StreamProtocol {
             }
             return nil
         case .write:
-            if let error = interactive(command.id, active) { return error }
+            if let error = check(command.id, active, \.acceptsInput) { return error }
             guard let encoded = command.params?.data, !encoded.isEmpty else {
                 return .missingData
             }
             guard command.params?.bytes != nil else { return .invalidData }
             return nil
         case .resize:
-            if let error = interactive(command.id, active) { return error }
+            if let error = check(command.id, active, \.acceptsResize) { return error }
             guard command.params?.size != nil else { return .missingSize }
             return nil
         }
     }
 
-    /// Whether `id` names a subscription that takes input.
+    /// Whether `id` names a subscription that accepts the operation, by the
+    /// trait that decides it.
     ///
     /// An unknown id *is* an error here, unlike `unsubscribe`. The same race
     /// exists — a keystroke can arrive just after a shell exited — but a write
     /// that lands nowhere because the client used the wrong id is a bug that
     /// otherwise presents as a terminal that ignores the keyboard. A client
     /// that has already seen `ended` for the id knows to ignore the answer.
-    private static func interactive(_ id: Int, _ active: [Int: Topic]) -> CommandError? {
+    private static func check(
+        _ id: Int, _ active: [Int: Topic], _ trait: KeyPath<Topic, Bool>
+    ) -> CommandError? {
         guard let topic = active[id] else { return .unknownSubscription }
-        return topic.acceptsInput ? nil : .notInteractive
+        return topic[keyPath: trait] ? nil : .notInteractive
     }
 }
 
@@ -260,18 +271,34 @@ extension StreamProtocol.Topic {
     public var needsSerial: Bool {
         switch self {
         case .devices, .pty, .reactotron: return false
-        case .logcat, .performance, .netspeed: return true
+        case .logcat, .performance, .netspeed, .mirror: return true
         }
     }
 
     /// Whether the client may send into the subscription.
     ///
-    /// Only `pty`: every other topic is something being observed, and a `write`
-    /// against one has no meaning to fall back on.
+    /// `pty` takes keystrokes and `mirror` takes control messages — taps, keys,
+    /// a clipboard paste. Every other topic is something being observed, and a
+    /// `write` against one has no meaning to fall back on.
     public var acceptsInput: Bool {
         switch self {
-        case .pty: return true
+        case .pty, .mirror: return true
         case .devices, .logcat, .performance, .netspeed, .reactotron: return false
+        }
+    }
+
+    /// Whether the client may resize it.
+    ///
+    /// `pty` only, and separate from `acceptsInput` for the same reason that
+    /// one names a write to a logcat stream: a terminal's size is an ioctl on
+    /// the tty, while a mirror's is scrcpy's own negotiation, fixed for the
+    /// session. Folding the two together would let a resize on a mirror
+    /// validate and then do nothing, which presents as a mirror that ignores
+    /// the window.
+    public var acceptsResize: Bool {
+        switch self {
+        case .pty: return true
+        case .devices, .logcat, .performance, .netspeed, .reactotron, .mirror: return false
         }
     }
 
@@ -301,10 +328,17 @@ extension StreamProtocol.Topic {
     /// stream where a discarded chunk can be half an escape sequence, so
     /// everything after it renders wrong. Chunks concatenate losslessly, which
     /// is why a batch of them is safe and a replaced one would not be.
+    ///
+    /// `mirror` is an increment for the strongest reason of all: an H.264 delta
+    /// frame is meaningless without the frames before it. That makes the drop
+    /// policy load-bearing rather than incidental — a `dropped` on this topic
+    /// means the client must discard frames until the next `key`, which it can
+    /// always do because every keyframe carries its own parameter sets. See
+    /// `MirrorStreamMapper`.
     public var isSnapshot: Bool {
         switch self {
         case .devices: return true
-        case .logcat, .performance, .netspeed, .pty, .reactotron: return false
+        case .logcat, .performance, .netspeed, .pty, .reactotron, .mirror: return false
         }
     }
 }

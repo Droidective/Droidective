@@ -870,26 +870,33 @@ after the screens rather than instead of them.
     against upstream's Electron app, so it is parity, not a regression.
 25. **Mirror, screen record, and the video editor.** Smaller than it looks.
     The instinct is "a decode/render stack to write from scratch", but counting
-    the files says otherwise: of the eighteen in `ADBKit/Services/Mirror`,
-    **thirteen are already portable** — `ScrcpyStreamDecoder`,
+    the files says otherwise: of the seventeen in `ADBKit/Services/Mirror`,
+    **ten are already portable** — `ScrcpyStreamDecoder`,
     `ScrcpyAudioStreamDecoder`, `ScrcpyControlMessage`, `ScrcpyDeviceMessage`,
-    `ScrcpyServerParams`, `ScrcpyServerLocator`, `H264Format`, `H264NAL`,
-    `PCMMixdown`, `MirrorAudioFallback`, `ShowTouches`, plus `MirrorWall`'s
-    layout maths. scrcpy's own server speaks the same protocol to any host.
+    `ScrcpyServerParams`, `ScrcpyServerLocator`, `H264NAL`, `PCMMixdown`,
+    `MirrorAudioFallback`, `ShowTouches`, plus `MirrorWall`'s layout maths, which
+    lives under `Features/`. scrcpy's own server speaks the same protocol to any
+    host.
     ffmpeg builds for Windows and Linux, but nothing in this repo provisions it
     for either yet: `App/Resources/ffmpeg` is a committed macOS universal binary
     and `scripts/unpack-ffmpeg.sh` verifies it with `lipo`. Screen record and the
     video editor need that gap closed first — the mirror itself does not.
 
-    **Five files are gated, and they are the whole job:**
+    **Seven files are gated, and they are the whole job.** (The entry said five;
+    the two it missed are the ones whose `#if` is not on the first line, and
+    neither changes the shape of the work — `H264Format` is glue for the Apple
+    display layer and recorder, so the webview path wants nothing from it, and
+    `MicrophoneCapture` belongs to screen record rather than the mirror.)
 
     | Gated on | What it does | The portable answer |
     | --- | --- | --- |
     | `MirrorTransport` | `Network.framework` socket to the scrcpy server over `adb forward` | NIO **in the daemon**, exactly the move `ReactotronRelay` already made — see below |
-    | `MirrorSession` | the orchestrator — gated only because it holds the two below | falls out once they are |
+    | `MirrorSession` | the orchestrator — gated only because it holds the others | falls out once they are |
     | `H264Decoder` | VideoToolbox | settled: the webview's `VideoDecoder` — see below |
+    | `H264Format` | CoreMedia glue: format descriptions and `CMSampleBuffer`s | none needed — it exists to feed `AVSampleBufferDisplayLayer` and `AVAssetWriter` |
     | `MirrorAudioPlayer` | AVFoundation playback | the webview's `AudioDecoder`, or a Rust audio crate |
     | `MirrorRecorder` | AVFoundation writer | ffmpeg, once it is provisioned off-Apple |
+    | `MicrophoneCapture` | AVFoundation host mic | screen record's problem, not the mirror's |
 
     **The transport goes in the daemon, not ADBKit.** "The same move as
     `ReactotronRelay`" means its *location* too, and that file's own header says
@@ -956,6 +963,28 @@ after the screens rather than instead of them.
     learned by leaking one per quit); the session; one tile; then the wall, whose
     layout is already ported. Screen record and the video editor ride the
     session, so they follow rather than lead.
+
+    **Landed so far.** `ScrcpyTransport` (the NIO sockets, with the
+    accept-then-drop handshake `adb forward` forces) and `ScrcpySession` (the
+    transport, `ScrcpyStreamDecoder` and the mapping onto the wire, with one
+    teardown over all three) — both in `DaemonCore`, named apart from ADBKit's
+    `MirrorTransport`/`MirrorSession` because on macOS both modules are visible
+    at once and the bare names are ambiguous. The `mirror` stream topic is wired
+    (`docs/droidectived-protocol.md` §5.4): `config` then frames, Annex-B, taps
+    back through `write`. `H264NAL.avcCodecString` is the one piece that went to
+    ADBKit, being pure H.264 parsing both hosts could use.
+
+    **Next is one tile**, and the client owes three things the daemon cannot do
+    for it: configure on `config` and not before, discard until the next `key`
+    after a `dropped`, and size itself from the decoded frames rather than the
+    config's hint. Then the wall.
+
+    **Still open, and worth doing before the tile ships:** the server jar. The
+    daemon reads it from an installed scrcpy via `ScrcpyServerLocator`, while the
+    Mac ships it in its bundle and promises no separate install. It is a Java
+    jar — architecture-independent — and `App/Resources/scrcpy-server` is
+    committed already, so this is a packaging step (bundle it as a Tauri
+    resource, pass the path to the sidecar), not a porting one.
 
     **The wire is cheap, but its drop policy is not.** The 370 MB/s above is
     *decoded* frames; the encoded stream is scrcpy's bitrate, ~1–8 Mbps, so

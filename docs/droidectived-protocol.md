@@ -419,6 +419,79 @@ Electron app, so this is parity rather than a regression, and it only arises
 where two Reactotrons run at once. Worth knowing before debugging "my app
 connects but nothing appears".
 
+### 5.4 The `mirror` topic — a media stream over the same socket
+
+The screen, as the H.264 frames scrcpy's own server produces. The second
+two-way topic: taps and keys go back through `write`, the same operation the
+terminal uses, carrying `ScrcpyControlMessage` bytes instead of keystrokes.
+
+The daemon does not decode. The webview does, with WebCodecs — that decision,
+and the measurement behind it, is backlog 25's step 0 in
+`docs/desktop-parity.md`. So this topic relays a stream the daemon has already
+parsed, and the payload is shaped for `VideoDecoder` rather than for us.
+
+```jsonc
+// client → server
+{ "op": "subscribe", "id": 9, "topic": "mirror",
+  "params": { "serial": "emulator-5554" } }
+// server → client: the configuration first, always
+{ "id": 9, "event": "batch", "items": [
+  { "kind": "config", "codec": "avc1.42C029", "width": 800, "height": 500,
+    "deviceName": "sdk_gphone64_arm64" }
+] }
+// then frames
+{ "id": 9, "event": "batch", "items": [
+  { "kind": "frame", "key": true,  "pts": 111222, "data": "<base64 Annex-B>" },
+  { "kind": "frame", "key": false, "pts": 111555, "data": "<base64 Annex-B>" }
+] }
+// client → server: a touch, as ScrcpyControlMessage bytes
+{ "op": "write", "id": 9, "params": { "data": "<base64>" } }
+```
+
+Five things that are decisions rather than details:
+
+- **`config` before any frame, on one topic.** A client cannot decode before it
+  has configured a decoder. Both kinds ride the same subscription so that
+  ordering is free rather than something the client has to sequence; a second
+  topic would have made it a race. `codec` is read out of the SPS
+  (`H264NAL.avcCodecString`) rather than assumed, because the device picks the
+  profile — the captured emulator negotiates Constrained Baseline 4.1, not the
+  High profile a hard-coded string would have claimed.
+- **Annex-B, not AVCC.** That is what `VideoDecoder` decodes when
+  `description` is absent, and it is scrcpy's own framing — so the bytes pass
+  through instead of being repackaged.
+- **Every keyframe carries its own SPS/PPS.** scrcpy sends parameter sets once,
+  in a config packet. Prepending them to each keyframe costs a few dozen bytes
+  about once a second and buys the property the next bullet depends on.
+- **`dropped` means "discard until the next `key`".** This is the strongest
+  increment topic there is: an H.264 delta frame is meaningless without the
+  frames before it, so the drop-oldest policy of §5 leaves a client holding
+  frames it cannot use. Because every keyframe is self-describing, the recovery
+  rule is simple and always available. A client that ignores this renders
+  garbage rather than a gap, which is why it is written here and not left to
+  taste.
+- **`width`/`height` are a layout hint, not the truth.** They are the session's
+  opening dimensions. A device can rotate afterwards without the daemon knowing
+  the new geometry — reading it out of a rotated SPS would mean a full
+  exp-Golomb parse — and a decoded `VideoFrame` carries its own
+  `displayWidth`/`displayHeight`. Size from the frames; use these only to avoid
+  a zero-sized first layout.
+
+`resize` is refused on this topic (`Topic.acceptsResize`), separately from
+`write` being accepted: scrcpy negotiates the size once per session, so a
+resize here would validate and then do nothing — which presents as a mirror
+that ignores the window.
+
+Two failure modes reach the client as `failed` rather than as a feed that never
+produces a frame: scrcpy's server jar not being found, which is reported at
+subscribe time, and a stream whose codec is not H.264, which is reported when
+the header arrives and names what was negotiated. **One packaging gap remains:**
+the jar is currently read from an installed scrcpy via `ScrcpyServerLocator`,
+while the Mac ships it in its bundle. It is a Java jar, so it is
+architecture-independent and the committed `App/Resources/scrcpy-server` is
+already the right file — the desktop app passing its own bundled copy through is
+the step that closes it.
+
 ## 6. Lifecycle
 
 - **Startup:** parse args, write the token, bind, print the port line.
