@@ -53,7 +53,6 @@ export function ReactotronFeed({
         <ReactotronRow
           key={row.id}
           row={row}
-          hit={false}
           onMenu={(at, target) => {
             setMenu({ ...at, row: target })
           }}

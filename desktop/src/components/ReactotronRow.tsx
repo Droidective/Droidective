@@ -94,11 +94,9 @@ function clock(at: number): string {
  */
 export function ReactotronRow({
   row,
-  hit,
   onMenu,
 }: {
   row: TimelineRow
-  hit: boolean
   /** Right-click, for the copy menu the pane owns. */
   onMenu?: (at: { x: number; y: number }, row: TimelineRow) => void
 }) {
@@ -109,7 +107,7 @@ export function ReactotronRow({
 
   return (
     <div
-      className={cn("flex min-w-0 border-b border-border-subtle/50", hit ? "bg-warn/20" : "")}
+      className="flex min-w-0 border-b border-border-subtle/50"
       onContextMenu={(event) => {
         if (onMenu === undefined) return
         event.preventDefault()

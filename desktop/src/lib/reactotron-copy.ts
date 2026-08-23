@@ -53,11 +53,6 @@ export function copyEventsAsJson(rows: readonly TimelineRow[]): string {
   return prettyJson(rows.map((row) => wireShape(row)))
 }
 
-/** A run of rows as plain text, one line each. */
-export function copyEventsAsText(rows: readonly TimelineRow[]): string {
-  return rows.map((row) => copyLine(row)).join("\n")
-}
-
 /**
  * One row as the wire saw it.
  *

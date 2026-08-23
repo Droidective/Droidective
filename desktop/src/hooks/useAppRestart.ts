@@ -21,9 +21,11 @@ export interface AppRestart {
    * Restart the app the client belongs to, optionally wiping first. Returns
    * `ask` instead of acting when the target cannot be established.
    */
-  restart: (args: { serial: string; clientName: string | null; scope: ClearScope }) => Promise<RestartOutcome>
-  /** Restart a package the caller has already decided on. */
-  restartPackage: (args: { serial: string; packageId: string; scope: ClearScope }) => Promise<RestartOutcome>
+  restart: (args: {
+    serial: string
+    clientName: string | null
+    scope: ClearScope
+  }) => Promise<RestartOutcome>
 }
 
 /**
@@ -99,7 +101,7 @@ export function useAppRestart(): AppRestart {
     [restartPackage],
   )
 
-  return { busy, restart, restartPackage }
+  return { busy, restart }
 }
 
 /**

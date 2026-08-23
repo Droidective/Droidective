@@ -2,13 +2,7 @@ import { describe, expect, it } from "vitest"
 import { emptyTreeState, treeRows } from "@/lib/json-tree"
 import { parseEvent } from "@/lib/reactotron"
 import { makeRow, type TimelineRow } from "@/lib/reactotron-rows"
-import {
-  copyEventsAsJson,
-  copyEventsAsText,
-  copyLine,
-  copyObject,
-  copyValue,
-} from "@/lib/reactotron-copy"
+import { copyEventsAsJson, copyLine, copyObject, copyValue } from "@/lib/reactotron-copy"
 import type { JsonValue } from "@/lib/json"
 import type { ReactotronCommand } from "@/lib/wire"
 
@@ -157,15 +151,5 @@ describe("copyEventsAsJson", () => {
 
   it("is valid JSON for an empty selection", () => {
     expect(JSON.parse(copyEventsAsJson([]))).toEqual([])
-  })
-})
-
-describe("copyEventsAsText", () => {
-  it("is one line per row, in order", () => {
-    const rows = [
-      row({ type: "log", payload: { level: "debug", message: "one" } }),
-      row({ type: "log", payload: { level: "warn", message: "two" } }),
-    ]
-    expect(copyEventsAsText(rows)).toBe("DEBUG one\nWARN two")
   })
 })
