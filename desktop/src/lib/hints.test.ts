@@ -7,24 +7,30 @@ import type { FeatureSummary } from "@/lib/wire"
 const features = (raw as unknown as { features: FeatureSummary[] }).features
 
 /**
- * The panes that take a device, read out of the router that decides it.
+ * The panes that *require* a device, read out of the router that decides it.
  *
  * A source read rather than a second list: the switch in `FeaturePane` *is* the
  * answer to which screens exist, and anything restating it is something to keep
  * in agreement.
  *
- * Taking a device is the point, not merely having a pane: `emulators` has one
- * and deliberately takes none — launching an emulator is what you do when
- * nothing is connected — so it can never show this empty state and needs no
- * line for it.
+ * Requiring one is the point, not merely having a pane, and not merely being
+ * handed a device either. The screens in `hostPane` all run against *this*
+ * machine and work with nothing connected — `emulators` because launching one
+ * is what you do when nothing is attached, `terminal` because a shell is local,
+ * `reactotron` because the relay is a listener here and a device only matters
+ * for its reverse tunnel. None of them can reach the connect-a-device empty
+ * state, so a line for it would be dead text.
  */
 function deviceScopedPaneIDs(): string[] {
   const router = readFileSync(new URL("../components/FeaturePane.tsx", import.meta.url), "utf8")
+  // Cut the host-side group off before splitting. `reactotron` is handed a
+  // device (`device={device}`) and still belongs outside this list, so the
+  // exclusion has to be structural rather than another substring test.
+  const deviceScoped = router.split("function hostPane(")[0] ?? router
   // Split at each `case "`, so a block is exactly that case's body. The last
-  // one runs on into `default:` and the helpers below it, which is why it is
-  // cut there — the fallback passes a device and would claim every trailing
-  // case does too.
-  return router
+  // one runs on into `default:`, which is why it is cut there — the fallback
+  // passes a device and would claim every trailing case does too.
+  return deviceScoped
     .split(/\n\s*case "/u)
     .slice(1)
     .map((block) => ({ id: block.slice(0, block.indexOf('"')), body: block.split("default:")[0] }))
@@ -75,5 +81,14 @@ describe("the hint table", () => {
     // would silently pass over an empty list.
     expect(deviceScopedPaneIDs().length).toBeGreaterThan(15)
     expect(deviceScopedPaneIDs()).toContain("logcat")
+  })
+
+  it("leaves the host-side screens out of it", () => {
+    // The cut at `hostPane` is doing the work here. Without it `reactotron`
+    // reads as device-scoped — it is handed one — and the test above would
+    // demand an empty-state line for a screen that cannot show one.
+    expect(deviceScopedPaneIDs()).not.toContain("reactotron")
+    expect(deviceScopedPaneIDs()).not.toContain("terminal")
+    expect(deviceScopedPaneIDs()).not.toContain("emulators")
   })
 })

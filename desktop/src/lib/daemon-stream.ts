@@ -19,6 +19,8 @@ import type {
   NetSample,
   PerfSample,
   PtyChunk,
+  ReactotronFrame,
+  ReactotronReverseResponse,
   StreamUpdate,
 } from "@/lib/wire"
 
@@ -34,7 +36,8 @@ async function subscribe<Item>(
     | "watch_devices"
     | "watch_logcat"
     | "watch_netspeed"
-    | "watch_performance",
+    | "watch_performance"
+    | "watch_reactotron",
   args: Record<string, unknown>,
   onUpdate: (update: StreamUpdate<Item>) => void,
 ): Promise<Subscription> {
@@ -88,6 +91,41 @@ export function watchNetspeed(
   onUpdate: (update: StreamUpdate<NetSample>) => void,
 ): Promise<Subscription> {
   return subscribe("watch_netspeed", { serial }, onUpdate)
+}
+
+/**
+ * Everything the Reactotron relay sees.
+ *
+ * Subscribing is also what *starts* the relay, and the last unsubscribe stops
+ * it — so a mounted pane is a listening relay, and there is no separate switch
+ * for the two to disagree about.
+ */
+export function watchReactotron(
+  onUpdate: (update: StreamUpdate<ReactotronFrame>) => void,
+): Promise<Subscription> {
+  return subscribe("watch_reactotron", {}, onUpdate)
+}
+
+/**
+ * Opens `adb reverse tcp:<port> tcp:<port>` so each device's own localhost
+ * reaches the relay.
+ *
+ * The port is the one the relay reported binding rather than a constant: a
+ * tunnel to a port nothing is listening on is the failure that reads as the
+ * whole feature being broken.
+ */
+export function reactotronReverse(
+  serials: string[],
+  port: number | null,
+): Promise<ReactotronReverseResponse> {
+  return invoke("reactotron_reverse", { serials, port })
+}
+
+export function reactotronUnreverse(
+  serials: string[],
+  port: number | null,
+): Promise<ReactotronReverseResponse> {
+  return invoke("reactotron_unreverse", { serials, port })
 }
 
 /** One open terminal, and everything that can be sent into it. */

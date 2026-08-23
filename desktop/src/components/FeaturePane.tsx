@@ -21,6 +21,7 @@ import {
   PerformancePane,
   PermissionsPane,
   PrivateDnsPane,
+  ReactotronPane,
   RestrictionsPane,
   RootStatusPane,
   SandboxPane,
@@ -83,6 +84,9 @@ export function FeaturePane(props: FeaturePaneProps) {
   if (props.id === ABOUT_TAB) return <AboutPane />
   if (props.feature === null) return <NotHere title={props.id} />
 
+  const hostSide = hostPane(props.id, props.device)
+  if (hostSide !== null) return hostSide
+
   switch (props.id) {
     case "apps":
       return (
@@ -118,15 +122,6 @@ export function FeaturePane(props: FeaturePaneProps) {
       return <PrivateDnsPane device={props.device} />
     case "network-speed":
       return <NetspeedPane device={props.device} />
-    // No device prop: an emulator is a thing on *this* machine, and the
-    // screen's whole job is launching one when none is connected.
-    case "emulators":
-      return <EmulatorsPane />
-    // A serial rather than a device, and for the same reason: a shell runs on
-    // this machine. The selection only decides what `ANDROID_SERIAL` says in
-    // the next shell opened, so the terminal works with nothing connected.
-    case "terminal":
-      return <TerminalPane serial={props.device?.serial ?? null} />
     case "install-app":
       return <InstallAppPane device={props.device} />
     case "app-info":
@@ -149,6 +144,29 @@ export function FeaturePane(props: FeaturePaneProps) {
       ) : (
         <NotHere title={props.feature.title} subtitle={props.feature.subtitle} />
       )
+  }
+}
+
+/**
+ * The screens that run against *this* machine rather than a device.
+ *
+ * All three work with nothing connected, and each takes the selection
+ * differently for a reason worth stating once: an emulator is a thing here and
+ * the screen's whole job is launching one; a shell runs here and the selection
+ * only decides what `ANDROID_SERIAL` says in the next tab; the Reactotron relay
+ * listens here, and a device matters only for the reverse tunnel its waiting
+ * screen offers.
+ */
+function hostPane(id: string, device: Device | null) {
+  switch (id) {
+    case "emulators":
+      return <EmulatorsPane />
+    case "terminal":
+      return <TerminalPane serial={device?.serial ?? null} />
+    case "reactotron":
+      return <ReactotronPane device={device} />
+    default:
+      return null
   }
 }
 

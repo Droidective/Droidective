@@ -185,10 +185,13 @@ export function asDaemonError(error: unknown): DaemonError {
 export type { Subscription, TerminalSession } from "@/lib/daemon-stream"
 export {
   openTerminal,
+  reactotronReverse,
+  reactotronUnreverse,
   watchDevices,
   watchLogcat,
   watchNetspeed,
   watchPerformance,
+  watchReactotron,
 } from "@/lib/daemon-stream"
 export {
   appInfo,

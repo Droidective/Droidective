@@ -38,6 +38,23 @@ export interface LogLine {
   message: string
 }
 
+/** One device's `adb reverse` outcome. */
+export interface ReactotronReverseResult {
+  serial: string
+  ok: boolean
+  /**
+   * adb's own words when it refused. Not a bare failure flag: "device offline"
+   * and "more than one device" want different things done about them.
+   */
+  detail: string
+}
+
+export interface ReactotronReverseResponse {
+  results: ReactotronReverseResult[]
+  /** The exact command the daemon ran, which the pane shows verbatim. */
+  command: string
+}
+
 /**
  * One Reactotron frame, as the relay decoded it.
  *
