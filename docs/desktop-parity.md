@@ -868,12 +868,52 @@ after the screens rather than instead of them.
     while the daemon took IPv4 loopback and neither failed — so the device's
     traffic goes to whichever owns IPv4 loopback. The Mac has the same property
     against upstream's Electron app, so it is parity, not a regression.
-25. **Mirror, screen record, and the video editor.** The Mac's pipeline is
-    VideoToolbox + AVFoundation + a `Network.framework` socket, none of which
-    exists off Apple — but the *capability* is not Apple-only. scrcpy's own
-    server speaks the same protocol to any host, and the bundled ffmpeg already
-    builds for Windows and Linux. This is a decode/render stack to write, not a
-    feature to drop.
+25. **Mirror, screen record, and the video editor.** Smaller than it looks.
+    The instinct is "a decode/render stack to write from scratch", but counting
+    the files says otherwise: of the eighteen in `ADBKit/Services/Mirror`,
+    **thirteen are already portable** — `ScrcpyStreamDecoder`,
+    `ScrcpyAudioStreamDecoder`, `ScrcpyControlMessage`, `ScrcpyDeviceMessage`,
+    `ScrcpyServerParams`, `ScrcpyServerLocator`, `H264Format`, `H264NAL`,
+    `PCMMixdown`, `MirrorAudioFallback`, `ShowTouches`, plus `MirrorWall`'s
+    layout maths. scrcpy's own server speaks the same protocol to any host, and
+    the bundled ffmpeg already builds for Windows and Linux.
+
+    **Five files are gated, and they are the whole job:**
+
+    | Gated on | What it does | The portable answer |
+    | --- | --- | --- |
+    | `MirrorTransport` | `Network.framework` socket to the scrcpy server over `adb forward` | NIO, exactly the move `ReactotronRelay` already made |
+    | `MirrorSession` | the orchestrator — gated only because it holds the two below | falls out once they are |
+    | `H264Decoder` | VideoToolbox | the open question, below |
+    | `MirrorAudioPlayer` | AVFoundation playback | a Rust audio crate, or ffmpeg |
+    | `MirrorRecorder` | AVFoundation writer | ffmpeg, which the release already ships |
+
+    **Step 0 is a decision, not code.** Where does H.264 decoding happen? The
+    three candidates are genuinely different products, so this is worth settling
+    before anything is written:
+
+    1. **In the webview, via WebCodecs `VideoDecoder`.** The browser already has
+       a hardware decoder and a `canvas` to paint on, so the daemon only relays
+       the stream it already parses. Cheapest by far *if* it holds on both
+       targets — WebView2 is Chromium and certainly has it; **WebKitGTK is the
+       one to check first**, and if it does not, this option is dead on Linux.
+    2. **In Rust, painting a native surface.** Full control and no webview
+       dependency, at the cost of a decoder crate, a surface, and getting input
+       forwarding to line up with a region the webview does not own.
+    3. **In the daemon, streaming decoded frames.** Rejected on arithmetic
+       rather than taste: a 1080p60 raw stream is ~370 MB/s over the local
+       socket, which is not a thing to send through JSON framing.
+
+    Then, in order: the transport on NIO (it is the same shape as the relay, and
+    the `adb forward` tunnel *must* be torn down — see the mirror-teardown
+    convention, which the Mac learned by leaking one per quit); the session; one
+    tile; then the wall, whose layout is already ported. Screen record and the
+    video editor ride the session, so they follow rather than lead.
+
+    Two things the Mac learned the hard way and this must not relearn: a
+    session's teardown has to be **awaited** at quit or its `adb forward`
+    survives the process, and a new session for the same on-screen tile has to
+    **adopt the new display layer** or the tile keeps drawing the stopped one.
 
 **What genuinely cannot be ported.** Two features, and only for the reason
 that they drive an Apple toolchain rather than a device: `ios-logs` and
