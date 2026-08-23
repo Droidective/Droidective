@@ -823,9 +823,40 @@ after the screens rather than instead of them.
        there were none; and a real `api.response` body arrives as a *string* of
        JSON, so the Response tab showing ten user objects is `parseEmbedded`
        grafting rather than a wall of escaped text.
-    4. **Export and the restarts.** Filter-aware export to file and clipboard,
-       then the split Restart button — the bounded `pm clear --cache-only` and
-       the confirmed clear-data variant (`RestartClearScope`).
+    4. ~~**Export and the restarts.**~~ **Landed.** The toolbar's export menu
+       saves or copies what is *shown*, so a filter narrows the export as well
+       as the view, and both verbs hand over the same thing: the **raw wire
+       commands**. Raw rather than enriched, matching the Mac — a badge and a
+       headline are this app's rendering choices, and a machine-readable export
+       must not invite a script to depend on something free to change.
+
+       The split Restart button restarts on a press and offers the two clearing
+       variants behind its chevron: `pm clear --cache-only`, raced against a
+       10-second timeout because it never returns on some images (observed on
+       the API 36 emulator), and `pm clear`, always behind a confirmation
+       because it signs you out. A failed clear is reported rather than fatal —
+       the restart proceeds and the wording says which happened.
+
+       Picking the app to restart is `lib/reactotron-restart.ts`, pure and
+       tested: the client's own name first (the only signal naming the app that
+       is actually talking to us), then the foreground app but *only* when it is
+       something we can see installed, then ask. That middle step needed a new
+       daemon route, `POST /v1/apps/foreground`, whose absent answer is an
+       omitted key rather than an error — the launcher is in front more often
+       than any app is.
+
+       Verified live against StreamLab: **the export copied 11 real events** in
+       the wire shape with no presentation leaked, and **Restart app moved the
+       app's pid** (20890 → 21121) with the notice reading
+       "Restarting com.streamlab…" and the strip flipping to "no app
+       connected" until it came back.
+
+    **What item 24 still lacks**, both named rather than implied: the Mac opens
+    a **picker sheet** when it cannot work out which app to restart, where this
+    reports the reason and points at the Apps screen; and the **per-pane split**
+    (two timelines side by side, each with its own filter and
+    `reactotronPane<n>NewestFirst`) belongs to backlog 20's split-pane model, so
+    the sort here is per tab.
 
     Deliberately later: the **MCP server** over the relay. `ReactotronMCP` is a
     separate package that depends on the Mac-gated `ReactotronServer`, so
@@ -1016,7 +1047,7 @@ job, and the checklist now says which.
 #### `reactotron` — Reactotron  ·  🟡 partial
 > Live React Native inspector — logs, network, state, custom display
 - **Kind** `view`
-- **Note** Feed and detail landed — the relay, the timeline model, the toolbar and filter dialog, the waiting screen with its `adb reverse` button, expandable rows with JSON trees, find-in-object, the API tabs, Copy as cURL and the copy verbs. Still to come: export and the restart verbs. Backlog 24.
+- **Note** Built, with two named gaps — the relay, the timeline model, the toolbar and filter dialog, the waiting screen with its `adb reverse` button, expandable rows with JSON trees, find-in-object, the API tabs, Copy as cURL, the copy verbs, the filter-aware export and the split Restart button. Missing: the restart's picker sheet, and the per-pane split (backlog 20's model). Backlog 24.
 - **macOS view** `ReactotronView` — `App/Sources/FeatureDetail/Views/ReactotronView.swift`
 - **Must replicate**
   - [ ] button: OK
