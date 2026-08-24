@@ -131,8 +131,14 @@ import Testing
         // the `TIOCSCTTY` in the C shim happened.
         let pty = try shell()
         defer { pty.terminate() }
-        let text = await run("tty", in: pty, until: "/dev/tty")
-        #expect(text.contains("/dev/tty"))
+        // A device path at all is the portable proof, and the absence of `tty`'s
+        // own "not a tty" is the assertion that actually bites. The *name*
+        // is not portable: Darwin calls a pty slave `/dev/ttysNNN` and Linux
+        // calls it `/dev/pts/N`, so matching on `/dev/tty` passed here and hung
+        // for 45 seconds on Linux waiting for a marker that never arrives.
+        let text = await run("tty", in: pty, until: "/dev/")
+        #expect(text.contains("/dev/"))
+        #expect(!text.contains("not a tty"))
     }
 
     @Test func reportsTheSizeItWasGiven() async throws {
