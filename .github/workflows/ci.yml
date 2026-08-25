@@ -456,8 +456,8 @@ jobs:
       # behind by an ungated job fails the stable release instead of shipping on
       # it — and the publish step can glob `dist/*` without
       # fail_on_unmatched_files breaking on the set that varies.
-      # Universal, like the app: the daemon is a sidecar next to it, and an
-      # arm64-only binary would break Intel Macs that the app itself supports.
+      # Universal, like the app — build-daemon-universal.sh says why that is two
+      # single-arch builds and a lipo rather than one multi-arch swift build.
       # Beta only — release-channel.sh lists the macOS daemon tarball and
       # SHA256SUMS alongside the Linux and Windows ones, so a stable tag
       # publishes neither and building them for one is ten minutes nothing
@@ -466,10 +466,9 @@ jobs:
         if: contains(github.ref_name, '-')
         run: |
           VERSION="$(./scripts/release-channel.sh port-version)"
-          (cd droidectived && swift build -c release --arch arm64 --arch x86_64 \
-            --product droidectived)
+          ./scripts/build-daemon-universal.sh
           ./scripts/package-daemon.sh "$VERSION" macos-universal \
-            droidectived/.build/apple/Products/Release/droidectived \
+            droidectived/.build/universal/droidectived \
             DerivedData/Build/Products/Release
       # Only a beta has them — neither artifact job runs for a stable tag.
       - if: contains(github.ref_name, '-')
