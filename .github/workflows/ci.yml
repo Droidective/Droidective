@@ -277,7 +277,13 @@ jobs:
   desktop-artifacts:
     if: startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-')
     strategy:
-      fail-fast: true
+      # Unlike daemon-artifacts, this does NOT fail fast. Each platform is a
+      # separate build with separate failure modes, and cancelling one because
+      # the other broke hides whether it would have worked — which is what
+      # happened on the first beta tag: a path bug failed Linux, Windows was
+      # cancelled nine minutes into its Swift build, and the run proved nothing
+      # about Windows at all. The release job gates on both regardless.
+      fail-fast: false
       matrix:
         include:
           # The image test-linux and desktop-native already use: the daemon is

@@ -31,6 +31,20 @@ PLATFORM="${1:?platform required: linux or windows}"
 CONFIGURATION="${2:-release}"
 OUT_DIR="${3:-$ROOT/desktop/dist-app}"
 
+# Absolute before anything changes directory. This script cds into desktop/ to
+# run npm, so a *relative* out-dir would resolve there rather than against the
+# caller's cwd — which is exactly what the first beta tag did: the bundles were
+# built correctly and written to desktop/dist while the workflow looked for
+# dist/ at the repo root, and the upload failed with "no files were found" on a
+# build that had actually succeeded.
+#
+# The second pattern is for Git Bash on the Windows runner, where an absolute
+# path is `C:/…` and would otherwise be treated as relative.
+case "$OUT_DIR" in
+/* | [A-Za-z]:[/\\]*) ;;
+*) OUT_DIR="$(pwd)/$OUT_DIR" ;;
+esac
+
 case "$PLATFORM" in
 # Deliberately not the config's "targets": "all". On Linux that adds an .rpm
 # nothing publishes and rpmbuild is not installed; on Windows it would try
@@ -62,6 +76,7 @@ done
 PORT_VERSION="$(release_port_version)"
 MSI_VERSION="$(release_msi_version)"
 echo "building the $PLATFORM desktop app, version $PORT_VERSION ($CONFIGURATION)"
+echo "bundles will be written to $OUT_DIR"
 
 # The version reaches Tauri as a config overlay rather than an edit to
 # tauri.conf.json: the committed config would otherwise have to be bumped in
