@@ -1,3 +1,85 @@
+## Droidective v3.10.0-beta.1
+
+The first Windows and Linux build of the app itself. Until now a beta carried
+only `droidectived`, the headless daemon; this one carries the desktop app that
+runs on top of it — an NSIS installer and an MSI for Windows, a `.deb` and an
+`.AppImage` for Linux. It is an early build and the version says so: Windows and
+Linux start their own version line at `0.0.1-beta.1` rather than inheriting the
+Mac's.
+
+### Windows and Linux
+
+- **The desktop app, for the first time.** 23 screens have a real pane: Terminal,
+  Apps, Logcat, Device Info, File Explorer, Crash Catcher, Bug Report,
+  Performance, Root Status, Developer Settings, System Restrictions, Wi-Fi,
+  Private DNS, Network Speed, Emulators, Install App, App Info, Permissions,
+  Memory Usage, Sandbox Browser, Manage App, Deep Links and Reactotron — plus
+  the catalog and About. Another 19 features run as actions from the palette
+  without a screen of their own.
+- **It is meant to be the same app.** Where a control exists on both, it has the
+  Mac's wording, icon, confirmation shape and gesture. Two deliberate
+  exceptions, and they are the only ones: a shortcut whose modifier has no
+  equivalent here (⌘\ is Ctrl+\, and the split is Ctrl+\ rather than Ctrl+D
+  because Ctrl+D ends input in every Linux shell), and a label that names a
+  platform.
+- **`droidectived` still ships too**, for macOS, Linux and Windows. It is useful
+  on its own — CI, scripting, adb over loopback — and the app talks to it rather
+  than to adb directly.
+
+### What is not there yet
+
+- **17 of the 61 features have not been started**, and the 42 counted as partial
+  are each missing something the Mac version offers. Read the state as *nothing
+  is finished* rather than *most of it is done*; `docs/desktop-parity.md` tracks
+  it feature by feature.
+- **The mirror, screen recording, the video editor, multi-window, Quick Actions,
+  the tour and notifications are not ported.** They are porting jobs with
+  entries in the backlog, not decisions.
+- **`ios-logs` and `push-notification` will not come.** They drive `xcrun
+  simctl` against an iOS Simulator, which is a macOS toolchain rather than
+  anything about a device.
+- **No automatic updates.** The app does not update itself on Windows or Linux;
+  a new beta is a new download.
+
+### Two version lines
+
+- **Windows and Linux are versioned separately from the Mac.** This build is
+  `0.0.1-beta.1` on those platforms and `3.10.0-beta.1` on macOS. The Mac
+  carries the product's own history — 61 features across three major versions —
+  and the ports do not, so numbering a first Windows build in the threes would
+  claim a maturity it has not got. The two lines move independently from here.
+
+### Unsigned, and what that means
+
+- **Windows will warn.** The installer is not Authenticode-signed, so
+  SmartScreen shows "Windows protected your PC" — More info, then Run anyway.
+  Code-signing is a deliberate deferral, not an oversight: an OV certificate is
+  a recurring cost and a multi-week identity check, and reputation accrues per
+  certificate over download volume a beta will not generate.
+- **Linux bundles are unsigned too**, which is normal for the ecosystem.
+- **Every unsigned artifact is checksummed.** `SHA256SUMS` on the release page
+  covers the installers, the bundles and all three daemon archives. The macOS
+  DMG is Developer ID-signed and notarized as always.
+
+### macOS
+
+- **This is a rebuild, not a Mac release.** The Mac app is identical to v3.9.2 —
+  a beta that exists to ship a Windows and Linux build still rebuilds the Mac
+  app, and it is offered only to installs that opted into beta updates in
+  Settings ▸ General. The stable channel is untouched: the download button and
+  `/releases/latest/download/` keep serving v3.9.2.
+
+### Install
+
+**Windows** — download the `-setup.exe` and run it, clicking through the
+SmartScreen warning above. The `.msi` is there for anyone deploying it centrally.
+
+**Linux** — `sudo apt install ./Droidective-0.0.1-beta.1-linux-x86_64.deb`, or
+make the `.AppImage` executable and run it. Both need `adb` on `PATH`; the `.deb`
+declares it as a dependency.
+
+**macOS** — download the DMG and drag Droidective to Applications. Existing
+installs on the beta channel update themselves.
 ## Droidective v3.9.2
 
 Pulling events out of a busy log. Rows in the Reactotron timeline and the JS

@@ -61,6 +61,11 @@ fi
 # Anything release-shaped that the channel did not ask for is a policy break,
 # not a stray file to ignore. Scoped to the artifact prefixes and extensions we
 # publish so unrelated build output (.app bundles, dSYMs) stays invisible.
+#
+# The app bundles are in that scope too: a Linux .deb or a Windows .msi left
+# behind by a job that forgot its tag gate is exactly the leak this check exists
+# for, and it would be invisible if the patterns only knew about DMGs and daemon
+# tarballs.
 unexpected=()
 while IFS= read -r path; do
   name="$(basename "$path")"
@@ -69,7 +74,10 @@ while IFS= read -r path; do
   done
   unexpected+=("$name")
 done < <(find "$BUILD_DIR" -maxdepth 1 -type f \
-  \( -name 'Droidective*.dmg' -o -name 'droidectived-*' -o -name 'SHA256SUMS' \) | sort)
+  \( -name 'Droidective*.dmg' -o -name 'droidectived-*' -o -name 'SHA256SUMS' \
+  -o -name 'Droidective*.deb' -o -name 'Droidective*.AppImage' \
+  -o -name 'Droidective*.rpm' -o -name 'Droidective*.msi' \
+  -o -name 'Droidective*.exe' \) | sort)
 
 if ((${#unexpected[@]} > 0)); then
   echo "error: $channel release $TAG would publish ${#unexpected[@]} artifact(s) its channel does not allow:" >&2

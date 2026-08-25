@@ -811,7 +811,17 @@ per-channel version touchpoints, and the staged rollout are in
 `docs/release-channels.md`; `scripts/release-channel.sh` is the single
 resolver and `scripts/test-release-channel.sh` (in `make verify-self` and CI)
 keeps it honest — notably that a stable release can never attach a Windows or
-Linux artifact. Notes are picked by tag (`scripts/extract-notes.sh`), not by
+Linux artifact. **Two version lines:** the tag carries the Mac's version, and
+the root `PORT_VERSION` file (semver, hand-bumped like `MARKETING_VERSION`)
+carries the ports' — so one beta tag is `3.10.0-beta.1` on macOS and
+`0.0.1-beta.1` on Windows and Linux. Every cross-platform artifact name must
+come from `release-channel.sh port-version`, never from `${GITHUB_REF_NAME#v}`:
+that expression is right for the DMG and wrong for everything else, and two
+tests exist to catch the crossing. A beta tag builds the Tauri app for Windows
+(NSIS + MSI) and Linux (.deb + .AppImage) in the `desktop-artifacts` job via
+`scripts/build-desktop-app.sh` — the same script `build-desktop-linux.sh` runs
+in a container locally — and `scripts/package-desktop.sh` renames the bundlers'
+output to the one canonical set `release_artifacts_for_tag` promises. Notes are picked by tag (`scripts/extract-notes.sh`), not by
 position in `RELEASE_NOTES.md`.
 
 ## Status

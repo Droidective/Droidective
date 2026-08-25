@@ -246,10 +246,14 @@ jobs:
         with:
           branch: swift-6.2.4-release
           tag: 6.2.4-RELEASE
+      # The ports have their own version line: the tag names the Mac release,
+      # PORT_VERSION names everything Windows and Linux get. Asking the
+      # resolver rather than stripping the tag is what keeps the two apart —
+      # see docs/release-channels.md.
       - name: Build and package droidectived
         shell: bash
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="$(./scripts/release-channel.sh port-version)"
           (cd droidectived && swift build -c release --product droidectived)
           BIN="droidectived/.build/release/droidectived"
           [[ "${{ matrix.platform }}" == windows-x86_64 ]] && BIN="$BIN.exe"
@@ -257,6 +261,82 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: daemon-${{ matrix.platform }}
+          path: dist/*
+          if-no-files-found: error
+
+  # The Tauri app for Windows and Linux — stage 2 of the port's release plan
+  # (docs/release-channels.md). Beta tags only, on the same hyphen rule
+  # daemon-artifacts uses: the stable channel is macOS-only, and
+  # stage-release-artifacts.sh would refuse an app bundle on a stable release
+  # anyway.
+  #
+  # Tauri does not cross-compile, so each platform builds on its own runner.
+  # Both run scripts/build-desktop-app.sh — the same script
+  # scripts/build-desktop-linux.sh runs in a container locally, so this job can
+  # be reproduced off CI rather than debugged one push at a time.
+  desktop-artifacts:
+    if: startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-')
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          # The image test-linux and desktop-native already use: the daemon is
+          # the awkward half (it needs Swift), and Rust and Node are easy to add.
+          - os: ubuntu-24.04
+            container: swift:6.2-noble
+            platform: linux
+          - os: windows-2022
+            container: ''
+            platform: windows
+    runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      # webkit2gtk *4.1* is the one that matters: 4.0 is the GTK3/soup2 build
+      # Tauri 1 used, and linking against it fails late and confusingly.
+      - if: matrix.platform == 'linux'
+        name: Install the Linux bundler dependencies
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends \
+            build-essential curl wget file pkg-config ca-certificates \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
+            librsvg2-dev libssl-dev libxdo-dev patchelf desktop-file-utils \
+            xdg-utils fakeroot
+      # Ubuntu's packaged toolchain is older than Tauri 2 needs, so Rust comes
+      # from rustup. The Windows runner already ships one.
+      - if: matrix.platform == 'linux'
+        name: Install Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+            | sh -s -- -y --profile minimal
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - if: matrix.platform == 'windows'
+        uses: compnerd/gha-setup-swift@eeda069c5bc95ac8a9ac5cea7d4f588ae5420ca5  # v0.4.0
+        with:
+          branch: swift-6.2.4-release
+          tag: 6.2.4-RELEASE
+      - if: matrix.platform == 'windows'
+        name: Select a Rust toolchain
+        shell: bash
+        run: |
+          rustup default stable
+          rustc -vV
+      # No npm cache: this job builds an artifact that ships, and a poisoned
+      # cache could inject code into it (zizmor: cache-poisoning) — the same
+      # reasoning as desktop-web.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - name: Build and package the app
+        shell: bash
+        run: ./scripts/build-desktop-app.sh "${{ matrix.platform }}" release dist
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: desktop-${{ matrix.platform }}
           path: dist/*
           if-no-files-found: error
 
@@ -272,7 +352,9 @@ jobs:
       && needs.build.result == 'success'
       && (needs['daemon-artifacts'].result == 'success'
       || needs['daemon-artifacts'].result == 'skipped')
-    needs: [test, build, daemon-artifacts]
+      && (needs['desktop-artifacts'].result == 'success'
+      || needs['desktop-artifacts'].result == 'skipped')
+    needs: [test, build, daemon-artifacts, desktop-artifacts]
     runs-on: macos-15
     permissions:
       contents: write
@@ -377,28 +459,50 @@ jobs:
       - name: Build and package droidectived (macOS universal)
         if: contains(github.ref_name, '-')
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="$(./scripts/release-channel.sh port-version)"
           (cd droidectived && swift build -c release --arch arm64 --arch x86_64 \
             --product droidectived)
           ./scripts/package-daemon.sh "$VERSION" macos-universal \
             droidectived/.build/apple/Products/Release/droidectived \
             DerivedData/Build/Products/Release
-      # Only a beta has them — daemon-artifacts doesn't run for a stable tag.
+      # Only a beta has them — neither artifact job runs for a stable tag.
       - if: contains(github.ref_name, '-')
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
         with:
           pattern: daemon-*
           merge-multiple: true
           path: DerivedData/Build/Products/Release
+      - if: contains(github.ref_name, '-')
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          pattern: desktop-*
+          merge-multiple: true
+          path: DerivedData/Build/Products/Release
       # Checksums cover exactly what ships, so they are generated after every
       # artifact is in place and before staging asserts the set. SHA256SUMS is
-      # itself a beta artifact, and on a stable tag there are no archives to
-      # sum — the glob would match nothing and shasum would fail the release.
-      - name: Checksum the daemon archives
+      # itself a beta artifact, and on a stable tag there is nothing to sum —
+      # the glob would match nothing and shasum would fail the release.
+      #
+      # Everything unsigned, which is everything but the DMG: the Mac build is
+      # Developer ID-signed and notarized, the Linux tarball and bundles are
+      # not, and Windows is deliberately unsigned for the beta
+      # (docs/release-channels.md — Authenticode is a named deferral). A sum is
+      # the only integrity check those five have.
+      #
+      # find, not a glob: a stage whose artifacts are absent should fail the
+      # staging assertion by name, not fail shasum with "no such file".
+      - name: Checksum the unsigned artifacts
         if: contains(github.ref_name, '-')
         run: |
           cd DerivedData/Build/Products/Release
-          shasum -a 256 droidectived-* > SHA256SUMS
+          : > SHA256SUMS
+          find . -maxdepth 1 -type f \
+            \( -name 'droidectived-*' -o -name 'Droidective-*.deb' \
+            -o -name 'Droidective-*.AppImage' -o -name 'Droidective-*.msi' \
+            -o -name 'Droidective-*-setup.exe' \) \
+            | sed 's|^\./||' | sort | while IFS= read -r artifact; do
+            shasum -a 256 "$artifact" >> SHA256SUMS
+          done
           cat SHA256SUMS
       - name: Stage the artifacts this channel publishes
         run: ./scripts/stage-release-artifacts.sh "$GITHUB_REF_NAME" DerivedData/Build/Products/Release dist

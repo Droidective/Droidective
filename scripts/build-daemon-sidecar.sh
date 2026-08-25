@@ -45,5 +45,10 @@ BUILT="$ROOT/droidectived/.build/$CONFIGURATION/droidectived$SUFFIX"
 }
 
 mkdir -p "$DESTINATION"
-install -m 755 "$BUILT" "$DESTINATION/droidectived-$TRIPLE$SUFFIX"
+# cp then chmod, not `install`: this script runs on the Windows runner too
+# (Git Bash), where the coreutils set is trimmed and a missing `install` would
+# fail the release with "command not found" rather than anything about the
+# sidecar. chmod is a no-op on Windows and load-bearing everywhere else.
+cp "$BUILT" "$DESTINATION/droidectived-$TRIPLE$SUFFIX"
+chmod 755 "$DESTINATION/droidectived-$TRIPLE$SUFFIX"
 echo "installed $DESTINATION/droidectived-$TRIPLE$SUFFIX"
