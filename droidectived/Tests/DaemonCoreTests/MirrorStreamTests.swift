@@ -221,3 +221,61 @@ import Testing
         }
     }
 }
+
+/// The quality a client asks a tile to stream at.
+///
+/// Clamped rather than trusted, because these numbers become arguments to a
+/// process on the device: a value scrcpy refuses reaches the user as a mirror
+/// that never produces a frame, which says nothing about the number that caused
+/// it.
+@Suite struct MirrorQualityTests {
+    @Test func absentQualityLeavesTheDeviceToDecide() {
+        let params = StreamProtocol.Command.Params(serial: "emulator-5554")
+        #expect(params.mirrorQuality == MirrorQuality.deviceDefault)
+        #expect(MirrorQuality.deviceDefault.maxSize == 0)
+        #expect(MirrorQuality.deviceDefault.maxFps == 0)
+    }
+
+    @Test func aWallsTileQualityIsCarriedThrough() {
+        // The numbers ADBKit's `MirrorWall.quality(tiles: 6)` produces, which
+        // is what the client sends for a full wall.
+        let params = StreamProtocol.Command.Params(maxSize: 640, maxFps: 24)
+        #expect(params.mirrorQuality == MirrorQuality(maxSize: 640, maxFps: 24))
+    }
+
+    @Test func nonsenseBecomesTheDeviceDefaultRatherThanAnArgument() {
+        // 0 is scrcpy's own "use the device's", so a refused value degrades to
+        // a working mirror rather than to no mirror.
+        #expect(StreamProtocol.Command.Params(maxSize: -1).mirrorQuality.maxSize == 0)
+        #expect(StreamProtocol.Command.Params(maxSize: 0).mirrorQuality.maxSize == 0)
+        #expect(StreamProtocol.Command.Params(maxFps: -30).mirrorQuality.maxFps == 0)
+    }
+
+    @Test func absurdRequestsAreCappedRatherThanPassedOn() {
+        #expect(
+            StreamProtocol.Command.Params(maxSize: 999_999).mirrorQuality.maxSize
+                == MirrorQuality.largestSide)
+        #expect(
+            StreamProtocol.Command.Params(maxFps: 10_000).mirrorQuality.maxFps
+                == MirrorQuality.fastestFrameRate)
+    }
+
+    @Test func qualityReachesTheServersArgumentVector() throws {
+        // The whole point of the chain: what the client asked for has to end up
+        // in the arguments `app_process` is launched with.
+        let params = ScrcpyServerParams(scid: 1, maxSize: 640, maxFps: 24)
+        let arguments = params.shellArguments(
+            serverVersion: "4.0", remoteJarPath: "/data/local/tmp/scrcpy-server.jar")
+        #expect(arguments.contains("max_size=640"))
+        #expect(arguments.contains("max_fps=24"))
+    }
+
+    @Test func theDeviceDefaultEmitsNoCapAtAll() {
+        // scrcpy fills in its own defaults, so 0 must be *absent* rather than
+        // sent as `max_size=0`.
+        let arguments = ScrcpyServerParams(scid: 1, maxSize: 0, maxFps: 0)
+            .shellArguments(serverVersion: "4.0", remoteJarPath: "/x.jar")
+        #expect(!arguments.contains { $0.hasPrefix("max_size=") })
+        #expect(!arguments.contains { $0.hasPrefix("max_fps=") })
+    }
+}

@@ -18,6 +18,7 @@ import {
   ManageAppPane,
   MeminfoPane,
   MirrorPane,
+  MirrorWallPane,
   NetspeedPane,
   PerformancePane,
   PermissionsPane,
@@ -168,6 +169,10 @@ function hostPane(id: string, device: Device | null) {
       return <TerminalPane serial={device?.serial ?? null} />
     case "reactotron":
       return <ReactotronPane device={device} />
+    case "mirror-wall":
+      // Host-side by the same logic as the others: the wall picks its own
+      // devices from its header and never follows the bar's selection.
+      return <MirrorWallPane />
     default:
       return null
   }

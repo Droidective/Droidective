@@ -34,6 +34,7 @@ const HINTS: Readonly<Record<string, string>> = {
   // gathered here so this app has one place the copy lives.
   logcat: "Connect a device to read its log.",
   scrcpy: "Connect a device to mirror its screen.",
+  "mirror-wall": "Connect devices to mirror them side by side.",
   apps: "Connect a device to browse its apps.",
   "file-explorer": "Connect a device to browse its storage.",
   "device-info": "Connect a device to read its properties.",

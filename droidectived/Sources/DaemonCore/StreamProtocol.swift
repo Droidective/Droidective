@@ -79,11 +79,20 @@ public enum StreamProtocol {
             /// not a size.
             public let columns: Int?
             public let rows: Int?
+            /// scrcpy's `max_size` and `max_fps` for a `mirror` subscription.
+            ///
+            /// The client resolves these, because it is the one that knows how
+            /// many tiles it is drawing — the Mirror Wall steps quality down as
+            /// tiles are added, and the daemon has no view to measure. Absent
+            /// means scrcpy's own defaults, which is the single full mirror.
+            public let maxSize: Int?
+            public let maxFps: Int?
 
             public init(
                 serial: String? = nil, filter: String? = nil,
                 packageId: String? = nil, processes: Bool? = nil,
-                data: String? = nil, columns: Int? = nil, rows: Int? = nil
+                data: String? = nil, columns: Int? = nil, rows: Int? = nil,
+                maxSize: Int? = nil, maxFps: Int? = nil
             ) {
                 self.serial = serial
                 self.filter = filter
@@ -92,6 +101,8 @@ public enum StreamProtocol {
                 self.data = data
                 self.columns = columns
                 self.rows = rows
+                self.maxSize = maxSize
+                self.maxFps = maxFps
             }
 
             public var wantsProcesses: Bool { processes ?? false }
@@ -109,6 +120,18 @@ public enum StreamProtocol {
             public var size: PtySize? {
                 guard let columns, let rows else { return nil }
                 return PtySize(columns: columns, rows: rows)
+            }
+
+            /// The stream quality a mirror subscription asked for, clamped.
+            ///
+            /// Clamped rather than trusted: these become arguments to a process
+            /// on the device, and a negative or absurd value is a scrcpy server
+            /// that refuses to start — which reaches the user as a mirror that
+            /// never produces a frame rather than as the bad number it was.
+            public var mirrorQuality: MirrorQuality {
+                MirrorQuality(
+                    maxSize: MirrorQuality.clampSize(maxSize),
+                    maxFps: MirrorQuality.clampFps(maxFps))
             }
         }
 

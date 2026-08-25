@@ -836,6 +836,13 @@ pub struct StreamParams {
     pub columns: Option<u16>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rows: Option<u16>,
+    /// scrcpy's `max_size` and `max_fps` for a `mirror` subscription. The
+    /// webview resolves them, because the Mirror Wall steps quality down as
+    /// tiles are added and only it knows how many it is drawing.
+    #[serde(rename = "maxSize", skip_serializing_if = "Option::is_none")]
+    pub max_size: Option<u32>,
+    #[serde(rename = "maxFps", skip_serializing_if = "Option::is_none")]
+    pub max_fps: Option<u32>,
 }
 
 impl StreamCommand {

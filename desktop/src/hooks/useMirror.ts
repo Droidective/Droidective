@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { asDaemonError, watchMirror, type MirrorSession } from "@/lib/daemon"
 import { codecSupport, newGate, noteGap, stepMirror, type MirrorGate } from "@/lib/mirror"
+import { FULL_QUALITY, type Quality } from "@/lib/mirror-wall"
 import { encodeControl } from "@/lib/scrcpy-control"
 import type { DaemonError, MirrorFrame, StreamUpdate } from "@/lib/wire"
 
@@ -151,7 +152,11 @@ function handler(wiring: Wiring) {
  * decides what each payload means, so the rules that matter are tested without
  * a decoder, a canvas or a device.
  */
-export function useMirror(serial: string | null): Mirror {
+export function useMirror(serial: string | null, quality: Quality = FULL_QUALITY): Mirror {
+  // Destructured so the effect depends on the two numbers rather than the
+  // object: a caller computing quality inline hands a fresh identity every
+  // render, and depending on that would restart the scrcpy server on each one.
+  const { maxSize, maxFps } = quality
   const [size, setSize] = useState({ width: 0, height: 0 })
   const [deviceName, setDeviceName] = useState<string | null>(null)
   const [streaming, setStreaming] = useState(false)
@@ -201,7 +206,7 @@ export function useMirror(serial: string | null): Mirror {
       },
     }
 
-    watchMirror(serial, handler(wiring)).then(
+    watchMirror(serial, { maxSize, maxFps }, handler(wiring)).then(
       (handle) => {
         if (cancelled) {
           // Stopping is what removes the `adb forward`, so a subscription that
@@ -225,7 +230,7 @@ export function useMirror(serial: string | null): Mirror {
       // `close`, not `flush`: pending frames are for a screen that is gone.
       if (built !== null && built.state !== "closed") built.close()
     }
-  }, [serial])
+  }, [serial, maxSize, maxFps])
 
   return { size, deviceName, streaming, error, dropped, send, attach }
 }

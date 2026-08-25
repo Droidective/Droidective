@@ -711,6 +711,8 @@ pub async fn open_terminal(
 pub async fn watch_mirror(
     supervisor: State<'_, Supervisor>,
     serial: String,
+    max_size: Option<u32>,
+    max_fps: Option<u32>,
     on_event: Channel<StreamUpdate>,
 ) -> Result<i64, DaemonError> {
     let stream = supervisor.stream().await?;
@@ -718,6 +720,8 @@ pub async fn watch_mirror(
         "mirror",
         Some(StreamParams {
             serial: Some(serial),
+            max_size,
+            max_fps,
             ..StreamParams::default()
         }),
         forward(on_event),

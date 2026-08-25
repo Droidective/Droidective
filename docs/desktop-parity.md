@@ -11,13 +11,13 @@ rewriting one when something turns out to be more work than it looked.
 
 | | Count |
 | --- | --- |
-| ⬜ Not started | 16 |
-| 🟡 Partial | 43 |
+| ⬜ Not started | 15 |
+| 🟡 Partial | 44 |
 | ⛔ Not applicable off-Apple | 2 |
 | **Total registry features** | **61** |
 
-"Partial" is doing a lot of work in that table: 19 of the 43 are actions that
-run from the palette but have no screen of their own, and the 24 that do have
+"Partial" is doing a lot of work in that table: 19 of the 44 are actions that
+run from the palette but have no screen of their own, and the 25 that do have
 screens are each missing something the Mac version offers. Read it as *nothing
 is finished*, not as *most of it is done*.
 
@@ -1000,10 +1000,29 @@ after the screens rather than instead of them.
     not yet plumbed), Show touches, the reconnect button, and opening a mirror
     in a separate window. The per-feature checklist below lists them.
 
+    **And the wall.** `MirrorWallPane` puts up to six tiles in a grid, each its
+    own session at the quality `MirrorWall.quality(tiles:)` gives it — ported to
+    `lib/mirror-wall.ts` and pinned to the numbers the Swift suite asserts,
+    because a port that agreed only with itself would drift from the Mac's
+    layout one release at a time. It picks its own devices from a header menu
+    rather than following the device bar, and a tile reorders by dragging its
+    **caption strip**: a drag handle on the video would eat every swipe on the
+    device, which is the note the Mac left.
+
+    Per-tile quality is why the `mirror` topic gained `maxSize`/`maxFps`. The
+    client resolves them because only it knows how many tiles it is drawing;
+    the daemon clamps them, because they become arguments to a process on the
+    device and a value scrcpy refuses arrives as a mirror that never produces a
+    frame rather than as the bad number that caused it.
+
+    **What the wall still owes the Mac's:** the selection is not persisted (the
+    Mac keeps it per window as `WindowState.mirrorWallSerials`), there is no
+    breaking a tile out into its own window, and no Full View.
+
     **Not yet seen running.** Everything here is verified by tests and by the
     codec probe against a real WebKitGTK, but no frame has been decoded from a
     real device on Windows or Linux — the one step that needs a person at a
-    machine with a phone plugged in. Then the wall.
+    machine with a phone plugged in.
 
     **Still open, and worth doing before the tile ships:** the server jar. The
     daemon reads it from an installed scrcpy via `ScrcpyServerLocator`, while the
@@ -1278,10 +1297,10 @@ job, and the checklist now says which.
 - **Kind** `toggleAction`
 - **Note** Runs from the palette; no dedicated screen.
 
-#### `mirror-wall` — Mirror Wall  ·  ⬜ todo
+#### `mirror-wall` — Mirror Wall  ·  🟡 partial
 > Mirror up to six devices side by side
 - **Kind** `view`
-- **Note** Not started — several mirrors at once, on the same pipeline as `scrcpy`, so it follows the mirror. Backlog 25.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `MirrorWallView` — `App/Sources/FeatureDetail/Views/MirrorWallView.swift`
 - **Must replicate**
   - [ ] button: Open Each in Its Own Window
@@ -1774,4 +1793,4 @@ job, and the checklist now says which.
   - [ ] drag: drag and drop
 
 
-<!-- counts: {'done': 0, 'partial': 43, 'todo': 16, 'gated': 2} -->
+<!-- counts: {'done': 0, 'partial': 44, 'todo': 15, 'gated': 2} -->

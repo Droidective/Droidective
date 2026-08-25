@@ -431,9 +431,9 @@ and the measurement behind it, is backlog 25's step 0 in
 parsed, and the payload is shaped for `VideoDecoder` rather than for us.
 
 ```jsonc
-// client → server
+// client → server — maxSize/maxFps optional, see below
 { "op": "subscribe", "id": 9, "topic": "mirror",
-  "params": { "serial": "emulator-5554" } }
+  "params": { "serial": "emulator-5554", "maxSize": 640, "maxFps": 24 } }
 // server → client: the configuration first, always
 { "id": 9, "event": "batch", "items": [
   { "kind": "config", "codec": "avc1.42C029", "width": 800, "height": 500,
@@ -476,6 +476,16 @@ Five things that are decisions rather than details:
   exp-Golomb parse — and a decoded `VideoFrame` carries its own
   `displayWidth`/`displayHeight`. Size from the frames; use these only to avoid
   a zero-sized first layout.
+
+**Quality is the client's to choose and the daemon's to clamp.** `maxSize` and
+`maxFps` are scrcpy's own caps, and they are absent for a single full mirror.
+The client resolves them because only it knows how many tiles it is drawing —
+the Mirror Wall steps quality down as devices are added, and the daemon has no
+view to measure. It clamps them anyway: these become arguments to a process on
+the device, so a negative or absurd value is a scrcpy server that refuses to
+start, which reaches the user as a mirror that never produces a frame rather
+than as the bad number that caused it. Out-of-range degrades to 0, which is
+scrcpy's own "use the device's" — a working mirror beats no mirror.
 
 `resize` is refused on this topic (`Topic.acceptsResize`), separately from
 `write` being accepted: scrcpy negotiates the size once per session, so a

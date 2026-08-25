@@ -50,7 +50,7 @@ public protocol StreamSource: Sendable {
     /// above all — so that arrives as a `failed` with a reason rather than as a
     /// subscription that never produces a frame. `ScrcpySession.start()` is the
     /// slow half and stays the caller's to run.
-    func openMirror(serial: String) async throws -> ScrcpySession
+    func openMirror(serial: String, quality: MirrorQuality) async throws -> ScrcpySession
 }
 
 /// One WebSocket connection's worth of subscriptions.
@@ -201,7 +201,8 @@ public actor StreamSession {
         if topic == .mirror {
             guard let serial = command.params?.serial else { return }
             do {
-                mirror = try await source.openMirror(serial: serial)
+                mirror = try await source.openMirror(
+                    serial: serial, quality: command.params?.mirrorQuality ?? .deviceDefault)
             } catch {
                 await sink.send(
                     StreamFrame.encode(
@@ -569,7 +570,7 @@ public struct LiveStreamSource: StreamSource {
         }
     }
 
-    public func openMirror(serial: String) async throws -> ScrcpySession {
+    public func openMirror(serial: String, quality: MirrorQuality) async throws -> ScrcpySession {
         guard let server = await ScrcpyServerLocator.resolve(locator: locator) else {
             throw MirrorError.scrcpyServerMissing
         }
@@ -579,9 +580,12 @@ public struct LiveStreamSource: StreamSource {
                 serial: serial,
                 serverVersion: server.version,
                 localJarPath: server.jarPath,
-                // scrcpy's defaults, which is one tile at full quality. The
-                // Mirror Wall steps quality down per tile, so that choice
-                // belongs to whoever is laying the tiles out, not here.
-                params: ScrcpyServerParams(scid: ScrcpyServerParams.randomSCID())))
+                // The quality is the client's to choose: the Mirror Wall steps
+                // it down as tiles are added, and only the client knows how
+                // many it is drawing.
+                params: ScrcpyServerParams(
+                    scid: ScrcpyServerParams.randomSCID(),
+                    maxSize: quality.maxSize,
+                    maxFps: quality.maxFps)))
     }
 }

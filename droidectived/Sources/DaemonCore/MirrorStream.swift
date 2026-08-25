@@ -99,3 +99,41 @@ struct MirrorStreamMapper {
         }
     }
 }
+
+/// What one mirror asks the device-side server for.
+///
+/// The client decides it — the Mirror Wall steps quality down as tiles are
+/// added, and only the client knows how many it is drawing — so this exists to
+/// carry the numbers and to refuse the ones scrcpy would choke on.
+public struct MirrorQuality: Sendable, Equatable {
+    /// scrcpy `max_size`: the longest side in px, or 0 for the device's own.
+    public let maxSize: Int
+    /// scrcpy `max_fps`: 0 leaves the device uncapped.
+    public let maxFps: Int
+
+    public init(maxSize: Int, maxFps: Int) {
+        self.maxSize = maxSize
+        self.maxFps = maxFps
+    }
+
+    /// scrcpy's own default: whatever the device encodes at.
+    public static let deviceDefault = MirrorQuality(maxSize: 0, maxFps: 0)
+
+    /// Above this a tile is decoding more pixels than any wall can show, and a
+    /// client asking for it is a bug rather than a preference.
+    static let largestSide = 4096
+    /// scrcpy's own ceiling; above it the server refuses to start.
+    static let fastestFrameRate = 240
+
+    /// A requested size, or 0 for the device's own. Anything negative or absurd
+    /// becomes 0 rather than an argument the server rejects.
+    static func clampSize(_ requested: Int?) -> Int {
+        guard let requested, requested > 0 else { return 0 }
+        return min(requested, largestSide)
+    }
+
+    static func clampFps(_ requested: Int?) -> Int {
+        guard let requested, requested > 0 else { return 0 }
+        return min(requested, fastestFrameRate)
+    }
+}

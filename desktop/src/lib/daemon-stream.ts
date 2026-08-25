@@ -182,9 +182,16 @@ export interface MirrorSession extends Subscription {
  */
 export async function watchMirror(
   serial: string,
+  quality: { maxSize: number; maxFps: number },
   onUpdate: (update: StreamUpdate<MirrorFrame>) => void,
 ): Promise<MirrorSession> {
-  const subscription = await subscribe<MirrorFrame>("watch_mirror", { serial }, onUpdate)
+  const subscription = await subscribe<MirrorFrame>(
+    "watch_mirror",
+    // Resolved here rather than by the daemon: the Mirror Wall steps quality
+    // down as tiles are added, and only this side knows how many it is drawing.
+    { serial, maxSize: quality.maxSize, maxFps: quality.maxFps },
+    onUpdate,
+  )
   const id = subscription.id
   return {
     ...subscription,
