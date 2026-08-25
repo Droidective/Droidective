@@ -276,7 +276,13 @@ public actor ManagedToolStore {
     private func place(asset: URL, spec: ManagedToolSpec, into dir: URL) async throws {
         switch spec.kind {
         case .jar:
-            try fileManager.moveItem(at: asset, to: dir.appendingPathComponent(asset.lastPathComponent))
+            // Through FileRetry because this rename is the one that loses the
+            // race on Windows: the jar was written moments ago by the download,
+            // and a scanner still holding it open fails the move with a sharing
+            // violation. The other kinds hand the asset to an external unpacker,
+            // which opens it itself.
+            let destination = dir.appendingPathComponent(asset.lastPathComponent)
+            try await FileRetry.run { try fileManager.moveItem(at: asset, to: destination) }
         case .zipArchive:
             try await extract(
                 HostArchive.unzipExecutable,
