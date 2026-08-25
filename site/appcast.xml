@@ -6,6 +6,109 @@
     <description>Most recent Droidective updates.</description>
     <language>en</language>
     <item>
+      <title>Droidective 3.10.0-beta.1</title>
+      <sparkle:channel>beta</sparkle:channel>
+      <sparkle:version>842</sparkle:version>
+      <sparkle:shortVersionString>3.10.0-beta.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+<style>
+:root { color-scheme: light dark; }
+body { font: 13px/1.55 -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; }
+h2 { font-size: 1.3em; margin: .2em 0 .4em; }
+h3 { font-size: 1.05em; margin: 1.1em 0 .3em; }
+p { margin: .5em 0; }
+ul { margin: .4em 0; padding-left: 1.4em; }
+li { margin: .3em 0; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9em; background: color-mix(in srgb, currentColor 12%, transparent); padding: .1em .35em; border-radius: 4px; }
+pre { background: color-mix(in srgb, currentColor 8%, transparent); padding: .6em .8em; border-radius: 6px; overflow-x: auto; }
+pre code { background: none; padding: 0; }
+a { color: #2f9e44; }
+</style>
+<p>The first Windows and Linux build of the app itself. Until now a beta carried
+only <code>droidectived</code>, the headless daemon; this one carries the desktop app that
+runs on top of it — an NSIS installer and an MSI for Windows, a <code>.deb</code> and an
+<code>.AppImage</code> for Linux. It is an early build and the version says so: Windows and
+Linux start their own version line at <code>0.0.1-beta.1</code> rather than inheriting the
+Mac's.</p>
+<h3>Windows and Linux</h3>
+<ul>
+<li>
+<strong>The desktop app, for the first time.</strong> 23 screens have a real pane: Terminal,
+Apps, Logcat, Device Info, File Explorer, Crash Catcher, Bug Report,
+Performance, Root Status, Developer Settings, System Restrictions, Wi-Fi,
+Private DNS, Network Speed, Emulators, Install App, App Info, Permissions,
+Memory Usage, Sandbox Browser, Manage App, Deep Links and Reactotron — plus
+the catalog and About. Another 19 features run as actions from the palette
+without a screen of their own.</li>
+<li>
+<strong>It is meant to be the same app.</strong> Where a control exists on both, it has the
+Mac's wording, icon, confirmation shape and gesture. Two deliberate
+exceptions, and they are the only ones: a shortcut whose modifier has no
+equivalent here (⌘\ is Ctrl+, and the split is Ctrl+\ rather than Ctrl+D
+because Ctrl+D ends input in every Linux shell), and a label that names a
+platform.</li>
+<li>
+<strong><code>droidectived</code> still ships too</strong>, for macOS, Linux and Windows. It is useful
+on its own — CI, scripting, adb over loopback — and the app talks to it rather
+than to adb directly.</li>
+</ul>
+<h3>What is not there yet</h3>
+<ul>
+<li>
+<strong>17 of the 61 features have not been started</strong>, and the 42 counted as partial
+are each missing something the Mac version offers. Read the state as <em>nothing
+is finished</em> rather than <em>most of it is done</em>; <code>docs/desktop-parity.md</code> tracks
+it feature by feature.</li>
+<li>
+<strong>The mirror, screen recording, the video editor, multi-window, Quick Actions,
+the tour and notifications are not ported.</strong> They are porting jobs with
+entries in the backlog, not decisions.</li>
+<li>
+<strong><code>ios-logs</code> and <code>push-notification</code> will not come.</strong> They drive <code>xcrun simctl</code> against an iOS Simulator, which is a macOS toolchain rather than
+anything about a device.</li>
+<li>
+<strong>No automatic updates.</strong> The app does not update itself on Windows or Linux;
+a new beta is a new download.</li>
+</ul>
+<h3>Two version lines</h3>
+<ul>
+<li>
+<strong>Windows and Linux are versioned separately from the Mac.</strong> This build is
+<code>0.0.1-beta.1</code> on those platforms and <code>3.10.0-beta.1</code> on macOS. The Mac
+carries the product's own history — 61 features across three major versions —
+and the ports do not, so numbering a first Windows build in the threes would
+claim a maturity it has not got. The two lines move independently from here.</li>
+</ul>
+<h3>Unsigned, and what that means</h3>
+<ul>
+<li>
+<strong>Windows will warn.</strong> The installer is not Authenticode-signed, so
+SmartScreen shows "Windows protected your PC" — More info, then Run anyway.
+Code-signing is a deliberate deferral, not an oversight: an OV certificate is
+a recurring cost and a multi-week identity check, and reputation accrues per
+certificate over download volume a beta will not generate.</li>
+<li>
+<strong>Linux bundles are unsigned too</strong>, which is normal for the ecosystem.</li>
+<li>
+<strong>Every unsigned artifact is checksummed.</strong> <code>SHA256SUMS</code> on the release page
+covers the installers, the bundles and all three daemon archives. The macOS
+DMG is Developer ID-signed and notarized as always.</li>
+</ul>
+<h3>macOS</h3>
+<ul>
+<li>
+<strong>This is a rebuild, not a Mac release.</strong> The Mac app is identical to v3.9.2 —
+a beta that exists to ship a Windows and Linux build still rebuilds the Mac
+app, and it is offered only to installs that opted into beta updates in
+Settings ▸ General. The stable channel is untouched: the download button and
+<code>/releases/latest/download/</code> keep serving v3.9.2.</li>
+</ul>
+]]></description>
+      <pubDate>Tue, 25 Aug 2026 19:27:01 +0000</pubDate>
+      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.10.0-beta.1/Droidective-v3.10.0-beta.1.dmg" sparkle:edSignature="CCyLwfKf8zoolcWKoDQqj3/MO997skDzvQzw1ZfcTMoFqBhCAenb2vfQrnP+izM+FOwYgQwDIfMNO/JWUKlpBA==" length="145750150" type="application/octet-stream" />
+    </item>
+    <item>
       <title>Droidective 3.9.2</title>
       <sparkle:version>830</sparkle:version>
       <sparkle:shortVersionString>3.9.2</sparkle:shortVersionString>
@@ -74,8 +177,7 @@ session; anything else closes itself once a real window is up.</li>
 </ul>
 ]]></description>
       <pubDate>Tue, 25 Aug 2026 12:15:04 +0000</pubDate>
-      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.9.2/Droidective-v3.9.2.dmg" sparkle:edSignature="9J2wA5//XpPHq08jgJerK9+IaIjjFOWN3+WYCH2sjO9DDOtLfcAbjhNFbDU/K4VORPico+VsbjbVUI5Kj4uxAw==" length="145155632" type="application/octet-stream" />
+      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.9.2/Droidective-v3.9.2.dmg" sparkle:edSignature="9J2wA5//XpPHq08jgJerK9+IaIjjFOWN3+WYCH2sjO9DDOtLfcAbjhNFbDU/K4VORPico+VsbjbVUI5Kj4uxAw==" length="145155632" type="application/octet-stream"/>
     </item>
-    
   </channel>
 </rss>
