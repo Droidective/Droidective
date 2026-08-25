@@ -1,3 +1,54 @@
+## Droidective v3.9.2
+
+Pulling events out of a busy log. Rows in the Reactotron timeline and the JS
+Console can be selected — ⌘-click one, ⇧-click a range, drag across them — and
+copied whole, payload included. An API call's status code also reads off its
+collapsed row, and the empty "Screen Mirror" window that could appear at launch
+is gone.
+
+### Reactotron and JS Console
+
+- **Select rows and copy them whole.** Pulling a few events out of a busy
+  timeline meant right-clicking them one at a time. ⌘-click toggles a row,
+  ⇧-click takes the range from the last one picked, and dragging across rows
+  sweeps a range; the toolbar shows how many are picked, with a copy menu, and
+  ⌘C copies them. A copy carries the whole event rather than the line already on
+  screen — the row's summary followed by the complete payload: an API call's
+  request body, headers and response, an action's or saga's arguments. Copy as
+  JSON gives the same events in the export's wire form.
+- **A selection can't copy what the feed no longer has.** Rows that were
+  cleared, filtered out, or trimmed while the selection stood are dropped from
+  it, so a copy never contains events nobody can see.
+- **The gestures stay out of each other's way.** Only a row's header carries the
+  drag, so dragging through an expanded payload still selects that text, and ⌘C
+  is bound only while rows are picked — it never shadows copying text out of the
+  search field or an open payload.
+
+### Reactotron
+
+- **An API event's status code sits on its collapsed row.** Reading a timeline is
+  mostly looking for the one call that didn't return 200, and that meant
+  expanding rows one at a time. The code now sits between the API badge and the
+  method — green for 2xx, orange for a client error, red for a server error,
+  neutral for a redirect. Only the code is tinted, so the timeline's own badge
+  colours still read. A request that never got a response reports status 0 on the
+  wire, so it reads `ERR`.
+
+### Mirror
+
+- **No empty "Screen Mirror" window at launch.** A 420×850 window with a title
+  bar and nothing in it could appear on its own at launch — and in the worst case
+  it was the only window the app had. The pop-out mirror's window group persists
+  the device it was presented with and re-presents it at the next launch, before
+  any workspace exists for it to attach to, so it rendered nothing and no main
+  window was created either. A pop-out now has to have been asked for in this
+  session; anything else closes itself once a real window is up.
+
+### Install
+
+Download the DMG, drag Droidective to Applications, and open it. Existing
+installs update themselves.
+
 ## Droidective v3.9.1
 
 A bug-fix release. The pop-out mirror window from 3.9.0 could hang the app —

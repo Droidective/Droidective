@@ -113,7 +113,7 @@ opening it — verify those by hand.
 ## Build / test / run
 
 ```
-make test          # ADBKit unit tests (cd ADBKit && swift test) — 1844 tests, keep green
+make test          # ADBKit unit tests (cd ADBKit && swift test) — 1846 tests, keep green
 make test-app      # the AppTests logic bundle — 105 tests
 make verify        # tiers 0-1: warnings-as-errors + both test bundles
 make test-linux    # the same suite on Linux (Apple `container` CLI; the port gate)
@@ -817,7 +817,31 @@ position in `RELEASE_NOTES.md`.
 ## Status
 
 Feature-complete across all planned milestones plus several UX rounds.
-(Latest release: **v3.9.1** — a bug-fix release. A pop-out mirror window
+(Latest release: **v3.9.2** — row selection across the two log feeds, plus a
+launch fix. `RowSelection` (ADBKit, pure) holds the ⌘-click / ⇧-click / drag
+rules for the Reactotron timeline and the JS Console: the part that goes subtly
+wrong is never the highlight but where the *anchor* sits after each gesture,
+which decides what the next range spans, and `retain(in:)` drops rows the feed
+no longer has so a selection can't copy events cleared, filtered out or trimmed
+while it stood. The App side is `LogRowFrames` — a plain **non-observable**
+reference box, because rows report their frames on every scroll and layout pass
+and holding that in `@State` would re-render the feed per pixel — plus
+`LogSelectionMouse` for the drag's hit-testing. Only a row's *header* carries
+the drag, so a drag through an expanded payload still selects that text, and ⌘C
+is bound only while rows are picked so it never shadows copying out of the
+search field. A copy carries the whole event (summary plus complete payload);
+Copy as JSON reuses the export's wire shape. An API event's status code now sits
+on its collapsed row, tinted by class only — colouring the row would drown the
+timeline's own badge colours — and status 0 on the wire reads `ERR`. The phantom
+`Screen Mirror` window is also gone: `WindowGroup(for: String.self)` persists
+its presented value and re-presents it at the next launch *before* any workspace
+exists, so it rendered nothing and no main window was created either. Both
+openers now record the serial first and an unasked-for pop-out closes itself —
+but only after a workspace window is up, since a pop-out is `canBecomeMain` and
+closing the app's only such window is what `AppDelegate.windowWillClose` reads
+as the user closing the workspace. Complements v3.9.1's `isRestorable = false`,
+which stops AppKit doing the same thing.) Before that,
+**v3.9.1** — a bug-fix release. A pop-out mirror window
 hung the app: `MirrorWindowRegistrar` re-registered on every `updateNSView`, and
 `noteMirrorWindow` wrote `AppCore.registry` unconditionally — which `RootView`'s
 body and the Window menu read, so the write ran the update and the update ran
@@ -837,7 +861,7 @@ it. The mirror capture sheet gained Copy — deliberately not a decision, so the
 sheet stays up. And `SecretFile` replaces both signing paths'
 `FileManager.createFile`, so a keystore password file that can't be written
 reports the path and the underlying error, with the 0600 step reportable
-separately and best-effort on Windows.) Before that,
+separately and best-effort on Windows. Before that,
 **v3.9.0** — the **Mirror Wall** (the 61st feature,
 `mirror-wall`): up to six connected devices mirrored side by side in one pane,
 each tile the same interactive session the full mirror runs, at a per-tile
@@ -1051,7 +1075,7 @@ jadx/apktool, recompile, and sign — with keystore creation) plus Frida setup, 
 custom accent color, launching emulators from the device bar, per-feature
 connect-a-device empty states, a live-preview hotkey recorder, and a Settings
 split into Appearance/Privacy; managed tools download from GitHub releases into
-Application Support and are sized/removable in Settings); 1833 ADBKit + 99
+Application Support and are sized/removable in Settings); 1846 ADBKit + 105
 AppTests green (macOS — the suite also runs on Linux in CI, minus the
 Darwin-gated files);
 builds clean with zero warnings (enforced as errors in CI). Verified live against a
