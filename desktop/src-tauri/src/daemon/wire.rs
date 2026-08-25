@@ -1038,3 +1038,98 @@ pub struct CustomCommandRunRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bundle_id: Option<String>,
 }
+
+/// Which of the APK tools this machine has.
+///
+/// Asked before a file is picked: the SDK build-tools are detected rather than
+/// downloadable, so "install the build-tools" is advice a screen can give up
+/// front — after a failed run it reads as though the APK was the problem.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "one flag per tool, mirroring the daemon's answer; a bitfield or a \
+              list of names would be a second spelling of the same five facts"
+)]
+pub struct ApkToolchain {
+    pub aapt2: bool,
+    pub apksigner: bool,
+    pub zipalign: bool,
+    pub java: bool,
+    pub bundletool: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApkSigner {
+    pub subject_dn: Option<String>,
+    pub sha256: Option<String>,
+    pub sha1: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApkReport {
+    pub file_name: String,
+    pub file_size_bytes: i64,
+    pub label: Option<String>,
+    pub package_name: Option<String>,
+    pub version_name: Option<String>,
+    pub version_code: Option<String>,
+    pub min_sdk: Option<String>,
+    pub target_sdk: Option<String>,
+    /// False when aapt2 was missing, so a screen can say why it is showing a
+    /// name and a size and nothing else.
+    pub has_details: bool,
+    pub permissions: Vec<String>,
+    pub features: Vec<String>,
+    pub is_debuggable: bool,
+    pub signature_schemes: Vec<String>,
+    pub signers: Vec<ApkSigner>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ApkPathRequest {
+    pub path: String,
+}
+
+/// A keystore's password rides the loopback body, which is the same trust
+/// boundary the token establishes. It must never reach a command line — the
+/// daemon writes it to a 0600 temp file for exactly that reason.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApkKeystore {
+    pub path: String,
+    pub store_password: String,
+    pub key_alias: Option<String>,
+    pub key_password: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ApkSignRequest {
+    pub input: String,
+    pub output: String,
+    pub keystore: ApkKeystore,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApkSignResponse {
+    pub ok: bool,
+    pub message: String,
+    pub output: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AabConvertRequest {
+    pub input: String,
+    pub output_directory: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub keystore: Option<ApkKeystore>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AabConvertResponse {
+    pub path: String,
+    pub size_bytes: i64,
+}

@@ -49,7 +49,10 @@ let server = DaemonServer(
         // Also the Mac's own file: a developer running both apps has one list
         // of custom commands, not two.
         customCommands: JSONStore<[CustomCommand]>(
-            filename: "custom-commands.json", default: [])),
+            filename: "custom-commands.json", default: []),
+        // The same managed-tool directory the engine uses, so a jadx or
+        // bundletool downloaded once serves every feature that wants it.
+        toolsDirectory: AppPaths.supportDir.appendingPathComponent("tools")),
     token: token,
     streamSource: LiveStreamSource(
         monitor: monitor, streamer: LogcatStreamer(client: client),

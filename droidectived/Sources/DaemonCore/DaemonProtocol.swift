@@ -66,6 +66,14 @@ public enum DaemonProtocol {
         /// The saved custom commands: read the list, replace it, run one. The
         /// write takes the whole list for the reason the deep links do — the
         /// client holds what it is showing.
+        /// The APK tools — inspect, sign, and convert a bundle. `apkToolchain`
+        /// is asked first: the SDK build-tools are detected rather than
+        /// downloadable, so a screen can say what is missing before someone
+        /// picks a file.
+        case apkToolchain = "/v1/apk/toolchain"
+        case apkInspect = "/v1/apk/inspect"
+        case apkSign = "/v1/apk/sign"
+        case aabConvert = "/v1/apk/convert"
         case customCommandsRead = "/v1/customcommands/read"
         case customCommandsWrite = "/v1/customcommands/write"
         case customCommandsRun = "/v1/customcommands/run"

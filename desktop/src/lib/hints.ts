@@ -56,6 +56,7 @@ const HINTS: Readonly<Record<string, string>> = {
   "sandbox-browser": "Connect a device to browse files.",
   "app-management": "Connect a device to manage apps.",
   "custom-commands": "Connect a device to run your own commands.",
+  "aab-convert": "Connect a device to install the converted APK.",
 }
 
 /** The line for `id`, or one derived from the feature's title. */

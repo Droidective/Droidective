@@ -270,5 +270,6 @@ export interface CommandPreset {
   detail: string
 }
 
+export type * from "@/lib/wire-apk"
 export type * from "@/lib/wire-settings"
 export type * from "@/lib/wire-stream"

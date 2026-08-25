@@ -11,13 +11,13 @@ rewriting one when something turns out to be more work than it looked.
 
 | | Count |
 | --- | --- |
-| ⬜ Not started | 13 |
-| 🟡 Partial | 46 |
+| ⬜ Not started | 10 |
+| 🟡 Partial | 49 |
 | ⛔ Not applicable off-Apple | 2 |
 | **Total registry features** | **61** |
 
-"Partial" is doing a lot of work in that table: 19 of the 46 are actions that
-run from the palette but have no screen of their own, and the 27 that do have
+"Partial" is doing a lot of work in that table: 19 of the 49 are actions that
+run from the palette but have no screen of their own, and the 30 that do have
 screens are each missing something the Mac version offers. Read it as *nothing
 is finished*, not as *most of it is done*.
 
@@ -1565,10 +1565,10 @@ job, and the checklist now says which.
 
 
 ### App Management
-#### `aab-convert` — AAB to APK  ·  ⬜ todo
+#### `aab-convert` — AAB to APK  ·  🟡 partial
 > Convert an Android App Bundle into an installable APK
 - **Kind** `view`
-- **Note** Not started on Windows/Linux.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `AabConvertView` — `App/Sources/FeatureDetail/Views/AabConvertView.swift`
 - **Must replicate**
   - [ ] button: Choose AAB…
@@ -1599,10 +1599,10 @@ job, and the checklist now says which.
   - [ ] label: Open externally
   - [ ] tooltip: Find in file (⌘F)
 
-#### `apk-inspector` — APK Inspector  ·  ⬜ todo
+#### `apk-inspector` — APK Inspector  ·  🟡 partial
 > Inspect an APK — manifest, permissions, SDK, signing
 - **Kind** `view` · **hub member**
-- **Note** Not started on Windows/Linux.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `ApkInspectorView` — `App/Sources/FeatureDetail/Views/ApkInspectorView.swift`
 - **Must replicate**
   - [ ] button: Choose APK…
@@ -1610,10 +1610,10 @@ job, and the checklist now says which.
   - [ ] label: \(title) (\(items.count))
   - [ ] label: Signing
 
-#### `apk-sign` — Sign APK  ·  ⬜ todo
+#### `apk-sign` — Sign APK  ·  🟡 partial
 > Zipalign and sign an APK — debug key or your keystore
 - **Kind** `view` · **hub member**
-- **Note** Not started on Windows/Linux.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `ApkSignView` — `App/Sources/FeatureDetail/Views/ApkSignView.swift`
 - **Must replicate**
   - [ ] button: Choose APK…
@@ -1805,4 +1805,4 @@ job, and the checklist now says which.
   - [ ] drag: drag and drop
 
 
-<!-- counts: {'done': 0, 'partial': 46, 'todo': 13, 'gated': 2} -->
+<!-- counts: {'done': 0, 'partial': 49, 'todo': 10, 'gated': 2} -->

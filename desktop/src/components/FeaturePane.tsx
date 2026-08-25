@@ -4,6 +4,9 @@ import { AboutPane } from "@/components/AboutPane"
 import { CatalogPane } from "@/components/CatalogPane"
 import { HomeView } from "@/components/HomeView"
 import {
+  AabConvertPane,
+  ApkInspectorPane,
+  ApkSignPane,
   AppInfoPane,
   AppsPane,
   BugReportPane,
@@ -100,6 +103,8 @@ export function FeaturePane(props: FeaturePaneProps) {
           onSelect={props.onSelectPackage}
         />
       )
+    case "aab-convert":
+      return <AabConvertPane device={props.device} />
     case "custom-commands":
       return <CustomCommandsPane device={props.device} packageId={props.packageId} />
     case "logcat":
@@ -173,6 +178,12 @@ function hostPane(id: string, device: Device | null) {
       return <TerminalPane serial={device?.serial ?? null} />
     case "reactotron":
       return <ReactotronPane device={device} />
+    case "apk-inspector":
+      // Device-free: an APK is a file on this machine, so both work with
+      // nothing connected.
+      return <ApkInspectorPane />
+    case "apk-sign":
+      return <ApkSignPane />
     case "wireless-adb":
       // Host-side: it is about the devices themselves, so it works — and is
       // most wanted — with nothing selected in the bar.

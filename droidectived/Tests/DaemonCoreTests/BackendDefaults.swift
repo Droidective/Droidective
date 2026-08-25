@@ -53,6 +53,25 @@ extension DaemonBackend {
         serial: String, path: String, to destination: String, asRoot: Bool
     ) async throws -> String { destination }
 
+    func apkToolchain() async -> ApkProtocol.Toolchain {
+        ApkProtocol.Toolchain(
+            aapt2: false, apksigner: false, zipalign: false, java: false, bundletool: false)
+    }
+
+    func inspectApk(path: String) async -> ApkReport {
+        ApkReport(info: ApkInfo(fileName: "stub.apk", fileSizeBytes: 0))
+    }
+
+    func signApk(_ request: ApkProtocol.SignRequest) async throws -> ApkProtocol.SignResponse {
+        ApkProtocol.SignResponse(ok: true, message: "stub", output: request.output)
+    }
+
+    func convertAab(
+        _ request: ApkProtocol.ConvertRequest
+    ) async throws -> ApkProtocol.ConvertResponse {
+        ApkProtocol.ConvertResponse(path: "\(request.outputDirectory)/universal.apk", sizeBytes: 0)
+    }
+
     func customCommands() async -> [CustomCommand] { [] }
 
     func writeCustomCommands(_ commands: [CustomCommand]) async throws {}

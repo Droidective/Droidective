@@ -6,6 +6,9 @@
  * each of them.
  */
 
+export { AabConvertPane } from "@/components/AabConvertPane"
+export { ApkInspectorPane } from "@/components/ApkInspectorPane"
+export { ApkSignPane } from "@/components/ApkSignPane"
 export { AppInfoPane } from "@/components/AppInfoPane"
 export { AppsPane } from "@/components/AppsPane"
 export { BugReportPane } from "@/components/BugReportPane"
