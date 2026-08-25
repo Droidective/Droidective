@@ -14,11 +14,23 @@ public struct DaemonOptions: Equatable, Sendable {
     /// daemon holding adb children — the failure users experience as "adb is
     /// stuck".
     public var parentPID: Int32?
+    /// Where the app keeps its bundled `scrcpy-server`.
+    ///
+    /// The Mac ships the jar inside its own bundle and promises no separate
+    /// scrcpy install; off Apple the app bundles the same file — it is a Java
+    /// jar, so one copy suits every platform — and tells the daemon where it
+    /// put it. Absent falls back to an installed scrcpy, which is what a
+    /// developer running the daemon by hand has.
+    public var scrcpyServer: String?
 
-    public init(port: Int = 0, tokenFile: String? = nil, parentPID: Int32? = nil) {
+    public init(
+        port: Int = 0, tokenFile: String? = nil, parentPID: Int32? = nil,
+        scrcpyServer: String? = nil
+    ) {
         self.port = port
         self.tokenFile = tokenFile
         self.parentPID = parentPID
+        self.scrcpyServer = scrcpyServer
     }
 
     public enum ParseError: Error, Equatable, CustomStringConvertible {
@@ -61,6 +73,8 @@ public struct DaemonOptions: Equatable, Sendable {
                 options.port = port
             case "--token-file":
                 options.tokenFile = try value()
+            case "--scrcpy-server":
+                options.scrcpyServer = try value()
             case "--parent-pid":
                 let raw = try value()
                 guard let pid = Int32(raw) else {

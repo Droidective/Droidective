@@ -17,6 +17,29 @@ public struct ScrcpyServerInfo: Sendable, Equatable {
 /// the installed scrcpy (its package lays the jar beside the binary); bundling
 /// it in the app is a later packaging step.
 public enum ScrcpyServerLocator {
+    /// The version of the `scrcpy-server` this repo ships.
+    ///
+    /// MUST match the committed `App/Resources/scrcpy-server`, because the
+    /// server aborts on a version mismatch rather than degrading. It lives here
+    /// rather than beside either bundler because *both* hosts ship the same
+    /// file — it is a Java jar, so one copy suits every platform — and two
+    /// constants for one jar is a drift waiting to happen.
+    ///
+    /// `bundledVersionMatchesTheMacsOwn` in ADBKitTests holds the Mac's
+    /// `BundledTools.scrcpyVersion` to this, so the pair cannot part company
+    /// quietly.
+    public static let bundledVersion = "4.1"
+
+    /// The bundled server, given where the app put the jar.
+    ///
+    /// The Mac reads it out of its own bundle; off Apple the app passes the
+    /// path to the daemon, which has no bundle to look in. Either way the point
+    /// is the same one the Mac's Doctor makes: Droidective does not ask anyone
+    /// to install scrcpy separately.
+    public static func bundled(jarPath: String) -> ScrcpyServerInfo {
+        ScrcpyServerInfo(jarPath: jarPath, version: bundledVersion)
+    }
+
     /// Standard layout: `<prefix>/bin/scrcpy` → `<prefix>/share/scrcpy/scrcpy-server`.
     public static func jarPath(forBinary binaryPath: String) -> String {
         let binDir = (binaryPath as NSString).deletingLastPathComponent

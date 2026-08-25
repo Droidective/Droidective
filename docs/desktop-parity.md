@@ -1024,12 +1024,24 @@ after the screens rather than instead of them.
     real device on Windows or Linux — the one step that needs a person at a
     machine with a phone plugged in.
 
-    **Still open, and worth doing before the tile ships:** the server jar. The
-    daemon reads it from an installed scrcpy via `ScrcpyServerLocator`, while the
-    Mac ships it in its bundle and promises no separate install. It is a Java
-    jar — architecture-independent — and `App/Resources/scrcpy-server` is
-    committed already, so this is a packaging step (bundle it as a Tauri
-    resource, pass the path to the sidecar), not a porting one.
+    **The server jar ships with the app now.** The Tauri bundle carries the
+    committed `App/Resources/scrcpy-server` — the very same file, since a Java
+    jar is architecture-independent — and passes its path to the sidecar as
+    `--scrcpy-server`, so nobody installs scrcpy themselves. That was the Mac's
+    promise and it is the port's now too. `ScrcpyServerLocator.bundledVersion`
+    is the one version both hosts read, and an ADBKit test holds the Mac's
+    `BundledTools.scrcpyVersion` to it, because the pair describes one committed
+    file and a mismatch does not degrade — the device-side server aborts, so the
+    mirror simply never starts.
+
+    A bundled path that is *not* there fails rather than falling back: quietly
+    mirroring through whatever scrcpy the machine happens to have is exactly the
+    version mismatch that test exists to prevent. A daemon started by hand
+    passes no path and gets the installed one, which is what a developer has.
+
+    **The Linux codec dependency is declared too.** `bundle.linux.deb.recommends`
+    now names `gstreamer1.0-libav`, so apt pulls the H.264 decoder in by default
+    and the probe's message becomes the fallback rather than the plan.
 
     **The wire is cheap, but its drop policy is not.** The 370 MB/s above is
     *decoded* frames; the encoded stream is scrcpy's bitrate, ~1–8 Mbps, so

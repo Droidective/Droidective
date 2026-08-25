@@ -495,12 +495,14 @@ that ignores the window.
 Two failure modes reach the client as `failed` rather than as a feed that never
 produces a frame: scrcpy's server jar not being found, which is reported at
 subscribe time, and a stream whose codec is not H.264, which is reported when
-the header arrives and names what was negotiated. **One packaging gap remains:**
-the jar is currently read from an installed scrcpy via `ScrcpyServerLocator`,
-while the Mac ships it in its bundle. It is a Java jar, so it is
-architecture-independent and the committed `App/Resources/scrcpy-server` is
-already the right file — the desktop app passing its own bundled copy through is
-the step that closes it.
+the header arrives and names what was negotiated.
+
+The jar comes from `--scrcpy-server`, which the app passes because it bundles
+the committed `App/Resources/scrcpy-server` — architecture-independent, so one
+file serves every target. A daemon started by hand omits the flag and falls
+back to an installed scrcpy. A path that was given and is not there is an
+error rather than a fallback: using some other scrcpy's server instead is a
+version mismatch, and the device-side server aborts on one.
 
 ## 6. Lifecycle
 

@@ -447,11 +447,14 @@ public struct LiveStreamSource: StreamSource {
     private let relay: ReactotronRelay
     private let client: AdbClient
     private let locator: ToolLocator
+    /// The app's bundled `scrcpy-server`, when it passed one.
+    private let bundledScrcpyServer: String?
 
     public init(
         monitor: DeviceMonitor, streamer: LogcatStreamer, performance: PerformanceService,
         networkSpeed: NetworkSpeedService, reactotron: ReactotronRelay,
-        client: AdbClient, locator: ToolLocator
+        client: AdbClient, locator: ToolLocator,
+        bundledScrcpyServer: String? = nil
     ) {
         self.monitor = monitor
         self.streamer = streamer
@@ -460,6 +463,7 @@ public struct LiveStreamSource: StreamSource {
         relay = reactotron
         self.client = client
         self.locator = locator
+        self.bundledScrcpyServer = bundledScrcpyServer
     }
 
     public func devices() async -> AsyncStream<[Device]> { await monitor.updates() }
@@ -558,20 +562,36 @@ public struct LiveStreamSource: StreamSource {
         public var description: String {
             switch self {
             case .scrcpyServerMissing:
-                // Named rather than generic, because it is the one the user can
-                // act on. The Mac ships the jar in its bundle; off Apple the
-                // daemon reads it from an installed scrcpy until the desktop
-                // app passes its own bundled copy through (see backlog 25).
+                // Named rather than generic, because it is the one thing the
+                // user can act on. The app normally passes its own bundled
+                // jar, so reaching this means either a damaged install or a
+                // daemon someone started by hand without one.
                 return """
-                    scrcpy's server was not found. Install scrcpy, which lays \
-                    scrcpy-server beside its binary.
+                    scrcpy's server was not found. The app bundles it, so this \
+                    usually means a damaged install; a daemon started by hand \
+                    needs either --scrcpy-server or an installed scrcpy.
                     """
             }
         }
     }
 
+    /// The bundled jar the app shipped, or an installed scrcpy's.
+    ///
+    /// The bundle wins, and does not fall back: if the app said where it put
+    /// the jar and it is not there, quietly mirroring through some other
+    /// scrcpy the machine happens to have is a version mismatch waiting to
+    /// happen — the server aborts on one. A developer running the daemon by
+    /// hand passes no path and gets the installed one.
+    private func scrcpyServer() async -> ScrcpyServerInfo? {
+        if let bundledScrcpyServer {
+            let exists = FileManager.default.isReadableFile(atPath: bundledScrcpyServer)
+            return exists ? ScrcpyServerLocator.bundled(jarPath: bundledScrcpyServer) : nil
+        }
+        return await ScrcpyServerLocator.resolve(locator: locator)
+    }
+
     public func openMirror(serial: String, quality: MirrorQuality) async throws -> ScrcpySession {
-        guard let server = await ScrcpyServerLocator.resolve(locator: locator) else {
+        guard let server = await scrcpyServer() else {
             throw MirrorError.scrcpyServerMissing
         }
         return ScrcpySession(

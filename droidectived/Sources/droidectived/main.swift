@@ -55,7 +55,10 @@ let server = DaemonServer(
         // one on `AppCore` for every window. It starts when something subscribes
         // to the topic and stops when the last subscriber goes.
         reactotron: ReactotronRelay(),
-        client: client, locator: locator))
+        client: client, locator: locator,
+        // Where the app put its copy of scrcpy-server, so a user needs no
+        // separate scrcpy install — the promise the Mac's bundle already makes.
+        bundledScrcpyServer: options.scrcpyServer))
 
 do {
     let bound = try await server.start(port: options.port)

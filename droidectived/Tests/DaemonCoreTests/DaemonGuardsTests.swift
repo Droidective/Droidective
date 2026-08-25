@@ -117,8 +117,25 @@ import Testing
     @Test func parsesEveryFlag() throws {
         let parsed = try DaemonOptions.parse([
             "--port", "5000", "--token-file", "/tmp/t", "--parent-pid", "42",
+            "--scrcpy-server", "/opt/app/scrcpy-server",
         ])
-        #expect(parsed == DaemonOptions(port: 5000, tokenFile: "/tmp/t", parentPID: 42))
+        #expect(
+            parsed
+                == DaemonOptions(
+                    port: 5000, tokenFile: "/tmp/t", parentPID: 42,
+                    scrcpyServer: "/opt/app/scrcpy-server"))
+    }
+
+    @Test func theBundledServerIsOptional() throws {
+        // A daemon someone started by hand has no bundle to point at, and falls
+        // back to an installed scrcpy rather than refusing to run.
+        #expect(try DaemonOptions.parse([]).scrcpyServer == nil)
+    }
+
+    @Test func aBundledServerPathNeedsAValue() {
+        #expect(throws: DaemonOptions.ParseError.missingValue("--scrcpy-server")) {
+            try DaemonOptions.parse(["--scrcpy-server"])
+        }
     }
 
     @Test func rejectsBadInputLoudlyRatherThanDefaulting() {
