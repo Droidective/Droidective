@@ -11,13 +11,13 @@ rewriting one when something turns out to be more work than it looked.
 
 | | Count |
 | --- | --- |
-| ⬜ Not started | 17 |
-| 🟡 Partial | 42 |
+| ⬜ Not started | 16 |
+| 🟡 Partial | 43 |
 | ⛔ Not applicable off-Apple | 2 |
 | **Total registry features** | **61** |
 
-"Partial" is doing a lot of work in that table: 19 of the 42 are actions that
-run from the palette but have no screen of their own, and the 23 that do have
+"Partial" is doing a lot of work in that table: 19 of the 43 are actions that
+run from the palette but have no screen of their own, and the 24 that do have
 screens are each missing something the Mac version offers. Read it as *nothing
 is finished*, not as *most of it is done*.
 
@@ -945,14 +945,26 @@ after the screens rather than instead of them.
     - **The probe is part of the feature, not a diagnostic.** One
       `isConfigSupported` call decides between a working mirror and a precise
       "install *this*" message. Without it the failure is a black rectangle.
-    - **Per artifact, the fix differs.** A `.deb` can `depends` on it, the way
-      the bundle already depends on `android-tools-adb`. An AppImage has
-      `bundle.linux.appimage.bundleMediaFramework`. The tarball that
-      `docs/release-channels.md` describes has no package manager at all, so
-      there the probe's message *is* the answer. Fedora's decoder lives outside
-      the default repos (RPM Fusion, or the Cisco openh264 repo), so a hard
-      `Requires:` would make an RPM uninstallable on a stock system — do not add
-      one.
+    - **Per artifact, the fix differs — and v3.10.0-beta.1 settled which
+      artifacts there are.** Linux ships a `.deb` and an `.AppImage`, not the
+      tarball an earlier draft of this entry assumed, so both mitigations are
+      real rather than theoretical:
+      - The `.deb` gets `bundle.linux.deb.recommends`, not `depends`. apt
+        installs Recommends by default, so almost everyone gets the codec, while
+        an app that is 61 features wide stays installable for the 60 that do not
+        need it. `depends` would make a video codec a condition of running the
+        file explorer.
+      - The `.AppImage` has `bundle.linux.appimage.bundleMediaFramework`, and it
+        is **not** ready to switch on: linuxdeploy bundles what the *builder*
+        has, and the Linux job installs with `--no-install-recommends` and no
+        gstreamer codec packages at all, so today it would bundle nothing. It
+        also costs 15–35 MB and has a live over-bundling bug against Mesa 25+
+        hosts. Adding the packages to the builder comes first, and an AppImage
+        that is actually run comes before believing either.
+      - No RPM ships, so the trap there is only worth remembering if one is
+        added: Fedora's decoder lives outside the default repos (RPM Fusion, or
+        the Cisco openh264 repo), so a hard `Requires:` would make the package
+        uninstallable on a stock system.
 
     Also worth correcting: on Linux this is **software** decode via
     `avdec_h264`; hardware would need the VA-API plugins on top. Only
@@ -974,10 +986,24 @@ after the screens rather than instead of them.
     back through `write`. `H264NAL.avcCodecString` is the one piece that went to
     ADBKit, being pure H.264 parsing both hosts could use.
 
-    **Next is one tile**, and the client owes three things the daemon cannot do
-    for it: configure on `config` and not before, discard until the next `key`
-    after a `dropped`, and size itself from the decoded frames rather than the
-    config's hint. Then the wall.
+    **One tile has landed too.** `MirrorPane` decodes into a `<canvas>` with
+    `useMirror`, and the three rules the daemon cannot enforce for a client are
+    `lib/mirror.ts`, tested without a decoder or a device: configure on `config`
+    and not before, discard until the next `key` after a `dropped`, and size
+    from the decoded frames rather than the config's hint. Input goes back the
+    other way through `lib/scrcpy-control.ts`, a port of ADBKit's
+    `ScrcpyControlMessage` pinned to the same byte vectors its Swift suite
+    asserts — including the Mac's own pointer id of 0 rather than scrcpy's mouse
+    sentinel, because those values are the ones proven against real hardware.
+
+    **What the tile still owes the Mac's screen:** audio (its own scrcpy socket,
+    not yet plumbed), Show touches, the reconnect button, and opening a mirror
+    in a separate window. The per-feature checklist below lists them.
+
+    **Not yet seen running.** Everything here is verified by tests and by the
+    codec probe against a real WebKitGTK, but no frame has been decoded from a
+    real device on Windows or Linux — the one step that needs a person at a
+    machine with a phone plugged in. Then the wall.
 
     **Still open, and worth doing before the tile ships:** the server jar. The
     daemon reads it from an installed scrcpy via `ScrcpyServerLocator`, while the
@@ -1175,7 +1201,7 @@ job, and the checklist now says which.
 #### `reactotron` — Reactotron  ·  🟡 partial
 > Live React Native inspector — logs, network, state, custom display
 - **Kind** `view`
-- **Note** Built, with two named gaps — the relay, the timeline model, the toolbar and filter dialog, the waiting screen with its `adb reverse` button, expandable rows with JSON trees, find-in-object, the API tabs, Copy as cURL, the copy verbs, the filter-aware export and the split Restart button. Missing: the restart's picker sheet, and the per-pane split (backlog 20's model). Backlog 24.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `ReactotronView` — `App/Sources/FeatureDetail/Views/ReactotronView.swift`
 - **Must replicate**
   - [ ] button: OK
@@ -1267,10 +1293,10 @@ job, and the checklist now says which.
   - [ ] tooltip: Audio, and breaking tiles out into windows
   - [ ] drag: drag and drop
 
-#### `scrcpy` — Mirror Screen  ·  ⬜ todo
+#### `scrcpy` — Mirror Screen  ·  🟡 partial
 > Mirror and control the device with scrcpy
 - **Kind** `view`
-- **Note** Not started — the decode/render stack needs writing off Apple (scrcpy's server is portable; VideoToolbox/AVFoundation are not). Backlog 25.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `ScreenMirrorView` — `App/Sources/FeatureDetail/Views/ScreenMirrorView.swift`
 - **Must replicate**
   - [ ] button: Volume down
@@ -1728,22 +1754,19 @@ job, and the checklist now says which.
 #### `terminal` — Terminal  ·  🟡 partial
 > Real shell tabs with the device on ANDROID_SERIAL
 - **Kind** `system`
-- **Note** A pane exists; the checklist below is what it is missing. Tabs,
-  splits and the shell work; the per-tab rename, the tab groups, the context
-  menu and dragging a tab between panes do not, and `TerminalResume`'s
-  reopen-where-you-left-off is deferred with the cwd read it needs.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `TerminalView` — `App/Sources/FeatureDetail/Views/TerminalView.swift`
 - **Must replicate**
   - [ ] button: Rename
   - [ ] button: Cancel
   - [ ] button: Rename…
   - [ ] button: New Group…
-  - [x] button: Split Vertically
-  - [x] button: Split Horizontally
-  - [x] button: Close Terminal
+  - [ ] button: Split Vertically
+  - [ ] button: Split Horizontally
+  - [ ] button: Close Terminal
   - [ ] button: New Terminal Here
   - [ ] button: Close Group
-  - [x] button: plus
+  - [ ] button: plus
   - [ ] field: Name
   - [ ] tooltip: Close this terminal (kills its shell)
   - [ ] tooltip: Close this pane (kills its shell)
@@ -1751,4 +1774,4 @@ job, and the checklist now says which.
   - [ ] drag: drag and drop
 
 
-<!-- counts: {'done': 0, 'partial': 42, 'todo': 17, 'gated': 2} -->
+<!-- counts: {'done': 0, 'partial': 43, 'todo': 16, 'gated': 2} -->

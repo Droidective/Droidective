@@ -156,3 +156,37 @@ export interface NetSample {
     txBytes: number
   }[]
 }
+
+/**
+ * One mirror frame, or the configuration that has to precede them.
+ *
+ * Two kinds in one payload because a client cannot decode before it has
+ * configured a decoder, and sharing the subscription is what makes that
+ * ordering free rather than something to sequence. The daemon's own
+ * `MirrorFramePayload` is the other side of this; §5.4 of
+ * `docs/droidectived-protocol.md` is the contract.
+ *
+ * The bytes are Annex-B, which is what `VideoDecoder` decodes when
+ * `description` is absent, and every keyframe carries its own SPS/PPS.
+ */
+export interface MirrorFrame {
+  kind: "config" | "frame"
+  /** `config`: the RFC 6381 string `VideoDecoder.configure` takes. */
+  codec?: string | undefined
+  /**
+   * `config`: the size scrcpy negotiated — a hint for the first layout, not
+   * the truth. A device can rotate without the daemon learning the new
+   * geometry, and a decoded `VideoFrame` carries its own dimensions, so size
+   * from the frames.
+   */
+  width?: number | undefined
+  height?: number | undefined
+  /** `config`: the device's own name, for the tile caption. */
+  deviceName?: string | undefined
+  /** `frame`: a keyframe, which is `EncodedVideoChunk`'s `type: "key"`. */
+  key?: boolean | undefined
+  /** `frame`: presentation timestamp in microseconds, on the device's clock. */
+  pts?: number | undefined
+  /** `frame`: base64 Annex-B bytes. */
+  data?: string | undefined
+}

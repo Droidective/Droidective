@@ -701,6 +701,41 @@ pub async fn open_terminal(
     )
 }
 
+/// The device's screen, as scrcpy's H.264 frames.
+///
+/// The daemon relays; the webview decodes with `WebCodecs`. Nothing here knows
+/// about video — the frames pass through as opaque payloads, the same as every
+/// other topic — because the decision that put decoding in the webview
+/// (backlog 25's step 0) is what keeps this layer that simple.
+#[tauri::command]
+pub async fn watch_mirror(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    on_event: Channel<StreamUpdate>,
+) -> Result<i64, DaemonError> {
+    let stream = supervisor.stream().await?;
+    stream.subscribe(
+        "mirror",
+        Some(StreamParams {
+            serial: Some(serial),
+            ..StreamParams::default()
+        }),
+        forward(on_event),
+    )
+}
+
+/// A tap, a key, a scroll. `data` is base64 `ScrcpyControlMessage` bytes, built
+/// in the webview by `lib/scrcpy-control.ts` — this forwards them untouched, on
+/// the same `write` the terminal uses.
+#[tauri::command]
+pub async fn write_mirror(
+    supervisor: State<'_, Supervisor>,
+    id: i64,
+    data: String,
+) -> Result<(), DaemonError> {
+    supervisor.stream().await?.write(id, data)
+}
+
 /// Keystrokes into a terminal. `data` is base64: terminal input is bytes,
 /// including the control codes a JSON string cannot carry.
 #[tauri::command]

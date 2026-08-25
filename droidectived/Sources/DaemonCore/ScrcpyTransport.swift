@@ -96,6 +96,14 @@ public actor ScrcpyTransport {
     /// EOF callback). A file never blocks a writer, and this is only ever read
     /// on the failure path.
     private var serverLogURL: URL?
+    /// Held so teardown can close it *before* deleting the file.
+    ///
+    /// `Process` does not close a `FileHandle` it was handed, so without this
+    /// the fd lives until the `Process` is released — one per session, six for
+    /// a full Mirror Wall, and again on every reconnect. On Windows it is worse
+    /// than untidy: deleting a file this process still has open fails with
+    /// ERROR_SHARING_VIOLATION, the same Win32 32 that `FileRetry` exists for.
+    private var serverLogHandle: FileHandle?
     private var forwardedPort: UInt16?
     /// Terminal latch: actors are reentrant, so `stop()` can run at any of
     /// `start()`'s suspension points — including *before* the fields it cleans
@@ -207,6 +215,9 @@ public actor ScrcpyTransport {
         try? await loops?.shutdownGracefully()
         if let process = serverProcess, process.isRunning { process.terminate() }
         serverProcess = nil
+        // Close before deleting, not after: see `serverLogHandle`.
+        try? serverLogHandle?.close()
+        serverLogHandle = nil
         if let url = serverLogURL {
             try? FileManager.default.removeItem(at: url)
             serverLogURL = nil
@@ -271,6 +282,7 @@ public actor ScrcpyTransport {
             .appendingPathComponent("scrcpy-server-\(config.params.socketName).log")
         if let log = Self.openLog(at: logURL) {
             process.standardError = log
+            serverLogHandle = log
             serverLogURL = logURL
         }
         do {

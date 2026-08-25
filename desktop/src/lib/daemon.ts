@@ -188,13 +188,14 @@ export function asDaemonError(error: unknown): DaemonError {
 // The stream subscriptions and the per-device settings calls live next door, so
 // this file stays inside its line budget; `@/lib/daemon` remains the one import
 // for all of them.
-export type { Subscription, TerminalSession } from "@/lib/daemon-stream"
+export type { MirrorSession, Subscription, TerminalSession } from "@/lib/daemon-stream"
 export {
   openTerminal,
   reactotronReverse,
   reactotronUnreverse,
   watchDevices,
   watchLogcat,
+  watchMirror,
   watchNetspeed,
   watchPerformance,
   watchReactotron,

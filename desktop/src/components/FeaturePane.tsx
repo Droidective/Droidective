@@ -17,6 +17,7 @@ import {
   LogcatPane,
   ManageAppPane,
   MeminfoPane,
+  MirrorPane,
   NetspeedPane,
   PerformancePane,
   PermissionsPane,
@@ -98,6 +99,8 @@ export function FeaturePane(props: FeaturePaneProps) {
       )
     case "logcat":
       return <LogcatPane device={props.device} />
+    case "scrcpy":
+      return <MirrorPane device={props.device} />
     case "device-info":
       return <DeviceInfoPane device={props.device} />
     case "file-explorer":

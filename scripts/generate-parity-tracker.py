@@ -100,8 +100,6 @@ GATED = {
 # Not started, and big enough that the checklist alone understates them. The
 # note says what each actually needs so the entry is a plan, not a shrug.
 BLOCKED = {
-    "scrcpy": "Not started — the decode/render stack needs writing off Apple "
-              "(scrcpy's server is portable; VideoToolbox/AVFoundation are not). Backlog 25.",
     "mirror-wall": "Not started — several mirrors at once, on the same pipeline "
                    "as `scrcpy`, so it follows the mirror. Backlog 25.",
     "screen-record": "Not started — rides the mirror session, so it follows the mirror. Backlog 25.",
