@@ -1,0 +1,12 @@
+# The Windows/Linux version line.
+#
+# The Mac and the ports are versioned separately: the Mac carries the product's
+# own history (3.10.x), the ports start from zero because that is what they are
+# — see docs/release-channels.md. The tag names the Mac version and picks the
+# channel; this file names everything a beta publishes for Windows and Linux,
+# and it is bumped by hand, like MARKETING_VERSION.
+#
+# Must be semver: Tauri rejects anything else, and the MSI installer version is
+# derived from it (WiX wants numeric major.minor.patch, so a pre-release suffix
+# is stripped for that one field). `0.0.1_beta` is NOT valid here.
+0.0.1-beta.1

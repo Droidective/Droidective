@@ -7,17 +7,15 @@ which.
 | --- | --- | --- |
 | Tag | `vX.Y.Z` | `vX.Y.Z-beta.N` (any pre-release suffix) |
 | GitHub release | normal | prerelease |
+| Version | `X.Y.Z` — the Mac's line | Mac `X.Y.Z-beta.N`, ports `PORT_VERSION` |
 | macOS | ✅ signed, notarized DMG | ✅ same DMG |
-| Windows | ❌ | ✅ `droidectived` (the Tauri app when it exists) |
-| Linux | ❌ | ✅ `droidectived` (the Tauri app when it exists) |
+| Windows | ❌ | ✅ NSIS installer, MSI, and `droidectived` |
+| Linux | ❌ | ✅ `.deb`, `.AppImage`, and `droidectived` |
 | Update feed | `appcast.xml`, untagged item | `appcast.xml` beta item **+** `updates/beta/latest.json` |
 | Who gets it | every install | Settings ▸ General ▸ Updates ▸ *Receive beta updates*, and Windows/Linux users |
 
-The Windows and Linux rows describe what a beta tag carries **once there is
-something to carry** — today that is nothing, because no Windows or Linux
-binary exists yet. See [Where this stands](#where-this-stands); the policy and
-its enforcement are in place now so the artifacts have a home the day they
-build.
+The Windows and Linux rows are what a beta tag carries today. See
+[Where this stands](#where-this-stands) for how it got here.
 
 **The rule, in one sentence:** the stable channel is macOS-only and always will
 be until a non-Apple platform is good enough to graduate; everything
@@ -45,18 +43,55 @@ from it rather than re-deriving the rule. `scripts/test-release-channel.sh`
 unit-tests it (the `test-verify-guards.sh` pattern): the channel policy is a
 test, not review folklore.
 
-## Why one version line
+## Two version lines
 
-The alternative — a separate `xplat-vA.B.C` line for Windows/Linux — was
-rejected. It buys an honest signal that the ports lag in features, and costs
-two changelogs, two version-touchpoint tables, two feed lifecycles, and a
-standing "how does Windows 0.3 relate to Mac 3.9?" question. One line with a
-`-beta.N` suffix carries the same "this is rougher" signal at a fraction of the
-machinery, and it leaves the existing Sparkle beta channel's meaning untouched.
+The Mac and the ports are versioned **separately**, and the tag carries only
+the Mac's.
 
-So a beta is exactly *the next stable's Mac build, plus the cross-platform
-builds*. A beta cut purely to ship a Windows fix still rebuilds the Mac app;
-that is a harmless rebuild, not a Mac release.
+```
+tag                 Mac DMG           Windows + Linux
+v3.9.2              3.9.2             — (stable is macOS-only)
+v3.10.0-beta.1      3.10.0-beta.1     PORT_VERSION, e.g. 0.0.1-beta.1
+v3.10.0-beta.2      3.10.0-beta.2     PORT_VERSION, bumped or not
+```
+
+The Mac carries the product's own history — 61 features across three major
+versions — and the ports do not. Naming a first Windows build `3.10.0` claims a
+maturity it has not got: someone downloading it reads the version as "the tenth
+minor release of a mature app", and what they get is a port with 17 of those 61
+features not started.
+`0.0.1-beta.1` says the true thing without a paragraph of explanation.
+
+**Where each version lives.** The tag names the Mac's, exactly as before.
+`PORT_VERSION` at the repo root names the ports', and is bumped by hand like
+`MARKETING_VERSION`. `release-channel.sh` reads both — `port-version` and
+`msi-version` — so the rule stays in one resolver and
+`test-release-channel.sh` can assert that the two never cross: the Mac's
+version must never name a port artifact, and the ports' must never name the
+DMG. That pair of tests is the whole design.
+
+**It must be semver.** Tauri rejects anything else, and every bundler derives
+its own version from it. `0.0.1_beta` is not semver — an underscore is not a
+pre-release separator — and `release_port_version` refuses it by name rather
+than letting the build fail later with something less obvious. WiX is the one
+exception that needs help: an MSI version must be numeric
+`major.minor.patch[.build]`, so `msi-version` strips the pre-release suffix and
+the build passes it as `bundle.windows.wix.version`.
+
+**What this costs, and it is not nothing.** This reverses the earlier decision
+to keep one version line, which was taken to avoid exactly these costs: two
+things to bump instead of one, two histories a reader has to relate, and the
+standing question of how Windows 0.0.1 relates to Mac 3.10. The answer to that
+question is "it does not, deliberately" — the ports are their own product until
+one of them is good enough to graduate. The mitigation for the rest is that
+neither version is written down twice: the tag is the Mac's only source and
+`PORT_VERSION` is the ports' only source, and a release that gets them
+backwards fails its own test suite rather than shipping.
+
+A beta is still *the next Mac stable's build plus the cross-platform builds*.
+A beta cut purely to ship a Windows fix still rebuilds the Mac app; that is a
+harmless rebuild, not a Mac release, and `PORT_VERSION` may move without the
+tag's minor moving at all.
 
 ## The two feeds
 
@@ -78,10 +113,19 @@ invisible to Sparkle.
 
 ### `site/updates/beta/latest.json` — Windows and Linux
 
-Written on beta tags only, committed to `main` by the release job (the same
-route the appcast takes, so Pages deploys it), and never written by a stable
-tag — a stable release leaves the previous beta feed in place, because the
-newest beta is still the newest thing Windows and Linux have.
+**Not implemented.** This section is the design, not a description of the
+pipeline: nothing in the release job writes this file today, and the website has
+no beta section to read it. Until both exist, the GitHub prerelease page is
+where Windows and Linux downloads live, and the permanent
+`/releases/latest/download/` link keeps serving the newest *stable* Mac build
+throughout a beta cycle because GitHub's `latest` never resolves to a
+prerelease.
+
+The design, for whoever builds it: written on beta tags only, committed to
+`main` by the release job (the same route the appcast takes, so Pages deploys
+it), and never written by a stable tag — a stable release leaves the previous
+beta feed in place, because the newest beta is still the newest thing Windows
+and Linux have.
 
 ```jsonc
 {
@@ -120,6 +164,7 @@ as the current release.
 | --- | --- | --- |
 | `RELEASE_NOTES.md` — new `## Droidective vX.Y.Z` section | ✅ | ✅ (heading carries the full tag, e.g. `v3.9.0-beta.1`) |
 | `project.yml` `MARKETING_VERSION` | ✅ | ❌ — CI passes the tag's version to `xcodebuild`, overriding it; the file tracks the stable line |
+| `PORT_VERSION` | ❌ — a stable publishes nothing it names | ✅ if the Windows/Linux build changed since the last beta |
 | `website/src/lib/content.ts` `APP_VERSION` | ✅ | ❌ — drives the hero badge and JSON-LD `softwareVersion`, both of which mean *current stable* |
 | `website/src/lib/content.ts` `releases` entry | ✅ | ❌ — the public changelog is the stable line |
 | `BETA_VERSION` + beta section copy | ❌ | ✅ |
@@ -169,9 +214,14 @@ before the Tauri UI depends on it.
 
 | stage | payload of a beta tag | status |
 | --- | --- | --- |
-| 0 | Mac DMG only (channel infra in place, no cross-platform artifact) | ← here |
-| 1 | \+ `droidectived` for Windows, Linux, macOS | daemon scaffold landed; protocol unimplemented |
-| 2 | \+ the Tauri app for Windows and Linux, with its signed updater feed | not started |
+| 0 | Mac DMG only (channel infra in place, no cross-platform artifact) | done |
+| 1 | \+ `droidectived` for Windows, Linux, macOS | done — protocol implemented |
+| 2 | \+ the Tauri app for Windows and Linux | ← here, unsigned; no updater feed yet |
+| 3 | \+ a signed Tauri updater feed | not started (see `latest.json` above) |
+
+`CROSS_PLATFORM_STAGE` in `release-channel.sh` is the switch, and every stage
+is a test: the suite asserts what each one publishes and — more importantly —
+that raising it never leaks a port artifact onto the stable channel.
 
 macOS's stable channel is unaffected at every stage. That is the point of the
 split: the port cannot regress the thing people use today, because the thing
@@ -190,12 +240,24 @@ people use today never ships from a beta tag.
   serving the newest stable throughout a beta cycle. Windows and Linux have no
   equivalent permanent URL — they resolve through `latest.json`, which is why
   that file exists.
-- **The daemon package is macOS-gated on the branch it lives on.** On
-  `feat/droidectived-scaffold` (not yet merged), `droidectived/Package.swift`
-  declares `platforms: [.macOS(.v14)]`, and its CI additions run the daemon
-  suite on macOS and Linux but not Windows — the one component whose entire
-  purpose is serving Windows and Linux is not built on Windows. Fix that when
-  landing the scaffold, before stage 1.
+- **The daemon's suite does not run on Windows, only its build does.** The
+  scaffold has landed, and `droidectived/Package.swift` still declares
+  `platforms: [.macOS(.v14)]` — harmless, because that clause sets an Apple
+  deployment target and does not restrict which hosts can build the package.
+  What is real is the coverage gap: the suite runs in `test` (macOS) and
+  `test-linux`, while `build-windows` only compiles the daemon. So the component
+  whose entire purpose is serving Windows is the one nobody tests there, and a
+  Windows-only behaviour difference — a path separator, a socket option, a
+  handle still held at teardown — surfaces in a beta rather than in CI. The two
+  Windows-only failures already on record (`ERROR_SHARING_VIOLATION` in temp-dir
+  teardown, and `AabConvertServiceTests`) are that shape.
+- **The two version lines are one substitution away from crossing.** Every
+  cross-platform artifact name must come from `release-channel.sh port-version`,
+  never from `${GITHUB_REF_NAME#v}` — that expression is right for the DMG and
+  wrong for everything else, and it is the natural thing to type. Two tests
+  exist purely to catch it (`the Mac's version never names a port artifact` and
+  its mirror), because the failure ships a correctly-built binary under a name
+  that claims it is the Mac release.
 - **A beta must not be the newest `## ` section by accident.** With tag-aware
   extraction this is no longer load-bearing, but the file still reads
   top-down for humans; keep stable sections in version order and betas next to

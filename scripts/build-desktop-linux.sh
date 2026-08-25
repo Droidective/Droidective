@@ -97,24 +97,9 @@ rsync -a --exclude node_modules --exclude .build --exclude target \
   --exclude DerivedData --exclude .git /repo/ /work/
 cd /work
 
-./scripts/build-daemon-sidecar.sh \"\$CONFIGURATION\"
-
-cd desktop
-npm ci
-# Copy whatever exists even when a later bundler fails: the .deb is written
-# before the AppImage, so one broken target must not discard the other.
-STATUS=0
-if [ \"\$CONFIGURATION\" = debug ]; then
-  npm run tauri -- build --debug || STATUS=\$?
-else
-  npm run tauri -- build || STATUS=\$?
-fi
-
-# Whatever the bundler produced — .deb, .rpm, .AppImage — plus the bare
-# executable, which is what a smoke test actually runs.
-find \"\$CARGO_TARGET_DIR\" -path '*/bundle/*' -type f \
-  \\( -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' \\) -exec cp -v {} /out/ \\;
-cp -v \"\$CARGO_TARGET_DIR/\$CONFIGURATION/droidective-desktop\" /out/ 2>/dev/null || true
+# The shared recipe: it sets the version from PORT_VERSION, picks the bundlers,
+# and leaves canonically-named bundles straight in /out. No copy step here —
+# package-desktop.sh is what names them, on this path and in CI alike.
+./scripts/build-desktop-app.sh linux \"\$CONFIGURATION\" /out
 ls -la /out
-exit \$STATUS
 "
