@@ -231,3 +231,4 @@ export {
   writeDevSetting,
   writeRestriction,
 } from "@/lib/daemon-settings"
+export { customCommands, runCustomCommand, writeCustomCommands } from "@/lib/daemon-commands"

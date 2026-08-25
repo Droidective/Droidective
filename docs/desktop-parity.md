@@ -11,13 +11,13 @@ rewriting one when something turns out to be more work than it looked.
 
 | | Count |
 | --- | --- |
-| ⬜ Not started | 15 |
-| 🟡 Partial | 44 |
+| ⬜ Not started | 13 |
+| 🟡 Partial | 46 |
 | ⛔ Not applicable off-Apple | 2 |
 | **Total registry features** | **61** |
 
-"Partial" is doing a lot of work in that table: 19 of the 44 are actions that
-run from the palette but have no screen of their own, and the 25 that do have
+"Partial" is doing a lot of work in that table: 19 of the 46 are actions that
+run from the palette but have no screen of their own, and the 27 that do have
 screens are each missing something the Mac version offers. Read it as *nothing
 is finished*, not as *most of it is done*.
 
@@ -1148,10 +1148,10 @@ job, and the checklist now says which.
   - [ ] tooltip: Refresh
   - [ ] tooltip: Copy password
 
-#### `wireless-adb` — Wireless ADB  ·  ⬜ todo
+#### `wireless-adb` — Wireless ADB  ·  🟡 partial
 > Connect over Wi-Fi (tcpip + Android 11 pairing)
 - **Kind** `view` · **hub member**
-- **Note** Not started on Windows/Linux.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `WirelessAdbView` — `App/Sources/FeatureDetail/Views/WirelessAdbView.swift`
 - **Must replicate**
   - [ ] button: Enable Wi-Fi & Connect
@@ -1760,10 +1760,10 @@ job, and the checklist now says which.
   - [ ] shortcut: .return, modifiers: .command
   - [ ] shortcut: "s", modifiers: .command
 
-#### `custom-commands` — Custom Commands  ·  ⬜ todo
+#### `custom-commands` — Custom Commands  ·  🟡 partial
 > Your own adb, terminal, and script actions
 - **Kind** `system`
-- **Note** Not started on Windows/Linux.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `CustomCommandsView` — `App/Sources/FeatureDetail/Views/CustomCommandsView.swift`
 - **Must replicate**
   - [ ] button: Delete
@@ -1805,4 +1805,4 @@ job, and the checklist now says which.
   - [ ] drag: drag and drop
 
 
-<!-- counts: {'done': 0, 'partial': 44, 'todo': 15, 'gated': 2} -->
+<!-- counts: {'done': 0, 'partial': 46, 'todo': 13, 'gated': 2} -->

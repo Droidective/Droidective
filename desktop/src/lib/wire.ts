@@ -238,5 +238,37 @@ export interface DaemonError {
 
 // The device-state, network and streaming shapes live next door, so this file
 // stays inside its line budget; `@/lib/wire` remains the one import for all.
+/**
+ * One saved custom command.
+ *
+ * `createdAt` rides both ways untouched: no UI sets it, so dropping it here
+ * would restamp the whole list the first time anyone saved.
+ */
+export interface CustomCommand {
+  id: string
+  name: string
+  command: string
+  /** "adb" or "shell" — which runner the line goes through. */
+  kind: string
+  needsBundle: boolean
+  /**
+   * false is the headless runner with a toast; true types it into a terminal,
+   * for live output, prompts and ctrl-C.
+   */
+  runsInTerminal: boolean
+  /** Which terminal a `runsInTerminal` command opens in. */
+  terminal: string
+  pinned: boolean
+  createdAt: number
+}
+
+/** A ready-made command to start from, as the daemon serves it. */
+export interface CommandPreset {
+  name: string
+  command: string
+  needsBundle: boolean
+  detail: string
+}
+
 export type * from "@/lib/wire-settings"
 export type * from "@/lib/wire-stream"

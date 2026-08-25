@@ -46,6 +46,7 @@ const HINTS: Readonly<Record<string, string>> = {
   "dev-settings": "Connect a device to change its developer settings.",
   "system-restrictions": "Connect a device to change restrictions.",
   wifi: "Connect a device to manage Wi-Fi.",
+  "wireless-adb": "Connect a device over USB to switch it to Wi-Fi.",
   "private-dns": "Connect a device to set its Private DNS.",
   "network-speed": "Connect a device to watch its network traffic.",
   "install-app": "Connect a device to install onto.",
@@ -54,6 +55,7 @@ const HINTS: Readonly<Record<string, string>> = {
   meminfo: "Connect a device to read memory usage.",
   "sandbox-browser": "Connect a device to browse files.",
   "app-management": "Connect a device to manage apps.",
+  "custom-commands": "Connect a device to run your own commands.",
 }
 
 /** The line for `id`, or one derived from the feature's title. */

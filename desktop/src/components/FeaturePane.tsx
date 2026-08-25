@@ -8,6 +8,7 @@ import {
   AppsPane,
   BugReportPane,
   CrashPane,
+  CustomCommandsPane,
   DeepLinksPane,
   DeviceInfoPane,
   DevSettingsPane,
@@ -29,6 +30,7 @@ import {
   SandboxPane,
   TerminalPane,
   WifiPane,
+  WirelessAdbPane,
 } from "@/components/panes"
 import { ABOUT_TAB, CATALOG_TAB, HOME_TAB } from "@/lib/layout"
 import { isRunnable, type Device, type FeatureSummary } from "@/lib/wire"
@@ -98,6 +100,8 @@ export function FeaturePane(props: FeaturePaneProps) {
           onSelect={props.onSelectPackage}
         />
       )
+    case "custom-commands":
+      return <CustomCommandsPane device={props.device} packageId={props.packageId} />
     case "logcat":
       return <LogcatPane device={props.device} />
     case "scrcpy":
@@ -169,6 +173,10 @@ function hostPane(id: string, device: Device | null) {
       return <TerminalPane serial={device?.serial ?? null} />
     case "reactotron":
       return <ReactotronPane device={device} />
+    case "wireless-adb":
+      // Host-side: it is about the devices themselves, so it works — and is
+      // most wanted — with nothing selected in the bar.
+      return <WirelessAdbPane />
     case "mirror-wall":
       // Host-side by the same logic as the others: the wall picks its own
       // devices from its header and never follows the bar's selection.

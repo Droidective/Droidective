@@ -53,6 +53,14 @@ extension DaemonBackend {
         serial: String, path: String, to destination: String, asRoot: Bool
     ) async throws -> String { destination }
 
+    func customCommands() async -> [CustomCommand] { [] }
+
+    func writeCustomCommands(_ commands: [CustomCommand]) async throws {}
+
+    func runCustomCommand(
+        id: String, serial: String, bundleId: String?
+    ) async -> FeatureResult? { nil }
+
     func crashes(serial: String) async throws -> [CrashReport] { [] }
 
     func clearCrashBuffer(serial: String) async throws {}

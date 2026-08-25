@@ -137,6 +137,16 @@ public protocol DaemonBackend: Sendable {
     func writeDeepLinks(packageId: String, links: [DeepLink]) async throws
     /// `am start -a android.intent.action.VIEW -d <url>` on one device.
     func launchDeepLink(serial: String, url: String) async throws -> FeatureResult
+    /// The saved custom commands. Best-effort: a store that will not load
+    /// reads as no commands rather than failing the screen.
+    func customCommands() async -> [CustomCommand]
+    /// Replaces the whole list. Throws only when the store cannot be written.
+    func writeCustomCommands(_ commands: [CustomCommand]) async throws
+    /// Runs one saved command, or nil when no command has that id — which is a
+    /// 404 rather than a failed run, because nothing was attempted.
+    func runCustomCommand(
+        id: String, serial: String, bundleId: String?
+    ) async -> FeatureResult?
     /// Builds the bug-report zip into a host folder, answering where it landed.
     func createBugReport(
         serial: String, packageId: String?, destination: String
@@ -156,13 +166,15 @@ public struct LiveBackend: DaemonBackend {
     private let client: AdbClient
     private let emulatorService: EmulatorService
     private let locator: ToolLocator
-    /// The same on-disk store the Mac app uses, under the shared support dir.
+    /// The same on-disk stores the Mac app uses, under the shared support dir.
     private let deepLinkStore: JSONStore<DeepLinksMap>
+    private let customCommandStore: JSONStore<[CustomCommand]>
 
     public init(
         monitor: DeviceMonitor, engine: FeatureEngine, client: AdbClient,
         emulators: EmulatorService, locator: ToolLocator,
-        deepLinks: JSONStore<DeepLinksMap>
+        deepLinks: JSONStore<DeepLinksMap>,
+        customCommands: JSONStore<[CustomCommand]>
     ) {
         self.monitor = monitor
         self.engine = engine
@@ -170,6 +182,7 @@ public struct LiveBackend: DaemonBackend {
         emulatorService = emulators
         self.locator = locator
         deepLinkStore = deepLinks
+        customCommandStore = customCommands
     }
 
     public func listDevices() async -> [Device] { await monitor.list(force: true) }
@@ -497,6 +510,29 @@ public struct LiveBackend: DaemonBackend {
 
     public func launchDeepLink(serial: String, url: String) async throws -> FeatureResult {
         try await AppControlService(client: client).launchDeepLink(serial: serial, url: url)
+    }
+
+    public func customCommands() async -> [CustomCommand] {
+        await customCommandStore.load()
+    }
+
+    public func writeCustomCommands(_ commands: [CustomCommand]) async throws {
+        try await customCommandStore.save(commands)
+    }
+
+    public func runCustomCommand(
+        id: String, serial: String, bundleId: String?
+    ) async -> FeatureResult? {
+        guard let command = await customCommandStore.load().first(where: { $0.id == id }) else {
+            return nil
+        }
+        // `runsInTerminal` is deliberately ignored here. A terminal command is
+        // typed into a shell the *client* owns, so the daemon running it
+        // headlessly would be a different thing than the one that was asked
+        // for — the desktop app opens its Terminal tab instead, and only sends
+        // the silent ones here.
+        return await CustomCommandService(client: client).run(
+            command: command, bundleId: bundleId, serial: serial)
     }
 
     public func createBugReport(
@@ -874,6 +910,14 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
                 body: Data(body.readableBytesView), backend: backend))
         case .deepLinksLaunch:
             return Self.answer(await DiagnosticsRoutes.linksLaunch(
+                body: Data(body.readableBytesView), backend: backend))
+        case .customCommandsRead:
+            return Self.answer(await CustomCommandRoutes.read(backend: backend))
+        case .customCommandsWrite:
+            return Self.answer(await CustomCommandRoutes.write(
+                body: Data(body.readableBytesView), backend: backend))
+        case .customCommandsRun:
+            return Self.answer(await CustomCommandRoutes.run(
                 body: Data(body.readableBytesView), backend: backend))
         case .bugReportCreate:
             return Self.answer(await DiagnosticsRoutes.bugReport(

@@ -17,7 +17,8 @@ use tauri_plugin_opener::OpenerExt;
 use crate::daemon::stream::StreamMessage;
 use crate::daemon::wire::{
     AppControlRequest, AppInfoResponse, AppPullRequest, AppPullResponse, AppRequest, AppsResponse,
-    BugReportRequest, BugReportResponse, CrashListResponse, DeepLink, DeepLinkLaunchRequest,
+    BugReportRequest, BugReportResponse, CrashListResponse, CustomCommand, CustomCommandRunRequest,
+    CustomCommandsResponse, CustomCommandsWriteRequest, DeepLink, DeepLinkLaunchRequest,
     DeepLinksResponse, DeepLinksWriteRequest, DevSettingsResponse, DevSettingsWriteRequest, Device,
     DevicePropsResponse, DnsResponse, DnsWriteRequest, EmulatorActionRequest, EmulatorsResponse,
     FeatureSummary, FileInfoRequest, FileInfoResponse, FileOperationRequest, FilePullRequest,
@@ -922,6 +923,46 @@ pub async fn enable_tcpip(
             endpoint: None,
             code: None,
             serial: Some(serial),
+        })
+        .await
+}
+
+/// The saved custom commands.
+#[tauri::command]
+pub async fn custom_commands(
+    supervisor: State<'_, Supervisor>,
+) -> Result<CustomCommandsResponse, DaemonError> {
+    supervisor.client().await?.custom_commands().await
+}
+
+/// Replaces the whole list, and answers with what was stored.
+#[tauri::command]
+pub async fn write_custom_commands(
+    supervisor: State<'_, Supervisor>,
+    commands: Vec<CustomCommand>,
+) -> Result<CustomCommandsResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .write_custom_commands(&CustomCommandsWriteRequest { commands })
+        .await
+}
+
+/// Runs one saved command on one device.
+#[tauri::command]
+pub async fn run_custom_command(
+    supervisor: State<'_, Supervisor>,
+    id: String,
+    serial: String,
+    bundle_id: Option<String>,
+) -> Result<RunResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .run_custom_command(&CustomCommandRunRequest {
+            id,
+            serial,
+            bundle_id,
         })
         .await
 }

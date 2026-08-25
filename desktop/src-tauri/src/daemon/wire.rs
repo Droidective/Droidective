@@ -985,3 +985,56 @@ mod tests {
         Ok(())
     }
 }
+
+/// One saved custom command, as the daemon stores it.
+///
+/// `created_at` rides both ways untouched: no UI sets it, so a client that
+/// dropped it would restamp everyone's list the first time they saved.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomCommand {
+    pub id: String,
+    pub name: String,
+    pub command: String,
+    /// "adb" or "shell" — which runner the line goes through.
+    pub kind: String,
+    pub needs_bundle: bool,
+    /// false is the headless runner with a toast; true types it into a
+    /// terminal, for live output and prompts.
+    pub runs_in_terminal: bool,
+    pub terminal: String,
+    pub pinned: bool,
+    pub created_at: f64,
+}
+
+/// A ready-made command to start from. Served rather than ported, so the two
+/// apps cannot drift over what the library holds.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommandPreset {
+    pub name: String,
+    pub command: String,
+    pub needs_bundle: bool,
+    pub detail: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CustomCommandsResponse {
+    pub commands: Vec<CustomCommand>,
+    pub presets: Vec<CommandPreset>,
+}
+
+/// The whole list, not an add or a delete — the client holds what it shows.
+#[derive(Debug, Clone, Serialize)]
+pub struct CustomCommandsWriteRequest {
+    pub commands: Vec<CustomCommand>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomCommandRunRequest {
+    pub id: String,
+    pub serial: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bundle_id: Option<String>,
+}

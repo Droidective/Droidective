@@ -45,7 +45,11 @@ let server = DaemonServer(
         locator: locator,
         // The Mac's own file, in the same shared support dir as the overrides
         // above — a developer running both apps has one store, not two.
-        deepLinks: JSONStore<DeepLinksMap>(filename: "deep-links.json", default: [:])),
+        deepLinks: JSONStore<DeepLinksMap>(filename: "deep-links.json", default: [:]),
+        // Also the Mac's own file: a developer running both apps has one list
+        // of custom commands, not two.
+        customCommands: JSONStore<[CustomCommand]>(
+            filename: "custom-commands.json", default: [])),
     token: token,
     streamSource: LiveStreamSource(
         monitor: monitor, streamer: LogcatStreamer(client: client),

@@ -63,6 +63,12 @@ public enum DaemonProtocol {
         case deepLinksWrite = "/v1/deeplinks/write"
         case deepLinksLaunch = "/v1/deeplinks/launch"
         case bugReportCreate = "/v1/bugreport/create"
+        /// The saved custom commands: read the list, replace it, run one. The
+        /// write takes the whole list for the reason the deep links do — the
+        /// client holds what it is showing.
+        case customCommandsRead = "/v1/customcommands/read"
+        case customCommandsWrite = "/v1/customcommands/write"
+        case customCommandsRun = "/v1/customcommands/run"
         /// Which external tools are on this machine, for Settings ▸ Doctor and
         /// the device bar's adb warning.
         case toolsDetect = "/v1/tools/detect"
