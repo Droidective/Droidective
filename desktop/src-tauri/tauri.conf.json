@@ -34,11 +34,21 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "externalBin": ["binaries/droidectived"],
+    "externalBin": [
+      "binaries/droidectived"
+    ],
+    "resources": {
+      "../../App/Resources/scrcpy-server": "scrcpy-server"
+    },
     "licenseFile": "../../LICENSE",
     "linux": {
       "deb": {
-        "depends": ["android-tools-adb"]
+        "depends": [
+          "android-tools-adb"
+        ],
+        "recommends": [
+          "gstreamer1.0-libav"
+        ]
       }
     }
   }

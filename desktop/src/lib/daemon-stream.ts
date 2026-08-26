@@ -16,6 +16,7 @@ import { Channel, invoke } from "@tauri-apps/api/core"
 import type {
   Device,
   LogLine,
+  MirrorFrame,
   NetSample,
   PerfSample,
   PtyChunk,
@@ -35,6 +36,7 @@ async function subscribe<Item>(
     | "open_terminal"
     | "watch_devices"
     | "watch_logcat"
+    | "watch_mirror"
     | "watch_netspeed"
     | "watch_performance"
     | "watch_reactotron",
@@ -157,5 +159,42 @@ export async function openTerminal(
     send: (data: string) => invoke("write_terminal", { id, data }),
     resize: (columns: number, rows: number) =>
       invoke("resize_terminal", { id, columns, rows }),
+  }
+}
+
+/** A live mirror, and everything that can be sent into it. */
+export interface MirrorSession extends Subscription {
+  /** A control message. Takes base64 — see `encodeControl`. */
+  send: (data: string) => Promise<void>
+}
+
+/**
+ * Mirrors a device's screen.
+ *
+ * The frames arrive already framed for `VideoDecoder`: a `config` first, then
+ * Annex-B keyframes and deltas. `lib/mirror.ts` holds the rules for feeding
+ * them to a decoder, and there are three — configure first, wait for a keyframe
+ * after a gap, size from the frames — because each one fails quietly.
+ *
+ * Stopping is what tears the scrcpy server and its `adb forward` down, so a
+ * view that unmounts without stopping leaks a tunnel into the long-lived adb
+ * server.
+ */
+export async function watchMirror(
+  serial: string,
+  quality: { maxSize: number; maxFps: number },
+  onUpdate: (update: StreamUpdate<MirrorFrame>) => void,
+): Promise<MirrorSession> {
+  const subscription = await subscribe<MirrorFrame>(
+    "watch_mirror",
+    // Resolved here rather than by the daemon: the Mirror Wall steps quality
+    // down as tiles are added, and only this side knows how many it is drawing.
+    { serial, maxSize: quality.maxSize, maxFps: quality.maxFps },
+    onUpdate,
+  )
+  const id = subscription.id
+  return {
+    ...subscription,
+    send: (data: string) => invoke("write_mirror", { id, data }),
   }
 }

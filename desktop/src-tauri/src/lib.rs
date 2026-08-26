@@ -75,6 +75,8 @@ pub fn run() -> tauri::Result<()> {
             commands::watch_reactotron,
             commands::reactotron_reverse,
             commands::reactotron_unreverse,
+            commands::watch_mirror,
+            commands::write_mirror,
             commands::open_terminal,
             commands::write_terminal,
             commands::resize_terminal,

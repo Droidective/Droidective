@@ -343,6 +343,12 @@ import Testing
                 // Increments, all three: dropping the middle of a log or a
                 // graph is exactly what a client must be told about.
                 #expect(!topic.isSnapshot)
+            case .mirror:
+                #expect(topic.needsSerial)
+                // The strongest increment of the lot: an H.264 delta frame is
+                // meaningless without the frames before it, so a gap has to be
+                // reported rather than papered over with a newer picture.
+                #expect(!topic.isSnapshot)
             }
         }
     }

@@ -15,6 +15,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use serde::Serialize;
+use tauri::path::BaseDirectory;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
@@ -90,7 +91,8 @@ impl Supervisor {
 
     async fn spawn(&self, app: &AppHandle) -> Result<u16, DaemonError> {
         let token_file = token_path(app)?;
-        let args = launch::spawn_args(&token_file, std::process::id());
+        let scrcpy_server = bundled_scrcpy_server(app);
+        let args = launch::spawn_args(&token_file, std::process::id(), scrcpy_server.as_deref());
 
         let (mut events, child) = app
             .shell()
@@ -201,6 +203,22 @@ impl Supervisor {
             let _ = child.kill();
         }
     }
+}
+
+/// The bundled `scrcpy-server`, if this build has one where it should be.
+///
+/// `None` rather than an error: every other feature works without it, so a
+/// missing jar should cost the mirror and nothing else. The mirror then says
+/// so itself, where someone is looking.
+fn bundled_scrcpy_server(app: &AppHandle) -> Option<String> {
+    let path = app
+        .path()
+        .resolve("scrcpy-server", BaseDirectory::Resource)
+        .ok()?;
+    if !path.is_file() {
+        return None;
+    }
+    path.to_str().map(str::to_string)
 }
 
 /// Where the daemon writes its token. Under the app's own data directory, so

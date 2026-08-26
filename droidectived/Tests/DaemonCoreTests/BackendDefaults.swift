@@ -176,3 +176,22 @@ extension DaemonBackend {
 
     func detectTools() async -> [Tool: ToolStatus] { [:] }
 }
+
+/// The same trick for `StreamSource`, and for the same reason: a stub testing
+/// logcat has no opinion about mirroring.
+///
+/// `openMirror` throws rather than returning an inert session, because a
+/// `ScrcpySession` is only constructible with a real `AdbClient` and there is
+/// nothing honest for a stub to hand back. A test that means to exercise the
+/// topic overrides this; every other one is saying "not this".
+extension StreamSource {
+    func openMirror(serial: String, quality: MirrorQuality) async throws -> ScrcpySession {
+        throw StubbedOut.notImplemented
+    }
+}
+
+enum StubbedOut: Error, CustomStringConvertible {
+    case notImplemented
+
+    var description: String { "this source does not implement that topic" }
+}

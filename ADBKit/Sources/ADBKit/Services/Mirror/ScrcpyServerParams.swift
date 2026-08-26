@@ -80,6 +80,14 @@ public struct ScrcpyServerParams: Sendable, Equatable {
     /// The local abstract socket name the server listens on.
     public var socketName: String { String(format: "scrcpy_%08x", scid) }
 
+    /// A fresh session id.
+    ///
+    /// Random rather than sequential because it *names* the device-side
+    /// abstract socket: two sessions against one device — a wall tile and a
+    /// recording, or two copies of the app — must not land on the same name.
+    /// Kept under the sign bit because the server parses it as a signed int.
+    public static func randomSCID() -> UInt32 { UInt32.random(in: 1 ... 0x7fff_ffff) }
+
     /// The `key=value` parameters, in scrcpy's own order. `scid` and `log_level`
     /// are always present; the rest are emitted only when they differ from the
     /// server's defaults (`video`/`audio`/`control` default on, caps default off).

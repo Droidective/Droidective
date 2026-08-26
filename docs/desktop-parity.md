@@ -11,13 +11,13 @@ rewriting one when something turns out to be more work than it looked.
 
 | | Count |
 | --- | --- |
-| ⬜ Not started | 17 |
-| 🟡 Partial | 42 |
+| ⬜ Not started | 15 |
+| 🟡 Partial | 44 |
 | ⛔ Not applicable off-Apple | 2 |
 | **Total registry features** | **61** |
 
-"Partial" is doing a lot of work in that table: 19 of the 42 are actions that
-run from the palette but have no screen of their own, and the 23 that do have
+"Partial" is doing a lot of work in that table: 19 of the 44 are actions that
+run from the palette but have no screen of their own, and the 25 that do have
 screens are each missing something the Mac version offers. Read it as *nothing
 is finished*, not as *most of it is done*.
 
@@ -870,45 +870,190 @@ after the screens rather than instead of them.
     against upstream's Electron app, so it is parity, not a regression.
 25. **Mirror, screen record, and the video editor.** Smaller than it looks.
     The instinct is "a decode/render stack to write from scratch", but counting
-    the files says otherwise: of the eighteen in `ADBKit/Services/Mirror`,
-    **thirteen are already portable** — `ScrcpyStreamDecoder`,
+    the files says otherwise: of the seventeen in `ADBKit/Services/Mirror`,
+    **ten are already portable** — `ScrcpyStreamDecoder`,
     `ScrcpyAudioStreamDecoder`, `ScrcpyControlMessage`, `ScrcpyDeviceMessage`,
-    `ScrcpyServerParams`, `ScrcpyServerLocator`, `H264Format`, `H264NAL`,
-    `PCMMixdown`, `MirrorAudioFallback`, `ShowTouches`, plus `MirrorWall`'s
-    layout maths. scrcpy's own server speaks the same protocol to any host, and
-    the bundled ffmpeg already builds for Windows and Linux.
+    `ScrcpyServerParams`, `ScrcpyServerLocator`, `H264NAL`, `PCMMixdown`,
+    `MirrorAudioFallback`, `ShowTouches`, plus `MirrorWall`'s layout maths, which
+    lives under `Features/`. scrcpy's own server speaks the same protocol to any
+    host.
+    ffmpeg builds for Windows and Linux, but nothing in this repo provisions it
+    for either yet: `App/Resources/ffmpeg` is a committed macOS universal binary
+    and `scripts/unpack-ffmpeg.sh` verifies it with `lipo`. Screen record and the
+    video editor need that gap closed first — the mirror itself does not.
 
-    **Five files are gated, and they are the whole job:**
+    **Seven files are gated, and they are the whole job.** (The entry said five;
+    the two it missed are the ones whose `#if` is not on the first line, and
+    neither changes the shape of the work — `H264Format` is glue for the Apple
+    display layer and recorder, so the webview path wants nothing from it, and
+    `MicrophoneCapture` belongs to screen record rather than the mirror.)
 
     | Gated on | What it does | The portable answer |
     | --- | --- | --- |
-    | `MirrorTransport` | `Network.framework` socket to the scrcpy server over `adb forward` | NIO, exactly the move `ReactotronRelay` already made |
-    | `MirrorSession` | the orchestrator — gated only because it holds the two below | falls out once they are |
-    | `H264Decoder` | VideoToolbox | the open question, below |
-    | `MirrorAudioPlayer` | AVFoundation playback | a Rust audio crate, or ffmpeg |
-    | `MirrorRecorder` | AVFoundation writer | ffmpeg, which the release already ships |
+    | `MirrorTransport` | `Network.framework` socket to the scrcpy server over `adb forward` | NIO **in the daemon**, exactly the move `ReactotronRelay` already made — see below |
+    | `MirrorSession` | the orchestrator — gated only because it holds the others | falls out once they are |
+    | `H264Decoder` | VideoToolbox | settled: the webview's `VideoDecoder` — see below |
+    | `H264Format` | CoreMedia glue: format descriptions and `CMSampleBuffer`s | none needed — it exists to feed `AVSampleBufferDisplayLayer` and `AVAssetWriter` |
+    | `MirrorAudioPlayer` | AVFoundation playback | the webview's `AudioDecoder`, or a Rust audio crate |
+    | `MirrorRecorder` | AVFoundation writer | ffmpeg, once it is provisioned off-Apple |
+    | `MicrophoneCapture` | AVFoundation host mic | screen record's problem, not the mirror's |
 
-    **Step 0 is a decision, not code.** Where does H.264 decoding happen? The
-    three candidates are genuinely different products, so this is worth settling
-    before anything is written:
+    **The transport goes in the daemon, not ADBKit.** "The same move as
+    `ReactotronRelay`" means its *location* too, and that file's own header says
+    why: ADBKit's graph staying free of swift-nio is what lets `swift test` run
+    on Windows, so the Apple-only listener stays gated in ADBKit and the
+    portable counterpart lives in `DaemonCore`, with everything above it — the
+    decoders, `ScrcpyServerParams`, `ScrcpyControlMessage` — as the shared
+    portable code. The mirror is the same shape: `MirrorTransport` keeps its
+    `#if canImport(Network)` gate for the Mac, and the daemon gets the NIO one.
 
-    1. **In the webview, via WebCodecs `VideoDecoder`.** The browser already has
-       a hardware decoder and a `canvas` to paint on, so the daemon only relays
-       the stream it already parses. Cheapest by far *if* it holds on both
-       targets — WebView2 is Chromium and certainly has it; **WebKitGTK is the
-       one to check first**, and if it does not, this option is dead on Linux.
-    2. **In Rust, painting a native surface.** Full control and no webview
-       dependency, at the cost of a decoder crate, a surface, and getting input
-       forwarding to line up with a region the webview does not own.
-    3. **In the daemon, streaming decoded frames.** Rejected on arithmetic
-       rather than taste: a 1080p60 raw stream is ~370 MB/s over the local
-       socket, which is not a thing to send through JSON framing.
+    **`H264Decoder` is not the decode path**, which makes the job larger than
+    its 62 lines suggest. Its own comment says it exists *only to keep the
+    latest decoded frame for screenshots*; live display feeds **compressed**
+    buffers straight to `AVSampleBufferDisplayLayer`. So the port owes both a
+    live present and a still grab. A `canvas` gives both — draw the
+    `VideoFrame`, `toBlob()` for the capture.
 
-    Then, in order: the transport on NIO (it is the same shape as the relay, and
-    the `adb forward` tunnel *must* be torn down — see the mirror-teardown
-    convention, which the Mac learned by leaking one per quit); the session; one
-    tile; then the wall, whose layout is already ported. Screen record and the
-    video editor ride the session, so they follow rather than lead.
+    **Step 0 is settled: decode in the webview, via WebCodecs `VideoDecoder`,
+    behind a runtime probe.** The daemon relays the stream it already parses;
+    the canvas is a DOM node, so it inherits the Mirror Wall's grid layout,
+    caption-strip drag, breakout and Full View for free. The rejected pair:
+    **Rust with a native surface** — no codec dependency, but six native
+    surfaces positioned over a scrolling webview and re-synced on every resize,
+    reorder and breakout, with Wayland and X11 differing, which is the class of
+    thing that works in dev and breaks on real hardware; and **decoded frames
+    through the daemon** — 1080p60 raw is ~370 MB/s, which is not a thing to
+    send through JSON framing.
+
+    The gating question was whether WebKitGTK has it. **Measured, not assumed** —
+    a real `WebKitWebView` on Ubuntu 24.04 (WebKitGTK 2.52.3), asking
+    `VideoDecoder.isConfigSupported` directly, by
+    `scripts/probe-webkit-webcodecs.sh`, which re-runs the whole table when a
+    distro bumps its webview:
+
+    | | `avc1.42E01E` | `avc1.4D401F` | `avc1.640028` | `vp8` |
+    | --- | --- | --- | --- | --- |
+    | stock `libwebkit2gtk-4.1-0` | ❌ | ❌ | ❌ | ✅ |
+    | `+ gstreamer1.0-libav` | ✅ | ✅ | ✅ | ✅ |
+
+    So the API is there — `VideoDecoder`, `VideoFrame`, `EncodedVideoChunk` all
+    defined, `isSecureContext` true (wry registers its scheme as secure, in
+    `webkitgtk/web_context.rs`) — but **H.264 is a GStreamer plugin the app does
+    not ship**, and `gstreamer1.0-libav` is not a dependency of
+    `libwebkit2gtk-4.1-0`. Two consequences worth writing down:
+
+    - **The probe is part of the feature, not a diagnostic.** One
+      `isConfigSupported` call decides between a working mirror and a precise
+      "install *this*" message. Without it the failure is a black rectangle.
+    - **Per artifact, the fix differs — and v3.10.0-beta.1 settled which
+      artifacts there are.** Linux ships a `.deb` and an `.AppImage`, not the
+      tarball an earlier draft of this entry assumed, so both mitigations are
+      real rather than theoretical:
+      - The `.deb` gets `bundle.linux.deb.recommends`, not `depends`. apt
+        installs Recommends by default, so almost everyone gets the codec, while
+        an app that is 61 features wide stays installable for the 60 that do not
+        need it. `depends` would make a video codec a condition of running the
+        file explorer.
+      - The `.AppImage` has `bundle.linux.appimage.bundleMediaFramework`, and it
+        is **not** ready to switch on: linuxdeploy bundles what the *builder*
+        has, and the Linux job installs with `--no-install-recommends` and no
+        gstreamer codec packages at all, so today it would bundle nothing. It
+        also costs 15–35 MB and has a live over-bundling bug against Mesa 25+
+        hosts. Adding the packages to the builder comes first, and an AppImage
+        that is actually run comes before believing either.
+      - No RPM ships, so the trap there is only worth remembering if one is
+        added: Fedora's decoder lives outside the default repos (RPM Fusion, or
+        the Cisco openh264 repo), so a hard `Requires:` would make the package
+        uninstallable on a stock system.
+
+    Also worth correcting: on Linux this is **software** decode via
+    `avdec_h264`; hardware would need the VA-API plugins on top. Only
+    Windows/WebView2 gets hardware decode for free.
+
+    Then, in order: the transport on NIO in the daemon (the `adb forward` tunnel
+    *must* be torn down — see the mirror-teardown convention, which the Mac
+    learned by leaking one per quit); the session; one tile; then the wall, whose
+    layout is already ported. Screen record and the video editor ride the
+    session, so they follow rather than lead.
+
+    **Landed so far.** `ScrcpyTransport` (the NIO sockets, with the
+    accept-then-drop handshake `adb forward` forces) and `ScrcpySession` (the
+    transport, `ScrcpyStreamDecoder` and the mapping onto the wire, with one
+    teardown over all three) — both in `DaemonCore`, named apart from ADBKit's
+    `MirrorTransport`/`MirrorSession` because on macOS both modules are visible
+    at once and the bare names are ambiguous. The `mirror` stream topic is wired
+    (`docs/droidectived-protocol.md` §5.4): `config` then frames, Annex-B, taps
+    back through `write`. `H264NAL.avcCodecString` is the one piece that went to
+    ADBKit, being pure H.264 parsing both hosts could use.
+
+    **One tile has landed too.** `MirrorPane` decodes into a `<canvas>` with
+    `useMirror`, and the three rules the daemon cannot enforce for a client are
+    `lib/mirror.ts`, tested without a decoder or a device: configure on `config`
+    and not before, discard until the next `key` after a `dropped`, and size
+    from the decoded frames rather than the config's hint. Input goes back the
+    other way through `lib/scrcpy-control.ts`, a port of ADBKit's
+    `ScrcpyControlMessage` pinned to the same byte vectors its Swift suite
+    asserts — including the Mac's own pointer id of 0 rather than scrcpy's mouse
+    sentinel, because those values are the ones proven against real hardware.
+
+    **What the tile still owes the Mac's screen:** audio (its own scrcpy socket,
+    not yet plumbed), Show touches, the reconnect button, and opening a mirror
+    in a separate window. The per-feature checklist below lists them.
+
+    **And the wall.** `MirrorWallPane` puts up to six tiles in a grid, each its
+    own session at the quality `MirrorWall.quality(tiles:)` gives it — ported to
+    `lib/mirror-wall.ts` and pinned to the numbers the Swift suite asserts,
+    because a port that agreed only with itself would drift from the Mac's
+    layout one release at a time. It picks its own devices from a header menu
+    rather than following the device bar, and a tile reorders by dragging its
+    **caption strip**: a drag handle on the video would eat every swipe on the
+    device, which is the note the Mac left.
+
+    Per-tile quality is why the `mirror` topic gained `maxSize`/`maxFps`. The
+    client resolves them because only it knows how many tiles it is drawing;
+    the daemon clamps them, because they become arguments to a process on the
+    device and a value scrcpy refuses arrives as a mirror that never produces a
+    frame rather than as the bad number that caused it.
+
+    **What the wall still owes the Mac's:** the selection is not persisted (the
+    Mac keeps it per window as `WindowState.mirrorWallSerials`), there is no
+    breaking a tile out into its own window, and no Full View.
+
+    **Not yet seen running.** Everything here is verified by tests and by the
+    codec probe against a real WebKitGTK, but no frame has been decoded from a
+    real device on Windows or Linux — the one step that needs a person at a
+    machine with a phone plugged in.
+
+    **The server jar ships with the app now.** The Tauri bundle carries the
+    committed `App/Resources/scrcpy-server` — the very same file, since a Java
+    jar is architecture-independent — and passes its path to the sidecar as
+    `--scrcpy-server`, so nobody installs scrcpy themselves. That was the Mac's
+    promise and it is the port's now too. `ScrcpyServerLocator.bundledVersion`
+    is the one version both hosts read, and an ADBKit test holds the Mac's
+    `BundledTools.scrcpyVersion` to it, because the pair describes one committed
+    file and a mismatch does not degrade — the device-side server aborts, so the
+    mirror simply never starts.
+
+    A bundled path that is *not* there fails rather than falling back: quietly
+    mirroring through whatever scrcpy the machine happens to have is exactly the
+    version mismatch that test exists to prevent. A daemon started by hand
+    passes no path and gets the installed one, which is what a developer has.
+
+    **The Linux codec dependency is declared too.** `bundle.linux.deb.recommends`
+    now names `gstreamer1.0-libav`, so apt pulls the H.264 decoder in by default
+    and the probe's message becomes the fallback rather than the plan.
+
+    **The wire is cheap, but its drop policy is not.** The 370 MB/s above is
+    *decoded* frames; the encoded stream is scrcpy's bitrate, ~1–8 Mbps, so
+    base64 over the existing text protocol costs a third of about a megabyte a
+    second and needs no second encoding path in `WebSocketBridge` (whose
+    text-only comment gives "no client wants it" as the reason, and this is the
+    first client that might). scrcpy sends **Annex-B** with periodic SPS/PPS,
+    which is exactly what `VideoDecoder` wants when `description` is absent — no
+    AVCC repackaging. What does need thought at the session step:
+    `StreamSession`'s bounded buffer drops frames under load, and dropping an
+    arbitrary NAL corrupts the picture until the next keyframe, so a video
+    stream's drop policy has to be keyframe-aware rather than inherited.
 
     Two things the Mac learned the hard way and this must not relearn: a
     session's teardown has to be **awaited** at quit or its `adb forward`
@@ -1087,7 +1232,7 @@ job, and the checklist now says which.
 #### `reactotron` — Reactotron  ·  🟡 partial
 > Live React Native inspector — logs, network, state, custom display
 - **Kind** `view`
-- **Note** Built, with two named gaps — the relay, the timeline model, the toolbar and filter dialog, the waiting screen with its `adb reverse` button, expandable rows with JSON trees, find-in-object, the API tabs, Copy as cURL, the copy verbs, the filter-aware export and the split Restart button. Missing: the restart's picker sheet, and the per-pane split (backlog 20's model). Backlog 24.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `ReactotronView` — `App/Sources/FeatureDetail/Views/ReactotronView.swift`
 - **Must replicate**
   - [ ] button: OK
@@ -1164,10 +1309,10 @@ job, and the checklist now says which.
 - **Kind** `toggleAction`
 - **Note** Runs from the palette; no dedicated screen.
 
-#### `mirror-wall` — Mirror Wall  ·  ⬜ todo
+#### `mirror-wall` — Mirror Wall  ·  🟡 partial
 > Mirror up to six devices side by side
 - **Kind** `view`
-- **Note** Not started — several mirrors at once, on the same pipeline as `scrcpy`, so it follows the mirror. Backlog 25.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `MirrorWallView` — `App/Sources/FeatureDetail/Views/MirrorWallView.swift`
 - **Must replicate**
   - [ ] button: Open Each in Its Own Window
@@ -1179,10 +1324,10 @@ job, and the checklist now says which.
   - [ ] tooltip: Audio, and breaking tiles out into windows
   - [ ] drag: drag and drop
 
-#### `scrcpy` — Mirror Screen  ·  ⬜ todo
+#### `scrcpy` — Mirror Screen  ·  🟡 partial
 > Mirror and control the device with scrcpy
 - **Kind** `view`
-- **Note** Not started — the decode/render stack needs writing off Apple (scrcpy's server is portable; VideoToolbox/AVFoundation are not). Backlog 25.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `ScreenMirrorView` — `App/Sources/FeatureDetail/Views/ScreenMirrorView.swift`
 - **Must replicate**
   - [ ] button: Volume down
@@ -1640,22 +1785,19 @@ job, and the checklist now says which.
 #### `terminal` — Terminal  ·  🟡 partial
 > Real shell tabs with the device on ANDROID_SERIAL
 - **Kind** `system`
-- **Note** A pane exists; the checklist below is what it is missing. Tabs,
-  splits and the shell work; the per-tab rename, the tab groups, the context
-  menu and dragging a tab between panes do not, and `TerminalResume`'s
-  reopen-where-you-left-off is deferred with the cwd read it needs.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `TerminalView` — `App/Sources/FeatureDetail/Views/TerminalView.swift`
 - **Must replicate**
   - [ ] button: Rename
   - [ ] button: Cancel
   - [ ] button: Rename…
   - [ ] button: New Group…
-  - [x] button: Split Vertically
-  - [x] button: Split Horizontally
-  - [x] button: Close Terminal
+  - [ ] button: Split Vertically
+  - [ ] button: Split Horizontally
+  - [ ] button: Close Terminal
   - [ ] button: New Terminal Here
   - [ ] button: Close Group
-  - [x] button: plus
+  - [ ] button: plus
   - [ ] field: Name
   - [ ] tooltip: Close this terminal (kills its shell)
   - [ ] tooltip: Close this pane (kills its shell)
@@ -1663,4 +1805,4 @@ job, and the checklist now says which.
   - [ ] drag: drag and drop
 
 
-<!-- counts: {'done': 0, 'partial': 42, 'todo': 17, 'gated': 2} -->
+<!-- counts: {'done': 0, 'partial': 44, 'todo': 15, 'gated': 2} -->

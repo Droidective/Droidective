@@ -14,15 +14,26 @@ const LISTENING_PREFIX: &str = "droidectived listening 127.0.0.1:";
 ///
 /// `--parent-pid` is the orphan guard — a crashed UI otherwise leaves a daemon
 /// holding adb children, which users experience as "adb is stuck".
-pub fn spawn_args(token_file: &str, parent_pid: u32) -> Vec<String> {
-    vec![
+/// `--scrcpy-server` is passed when the bundled jar is where it should be. The
+/// mirror needs it and the app ships it, so a user installs no scrcpy of their
+/// own — the promise the Mac's bundle already makes. Absent, the daemon falls
+/// back to an installed scrcpy, which is what a developer running it by hand
+/// has; passing a path that is not there would be worse than passing none,
+/// because the daemon refuses rather than silently using some other version.
+pub fn spawn_args(token_file: &str, parent_pid: u32, scrcpy_server: Option<&str>) -> Vec<String> {
+    let mut args = vec![
         "--port".into(),
         "0".into(),
         "--token-file".into(),
         token_file.into(),
         "--parent-pid".into(),
         parent_pid.to_string(),
-    ]
+    ];
+    if let Some(path) = scrcpy_server {
+        args.push("--scrcpy-server".into());
+        args.push(path.into());
+    }
+    args
 }
 
 /// The port from one complete stdout line, or `None` if that is not what this
@@ -74,7 +85,7 @@ mod tests {
     #[test]
     fn the_sidecar_always_asks_for_an_os_chosen_port() {
         assert_eq!(
-            spawn_args("/tmp/token", 4242),
+            spawn_args("/tmp/token", 4242, None),
             vec![
                 "--port",
                 "0",
@@ -84,6 +95,26 @@ mod tests {
                 "4242"
             ]
         );
+    }
+
+    #[test]
+    fn the_bundled_scrcpy_server_is_passed_when_this_build_has_one() {
+        // The mirror needs it and the app ships it, so nobody installs scrcpy
+        // themselves — the promise the Mac's bundle already makes.
+        let args = spawn_args("/tmp/token", 1, Some("/opt/app/scrcpy-server"));
+        assert_eq!(
+            args.iter().rev().take(2).rev().collect::<Vec<_>>(),
+            vec!["--scrcpy-server", "/opt/app/scrcpy-server"]
+        );
+    }
+
+    #[test]
+    fn a_build_without_the_jar_passes_no_path_at_all() {
+        // Not an empty string: the daemon refuses a path that is not there
+        // rather than falling back, so "no path" and "a bad path" must not be
+        // the same argument.
+        let args = spawn_args("/tmp/token", 1, None);
+        assert!(!args.iter().any(|arg| arg == "--scrcpy-server"), "{args:?}");
     }
 
     #[test]

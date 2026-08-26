@@ -43,6 +43,14 @@ public protocol StreamSource: Sendable {
     /// client: on Windows there is no pty at all, and "your terminal did not
     /// open" is worth far less than being told why.
     func openPty(serial: String?, size: PtySize) throws -> any PtyChannel
+
+    /// A mirror for one device, not yet brought up.
+    ///
+    /// Throws when the pieces a mirror needs are missing — scrcpy's server jar
+    /// above all — so that arrives as a `failed` with a reason rather than as a
+    /// subscription that never produces a frame. `ScrcpySession.start()` is the
+    /// slow half and stays the caller's to run.
+    func openMirror(serial: String, quality: MirrorQuality) async throws -> ScrcpySession
 }
 
 /// One WebSocket connection's worth of subscriptions.
@@ -64,6 +72,10 @@ public actor StreamSession {
         /// The shell, for a `pty` subscription. Where a write and a resize go,
         /// and what has to be hung up when the subscription ends.
         let pty: (any PtyChannel)?
+        /// The mirror, for a `mirror` subscription. Where a control message
+        /// goes, and what has to be stopped — and *awaited* — when the
+        /// subscription ends, or its `adb forward` outlives the daemon.
+        let mirror: ScrcpySession?
         var buffer: StreamBuffer<Data>
         /// The newest unsent snapshot, for a `isSnapshot` topic. Kept apart
         /// from `buffer` because a snapshot replaces rather than accumulates —
@@ -126,7 +138,12 @@ public actor StreamSession {
             // guard is what makes that a compile-time fact rather than a
             // comment. Unacknowledged on purpose — see `Operation.write`.
             guard let bytes = command.params?.bytes else { return }
-            subscriptions[command.id]?.pty?.write(bytes)
+            let subscription = subscriptions[command.id]
+            subscription?.pty?.write(bytes)
+            // A control message before the mirror's control socket is up is
+            // dropped inside the session, which is right: nothing is on screen
+            // yet, so no tap could have been aimed at anything.
+            await subscription?.mirror?.send(control: bytes)
         case .resize:
             guard let size = command.params?.size else { return }
             subscriptions[command.id]?.pty?.resize(to: size)
@@ -174,8 +191,29 @@ public actor StreamSession {
             }
         }
 
+        // The mirror is *opened* before the subscription is announced, for the
+        // same reason the shell is: resolving scrcpy can fail (it is not
+        // installed) and that belongs in a `failed` instead of a feed that
+        // never produces a frame. Bringing it *up* — push, forward, spawn,
+        // connect — is a second or two, so that happens in the pump and the
+        // client gets its acknowledgement immediately.
+        var mirror: ScrcpySession?
+        if topic == .mirror {
+            guard let serial = command.params?.serial else { return }
+            do {
+                mirror = try await source.openMirror(
+                    serial: serial, quality: command.params?.mirrorQuality ?? .deviceDefault)
+            } catch {
+                await sink.send(
+                    StreamFrame.encode(
+                        StreamProtocol.Event<LogLinePayload>.failed(
+                            id: id, message: "\(error)")))
+                return
+            }
+        }
+
         subscriptions[id] = Subscription(
-            topic: topic, serial: command.params?.serial, pty: channel,
+            topic: topic, serial: command.params?.serial, pty: channel, mirror: mirror,
             buffer: StreamBuffer(capacity: capacity))
         await sink.send(
             StreamFrame.encode(StreamProtocol.Event<LogLinePayload>.subscribed(id: id)))
@@ -276,6 +314,29 @@ public actor StreamSession {
                 // the parent as the terminal hanging up rather than as a throw.
                 await self?.end(id, reason: .processExited)
             }
+
+        case .mirror:
+            guard let mirror else { return }
+            subscriptions[id]?.pump = Task { [weak self] in
+                do {
+                    for try await frame in try await mirror.start() {
+                        await self?.enqueue(
+                            id: id,
+                            items: [try? DaemonProtocol.encode(frame)].compactMap { $0 })
+                    }
+                    await self?.end(id, reason: .deviceDisconnected)
+                } catch is CancellationError {
+                    // The subscription was torn down under us; `end` has
+                    // already run and said so.
+                    return
+                } catch {
+                    // The only topic whose stream can break mid-flight rather
+                    // than just stop: the device rejected the server, or the
+                    // stream is a codec we cannot hand a `VideoDecoder`. Either
+                    // way the reason is the whole value of the event.
+                    await self?.fail(id, message: "\(error)")
+                }
+            }
         }
     }
 
@@ -287,6 +348,11 @@ public actor StreamSession {
         // Cancelling the pump only stops the reading; the shell is a child
         // process and has to be hung up, or every closed tab leaks one.
         subscription.pty?.terminate()
+        // Awaited, not fired off, and this is the one that bites: the mirror
+        // owns an `adb forward` that only its own teardown removes, and adb's
+        // server is long-lived, so a tunnel left behind here survives the
+        // daemon. One leaked listening socket per closed tile.
+        await subscription.mirror?.stop()
         // ADBKit kills the adb child on task cancellation, but the streamer
         // owns the process, so it needs telling too.
         if subscription.topic == .logcat, let serial = subscription.serial {
@@ -304,6 +370,20 @@ public actor StreamSession {
                 StreamFrame.encode(
                     StreamProtocol.Event<LogLinePayload>.ended(id: id, reason: reason)))
         }
+    }
+
+    /// A subscription that broke after it had started.
+    ///
+    /// `ended` says a stream stopped; this says it failed, and the message is
+    /// the only place the client learns why. The teardown is the same one an
+    /// orderly end does — the `reason` is not sent, which is what `notify:
+    /// false` means here.
+    private func fail(_ id: Int, message: String) async {
+        guard subscriptions[id] != nil else { return }
+        await end(id, reason: .deviceDisconnected, notify: false)
+        await sink.send(
+            StreamFrame.encode(
+                StreamProtocol.Event<LogLinePayload>.failed(id: id, message: message)))
     }
 
     // MARK: the drop-oldest path
@@ -365,16 +445,25 @@ public struct LiveStreamSource: StreamSource {
     private let performanceService: PerformanceService
     private let networkService: NetworkSpeedService
     private let relay: ReactotronRelay
+    private let client: AdbClient
+    private let locator: ToolLocator
+    /// The app's bundled `scrcpy-server`, when it passed one.
+    private let bundledScrcpyServer: String?
 
     public init(
         monitor: DeviceMonitor, streamer: LogcatStreamer, performance: PerformanceService,
-        networkSpeed: NetworkSpeedService, reactotron: ReactotronRelay
+        networkSpeed: NetworkSpeedService, reactotron: ReactotronRelay,
+        client: AdbClient, locator: ToolLocator,
+        bundledScrcpyServer: String? = nil
     ) {
         self.monitor = monitor
         self.streamer = streamer
         performanceService = performance
         networkService = networkSpeed
         relay = reactotron
+        self.client = client
+        self.locator = locator
+        self.bundledScrcpyServer = bundledScrcpyServer
     }
 
     public func devices() async -> AsyncStream<[Device]> { await monitor.updates() }
@@ -464,5 +553,59 @@ public struct LiveStreamSource: StreamSource {
         #else
         return try Pty.spawn(environment: Pty.childEnvironment(serial: serial), size: size)
         #endif
+    }
+
+    /// Errors a mirror can hit before it has a socket to fail on.
+    public enum MirrorError: Error, CustomStringConvertible {
+        case scrcpyServerMissing
+
+        public var description: String {
+            switch self {
+            case .scrcpyServerMissing:
+                // Named rather than generic, because it is the one thing the
+                // user can act on. The app normally passes its own bundled
+                // jar, so reaching this means either a damaged install or a
+                // daemon someone started by hand without one.
+                return """
+                    scrcpy's server was not found. The app bundles it, so this \
+                    usually means a damaged install; a daemon started by hand \
+                    needs either --scrcpy-server or an installed scrcpy.
+                    """
+            }
+        }
+    }
+
+    /// The bundled jar the app shipped, or an installed scrcpy's.
+    ///
+    /// The bundle wins, and does not fall back: if the app said where it put
+    /// the jar and it is not there, quietly mirroring through some other
+    /// scrcpy the machine happens to have is a version mismatch waiting to
+    /// happen — the server aborts on one. A developer running the daemon by
+    /// hand passes no path and gets the installed one.
+    private func scrcpyServer() async -> ScrcpyServerInfo? {
+        if let bundledScrcpyServer {
+            let exists = FileManager.default.isReadableFile(atPath: bundledScrcpyServer)
+            return exists ? ScrcpyServerLocator.bundled(jarPath: bundledScrcpyServer) : nil
+        }
+        return await ScrcpyServerLocator.resolve(locator: locator)
+    }
+
+    public func openMirror(serial: String, quality: MirrorQuality) async throws -> ScrcpySession {
+        guard let server = await scrcpyServer() else {
+            throw MirrorError.scrcpyServerMissing
+        }
+        return ScrcpySession(
+            adb: client,
+            config: .init(
+                serial: serial,
+                serverVersion: server.version,
+                localJarPath: server.jarPath,
+                // The quality is the client's to choose: the Mirror Wall steps
+                // it down as tiles are added, and only the client knows how
+                // many it is drawing.
+                params: ScrcpyServerParams(
+                    scid: ScrcpyServerParams.randomSCID(),
+                    maxSize: quality.maxSize,
+                    maxFps: quality.maxFps)))
     }
 }

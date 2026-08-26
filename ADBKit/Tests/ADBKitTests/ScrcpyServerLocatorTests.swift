@@ -22,3 +22,43 @@ import Testing
         #expect(ScrcpyServerLocator.parseVersion("scrcpy") == nil)
     }
 }
+
+/// The bundled jar's version, against the Mac's own copy of the same fact.
+///
+/// A cross-file invariant rather than review folklore: the two constants
+/// describe one committed file, and a mismatch does not degrade — the
+/// device-side server aborts, so the mirror simply never starts.
+@Suite struct BundledScrcpyVersionTests {
+    @Test func bundledVersionMatchesTheMacsOwn() throws {
+        // Located from `#filePath` the way `PortabilityGuardTests` does, so the
+        // suite carries no assumption about where it was run from.
+        let repository = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()  // ADBKitTests
+            .deletingLastPathComponent()  // Tests
+            .deletingLastPathComponent()  // the package root
+            .deletingLastPathComponent()  // the repository
+        let bundledTools = repository
+            .appendingPathComponent("App/Sources/Bundled/BundledTools.swift")
+
+        // The Mac's half is not in this package, so a checkout without it (a
+        // Linux CI job cloning only what it builds) skips rather than fails.
+        guard let source = try? String(contentsOf: bundledTools, encoding: .utf8) else { return }
+
+        let pattern = #"scrcpyVersion\s*=\s*"([^"]+)""#
+        let match = source.range(of: pattern, options: .regularExpression)
+        let declaration = try #require(match.map { String(source[$0]) })
+        #expect(
+            declaration.contains("\"\(ScrcpyServerLocator.bundledVersion)\""),
+            """
+            BundledTools.scrcpyVersion and ScrcpyServerLocator.bundledVersion \
+            describe the same committed jar and have parted company: \
+            \(declaration) vs "\(ScrcpyServerLocator.bundledVersion)".
+            """)
+    }
+
+    @Test func bundledInfoCarriesThePathItWasGiven() {
+        let info = ScrcpyServerLocator.bundled(jarPath: "/opt/app/scrcpy-server")
+        #expect(info.jarPath == "/opt/app/scrcpy-server")
+        #expect(info.version == ScrcpyServerLocator.bundledVersion)
+    }
+}

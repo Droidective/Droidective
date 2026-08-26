@@ -17,6 +17,8 @@ import {
   LogcatPane,
   ManageAppPane,
   MeminfoPane,
+  MirrorPane,
+  MirrorWallPane,
   NetspeedPane,
   PerformancePane,
   PermissionsPane,
@@ -98,6 +100,8 @@ export function FeaturePane(props: FeaturePaneProps) {
       )
     case "logcat":
       return <LogcatPane device={props.device} />
+    case "scrcpy":
+      return <MirrorPane device={props.device} />
     case "device-info":
       return <DeviceInfoPane device={props.device} />
     case "file-explorer":
@@ -165,6 +169,10 @@ function hostPane(id: string, device: Device | null) {
       return <TerminalPane serial={device?.serial ?? null} />
     case "reactotron":
       return <ReactotronPane device={device} />
+    case "mirror-wall":
+      // Host-side by the same logic as the others: the wall picks its own
+      // devices from its header and never follows the bar's selection.
+      return <MirrorWallPane />
     default:
       return null
   }
