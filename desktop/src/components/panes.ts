@@ -9,6 +9,7 @@
 export { AabConvertPane } from "@/components/AabConvertPane"
 export { ApkInspectorPane } from "@/components/ApkInspectorPane"
 export { ApkSignPane } from "@/components/ApkSignPane"
+export { DecompilePane } from "@/components/DecompilePane"
 export { AppInfoPane } from "@/components/AppInfoPane"
 export { AppsPane } from "@/components/AppsPane"
 export { BugReportPane } from "@/components/BugReportPane"

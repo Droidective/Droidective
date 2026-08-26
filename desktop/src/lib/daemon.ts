@@ -235,9 +235,13 @@ export { customCommands, runCustomCommand, writeCustomCommands } from "@/lib/dae
 export {
   apkToolchain,
   convertAab,
+  decompileApk,
+  decompiledFile,
   inspectApk,
   installPath,
   pickFile,
   pickFolder,
+  rebuildDecompiled,
+  searchDecompiled,
   signApk,
 } from "@/lib/daemon-apk"

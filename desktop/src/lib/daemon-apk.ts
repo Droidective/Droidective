@@ -12,6 +12,11 @@ import type {
   ApkReport,
   ApkSignResponse,
   ApkToolchain,
+  DecompileFileText,
+  DecompileHits,
+  DecompileMode,
+  DecompileRebuildResponse,
+  DecompileTree,
   InstallResponse,
 } from "@/lib/wire"
 
@@ -77,4 +82,38 @@ export function pickFolder(): Promise<string | null> {
  */
 export function installPath(serials: string[], path: string): Promise<InstallResponse> {
   return invoke("install_path", { serials, path })
+}
+
+/**
+ * Runs jadx or apktool over one APK and answers the tree it wrote.
+ *
+ * A previous run of the same APK and mode is reused unless `refresh` — the
+ * output is deterministic and jadx is slow enough that re-running it on every
+ * revisit is the difference between a screen and a wait.
+ */
+export function decompileApk(
+  path: string,
+  mode: DecompileMode,
+  refresh = false,
+): Promise<DecompileTree> {
+  return invoke("decompile_apk", { path, mode, refresh })
+}
+
+/** One decompiled file's text. `root` is what the daemon confines the read to. */
+export function decompiledFile(root: string, path: string): Promise<DecompileFileText> {
+  return invoke("decompiled_file", { root, path })
+}
+
+/** Case-insensitive search across one decompile's output. */
+export function searchDecompiled(root: string, query: string): Promise<DecompileHits> {
+  return invoke("search_decompiled", { root, query })
+}
+
+/** Rebuilds an apktool source tree back into an APK. */
+export function rebuildDecompiled(
+  root: string,
+  sourceDir: string,
+  output: string,
+): Promise<DecompileRebuildResponse> {
+  return invoke("rebuild_decompiled", { root, sourceDir, output })
 }

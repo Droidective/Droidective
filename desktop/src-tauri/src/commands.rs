@@ -19,7 +19,9 @@ use crate::daemon::wire::{
     AabConvertRequest, AabConvertResponse, ApkKeystore, ApkReport, ApkSignRequest, ApkSignResponse,
     ApkToolchain, AppControlRequest, AppInfoResponse, AppPullRequest, AppPullResponse, AppRequest,
     AppsResponse, BugReportRequest, BugReportResponse, CrashListResponse, CustomCommand,
-    CustomCommandRunRequest, CustomCommandsResponse, CustomCommandsWriteRequest, DeepLink,
+    CustomCommandRunRequest, CustomCommandsResponse, CustomCommandsWriteRequest,
+    DecompileFileRequest, DecompileFileText, DecompileHits, DecompileMode, DecompileRebuildRequest,
+    DecompileRebuildResponse, DecompileRequest, DecompileSearchRequest, DecompileTree, DeepLink,
     DeepLinkLaunchRequest, DeepLinksResponse, DeepLinksWriteRequest, DevSettingsResponse,
     DevSettingsWriteRequest, Device, DevicePropsResponse, DnsResponse, DnsWriteRequest,
     EmulatorActionRequest, EmulatorsResponse, FeatureSummary, FileInfoRequest, FileInfoResponse,
@@ -981,6 +983,72 @@ pub async fn enable_tcpip(
             endpoint: None,
             code: None,
             serial: Some(serial),
+        })
+        .await
+}
+
+/// Runs jadx or apktool over one APK and answers the tree it wrote.
+#[tauri::command]
+pub async fn decompile_apk(
+    supervisor: State<'_, Supervisor>,
+    path: String,
+    mode: DecompileMode,
+    refresh: Option<bool>,
+) -> Result<DecompileTree, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .decompile_apk(&DecompileRequest {
+            path,
+            mode,
+            refresh,
+        })
+        .await
+}
+
+/// One decompiled file's text. `root` is what the daemon confines the read to.
+#[tauri::command]
+pub async fn decompiled_file(
+    supervisor: State<'_, Supervisor>,
+    root: String,
+    path: String,
+) -> Result<DecompileFileText, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .decompiled_file(&DecompileFileRequest { root, path })
+        .await
+}
+
+/// Searches one decompile's output.
+#[tauri::command]
+pub async fn search_decompiled(
+    supervisor: State<'_, Supervisor>,
+    root: String,
+    query: String,
+) -> Result<DecompileHits, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .search_decompiled(&DecompileSearchRequest { root, query })
+        .await
+}
+
+/// Rebuilds an apktool tree back into an APK.
+#[tauri::command]
+pub async fn rebuild_decompiled(
+    supervisor: State<'_, Supervisor>,
+    root: String,
+    source_dir: String,
+    output: String,
+) -> Result<DecompileRebuildResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .rebuild_decompiled(&DecompileRebuildRequest {
+            root,
+            source_dir,
+            output,
         })
         .await
 }

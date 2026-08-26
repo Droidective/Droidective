@@ -148,6 +148,21 @@ public protocol DaemonBackend: Sendable {
     /// absent.
     func convertAab(_ request: ApkProtocol.ConvertRequest) async throws
         -> ApkProtocol.ConvertResponse
+    /// Runs jadx or apktool and walks what it wrote. Throws when a tool it
+    /// needs is absent, or when the decompiler produced nothing.
+    func decompileApk(_ request: DecompileProtocol.Request) async throws
+        -> DecompileProtocol.Tree
+    /// One decompiled file's text, or nil when the path is not inside a
+    /// decompile output directory — which is a refusal, not an empty file.
+    func decompiledFile(_ request: DecompileProtocol.FileRequest) async
+        -> DecompileProtocol.FileText?
+    /// Searches one decompile's output. Nil for the same refusal.
+    func searchDecompiled(_ request: DecompileProtocol.SearchRequest) async
+        -> DecompileProtocol.Hits?
+    /// Rebuilds an apktool tree back into an APK. Nil for the same refusal;
+    /// throws when apktool or Java is absent, or the build fails.
+    func rebuildDecompiled(_ request: DecompileProtocol.RebuildRequest) async throws
+        -> DecompileProtocol.RebuildResponse?
     /// The saved custom commands. Best-effort: a store that will not load
     /// reads as no commands rather than failing the screen.
     func customCommands() async -> [CustomCommand]
@@ -183,6 +198,10 @@ public struct LiveBackend: DaemonBackend {
     /// The APK tools, over the same managed-tool directory the feature engine
     /// uses — one download of jadx or bundletool serves both.
     private let apkToolchainValue: ApkToolchain
+    /// Where jadx and apktool write, and the only tree the read/search/rebuild
+    /// routes may touch. Its own directory rather than the tools one: this is
+    /// throwaway output, regenerable from the APK.
+    private let decompileCache: URL
 
     public init(
         monitor: DeviceMonitor, engine: FeatureEngine, client: AdbClient,
@@ -200,6 +219,7 @@ public struct LiveBackend: DaemonBackend {
         customCommandStore = customCommands
         apkToolchainValue = ApkToolchain(
             locator: locator, store: ManagedToolStore(rootDirectory: toolsDirectory))
+        decompileCache = AppPaths.decompiledCacheDir
     }
 
     public func listDevices() async -> [Device] { await monitor.list(force: true) }
@@ -565,6 +585,60 @@ public struct LiveBackend: DaemonBackend {
             credentials: request.keystore?.credentials)
         return ApkProtocol.ConvertResponse(
             path: converted.url.path, sizeBytes: converted.sizeBytes)
+    }
+
+    public func decompileApk(
+        _ request: DecompileProtocol.Request
+    ) async throws -> DecompileProtocol.Tree {
+        let root = try await DecompileService(toolchain: apkToolchainValue).decompile(
+            apkPath: request.path, mode: request.mode.service,
+            into: decompileCache, reuseExisting: request.refresh != true)
+        return DecompileProtocol.Tree(
+            root: root.path, tree: DecompileProtocol.Node(DecompileService.tree(at: root)))
+    }
+
+    public func decompiledFile(
+        _ request: DecompileProtocol.FileRequest
+    ) async -> DecompileProtocol.FileText? {
+        guard confinedToOutput(request.path, root: request.root) else { return nil }
+        guard let data = FileManager.default.contents(atPath: request.path) else {
+            return DecompileProtocol.FileText(text: "", truncated: false, byteCount: 0)
+        }
+        let capped = data.prefix(DecompileProtocol.maxFileBytes)
+        // Lossy on purpose: smali and decoded resources are text, but a stray
+        // byte in one is not a reason to show nothing.
+        let text = String(decoding: capped, as: UTF8.self)
+        return DecompileProtocol.FileText(
+            text: text, truncated: data.count > capped.count, byteCount: data.count)
+    }
+
+    public func searchDecompiled(
+        _ request: DecompileProtocol.SearchRequest
+    ) async -> DecompileProtocol.Hits? {
+        guard confinedToOutput(request.root, root: request.root) else { return nil }
+        let hits = DecompileService.search(
+            in: URL(fileURLWithPath: request.root), query: request.query,
+            maxResults: DecompileProtocol.maxHits)
+        return DecompileProtocol.Hits(
+            hits: hits.map(DecompileProtocol.Hit.init),
+            capped: hits.count >= DecompileProtocol.maxHits)
+    }
+
+    public func rebuildDecompiled(
+        _ request: DecompileProtocol.RebuildRequest
+    ) async throws -> DecompileProtocol.RebuildResponse? {
+        guard confinedToOutput(request.sourceDir, root: request.root) else { return nil }
+        try await DecompileService(toolchain: apkToolchainValue).rebuild(
+            sourceDir: request.sourceDir, to: request.output)
+        return DecompileProtocol.RebuildResponse(output: request.output)
+    }
+
+    /// Both halves of the confinement: the root really is one of ours, and the
+    /// path really is inside it. Checking only the second would be circular —
+    /// a client naming `/` as the root would pass it.
+    private func confinedToOutput(_ path: String, root: String) -> Bool {
+        DecompileProtocol.isOutputRoot(root, cache: decompileCache)
+            && DecompileProtocol.confined(path, to: root)
     }
 
     public func customCommands() async -> [CustomCommand] {
@@ -973,6 +1047,18 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
                 body: Data(body.readableBytesView), backend: backend))
         case .apkSign:
             return Self.answer(await ApkRoutes.sign(
+                body: Data(body.readableBytesView), backend: backend))
+        case .apkDecompile:
+            return Self.answer(await DecompileRoutes.run(
+                body: Data(body.readableBytesView), backend: backend))
+        case .apkDecompileFile:
+            return Self.answer(await DecompileRoutes.file(
+                body: Data(body.readableBytesView), backend: backend))
+        case .apkDecompileSearch:
+            return Self.answer(await DecompileRoutes.search(
+                body: Data(body.readableBytesView), backend: backend))
+        case .apkRebuild:
+            return Self.answer(await DecompileRoutes.rebuild(
                 body: Data(body.readableBytesView), backend: backend))
         case .aabConvert:
             return Self.answer(await ApkRoutes.convert(

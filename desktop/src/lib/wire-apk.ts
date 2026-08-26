@@ -72,3 +72,52 @@ export interface AabConvertResponse {
   path: string
   sizeBytes: number
 }
+
+/** Which decompiler ran. Mirrors the daemon's own enum. */
+export type DecompileMode = "jadx" | "apktool"
+
+/**
+ * One entry in a decompiled tree.
+ *
+ * `children` absent means a file and present — even empty — means a directory,
+ * which is what puts a disclosure triangle on the right rows. An empty
+ * directory is still a directory.
+ */
+export interface DecompileNode {
+  name: string
+  path: string
+  children?: DecompileNode[]
+}
+
+export interface DecompileTree {
+  /**
+   * The output directory. Handed back on every read and search so the daemon
+   * can confine them to it — a path from this client is otherwise a read of
+   * any file the developer can read.
+   */
+  root: string
+  tree: DecompileNode
+}
+
+export interface DecompileFileText {
+  text: string
+  /** True when the file was longer than the daemon will send in one piece. */
+  truncated: boolean
+  byteCount: number
+}
+
+export interface DecompileHit {
+  path: string
+  line: number
+  text: string
+}
+
+export interface DecompileHits {
+  hits: DecompileHit[]
+  /** True when the cap was reached, so the list is partial rather than whole. */
+  capped: boolean
+}
+
+export interface DecompileRebuildResponse {
+  output: string
+}

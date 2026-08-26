@@ -12,6 +12,7 @@ import {
   BugReportPane,
   CrashPane,
   CustomCommandsPane,
+  DecompilePane,
   DeepLinksPane,
   DeviceInfoPane,
   DevSettingsPane,
@@ -184,6 +185,9 @@ function hostPane(id: string, device: Device | null) {
       return <ApkInspectorPane />
     case "apk-sign":
       return <ApkSignPane />
+    case "apk-decompile":
+      // Device-free like the other two: an APK is a file on this machine.
+      return <DecompilePane />
     case "wireless-adb":
       // Host-side: it is about the devices themselves, so it works — and is
       // most wanted — with nothing selected in the bar.
