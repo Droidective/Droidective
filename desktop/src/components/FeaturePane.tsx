@@ -19,6 +19,7 @@ import {
   DevSettingsPane,
   EmulatorsPane,
   InstallAppPane,
+  JsConsolePane,
   FileExplorerPane,
   LogcatPane,
   ManageAppPane,
@@ -180,6 +181,11 @@ function hostPane(id: string, device: Device | null) {
       return <TerminalPane serial={device?.serial ?? null} />
     case "reactotron":
       return <ReactotronPane device={device} />
+    case "js-console":
+      // Metro is a process on this machine, so the console connects with no
+      // device at all; the selection only decides which device gets the
+      // `adb reverse` that lets it reach Metro.
+      return <JsConsolePane device={device} />
     case "apk-inspector":
       // Device-free: an APK is a file on this machine, so both work with
       // nothing connected.
