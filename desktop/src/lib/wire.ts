@@ -59,6 +59,14 @@ export interface FeatureSummary {
   isDestructive: boolean
   isAbsorbedByHub: boolean
   /**
+   * Which hub folded this feature in, if one did.
+   *
+   * The flag above is not enough for this app: it has built some hub screens
+   * and not others, and hiding a member whose hub does not exist here would
+   * strand the feature. See `lib/hubs.ts`.
+   */
+  absorbedBy?: string | null
+  /**
    * Whether running this on every connected device at once makes sense.
    *
    * The registry's answer, because it is a property of the runner: a screenshot

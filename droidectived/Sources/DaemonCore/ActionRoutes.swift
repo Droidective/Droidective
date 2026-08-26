@@ -110,6 +110,9 @@ public enum ActionProtocol {
         /// show it standalone is the client's call, but it cannot make that
         /// call if the registry's answer never reaches it.
         public let isAbsorbedByHub: Bool
+        /// Which hub folded it in, if one did. A client that has built some
+        /// hubs but not all needs the id, not just the flag.
+        public let absorbedBy: String?
         /// Whether running this on every connected device at once makes sense.
         /// The registry's answer, because it is a property of the runner: a
         /// screenshot of five devices is five files, while pulling one file
@@ -167,6 +170,7 @@ public enum ActionProtocol {
                     needsBundle: def.needsBundle,
                     isDestructive: def.isDestructive,
                     isAbsorbedByHub: def.isAbsorbedByHub,
+                    absorbedBy: def.absorbedByHub,
                     supportsRunAll: def.supportsRunAll,
                     fields: def.fields.map { field in
                         FeatureSummary.Field(

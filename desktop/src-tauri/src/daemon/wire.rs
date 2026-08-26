@@ -83,6 +83,11 @@ pub struct FeatureSummary {
     /// but the flag has to survive the wire for that to stay a decision.
     #[serde(rename = "isAbsorbedByHub")]
     pub is_absorbed_by_hub: bool,
+    /// *Which* hub folded it in. The flag alone is not enough here: this UI has
+    /// built some hubs and not others, and hiding a member whose hub does not
+    /// exist yet would strand the feature with no way in.
+    #[serde(rename = "absorbedBy", default)]
+    pub absorbed_by: Option<String>,
     /// Whether running this on every connected device at once makes sense. The
     /// registry's answer: it is a property of the runner, not of the UI.
     #[serde(rename = "supportsRunAll")]

@@ -7,6 +7,7 @@ import {
   AabConvertPane,
   ApkInspectorPane,
   ApkSignPane,
+  ApkStudioPane,
   AppInfoPane,
   AppsPane,
   BugReportPane,
@@ -188,6 +189,10 @@ function hostPane(id: string, device: Device | null) {
     case "apk-decompile":
       // Device-free like the other two: an APK is a file on this machine.
       return <DecompilePane />
+    case "apk-studio":
+      // The hub over the three above. Reachable on its own too — the members
+      // fold into it once this app has the screen (`lib/hubs.ts`).
+      return <ApkStudioPane />
     case "wireless-adb":
       // Host-side: it is about the devices themselves, so it works — and is
       // most wanted — with nothing selected in the bar.

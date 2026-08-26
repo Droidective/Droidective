@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import raw from "@/lib/__fixtures__/features.json"
+import { withoutHubMembers } from "@/lib/hubs"
 import { moveHighlight, paletteResults, rankFeatures, relevance, togglePinned } from "@/lib/palette"
 import type { FeatureSummary } from "@/lib/wire"
 
@@ -7,6 +8,10 @@ import type { FeatureSummary } from "@/lib/wire"
 // hand-written — the same reason ADBKit replays recorded adb output. A
 // hand-made fixture would agree with whatever this file assumed.
 const features = (raw as unknown as { features: FeatureSummary[] }).features
+
+// What the palette may list: the members of a hub this app has built are
+// reached through the hub, so they are not offered separately. See `lib/hubs.ts`.
+const listable = withoutHubMembers(features)
 
 function byID(id: string): FeatureSummary {
   const feature = features.find((candidate) => candidate.id === id)
@@ -86,7 +91,7 @@ describe("paletteResults", () => {
   it("lists a pinned feature once, not twice", () => {
     const ids = paletteResults(features, "", ["logcat"]).map((feature) => feature.id)
     expect(ids.filter((id) => id === "logcat")).toHaveLength(1)
-    expect(ids).toHaveLength(features.length)
+    expect(ids).toHaveLength(listable.length)
   })
 
   it("lets relevance decide once there is a query", () => {
@@ -99,7 +104,7 @@ describe("paletteResults", () => {
 
   it("ignores a pinned id that is no longer served", () => {
     const ids = paletteResults(features, "", ["gone-feature"]).map((feature) => feature.id)
-    expect(ids).toHaveLength(features.length)
+    expect(ids).toHaveLength(listable.length)
   })
 })
 

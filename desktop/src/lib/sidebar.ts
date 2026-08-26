@@ -1,5 +1,6 @@
 import { rankBy } from "@/lib/ordering"
 import { rankFeatures } from "@/lib/palette"
+import { withoutHubMembers } from "@/lib/hubs"
 import type { FeatureSummary } from "@/lib/wire"
 
 /**
@@ -46,13 +47,13 @@ export function categoryLabel(category: string): string {
 /**
  * The features the sidebar lists: everything the engine can actually run.
  *
- * Hub members are **kept**, unlike the Mac's sidebar, which hides them because
- * a hub screen owns them. This app has no hub screens, so hiding them would
- * make them unreachable rather than merely relocated — the same call
- * `searchActions` made before it.
+ * A hub member is hidden **only when this app has the hub** — the Mac hides
+ * every one of them because it has all four hub screens, and this app does
+ * not. Hiding a member whose hub is not built here would make it unreachable
+ * rather than merely relocated. `lib/hubs.ts` holds which hubs exist.
  */
 export function sidebarFeatures(features: readonly FeatureSummary[]): FeatureSummary[] {
-  return features.filter((feature) => feature.implemented)
+  return withoutHubMembers(features.filter((feature) => feature.implemented))
 }
 
 export interface SidebarSection {

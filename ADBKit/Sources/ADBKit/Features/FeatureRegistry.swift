@@ -638,6 +638,13 @@ public enum FeatureRegistry {
     /// and sidebar. They remain in `all` (searchable + hotkey-able).
     public static let absorbedFeatureIDs: Set<String> = Set(absorbedByHub.values.flatMap { $0 })
 
+    /// Member id → the hub that folded it in. The inverse of `absorbedByHub`,
+    /// built once rather than searched per lookup.
+    public static let hubOfMember: [String: String] = absorbedByHub.reduce(into: [:]) {
+        result, entry in
+        for member in entry.value { result[member] = entry.key }
+    }
+
     /// Features the user manages individually in the catalog and sidebar:
     /// everything except hub members. The hub screens themselves are included.
     public static let catalogFeatureIDs: [String] = all.map(\.id).filter { !absorbedFeatureIDs.contains($0) }
@@ -797,4 +804,13 @@ public extension FeatureDef {
     /// the hub screen — hidden from the catalog and sidebar — but stay
     /// searchable and hotkey-able. See `FeatureRegistry.absorbedByHub`.
     var isAbsorbedByHub: Bool { FeatureRegistry.absorbedFeatureIDs.contains(id) }
+
+    /// *Which* hub folded this feature in, or nil when none did.
+    ///
+    /// The Mac needs only the boolean, because it has every hub. A client that
+    /// has some of them needs the id: hiding a member whose hub it has not
+    /// built yet would strand the feature with no way in.
+    var absorbedByHub: String? {
+        FeatureRegistry.hubOfMember[id]
+    }
 }
