@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { asDaemonError, watchMirror, type MirrorSession } from "@/lib/daemon"
-import { codecSupport, newGate, noteGap, stepMirror, type MirrorGate } from "@/lib/mirror"
+import {
+  codecSupport,
+  MAX_PENDING_FRAMES,
+  newGate,
+  noteGap,
+  replayable,
+  stepMirror,
+  type DecodeStep,
+  type MirrorGate,
+} from "@/lib/mirror"
 import { FULL_QUALITY, type Quality } from "@/lib/mirror-wall"
 import { encodeControl } from "@/lib/scrcpy-control"
 import type { DaemonError, MirrorFrame, StreamUpdate } from "@/lib/wire"
@@ -25,6 +34,8 @@ interface Wiring {
   canvas: React.RefObject<HTMLCanvasElement | null>
   gate: React.RefObject<MirrorGate>
   decoder: React.RefObject<VideoDecoder | null>
+  /** Frames that arrived while `configure` was still awaiting its support check. */
+  pending: React.RefObject<DecodeStep[]>
   setSize: (size: { width: number; height: number }) => void
   setDeviceName: (name: string | null) => void
   setStreaming: (streaming: boolean) => void
@@ -67,6 +78,7 @@ async function configure(codec: string, wiring: Wiring): Promise<void> {
   if (!support.ok) {
     // The measured case on Linux — see `missingCodecHint`. Reported rather than
     // left as a black rectangle, which is what this check is for.
+    wiring.pending.current = []
     wiring.fail(support.hint ?? "This webview cannot decode the device's video.")
     return
   }
@@ -79,6 +91,30 @@ async function configure(codec: string, wiring: Wiring): Promise<void> {
   // to smooth playback is showing the past.
   built.configure({ codec, optimizeForLatency: true })
   wiring.decoder.current = built
+  // The await above spans frames, and scrcpy's first keyframe lands inside it.
+  // Replaying from that keyframe is what gets a picture up now rather than at
+  // the next one, which scrcpy leaves ten seconds away by default.
+  const replay = replayable(wiring.pending.current)
+  wiring.pending.current = []
+  if (replay.length === 0) wiring.gate.current = noteGap(wiring.gate.current)
+  for (const step of replay) decodeInto(built, step, wiring)
+}
+
+/** Hand one chunk to a configured decoder, reporting a rejection. */
+function decodeInto(decoder: VideoDecoder, step: DecodeStep, wiring: Wiring): void {
+  try {
+    decoder.decode(
+      new EncodedVideoChunk({
+        type: step.type,
+        timestamp: step.timestamp,
+        data: step.data,
+      }),
+    )
+  } catch (thrown) {
+    // A decoder that rejects a chunk is done — it does not recover on the next
+    // one, so say so rather than showing a frozen picture.
+    wiring.fail(thrown instanceof Error ? thrown.message : String(thrown))
+  }
 }
 
 /** One payload, through the rules in `lib/mirror.ts` and into the decoder. */
@@ -95,22 +131,22 @@ function accept(frame: MirrorFrame, wiring: Wiring): void {
   }
   if (step.do !== "decode") return
   const decoder = wiring.decoder.current
-  // `configure` is async, so frames can arrive before the decoder exists.
-  // Dropping them is right: the next keyframe is moments away.
-  if (decoder === null || decoder.state !== "configured") return
-  try {
-    decoder.decode(
-      new EncodedVideoChunk({
-        type: step.type,
-        timestamp: step.timestamp,
-        data: step.data,
-      }),
-    )
-  } catch (thrown) {
-    // A decoder that rejects a chunk is done — it does not recover on the next
-    // one, so say so rather than showing a frozen picture.
-    wiring.fail(thrown instanceof Error ? thrown.message : String(thrown))
+  // `configure` awaits its support check, so frames — the first keyframe among
+  // them — arrive before the decoder exists. Holding them is what keeps that
+  // keyframe: dropping it left every following delta to be decoded against
+  // pictures no decoder ever saw, which WebCodecs ends the session over
+  // ("Key frame is required"). Past the cap the backlog is stale enough that
+  // the next keyframe is the better start, so the gate waits for one.
+  if (decoder === null || decoder.state !== "configured") {
+    if (wiring.pending.current.length >= MAX_PENDING_FRAMES) {
+      wiring.pending.current = []
+      wiring.gate.current = noteGap(wiring.gate.current)
+      return
+    }
+    wiring.pending.current.push(step)
+    return
   }
+  decodeInto(decoder, step, wiring)
 }
 
 /**
@@ -169,6 +205,7 @@ export function useMirror(serial: string | null, quality: Quality = FULL_QUALITY
   const session = useRef<MirrorSession | null>(null)
   const decoder = useRef<VideoDecoder | null>(null)
   const gate = useRef<MirrorGate>(newGate())
+  const pending = useRef<DecodeStep[]>([])
 
   const attach = useCallback((element: HTMLCanvasElement | null) => {
     canvas.current = element
@@ -187,6 +224,7 @@ export function useMirror(serial: string | null, quality: Quality = FULL_QUALITY
     setError(null)
     setDropped(0)
     gate.current = newGate()
+    pending.current = []
     if (serial === null) return
 
     let cancelled = false
@@ -194,6 +232,7 @@ export function useMirror(serial: string | null, quality: Quality = FULL_QUALITY
       canvas,
       gate,
       decoder,
+      pending,
       setSize,
       setDeviceName,
       setStreaming,
@@ -227,6 +266,7 @@ export function useMirror(serial: string | null, quality: Quality = FULL_QUALITY
       session.current = null
       const built = decoder.current
       decoder.current = null
+      pending.current = []
       // `close`, not `flush`: pending frames are for a screen that is gone.
       if (built !== null && built.state !== "closed") built.close()
     }

@@ -29,9 +29,45 @@ export type MirrorStep =
       height: number
       deviceName: string | null
     }
-  | { do: "decode"; type: "key" | "delta"; timestamp: number; data: Uint8Array }
+  | DecodeStep
   /** Nothing to do, and why — the reasons are distinct bugs if they persist. */
   | { do: "skip"; why: "unconfigured" | "awaiting-key" | "malformed" }
+
+/** One chunk to hand a configured decoder. */
+export interface DecodeStep {
+  do: "decode"
+  type: "key" | "delta"
+  timestamp: number
+  data: Uint8Array
+}
+
+/**
+ * How many decodable frames to hold while a decoder configures.
+ *
+ * `configure` awaits `VideoDecoder.isConfigSupported`, so it spans frames, and
+ * scrcpy sends its first keyframe immediately after the config packet — inside
+ * that window. A cap because this is a live stream: if configuring takes long
+ * enough to fill it, replaying the backlog would show seconds of the past, and
+ * the next keyframe is the better start. At ~60fps this is four seconds.
+ */
+export const MAX_PENDING_FRAMES = 240
+
+/**
+ * The frames worth replaying once a decoder is finally configured.
+ *
+ * A `VideoDecoder` must be handed a keyframe before any delta — WebCodecs
+ * answers a delta-first stream with "Key frame is required", and the decoder is
+ * dead after it. So the replay starts at the first keyframe in the window and
+ * discards whatever preceded it, which is exactly what those deltas are worth:
+ * they reference pictures this decoder never decoded.
+ *
+ * Empty when the window holds no keyframe, which leaves the caller waiting for
+ * the next one rather than feeding the decoder something it must reject.
+ */
+export function replayable(pending: readonly DecodeStep[]): DecodeStep[] {
+  const first = pending.findIndex((step) => step.type === "key")
+  return first === -1 ? [] : pending.slice(first)
+}
 
 /** Whether a decoder exists yet, and whether it is mid-recovery. */
 export interface MirrorGate {
