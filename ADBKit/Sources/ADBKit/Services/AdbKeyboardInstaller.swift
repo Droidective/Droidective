@@ -24,7 +24,10 @@ public struct AdbKeyboardInstaller: Sendable {
             }
             apkPath = FileManager.default.temporaryDirectory.appendingPathComponent("ADBKeyboard.apk")
             try? FileManager.default.removeItem(at: apkPath)
-            try FileManager.default.moveItem(at: downloaded, to: apkPath)
+            // The same download-then-rename the managed-tool jar move retries:
+            // URLSession wrote this file a moment ago, and a Windows scanner
+            // still holding it fails the move with a sharing violation.
+            try await FileRetry.run { try FileManager.default.moveItem(at: downloaded, to: apkPath) }
         } catch {
             return FeatureResult(ok: false, message: "Couldn't download ADBKeyboard: \(error.localizedDescription)")
         }

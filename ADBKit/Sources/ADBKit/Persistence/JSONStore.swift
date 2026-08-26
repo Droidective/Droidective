@@ -50,7 +50,7 @@ public actor JSONStore<T: Codable & Sendable> {
         return loaded
     }
 
-    public func save(_ value: T) throws {
+    public func save(_ value: T) async throws {
         // Cache only after the write succeeds — a throwing write must not leave
         // the in-memory cache holding a value that never reached disk, or a
         // later load() would return unpersisted data.
@@ -60,24 +60,30 @@ public actor JSONStore<T: Codable & Sendable> {
         try FileManager.default.createDirectory(
             at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true
         )
-        #if canImport(Darwin)
-        let tempURL = fileURL.deletingLastPathComponent()
-            .appendingPathComponent(".\(fileURL.lastPathComponent).tmp-\(UUID().uuidString)")
-        try data.write(to: tempURL)
-        _ = try FileManager.default.replaceItemAt(fileURL, withItemAt: tempURL)
-        #else
-        // corelibs Foundation doesn't implement replaceItemAt; its `.atomic`
-        // write is the same temp-file-then-rename(2) dance.
-        try data.write(to: fileURL, options: .atomic)
-        #endif
+        // Both branches finish by renaming a temp file over `fileURL`, and on
+        // Windows a scanner holding either end fails that rename with a sharing
+        // violation — the same one `FileRetry` was added for. What is lost here
+        // is a user's layout or prefs, so it retries rather than surfacing.
+        try await FileRetry.run {
+            #if canImport(Darwin)
+            let tempURL = fileURL.deletingLastPathComponent()
+                .appendingPathComponent(".\(fileURL.lastPathComponent).tmp-\(UUID().uuidString)")
+            try data.write(to: tempURL)
+            _ = try FileManager.default.replaceItemAt(fileURL, withItemAt: tempURL)
+            #else
+            // corelibs Foundation doesn't implement replaceItemAt; its `.atomic`
+            // write is the same temp-file-then-rename(2) dance.
+            try data.write(to: fileURL, options: .atomic)
+            #endif
+        }
         cached = value
     }
 
     @discardableResult
-    public func update(_ mutate: @Sendable (inout T) -> Void) throws -> T {
+    public func update(_ mutate: @Sendable (inout T) -> Void) async throws -> T {
         var value = load()
         mutate(&value)
-        try save(value)
+        try await save(value)
         return value
     }
 }
