@@ -1019,10 +1019,18 @@ after the screens rather than instead of them.
     Mac keeps it per window as `WindowState.mirrorWallSerials`), there is no
     breaking a tile out into its own window, and no Full View.
 
-    **Not yet seen running.** Everything here is verified by tests and by the
-    codec probe against a real WebKitGTK, but no frame has been decoded from a
-    real device on Windows or Linux — the one step that needs a person at a
-    machine with a phone plugged in.
+    **Proven against a real device.** Subscribing to `mirror` on a live
+    emulator produced a `config` of `avc1.42C029` at 360×800 followed by real
+    H.264 frames, each keyframe starting with an Annex-B start code whose first
+    NAL is the SPS — the prepending rule, confirmed on bytes a device actually
+    sent. The `adb forward` was open while streaming and gone after
+    `unsubscribe`, which is the leak convention checked rather than asserted.
+
+    **What is still unseen is the picture.** The daemon's half is proven and
+    WebCodecs' H.264 support is measured on the real target, but no frame has
+    been decoded into a canvas in a running window — `useMirror`'s
+    `VideoDecoder` wiring is unit-tested and has not been watched. That is the
+    step that wants a person at a machine with a device attached.
 
     **The server jar ships with the app now.** The Tauri bundle carries the
     committed `App/Resources/scrcpy-server` — the very same file, since a Java

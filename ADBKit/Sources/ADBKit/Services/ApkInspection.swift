@@ -67,7 +67,14 @@ public enum ApkBadging {
             packageName: regexFirstGroup(output, #"package: name='([^']*)'"#),
             versionName: regexFirstGroup(output, #"versionName='([^']*)'"#),
             versionCode: regexFirstGroup(output, #"versionCode='([^']*)'"#),
-            minSdk: regexFirstGroup(output, #"sdkVersion:'([^']*)'"#),
+            // aapt2 spells it `minSdkVersion:'35'`; aapt1 spelled it
+            // `sdkVersion:'21'`. The lowercase form alone never matched aapt2
+            // output at all — the capital S in `minSdkVersion` is not in it —
+            // so this read nil against every modern build-tools until now.
+            // The aapt1 spelling stays as a fallback, and cannot be confused
+            // with `targetSdkVersion`, which also capitalises the S.
+            minSdk: regexFirstGroup(output, #"minSdkVersion:'([^']*)'"#)
+                ?? regexFirstGroup(output, #"sdkVersion:'([^']*)'"#),
             targetSdk: regexFirstGroup(output, #"targetSdkVersion:'([^']*)'"#),
             permissions: regexAllGroups(output, #"uses-permission(?:-sdk-\d+)?: name='([^']*)'"#),
             features: regexAllGroups(output, #"uses-feature(?:-not-required)?: name='([^']*)'"#),

@@ -10,13 +10,15 @@ import Testing
 /// missing SDK build-tool, which the client has to be able to tell apart from a
 /// bad APK. So what is asserted here is mostly the shape of the refusals.
 @Suite struct ApkRouteTests {
-    private struct Missing: Error, CustomStringConvertible {
-        let description = "apksigner was not found"
-    }
+    /// The services name a missing tool themselves, so the tests use their own
+    /// error rather than a stand-in that only looks like one.
+    private static let missingTool = ApkSigningService.SigningError.toolMissing("apksigner")
+    private static let brokenInput = AabConvertService.ConvertError.buildFailed(
+        "The archive doesn't seem to be an App Bundle")
 
     private struct StubBackend: DaemonBackend {
         var report = ApkReport(info: ApkInfo(fileName: "app.apk", fileSizeBytes: 1_024))
-        var refusal: Missing?
+        var refusal: (any Error)?
         var tools = ApkProtocol.Toolchain(
             aapt2: true, apksigner: true, zipalign: true, java: true, bundletool: true)
 
@@ -127,14 +129,28 @@ import Testing
         // 422, not 500: nothing is wrong with the request or the daemon — a
         // tool is absent, and that is the one thing the user can fix.
         let answer = await ApkRoutes.sign(
-            body: try signRequest(), backend: StubBackend(refusal: Missing()))
+            body: try signRequest(), backend: StubBackend(refusal: Self.missingTool))
 
         #expect(answer.status == 422)
         let error = try decode(answer, as: DaemonProtocol.ErrorBody.self)
         #expect(error.error.code == "tool_missing")
-        // The toolchain's own words: "apksigner was not found" and "wrong
-        // password" want different things done about them.
         #expect(error.error.detail?.contains("apksigner") == true)
+    }
+
+    @Test func aToolThatRanAndRefusedIsNotReportedAsAMissingOne() async throws {
+        // Found by running it: bundletool rejecting a plain APK as "not an App
+        // Bundle" came back as `tool_missing`, which sends someone to install
+        // something they already have.
+        let request = ApkProtocol.ConvertRequest(
+            input: "/tmp/not-a-bundle.apk", outputDirectory: "/tmp/out")
+        let answer = await ApkRoutes.convert(
+            body: try JSONEncoder().encode(request),
+            backend: StubBackend(refusal: Self.brokenInput))
+
+        #expect(answer.status == 422)
+        let error = try decode(answer, as: DaemonProtocol.ErrorBody.self)
+        #expect(error.error.code == "tool_failed")
+        #expect(error.error.detail?.contains("App Bundle") == true)
     }
 
     @Test func signNeedsAnInputAnOutputAndAKeystore() async throws {
@@ -197,7 +213,7 @@ import Testing
         let request = ApkProtocol.ConvertRequest(
             input: "/tmp/app.aab", outputDirectory: "/tmp/out")
         let answer = await ApkRoutes.convert(
-            body: try JSONEncoder().encode(request), backend: StubBackend(refusal: Missing()))
+            body: try JSONEncoder().encode(request), backend: StubBackend(refusal: Self.missingTool))
 
         #expect(answer.status == 422)
         #expect(try decode(answer, as: DaemonProtocol.ErrorBody.self).error.code == "tool_missing")

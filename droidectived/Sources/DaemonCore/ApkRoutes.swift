@@ -4,8 +4,9 @@ import Foundation
 /// The wire shapes for the APK tools: inspect, sign, and convert a bundle.
 ///
 /// Three features over one toolchain, so they share a protocol enum — what they
-/// have in common is the part that fails, which is a missing tool rather than
-/// anything about the file.
+/// have in common is how they fail, which is either a tool that is not there or
+/// a tool that would not finish. Those are different problems with different
+/// fixes, and `failure` keeps them apart.
 public enum ApkProtocol {
     /// Which of the tools these features need are actually on this machine.
     ///
@@ -164,10 +165,31 @@ public enum ApkProtocol {
     static let badRequest = DaemonProtocol.ErrorBody(
         code: "bad_request", message: "That is not an APK request.", detail: nil)
 
-    static func toolMissing(_ detail: String) -> DaemonProtocol.ErrorBody {
-        DaemonProtocol.ErrorBody(
-            code: "tool_missing",
-            message: "A tool this needs is not installed.", detail: detail)
+    /// Why an APK step could not finish.
+    ///
+    /// A missing tool and a file the tool rejected are different problems with
+    /// different fixes, and collapsing them was wrong in a way real use found
+    /// at once: bundletool refusing a plain APK as "not an App Bundle" was
+    /// reported as `tool_missing`, which sends someone to install something
+    /// they already have.
+    static func failure(_ error: any Error) -> DaemonProtocol.ErrorBody {
+        let detail = "\(error)"
+        if isToolMissing(error) {
+            return DaemonProtocol.ErrorBody(
+                code: "tool_missing",
+                message: "A tool this needs is not installed.", detail: detail)
+        }
+        return DaemonProtocol.ErrorBody(
+            code: "tool_failed",
+            message: "The tool could not finish.", detail: detail)
+    }
+
+    /// Both services name the case themselves, so ask them rather than reading
+    /// their prose.
+    private static func isToolMissing(_ error: any Error) -> Bool {
+        if case ApkSigningService.SigningError.toolMissing = error { return true }
+        if case AabConvertService.ConvertError.toolMissing = error { return true }
+        return false
     }
 }
 
@@ -195,10 +217,10 @@ enum ApkRoutes {
             let result = try await backend.signApk(request)
             return (200, DaemonProtocol.encoded(result))
         } catch {
-            // The toolchain's own words. "apksigner was not found" and "the
-            // keystore password is wrong" want different things done about
-            // them, and only the first is worth a link to the build-tools.
-            return (422, DaemonProtocol.encoded(ApkProtocol.toolMissing("\(error)")))
+            // The toolchain's own words, under a code that says which kind of
+            // problem it was: only a missing tool is worth a link to the SDK
+            // manager.
+            return (422, DaemonProtocol.encoded(ApkProtocol.failure(error)))
         }
     }
 
@@ -211,7 +233,7 @@ enum ApkRoutes {
             let converted = try await backend.convertAab(request)
             return (200, DaemonProtocol.encoded(converted))
         } catch {
-            return (422, DaemonProtocol.encoded(ApkProtocol.toolMissing("\(error)")))
+            return (422, DaemonProtocol.encoded(ApkProtocol.failure(error)))
         }
     }
 }
