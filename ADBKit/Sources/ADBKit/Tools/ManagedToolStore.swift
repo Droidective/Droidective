@@ -245,7 +245,7 @@ public actor ManagedToolStore {
         guard let runnablePath = runnable(in: versionDir, spec: spec) else {
             throw StoreError.runnableNotFound(tool)
         }
-        try markCurrent(tool, tag: release.tagName)
+        try await markCurrent(tool, tag: release.tagName)
         return runnablePath
     }
 
@@ -253,7 +253,7 @@ public actor ManagedToolStore {
     /// an equal-or-newer version is already installed. Features get the tool
     /// with no first-use download, while Settings ▸ Tools keeps version
     /// tracking and in-place upgrades over it. Idempotent.
-    public func seed(_ tool: ManagedTool, version: String, from source: URL) throws {
+    public func seed(_ tool: ManagedTool, version: String, from source: URL) async throws {
         if let installed = installedVersion(tool),
            !ManagedToolReleases.isNewer(version, than: installed) { return }
         guard let spec = ManagedToolSpec.catalog[tool] else { throw StoreError.unsupported(tool) }
@@ -261,7 +261,7 @@ public actor ManagedToolStore {
         try recreateDirectory(versionDir)
         try fileManager.copyItem(at: source, to: versionDir.appendingPathComponent(source.lastPathComponent))
         guard runnable(in: versionDir, spec: spec) != nil else { throw StoreError.runnableNotFound(tool) }
-        try markCurrent(tool, tag: version)
+        try await markCurrent(tool, tag: version)
     }
 
     // MARK: - Internals
@@ -369,8 +369,18 @@ public actor ManagedToolStore {
         try fileManager.createDirectory(at: url, withIntermediateDirectories: true)
     }
 
-    private func markCurrent(_ tool: ManagedTool, tag: String) throws {
+    /// Through `FileRetry` for the same reason the jar move is: `atomically`
+    /// writes a temp file and *renames* it over the marker, and that rename is
+    /// what a Windows scanner turns into a sharing violation. This one runs on
+    /// every install, seeded or downloaded, so it races more often than the
+    /// move does — it is what failed `build-windows` on #300.
+    ///
+    /// Still atomic. A torn marker would leave the store naming a version that
+    /// isn't the one on disk, which outlasts the write it came from; a slow
+    /// write doesn't.
+    private func markCurrent(_ tool: ManagedTool, tag: String) async throws {
         try fileManager.createDirectory(at: toolRoot(tool), withIntermediateDirectories: true)
-        try tag.write(to: toolRoot(tool).appendingPathComponent("current.txt"), atomically: true, encoding: .utf8)
+        let marker = toolRoot(tool).appendingPathComponent("current.txt")
+        try await FileRetry.run { try tag.write(to: marker, atomically: true, encoding: .utf8) }
     }
 }

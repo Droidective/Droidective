@@ -113,7 +113,10 @@ public struct AabConvertService: Sendable {
         let name = URL(fileURLWithPath: aabPath).deletingPathExtension().lastPathComponent
         try fm.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
         let destination = Self.availableDestination(in: outputDirectory, baseName: "\(name)-universal")
-        try fm.moveItem(at: universal, to: destination)
+        // `unzip` extracted this file moments ago; on Windows a scanner reading
+        // it in fails the rename with a sharing violation, which would lose a
+        // conversion the user already waited on.
+        try await FileRetry.run { try fm.moveItem(at: universal, to: destination) }
         let size = ((try? fm.attributesOfItem(atPath: destination.path))?[.size] as? NSNumber)?.int64Value ?? 0
         return ConvertedApk(url: destination, sizeBytes: size)
     }
