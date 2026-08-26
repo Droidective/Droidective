@@ -11,15 +11,22 @@ rewriting one when something turns out to be more work than it looked.
 
 | | Count |
 | --- | --- |
-| ⬜ Not started | 10 |
-| 🟡 Partial | 49 |
+| ⬜ Not started | 7 |
+| 🟡 Partial | 52 |
 | ⛔ Not applicable off-Apple | 2 |
 | **Total registry features** | **61** |
 
-"Partial" is doing a lot of work in that table: 19 of the 49 are actions that
-run from the palette but have no screen of their own, and the 30 that do have
+"Partial" is doing a lot of work in that table: 19 of the 52 are actions that
+run from the palette but have no screen of their own, and the 33 that do have
 screens are each missing something the Mac version offers. Read it as *nothing
 is finished*, not as *most of it is done*.
+
+The seven not started are the three remaining hub screens (`react-native`,
+`simulate`, `connection` — their member actions all run today, just not
+gathered), `frida-console`, `api-client`, and the two that are **blocked rather
+than unscheduled**: `screen-record` and `video-editor` both need ffmpeg
+provisioned for Windows and Linux, and this repo only commits a macOS universal
+binary.
 
 **Screens with a real pane today** (23): Terminal, Apps, Logcat, Device Info, File
 Explorer, Crash Catcher, Bug Report, Performance, Root Status, Developer
@@ -374,6 +381,23 @@ Found by driving the app against a live emulator, not by reading it.
 
 ## Backlog
 
+### A finding that applies to more than one item
+
+`URLSessionWebSocketTask` **compiles off-Darwin and does not work**. A probe in
+`swift:6.2-noble` fails every send and receive with `NSURLErrorDomain Code=-1002
+"WebSockets not supported by libcurl"`. CI cannot catch this: compiling is all
+it checks, so an ADBKit WebSocket client passes `test-linux` and `build-windows`
+and then fails on a real machine. `JSConsoleClient` is exactly that shape and is
+safe only because just the Mac app calls it.
+
+Plain HTTP `URLSession` is fine — libcurl does that — so `MetroInspector` and
+`MetroSymbolicator` stay portable. Only the socket does not. For a portable
+WebSocket, pick by side: a **listener** is SwiftNIO in the daemon, the way
+`ReactotronRelay` does it; a **client** is either a NIO client or, where the
+other end is on this machine, the webview's own. The JS console took the second
+route, which is why it needed no new transport at all.
+
+
 The order the remaining work is planned in, and what each item actually costs.
 Tick an item here when its PR merges; the detail stays in the sections above.
 
@@ -402,6 +426,9 @@ Tick an item here when its PR merges; the detail stays in the sections above.
 | ✅ | Device bar: dropdown, wireless sheet, run-on-all, launch an emulator | — |
 | ✅ | Auto-hiding sidebar and the ⌘= / ⌘- UI zoom | — |
 | ✅ | Deep links, Bug Report, and Settings ▸ Doctor | — |
+| ✅ | Mirror and Mirror Wall | #299 |
+| ✅ | Wireless ADB, Custom Commands, APK Inspect/Sign, AAB Convert | #300 |
+| ✅ | APK Decompile, APK Studio, JS Console | this branch |
 
 **Next, in order.** Everything from *File explorer* down needs four layers, not
 one — a daemon route in Swift, a Rust command, a pane, and tests at both ends.
@@ -705,7 +732,8 @@ after the screens rather than instead of them.
 22. **The welcome tour** on first run.
 23. **The updater** — Sparkle is macOS-only, so this is `tauri-plugin-updater`
     behind the same "Relaunch to update" pill and What's New sheet.
-24. **Reactotron** — **the relay has landed; the pane has not.**
+24. **Reactotron** — landed, relay and pane both. The rest of this entry is the
+    relay's design, which is still the thing worth reading.
     `ReactotronRelay` in the daemon is a NIO WebSocket listener speaking
     upstream's protocol, feeding the portable `ReactotronCommand` decoders that
     ADBKit already shares with the Mac. It reaches a client as the `reactotron`
@@ -1076,7 +1104,9 @@ job, and the checklist now says which.
 
 ---
 
-## Per-feature checklists### Input & Clipboard
+## Per-feature checklists
+
+### Input & Clipboard
 #### `send-text` — Send Text  ·  🟡 partial
 > Type text, URLs, or symbols on the device
 - **Kind** `formAction`
@@ -1184,10 +1214,10 @@ job, and the checklist now says which.
   - [ ] label: Delete \(link.label)
   - [ ] tooltip: Launch on device
 
-#### `js-console` — JS Console  ·  ⬜ todo
+#### `js-console` — JS Console  ·  🟡 partial
 > Hermes REPL + live console over the Metro debugger
 - **Kind** `view`
-- **Note** Not started on Windows/Linux.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `JSConsoleView` — `App/Sources/FeatureDetail/Views/JSConsoleView.swift`
 - **Must replicate**
   - [ ] button: Clear Data & Restart
@@ -1590,10 +1620,10 @@ job, and the checklist now says which.
   - [ ] label: Connect a device to install onto
   - [ ] export: save/export to a file
 
-#### `apk-decompile` — Decompile APK  ·  ⬜ todo
+#### `apk-decompile` — Decompile APK  ·  🟡 partial
 > Browse Java (jadx) or smali + resources (apktool)
 - **Kind** `view` · **hub member**
-- **Note** Not started on Windows/Linux.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `DecompileBrowserView` — `App/Sources/FeatureDetail/Views/DecompileBrowserView.swift`
 - **Must replicate**
   - [ ] button: Choose APK…
@@ -1628,10 +1658,10 @@ job, and the checklist now says which.
   - [ ] button: Choose a different APK…
   - [ ] button: Open in Finder
 
-#### `apk-studio` — APK Studio  ·  ⬜ todo
+#### `apk-studio` — APK Studio  ·  🟡 partial
 > Inspect, decompile, recompile, and sign APKs in one place
 - **Kind** `view`
-- **Note** Not started on Windows/Linux.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `ApkStudioView` — `App/Sources/FeatureDetail/Views/ApkStudioView.swift`
 - **Must replicate**
   - [ ] button: Open another APK
@@ -1813,4 +1843,4 @@ job, and the checklist now says which.
   - [ ] drag: drag and drop
 
 
-<!-- counts: {'done': 0, 'partial': 49, 'todo': 10, 'gated': 2} -->
+<!-- counts: {'done': 0, 'partial': 52, 'todo': 7, 'gated': 2} -->
