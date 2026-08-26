@@ -88,6 +88,31 @@ import Testing
         }
     }
 
+    @Test func theSocketReallyHasNagleTurnedOff() async throws {
+        // Asserted on the connected channel rather than trusted from the
+        // bootstrap. The first spelling named the option at the wrong level —
+        // `socketOption(.tcp_nodelay)` is SOL_SOCKET, where the value 1 is
+        // SO_DEBUG, a privileged option — and on a container without
+        // CAP_NET_ADMIN that fails the connect with EPERM.
+        //
+        // Be clear about what this test is worth: on Darwin it passes either
+        // way, because the kernel reports a non-zero TCP_NODELAY on loopback
+        // regardless. The regression guard that actually bites is every socket
+        // test in this suite failing on Linux, which is how the bug surfaced.
+        // This one pins the intent and the level.
+        try await withFakeDevice { port, group, _ in
+            let socket = try await ScrcpyTransport.connectVideoSocket(
+                port: port, group: group, giveUpAfter: Self.giveUp,
+                firstByteWithin: Self.firstByte)
+
+            // Non-zero, not `== 1`: it is a boolean flag and the kernel
+            // reports it in its own terms — Darwin answers 4.
+            let noDelay = try await socket.channel.getOption(.tcpOption(.tcp_nodelay)).get()
+            #expect(noDelay != 0, "Nagle is still on, so every touch waits for an ACK")
+            try? await socket.channel.close().get()
+        }
+    }
+
     // MARK: - streaming
 
     @Test func streamsWhatTheServerSendsInOrder() async throws {

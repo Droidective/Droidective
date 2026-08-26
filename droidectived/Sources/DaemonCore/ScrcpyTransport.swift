@@ -402,7 +402,13 @@ public actor ScrcpyTransport {
             // bytes) and the video socket reads a latency-sensitive stream;
             // batching either behind delayed ACKs costs tens of milliseconds
             // of lag for no win on a loopback tunnel.
-            .channelOption(.socketOption(.tcp_nodelay), value: 1)
+            //
+            // `tcpOption`, not `socketOption`: the latter sets the name at
+            // `SOL_SOCKET`, where TCP_NODELAY's value (1) is SO_DEBUG — a
+            // privileged option. That silently set the wrong thing on macOS,
+            // so Nagle stayed *on*, and failed outright with EPERM on a
+            // container without CAP_NET_ADMIN.
+            .channelOption(.tcpOption(.tcp_nodelay), value: 1)
             .channelInitializer { channel in
                 channel.eventLoop.makeCompletedFuture {
                     try channel.pipeline.syncOperations.addHandler(
