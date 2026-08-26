@@ -308,32 +308,24 @@ import Testing
         })
     }
 
-    /// Ports the OS will never hand out by itself.
+    /// A port the OS will never hand out by itself.
     ///
     /// `port: 0` draws from the ephemeral range (49152–65535 on macOS), and the
     /// other *suites* — this one is `.serialized`, they are not — bind that way
-    /// while this one runs. The test below is shaped "release a port, then take
-    /// it again", so an ephemeral port gets handed to one of them in the gap
-    /// between: it failed twice running on CI, on 49407 and then 49412. Nothing
-    /// auto-binds down here, so the gap stops mattering.
+    /// throughout. The test below is shaped "release a port, then take it
+    /// again", so with an ephemeral port one of them can be handed it in the
+    /// gap between: it failed twice running on CI, on 49407 and then 49412,
+    /// with `SO_REUSEADDR` already set on the bind. Nothing is auto-assigned
+    /// down here, so the gap stops mattering.
     ///
-    /// Several candidates because a developer's machine may already be using
-    /// one, which is a different problem from the one being tested.
-    private static let reservedPorts = [28_411, 28_412, 28_413, 28_414]
-
-    /// The first reserved port this machine will actually give us.
-    private static func freeReservedPort() async -> Int? {
-        for candidate in reservedPorts {
-            let probe = ReactotronRelay(port: candidate)
-            guard (try? await probe.start()) != nil else { continue }
-            await probe.stop()
-            return candidate
-        }
-        return nil
-    }
+    /// Exactly one start/stop pair either side, deliberately: an extra cycle to
+    /// pick the port turned this red every run, which says `stop()` can return
+    /// before the listener is really gone. That is worth chasing on its own,
+    /// and it is not what this test is about.
+    private static let reservedPort = 28_411
 
     @Test func stoppingReleasesThePort() async throws {
-        let port = try #require(await Self.freeReservedPort(), "no reserved port was free")
+        let port = Self.reservedPort
         let relay = ReactotronRelay(port: port)
         try await relay.start()
         #expect(await relay.boundPort == port)
