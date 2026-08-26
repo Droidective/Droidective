@@ -1,3 +1,4 @@
+import { withoutHubMembers } from "@/lib/hubs"
 import type { FeatureSummary } from "@/lib/wire"
 
 /**
@@ -76,9 +77,13 @@ export function paletteResults(
   query: string,
   favorites: readonly string[],
 ): FeatureSummary[] {
-  if (query.trim() !== "") return rankFeatures(features, query)
-  const pinned = favorites.flatMap((id) => features.filter((feature) => feature.id === id))
-  const rest = features.filter((feature) => !favorites.includes(feature.id))
+  // A member of a hub this app has built is reached through the hub, so it is
+  // not offered separately — the hub carries its keywords, which is what keeps
+  // searching "decompile" working. A member whose hub is not built here stays.
+  const listable = withoutHubMembers(features)
+  if (query.trim() !== "") return rankFeatures(listable, query)
+  const pinned = favorites.flatMap((id) => listable.filter((feature) => feature.id === id))
+  const rest = listable.filter((feature) => !favorites.includes(feature.id))
   return [...pinned, ...rest]
 }
 

@@ -74,6 +74,14 @@ public enum DaemonProtocol {
         case apkInspect = "/v1/apk/inspect"
         case apkSign = "/v1/apk/sign"
         case aabConvert = "/v1/apk/convert"
+        /// Decompile: run jadx or apktool, then read and search what it wrote.
+        /// The last three carry the output root back so the daemon can confine
+        /// them to it — a path from a client is otherwise a read of any file
+        /// the developer can read.
+        case apkDecompile = "/v1/apk/decompile"
+        case apkDecompileFile = "/v1/apk/decompile/file"
+        case apkDecompileSearch = "/v1/apk/decompile/search"
+        case apkRebuild = "/v1/apk/rebuild"
         case customCommandsRead = "/v1/customcommands/read"
         case customCommandsWrite = "/v1/customcommands/write"
         case customCommandsRun = "/v1/customcommands/run"

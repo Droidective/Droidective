@@ -72,6 +72,31 @@ extension DaemonBackend {
         ApkProtocol.ConvertResponse(path: "\(request.outputDirectory)/universal.apk", sizeBytes: 0)
     }
 
+    func decompileApk(
+        _ request: DecompileProtocol.Request
+    ) async throws -> DecompileProtocol.Tree {
+        DecompileProtocol.Tree(
+            root: "/stub", tree: DecompileProtocol.Node(FileNode(name: "stub", path: "/stub")))
+    }
+
+    func decompiledFile(
+        _ request: DecompileProtocol.FileRequest
+    ) async -> DecompileProtocol.FileText? {
+        DecompileProtocol.FileText(text: "stub", truncated: false, byteCount: 4)
+    }
+
+    func searchDecompiled(
+        _ request: DecompileProtocol.SearchRequest
+    ) async -> DecompileProtocol.Hits? {
+        DecompileProtocol.Hits(hits: [], capped: false)
+    }
+
+    func rebuildDecompiled(
+        _ request: DecompileProtocol.RebuildRequest
+    ) async throws -> DecompileProtocol.RebuildResponse? {
+        DecompileProtocol.RebuildResponse(output: request.output)
+    }
+
     func customCommands() async -> [CustomCommand] { [] }
 
     func writeCustomCommands(_ commands: [CustomCommand]) async throws {}

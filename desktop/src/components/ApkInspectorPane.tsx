@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 
 import { ApkToolNotice } from "@/components/ApkToolNotice"
 import { HubColumn, HubRowList, HubSection } from "@/components/Hub"
@@ -13,24 +13,44 @@ import type { ApkReport } from "@/lib/wire"
  * Reads a package's manifest, permissions, SDK levels and signing certificates.
  * Device-free: it is a file on this machine, so the screen works with nothing
  * connected.
+ *
+ * `apkPath` is APK Studio handing over the APK it already has, which this then
+ * inspects without asking again; the standalone feature passes nothing.
  */
-export function ApkInspectorPane() {
+export function ApkInspectorPane({ apkPath = null }: { apkPath?: string | null }) {
   const tools = useApkToolchain()
   const { show } = useNotifications()
   const [report, setReport] = useState<ApkReport | null>(null)
   const [busy, setBusy] = useState(false)
 
+  const inspect = useCallback(
+    (path: string) => {
+      setBusy(true)
+      void (async () => {
+        try {
+          setReport(await inspectApk(path))
+        } catch (thrown) {
+          show({ message: asDaemonError(thrown).message, ok: false })
+        } finally {
+          setBusy(false)
+        }
+      })()
+    },
+    [show],
+  )
+
+  useEffect(() => {
+    if (apkPath !== null) inspect(apkPath)
+  }, [apkPath, inspect])
+
   const choose = () => {
-    setBusy(true)
     void (async () => {
       try {
         const path = await pickFile("APK", ["apk"])
         // A dismissed dialog is a choice, not a failure.
-        if (path !== null) setReport(await inspectApk(path))
+        if (path !== null) inspect(path)
       } catch (thrown) {
         show({ message: asDaemonError(thrown).message, ok: false })
-      } finally {
-        setBusy(false)
       }
     })()
   }

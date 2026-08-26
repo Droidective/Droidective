@@ -83,6 +83,11 @@ pub struct FeatureSummary {
     /// but the flag has to survive the wire for that to stay a decision.
     #[serde(rename = "isAbsorbedByHub")]
     pub is_absorbed_by_hub: bool,
+    /// *Which* hub folded it in. The flag alone is not enough here: this UI has
+    /// built some hubs and not others, and hiding a member whose hub does not
+    /// exist yet would strand the feature with no way in.
+    #[serde(rename = "absorbedBy", default)]
+    pub absorbed_by: Option<String>,
     /// Whether running this on every connected device at once makes sense. The
     /// registry's answer: it is a property of the runner, not of the UI.
     #[serde(rename = "supportsRunAll")]
@@ -1116,6 +1121,88 @@ pub struct ApkSignResponse {
     pub ok: bool,
     pub message: String,
     pub output: Option<String>,
+}
+
+/// Which decompiler to run. The daemon decodes this into its own enum, so a
+/// spelling it does not know is a decode error there rather than a silent
+/// fallback to the wrong tool.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum DecompileMode {
+    Jadx,
+    Apktool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DecompileRequest {
+    pub path: String,
+    pub mode: DecompileMode,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub refresh: Option<bool>,
+}
+
+/// One entry in the decompiled tree. `children` absent means a file; present
+/// (even empty) means a directory.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DecompileNode {
+    pub name: String,
+    pub path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub children: Option<Vec<DecompileNode>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DecompileTree {
+    /// Handed back on every later call so the daemon can confine reads and
+    /// searches to it.
+    pub root: String,
+    pub tree: DecompileNode,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DecompileFileRequest {
+    pub root: String,
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DecompileFileText {
+    pub text: String,
+    pub truncated: bool,
+    pub byte_count: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DecompileSearchRequest {
+    pub root: String,
+    pub query: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DecompileHit {
+    pub path: String,
+    pub line: i64,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DecompileHits {
+    pub hits: Vec<DecompileHit>,
+    pub capped: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DecompileRebuildRequest {
+    pub root: String,
+    pub source_dir: String,
+    pub output: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DecompileRebuildResponse {
+    pub output: String,
 }
 
 #[derive(Debug, Clone, Serialize)]

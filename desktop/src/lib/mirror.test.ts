@@ -11,10 +11,13 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import {
   codecSupport,
   decodeFrame,
+  MAX_PENDING_FRAMES,
   missingCodecHint,
   newGate,
   noteGap,
+  replayable,
   stepMirror,
+  type DecodeStep,
 } from "@/lib/mirror"
 import type { MirrorFrame } from "@/lib/wire"
 
@@ -172,5 +175,60 @@ describe("the codec probe", () => {
     expect(hint).toContain("avc1.640028")
     expect(hint).toContain("gstreamer1.0-libav")
     expect(hint).toContain("gstreamer1-libav")
+  })
+})
+
+/**
+ * The window between a `config` payload and a usable decoder.
+ *
+ * `configure` awaits `VideoDecoder.isConfigSupported`, and scrcpy sends its
+ * first keyframe immediately after the config packet — inside that await. The
+ * frames are held rather than dropped, because dropping the keyframe left every
+ * following delta referencing pictures no decoder had, and WebCodecs ends the
+ * session over it ("Key frame is required"). Found by opening the mirror
+ * against a real emulator, not by reading this.
+ */
+function chunk(type: "key" | "delta", timestamp: number): DecodeStep {
+  return { do: "decode", type, timestamp, data: new Uint8Array([timestamp]) }
+}
+
+describe("replayable", () => {
+  it("replays from the first keyframe, dropping the deltas before it", () => {
+    const replay = replayable([
+      chunk("delta", 1),
+      chunk("delta", 2),
+      chunk("key", 3),
+      chunk("delta", 4),
+    ])
+    expect(replay.map((one) => one.timestamp)).toEqual([3, 4])
+  })
+
+  it("starts at the keyframe when it is the first frame in the window", () => {
+    const replay = replayable([chunk("key", 1), chunk("delta", 2)])
+    expect(replay.map((one) => one.timestamp)).toEqual([1, 2])
+  })
+
+  it("replays nothing when the window holds no keyframe", () => {
+    // The caller waits for the next one rather than feeding the decoder a
+    // chunk it must reject — the whole point of the queue.
+    expect(replayable([chunk("delta", 1), chunk("delta", 2)])).toEqual([])
+  })
+
+  it("replays nothing for an empty window", () => {
+    expect(replayable([])).toEqual([])
+  })
+
+  it("keeps every frame from the keyframe on, in order", () => {
+    const window = [chunk("key", 1), ...Array.from({ length: 30 }, (_, i) => chunk("delta", i + 2))]
+    const replay = replayable(window)
+    expect(replay).toHaveLength(31)
+    expect(replay.map((one) => one.timestamp)).toEqual(window.map((one) => one.timestamp))
+  })
+
+  it("caps the window at a few seconds of live video", () => {
+    // A bound, not a number worth pinning: past it the backlog is stale enough
+    // that the next keyframe is the better start.
+    expect(MAX_PENDING_FRAMES).toBeGreaterThan(60)
+    expect(MAX_PENDING_FRAMES).toBeLessThanOrEqual(600)
   })
 })

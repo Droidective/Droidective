@@ -92,6 +92,7 @@
             "title": "Connection"
         },
         {
+            "absorbedBy": "connection",
             "category": "connection",
             "fields": [
                 {
@@ -123,6 +124,7 @@
             "title": "Reverse Port"
         },
         {
+            "absorbedBy": "connection",
             "category": "connection",
             "fields": [],
             "id": "wireless-adb",
@@ -228,6 +230,7 @@
             "title": "Wi-Fi"
         },
         {
+            "absorbedBy": "connection",
             "category": "connection",
             "fields": [],
             "id": "private-dns",
@@ -291,6 +294,7 @@
             "title": "React Native"
         },
         {
+            "absorbedBy": "react-native",
             "category": "reactNative",
             "fields": [],
             "id": "open-dev-menu",
@@ -312,6 +316,7 @@
             "title": "Open Dev Menu"
         },
         {
+            "absorbedBy": "react-native",
             "category": "reactNative",
             "fields": [],
             "id": "reload-js",
@@ -333,6 +338,7 @@
             "title": "Reload JS"
         },
         {
+            "absorbedBy": "react-native",
             "category": "reactNative",
             "fields": [],
             "id": "deep-link",
@@ -354,6 +360,7 @@
             "title": "Deep Links"
         },
         {
+            "absorbedBy": "react-native",
             "category": "reactNative",
             "fields": [],
             "id": "process-death",
@@ -375,6 +382,7 @@
             "title": "Simulate Process Death"
         },
         {
+            "absorbedBy": "react-native",
             "category": "reactNative",
             "fields": [
                 {
@@ -801,6 +809,7 @@
             "title": "Simulate"
         },
         {
+            "absorbedBy": "simulate",
             "category": "deviceState",
             "fields": [
                 {
@@ -842,6 +851,7 @@
             "title": "Fake Battery"
         },
         {
+            "absorbedBy": "simulate",
             "category": "deviceState",
             "fields": [],
             "id": "dark-mode",
@@ -863,6 +873,7 @@
             "title": "Dark Mode"
         },
         {
+            "absorbedBy": "simulate",
             "category": "deviceState",
             "fields": [
                 {
@@ -921,6 +932,7 @@
             "title": "Push Notification"
         },
         {
+            "absorbedBy": "simulate",
             "category": "deviceState",
             "fields": [
                 {
@@ -963,6 +975,7 @@
             "title": "Font & Density"
         },
         {
+            "absorbedBy": "simulate",
             "category": "deviceState",
             "fields": [],
             "id": "animation-scale",
@@ -985,6 +998,7 @@
             "title": "Animation Scale"
         },
         {
+            "absorbedBy": "simulate",
             "category": "deviceState",
             "fields": [
                 {
@@ -1064,6 +1078,7 @@
             "title": "Change Locale"
         },
         {
+            "absorbedBy": "simulate",
             "category": "deviceState",
             "fields": [
                 {
@@ -1111,6 +1126,7 @@
             "title": "Network Toggles"
         },
         {
+            "absorbedBy": "simulate",
             "category": "deviceState",
             "fields": [
                 {
@@ -1281,6 +1297,7 @@
             "title": "APK Studio"
         },
         {
+            "absorbedBy": "apk-studio",
             "category": "appManagement",
             "fields": [],
             "id": "apk-inspector",
@@ -1316,6 +1333,7 @@
             "title": "APK Inspector"
         },
         {
+            "absorbedBy": "apk-studio",
             "category": "appManagement",
             "fields": [],
             "id": "apk-sign",
@@ -1346,6 +1364,7 @@
             "title": "Sign APK"
         },
         {
+            "absorbedBy": "apk-studio",
             "category": "appManagement",
             "fields": [],
             "id": "apk-decompile",
@@ -1436,6 +1455,7 @@
             "title": "Frida"
         },
         {
+            "absorbedBy": "apps",
             "category": "appManagement",
             "fields": [],
             "id": "app-management",
@@ -1458,6 +1478,7 @@
             "title": "Manage App"
         },
         {
+            "absorbedBy": "apps",
             "category": "appManagement",
             "fields": [],
             "id": "permissions",
@@ -1479,6 +1500,7 @@
             "title": "Permissions"
         },
         {
+            "absorbedBy": "apps",
             "category": "appManagement",
             "fields": [],
             "id": "app-info",

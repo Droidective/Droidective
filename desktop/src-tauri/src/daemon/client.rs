@@ -8,7 +8,9 @@ use crate::daemon::wire::{
     ApkSignResponse, ApkToolchain, AppControlRequest, AppInfoResponse, AppPullRequest,
     AppPullResponse, AppRequest, AppsListRequest, AppsResponse, BugReportRequest,
     BugReportResponse, CrashListRequest, CrashListResponse, CustomCommandRunRequest,
-    CustomCommandsResponse, CustomCommandsWriteRequest, DeepLinkLaunchRequest, DeepLinksRequest,
+    CustomCommandsResponse, CustomCommandsWriteRequest, DecompileFileRequest, DecompileFileText,
+    DecompileHits, DecompileRebuildRequest, DecompileRebuildResponse, DecompileRequest,
+    DecompileSearchRequest, DecompileTree, DeepLinkLaunchRequest, DeepLinksRequest,
     DeepLinksResponse, DeepLinksWriteRequest, DevSettingsResponse, DevSettingsWriteRequest, Device,
     DevicePropsResponse, DeviceRequest, DevicesResponse, DnsResponse, DnsWriteRequest,
     EmulatorActionRequest, EmulatorsResponse, ErrorEnvelope, FeatureSummary, FeaturesResponse,
@@ -261,6 +263,34 @@ impl DaemonClient {
         request: &AabConvertRequest,
     ) -> Result<AabConvertResponse, DaemonError> {
         self.post("/v1/apk/convert", request).await
+    }
+
+    pub async fn decompile_apk(
+        &self,
+        request: &DecompileRequest,
+    ) -> Result<DecompileTree, DaemonError> {
+        self.post("/v1/apk/decompile", request).await
+    }
+
+    pub async fn decompiled_file(
+        &self,
+        request: &DecompileFileRequest,
+    ) -> Result<DecompileFileText, DaemonError> {
+        self.post("/v1/apk/decompile/file", request).await
+    }
+
+    pub async fn search_decompiled(
+        &self,
+        request: &DecompileSearchRequest,
+    ) -> Result<DecompileHits, DaemonError> {
+        self.post("/v1/apk/decompile/search", request).await
+    }
+
+    pub async fn rebuild_decompiled(
+        &self,
+        request: &DecompileRebuildRequest,
+    ) -> Result<DecompileRebuildResponse, DaemonError> {
+        self.post("/v1/apk/rebuild", request).await
     }
 
     pub async fn custom_commands(&self) -> Result<CustomCommandsResponse, DaemonError> {

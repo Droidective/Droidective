@@ -7,16 +7,19 @@ import {
   AabConvertPane,
   ApkInspectorPane,
   ApkSignPane,
+  ApkStudioPane,
   AppInfoPane,
   AppsPane,
   BugReportPane,
   CrashPane,
   CustomCommandsPane,
+  DecompilePane,
   DeepLinksPane,
   DeviceInfoPane,
   DevSettingsPane,
   EmulatorsPane,
   InstallAppPane,
+  JsConsolePane,
   FileExplorerPane,
   LogcatPane,
   ManageAppPane,
@@ -178,12 +181,24 @@ function hostPane(id: string, device: Device | null) {
       return <TerminalPane serial={device?.serial ?? null} />
     case "reactotron":
       return <ReactotronPane device={device} />
+    case "js-console":
+      // Metro is a process on this machine, so the console connects with no
+      // device at all; the selection only decides which device gets the
+      // `adb reverse` that lets it reach Metro.
+      return <JsConsolePane device={device} />
     case "apk-inspector":
       // Device-free: an APK is a file on this machine, so both work with
       // nothing connected.
       return <ApkInspectorPane />
     case "apk-sign":
       return <ApkSignPane />
+    case "apk-decompile":
+      // Device-free like the other two: an APK is a file on this machine.
+      return <DecompilePane />
+    case "apk-studio":
+      // The hub over the three above. Reachable on its own too — the members
+      // fold into it once this app has the screen (`lib/hubs.ts`).
+      return <ApkStudioPane />
     case "wireless-adb":
       // Host-side: it is about the devices themselves, so it works — and is
       // most wanted — with nothing selected in the bar.

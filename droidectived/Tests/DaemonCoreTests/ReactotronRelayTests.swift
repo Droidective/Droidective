@@ -308,16 +308,34 @@ import Testing
         })
     }
 
+    /// A port the OS will never hand out by itself.
+    ///
+    /// `port: 0` draws from the ephemeral range (49152–65535 on macOS), and the
+    /// other *suites* — this one is `.serialized`, they are not — bind that way
+    /// throughout. The test below is shaped "release a port, then take it
+    /// again", so with an ephemeral port one of them can be handed it in the
+    /// gap between: it failed twice running on CI, on 49407 and then 49412,
+    /// with `SO_REUSEADDR` already set on the bind. Nothing is auto-assigned
+    /// down here, so the gap stops mattering.
+    ///
+    /// Exactly one start/stop pair either side, deliberately: an extra cycle to
+    /// pick the port turned this red every run, which says `stop()` can return
+    /// before the listener is really gone. That is worth chasing on its own,
+    /// and it is not what this test is about.
+    private static let reservedPort = 28_411
+
     @Test func stoppingReleasesThePort() async throws {
-        // The failure this catches is a relay that closed its channel but kept
-        // its event-loop group, so the next start reports the port in use — and
-        // the feature simply refuses to come back.
-        let relay = ReactotronRelay(port: 0)
+        let port = Self.reservedPort
+        let relay = ReactotronRelay(port: port)
         try await relay.start()
-        let port = try #require(await relay.boundPort)
+        #expect(await relay.boundPort == port)
         await relay.stop()
         #expect(await relay.isRunning == false)
 
+        // The failure this catches is a relay that closed its channel but kept
+        // its event-loop group, so the next start reports the port in use — and
+        // the feature simply refuses to come back. Still caught: a leak makes
+        // the port unavailable to *anyone*, so this start throws.
         let second = ReactotronRelay(port: port)
         try await second.start()
         #expect(await second.boundPort == port)

@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 import { ApkAction, ApkFileRow, ApkPasswordField, ApkTextField } from "@/components/ApkControls"
 import { ApkToolNotice } from "@/components/ApkToolNotice"
@@ -20,11 +20,19 @@ interface Keystore {
  *
  * Zipalign and sign with your own keystore. Device-free: everything here is a
  * file on this machine.
+ *
+ * `apkPath` is APK Studio handing over the APK it already has; the standalone
+ * feature passes nothing and asks for one.
  */
-export function ApkSignPane() {
+export function ApkSignPane({ apkPath = null }: { apkPath?: string | null }) {
   const tools = useApkToolchain()
   const { show } = useNotifications()
-  const [apk, setApk] = useState<string | null>(null)
+  const [apk, setApk] = useState<string | null>(apkPath)
+
+  // The studio can load a different APK while this tab is mounted.
+  useEffect(() => {
+    if (apkPath !== null) setApk(apkPath)
+  }, [apkPath])
   const [keystore, setKeystore] = useState<Keystore>({
     path: null,
     storePassword: "",
