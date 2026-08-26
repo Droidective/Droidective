@@ -39,6 +39,39 @@ import Testing
         #expect(fields.targetSdk == "34")
     }
 
+    @Test func readsTheMinSdkModernBuildToolsActuallyPrint() {
+        // Captured from `aapt2 dump badging` (build-tools 36.1.0) against a real
+        // APK pulled off an emulator. The sample above is aapt*1*'s spelling,
+        // `sdkVersion:'24'`, and matching only that read nil against every
+        // modern build-tools — the capital S in `minSdkVersion` is not in the
+        // lowercase pattern, so it never matched at all.
+        let real = """
+        package: name='com.android.settings' versionCode='35' versionName='15' \
+        platformBuildVersionName='15' platformBuildVersionCode='35' \
+        compileSdkVersion='35' compileSdkVersionCodename='15'
+        minSdkVersion:'35'
+        targetSdkVersion:'35'
+        uses-permission: name='android.permission.WAKE_LOCK'
+        """
+        let fields = ApkBadging.parse(real)
+        #expect(fields.minSdk == "35")
+        #expect(fields.targetSdk == "35")
+        #expect(fields.packageName == "com.android.settings")
+    }
+
+    @Test func stillReadsTheOlderSpelling() {
+        // aapt1's `sdkVersion:'21'` stays supported, and cannot be confused
+        // with `targetSdkVersion`, which capitalises the S too.
+        let old = """
+        package: name='com.x' versionCode='1' versionName='1.0'
+        sdkVersion:'21'
+        targetSdkVersion:'30'
+        """
+        let fields = ApkBadging.parse(old)
+        #expect(fields.minSdk == "21")
+        #expect(fields.targetSdk == "30")
+    }
+
     @Test func fallsBackToApplicationLineLabel() {
         let output = """
         package: name='com.x' versionCode='1' versionName='1.0'

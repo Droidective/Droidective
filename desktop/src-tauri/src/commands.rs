@@ -16,17 +16,19 @@ use tauri_plugin_opener::OpenerExt;
 
 use crate::daemon::stream::StreamMessage;
 use crate::daemon::wire::{
-    AppControlRequest, AppInfoResponse, AppPullRequest, AppPullResponse, AppRequest, AppsResponse,
-    BugReportRequest, BugReportResponse, CrashListResponse, DeepLink, DeepLinkLaunchRequest,
-    DeepLinksResponse, DeepLinksWriteRequest, DevSettingsResponse, DevSettingsWriteRequest, Device,
-    DevicePropsResponse, DnsResponse, DnsWriteRequest, EmulatorActionRequest, EmulatorsResponse,
-    FeatureSummary, FileInfoRequest, FileInfoResponse, FileOperationRequest, FilePullRequest,
-    FilePullResponse, FilesListRequest, FilesListResponse, ForegroundResponse, InstallRequest,
-    InstallResponse, LaunchResponse, MemInfoResponse, PairResponse, PermissionWriteRequest,
-    PermissionsResponse, ReactotronReverseRequest, ReactotronReverseResponse,
-    RestrictionWriteRequest, RestrictionsResponse, RootStatusResponse, RunRequest, RunResponse,
-    SandboxRequest, SandboxResponse, StreamParams, ToolsResponse, WifiResponse, WifiWriteRequest,
-    WirelessActionRequest,
+    AabConvertRequest, AabConvertResponse, ApkKeystore, ApkReport, ApkSignRequest, ApkSignResponse,
+    ApkToolchain, AppControlRequest, AppInfoResponse, AppPullRequest, AppPullResponse, AppRequest,
+    AppsResponse, BugReportRequest, BugReportResponse, CrashListResponse, CustomCommand,
+    CustomCommandRunRequest, CustomCommandsResponse, CustomCommandsWriteRequest, DeepLink,
+    DeepLinkLaunchRequest, DeepLinksResponse, DeepLinksWriteRequest, DevSettingsResponse,
+    DevSettingsWriteRequest, Device, DevicePropsResponse, DnsResponse, DnsWriteRequest,
+    EmulatorActionRequest, EmulatorsResponse, FeatureSummary, FileInfoRequest, FileInfoResponse,
+    FileOperationRequest, FilePullRequest, FilePullResponse, FilesListRequest, FilesListResponse,
+    ForegroundResponse, InstallRequest, InstallResponse, LaunchResponse, MemInfoResponse,
+    PairResponse, PermissionWriteRequest, PermissionsResponse, ReactotronReverseRequest,
+    ReactotronReverseResponse, RestrictionWriteRequest, RestrictionsResponse, RootStatusResponse,
+    RunRequest, RunResponse, SandboxRequest, SandboxResponse, StreamParams, ToolsResponse,
+    WifiResponse, WifiWriteRequest, WirelessActionRequest,
 };
 use crate::daemon::{DaemonStatus, Supervisor};
 use crate::error::DaemonError;
@@ -783,6 +785,63 @@ pub async fn watch_performance(
     )
 }
 
+/// Installs a package this app already knows the path of.
+///
+/// Separate from `pick_and_install`, which opens a picker: a converted bundle
+/// or a signed APK has a path already, and routing it through a dialog would
+/// ask someone to find the file the app just made.
+#[tauri::command]
+pub async fn install_path(
+    supervisor: State<'_, Supervisor>,
+    serials: Vec<String>,
+    path: String,
+) -> Result<InstallResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .install(&InstallRequest { serials, path })
+        .await
+}
+
+/// Picks one file, answering its path.
+///
+/// The picker runs **here**, not in the webview, for the reason
+/// `pick_and_install` names: a webview drag hands over a `File` with no path,
+/// and every one of these tools needs a real one. `None` is a dismissed
+/// dialog, which is a choice rather than a failure.
+#[tauri::command]
+pub async fn pick_file(
+    app: AppHandle,
+    label: String,
+    extensions: Vec<String>,
+) -> Result<Option<String>, DaemonError> {
+    let filters: Vec<&str> = extensions.iter().map(String::as_str).collect();
+    let picked = app
+        .dialog()
+        .file()
+        .add_filter(&label, &filters)
+        .blocking_pick_file();
+    let Some(picked) = picked else {
+        return Ok(None);
+    };
+    let path = picked
+        .into_path()
+        .map_err(|error| DaemonError::Host(format!("could not read that file: {error}")))?;
+    Ok(Some(path.to_string_lossy().into_owned()))
+}
+
+/// Picks a folder — where a signed APK or a converted bundle should land.
+#[tauri::command]
+pub async fn pick_folder(app: AppHandle) -> Result<Option<String>, DaemonError> {
+    let Some(picked) = app.dialog().file().blocking_pick_folder() else {
+        return Ok(None);
+    };
+    let path = picked
+        .into_path()
+        .map_err(|error| DaemonError::Host(format!("could not read that folder: {error}")))?;
+    Ok(Some(path.to_string_lossy().into_owned()))
+}
+
 /// Picks a package and installs it onto the given devices.
 ///
 /// The picker runs **here**, not in the webview: a webview drag hands over a
@@ -922,6 +981,99 @@ pub async fn enable_tcpip(
             endpoint: None,
             code: None,
             serial: Some(serial),
+        })
+        .await
+}
+
+/// Which of the APK tools this machine has.
+#[tauri::command]
+pub async fn apk_toolchain(supervisor: State<'_, Supervisor>) -> Result<ApkToolchain, DaemonError> {
+    supervisor.client().await?.apk_toolchain().await
+}
+
+/// Reads what it can from an APK — manifest, permissions, SDK levels, signing.
+#[tauri::command]
+pub async fn inspect_apk(
+    supervisor: State<'_, Supervisor>,
+    path: String,
+) -> Result<ApkReport, DaemonError> {
+    supervisor.client().await?.inspect_apk(path).await
+}
+
+/// Zipaligns and signs an APK with a keystore.
+#[tauri::command]
+pub async fn sign_apk(
+    supervisor: State<'_, Supervisor>,
+    input: String,
+    output: String,
+    keystore: ApkKeystore,
+) -> Result<ApkSignResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .sign_apk(&ApkSignRequest {
+            input,
+            output,
+            keystore,
+        })
+        .await
+}
+
+/// Builds a universal APK from an Android App Bundle.
+#[tauri::command]
+pub async fn convert_aab(
+    supervisor: State<'_, Supervisor>,
+    input: String,
+    output_directory: String,
+    keystore: Option<ApkKeystore>,
+) -> Result<AabConvertResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .convert_aab(&AabConvertRequest {
+            input,
+            output_directory,
+            keystore,
+        })
+        .await
+}
+
+/// The saved custom commands.
+#[tauri::command]
+pub async fn custom_commands(
+    supervisor: State<'_, Supervisor>,
+) -> Result<CustomCommandsResponse, DaemonError> {
+    supervisor.client().await?.custom_commands().await
+}
+
+/// Replaces the whole list, and answers with what was stored.
+#[tauri::command]
+pub async fn write_custom_commands(
+    supervisor: State<'_, Supervisor>,
+    commands: Vec<CustomCommand>,
+) -> Result<CustomCommandsResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .write_custom_commands(&CustomCommandsWriteRequest { commands })
+        .await
+}
+
+/// Runs one saved command on one device.
+#[tauri::command]
+pub async fn run_custom_command(
+    supervisor: State<'_, Supervisor>,
+    id: String,
+    serial: String,
+    bundle_id: Option<String>,
+) -> Result<RunResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .run_custom_command(&CustomCommandRunRequest {
+            id,
+            serial,
+            bundle_id,
         })
         .await
 }

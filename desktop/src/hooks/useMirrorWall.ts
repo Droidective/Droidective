@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
-import { watchDevices, type Subscription } from "@/lib/daemon"
+import { useConnectedDevices } from "@/hooks/useConnectedDevices"
 import {
   autoColumns,
   canAdd,
@@ -11,7 +11,7 @@ import {
   toggled,
   type Quality,
 } from "@/lib/mirror-wall"
-import type { Device, StreamUpdate } from "@/lib/wire"
+import type { Device } from "@/lib/wire"
 
 /** `auto` follows the pane width; a number is the user overruling it. */
 export type ColumnMode = "auto" | number
@@ -47,7 +47,7 @@ export interface MirrorWallState {
  * `MirrorWall`; this only holds the pieces that need a lifetime.
  */
 export function useMirrorWall(): MirrorWallState {
-  const [devices, setDevices] = useState<Device[]>([])
+  const devices = useConnectedDevices()
   // `null` means nobody has picked yet, which is what fills the wall with the
   // connected devices on first open. An explicitly emptied selection is `[]`
   // and stays that way.
@@ -56,35 +56,6 @@ export function useMirrorWall(): MirrorWallState {
   const [paneWidth, setPaneWidth] = useState(0)
 
   const observer = useRef<ResizeObserver | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    let subscription: Subscription | null = null
-
-    watchDevices((update: StreamUpdate<Device>) => {
-      // A devices batch is the whole list, not an addition — including the
-      // empty one that says everything was unplugged.
-      if (update.event === "batch") setDevices(update.items)
-    }).then(
-      (handle) => {
-        if (cancelled) {
-          void handle.stop()
-          return
-        }
-        subscription = handle
-      },
-      () => {
-        // A device list this pane cannot get is not worth its own error state:
-        // the tiles below will say they have no device, which is the same
-        // thing said where someone is looking.
-      },
-    )
-
-    return () => {
-      cancelled = true
-      void subscription?.stop()
-    }
-  }, [])
 
   const connected = useMemo(() => devices.map((device) => device.serial), [devices])
   // Recomputed rather than stored, so a device leaving drops its tile without

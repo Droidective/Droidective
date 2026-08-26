@@ -6,10 +6,14 @@
  * each of them.
  */
 
+export { AabConvertPane } from "@/components/AabConvertPane"
+export { ApkInspectorPane } from "@/components/ApkInspectorPane"
+export { ApkSignPane } from "@/components/ApkSignPane"
 export { AppInfoPane } from "@/components/AppInfoPane"
 export { AppsPane } from "@/components/AppsPane"
 export { BugReportPane } from "@/components/BugReportPane"
 export { CrashPane } from "@/components/CrashPane"
+export { CustomCommandsPane } from "@/components/CustomCommandsPane"
 export { DeepLinksPane } from "@/components/DeepLinksPane"
 export { DevSettingsPane } from "@/components/DevSettingsPane"
 export { EmulatorsPane } from "@/components/EmulatorsPane"
@@ -31,3 +35,4 @@ export { RootStatusPane } from "@/components/RootStatusPane"
 export { SandboxPane } from "@/components/SandboxPane"
 export { TerminalPane } from "@/components/TerminalPane"
 export { WifiPane } from "@/components/WifiPane"
+export { WirelessAdbPane } from "@/components/WirelessAdbPane"

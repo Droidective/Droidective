@@ -231,3 +231,13 @@ export {
   writeDevSetting,
   writeRestriction,
 } from "@/lib/daemon-settings"
+export { customCommands, runCustomCommand, writeCustomCommands } from "@/lib/daemon-commands"
+export {
+  apkToolchain,
+  convertAab,
+  inspectApk,
+  installPath,
+  pickFile,
+  pickFolder,
+  signApk,
+} from "@/lib/daemon-apk"

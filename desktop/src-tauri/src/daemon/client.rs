@@ -4,10 +4,12 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 
 use crate::daemon::wire::{
-    AppControlRequest, AppInfoResponse, AppPullRequest, AppPullResponse, AppRequest,
-    AppsListRequest, AppsResponse, BugReportRequest, BugReportResponse, CrashListRequest,
-    CrashListResponse, DeepLinkLaunchRequest, DeepLinksRequest, DeepLinksResponse,
-    DeepLinksWriteRequest, DevSettingsResponse, DevSettingsWriteRequest, Device,
+    AabConvertRequest, AabConvertResponse, ApkPathRequest, ApkReport, ApkSignRequest,
+    ApkSignResponse, ApkToolchain, AppControlRequest, AppInfoResponse, AppPullRequest,
+    AppPullResponse, AppRequest, AppsListRequest, AppsResponse, BugReportRequest,
+    BugReportResponse, CrashListRequest, CrashListResponse, CustomCommandRunRequest,
+    CustomCommandsResponse, CustomCommandsWriteRequest, DeepLinkLaunchRequest, DeepLinksRequest,
+    DeepLinksResponse, DeepLinksWriteRequest, DevSettingsResponse, DevSettingsWriteRequest, Device,
     DevicePropsResponse, DeviceRequest, DevicesResponse, DnsResponse, DnsWriteRequest,
     EmulatorActionRequest, EmulatorsResponse, ErrorEnvelope, FeatureSummary, FeaturesResponse,
     FileInfoRequest, FileInfoResponse, FileOperationRequest, FilePullRequest, FilePullResponse,
@@ -240,6 +242,43 @@ impl DaemonClient {
     pub async fn deep_links(&self, package_id: String) -> Result<DeepLinksResponse, DaemonError> {
         self.post("/v1/deeplinks/read", &DeepLinksRequest { package_id })
             .await
+    }
+
+    pub async fn apk_toolchain(&self) -> Result<ApkToolchain, DaemonError> {
+        self.post("/v1/apk/toolchain", &EMPTY).await
+    }
+
+    pub async fn inspect_apk(&self, path: String) -> Result<ApkReport, DaemonError> {
+        self.post("/v1/apk/inspect", &ApkPathRequest { path }).await
+    }
+
+    pub async fn sign_apk(&self, request: &ApkSignRequest) -> Result<ApkSignResponse, DaemonError> {
+        self.post("/v1/apk/sign", request).await
+    }
+
+    pub async fn convert_aab(
+        &self,
+        request: &AabConvertRequest,
+    ) -> Result<AabConvertResponse, DaemonError> {
+        self.post("/v1/apk/convert", request).await
+    }
+
+    pub async fn custom_commands(&self) -> Result<CustomCommandsResponse, DaemonError> {
+        self.post("/v1/customcommands/read", &EMPTY).await
+    }
+
+    pub async fn write_custom_commands(
+        &self,
+        request: &CustomCommandsWriteRequest,
+    ) -> Result<CustomCommandsResponse, DaemonError> {
+        self.post("/v1/customcommands/write", request).await
+    }
+
+    pub async fn run_custom_command(
+        &self,
+        request: &CustomCommandRunRequest,
+    ) -> Result<RunResponse, DaemonError> {
+        self.post("/v1/customcommands/run", request).await
     }
 
     pub async fn write_deep_links(

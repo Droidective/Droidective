@@ -11,13 +11,13 @@ rewriting one when something turns out to be more work than it looked.
 
 | | Count |
 | --- | --- |
-| ⬜ Not started | 15 |
-| 🟡 Partial | 44 |
+| ⬜ Not started | 10 |
+| 🟡 Partial | 49 |
 | ⛔ Not applicable off-Apple | 2 |
 | **Total registry features** | **61** |
 
-"Partial" is doing a lot of work in that table: 19 of the 44 are actions that
-run from the palette but have no screen of their own, and the 25 that do have
+"Partial" is doing a lot of work in that table: 19 of the 49 are actions that
+run from the palette but have no screen of their own, and the 30 that do have
 screens are each missing something the Mac version offers. Read it as *nothing
 is finished*, not as *most of it is done*.
 
@@ -1019,10 +1019,18 @@ after the screens rather than instead of them.
     Mac keeps it per window as `WindowState.mirrorWallSerials`), there is no
     breaking a tile out into its own window, and no Full View.
 
-    **Not yet seen running.** Everything here is verified by tests and by the
-    codec probe against a real WebKitGTK, but no frame has been decoded from a
-    real device on Windows or Linux — the one step that needs a person at a
-    machine with a phone plugged in.
+    **Proven against a real device.** Subscribing to `mirror` on a live
+    emulator produced a `config` of `avc1.42C029` at 360×800 followed by real
+    H.264 frames, each keyframe starting with an Annex-B start code whose first
+    NAL is the SPS — the prepending rule, confirmed on bytes a device actually
+    sent. The `adb forward` was open while streaming and gone after
+    `unsubscribe`, which is the leak convention checked rather than asserted.
+
+    **What is still unseen is the picture.** The daemon's half is proven and
+    WebCodecs' H.264 support is measured on the real target, but no frame has
+    been decoded into a canvas in a running window — `useMirror`'s
+    `VideoDecoder` wiring is unit-tested and has not been watched. That is the
+    step that wants a person at a machine with a device attached.
 
     **The server jar ships with the app now.** The Tauri bundle carries the
     committed `App/Resources/scrcpy-server` — the very same file, since a Java
@@ -1148,10 +1156,10 @@ job, and the checklist now says which.
   - [ ] tooltip: Refresh
   - [ ] tooltip: Copy password
 
-#### `wireless-adb` — Wireless ADB  ·  ⬜ todo
+#### `wireless-adb` — Wireless ADB  ·  🟡 partial
 > Connect over Wi-Fi (tcpip + Android 11 pairing)
 - **Kind** `view` · **hub member**
-- **Note** Not started on Windows/Linux.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `WirelessAdbView` — `App/Sources/FeatureDetail/Views/WirelessAdbView.swift`
 - **Must replicate**
   - [ ] button: Enable Wi-Fi & Connect
@@ -1565,10 +1573,10 @@ job, and the checklist now says which.
 
 
 ### App Management
-#### `aab-convert` — AAB to APK  ·  ⬜ todo
+#### `aab-convert` — AAB to APK  ·  🟡 partial
 > Convert an Android App Bundle into an installable APK
 - **Kind** `view`
-- **Note** Not started on Windows/Linux.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `AabConvertView` — `App/Sources/FeatureDetail/Views/AabConvertView.swift`
 - **Must replicate**
   - [ ] button: Choose AAB…
@@ -1599,10 +1607,10 @@ job, and the checklist now says which.
   - [ ] label: Open externally
   - [ ] tooltip: Find in file (⌘F)
 
-#### `apk-inspector` — APK Inspector  ·  ⬜ todo
+#### `apk-inspector` — APK Inspector  ·  🟡 partial
 > Inspect an APK — manifest, permissions, SDK, signing
 - **Kind** `view` · **hub member**
-- **Note** Not started on Windows/Linux.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `ApkInspectorView` — `App/Sources/FeatureDetail/Views/ApkInspectorView.swift`
 - **Must replicate**
   - [ ] button: Choose APK…
@@ -1610,10 +1618,10 @@ job, and the checklist now says which.
   - [ ] label: \(title) (\(items.count))
   - [ ] label: Signing
 
-#### `apk-sign` — Sign APK  ·  ⬜ todo
+#### `apk-sign` — Sign APK  ·  🟡 partial
 > Zipalign and sign an APK — debug key or your keystore
 - **Kind** `view` · **hub member**
-- **Note** Not started on Windows/Linux.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `ApkSignView` — `App/Sources/FeatureDetail/Views/ApkSignView.swift`
 - **Must replicate**
   - [ ] button: Choose APK…
@@ -1760,10 +1768,10 @@ job, and the checklist now says which.
   - [ ] shortcut: .return, modifiers: .command
   - [ ] shortcut: "s", modifiers: .command
 
-#### `custom-commands` — Custom Commands  ·  ⬜ todo
+#### `custom-commands` — Custom Commands  ·  🟡 partial
 > Your own adb, terminal, and script actions
 - **Kind** `system`
-- **Note** Not started on Windows/Linux.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `CustomCommandsView` — `App/Sources/FeatureDetail/Views/CustomCommandsView.swift`
 - **Must replicate**
   - [ ] button: Delete
@@ -1805,4 +1813,4 @@ job, and the checklist now says which.
   - [ ] drag: drag and drop
 
 
-<!-- counts: {'done': 0, 'partial': 44, 'todo': 15, 'gated': 2} -->
+<!-- counts: {'done': 0, 'partial': 49, 'todo': 10, 'gated': 2} -->

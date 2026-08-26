@@ -137,6 +137,27 @@ public protocol DaemonBackend: Sendable {
     func writeDeepLinks(packageId: String, links: [DeepLink]) async throws
     /// `am start -a android.intent.action.VIEW -d <url>` on one device.
     func launchDeepLink(serial: String, url: String) async throws -> FeatureResult
+    /// Which of the APK tools this machine has.
+    func apkToolchain() async -> ApkProtocol.Toolchain
+    /// Reads what it can from an APK. Best-effort by construction: without
+    /// aapt2 it still answers a name and a size, with `hasDetails` false.
+    func inspectApk(path: String) async -> ApkReport
+    /// Zipaligns and signs. Throws when a tool it needs is absent.
+    func signApk(_ request: ApkProtocol.SignRequest) async throws -> ApkProtocol.SignResponse
+    /// Builds a universal APK from a bundle. Throws when bundletool or Java is
+    /// absent.
+    func convertAab(_ request: ApkProtocol.ConvertRequest) async throws
+        -> ApkProtocol.ConvertResponse
+    /// The saved custom commands. Best-effort: a store that will not load
+    /// reads as no commands rather than failing the screen.
+    func customCommands() async -> [CustomCommand]
+    /// Replaces the whole list. Throws only when the store cannot be written.
+    func writeCustomCommands(_ commands: [CustomCommand]) async throws
+    /// Runs one saved command, or nil when no command has that id — which is a
+    /// 404 rather than a failed run, because nothing was attempted.
+    func runCustomCommand(
+        id: String, serial: String, bundleId: String?
+    ) async -> FeatureResult?
     /// Builds the bug-report zip into a host folder, answering where it landed.
     func createBugReport(
         serial: String, packageId: String?, destination: String
@@ -156,13 +177,19 @@ public struct LiveBackend: DaemonBackend {
     private let client: AdbClient
     private let emulatorService: EmulatorService
     private let locator: ToolLocator
-    /// The same on-disk store the Mac app uses, under the shared support dir.
+    /// The same on-disk stores the Mac app uses, under the shared support dir.
     private let deepLinkStore: JSONStore<DeepLinksMap>
+    private let customCommandStore: JSONStore<[CustomCommand]>
+    /// The APK tools, over the same managed-tool directory the feature engine
+    /// uses — one download of jadx or bundletool serves both.
+    private let apkToolchainValue: ApkToolchain
 
     public init(
         monitor: DeviceMonitor, engine: FeatureEngine, client: AdbClient,
         emulators: EmulatorService, locator: ToolLocator,
-        deepLinks: JSONStore<DeepLinksMap>
+        deepLinks: JSONStore<DeepLinksMap>,
+        customCommands: JSONStore<[CustomCommand]>,
+        toolsDirectory: URL
     ) {
         self.monitor = monitor
         self.engine = engine
@@ -170,6 +197,9 @@ public struct LiveBackend: DaemonBackend {
         emulatorService = emulators
         self.locator = locator
         deepLinkStore = deepLinks
+        customCommandStore = customCommands
+        apkToolchainValue = ApkToolchain(
+            locator: locator, store: ManagedToolStore(rootDirectory: toolsDirectory))
     }
 
     public func listDevices() async -> [Device] { await monitor.list(force: true) }
@@ -497,6 +527,67 @@ public struct LiveBackend: DaemonBackend {
 
     public func launchDeepLink(serial: String, url: String) async throws -> FeatureResult {
         try await AppControlService(client: client).launchDeepLink(serial: serial, url: url)
+    }
+
+    public func apkToolchain() async -> ApkProtocol.Toolchain {
+        let toolchain = apkToolchainValue
+        async let aapt2 = toolchain.aapt2()
+        async let apksigner = toolchain.apksignerJar()
+        async let zipalign = toolchain.zipalign()
+        async let java = toolchain.java()
+        async let bundletool = toolchain.bundletool()
+        return await ApkProtocol.Toolchain(
+            aapt2: aapt2 != nil, apksigner: apksigner != nil, zipalign: zipalign != nil,
+            java: java != nil, bundletool: bundletool != nil)
+    }
+
+    public func inspectApk(path: String) async -> ApkReport {
+        await ApkInspectionService(client: client, toolchain: apkToolchainValue)
+            .inspect(apkPath: path)
+    }
+
+    public func signApk(
+        _ request: ApkProtocol.SignRequest
+    ) async throws -> ApkProtocol.SignResponse {
+        let result = try await ApkSigningService(toolchain: apkToolchainValue).sign(
+            input: request.input, output: request.output,
+            credentials: request.keystore.credentials)
+        return ApkProtocol.SignResponse(
+            ok: result.ok, message: result.message, output: result.ok ? request.output : nil)
+    }
+
+    public func convertAab(
+        _ request: ApkProtocol.ConvertRequest
+    ) async throws -> ApkProtocol.ConvertResponse {
+        let converted = try await AabConvertService(toolchain: apkToolchainValue).convert(
+            aabPath: request.input,
+            outputDirectory: URL(fileURLWithPath: request.outputDirectory),
+            credentials: request.keystore?.credentials)
+        return ApkProtocol.ConvertResponse(
+            path: converted.url.path, sizeBytes: converted.sizeBytes)
+    }
+
+    public func customCommands() async -> [CustomCommand] {
+        await customCommandStore.load()
+    }
+
+    public func writeCustomCommands(_ commands: [CustomCommand]) async throws {
+        try await customCommandStore.save(commands)
+    }
+
+    public func runCustomCommand(
+        id: String, serial: String, bundleId: String?
+    ) async -> FeatureResult? {
+        guard let command = await customCommandStore.load().first(where: { $0.id == id }) else {
+            return nil
+        }
+        // `runsInTerminal` is deliberately ignored here. A terminal command is
+        // typed into a shell the *client* owns, so the daemon running it
+        // headlessly would be a different thing than the one that was asked
+        // for — the desktop app opens its Terminal tab instead, and only sends
+        // the silent ones here.
+        return await CustomCommandService(client: client).run(
+            command: command, bundleId: bundleId, serial: serial)
     }
 
     public func createBugReport(
@@ -874,6 +965,25 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
                 body: Data(body.readableBytesView), backend: backend))
         case .deepLinksLaunch:
             return Self.answer(await DiagnosticsRoutes.linksLaunch(
+                body: Data(body.readableBytesView), backend: backend))
+        case .apkToolchain:
+            return Self.answer(await ApkRoutes.toolchain(backend: backend))
+        case .apkInspect:
+            return Self.answer(await ApkRoutes.inspect(
+                body: Data(body.readableBytesView), backend: backend))
+        case .apkSign:
+            return Self.answer(await ApkRoutes.sign(
+                body: Data(body.readableBytesView), backend: backend))
+        case .aabConvert:
+            return Self.answer(await ApkRoutes.convert(
+                body: Data(body.readableBytesView), backend: backend))
+        case .customCommandsRead:
+            return Self.answer(await CustomCommandRoutes.read(backend: backend))
+        case .customCommandsWrite:
+            return Self.answer(await CustomCommandRoutes.write(
+                body: Data(body.readableBytesView), backend: backend))
+        case .customCommandsRun:
+            return Self.answer(await CustomCommandRoutes.run(
                 body: Data(body.readableBytesView), backend: backend))
         case .bugReportCreate:
             return Self.answer(await DiagnosticsRoutes.bugReport(
