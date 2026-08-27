@@ -109,22 +109,9 @@ export function useJsConsole(port: number): JsConsole {
     [addRows, send],
   )
 
-  // Keepalive, only while there is something to keep alive.
-  useEffect(() => {
-    if (connection !== "connected") return
-    const timer = setInterval(() => send("Runtime.evaluate", keepaliveParams()), KEEPALIVE_MS)
-    return () => clearInterval(timer)
-  }, [connection, send])
-
-  // Close on unmount, not whenever React feels like it.
-  useEffect(
-    () => () => {
-      detach.current?.abort()
-      socket.current?.close()
-      socket.current = null
-    },
-    [],
-  )
+  useAutoConnect(connection, targets, target, setTarget, wiring)
+  useKeepalive(connection, send)
+  useCloseOnUnmount(socket, detach)
 
   return {
     rows,
@@ -162,3 +149,61 @@ function echoAndRun(
 }
 
 export type { Connection, NamedValue }
+
+/**
+ * Attach on our own when there is exactly one target.
+ *
+ * The Mac's console does this rather than making someone pick out of a list of
+ * one. Only with exactly one: where there are several, which app to attach to
+ * is a real choice, and guessing would attach to the wrong one in silence.
+ */
+function useAutoConnect(
+  connection: Connection,
+  targets: CdpTarget[],
+  target: CdpTarget | null,
+  setTarget: (target: CdpTarget) => void,
+  wiring: Wiring,
+): void {
+  useEffect(() => {
+    if (connection !== "idle" || targets.length !== 1) return
+    const only = targets[0]
+    if (only === undefined || only.id === target?.id) return
+    setTarget(only)
+    openSocket(only, wiring)
+    // `wiring` is refs and stable callbacks; its identity churn means nothing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connection, targets, target])
+}
+
+/**
+ * Poke the connection while there is one.
+ *
+ * The React Native debugger proxy drops a socket it decides is idle, and a
+ * console watching a quiet app is exactly that. `void 0` is the cheapest
+ * expression that proves the runtime is still answering.
+ */
+function useKeepalive(
+  connection: Connection,
+  send: (method: string, params: Record<string, unknown>) => number | null,
+): void {
+  useEffect(() => {
+    if (connection !== "connected") return
+    const timer = setInterval(() => send("Runtime.evaluate", keepaliveParams()), KEEPALIVE_MS)
+    return () => clearInterval(timer)
+  }, [connection, send])
+}
+
+/** Close the socket when the pane goes, not whenever React feels like it. */
+function useCloseOnUnmount(
+  socket: React.RefObject<WebSocket | null>,
+  detach: React.RefObject<AbortController | null>,
+): void {
+  useEffect(
+    () => () => {
+      detach.current?.abort()
+      socket.current?.close()
+      socket.current = null
+    },
+    [socket, detach],
+  )
+}

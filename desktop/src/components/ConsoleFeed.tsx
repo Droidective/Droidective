@@ -1,7 +1,7 @@
 import { ChevronRight, CircleAlert, TriangleAlert } from "lucide-react"
 import { useEffect, useRef } from "react"
 
-import type { ConsoleRow } from "@/lib/console-feed"
+import { emptyFeedText, type ConsoleRow } from "@/lib/console-feed"
 import { tokensFor, type Token } from "@/lib/console-format"
 
 /**
@@ -16,10 +16,14 @@ export function ConsoleFeed({
   rows,
   empty,
   problem,
+  connection,
+  targetCount,
 }: {
   rows: ConsoleRow[]
   empty: boolean
   problem: string | null
+  connection: string
+  targetCount: number
 }) {
   const scroller = useRef<HTMLDivElement | null>(null)
   const pinned = useRef(true)
@@ -38,11 +42,14 @@ export function ConsoleFeed({
         pinned.current =
           element.scrollHeight - element.scrollTop - element.clientHeight < 24
       }}
-      className="min-h-0 flex-1 overflow-auto font-mono text-[11.5px]"
+      // Never sideways. A feed that can scroll horizontally lets its content
+      // size to max-content, and a long Metro bundle URL then runs off the
+      // pane instead of wrapping. Logcat's feed is y-only for the same reason.
+      className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden font-mono text-[11.5px]"
     >
       {empty ? (
         <p className="p-3 font-sans text-text-tertiary">
-          {problem ?? "Connected. Anything the app logs shows up here."}
+          {emptyFeedText(connection, targetCount, problem)}
         </p>
       ) : (
         rows.map((row) => <Row key={row.id} row={row} />)
@@ -58,29 +65,44 @@ function Row({ row }: { row: ConsoleRow }) {
       : row.level === "warning"
         ? "bg-amber-500/10 text-amber-200"
         : "text-text-primary"
+  // A plain block with inline parts, the way the logcat feed does it — **not** a
+  // flex line. As a flex row inside a scrollable feed the message item was
+  // sized against max-content and collapsed to one character wide: every log
+  // rendered as a vertical column of letters. Found by opening the pane
+  // against a real app, not by reading this.
+  //
+  // `overflow-wrap: anywhere` rather than `break-words`, because the long
+  // token here is a Metro bundle URL with no spaces to break at.
   return (
-    <div className={`flex gap-2 border-b border-border-subtle/40 px-3 py-[3px] ${tone}`}>
-      <span className="shrink-0 select-none text-text-tertiary">
-        {row.level === "error" ? (
-          <CircleAlert size={11} className="mt-[3px]" />
-        ) : row.level === "warning" ? (
-          <TriangleAlert size={11} className="mt-[3px]" />
-        ) : row.local ? (
-          <ChevronRight size={11} className="mt-[3px]" />
-        ) : (
-          <span className="inline-block w-[11px]" />
-        )}
-      </span>
-      <span className="min-w-0 flex-1 whitespace-pre-wrap break-words">
-        {row.args.length === 0 ? row.text : <Args row={row} />}
-      </span>
+    <div
+      className={`whitespace-pre-wrap [overflow-wrap:anywhere] border-b border-border-subtle/40 px-3 py-[3px] ${tone}`}
+    >
       {row.source === null ? null : (
-        <span className="shrink-0 select-none text-text-tertiary" title={row.source}>
+        <span
+          className="float-right ml-2 select-none text-text-tertiary"
+          title={row.source}
+        >
           {row.source}
         </span>
       )}
+      <Glyph row={row} />
+      {row.args.length === 0 ? row.text : <Args row={row} />}
     </div>
   )
+}
+
+/** The level's mark, or the width of one so the messages still line up. */
+function Glyph({ row }: { row: ConsoleRow }) {
+  if (row.level === "error") {
+    return <CircleAlert size={11} className="mr-1.5 inline-block align-[-1px] text-red-400" />
+  }
+  if (row.level === "warning") {
+    return <TriangleAlert size={11} className="mr-1.5 inline-block align-[-1px] text-amber-400" />
+  }
+  if (row.local) {
+    return <ChevronRight size={11} className="mr-1.5 inline-block align-[-1px] text-text-tertiary" />
+  }
+  return <span className="mr-1.5 inline-block w-[11px]" />
 }
 
 /**

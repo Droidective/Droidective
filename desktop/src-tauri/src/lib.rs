@@ -2,6 +2,7 @@ mod commands;
 mod daemon;
 mod error;
 mod menu;
+mod metro;
 
 use tauri::{Emitter, Manager, RunEvent};
 
@@ -117,6 +118,8 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         commands::pick_folder,
         commands::apk_toolchain,
         commands::decompile_apk,
+        metro::metro_targets,
+        metro::metro_running,
         commands::decompiled_file,
         commands::search_decompiled,
         commands::rebuild_decompiled,

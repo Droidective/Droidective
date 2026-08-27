@@ -239,6 +239,8 @@ export {
   decompiledFile,
   inspectApk,
   installPath,
+  metroRunning,
+  metroTargets,
   pickFile,
   pickFolder,
   rebuildDecompiled,

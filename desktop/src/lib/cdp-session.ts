@@ -18,7 +18,8 @@ import {
   type RemoteObject,
 } from "@/lib/cdp"
 import { rowFromCall, rowFromException, type ConsoleRow } from "@/lib/console-feed"
-import { isLocalDebuggerUrl, parseTargets, targetsUrl, type CdpTarget } from "@/lib/metro"
+import { metroRunning, metroTargets } from "@/lib/daemon"
+import { isLocalDebuggerUrl, parseTargets, type CdpTarget } from "@/lib/metro"
 
 export type Connection = "idle" | "searching" | "connecting" | "connected" | "failed"
 
@@ -80,19 +81,28 @@ export async function findTargets(
   const settle = (connection: Connection) => {
     setConnection((current) => (current === "connected" ? current : connection))
   }
+  let found: CdpTarget[]
   try {
-    const response = await fetch(targetsUrl(port))
-    const found = parseTargets(await response.json())
-    setTargets(found)
-    if (found.length === 0) {
-      settle("idle")
-      setProblem("Metro is running, but no app has connected to it yet.")
-    }
+    found = parseTargets(await metroTargets(port))
   } catch {
     setTargets([])
     settle("idle")
     setProblem(`Nothing is answering on port ${String(port)}. Is Metro running?`)
+    return
   }
+  setTargets(found)
+  // Settle either way. Leaving it on "searching" after the answer arrived is a
+  // status that never stops spinning, which reads as a hang.
+  settle("idle")
+  if (found.length > 0) return
+  // Metro answering with an empty list and Metro not being there at all need
+  // different things done about them, so they get different sentences.
+  const running = await metroRunning(port).catch(() => false)
+  setProblem(
+    running
+      ? "Metro is running, but no app has connected to it yet."
+      : `Nothing is answering on port ${String(port)}. Is Metro running?`,
+  )
 }
 
 /** Open a CDP socket to one target and wire its events. */

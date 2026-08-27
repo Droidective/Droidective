@@ -117,3 +117,21 @@ export function rebuildDecompiled(
 ): Promise<DecompileRebuildResponse> {
   return invoke("rebuild_decompiled", { root, sourceDir, output })
 }
+
+/**
+ * Metro's debugger target list, fetched in Rust.
+ *
+ * Not `fetch` from here: Metro serves no `Access-Control-Allow-Origin`, so a
+ * cross-origin request from the webview is refused by the browser before Metro
+ * sees it — the console reported "nothing is answering" while curl to the same
+ * URL worked. Rust has no same-origin policy. The debugger *socket* stays in
+ * the webview, which needs no such help.
+ */
+export function metroTargets(port: number): Promise<unknown> {
+  return invoke("metro_targets", { port })
+}
+
+/** Whether a Metro dev server is answering, which is a different question. */
+export function metroRunning(port: number): Promise<boolean> {
+  return invoke("metro_running", { port })
+}

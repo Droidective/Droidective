@@ -70,7 +70,13 @@ export function JsConsolePane({ device }: { device: Device | null }) {
         onToggle={(level) => setLevels((current) => toggleLevel(current, level))}
         onClear={console.clear}
       />
-      <ConsoleFeed rows={shown} empty={console.rows.length === 0} problem={console.problem} />
+      <ConsoleFeed
+        rows={shown}
+        empty={console.rows.length === 0}
+        problem={console.problem}
+        connection={console.connection}
+        targetCount={console.targets.length}
+      />
       <Prompt
         value={draft}
         enabled={console.connection === "connected"}
