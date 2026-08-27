@@ -77,6 +77,7 @@ export function ApkSignPane({ apkPath = null }: { apkPath?: string | null }) {
       <HubSection title="Sign APK" subtitle="Zipalign and sign an APK with your keystore.">
         <SignForm
           apk={apk}
+          embedded={apkPath !== null}
           keystore={keystore}
           busy={busy}
           onPick={(set, label, extensions) =>
@@ -102,6 +103,7 @@ export function ApkSignPane({ apkPath = null }: { apkPath?: string | null }) {
 
 function SignForm({
   apk,
+  embedded,
   keystore,
   busy,
   onPick,
@@ -110,6 +112,8 @@ function SignForm({
   onSign,
 }: {
   apk: string | null
+  /** True when APK Studio handed the APK over and owns the choice. */
+  embedded: boolean
   keystore: Keystore
   busy: boolean
   onPick: (set: (path: string) => void, label: string, extensions: string[]) => void
@@ -123,13 +127,18 @@ function SignForm({
 
   return (
     <>
-      <ApkFileRow
-        label="APK"
-        path={apk}
-        chooseLabel="Choose APK…"
-        changeLabel="Choose a different APK…"
-        onChoose={() => onPick(setApk, "APK", ["apk"])}
-      />
+      {/* Inside APK Studio the studio owns the APK, so this row would be a
+          second way to change it and leave the other tabs behind. The file is
+          still named — just in the studio's own header. */}
+      {embedded ? null : (
+        <ApkFileRow
+          label="APK"
+          path={apk}
+          chooseLabel="Choose APK…"
+          changeLabel="Choose a different APK…"
+          onChoose={() => onPick(setApk, "APK", ["apk"])}
+        />
+      )}
       <ApkFileRow
         label="Keystore"
         path={keystore.path}

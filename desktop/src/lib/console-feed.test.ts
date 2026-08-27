@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   appended,
+  emptyFeedText,
   filtered,
   levelCounts,
   levelOf,
@@ -223,5 +224,34 @@ describe("rowText", () => {
 
   it("omits the source when there is none", () => {
     expect(rowText(row(1, "info", "hi"))).toBe("00:00:00.000 [info] hi")
+  })
+})
+
+/**
+ * What an empty feed says.
+ *
+ * It used to claim "Connected" whenever there was nothing to report, which was
+ * wrong at the one moment someone reads it for guidance — before a target is
+ * picked. Found by opening the pane, not by reading it.
+ */
+describe("emptyFeedText", () => {
+  it("reports a problem ahead of anything else", () => {
+    expect(emptyFeedText("idle", 0, "Metro is not running.")).toBe("Metro is not running.")
+    expect(emptyFeedText("connected", 1, "Metro is not running.")).toBe("Metro is not running.")
+  })
+
+  it("only claims a connection when there is one", () => {
+    expect(emptyFeedText("connected", 1, null)).toContain("Connected")
+    expect(emptyFeedText("idle", 1, null)).not.toContain("Connected")
+    expect(emptyFeedText("searching", 0, null)).not.toContain("Connected")
+    expect(emptyFeedText("connecting", 1, null)).not.toContain("Connected")
+  })
+
+  it("asks for a pick when targets are waiting", () => {
+    expect(emptyFeedText("idle", 2, null)).toContain("Pick a target")
+  })
+
+  it("says how to get a target when there is none", () => {
+    expect(emptyFeedText("idle", 0, null)).toContain("Metro")
   })
 })

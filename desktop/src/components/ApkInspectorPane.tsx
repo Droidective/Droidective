@@ -71,7 +71,7 @@ export function ApkInspectorPane({ apkPath = null }: { apkPath?: string | null }
           </button>
         </HubSection>
       ) : (
-        <ApkDetail report={report} busy={busy} onChoose={choose} />
+        <ApkDetail report={report} busy={busy} onChoose={apkPath === null ? choose : null} />
       )}
     </HubColumn>
   )
@@ -84,7 +84,8 @@ function ApkDetail({
 }: {
   report: ApkReport
   busy: boolean
-  onChoose: () => void
+  /** Null inside APK Studio, which owns the choice itself. */
+  onChoose: (() => void) | null
 }) {
   return (
     <>
@@ -92,14 +93,19 @@ function ApkDetail({
         title={report.label ?? report.fileName}
         subtitle={report.packageName ?? report.fileName}
         accessory={
-          <button
-            type="button"
-            disabled={busy}
-            onClick={onChoose}
-            className="rounded border border-border-subtle px-2 py-1 text-[12px] text-text-primary hover:bg-bg-hover disabled:opacity-40"
-          >
-            Inspect another…
-          </button>
+          // Null inside APK Studio: the studio owns which APK is loaded, and a
+          // second chooser here would change this tab's APK while the others
+          // kept the old one.
+          onChoose === null ? null : (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={onChoose}
+              className="rounded border border-border-subtle px-2 py-1 text-[12px] text-text-primary hover:bg-bg-hover disabled:opacity-40"
+            >
+              Inspect another…
+            </button>
+          )
         }
       >
         <HubRowList

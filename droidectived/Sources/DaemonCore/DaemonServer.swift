@@ -163,6 +163,11 @@ public protocol DaemonBackend: Sendable {
     /// throws when apktool or Java is absent, or the build fails.
     func rebuildDecompiled(_ request: DecompileProtocol.RebuildRequest) async throws
         -> DecompileProtocol.RebuildResponse?
+    /// Which of the downloadable decompilers are installed.
+    func managedTools() async -> DecompileProtocol.ManagedTools
+    /// Downloads one. Idempotent — an install that is already current is reused.
+    func installTool(_ tool: DecompileProtocol.Installable) async throws
+        -> DecompileProtocol.InstallResponse
     /// The saved custom commands. Best-effort: a store that will not load
     /// reads as no commands rather than failing the screen.
     func customCommands() async -> [CustomCommand]
@@ -202,6 +207,9 @@ public struct LiveBackend: DaemonBackend {
     /// routes may touch. Its own directory rather than the tools one: this is
     /// throwaway output, regenerable from the APK.
     private let decompileCache: URL
+    /// Where the managed tools live — the same directory `ApkToolchain` reads,
+    /// so a jadx downloaded here is the jadx a decompile then finds.
+    private let managedToolsDirectory: URL
 
     public init(
         monitor: DeviceMonitor, engine: FeatureEngine, client: AdbClient,
@@ -220,6 +228,7 @@ public struct LiveBackend: DaemonBackend {
         apkToolchainValue = ApkToolchain(
             locator: locator, store: ManagedToolStore(rootDirectory: toolsDirectory))
         decompileCache = AppPaths.decompiledCacheDir
+        managedToolsDirectory = toolsDirectory
     }
 
     public func listDevices() async -> [Device] { await monitor.list(force: true) }
@@ -631,6 +640,20 @@ public struct LiveBackend: DaemonBackend {
         try await DecompileService(toolchain: apkToolchainValue).rebuild(
             sourceDir: request.sourceDir, to: request.output)
         return DecompileProtocol.RebuildResponse(output: request.output)
+    }
+
+    public func managedTools() async -> DecompileProtocol.ManagedTools {
+        let store = ManagedToolStore(rootDirectory: managedToolsDirectory)
+        return await DecompileProtocol.ManagedTools(
+            jadx: store.installedVersion(.jadx) != nil,
+            apktool: store.installedVersion(.apktool) != nil)
+    }
+
+    public func installTool(
+        _ tool: DecompileProtocol.Installable
+    ) async throws -> DecompileProtocol.InstallResponse {
+        let store = ManagedToolStore(rootDirectory: managedToolsDirectory)
+        return DecompileProtocol.InstallResponse(path: try await store.install(tool.tool))
     }
 
     /// Both halves of the confinement: the root really is one of ours, and the
@@ -1056,6 +1079,11 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
                 body: Data(body.readableBytesView), backend: backend))
         case .apkDecompileSearch:
             return Self.answer(await DecompileRoutes.search(
+                body: Data(body.readableBytesView), backend: backend))
+        case .apkTools:
+            return Self.answer(await DecompileRoutes.tools(backend: backend))
+        case .apkToolInstall:
+            return Self.answer(await DecompileRoutes.install(
                 body: Data(body.readableBytesView), backend: backend))
         case .apkRebuild:
             return Self.answer(await DecompileRoutes.rebuild(

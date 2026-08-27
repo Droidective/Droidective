@@ -18,6 +18,8 @@ import type {
   DecompileRebuildResponse,
   DecompileTree,
   InstallResponse,
+  ManagedTools,
+  ToolInstallResponse,
 } from "@/lib/wire"
 
 /** Which of the APK tools are on this machine. */
@@ -116,4 +118,37 @@ export function rebuildDecompiled(
   output: string,
 ): Promise<DecompileRebuildResponse> {
   return invoke("rebuild_decompiled", { root, sourceDir, output })
+}
+
+/**
+ * Metro's debugger target list, fetched in Rust.
+ *
+ * Not `fetch` from here: Metro serves no `Access-Control-Allow-Origin`, so a
+ * cross-origin request from the webview is refused by the browser before Metro
+ * sees it — the console reported "nothing is answering" while curl to the same
+ * URL worked. Rust has no same-origin policy. The debugger *socket* stays in
+ * the webview, which needs no such help.
+ */
+export function metroTargets(port: number): Promise<unknown> {
+  return invoke("metro_targets", { port })
+}
+
+/** Whether a Metro dev server is answering, which is a different question. */
+export function metroRunning(port: number): Promise<boolean> {
+  return invoke("metro_running", { port })
+}
+
+/**
+ * Which downloadable decompilers this machine has.
+ *
+ * Asked before a run, not after one fails: jadx is a download, and finding that
+ * out from a failed decompile is finding it out at the worst moment.
+ */
+export function managedTools(): Promise<ManagedTools> {
+  return invoke("managed_tools")
+}
+
+/** Downloads jadx or apktool. Tens of megabytes, so the screen says so. */
+export function installTool(tool: DecompileMode): Promise<ToolInstallResponse> {
+  return invoke("install_tool", { tool })
 }

@@ -97,6 +97,16 @@ extension DaemonBackend {
         DecompileProtocol.RebuildResponse(output: request.output)
     }
 
+    func managedTools() async -> DecompileProtocol.ManagedTools {
+        DecompileProtocol.ManagedTools(jadx: true, apktool: true)
+    }
+
+    func installTool(
+        _ tool: DecompileProtocol.Installable
+    ) async throws -> DecompileProtocol.InstallResponse {
+        DecompileProtocol.InstallResponse(path: "/stub/\(tool.rawValue)")
+    }
+
     func customCommands() async -> [CustomCommand] { [] }
 
     func writeCustomCommands(_ commands: [CustomCommand]) async throws {}

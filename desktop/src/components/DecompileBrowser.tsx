@@ -113,13 +113,18 @@ function Toolbar({ state }: { state: Decompile }) {
           Rebuild
         </button>
       ) : null}
-      <button
-        type="button"
-        onClick={state.choose}
-        className="rounded border border-border-subtle px-2 py-1 text-text-secondary hover:bg-bg-surface"
-      >
-        Choose APK…
-      </button>
+      {/* Hidden inside APK Studio, which owns which APK is loaded — a second
+          chooser here would change this tab's APK and leave the others on the
+          old one. */}
+      {state.embedded ? null : (
+        <button
+          type="button"
+          onClick={state.choose}
+          className="rounded border border-border-subtle px-2 py-1 text-text-secondary hover:bg-bg-surface"
+        >
+          Choose APK…
+        </button>
+      )}
     </div>
   )
 }

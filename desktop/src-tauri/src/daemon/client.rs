@@ -16,11 +16,11 @@ use crate::daemon::wire::{
     EmulatorActionRequest, EmulatorsResponse, ErrorEnvelope, FeatureSummary, FeaturesResponse,
     FileInfoRequest, FileInfoResponse, FileOperationRequest, FilePullRequest, FilePullResponse,
     FilesListRequest, FilesListResponse, ForegroundResponse, InstallFormatsResponse,
-    InstallRequest, InstallResponse, LaunchResponse, MemInfoResponse, PairResponse,
+    InstallRequest, InstallResponse, LaunchResponse, ManagedTools, MemInfoResponse, PairResponse,
     PermissionWriteRequest, PermissionsResponse, ReactotronReverseRequest,
     ReactotronReverseResponse, RestrictionWriteRequest, RestrictionsResponse, RootStatusResponse,
-    RunRequest, RunResponse, SandboxRequest, SandboxResponse, ToolsResponse, WifiResponse,
-    WifiWriteRequest, WirelessActionRequest,
+    RunRequest, RunResponse, SandboxRequest, SandboxResponse, ToolInstallRequest,
+    ToolInstallResponse, ToolsResponse, WifiResponse, WifiWriteRequest, WirelessActionRequest,
 };
 use crate::error::DaemonError;
 
@@ -284,6 +284,17 @@ impl DaemonClient {
         request: &DecompileSearchRequest,
     ) -> Result<DecompileHits, DaemonError> {
         self.post("/v1/apk/decompile/search", request).await
+    }
+
+    pub async fn managed_tools(&self) -> Result<ManagedTools, DaemonError> {
+        self.post("/v1/apk/tools", &EMPTY).await
+    }
+
+    pub async fn install_tool(
+        &self,
+        request: &ToolInstallRequest,
+    ) -> Result<ToolInstallResponse, DaemonError> {
+        self.post("/v1/apk/tools/install", request).await
     }
 
     pub async fn rebuild_decompiled(

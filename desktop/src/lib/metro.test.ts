@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from "vitest"
 
-import { isHermes, isLocalDebuggerUrl, parseTargets, statusUrl, targetLabel, targetsUrl, isMetroStatus } from "@/lib/metro"
+import { isHermes, isLocalDebuggerUrl, parseTargets, targetLabel } from "@/lib/metro"
 
 const HERMES = {
   id: "1",
@@ -112,18 +112,6 @@ describe("isLocalDebuggerUrl", () => {
 
   it("is not fooled by a host that merely contains localhost", () => {
     expect(isLocalDebuggerUrl("ws://localhost.evil.com/x")).toBe(false)
-  })
-})
-
-describe("endpoints", () => {
-  it("names Metro's own routes", () => {
-    expect(targetsUrl(8081)).toBe("http://localhost:8081/json/list")
-    expect(statusUrl(8081)).toBe("http://localhost:8081/status")
-  })
-
-  it("reads Metro's status reply", () => {
-    expect(isMetroStatus("packager-status:running")).toBe(true)
-    expect(isMetroStatus("something else")).toBe(false)
   })
 })
 

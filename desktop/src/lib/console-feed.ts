@@ -171,3 +171,30 @@ export function rowText(row: ConsoleRow): string {
   const where = row.source === null ? "" : ` (${row.source})`
   return `${stamp} [${row.level}] ${row.text}${where}`
 }
+
+/**
+ * What an empty feed should say.
+ *
+ * It used to claim "Connected" whenever there was no problem to report, which
+ * was wrong every time before a target was picked — the one moment someone is
+ * looking at it for guidance.
+ */
+export function emptyFeedText(
+  connection: string,
+  targetCount: number,
+  problem: string | null,
+): string {
+  if (problem !== null) return problem
+  switch (connection) {
+    case "connected":
+      return "Connected. Anything the app logs shows up here."
+    case "connecting":
+      return "Connecting…"
+    case "searching":
+      return "Looking for a debug target…"
+    default:
+      return targetCount > 0
+        ? "Pick a target above to start reading its console."
+        : "No debug target yet. Start Metro and open the app."
+  }
+}

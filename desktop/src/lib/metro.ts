@@ -5,11 +5,17 @@
  * to pick the same target out of the same list — a console that attached to
  * Metro's placeholder entry would connect and then never receive anything.
  *
- * **The socket lives in the webview, not the daemon.** `URLSessionWebSocketTask`
- * compiles off-Darwin and then fails at runtime ("WebSockets not supported by
- * libcurl"), so the daemon cannot hold a CDP connection without a NIO client
- * written from scratch. Metro runs on this machine, so the webview can reach it
- * directly and both WebKitGTK and WebView2 ship a real WebSocket.
+ * **The socket lives in the webview; the target list does not.**
+ * `URLSessionWebSocketTask` compiles off-Darwin and then fails at runtime
+ * ("WebSockets not supported by libcurl"), so the daemon cannot hold a CDP
+ * connection without a NIO client written from scratch — and it needs none,
+ * because WebKitGTK and WebView2 both ship a real WebSocket and sockets are
+ * not subject to the same-origin policy.
+ *
+ * The *list* is fetched in Rust (`metro_targets`), because Metro serves no
+ * `Access-Control-Allow-Origin` and a cross-origin `fetch` from the page is
+ * refused before Metro ever sees it. So there are no URLs here: Rust builds
+ * them, and this file only reads what comes back.
  */
 
 export interface CdpTarget {
@@ -94,20 +100,6 @@ export function isLocalDebuggerUrl(raw: string): boolean {
   const host = url.hostname.toLowerCase()
   // `new URL` keeps IPv6 hosts in brackets.
   return host === "127.0.0.1" || host === "localhost" || host === "::1" || host === "[::1]"
-}
-
-/** Metro's target-list endpoint for a port. */
-export function targetsUrl(port: number): string {
-  return `http://localhost:${String(port)}/json/list`
-}
-
-/** Metro's status endpoint, which answers `packager-status:running` when up. */
-export function statusUrl(port: number): string {
-  return `http://localhost:${String(port)}/status`
-}
-
-export function isMetroStatus(body: string): boolean {
-  return body.includes("packager-status:running")
 }
 
 /** A one-line label for a target, as the picker shows it. */

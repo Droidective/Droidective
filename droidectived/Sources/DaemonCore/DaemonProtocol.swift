@@ -82,6 +82,10 @@ public enum DaemonProtocol {
         case apkDecompileFile = "/v1/apk/decompile/file"
         case apkDecompileSearch = "/v1/apk/decompile/search"
         case apkRebuild = "/v1/apk/rebuild"
+        /// The downloadable half of the APK toolchain. Asked before a run so a
+        /// screen can offer the download rather than failing into it.
+        case apkTools = "/v1/apk/tools"
+        case apkToolInstall = "/v1/apk/tools/install"
         case customCommandsRead = "/v1/customcommands/read"
         case customCommandsWrite = "/v1/customcommands/write"
         case customCommandsRun = "/v1/customcommands/run"

@@ -155,6 +155,47 @@ public enum DecompileProtocol {
     static let maxFileBytes = 4 << 20
     static let maxHits = 500
 
+    /// Which downloadable tools this machine has, so a screen can offer the
+    /// download *before* someone waits on a run that cannot start.
+    ///
+    /// Only the ones the decompiler needs. The store knows about several more,
+    /// and a screen that listed them all would be a tool manager — which is a
+    /// different feature.
+    public struct ManagedTools: Codable, Equatable, Sendable {
+        public let jadx: Bool
+        public let apktool: Bool
+
+        public init(jadx: Bool, apktool: Bool) {
+            self.jadx = jadx
+            self.apktool = apktool
+        }
+    }
+
+    /// Which tool to fetch. A closed set rather than the store's whole
+    /// catalogue: this route exists for the decompiler's two, and a request
+    /// naming anything else is a client bug, not a download.
+    public enum Installable: String, Codable, Sendable, CaseIterable {
+        case jadx
+        case apktool
+
+        var tool: ManagedTool {
+            switch self {
+            case .jadx: .jadx
+            case .apktool: .apktool
+            }
+        }
+    }
+
+    public struct InstallRequest: Codable, Equatable, Sendable {
+        public let tool: Installable
+        public init(tool: Installable) { self.tool = tool }
+    }
+
+    public struct InstallResponse: Codable, Equatable, Sendable {
+        public let path: String
+        public init(path: String) { self.path = path }
+    }
+
     static let badRequest = DaemonProtocol.ErrorBody(
         code: "bad_request", message: "That is not a decompile request.", detail: nil)
 
@@ -235,6 +276,26 @@ enum DecompileRoutes {
             return (403, DaemonProtocol.encoded(DecompileProtocol.outsideRoot))
         }
         return (200, DaemonProtocol.encoded(hits))
+    }
+
+    static func tools(backend: any DaemonBackend) async -> DaemonProtocol.Answer {
+        (200, DaemonProtocol.encoded(await backend.managedTools()))
+    }
+
+    static func install(body: Data, backend: any DaemonBackend) async -> DaemonProtocol.Answer {
+        guard let request = try? JSONDecoder().decode(
+            DecompileProtocol.InstallRequest.self, from: body)
+        else { return (400, DaemonProtocol.encoded(DecompileProtocol.badRequest)) }
+        do {
+            return (200, DaemonProtocol.encoded(try await backend.installTool(request.tool)))
+        } catch {
+            // A download that fails is not a missing tool — it is a network or
+            // a release problem, and saying "not installed" would send someone
+            // to install what they just tried to install.
+            return (422, DaemonProtocol.encoded(DaemonProtocol.ErrorBody(
+                code: "download_failed",
+                message: "That tool could not be downloaded.", detail: "\(error)")))
+        }
     }
 
     static func rebuild(body: Data, backend: any DaemonBackend) async -> DaemonProtocol.Answer {

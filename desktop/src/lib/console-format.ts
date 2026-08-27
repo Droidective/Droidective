@@ -10,6 +10,7 @@
  */
 
 import type { ObjectPreview, PropertyPreview, RemoteObject } from "@/lib/cdp"
+import { stripAnsi } from "@/lib/console-ansi"
 
 /** A colourable span. Semantic, so the markup decides the colour. */
 export type TokenKind =
@@ -99,7 +100,7 @@ function arrayLength(preview: ObjectPreview): number | null {
 function elementToken(property: PropertyPreview): Token {
   switch (property.type) {
     case "string":
-      return token(quoted(property.value ?? ""), "string")
+      return token(quoted(stripAnsi(property.value ?? "")), "string")
     case "number":
     case "bigint":
       return token(property.value ?? "", "number")
@@ -180,7 +181,11 @@ function objectTokens(object: RemoteObject): Token[] {
 export function tokensFor(object: RemoteObject, style: RenderStyle = "value"): Token[] {
   switch (object.type) {
     case "string": {
-      const text = typeof object.value === "string" ? object.value : (object.description ?? "")
+      // Stripped here, as the Swift does. React Native's dev-server notices
+      // arrive coloured for a terminal, and the codes are not text anyone
+      // wants to read.
+      const raw = typeof object.value === "string" ? object.value : (object.description ?? "")
+      const text = stripAnsi(raw)
       return style === "consoleArgument"
         ? [token(text, "plain")]
         : [token(quoted(text), "string")]
