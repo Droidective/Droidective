@@ -18,6 +18,8 @@ import type {
   DecompileRebuildResponse,
   DecompileTree,
   InstallResponse,
+  ManagedTools,
+  ToolInstallResponse,
 } from "@/lib/wire"
 
 /** Which of the APK tools are on this machine. */
@@ -134,4 +136,19 @@ export function metroTargets(port: number): Promise<unknown> {
 /** Whether a Metro dev server is answering, which is a different question. */
 export function metroRunning(port: number): Promise<boolean> {
   return invoke("metro_running", { port })
+}
+
+/**
+ * Which downloadable decompilers this machine has.
+ *
+ * Asked before a run, not after one fails: jadx is a download, and finding that
+ * out from a failed decompile is finding it out at the worst moment.
+ */
+export function managedTools(): Promise<ManagedTools> {
+  return invoke("managed_tools")
+}
+
+/** Downloads jadx or apktool. Tens of megabytes, so the screen says so. */
+export function installTool(tool: DecompileMode): Promise<ToolInstallResponse> {
+  return invoke("install_tool", { tool })
 }

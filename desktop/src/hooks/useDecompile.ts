@@ -1,23 +1,29 @@
 import { useCallback, useEffect, useState } from "react"
 
 import { useNotifications } from "@/hooks/useNotifications"
+import { managedTools } from "@/lib/daemon"
+import { isBinary, toggleExpanded } from "@/lib/decompile"
 import {
-  asDaemonError,
-  decompileApk,
-  decompiledFile,
-  pickFile,
-  pickFolder,
-  rebuildDecompiled,
-  searchDecompiled,
-} from "@/lib/daemon"
-import { ancestors, defaultExpanded, isBinary, toggleExpanded } from "@/lib/decompile"
-import type { ToastInput } from "@/lib/notifications"
+  chooseApk,
+  fetchTool,
+  readFile,
+  runDecompile,
+  runRebuild,
+  runSearch,
+  withAncestors,
+  type Show,
+} from "@/lib/decompile-actions"
 import type { DecompileFileText, DecompileHits, DecompileMode, DecompileTree } from "@/lib/wire"
-
-type Show = (input: ToastInput) => void
 
 export interface Decompile {
   path: string | null
+  /** True when APK Studio handed the APK over and owns the choice. */
+  embedded: boolean
+  /** Whether the chosen decompiler is downloaded. Null until asked. */
+  toolReady: boolean | null
+  /** True while fetching it. */
+  installing: boolean
+  install: () => void
   mode: DecompileMode
   tree: DecompileTree | null
   busy: boolean
@@ -41,25 +47,63 @@ export interface Decompile {
 }
 
 /**
- * A failure as one line.
+ * Whether the chosen decompiler is downloaded.
  *
- * Toasts carry no separate detail field, and the daemon's detail is the half
- * that says *why* — apktool's own words rather than "the tool could not
- * finish", which on its own sends nobody anywhere.
+ * Asked up front rather than discovered by a failed run. jadx is a download,
+ * and the old behaviour was a decompile that failed with "a tool this needs is
+ * not installed" and nothing to click — a dead end on any machine that had not
+ * already fetched it, which is every fresh one.
+ *
+ * Null means *unknown*, not missing: the daemon being unreachable is a
+ * different problem, and one the rest of the screen already reports.
  */
-function withDetail(error: { message: string; detail?: string | null }): string {
-  const detail = error.detail
-  if (detail === null || detail === undefined || detail === "") return error.message
-  return `${error.message} ${detail}`
+function useToolReady(mode: DecompileMode, installing: boolean): boolean | null {
+  const [ready, setReady] = useState<boolean | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    void managedTools()
+      .then((tools) => {
+        if (!cancelled) setReady(mode === "jadx" ? tools.jadx : tools.apktool)
+      })
+      .catch(() => {
+        if (!cancelled) setReady(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [mode, installing])
+  return ready
 }
 
 /**
- * Everything APK Decompile does, away from the markup.
+ * Opening one decompiled file.
  *
- * Its own hook because the pane is two screens over one piece of state — a
- * chooser and a browser — and threading eleven values plus their setters
- * between them is what makes a component too big to read.
+ * A binary needs no read at all — the viewer says what it is instead, rather
+ * than showing a screen of replacement characters.
  */
+function useOpenFile(
+  tree: DecompileTree | null,
+  setSelected: (path: string) => void,
+  setSource: (source: DecompileFileText | null) => void,
+  setLoadingFile: (loading: boolean) => void,
+  show: Show,
+): (path: string) => void {
+  return useCallback(
+    (which: string) => {
+      const root = tree?.root
+      if (root === undefined) return
+      setSelected(which)
+      if (isBinary(which)) {
+        setSource(null)
+        return
+      }
+      setLoadingFile(true)
+      void readFile(root, which, setSource, show).finally(() => setLoadingFile(false))
+    },
+    [tree, show, setSelected, setSource, setLoadingFile],
+  )
+}
+
 export function useDecompile(apkPath: string | null): Decompile {
   const { show } = useNotifications()
 
@@ -74,6 +118,8 @@ export function useDecompile(apkPath: string | null): Decompile {
   const [query, setQuery] = useState("")
   const [hits, setHits] = useState<DecompileHits | null>(null)
   const [searching, setSearching] = useState(false)
+  const [installing, setInstalling] = useState(false)
+  const toolReady = useToolReady(mode, installing)
 
   // An APK handed in (APK Studio) should not need choosing a second time.
   useEffect(() => {
@@ -93,26 +139,19 @@ export function useDecompile(apkPath: string | null): Decompile {
     [show],
   )
 
-  const open = useCallback(
-    (which: string) => {
-      const root = tree?.root
-      if (root === undefined) return
-      setSelected(which)
-      // A binary needs no read at all: the viewer says what it is instead.
-      if (isBinary(which)) {
-        setSource(null)
-        return
-      }
-      setLoadingFile(true)
-      void readFile(root, which, setSource, show).finally(() => setLoadingFile(false))
-    },
-    [tree, show],
-  )
+  const open = useOpenFile(tree, setSelected, setSource, setLoadingFile, show)
 
   return {
     path,
+    embedded: apkPath !== null,
     mode,
     tree,
+    toolReady,
+    installing,
+    install: () => {
+      setInstalling(true)
+      void fetchTool(mode, show).finally(() => setInstalling(false))
+    },
     busy,
     expanded,
     selected,
@@ -164,92 +203,3 @@ export function useDecompile(apkPath: string | null): Decompile {
  * Clearing on failure matters: leaving the previous APK's output on screen
  * under a failure toast reads as though the new one decompiled.
  */
-async function runDecompile(
-  path: string,
-  mode: DecompileMode,
-  refresh: boolean,
-  sink: {
-    setTree: (tree: DecompileTree | null) => void
-    setExpanded: (expanded: ReadonlySet<string>) => void
-    show: Show
-  },
-): Promise<void> {
-  try {
-    const answer = await decompileApk(path, mode, refresh)
-    sink.setTree(answer)
-    sink.setExpanded(defaultExpanded(answer.tree))
-  } catch (thrown) {
-    sink.setTree(null)
-    sink.show({ message: withDetail(asDaemonError(thrown)), ok: false })
-  }
-}
-
-/** Pick an APK, then decompile it. A dismissed dialog is a choice, not a failure. */
-async function chooseApk(
-  mode: DecompileMode,
-  setPath: (path: string) => void,
-  start: (path: string, mode: DecompileMode, refresh: boolean) => void,
-  show: Show,
-): Promise<void> {
-  try {
-    const picked = await pickFile("APK", ["apk"])
-    if (picked === null) return
-    setPath(picked)
-    start(picked, mode, false)
-  } catch (thrown) {
-    show({ message: withDetail(asDaemonError(thrown)), ok: false })
-  }
-}
-
-async function readFile(
-  root: string,
-  path: string,
-  setSource: (source: DecompileFileText | null) => void,
-  show: Show,
-): Promise<void> {
-  try {
-    setSource(await decompiledFile(root, path))
-  } catch (thrown) {
-    setSource(null)
-    show({ message: withDetail(asDaemonError(thrown)), ok: false })
-  }
-}
-
-async function runSearch(
-  root: string,
-  query: string,
-  setHits: (hits: DecompileHits) => void,
-  show: Show,
-): Promise<void> {
-  try {
-    setHits(await searchDecompiled(root, query))
-  } catch (thrown) {
-    show({ message: withDetail(asDaemonError(thrown)), ok: false })
-  }
-}
-
-async function runRebuild(root: string, path: string | null, show: Show): Promise<void> {
-  try {
-    const folder = await pickFolder()
-    if (folder === null) return
-    const base = (path ?? "app").split("/").pop() ?? "app"
-    const name = base.replace(/\.apk$/iu, "")
-    const answer = await rebuildDecompiled(root, root, `${folder}/${name}-rebuilt.apk`)
-    // Unsigned by design: apktool's output will not install until it is signed,
-    // and APK Sign is the screen that does that.
-    show({ message: "Rebuilt. Sign it before installing.", revealPath: answer.output, ok: true })
-  } catch (thrown) {
-    show({ message: withDetail(asDaemonError(thrown)), ok: false })
-  }
-}
-
-/** Opening the tree down to a file, so revealing a hit does not leave it hidden. */
-function withAncestors(
-  expanded: ReadonlySet<string>,
-  root: string,
-  path: string,
-): Set<string> {
-  const next = new Set(expanded)
-  for (const directory of ancestors(root, path)) next.add(directory)
-  return next
-}

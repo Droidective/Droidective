@@ -26,10 +26,11 @@ use crate::daemon::wire::{
     DevSettingsWriteRequest, Device, DevicePropsResponse, DnsResponse, DnsWriteRequest,
     EmulatorActionRequest, EmulatorsResponse, FeatureSummary, FileInfoRequest, FileInfoResponse,
     FileOperationRequest, FilePullRequest, FilePullResponse, FilesListRequest, FilesListResponse,
-    ForegroundResponse, InstallRequest, InstallResponse, LaunchResponse, MemInfoResponse,
-    PairResponse, PermissionWriteRequest, PermissionsResponse, ReactotronReverseRequest,
-    ReactotronReverseResponse, RestrictionWriteRequest, RestrictionsResponse, RootStatusResponse,
-    RunRequest, RunResponse, SandboxRequest, SandboxResponse, StreamParams, ToolsResponse,
+    ForegroundResponse, InstallRequest, InstallResponse, LaunchResponse, ManagedTools,
+    MemInfoResponse, PairResponse, PermissionWriteRequest, PermissionsResponse,
+    ReactotronReverseRequest, ReactotronReverseResponse, RestrictionWriteRequest,
+    RestrictionsResponse, RootStatusResponse, RunRequest, RunResponse, SandboxRequest,
+    SandboxResponse, StreamParams, ToolInstallRequest, ToolInstallResponse, ToolsResponse,
     WifiResponse, WifiWriteRequest, WirelessActionRequest,
 };
 use crate::daemon::{DaemonStatus, Supervisor};
@@ -1031,6 +1032,25 @@ pub async fn search_decompiled(
         .client()
         .await?
         .search_decompiled(&DecompileSearchRequest { root, query })
+        .await
+}
+
+/// Which of the downloadable decompilers this machine has.
+#[tauri::command]
+pub async fn managed_tools(supervisor: State<'_, Supervisor>) -> Result<ManagedTools, DaemonError> {
+    supervisor.client().await?.managed_tools().await
+}
+
+/// Downloads one. Slow — tens of megabytes — so the screen says so.
+#[tauri::command]
+pub async fn install_tool(
+    supervisor: State<'_, Supervisor>,
+    tool: DecompileMode,
+) -> Result<ToolInstallResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .install_tool(&ToolInstallRequest { tool })
         .await
 }
 

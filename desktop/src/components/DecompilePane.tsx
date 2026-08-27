@@ -63,14 +63,18 @@ function Chooser({ state }: { state: Decompile }) {
             </span>
           </label>
         ))}
-        <button
-          type="button"
-          disabled={state.busy}
-          onClick={path === null ? state.choose : () => state.run(false)}
-          className="mt-1 self-start rounded bg-accent px-3 py-1 text-white disabled:opacity-40"
-        >
-          {buttonLabel(state.busy, path)}
-        </button>
+        {state.toolReady === false ? (
+          <ToolGate mode={state.mode} installing={state.installing} onInstall={state.install} />
+        ) : (
+          <button
+            type="button"
+            disabled={state.busy}
+            onClick={path === null ? state.choose : () => state.run(false)}
+            className="mt-1 self-start rounded bg-accent px-3 py-1 text-white disabled:opacity-40"
+          >
+            {buttonLabel(state.busy, path)}
+          </button>
+        )}
         {path === null ? null : (
           <p className="truncate text-[11.5px] text-text-tertiary" title={path}>
             {path}
@@ -78,6 +82,41 @@ function Chooser({ state }: { state: Decompile }) {
         )}
       </div>
     </HubSection>
+  )
+}
+
+/**
+ * The decompiler is a download, and this is where that is said.
+ *
+ * Before this the run simply failed with "a tool this needs is not installed"
+ * and nothing to click — a dead end on any machine that had not already fetched
+ * it, which is every fresh one. The size is named because it is tens of
+ * megabytes and the wait is otherwise unexplained.
+ */
+function ToolGate({
+  mode,
+  installing,
+  onInstall,
+}: {
+  mode: string
+  installing: boolean
+  onInstall: () => void
+}) {
+  return (
+    <div className="mt-1 flex flex-col items-start gap-1.5 rounded border border-border-subtle p-2.5">
+      <p className="text-text-primary">{mode} is not downloaded yet.</p>
+      <p className="text-[11.5px] text-text-tertiary">
+        It is fetched once from its GitHub release — tens of megabytes — and kept for next time.
+      </p>
+      <button
+        type="button"
+        disabled={installing}
+        onClick={onInstall}
+        className="mt-0.5 rounded bg-accent px-3 py-1 text-white disabled:opacity-40"
+      >
+        {installing ? `Downloading ${mode}…` : `Download ${mode}`}
+      </button>
+    </div>
   )
 }
 

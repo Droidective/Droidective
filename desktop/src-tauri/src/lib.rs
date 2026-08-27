@@ -123,6 +123,8 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         commands::decompiled_file,
         commands::search_decompiled,
         commands::rebuild_decompiled,
+        commands::managed_tools,
+        commands::install_tool,
         commands::inspect_apk,
         commands::sign_apk,
         commands::convert_aab,

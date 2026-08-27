@@ -1192,6 +1192,23 @@ pub struct DecompileHits {
     pub capped: bool,
 }
 
+/// Which of the downloadable decompilers are installed.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ManagedTools {
+    pub jadx: bool,
+    pub apktool: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ToolInstallRequest {
+    pub tool: DecompileMode,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolInstallResponse {
+    pub path: String,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DecompileRebuildRequest {

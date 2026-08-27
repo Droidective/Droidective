@@ -121,3 +121,13 @@ export interface DecompileHits {
 export interface DecompileRebuildResponse {
   output: string
 }
+
+/** Which of the downloadable decompilers are installed. */
+export interface ManagedTools {
+  jadx: boolean
+  apktool: boolean
+}
+
+export interface ToolInstallResponse {
+  path: string
+}
