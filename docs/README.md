@@ -28,6 +28,14 @@ or reviewing a non-trivial change.
 | [review/IMPACT_ANALYSIS.md](review/IMPACT_ANALYSIS.md) | Reasoning about blast radius: persistence, registry, shared services, releases |
 | [review/SECURITY.md](review/SECURITY.md) | Secrets, on-device shell input, file operations, the public-repo rule |
 
+## Shipping a change
+
+- **[manual-verification.md](manual-verification.md)** — the per-release list of
+  what a human has to check, because no agent can: real hardware, sound, drag
+  and drop, notarisation, and whether the app runs on Windows and Linux at all.
+  Anything an agent *can* verify is automated or driven instead, so this list
+  stays short on purpose. Walk it before tagging.
+
 ## A note on these docs
 
 They describe the project as it is, not an aspirational process. If a standard

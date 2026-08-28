@@ -19,6 +19,13 @@ setup, secrets, and the mechanics.
 `scripts/update-bundled-tools.sh`, and `scripts/package-dmg.sh` refuses to
 package an app whose main executable or ffmpeg is missing a slice.
 
+**Before tagging, walk
+[`docs/manual-verification.md`](docs/manual-verification.md).** It is the short
+list of things no agent can check — real hardware, sound, drag and drop,
+notarisation, and whether the app runs on Windows and Linux at all. Everything
+that *can* be automated already is, so what is left there genuinely needs a
+person.
+
 ## One-time setup
 
 Do these once. Steps 1–3 are required before the first auto-updating release.
