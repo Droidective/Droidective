@@ -239,13 +239,33 @@ private final class FileProducingRunner: ProcessRunning, @unchecked Sendable {
         recorded.append(Invocation(executable: executable, arguments: arguments))
         lock.unlock()
         if let output = arguments.first(where: { $0.hasPrefix("--output=") }) {
-            _ = FileManager.default.createFile(atPath: String(output.dropFirst("--output=".count)), contents: Data("apks".utf8))
+            write(Data("apks".utf8), to: String(output.dropFirst("--output=".count)))
         }
         if producesUniversalApk, executable == HostArchive.unzipExecutable,
            let flag = arguments.firstIndex(where: { $0 == "-d" || $0 == "-C" }),
            arguments.count > flag + 1 {
             let dest = URL(fileURLWithPath: arguments[flag + 1]).appendingPathComponent("universal.apk")
-            _ = FileManager.default.createFile(atPath: dest.path, contents: Data("universal".utf8))
+            write(Data("universal".utf8), to: dest.path)
         }
+    }
+
+    /// Write one of the files a real tool would have produced, and **say so if
+    /// that fails**.
+    ///
+    /// It failed once on Windows CI, and because the result was discarded the
+    /// only symptom was `extractFailed("")` from the service two lines later —
+    /// an empty message about the wrong step, which says nothing about a
+    /// fixture that could not write its own file. `createFile` also returns a
+    /// must-use `Bool` off Darwin, so discarding it is the trap `SecretFile`
+    /// and the mirror log both had to be fixed for.
+    ///
+    /// Retried because the failure is transient: Windows CI briefly refuses a
+    /// just-created path, which is the same behaviour `FileRetry` exists for.
+    private func write(_ contents: Data, to path: String) {
+        for attempt in 1...5 {
+            if FileManager.default.createFile(atPath: path, contents: contents) { return }
+            Thread.sleep(forTimeInterval: 0.05 * Double(attempt))
+        }
+        Issue.record("the fixture could not write \(path)")
     }
 }
