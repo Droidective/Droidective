@@ -210,7 +210,22 @@ public actor ReactotronRelay {
         introduced.removeAll()
         let listening = channel
         channel = nil
-        try? await listening?.close().get()
+        if let listening {
+            try? await listening.close().get()
+            // Then wait for the channel to actually *be* closed.
+            //
+            // `close()`'s future completes when the close has been put through
+            // the pipeline; `closeFuture` is the one that fires when the
+            // channel is inactive and its socket released. Awaiting only the
+            // first let `stop()` return with the listener still holding the
+            // port, and a bind moments later was refused —
+            // `stoppingReleasesThePort` caught it on CI three times, on a port
+            // nothing else on the machine could have taken.
+            //
+            // Already-completed when the close was quick, so this costs
+            // nothing in the ordinary case.
+            try? await listening.closeFuture.get()
+        }
         let running = group
         group = nil
         try? await running?.shutdownGracefully()
