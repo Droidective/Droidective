@@ -35,7 +35,7 @@ private let isWindows: Bool = {
         }
         func download(from url: URL, to destination: URL, onProgress: (@Sendable (Double) -> Void)?) async throws {
             onProgress?(1)
-            try assetBytes.write(to: destination, options: .atomic)
+            try FixtureFile.write(assetBytes, to: destination)
         }
     }
 
@@ -51,7 +51,7 @@ private let isWindows: Bool = {
 
     @Test func seedInstallsABundledCopyAndResolvesIt() async throws {
         let jar = FileManager.default.temporaryDirectory.appendingPathComponent("bundletool-all.jar")
-        try Data("BUNDLED-JAR".utf8).write(to: jar)
+        try FixtureFile.write(Data("BUNDLED-JAR".utf8), to: jar)
         defer { try? FileManager.default.removeItem(at: jar) }
         let store = ManagedToolStore(rootDirectory: tempRoot())
 
@@ -190,7 +190,7 @@ private let isWindows: Bool = {
         let work = fm.temporaryDirectory.appendingPathComponent("xz-src-\(UUID().uuidString)")
         try fm.createDirectory(at: work, withIntermediateDirectories: true)
         let raw = work.appendingPathComponent("payload")
-        try payload.write(to: raw)
+        try FixtureFile.write(payload, to: raw)
         let xz = Process()
         xz.executableURL = URL(fileURLWithPath: "/usr/bin/xz")
         xz.arguments = ["--compress", raw.path]
@@ -207,7 +207,7 @@ private let isWindows: Bool = {
         let work = fm.temporaryDirectory.appendingPathComponent("tgz-src-\(UUID().uuidString)")
         let runnable = work.appendingPathComponent("jdk-21").appendingPathComponent(runnableRelPath)
         try fm.createDirectory(at: runnable.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try "#!/bin/sh\necho java\n".write(to: runnable, atomically: true, encoding: .utf8)
+        try FixtureFile.write("#!/bin/sh\necho java\n", to: runnable)
         try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: runnable.path)
         let out = work.appendingPathComponent("out.tar.gz")
         let tar = Process()

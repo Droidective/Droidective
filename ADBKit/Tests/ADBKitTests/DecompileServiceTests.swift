@@ -53,9 +53,9 @@ import Testing
         let fm = FileManager.default
         let root = fm.temporaryDirectory.appendingPathComponent("dec-\(UUID().uuidString)")
         try fm.createDirectory(at: root.appendingPathComponent("a"), withIntermediateDirectories: true)
-        try "x".write(to: root.appendingPathComponent("a/z.smali"), atomically: true, encoding: .utf8)
-        try "x".write(to: root.appendingPathComponent("b.txt"), atomically: true, encoding: .utf8)
-        try "x".write(to: root.appendingPathComponent("c.txt"), atomically: true, encoding: .utf8)
+        try FixtureFile.write("x", to: root.appendingPathComponent("a/z.smali"))
+        try FixtureFile.write("x", to: root.appendingPathComponent("b.txt"))
+        try FixtureFile.write("x", to: root.appendingPathComponent("c.txt"))
 
         let node = DecompileService.tree(at: root)
         #expect(node.isDirectory)
@@ -71,8 +71,8 @@ import Testing
         let fm = FileManager.default
         let root = fm.temporaryDirectory.appendingPathComponent("search-\(UUID().uuidString)")
         try fm.createDirectory(at: root.appendingPathComponent("com/x"), withIntermediateDirectories: true)
-        try "class A { void hello() {} }".write(to: root.appendingPathComponent("com/x/A.java"), atomically: true, encoding: .utf8)
-        try "<manifest hello=\"1\"/>".write(to: root.appendingPathComponent("AndroidManifest.xml"), atomically: true, encoding: .utf8)
+        try FixtureFile.write("class A { void hello() {} }", to: root.appendingPathComponent("com/x/A.java"))
+        try "<manifest hello=\"1\"/>".write(to: root.appendingPathComponent("AndroidManifest.xml"), atomically: false, encoding: .utf8)
         try Data([0xFF, 0xD8, 0xFF]).write(to: root.appendingPathComponent("icon.png"))  // binary ext → skipped
 
         let hits = DecompileService.search(in: root, query: "HELLO")  // case-insensitive
@@ -107,7 +107,7 @@ import Testing
         let dir = out.appendingPathComponent(
             DecompileService.outputDirName(apkPath: "/x/a.apk", mode: .jadx), isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        try "class A {}".write(to: dir.appendingPathComponent("A.java"), atomically: true, encoding: .utf8)
+        try FixtureFile.write("class A {}", to: dir.appendingPathComponent("A.java"))
         let service = await Self.makeService(java: nil)
         let result = try await service.decompile(apkPath: "/x/a.apk", mode: .jadx, into: out)
         #expect(result == dir)
@@ -120,7 +120,7 @@ import Testing
         let cached = out.appendingPathComponent(
             DecompileService.outputDirName(apkPath: "/debug/a.apk", mode: .jadx), isDirectory: true)
         try FileManager.default.createDirectory(at: cached, withIntermediateDirectories: true)
-        try "class A {}".write(to: cached.appendingPathComponent("A.java"), atomically: true, encoding: .utf8)
+        try FixtureFile.write("class A {}", to: cached.appendingPathComponent("A.java"))
         let service = await Self.makeService(java: nil)
         await #expect(throws: DecompileService.DecompileError.self) {
             try await service.decompile(apkPath: "/release/a.apk", mode: .jadx, into: out)
