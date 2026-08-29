@@ -18,6 +18,12 @@ private let isWindows: Bool = {
     #endif
 }()
 
+// Test fixtures write with `atomically: false` on purpose. An atomic write is
+// write-a-temp-then-rename, and on Windows CI that rename is what a scanner
+// refuses with ERROR_SHARING_VIOLATION — the transient `FileRetry` exists for
+// in the shipping code. A fixture writing a brand-new file into a brand-new
+// unique temp directory has nothing for atomicity to protect, so it does not
+// pay that cost.
 @Suite struct ManagedToolStoreTests {
     /// Canned network: every `data(from:)` returns the same release JSON, every
     /// download writes the same asset bytes. Extraction uses the real runner.
@@ -207,7 +213,7 @@ private let isWindows: Bool = {
         let work = fm.temporaryDirectory.appendingPathComponent("tgz-src-\(UUID().uuidString)")
         let runnable = work.appendingPathComponent("jdk-21").appendingPathComponent(runnableRelPath)
         try fm.createDirectory(at: runnable.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try "#!/bin/sh\necho java\n".write(to: runnable, atomically: true, encoding: .utf8)
+        try "#!/bin/sh\necho java\n".write(to: runnable, atomically: false, encoding: .utf8)
         try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: runnable.path)
         let out = work.appendingPathComponent("out.tar.gz")
         let tar = Process()
