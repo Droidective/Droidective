@@ -82,22 +82,65 @@ not regenerated — paste the generated half back under it.
 
 ## Order of work
 
-The shell comes first. Porting screens into a window that has no tabs, no
-split panes and no palette produces something that looks like Droidective in a
-screenshot and does not feel like it in use — and every screen ported before
-the shell exists will need reworking to live inside it.
+The shell came first, and it has landed: sidebar, tab strip, split panes,
+palette, per-feature hotkeys, UI zoom, device bar, menu bar, toasts. A screen
+ported now opens in a tab, splits, takes a shortcut and reports through the
+toasts without being reworked for any of it. Thirty-three screens exist.
 
-The sidebar, the tab strip, split panes, the palette, per-feature hotkeys, the
-UI zoom and the device bar have landed, so a screen ported now opens in a tab,
-splits, takes a shortcut and reports through the toasts without being reworked
-for any of it. What is left of the shell is the menu bar, multi-window, and the
-window translucency.
+### What is next, in order
 
-1. **Shell parity** (below) — tabs, split panes, sidebar, palette, hotkeys.
-2. **The screens people open every day** — logcat, file explorer, device info,
-   apps, crash catcher.
-3. **The rest of the views**, then the long tail of actions that deserve a
-   real screen rather than a form.
+The ordering principle is **risk before features**. Thirty-three screens have
+been built for two operating systems that **nobody has ever launched the app
+on** — CI compiles both and runs the unit suites, and that is all. Every screen
+in this document is theoretical until that is not true, so validating it comes
+before adding to it.
+
+1. **Run the app on Linux, and keep it running.** `scripts/smoke-desktop-linux.sh`
+   already installs the built `.deb` in a clean `ubuntu:24.04` container, starts
+   it under Xvfb and photographs the framebuffer — and **nothing runs it**. The
+   `.deb` itself is only built on beta tags. Build it, run the smoke, drive the
+   app far enough to open a screen, and then wire the smoke into CI so it cannot
+   regress. If the app does not come up, everything below waits.
+   *Also settles whether the mirror really decodes on WebKitGTK, which so far
+   has only been measured in a codec probe rather than watched in a window.*
+2. **Do the same for Windows, as far as it goes.** No container equivalent
+   exists, and the honest answer may be that a person has to launch it once —
+   but the `windows-2022` runner has a desktop session, so a smoke there is
+   worth attempting before conceding it to
+   [`manual-verification.md`](manual-verification.md).
+3. **The three remaining hubs** — `react-native`, `simulate`, `connection`.
+   Cheap: every member action already runs, so this is a grouped `Form` over
+   things that work, and it finishes the folding story `lib/hubs.ts` started.
+   When all four hubs exist the sidebar matches the Mac's exactly.
+4. **Logcat's app filter.** The most-used thing anyone does with logcat, and the
+   one gap in the screen people open most. Needs a pid → package map the daemon
+   does not serve yet; matching on the tag would quietly miss lines.
+5. **Notifications** (backlog 18). Small, and several screens already want it:
+   an install that finishes while you are elsewhere, a watched crash landing.
+6. **Background mode and the tray** (20), then **Quick Actions** (19). In that
+   order because the panel needs the global shortcut and the resident process
+   the first one establishes. Together they are the most distinctive thing the
+   Mac app does that this one does not.
+7. **API Testing** (`api-client`). The largest remaining feature and the easiest
+   to be confident about: device-free, and ADBKit's `ApiClient/` group is
+   already fully portable.
+8. **ffmpeg for Windows and Linux**, which unblocks **screen record** and the
+   **video editor** — the only two features blocked rather than unscheduled.
+   `App/Resources/ffmpeg` is a committed macOS universal binary and
+   `scripts/unpack-ffmpeg.sh` verifies it with `lipo`.
+9. **Multi-window** (21). Large, and the shell is the right shape for it now.
+10. **Drag and drop** (17). Deliberately late: it is the one item whose
+    *verification* an agent cannot do at all — synthetic drags never fire
+    `dragstart` in a webview — so it should land when there is a person to try
+    it, and it goes on the manual list the moment it does.
+11. **The polish** — Settings' remaining tabs and the background/text colour (8),
+    window translucency and its per-platform blur (15), the role picker (9),
+    the welcome tour (22), the updater (23).
+12. **`frida-console`**, last of the real features: it needs a rooted device to
+    verify, which makes it the hardest to be sure of and the least used.
+
+Not in this list, and not scheduled: `ios-logs` and `push-notification`, which
+drive an Apple toolchain rather than a device.
 
 ---
 

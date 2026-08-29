@@ -33,6 +33,17 @@ both and runs the unit suites; it has never *launched the app*.
 This is the largest gap in the project. Everything else on this list is a
 detail by comparison.
 
+> **The Linux half of this should not stay here.**
+> `scripts/smoke-desktop-linux.sh` already installs the built `.deb` in a clean
+> container, starts it under Xvfb and photographs the framebuffer — nothing
+> runs it, and the `.deb` is only built on beta tags. Wiring that into CI is
+> the first item in the parity tracker's order of work, and when it lands this
+> box goes away. Until then it is genuinely unchecked, so it stays.
+>
+> What will remain even then is a **real desktop**: a container under Xvfb
+> proves the app comes up and paints, not that it looks right on your GNOME at
+> your DPI with your GPU.
+
 - [ ] **Windows: the app launches** and shows a window with the device bar,
       sidebar and tab strip.
 - [ ] **Linux: the same** (the deb, on a stock GNOME or KDE).
