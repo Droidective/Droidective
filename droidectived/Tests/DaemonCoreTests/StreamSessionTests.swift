@@ -126,6 +126,24 @@ import Testing
         var ptyError: (any Error)?
         let stopped = StoppedBox()
         let ptyRequests = PtyRequestBox()
+        /// Every `(serial, pid)` a logcat subscription asked for, so the app
+        /// filter's wiring is asserted rather than assumed.
+        let logcatRequests = LogcatRequestBox()
+
+        final class LogcatRequestBox: @unchecked Sendable {
+            private let lock = NSLock()
+            private var opens: [(serial: String, pid: Int?)] = []
+            var all: [(serial: String, pid: Int?)] {
+                lock.lock()
+                defer { lock.unlock() }
+                return opens
+            }
+            func record(_ serial: String, _ pid: Int?) {
+                lock.lock()
+                opens.append((serial, pid))
+                lock.unlock()
+            }
+        }
 
         final class PtyRequestBox: @unchecked Sendable {
             private let lock = NSLock()
@@ -186,7 +204,8 @@ import Testing
             }
         }
 
-        func logcat(serial: String) async throws -> AsyncStream<[LogLine]> {
+        func logcat(serial: String, pid: Int?) async throws -> AsyncStream<[LogLine]> {
+            logcatRequests.record(serial, pid)
             if let logcatError { throw logcatError }
             let batches = logBatches
             return AsyncStream { continuation in
@@ -282,6 +301,39 @@ import Testing
         // `id` and `searchKey` are internal rendering concerns and must not leak.
         #expect(!batch.contains("searchKey"))
         #expect(!batch.contains(#""id":"#) || batch.contains(#""id":4"#))
+    }
+
+    /// The app filter's whole mechanism: the pid the client resolved has to
+    /// reach `adb logcat --pid`, not be filtered out afterwards. Dropping it
+    /// here would leave a log that looks filtered in the UI while the device
+    /// still ships every other app's lines into the ring buffer.
+    @Test func aLogcatSubscriptionPassesItsPidToTheStream() async {
+        let sink = RecordingSink()
+        let source = ScriptedSource(logBatches: [[Self.line("hello")]])
+        let session = StreamSession(sink: sink, source: source)
+
+        await session.handle(
+            text: #"{"op":"subscribe","id":4,"topic":"logcat","params":{"serial":"R58M","pid":4211}}"#)
+        #expect(await eventually { await sink.events().contains("batch") })
+
+        let asked = source.logcatRequests.all
+        #expect(asked.count == 1)
+        #expect(asked.first?.serial == "R58M")
+        #expect(asked.first?.pid == 4211)
+    }
+
+    /// No pid means the whole device, which is what the log opens as. A
+    /// default of some kind here would filter a feed nobody asked to filter.
+    @Test func aLogcatSubscriptionWithoutAPidStreamsTheWholeDevice() async {
+        let sink = RecordingSink()
+        let source = ScriptedSource(logBatches: [[Self.line("hello")]])
+        let session = StreamSession(sink: sink, source: source)
+
+        await session.handle(
+            text: #"{"op":"subscribe","id":4,"topic":"logcat","params":{"serial":"R58M"}}"#)
+        #expect(await eventually { await sink.events().contains("batch") })
+
+        #expect(source.logcatRequests.all.first?.pid == nil)
     }
 
     @Test func performanceSamplesGoOutAsTheDTONotTheInternalModel() async {

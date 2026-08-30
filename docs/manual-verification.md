@@ -14,11 +14,13 @@ That bar matters: a list that collects "would be nice to double-check" stops
 being read, and then the genuinely impossible items get missed with it.
 
 **What an agent already does, so you do not have to:** all six test suites; the
-Linux suite in a container; launching the desktop app and driving it against a
-booted emulator through the command palette; screenshotting and reading the
-result; calling daemon routes directly with a token; installing managed tools;
-decompiling a real APK; connecting the JS console to a real Metro and
-evaluating expressions in a running React Native app.
+Linux suite in a container; **installing the Linux `.deb` in a clean container
+and launching, driving and photographing the app**; launching the desktop app
+and driving it against a booted emulator through the command palette;
+screenshotting and reading the result; calling daemon routes directly with a
+token; installing managed tools; decompiling a real APK; connecting the JS
+console to a real Metro and evaluating expressions in a running React Native
+app.
 
 Add an item here only with a one-line reason it cannot be automated. Delete one
 the moment it can be.
@@ -27,31 +29,33 @@ the moment it can be.
 
 ## 1. Windows and Linux, actually running
 
-**Why not automatable here:** there is no Windows or Linux machine. CI compiles
-both and runs the unit suites; it has never *launched the app*.
+**Why not automatable here:** there is no Windows or Linux machine, and no
+Windows *container* either — CI compiles both and runs the unit suites.
 
-This is the largest gap in the project. Everything else on this list is a
-detail by comparison.
+**Linux is no longer in that sentence.** `desktop-linux-smoke` runs on every PR:
+it installs the `.deb` in a bare `ubuntu:24.04` so apt resolves the package's
+own declared Depends and nothing else, launches the app under Xvfb, drives the
+command palette to open a screen, and photographs both frames. Every check is
+fatal, and the artifacts are uploaded whether it passed or not, so a failure is
+a picture rather than a description of one. The first run found the app
+unusable — a daemon dynamically linked against a Swift runtime no user machine
+has — which is the case for the job existing.
 
-> **The Linux half of this should not stay here.**
-> `scripts/smoke-desktop-linux.sh` already installs the built `.deb` in a clean
-> container, starts it under Xvfb and photographs the framebuffer — nothing
-> runs it, and the `.deb` is only built on beta tags. Wiring that into CI is
-> the first item in the parity tracker's order of work, and when it lands this
-> box goes away. Until then it is genuinely unchecked, so it stays.
->
-> What will remain even then is a **real desktop**: a container under Xvfb
-> proves the app comes up and paints, not that it looks right on your GNOME at
-> your DPI with your GPU.
+What a container **cannot** tell you, and what is left below: whether it looks
+right on your GNOME, at your DPI, with your GPU.
 
 - [ ] **Windows: the app launches** and shows a window with the device bar,
       sidebar and tab strip.
-- [ ] **Linux: the same** (the deb, on a stock GNOME or KDE).
-- [ ] **The mirror decodes.** Open Mirror Screen with a device attached. A
-      WebKitGTK container measured H.264 support in `scripts/probe-webkit-webcodecs.sh`,
-      but no one has watched a real window paint frames. On Linux this needs
-      `gstreamer1.0-libav`; without it the pane should *say so* rather than
-      showing a black rectangle.
+- [ ] **Linux on a real desktop** — the deb on a stock GNOME or KDE. That it
+      *runs* is now checked on every PR; that its window decorations, fonts and
+      DPI look right on a real session is not.
+- [ ] **The mirror paints a device.** `scripts/probe-webkit-webcodecs.sh` now
+      *decodes* rather than asking: a real Annex-B keyframe goes into WebKitGTK
+      and a 64×64 `VideoFrame` comes out — but only with `gstreamer1.0-libav`
+      installed, which the `.deb` declares as a Recommends and without which
+      the same frame throws "No decoder found". So the codec is settled. What
+      is not is a *device* stream: open Mirror Screen with a device attached
+      and watch it move.
 - [ ] **Native file dialogs open** — Install App, APK Studio's Choose APK,
       and the save-location pickers. These are Rust-side and per-platform.
 - [ ] **Fonts and DPI look right** at 100% and at a scaled display.

@@ -76,6 +76,19 @@ enum ChildCommands {
         executable: "/bin/sh", arguments: ["-c", "sleep 1; echo done"]
     )
 
+    /// A child that leaves a grandchild holding its stdout and exits at once.
+    ///
+    /// This is `adb`'s shape on a machine whose adb server is not yet running:
+    /// it forks the server, prints a line, and exits — and the server inherits
+    /// the pipe. On Linux that child is then left a **zombie** that corelibs
+    /// never reaps, so `Process.terminationHandler` never fires. Nothing else
+    /// in this suite produces that, which is why it was the one failure the
+    /// whole desktop app fell over: the first `adb devices` on a fresh machine
+    /// never returned.
+    static let forksAndExits = (
+        executable: "/bin/sh", arguments: ["-c", "sleep 30 & echo started"]
+    )
+
     static let echoOutput = "hello\n"
     static let stderrOutput = "oops\n"
     #endif

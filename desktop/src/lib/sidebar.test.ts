@@ -49,13 +49,33 @@ describe("sidebarFeatures", () => {
     const listed = sidebarFeatures(features)
     expect(listed.length).toBeGreaterThan(0)
     for (const feature of listed) expect(feature.implemented).toBe(true)
-    // Registry entries with no runner on the Mac either.
-    expect(listed.map((feature) => feature.id)).not.toContain("simulate")
   })
 
-  it("keeps hub members, which this app has no hub to reach them through", () => {
+  it("drops a feature the daemon says it cannot run", () => {
+    // Asserted against a synthetic entry rather than a real id: every feature
+    // the current daemon serves is implemented, so an example from the fixture
+    // would be a test that passes by finding nothing. It still has to hold —
+    // an older daemon, or a registry entry that lands before its runner, is
+    // exactly what this filter is for.
+    const unrun = { ...(features[0] as FeatureSummary), id: "not-yet", implemented: false }
+    const listed = sidebarFeatures([...features, unrun]).map((feature) => feature.id)
+    expect(listed).not.toContain("not-yet")
+  })
+
+  it("keeps a member of the one hub this app has not built", () => {
+    // The Apps explorer's detail pane is what folds these in on the Mac, and
+    // this app's `AppsPane` has no such pane — so hiding them would strand
+    // them. See `lib/hubs.ts`.
     const listed = sidebarFeatures(features).map((feature) => feature.id)
-    expect(listed).toContain("fake-battery")
+    expect(listed).toContain("app-info")
+  })
+
+  it("folds away a member of a hub this app has built", () => {
+    // fake-battery is reachable through the Simulate hub, which is a real pane
+    // here now, so listing it as well would be the Mac's own duplication.
+    const listed = sidebarFeatures(features).map((feature) => feature.id)
+    expect(listed).not.toContain("fake-battery")
+    expect(listed).toContain("simulate")
   })
 
   it("lists full-screen views alongside actions", () => {
@@ -112,8 +132,11 @@ describe("sidebarSections", () => {
   })
 
   it("ranks by relevance while searching, best hit first", () => {
+    // The Simulate hub, not fake-battery: the hub folds in each member's
+    // keywords precisely so the member's own word still lands somewhere, and
+    // the member itself is no longer listed separately.
     const sections = sidebarSections(features, { ...plain, query: "battery" })
-    expect(sections[0]?.features[0]?.id).toBe("fake-battery")
+    expect(sections[0]?.features[0]?.id).toBe("simulate")
   })
 
   it("reveals a collapsed group's hits rather than hiding them from a search", () => {
@@ -122,7 +145,7 @@ describe("sidebarSections", () => {
       query: "battery",
       collapsedCategories: [...CATEGORY_ORDER],
     })
-    expect(visibleFeatures(sections).map((feature) => feature.id)).toContain("fake-battery")
+    expect(visibleFeatures(sections).map((feature) => feature.id)).toContain("simulate")
   })
 
   it("puts a Pinned section first and lifts its members out of their groups", () => {
@@ -143,7 +166,7 @@ describe("sidebarSections", () => {
 
   it("does not pin-order a search", () => {
     const sections = sidebarSections(features, { ...plain, query: "battery", favorites: ["logcat"] })
-    expect(sections[0]?.features[0]?.id).toBe("fake-battery")
+    expect(sections[0]?.features[0]?.id).toBe("simulate")
   })
 
   it("returns nothing for a query that matches nothing", () => {

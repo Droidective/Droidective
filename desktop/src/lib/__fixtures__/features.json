@@ -55,7 +55,7 @@
             "category": "connection",
             "fields": [],
             "id": "connection",
-            "implemented": false,
+            "implemented": true,
             "isAbsorbedByHub": false,
             "isDestructive": false,
             "keywords": [
@@ -258,7 +258,7 @@
             "category": "reactNative",
             "fields": [],
             "id": "react-native",
-            "implemented": false,
+            "implemented": true,
             "isAbsorbedByHub": false,
             "isDestructive": false,
             "keywords": [
@@ -581,7 +581,7 @@
             "category": "screen",
             "fields": [],
             "id": "video-editor",
-            "implemented": false,
+            "implemented": true,
             "isAbsorbedByHub": false,
             "isDestructive": false,
             "keywords": [
@@ -758,7 +758,7 @@
             "category": "deviceState",
             "fields": [],
             "id": "simulate",
-            "implemented": false,
+            "implemented": true,
             "isAbsorbedByHub": false,
             "isDestructive": false,
             "keywords": [
@@ -1201,7 +1201,7 @@
             "category": "appManagement",
             "fields": [],
             "id": "install-app",
-            "implemented": false,
+            "implemented": true,
             "isAbsorbedByHub": false,
             "isDestructive": false,
             "keywords": [

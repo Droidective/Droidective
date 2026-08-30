@@ -23,6 +23,9 @@ public protocol DaemonBackend: Sendable {
     /// worth naming. Not an error when absent: the launcher is in front more
     /// often than any app is.
     func foregroundPackage(serial: String) async throws -> String?
+    /// The process id an app is running under, or nil when it is not running.
+    /// Nil is an answer for the same reason as above — see `LogcatProtocol`.
+    func logcatPid(serial: String, packageId: String) async throws -> Int?
     /// One verb against one package.
     func controlApp(
         serial: String, packageId: String, action: AppControlService.AppAction
@@ -247,6 +250,10 @@ public struct LiveBackend: DaemonBackend {
 
     public func foregroundPackage(serial: String) async throws -> String? {
         try await AppInspectionService(client: client).getForegroundPackage(serial: serial)
+    }
+
+    public func logcatPid(serial: String, packageId: String) async throws -> Int? {
+        try await LogcatStreamer(client: client).resolvePid(serial: serial, packageId: packageId)
     }
 
     public func controlApp(
@@ -1165,6 +1172,21 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
             } catch {
                 return (.badGateway, encoded(DaemonProtocol.ErrorBody(
                     code: "adb_failed", message: "Could not read the foreground app.",
+                    detail: "\(error)")))
+            }
+
+        case .logcatPid:
+            let raw = Data(body.readableBytesView)
+            guard let request = try? JSONDecoder().decode(
+                LogcatProtocol.PidRequest.self, from: raw)
+            else { return (.badRequest, encoded(DaemonProtocol.badRequest)) }
+            do {
+                let pid = try await backend.logcatPid(
+                    serial: request.serial, packageId: request.packageId)
+                return (.ok, encoded(LogcatProtocol.PidResponse(pid: pid)))
+            } catch {
+                return (.badGateway, encoded(DaemonProtocol.ErrorBody(
+                    code: "adb_failed", message: "Could not read the app's process id.",
                     detail: "\(error)")))
             }
 

@@ -55,6 +55,12 @@ public struct SystemProcessRunner: ProcessRunning {
 
         let timedOut = LockedBox(false)
         let cancelled = LockedBox(false)
+        // Set once *we* have reaped the child ourselves (see `ExitReaper`,
+        // which runs off-Darwin only). After that its pid may be recycled by
+        // the kernel, so nothing may signal it again — terminating a stranger
+        // is worse than any hang. Never set on Darwin, where the guards below
+        // are a constant false.
+        let reaped = LockedBox(false)
         let boxed = UncheckedSendable(process)
 
         return await withTaskCancellationHandler {
@@ -65,7 +71,7 @@ public struct SystemProcessRunner: ProcessRunning {
             // (a process exiting cleanly right at the deadline isn't a timeout).
             let watchdog = Task {
                 try await Task.sleep(for: timeout)
-                if boxed.value.isRunning {
+                if boxed.value.isRunning, !reaped.get() {
                     timedOut.set(true)
                     boxed.value.terminate()
                 }
@@ -76,7 +82,7 @@ public struct SystemProcessRunner: ProcessRunning {
                 // first signal.
                 #if !os(Windows)
                 try await Task.sleep(for: .seconds(2))
-                if boxed.value.isRunning {
+                if boxed.value.isRunning, !reaped.get() {
                     kill(boxed.value.processIdentifier, SIGKILL)
                 }
                 #endif
@@ -110,6 +116,15 @@ public struct SystemProcessRunner: ProcessRunning {
                     // Cancelled during launch: tear the child down now so it
                     // doesn't keep running after the caller's Task is gone.
                     if cancelled.get(), boxed.value.isRunning { boxed.value.terminate() }
+                    #if !canImport(Darwin) && !os(Windows)
+                    ExitReaper.watch(
+                        pid: boxed.value.processIdentifier,
+                        onExit: { status in
+                            guard !resumed.swap(true) else { return }
+                            reaped.set(true)
+                            continuation.resume(returning: status)
+                        })
+                    #endif
                 } catch {
                     guard !resumed.swap(true) else { return }
                     stdout.cancel(outPipe.fileHandleForReading)
@@ -138,16 +153,94 @@ public struct SystemProcessRunner: ProcessRunning {
             // its timeout. SIGTERM first, then SIGKILL for anything ignoring it
             // (POSIX only — Windows' terminate() is already TerminateProcess).
             cancelled.set(true)
-            if boxed.value.isRunning { boxed.value.terminate() }
+            // `reaped` guards every signal: once we have waited on the pid
+            // ourselves the kernel may hand that number to someone else, and
+            // `Process.isRunning` does not know we did — it is the corelibs
+            // bookkeeping that missed the exit in the first place.
+            if boxed.value.isRunning, !reaped.get() { boxed.value.terminate() }
             #if !os(Windows)
             Task {
                 try? await Task.sleep(for: .seconds(2))
-                if boxed.value.isRunning { kill(boxed.value.processIdentifier, SIGKILL) }
+                if boxed.value.isRunning, !reaped.get() {
+                    kill(boxed.value.processIdentifier, SIGKILL)
+                }
             }
             #endif
         }
     }
 }
+
+#if !canImport(Darwin) && !os(Windows)
+/// A second way to notice a child has exited, because the first one can miss.
+///
+/// `Process.terminationHandler` is the primary path and normally fires within
+/// milliseconds. It does not always: on Linux, `adb devices` run on a machine
+/// where the adb *server* is not yet up forks that server, exits, and is left a
+/// **zombie** — corelibs never reaps it and never calls the handler, so the
+/// continuation waiting on it is suspended for the life of the process. The
+/// watchdog is no escape either: its only recovery is terminating a process
+/// that is still running, and this one is already gone.
+///
+/// That is not a hypothetical. It is what the first launch of the Linux app
+/// did: `list_features` answered with all 61 features while `list_devices`
+/// never returned, so the window came up with an empty sidebar, "0 features",
+/// and no error to explain it — the client was still awaiting a promise that
+/// would never settle.
+///
+/// So this polls `waitpid(WNOHANG)` and reports the exit itself. Racing
+/// corelibs for the reap is safe in both directions: whoever wins resumes the
+/// continuation exactly once (`resumed`), and the loser's `waitpid` answers
+/// -1/ECHILD and does nothing. What is *not* safe is signalling a pid after it
+/// has been reaped — the number can be recycled — which is why a win here
+/// raises `reaped` and the watchdog checks it.
+///
+/// **Off-Darwin only, deliberately.** This is a corelibs gap: Darwin's
+/// `Process` reaps and reports reliably, and the Mac app is the shipping one —
+/// racing Foundation for a `waitpid` there would be a change to a proven path
+/// in exchange for fixing nothing. The pipe collectors are split the same way
+/// and for the same kind of reason.
+///
+/// One thread for every child in flight, parked in `nanosleep`, which is a
+/// thread the cooperative pool does not own — the same reason the pipe
+/// collectors get their own.
+enum ExitReaper {
+    /// How often to ask. Short enough that a missed handler costs no visible
+    /// delay, long enough that a hundred concurrent children are not a hundred
+    /// busy loops.
+    private static let interval = 0.05
+
+    static func watch(pid: pid_t, onExit: @escaping @Sendable (Int32) -> Void) {
+        let thread = Thread {
+            var status: Int32 = 0
+            while true {
+                let answer = waitpid(pid, &status, WNOHANG)
+                if answer == pid {
+                    // The exit status the way the shell reports it: the low
+                    // byte for a signal, the high byte for a plain exit.
+                    let code: Int32
+                    if status & 0x7F == 0 {
+                        code = (status >> 8) & 0xFF
+                    } else {
+                        // Killed. `Process` reports these as a non-`.exit`
+                        // reason, which `run` turns into a nil exit code, so
+                        // the shell's 128+signal is the closest honest answer.
+                        code = 128 + (status & 0x7F)
+                    }
+                    onExit(code)
+                    return
+                }
+                // -1 means somebody else reaped it (corelibs, normally) or it
+                // was never ours; either way there is nothing left to watch.
+                if answer == -1 { return }
+                Thread.sleep(forTimeInterval: interval)
+            }
+        }
+        thread.name = "adbkit-exit-reaper"
+        thread.stackSize = 128 * 1024
+        thread.start()
+    }
+}
+#endif
 
 /// Accumulates one pipe's output via readabilityHandler (no blocked thread)
 /// and lets a waiter await EOF.

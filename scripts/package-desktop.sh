@@ -16,7 +16,12 @@
 # means a stale build is still lying around, and picking either one at random is
 # how a release ships last week's binary.
 #
-# Usage: package-desktop.sh <search-dir> <linux|windows> <out-dir>
+# Usage: package-desktop.sh <search-dir> <linux|windows> <out-dir> [extensions]
+#
+# `extensions` narrows what must be present, for a build that deliberately ran
+# fewer bundlers (`DESKTOP_BUNDLES`). A release never passes it: the platform's
+# full set is the artifact set the channel promises, and packaging a subset
+# silently would be how a release ships without its AppImage.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -36,6 +41,10 @@ windows) EXTENSIONS="exe msi" ;;
   exit 2
   ;;
 esac
+
+if [[ -n "${4:-}" ]]; then
+  EXTENSIONS="$4"
+fi
 
 [[ -d "$SEARCH_DIR" ]] || {
   echo "error: no such directory: $SEARCH_DIR" >&2

@@ -12,7 +12,12 @@ public protocol StreamSink: Sendable {
 /// drive scripted streams instead of needing a device.
 public protocol StreamSource: Sendable {
     func devices() async -> AsyncStream<[Device]>
-    func logcat(serial: String) async throws -> AsyncStream<[LogLine]>
+    /// One device's live log, optionally narrowed to a single process.
+    ///
+    /// `pid` becomes `adb logcat --pid`, so the device does the filtering. The
+    /// caller resolves the pid (`LogcatStreamer.resolvePid`) because only it
+    /// knows whether to wait for an app that has not launched yet.
+    func logcat(serial: String, pid: Int?) async throws -> AsyncStream<[LogLine]>
     /// Called when a logcat subscription ends, so the underlying adb child is
     /// torn down rather than left running.
     func stopLogcat(serial: String) async
@@ -230,7 +235,7 @@ public actor StreamSession {
         case .logcat:
             guard let serial = command.params?.serial else { return }
             do {
-                let stream = try await source.logcat(serial: serial)
+                let stream = try await source.logcat(serial: serial, pid: command.params?.pid)
                 subscriptions[id]?.pump = Task { [weak self] in
                     for await lines in stream {
                         await self?.enqueue(
@@ -468,8 +473,18 @@ public struct LiveStreamSource: StreamSource {
 
     public func devices() async -> AsyncStream<[Device]> { await monitor.updates() }
 
-    public func logcat(serial: String) async throws -> AsyncStream<[LogLine]> {
-        try await streamer.start(serial: serial, filters: LogcatFilters())
+    public func logcat(serial: String, pid: Int?) async throws -> AsyncStream<[LogLine]> {
+        try await streamer.start(serial: serial, filters: LogcatFilters(pid: pid))
+    }
+
+    /// The process id of `packageId` on `serial`, or nil when it is not
+    /// running.
+    ///
+    /// Nil is an answer rather than an error: an app that has not been launched
+    /// yet is the ordinary case for someone who opened the log first, and the
+    /// client waits on it.
+    public func logcatPid(serial: String, packageId: String) async throws -> Int? {
+        try await streamer.resolvePid(serial: serial, packageId: packageId)
     }
 
     public func stopLogcat(serial: String) async { await streamer.stop() }

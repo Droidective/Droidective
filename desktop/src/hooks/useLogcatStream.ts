@@ -22,8 +22,12 @@ export interface LogcatStream {
  * A subscription left running keeps an `adb logcat` child alive on the daemon
  * side, so the cleanup here is load-bearing rather than tidiness — the
  * daemon's unsubscribe is what kills that child.
+ *
+ * `pid` narrows it to one app (`useLogcatApp` resolves it). It re-keys the
+ * subscription, so following an app that relaunched is the same code path as
+ * switching device — which is what it is.
  */
-export function useLogcatStream(serial: string | null): LogcatStream {
+export function useLogcatStream(serial: string | null, pid: number | null = null): LogcatStream {
   const [buffer, setBuffer] = useState<LogBuffer>(emptyBuffer)
   const [streaming, setStreaming] = useState(false)
   const [error, setError] = useState<DaemonError | null>(null)
@@ -48,10 +52,12 @@ export function useLogcatStream(serial: string | null): LogcatStream {
     setBuffer(emptyBuffer())
   }, [])
 
-  // A different device is a different log; a restart is the same one.
+  // A different device is a different log; a restart is the same one. So is a
+  // different app: the lines already buffered are the previous process's, and
+  // keeping them would put another app's output under this app's name.
   useEffect(() => {
     setBuffer(emptyBuffer())
-  }, [serial])
+  }, [serial, pid])
 
   useEffect(() => {
     if (serial === null) return
@@ -63,7 +69,7 @@ export function useLogcatStream(serial: string | null): LogcatStream {
 
     const start = async () => {
       try {
-        const live = await watchLogcat(serial, (update) => {
+        const live = await watchLogcat(serial, pid, (update) => {
           switch (update.event) {
             case "batch":
               setBuffer((current) => withLines(current, update.items))
@@ -102,7 +108,9 @@ export function useLogcatStream(serial: string | null): LogcatStream {
       cancelled = true
       void stop()
     }
-  }, [serial, generation, stop])
+    // `pid` re-keys the effect, which is the restart an app relaunching under
+    // a new pid needs: `adb logcat --pid` goes silent forever on the old one.
+  }, [serial, pid, generation, stop])
 
   return { buffer, streaming, error, ended, stop, restart, clear }
 }

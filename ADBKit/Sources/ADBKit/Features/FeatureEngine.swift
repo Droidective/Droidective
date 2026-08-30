@@ -140,6 +140,14 @@ public struct FeatureEngine: Sendable {
         "root-status", "wifi", "private-dns", "system-restrictions", "dev-settings",
         "reactotron", "js-console",
         "api-client",
+        // Screens the Mac ships that this set had never named. It routes a
+        // `.view` by `FeatureDetailRoute` rather than through this set, so the
+        // omission was invisible there — but the daemon serves this set as the
+        // wire's `implemented` flag, and a client that believes it hides
+        // screens the Mac draws. That is how Install App went missing from the
+        // desktop app's sidebar while having a pane.
+        // `everyRoutedViewIsImplemented` in AppTests fails on the next one.
+        "react-native", "simulate", "connection", "install-app", "video-editor",
     ]
 
     /// Screenshot with an explicit destination (UI asks the user first).

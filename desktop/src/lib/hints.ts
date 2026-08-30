@@ -57,6 +57,10 @@ const HINTS: Readonly<Record<string, string>> = {
   "app-management": "Connect a device to manage apps.",
   "custom-commands": "Connect a device to run your own commands.",
   "aab-convert": "Connect a device to install the converted APK.",
+  // The Mac's `ContentUnavailableView` description, word for word. The other
+  // two hubs draw with nothing attached and say so per section, so they have no
+  // empty state to write a line for.
+  simulate: "Connect a device to simulate its state.",
 }
 
 /** The line for `id`, or one derived from the feature's title. */

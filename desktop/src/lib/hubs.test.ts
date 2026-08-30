@@ -25,10 +25,15 @@ describe("isFoldedIntoHub", () => {
 
   it("keeps a member whose hub this app has not built", () => {
     // The whole reason the daemon sends the id and not just the flag: hiding
-    // this would strand Reverse Port with no way in.
-    expect(isFoldedIntoHub({ absorbedBy: "connection" })).toBe(false)
-    expect(isFoldedIntoHub({ absorbedBy: "react-native" })).toBe(false)
-    expect(isFoldedIntoHub({ absorbedBy: "simulate" })).toBe(false)
+    // App Info would strand it, because this app's Apps explorer has no detail
+    // pane to fold it into the way the Mac's does.
+    expect(isFoldedIntoHub({ absorbedBy: "apps" })).toBe(false)
+  })
+
+  it("folds a member of each hub this app has built", () => {
+    for (const hub of ["react-native", "simulate", "connection"]) {
+      expect(isFoldedIntoHub({ absorbedBy: hub }), `${hub} should fold`).toBe(true)
+    }
   })
 
   it("keeps a feature no hub absorbed", () => {
