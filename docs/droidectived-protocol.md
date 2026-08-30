@@ -145,6 +145,14 @@ eventually disagree with the runner about it. An unknown verb is a 400 that
 never reaches the device. adb refusing — device gone, unauthorised — is a 502
 carrying adb's own words, not a 500.
 
+`/v1/logcat/pid` answers one question the log's app filter cannot work out for
+itself: which process id a package is running under. Its whole design is in the
+absent answer — an app that is not running comes back as `{}`, an *omitted* key
+rather than an error, because opening a log before launching the app is the
+ordinary case and a 502 there would be reported as a failure instead of waited
+on. A device that genuinely refused is still a 502, and keeping those two apart
+is what stops a client waiting forever for an app on a device that has gone.
+
 ### 4.1 The filesystem routes
 
 `/v1/files/list`, `/v1/files/op`, `/v1/files/info` and `/v1/files/pull` are the
@@ -235,7 +243,7 @@ would otherwise hold three sockets with three lifecycles.
 ```jsonc
 // client → server
 { "op": "subscribe", "id": 7, "topic": "logcat",
-  "params": { "serial": "emulator-5554", "filter": "E" } }
+  "params": { "serial": "emulator-5554", "pid": 4211 } }
 // server → client
 { "id": 7, "event": "batch", "items": [ /* LogLine */ ] }
 { "id": 7, "event": "ended", "reason": "device_disconnected" }
@@ -247,6 +255,14 @@ Topics for phase 2: `devices`, `logcat`, `performance`, `networkSpeed`,
 `iosLogs`. Each maps to an ADBKit `AsyncStream` that already exists. `pty`
 (§5.2) came later and is the one that does not — it is a shell this process
 starts, not a stream it forwards.
+
+`pid` narrows the log to one app: it becomes `adb logcat --pid`, so the device
+filters at the source and the ring buffer holds only that app's lines. It is a
+*pid* rather than a package because the caller has to re-resolve it while the
+log is open — an app that has not launched yet and an app that relaunched under
+a new pid are both ordinary, and only the client knows which of the two it is
+waiting on. `POST /v1/logcat/pid` is how it resolves one; an app that is not
+running comes back as an omitted key rather than an error.
 
 Three properties worth pinning now, because each one is a bug the Mac app
 already had to solve:

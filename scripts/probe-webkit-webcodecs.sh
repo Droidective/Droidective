@@ -12,8 +12,13 @@
 # its runtime probe. Two phases, so the result says which half is missing:
 # stock install first, then again with the libav decoder added.
 #
-# Expected today (Ubuntu 24.04 / WebKitGTK 2.52.3): every avc1 false in phase A,
-# every avc1 true in phase B.
+# Two questions, not one. `isConfigSupported` is a *claim* the webview makes
+# from the GStreamer registry; the second phase of each run feeds it a real
+# Annex-B keyframe and reports the size of the frame that came out, which is
+# what the mirror actually needs to be true.
+#
+# Expected today (Ubuntu 24.04 / WebKitGTK 2.52.3): every avc1 false and no
+# decode in phase A; every avc1 true and a 64x64 frame in phase B.
 set -euo pipefail
 
 IMAGE="${IMAGE:-ubuntu:24.04}"
@@ -34,7 +39,7 @@ fi
 work="$(mktemp -d)"
 # Named removals rather than a recursive one: the script knows exactly what it
 # created, and `rm -rf` on an expanded variable is the shape worth never having.
-trap 'rm -f "$work/probe.py" "$work/run.sh"; rmdir "$work" 2>/dev/null || true' EXIT
+trap 'rm -f "$work/probe.py" "$work/run.sh" "$work/sample.h264"; rmdir "$work" 2>/dev/null || true' EXIT
 
 # Kept as a heredoc rather than a committed .py so the probe is one file: it
 # only ever runs inside the throwaway container.
@@ -44,17 +49,29 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("WebKit2", "4.1")
 from gi.repository import Gtk, WebKit2, GLib
 
+import os
+
+# A real Annex-B keyframe, base64, produced by ffmpeg just before this runs.
+# The point of decoding one is that `isConfigSupported` is a *claim*: WebKitGTK
+# answers it from the GStreamer registry, so a plugin that is installed but
+# broken, or one that refuses the actual stream, still says yes. A frame that
+# comes out the other side with the right dimensions is the answer to the
+# question the mirror actually asks.
+SAMPLE = os.environ.get("H264_SAMPLE_B64", "")
+
 # `run_javascript` cannot marshal a Promise, so the async work parks its answer
 # on `window.__r` and the script's own completion value is a plain string.
 KICK = """
 window.__r = null;
+const SAMPLE = '__SAMPLE__';
 (async () => {
   const r = {
     isSecureContext: window.isSecureContext,
     hasVideoDecoder: typeof VideoDecoder !== 'undefined',
     hasVideoFrame: typeof VideoFrame !== 'undefined',
     hasEncodedVideoChunk: typeof EncodedVideoChunk !== 'undefined',
-    codecs: {}
+    codecs: {},
+    decoded: 'not attempted'
   };
   if (r.hasVideoDecoder) {
     for (const c of ['avc1.42E01E','avc1.4D401F','avc1.640028','vp8']) {
@@ -63,11 +80,45 @@ window.__r = null;
         r.codecs[c] = !!s.supported;
       } catch (e) { r.codecs[c] = 'threw: ' + e.name; }
     }
+    if (SAMPLE) {
+      try {
+        r.decoded = await decodeOne(SAMPLE);
+      } catch (e) { r.decoded = 'threw: ' + (e && e.message ? e.message : String(e)); }
+    }
   }
   window.__r = JSON.stringify(r);
 })().catch(e => { window.__r = JSON.stringify({fatal: String(e)}); });
+
+// Feed one keyframe through a real decoder and report the frame it produced.
+// `description` is deliberately absent: scrcpy sends Annex-B with in-band
+// SPS/PPS, which is exactly the shape `VideoDecoder` wants without one, and
+// the mirror depends on that being true here.
+async function decodeOne(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('no frame within 10s')), 10000);
+    const decoder = new VideoDecoder({
+      output: (frame) => {
+        clearTimeout(timer);
+        const answer = frame.codedWidth + 'x' + frame.codedHeight;
+        frame.close();
+        decoder.close();
+        resolve(answer);
+      },
+      error: (e) => { clearTimeout(timer); reject(e); }
+    });
+    decoder.configure({ codec: 'avc1.42C029', optimizeForLatency: true });
+    decoder.decode(new EncodedVideoChunk({ type: 'key', timestamp: 0, data: bytes }));
+    decoder.flush().catch(reject);
+  });
+}
+// The script's own completion value, and it has to be the last statement:
+// `run_javascript` marshals it back, and a trailing function declaration is a
+// type it refuses with "Unsupported result type".
 "kicked";
-"""
+""".replace("__SAMPLE__", SAMPLE)
 POLL = "window.__r === null ? '' : window.__r"
 
 view = WebKit2.WebView()
@@ -131,7 +182,18 @@ installed() {
 
 apt-get update -qq >/dev/null 2>&1
 apt-get install -y -qq libwebkit2gtk-4.1-0 gir1.2-webkit2-4.1 python3-gi xvfb \
-  gstreamer1.0-plugins-base gstreamer1.0-tools >/dev/null 2>&1
+  gstreamer1.0-plugins-base gstreamer1.0-tools ffmpeg >/dev/null 2>&1
+
+# One real keyframe to decode. Encoded here rather than committed as a blob:
+# a base64 string in the repo is a thing nobody can check, and ffmpeg is
+# already being installed. 64x64 so the whole sample is a few hundred bytes,
+# and `-bf 0 -g 1` so the first access unit is a complete, self-contained IDR
+# with its SPS and PPS in band — which is the shape scrcpy sends.
+ffmpeg -hide_banner -loglevel error -f lavfi -i color=c=red:s=64x64:d=0.1:r=1 \
+  -c:v libx264 -profile:v baseline -bf 0 -g 1 -frames:v 1 -f h264 /work/sample.h264
+H264_SAMPLE_B64="$(base64 -w0 /work/sample.h264)"
+export H264_SAMPLE_B64
+echo "sample keyframe: $(stat -c%s /work/sample.h264) bytes of Annex-B"
 
 echo "webkitgtk: $(dpkg-query -W -f='${Version}' libwebkit2gtk-4.1-0)"
 echo "gstreamer1.0-libav arrived as a dependency: $(installed gstreamer1.0-libav)"

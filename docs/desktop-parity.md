@@ -95,26 +95,140 @@ on** — CI compiles both and runs the unit suites, and that is all. Every scree
 in this document is theoretical until that is not true, so validating it comes
 before adding to it.
 
-1. **Run the app on Linux, and keep it running.** `scripts/smoke-desktop-linux.sh`
-   already installs the built `.deb` in a clean `ubuntu:24.04` container, starts
-   it under Xvfb and photographs the framebuffer — and **nothing runs it**. The
-   `.deb` itself is only built on beta tags. Build it, run the smoke, drive the
-   app far enough to open a screen, and then wire the smoke into CI so it cannot
-   regress. If the app does not come up, everything below waits.
-   *Also settles whether the mirror really decodes on WebKitGTK, which so far
-   has only been measured in a codec probe rather than watched in a window.*
-2. **Do the same for Windows, as far as it goes.** No container equivalent
-   exists, and the honest answer may be that a person has to launch it once —
-   but the `windows-2022` runner has a desktop session, so a smoke there is
-   worth attempting before conceding it to
-   [`manual-verification.md`](manual-verification.md).
-3. **The three remaining hubs** — `react-native`, `simulate`, `connection`.
-   Cheap: every member action already runs, so this is a grouped `Form` over
-   things that work, and it finishes the folding story `lib/hubs.ts` started.
-   When all four hubs exist the sidebar matches the Mac's exactly.
-4. **Logcat's app filter.** The most-used thing anyone does with logcat, and the
-   one gap in the screen people open most. Needs a pid → package map the daemon
-   does not serve yet; matching on the tag would quietly miss lines.
+1. ~~**Run the app on Linux, and keep it running.**~~ **Landed — and it did not
+   come up.** `scripts/smoke-desktop-linux.sh` now runs on every PR
+   (`desktop-linux-smoke`, over the `.deb` `desktop-native` bundles), installs
+   the package in a bare `ubuntu:24.04` so apt resolves its declared Depends and
+   nothing else, launches it under Xvfb, drives the palette, and photographs
+   both frames. Everything it asserts is fatal; the first version of the script
+   printed `WARNING: no droidectived process` and exited 0, which is how it
+   would have passed over the bug below.
+
+   **The first launch found two.** Both are the same shape — a build machine has
+   a toolchain and a user's machine has nothing:
+
+   - **The daemon could not start at all.** `droidectived` was dynamically
+     linked against the Swift runtime, so it died at exec with
+     `libswiftCore.so: cannot open shared object file` and the app came up
+     showing "droidectived would not start" with all thirty-three screens
+     behind it. `build-daemon-sidecar.sh` now passes `--static-swift-stdlib` on
+     Linux (and only there: macOS ships the runtime, and Swift on Windows has no
+     static stdlib to link).
+   - **Then it could not resolve `libcurl.so.4`.** FoundationNetworking links
+     it, `ubuntu:24.04` does not ship it, and no Tauri dependency pulled it in.
+     Declared as `bundle.linux.deb.depends`; `libcurl4t64` provides `libcurl4`,
+     so the plain name resolves on Debian and Ubuntu alike.
+
+   - **And then it came up and did nothing.** With the daemon alive, the app
+     painted its whole shell and sat there: "0 features", "Looking for
+     devices...", no error. The daemon was serving all 61 features to `curl`
+     from inside the same container, so the fault was above it. Tracing the
+     two commands the client makes at startup found `list_features` returning
+     61 while **`list_devices` never returned at all** - `Promise.all` waits
+     for both, so the whole session hung on one of them.
+
+     The cause is in ADBKit: `adb devices` on a machine whose adb *server* is
+     not yet running forks that server, prints two lines, and exits - and on
+     Linux corelibs then **never reaps the child**. It sits as a zombie,
+     `Process.terminationHandler` never fires, and the continuation waiting on
+     it is suspended for the life of the process. The watchdog is no escape
+     either: its only recovery is terminating a process that is still running,
+     and this one is already gone. `SystemProcessRunner` now watches for the
+     exit itself with `waitpid(WNOHANG)` on a reaper thread - off-Darwin only,
+     since this is a corelibs gap and the Mac is the shipping app. The cold
+     call went from **hanging past 60 seconds to 0.185 s**.
+     `aChildThatForksAGrandchildAndExitsIsStillReaped` is the regression test,
+     and nothing else in that suite produced the shape.
+
+   **It works now**, and the smoke shows it rather than asserting it: the
+   window comes up with 42 features and a device bar that has finished
+   looking, and driving Ctrl+K -> "terminal" -> Enter opens a Terminal tab
+   with a live shell prompt drawn by xterm.js over the daemon's pty. The whole
+   stack - IPC, daemon, pty, stream, renderer - in one photograph.
+
+   *And it settled the mirror.* `scripts/probe-webkit-webcodecs.sh` no longer
+   only asks `isConfigSupported`, which is a *claim* WebKitGTK answers out of
+   the GStreamer registry: it now encodes a real Annex-B keyframe with ffmpeg
+   and decodes it. Stock Ubuntu 24.04 throws `No decoder found for codec
+   avc1.42C029`; with `gstreamer1.0-libav` the same frame comes back as a
+   **64x64 `VideoFrame`**. So the decoder is real, the `.deb`'s Recommends puts
+   it there by default, and `codecSupport()`'s message is the fallback rather
+   than the plan. What is still unwatched is a *device* stream painting into a
+   canvas, which needs a device the container does not have.
+2. ~~**Do the same for Windows, as far as it goes.**~~ **Landed, and it does not
+   go as far.** `scripts/smoke-desktop-windows.ps1` silently installs the NSIS
+   package, launches the app, and asserts the two things the Linux run proved
+   were worth asserting: the app is still up after thirty seconds, and
+   `droidectived` is running beside it. The window title and a screenshot are
+   *reported* rather than asserted — a runner's session may have no interactive
+   window station, and failing on that would be failing on a property of the
+   runner rather than of the app.
+
+   Two limits, both real. There is **no Windows container**, so it runs on the
+   runner itself: the machine already has whatever the toolchain left behind,
+   so a missing runtime dependency — the exact class of bug the Linux smoke
+   caught twice — can still hide. And it runs **only on a beta tag**, in
+   `desktop-artifacts`, because that is the only job that builds a Windows app
+   at all; a Swift toolchain on Windows is far too slow to put on every push.
+   Late feedback about whether the thing starts still beats none.
+
+   What stays on [`manual-verification.md`](manual-verification.md): a person
+   launching it on a real desktop.
+3. ~~**The three remaining hubs** — `react-native`, `simulate`, `connection`.~~
+   **Landed**, each the Mac's view section for section: the RN hub's quick-action
+   cards, its two Metro paths and the deep links; Simulate's battery,
+   appearance, layout, locale, network and proxy; Connection's live Wi-Fi and IP,
+   the port reverse, and the wireless and Private DNS sections *themselves* —
+   the same components their standalone screens render, as on the Mac, where
+   each of those screens is one `HubColumn` around the section the hub embeds.
+   Nothing re-implements an action: every control hands its values to the
+   `run_action` route a generated form already uses (`useHubAction`).
+
+   All four hubs now fold their members away, so the sidebar matches the Mac's
+   — except `apps`, whose members stay standalone because this app's Apps
+   explorer has no detail pane to fold them into. `hubs-panes.test.ts` reads the
+   router and fails on a hub added to `IMPLEMENTED_HUBS` without one, which is
+   the failure that would stranded its members behind a screen that does not
+   exist.
+
+   **Two things the Mac's screens have and these do not**, both named on the
+   screen rather than quietly missing: Simulate's push-notification section is
+   `simctl` (absent, as the Emulators screen's simulator section is), and its
+   "Reset all overrides" reads `activeOverrides`, a reconciled record this app
+   does not keep — so the two toggles say they apply on flip rather than
+   implying they read the device.
+
+   **It also fixed a bug this exposed.** The three hubs were `implemented:
+   false` on the wire: the Mac routes a `.view` through `FeatureDetailRoute` and
+   never consults `FeatureEngine.implementedIDs`, so their absence from that set
+   was invisible there — but the daemon serves it as the wire's `implemented`
+   flag, and a client that believes it hides screens the Mac ships. Install App
+   was in the same state and had been **missing from this app's sidebar while
+   having a working pane**. `everyRoutedViewIsImplemented` in AppTests now fails
+   on the next one.
+4. ~~**Logcat's app filter.**~~ **Landed.** `POST /v1/logcat/pid` resolves a
+   package to its process id, and the `logcat` subscription carries a `pid` that
+   becomes `adb logcat --pid` — so the *device* filters, and the ring buffer
+   holds only that app's lines. A client-side filter over a mixed buffer would
+   let a chatty neighbour evict the lines being looked for before anyone saw
+   them, which is why the Mac does it this way too.
+
+   The loop around it is the Mac's, and it is the part worth getting right:
+   an app that is not running is waited for rather than silently streaming the
+   whole device, and the pid is re-read on a timer because `logcat --pid` goes
+   silent *forever* when an app relaunches under a new one. Both decisions are
+   `lib/logcat-app.ts`, pure and tested; the hook is the timer and the request.
+   The toolbar says which of the two empty feeds you are looking at — "waiting
+   for" and "that app is quiet" are indistinguishable otherwise.
+
+   It follows the Apps tab's selection rather than a bundle store this app does
+   not have, which is the one selector every other per-app screen here already
+   uses — and the Mac's own arrangement, since it hides the device bar's bundle
+   pill on this screen for the same reason. "App on screen" adopts the
+   foreground app, as `adoptForegroundApp()` does.
+
+   The subscription's `filter` field went with it: it was documented in the
+   protocol as a level filter and had never been read by anything.
 5. **Notifications** (backlog 18). Small, and several screens already want it:
    an install that finishes while you are elsewhere, a watched crash landing.
 6. **Background mode and the tray** (20), then **Quick Actions** (19). In that
@@ -596,9 +710,6 @@ often someone opens them rather than by how hard they look.
 
 **Known gaps inside work already called done.**
 
-- **Logcat's per-app filter.** Needs a pid → package map the daemon does not
-  serve. Matching on the tag instead would be a filter that quietly misses
-  lines, which is worse than not having one.
 - **The palette lists features, not commands.** There are no custom commands in
   this app yet for it to offer.
 - **Drop-to-split is unverified by automation.** Synthetic mouse events do not
