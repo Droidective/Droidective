@@ -486,6 +486,20 @@ table) is in `docs/reactotron-mcp-analysis.md`.
   uses `terminationHandler` + `readabilityHandler`, not `waitUntilExit`. A
   blocking design starved the async pool and froze the whole app. There's a
   16-concurrent-process canary test guarding this — don't regress it.
+- **…and `terminationHandler` does not always fire.** Off-Darwin, a child that
+  forks a grandchild and exits — which is exactly `adb devices` starting the
+  adb *server* — is left a **zombie** corelibs never reaps, so the handler
+  never runs and the continuation awaiting it is suspended for the life of the
+  process. The watchdog cannot save it: its only recovery is terminating a
+  process that is still *running*, and this one is already gone. So
+  `SystemProcessRunner` also watches with `waitpid(WNOHANG)` on a reaper
+  thread, off-Darwin only (Darwin reports reliably, and the Mac is the shipping
+  app). Racing corelibs for the reap is safe — one `resumed` guard, and the
+  loser gets ECHILD — but **signalling a reaped pid is not**, because the
+  number can be recycled, which is why every kill path checks `reaped`. This
+  cost the Linux app its entire first launch: it came up with "0 features" and
+  no error, because `list_devices` never returned.
+  (`aChildThatForksAGrandchildAndExitsIsStillReaped`.)
 - **`"\r\n"` is ONE Swift Character.** Splitting adb/emu console output on
   `"\n"` silently fails on CRLF. Use `.components(separatedBy: .newlines)`.
 - **Device-side shell quoting is the security boundary.** Anything going through
