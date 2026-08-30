@@ -33,9 +33,18 @@ import Testing
 /// is raced against a sleep and a probe that would hang fails instead, with
 /// every stage timestamped so the log says which one it stopped in.
 ///
-/// Gated on `ADB_COLD_START_PROBE=1` and skipped otherwise, like the emulator
-/// suites: it needs a real adb, and it kills the machine's adb server, which no
-/// other test may have running under it.
+/// **It does not run in CI**, and that is the honest end of a fight rather than
+/// an oversight. Three shapes of bound were tried and each parked the Windows
+/// job for a quarter of an hour: bounding the *assertions* is easy, but the
+/// abandoned task keeps the test process alive after them, so a suite
+/// containing this test does not finish even when the test passes. The same
+/// question is asked of the shipped app instead — both smoke scripts time a
+/// real `/v1/devices/list` — where a timeout is simply a timeout.
+///
+/// So this is for a person with a machine in front of them, gated on
+/// `ADB_COLD_START_PROBE=1` like the emulator suites: it needs a real adb, and
+/// it takes the machine's adb server down, which no other test may have running
+/// under it.
 @Suite(.serialized) struct AdbColdStartProbeTests {
     static var enabled: Bool { ProcessInfo.processInfo.environment["ADB_COLD_START_PROBE"] == "1" }
 

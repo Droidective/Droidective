@@ -120,6 +120,21 @@ FEATURES="$(curl -s -X POST "http://127.0.0.1:$PORT/v1/features/list" \
 echo "=== the daemon serves $FEATURES features on port $PORT ==="
 [ "$FEATURES" -ge 50 ] || fail "the daemon served $FEATURES features, which is not a registry"
 
+# The one call both ports fell over on. `adb devices` on a machine whose adb
+# server is not running forks that server and exits, and the runner used to
+# miss that exit and wait for it forever; the app came up with "0 features" and
+# no error to explain it. There is no device here and there does not need to be
+# — an *empty* answer is fine, an answer *arriving* is the assertion. Timed,
+# because a slow answer and a hung one are the same screenshot.
+DEVICES_START="$(date +%s)"
+curl -s --max-time 30 -o /tmp/devices.json -X POST "http://127.0.0.1:$PORT/v1/devices/list" \
+  -H "Authorization: Bearer $(cat "$TOKEN_FILE")" \
+  || fail "the first /v1/devices/list never came back — the hang the ports fell over on"
+DEVICES_ELAPSED="$(($(date +%s) - DEVICES_START))"
+echo "=== first /v1/devices/list answered in ${DEVICES_ELAPSED}s: $(head -c 120 /tmp/devices.json) ==="
+[ "$DEVICES_ELAPSED" -le 10 ] \
+  || fail "the first device list took ${DEVICES_ELAPSED}s, which is a launch nobody would wait out"
+
 echo "=== window tree ==="
 xwininfo -root -children -display :99 | tee /tmp/windows.txt
 grep -q "\"Droidective\"" /tmp/windows.txt || fail "no window named Droidective"

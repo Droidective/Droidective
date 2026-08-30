@@ -69,6 +69,41 @@ $daemon = Get-Process -Name "droidectived" -ErrorAction SilentlyContinue
 if ($null -eq $daemon) { Fail "the app is up but droidectived is not running" }
 Write-Host "=== droidectived is running (pid $($daemon.Id)) ==="
 
+# The call both ports fell over on. `adb devices` on a machine whose adb server
+# is not running forks that server and exits, and the runner used to miss that
+# exit and wait for it forever — on Linux the app came up with "0 features" and
+# no error, and the first Windows launch showed the same picture. There is no
+# device on this runner and there does not need to be: an *empty* answer is
+# fine, an answer *arriving* is the assertion.
+#
+# Asked of the shipped app rather than through a unit test, for a reason worth
+# keeping: a Swift test whose subject is a call that can fail to return cannot
+# be made safe to run in a build job — the abandoned task keeps the test
+# process alive after the assertions are done, and three shapes of bound each
+# parked `build-windows` for a quarter of an hour. Here a timeout is a timeout.
+$port = (Get-NetTCPConnection -State Listen -OwningProcess $daemon.Id -ErrorAction SilentlyContinue |
+  Where-Object { $_.LocalAddress -eq "127.0.0.1" } | Select-Object -First 1).LocalPort
+# `app_local_data_dir()`, which on Windows is LOCALAPPDATA and not APPDATA.
+$tokenFile = Join-Path $env:LOCALAPPDATA "com.rohindh.droidective.desktop\droidectived.token"
+if ($null -eq $port) { Fail "droidectived is running but is not listening on loopback" }
+if (-not (Test-Path $tokenFile)) { Fail "no token file at $tokenFile" }
+
+$headers = @{ Authorization = "Bearer $((Get-Content $tokenFile -Raw).Trim())" }
+$clock = [System.Diagnostics.Stopwatch]::StartNew()
+try {
+  $devices = Invoke-RestMethod -Method Post -TimeoutSec 30 `
+    -Uri "http://127.0.0.1:$port/v1/devices/list" -Headers $headers
+} catch {
+  Fail "the first /v1/devices/list never came back: $($_.Exception.Message)"
+}
+$clock.Stop()
+$seconds = [math]::Round($clock.Elapsed.TotalSeconds, 1)
+Write-Host "=== first /v1/devices/list answered in ${seconds}s ==="
+Write-Host "=== $($devices | ConvertTo-Json -Compress) ==="
+if ($clock.Elapsed.TotalSeconds -gt 10) {
+  Fail "the first device list took ${seconds}s, which is a launch nobody would wait out"
+}
+
 # Evidence, not assertions — see the header.
 $app.Refresh()
 Write-Host "=== main window title: '$($app.MainWindowTitle)' ==="
