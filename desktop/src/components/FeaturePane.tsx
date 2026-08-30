@@ -11,6 +11,7 @@ import {
   AppInfoPane,
   AppsPane,
   BugReportPane,
+  ConnectionHubPane,
   CrashPane,
   CustomCommandsPane,
   DecompilePane,
@@ -30,10 +31,12 @@ import {
   PerformancePane,
   PermissionsPane,
   PrivateDnsPane,
+  ReactNativeHubPane,
   ReactotronPane,
   RestrictionsPane,
   RootStatusPane,
   SandboxPane,
+  SimulateHubPane,
   TerminalPane,
   WifiPane,
   WirelessAdbPane,
@@ -94,8 +97,10 @@ export function FeaturePane(props: FeaturePaneProps) {
   if (props.id === ABOUT_TAB) return <AboutPane />
   if (props.feature === null) return <NotHere title={props.id} />
 
-  const hostSide = hostPane(props.id, props.device)
+  const hostSide = hostPane(props)
   if (hostSide !== null) return hostSide
+  const perApp = appPane(props)
+  if (perApp !== null) return perApp
 
   switch (props.id) {
     case "apps":
@@ -111,7 +116,13 @@ export function FeaturePane(props: FeaturePaneProps) {
     case "custom-commands":
       return <CustomCommandsPane device={props.device} packageId={props.packageId} />
     case "logcat":
-      return <LogcatPane device={props.device} />
+      return (
+        <LogcatPane
+          device={props.device}
+          packageId={props.packageId}
+          onSelectPackage={props.onSelectPackage}
+        />
+      )
     case "scrcpy":
       return <MirrorPane device={props.device} />
     case "device-info":
@@ -140,16 +151,8 @@ export function FeaturePane(props: FeaturePaneProps) {
       return <NetspeedPane device={props.device} />
     case "install-app":
       return <InstallAppPane device={props.device} />
-    case "app-info":
-      return <AppInfoPane device={props.device} packageId={props.packageId} />
-    case "permissions":
-      return <PermissionsPane device={props.device} packageId={props.packageId} />
-    case "meminfo":
-      return <MeminfoPane device={props.device} packageId={props.packageId} />
-    case "sandbox-browser":
-      return <SandboxPane device={props.device} packageId={props.packageId} />
-    case "app-management":
-      return <ManageAppPane device={props.device} packageId={props.packageId} />
+    case "simulate":
+      return <SimulateHubPane device={props.device} features={props.features} />
     default:
       return isRunnable(props.feature) ? (
         <ActionForm
@@ -164,16 +167,45 @@ export function FeaturePane(props: FeaturePaneProps) {
 }
 
 /**
+ * The screens scoped to one *app* as well as one device.
+ *
+ * All five take the Apps tab's selection and show `NoBundle` without it, so
+ * they are one group rather than five near-identical cases — and keeping them
+ * out of the switch above is what keeps `FeaturePane` a routing table.
+ *
+ * Deliberately declared before `hostPane`: `hints.test.ts` cuts the file there
+ * to decide which screens need a connect-a-device line, and these do.
+ */
+function appPane({ id, device, packageId }: FeaturePaneProps) {
+  switch (id) {
+    case "app-info":
+      return <AppInfoPane device={device} packageId={packageId} />
+    case "permissions":
+      return <PermissionsPane device={device} packageId={packageId} />
+    case "meminfo":
+      return <MeminfoPane device={device} packageId={packageId} />
+    case "sandbox-browser":
+      return <SandboxPane device={device} packageId={packageId} />
+    case "app-management":
+      return <ManageAppPane device={device} packageId={packageId} />
+    default:
+      return null
+  }
+}
+
+/**
  * The screens that run against *this* machine rather than a device.
  *
- * All three work with nothing connected, and each takes the selection
- * differently for a reason worth stating once: an emulator is a thing here and
- * the screen's whole job is launching one; a shell runs here and the selection
- * only decides what `ANDROID_SERIAL` says in the next tab; the Reactotron relay
- * listens here, and a device matters only for the reverse tunnel its waiting
- * screen offers.
+ * Each works with nothing connected, and each takes the selection differently
+ * for a reason worth stating once: an emulator is a thing here and the screen's
+ * whole job is launching one; a shell runs here and the selection only decides
+ * what `ANDROID_SERIAL` says in the next tab; the Reactotron relay listens here,
+ * and a device matters only for the reverse tunnel its waiting screen offers.
+ *
+ * What they have in common is what `hints.test.ts` cuts on: none of them can
+ * reach the connect-a-device empty state, so a line for it would be dead text.
  */
-function hostPane(id: string, device: Device | null) {
+function hostPane({ id, device, packageId, onOpen }: FeaturePaneProps) {
   switch (id) {
     case "emulators":
       return <EmulatorsPane />
@@ -203,6 +235,20 @@ function hostPane(id: string, device: Device | null) {
       // Host-side: it is about the devices themselves, so it works — and is
       // most wanted — with nothing selected in the bar.
       return <WirelessAdbPane />
+    case "connection":
+      // The hub over the wireless screen, and host-side for the same reason:
+      // pairing a device is what you do when none is attached. Its
+      // device-scoped sections say so individually rather than the screen
+      // refusing to draw, which is how the Mac's `NetworkConnectionView`
+      // behaves.
+      return <ConnectionHubPane device={device} />
+    case "react-native":
+      // Metro runs on *this* machine and the deep links are stored here, so
+      // the screen draws with nothing attached and each section says what it
+      // needs — the Mac's `ReactNativeView` puts "Connect a device to use
+      // these" under the cards rather than replacing the pane. Same reasoning
+      // as `js-console` above.
+      return <ReactNativeHubPane device={device} packageId={packageId} onOpen={onOpen} />
     case "mirror-wall":
       // Host-side by the same logic as the others: the wall picks its own
       // devices from its header and never follows the bar's selection.

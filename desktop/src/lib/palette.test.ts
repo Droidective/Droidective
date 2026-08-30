@@ -98,7 +98,9 @@ describe("paletteResults", () => {
     // A weakly-matching pin sitting above an exact match would make the
     // ranking a lie, so pins are not promoted here.
     const results = paletteResults(features, "battery", ["logcat"])
-    expect(results[0]?.id).toBe("fake-battery")
+    // The Simulate hub rather than fake-battery, which folds into it: the hub
+    // carries its members' keywords so the word still lands.
+    expect(results[0]?.id).toBe("simulate")
     expect(results.map((feature) => feature.id)).not.toContain("logcat")
   })
 
