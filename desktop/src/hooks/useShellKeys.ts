@@ -1,4 +1,4 @@
-import { useCallback } from "react"
+import { useCallback, useEffect } from "react"
 import { useFeatureHotkeys } from "@/hooks/useFeatureHotkeys"
 import { useMenuCommands } from "@/hooks/useMenuCommands"
 import { useRunFeature } from "@/hooks/useRunFeature"
@@ -55,10 +55,14 @@ export function useShellKeys({
 
   useFeatureHotkeys({
     bindings: workspace.layout.hotkeys,
+    panelHotkey: workspace.layout.quickPanelHotkey,
     features,
     onRun: run,
     onOpen: workspace.open,
   })
+
+  // A screen the panel picked, handed over through storage. See `openInApp`.
+  usePanelRequests(workspace.open)
 
   // The tray is a third way to reach these same commands, so it dispatches
   // from here for the reason the menu does: two call sites is how a click and
@@ -85,4 +89,27 @@ export function useShellKeys({
       open("terminal")
     }, [open]),
   })
+}
+
+/**
+ * A screen the Quick Actions panel asked this window to open.
+ *
+ * The panel is a second webview of the same origin, so it writes the request to
+ * `localStorage` and the `storage` event delivers it here — which is the one
+ * cross-window channel that works whether this window was hidden, minimised or
+ * simply behind something. The value carries a timestamp so asking for the same
+ * screen twice is two events rather than one.
+ */
+function usePanelRequests(open: (id: string) => void): void {
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== "droidective.openFeature" || event.newValue === null) return
+      const id = event.newValue.slice(event.newValue.indexOf(":") + 1)
+      if (id !== "") open(id)
+    }
+    globalThis.addEventListener("storage", onStorage)
+    return () => {
+      globalThis.removeEventListener("storage", onStorage)
+    }
+  }, [open])
 }

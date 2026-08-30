@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { Switch } from "@/components/Controls"
 import { Row, Section } from "@/components/settings/SettingsKit"
 import { backgroundAvailable } from "@/lib/daemon"
+import { panelEligibleActions } from "@/lib/quick-actions"
 import { sidebarSections, visibleFeatures } from "@/lib/sidebar"
 import type { FeatureSummary } from "@/lib/wire"
 
@@ -12,6 +13,11 @@ export interface GeneralTabProps {
   /** The features explicitly chosen for the tray; empty means "not chosen". */
   trayItems: readonly string[]
   onTrayItem: (id: string, listed: boolean) => void
+  /** Actions removed from the Quick Actions panel. */
+  quickPanelHiddenIds: readonly string[]
+  onQuickPanelAction: (id: string, shown: boolean) => void
+  quickPanelCloseAfterRun: boolean
+  onQuickPanelCloseAfterRun: (on: boolean) => void
   sidebarOrder: readonly string[]
   categoryOrder: readonly string[]
   favorites: readonly string[]
@@ -30,6 +36,7 @@ export function GeneralTab(props: GeneralTabProps) {
   return (
     <div className="flex flex-col gap-5">
       <BackgroundSection {...props} />
+      <QuickActionsSection {...props} />
       <TraySection {...props} />
       <Section title="Not ported yet">
         <Row
@@ -41,12 +48,6 @@ export function GeneralTab(props: GeneralTabProps) {
         <Row
           label="Open at login"
           detail="Needs tauri-plugin-autostart. Backlog item 8."
-        >
-          <Waiting />
-        </Row>
-        <Row
-          label="Quick Actions"
-          detail="The global-hotkey mini app is backlog item 19; its preferences arrive with it."
         >
           <Waiting />
         </Row>
@@ -92,6 +93,54 @@ function BackgroundSection({
           ariaLabel="Keep running in the background"
         />
       </Row>
+    </Section>
+  )
+}
+
+/**
+ * The Mac's Quick Actions section, less its resume picker.
+ *
+ * "Resume where I left off" is not here: the Mac's panel keeps a session in
+ * memory because the app is resident behind it, and this panel is a window that
+ * is created on first use and hidden after. It would be a preference over
+ * behaviour that does not exist yet, which is worse than an absent one.
+ */
+function QuickActionsSection({
+  features,
+  disabledFeatures,
+  quickPanelHiddenIds,
+  onQuickPanelAction,
+  quickPanelCloseAfterRun,
+  onQuickPanelCloseAfterRun,
+}: GeneralTabProps) {
+  const eligible = panelEligibleActions(features, disabledFeatures)
+  return (
+    <Section title="Quick Actions">
+      <Row
+        label="Close the panel after running an action"
+        detail="A successful action dismisses the panel right after its result shows; a failed one keeps it open so you can read the error."
+      >
+        <Switch
+          checked={quickPanelCloseAfterRun}
+          onChange={onQuickPanelCloseAfterRun}
+          ariaLabel="Close the panel after running an action"
+        />
+      </Row>
+      <p className="pt-1 text-[11.5px] text-text-tertiary">
+        Switched-off actions leave the panel’s action grid. Custom commands are managed on the
+        Custom Commands screen.
+      </p>
+      {eligible.map((feature) => (
+        <Row key={feature.id} label={feature.title}>
+          <Switch
+            checked={!quickPanelHiddenIds.includes(feature.id)}
+            onChange={(shown) => {
+              onQuickPanelAction(feature.id, shown)
+            }}
+            ariaLabel={feature.title}
+          />
+        </Row>
+      ))}
     </Section>
   )
 }

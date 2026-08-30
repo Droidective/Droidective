@@ -1,6 +1,6 @@
 import { useEffect } from "react"
 import { listen } from "@tauri-apps/api/event"
-import { setTrayMenu, showMainWindow, quitApp } from "@/lib/daemon"
+import { setTrayMenu, showMainWindow, quitApp, toggleQuickPanel } from "@/lib/daemon"
 import { stopAllStreams } from "@/lib/daemon-stream"
 import { hotkeyEffect } from "@/lib/hotkeys"
 import {
@@ -9,6 +9,7 @@ import {
   trayMenu,
   TRAY_MIRROR,
   TRAY_OPEN,
+  TRAY_QUICK,
   TRAY_QUIT,
   TRAY_SCREENSHOT,
 } from "@/lib/tray"
@@ -83,7 +84,9 @@ export function useTray({
         onOpen(feature.id)
         return
       }
-      if (id === TRAY_SCREENSHOT) {
+      if (id === TRAY_QUICK) {
+        void toggleQuickPanel()
+      } else if (id === TRAY_SCREENSHOT) {
         const screenshot = features.find((feature) => feature.id === "screenshot")
         if (screenshot !== undefined) onRun(screenshot)
       } else if (id === TRAY_MIRROR) {

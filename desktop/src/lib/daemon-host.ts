@@ -80,6 +80,16 @@ export interface RegisteredShortcut {
   canonical: string
 }
 
+/** Summons the Quick Actions panel, or dismisses it if it is already up. */
+export function toggleQuickPanel(): Promise<void> {
+  return invoke("toggle_quick_panel")
+}
+
+/** Dismisses it — Esc at its root, and a run that asked to close it. */
+export function hideQuickPanel(): Promise<void> {
+  return invoke("hide_quick_panel")
+}
+
 /** Where pulls and exports land, as the Rust side resolves it. */
 export function capturesFolder(): Promise<string> {
   return invoke<string>("captures_folder")

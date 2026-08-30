@@ -57,8 +57,9 @@ describe("trayMenu", () => {
     expect(first?.label).toBe("No device")
   })
 
-  it("always offers Screenshot, Mirror Screen, Open and Quit", () => {
+  it("always offers Quick Actions, Screenshot, Mirror Screen, Open and Quit", () => {
     const ids = trayMenu({ deviceLabel: null, features: [] }).map((entry) => entry.id)
+    expect(ids).toContain("tray.quick-actions")
     expect(ids).toContain("tray.screenshot")
     expect(ids).toContain("tray.mirror")
     expect(ids).toContain("tray.open")

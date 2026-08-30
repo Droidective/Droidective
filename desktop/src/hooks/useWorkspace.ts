@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import { usePreferenceEditors } from "@/hooks/useLayoutPreferences"
 import {
   HOME_TAB,
   loadLayout,
@@ -12,7 +13,6 @@ import { clampedFraction } from "@/lib/panes"
 import { togglePinned } from "@/lib/palette"
 import { toggleCollapsed } from "@/lib/sidebar"
 import type { FeatureSummary } from "@/lib/wire"
-import { clampZoomStep, DEFAULT_ZOOM_STEP } from "@/lib/zoom"
 import {
   activateAt,
   close,
@@ -60,6 +60,11 @@ export interface WorkspaceController {
   setKeepRunningInBackground: (on: boolean) => void
   /** Adds or removes one feature from the tray's chosen list. */
   setTrayItem: (id: string, listed: boolean) => void
+  /** Shows or hides one action in the Quick Actions panel. */
+  setQuickPanelAction: (id: string, shown: boolean) => void
+  setQuickPanelCloseAfterRun: (on: boolean) => void
+  /** The panel's global shortcut, or null to clear it. */
+  setQuickPanelHotkey: (hotkey: Hotkey | null) => void
   /** +1 zooms in, -1 out, 0 back to Actual Size. */
   zoom: (direction: -1 | 0 | 1) => void
 }
@@ -225,59 +230,3 @@ function useLayoutEditors(
   }
 }
 
-/**
- * The preferences, as opposed to the arrangement.
- *
- * `useLayoutEditors` above changes how the window is *laid out*; these four are
- * settings that happen to be persisted in the same place — the device bar's Run
- * on all, the sidebar's mode, background mode, and what the tray lists. Split
- * because the two grew past one readable function, and this is the seam.
- */
-function usePreferenceEditors(
-  setLayout: React.Dispatch<React.SetStateAction<LayoutState>>,
-): Pick<
-  WorkspaceController,
-  "setRunOnAll" | "setSidebarAutoHide" | "setKeepRunningInBackground" | "setTrayItem" | "zoom"
-> {
-  return {
-    setRunOnAll: useCallback(
-      (runOnAll: boolean) => {
-        setLayout((current) => ({ ...current, runOnAll }))
-      },
-      [setLayout],
-    ),
-    setSidebarAutoHide: useCallback(
-      (sidebarAutoHide: boolean) => {
-        setLayout((current) => ({ ...current, sidebarAutoHide }))
-      },
-      [setLayout],
-    ),
-    setKeepRunningInBackground: useCallback(
-      (keepRunningInBackground: boolean) => {
-        setLayout((current) => ({ ...current, keepRunningInBackground }))
-      },
-      [setLayout],
-    ),
-    setTrayItem: useCallback(
-      (id: string, listed: boolean) => {
-        setLayout((current) => ({
-          ...current,
-          trayItems: listed
-            ? [...current.trayItems.filter((item) => item !== id), id]
-            : current.trayItems.filter((item) => item !== id),
-        }))
-      },
-      [setLayout],
-    ),
-    zoom: useCallback(
-      (direction: -1 | 0 | 1) => {
-        setLayout((current) => ({
-          ...current,
-          zoomStep:
-            direction === 0 ? DEFAULT_ZOOM_STEP : clampZoomStep(current.zoomStep + direction),
-        }))
-      },
-      [setLayout],
-    ),
-  }
-}

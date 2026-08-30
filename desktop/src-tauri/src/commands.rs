@@ -36,6 +36,7 @@ use crate::daemon::wire::{
 };
 use crate::daemon::{DaemonStatus, Supervisor};
 use crate::error::DaemonError;
+use crate::panel;
 use crate::shortcuts::{self, Registered};
 use crate::tray::{self, TrayEntry, TrayState};
 use crate::BackgroundMode;
@@ -578,6 +579,31 @@ pub fn post_notification(
 pub fn set_tray_menu(app: AppHandle, entries: Vec<TrayEntry>) -> Result<(), DaemonError> {
     tray::set_menu(&app, &entries)
         .map_err(|error| DaemonError::Host(format!("could not build the tray menu: {error}")))
+}
+
+/// Summons the Quick Actions panel, or dismisses it. The hotkey's whole job.
+///
+/// # Errors
+///
+/// Fails only if the platform refuses to create the window.
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "tauri's command macro hands AppHandle in by value"
+)]
+pub fn toggle_quick_panel(app: AppHandle) -> Result<(), DaemonError> {
+    panel::toggle(&app)
+        .map_err(|error| DaemonError::Host(format!("could not open Quick Actions: {error}")))
+}
+
+/// Dismisses the panel — Esc at its root, and a run that asked to close it.
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "tauri's command macro hands AppHandle in by value"
+)]
+pub fn hide_quick_panel(app: AppHandle) {
+    panel::hide(&app);
 }
 
 /// Registers the recorded shortcuts with the OS, answering with the ones the

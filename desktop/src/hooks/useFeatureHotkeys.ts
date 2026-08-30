@@ -1,13 +1,22 @@
 import { useEffect, useState } from "react"
 import { listen } from "@tauri-apps/api/event"
 import { accelerator } from "@/lib/accelerator"
-import { setGlobalShortcuts, showMainWindow } from "@/lib/daemon"
-import { hotkeyEffect, modifiersOf, resolveHotkey, type HotkeyBindings } from "@/lib/hotkeys"
+import { setGlobalShortcuts, showMainWindow, toggleQuickPanel } from "@/lib/daemon"
+import {
+  hotkeyEffect,
+  modifiersOf,
+  resolveHotkey,
+  type Hotkey,
+  type HotkeyBindings,
+} from "@/lib/hotkeys"
 import { IS_MAC } from "@/lib/platform"
 import type { FeatureSummary } from "@/lib/wire"
 
 /** Rust's event, carrying the accelerator in the platform's own spelling. */
 const SHORTCUT_EVENT = "shortcut://pressed"
+
+/** The panel's registration id. Not a feature, and no registry id looks like it. */
+const PANEL_ID = "quick-actions-panel"
 
 /**
  * Makes a recorded shortcut do something — the Mac's `HotkeyManager.install`.
@@ -28,16 +37,19 @@ const SHORTCUT_EVENT = "shortcut://pressed"
  */
 export function useFeatureHotkeys({
   bindings,
+  panelHotkey,
   features,
   onRun,
   onOpen,
 }: {
   bindings: HotkeyBindings
+  /** Settings ▸ Hotkeys ▸ Global ▸ Quick Actions panel, or null. */
+  panelHotkey: Hotkey | null
   features: readonly FeatureSummary[]
   onRun: (feature: FeatureSummary) => void
   onOpen: (id: string) => void
 }): void {
-  const global = useGlobalRegistration({ bindings, features, onRun, onOpen })
+  const global = useGlobalRegistration({ bindings, panelHotkey, features, onRun, onOpen })
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -69,11 +81,13 @@ export function useFeatureHotkeys({
  */
 function useGlobalRegistration({
   bindings,
+  panelHotkey,
   features,
   onRun,
   onOpen,
 }: {
   bindings: HotkeyBindings
+  panelHotkey: Hotkey | null
   features: readonly FeatureSummary[]
   onRun: (feature: FeatureSummary) => void
   onOpen: (id: string) => void
@@ -87,6 +101,7 @@ function useGlobalRegistration({
     .map(([id, hotkey]) => `${id}:${accelerator(hotkey)}`)
     .toSorted()
     .join("|")
+    .concat(panelHotkey === null ? "" : `|${PANEL_ID}:${accelerator(panelHotkey)}`)
 
   useEffect(() => {
     let live = true
@@ -94,6 +109,12 @@ function useGlobalRegistration({
       id,
       requested: accelerator(hotkey),
     }))
+    // The panel rides the same registration. It is not a feature, so it gets
+    // an id no registry entry can collide with, and the press handler below
+    // recognises it before it looks anything up.
+    if (panelHotkey !== null) {
+      wanted.push({ id: PANEL_ID, requested: accelerator(panelHotkey) })
+    }
     void setGlobalShortcuts(wanted.map((entry) => entry.requested)).then(
       (accepted) => {
         if (!live) return
@@ -123,6 +144,10 @@ function useGlobalRegistration({
     const pending = listen<string>(SHORTCUT_EVENT, (event) => {
       const id = registered.get(event.payload)
       if (id === undefined) return
+      if (id === PANEL_ID) {
+        void toggleQuickPanel()
+        return
+      }
       const feature = features.find((candidate) => candidate.id === id)
       if (feature === undefined) return
       // The same two outcomes, plus the one thing a global shortcut needs that

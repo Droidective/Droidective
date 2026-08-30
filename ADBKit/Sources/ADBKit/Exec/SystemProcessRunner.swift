@@ -128,7 +128,14 @@ public struct SystemProcessRunner: ProcessRunning {
                         onExit: { status in
                             guard !resumed.swap(true) else { return }
                             reaped.set(true)
-                            continuation.resume(returning: status)
+                            // A child *we* killed has no clean exit code, and
+                            // must not report one just because this path won
+                            // the race to notice it. The handler above says the
+                            // same thing from the flags; the OS would say
+                            // 0xC000013A on Windows and 128+SIGTERM on Linux,
+                            // both of which read as the child's own answer.
+                            let killed = timedOut.get() || cancelled.get()
+                            continuation.resume(returning: killed ? nil : status)
                         })
                     #endif
                 } catch {

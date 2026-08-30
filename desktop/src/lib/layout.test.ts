@@ -38,6 +38,9 @@ describe("loadLayout", () => {
       splitFraction: 0.42,
       keepRunningInBackground: false,
       trayItems: ["logcat"],
+      quickPanelHiddenIds: ["monkey"],
+      quickPanelCloseAfterRun: true,
+      quickPanelHotkey: { code: "Space", ctrl: true, alt: false, shift: true, meta: false },
     }
     saveLayout(storage, layout)
     expect(loadLayout(storage)).toEqual(layout)
@@ -52,6 +55,9 @@ describe("loadLayout", () => {
     expect(loadLayout(fakeStorage("null"))).toEqual(emptyLayout())
   })
 
+})
+
+describe("loadLayout, against what a previous version wrote", () => {
   it("drops entries of the wrong type instead of trusting them", () => {
     const stored = JSON.stringify({
       sidebarOrder: ["logcat", 7, null],
@@ -71,6 +77,10 @@ describe("loadLayout", () => {
       // has to read as on, or a bad value would silently turn it off.
       keepRunningInBackground: "no",
       trayItems: { logcat: true },
+      quickPanelHiddenIds: "monkey",
+      quickPanelCloseAfterRun: 1,
+      // A shortcut with no key would match a keydown that reported no code.
+      quickPanelHotkey: { ctrl: true },
     })
     expect(loadLayout(fakeStorage(stored))).toEqual({
       sidebarOrder: ["logcat"],
@@ -87,6 +97,9 @@ describe("loadLayout", () => {
       splitFraction: 0.5,
       keepRunningInBackground: true,
       trayItems: [],
+      quickPanelHiddenIds: [],
+      quickPanelCloseAfterRun: false,
+      quickPanelHotkey: null,
     })
   })
 

@@ -177,6 +177,7 @@ export {
   capturesFolder,
   copyText,
   exportText,
+  hideQuickPanel,
   openUrl,
   postNotification,
   quitApp,
@@ -185,6 +186,7 @@ export {
   setGlobalShortcuts,
   setTrayMenu,
   showMainWindow,
+  toggleQuickPanel,
 } from "@/lib/daemon-host"
 export type { MirrorSession, Subscription, TerminalSession } from "@/lib/daemon-stream"
 export {

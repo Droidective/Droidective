@@ -3,6 +3,7 @@ mod daemon;
 mod error;
 mod menu;
 mod metro;
+mod panel;
 mod shortcuts;
 mod tray;
 
@@ -231,6 +232,8 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         commands::show_main_window,
         commands::quit_app,
         commands::set_global_shortcuts,
+        commands::toggle_quick_panel,
+        commands::hide_quick_panel,
         commands::open_url,
         commands::captures_folder,
         commands::export_text,

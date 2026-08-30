@@ -21,6 +21,7 @@ const SEPARATOR: TrayEntry = { id: "", label: "", enabled: true }
 /** A feature row's id, so the click handler can tell them from the fixed rows. */
 export const FEATURE_PREFIX = "feature."
 
+export const TRAY_QUICK = "tray.quick-actions"
 export const TRAY_SCREENSHOT = "tray.screenshot"
 export const TRAY_MIRROR = "tray.mirror"
 export const TRAY_OPEN = "tray.open"
@@ -61,11 +62,8 @@ export function trayFeatures(
  * The whole menu.
  *
  * The Mac's order, which is worth keeping literally: the device you are
- * pointed at, then the two things worth doing with no window at all, then what
- * you chose, then the way back in and the way out.
- *
- * "Quick Actions…" is absent until the panel is ported; a row that opens
- * nothing would be worse than a row that is not there.
+ * pointed at, then the three things worth doing with no window at all, then
+ * what you chose, then the way back in and the way out.
  */
 export function trayMenu({
   deviceLabel,
@@ -77,6 +75,7 @@ export function trayMenu({
   return [
     { id: "tray.device", label: deviceLabel ?? "No device", enabled: false },
     SEPARATOR,
+    { id: TRAY_QUICK, label: "Quick Actions…", enabled: true },
     { id: TRAY_SCREENSHOT, label: "Screenshot", enabled: true },
     { id: TRAY_MIRROR, label: "Mirror Screen", enabled: true },
     SEPARATOR,

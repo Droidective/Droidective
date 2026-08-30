@@ -90,6 +90,15 @@ export interface LayoutState {
    * those, the enabled instant actions.
    */
   trayItems: string[]
+  /**
+   * Actions removed from the Quick Actions panel — the Mac's
+   * `LayoutState.quickPanelHiddenIds`. Managed in Settings ▸ General.
+   */
+  quickPanelHiddenIds: string[]
+  /** Dismiss the panel after an action succeeds. A failure always stays up. */
+  quickPanelCloseAfterRun: boolean
+  /** The panel's global shortcut, or null while none is recorded. */
+  quickPanelHotkey: Hotkey | null
 }
 
 const STORAGE_KEY = "droidective.layout"
@@ -110,6 +119,9 @@ export function emptyLayout(): LayoutState {
     splitFraction: 0.5,
     keepRunningInBackground: true,
     trayItems: [],
+    quickPanelHiddenIds: [],
+    quickPanelCloseAfterRun: false,
+    quickPanelHotkey: null,
   }
 }
 
@@ -152,6 +164,11 @@ export function loadLayout(storage: Pick<Storage, "getItem">): LayoutState {
     // one boolean here whose default is true.
     keepRunningInBackground: saved.keepRunningInBackground !== false,
     trayItems: stringArray(saved.trayItems),
+    quickPanelHiddenIds: stringArray(saved.quickPanelHiddenIds),
+    quickPanelCloseAfterRun: saved.quickPanelCloseAfterRun === true,
+    // Through the same validation the per-feature bindings get: a half-written
+    // one would match a keydown that reported no code.
+    quickPanelHotkey: savedHotkeys({ panel: saved.quickPanelHotkey })["panel"] ?? null,
   }
 }
 
