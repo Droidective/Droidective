@@ -140,6 +140,17 @@ before adding to it.
      `aChildThatForksAGrandchildAndExitsIsStillReaped` is the regression test,
      and nothing else in that suite produced the shape.
 
+     **The same test found a second one, on Windows.** There the call returns
+     correctly - right output, no timeout flag - but only after **30 s**, the
+     grandchild's own lifetime, so the pipe collector's grace does not bound
+     the wait on that host the way it does on Linux and macOS. Every part of
+     the *answer* is still asserted there; only *when* is unproven, and the
+     timing bound is `#if !os(Windows)` with the reason written beside it.
+     Forcing it would mean closing a handle out from under a blocked read on a
+     platform nobody here can iterate on, which is how a shipping path gets
+     broken blind. Worth fixing when there is a Windows machine to fix it on;
+     the cost today is a slow first `adb devices` there, not a hang.
+
    **It works now**, and the smoke shows it rather than asserting it: the
    window comes up with 42 features and a device bar that has finished
    looking, and driving Ctrl+K -> "terminal" -> Enter opens a Terminal tab

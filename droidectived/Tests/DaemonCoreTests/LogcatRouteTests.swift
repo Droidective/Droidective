@@ -4,6 +4,13 @@ import Testing
 
 @testable import DaemonCore
 
+// `URLSession` is in its own module off-Apple, and every socket-driving suite
+// here needs this line — without it the file compiles on macOS and fails the
+// Linux job, which is where this one was caught.
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
+
 /// `/v1/logcat/pid` over a real socket.
 ///
 /// The route exists so a log client can narrow to one app. What it must get
