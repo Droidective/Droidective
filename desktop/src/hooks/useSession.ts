@@ -37,6 +37,16 @@ export interface Session {
  * state at startup, then the `devices` stream for changes. The stream alone is
  * not enough — it publishes on change, so a client that connects while nothing
  * is happening would wait indefinitely for its first list.
+ *
+ * **The two loads are independent, and that is load-bearing.** They used to
+ * arrive through one `Promise.all`, which handed the *slower* of them the
+ * decision about when the app became usable — and on a machine whose adb server
+ * is not running yet, `list_devices` is the slow one, because adb has to fork
+ * that server before it can answer. That is exactly how the Linux app's first
+ * launch came up with an empty sidebar and "0 features": the registry had
+ * answered in milliseconds and nothing rendered it. The device bar already has
+ * a "looking for devices" state to sit in; the sidebar has no reason to wait in
+ * it too.
  */
 export function useSession(): Session {
   const [status, setStatus] = useState<DaemonStatus>({ state: "starting" })
@@ -52,37 +62,25 @@ export function useSession(): Session {
 
   useEffect(() => {
     let cancelled = false
+    const alive = () => !cancelled
 
-    const load = async () => {
-      try {
-        const [loadedFeatures, loadedDevices] = await Promise.all([listFeatures(), listDevices()])
-        if (cancelled) return
-        setFeatures(loadedFeatures)
-        setDevices(loadedDevices)
-        setDevicesLoaded(true)
-        const live = await watchDevices((update) => {
-          // A devices batch is the whole list, not an addition — and an empty
-          // one is how the daemon says everything was unplugged.
-          if (update.event === "batch") {
-            setDevices(update.items)
-            setDevicesLoaded(true)
-          }
-        })
-        if (cancelled) {
-          void live.stop()
-          return
-        }
-        subscription.current = live
-      } catch (thrown) {
-        if (!cancelled) setError(asDaemonError(thrown))
-      }
+    // Once. The daemon can go ready between the listener being registered and
+    // `daemonStatus()` answering, in which case both paths below call this —
+    // and a second `loadDevices` opens a second subscription that nothing
+    // stops, because only the last one is kept.
+    let loading = false
+    const load = () => {
+      if (loading) return
+      loading = true
+      void loadFeatures({ alive, setFeatures, setError })
+      void loadDevices({ alive, setDevices, setDevicesLoaded, setError, subscription })
     }
 
     const start = async () => {
       const unlisten = await onDaemonStatus((next) => {
         if (cancelled) return
         setStatus(next)
-        if (next.state === "ready") void load()
+        if (next.state === "ready") load()
       })
       // The daemon may already have come up before this effect ran; the event
       // fires once and would have been missed.
@@ -92,7 +90,7 @@ export function useSession(): Session {
         return
       }
       setStatus(current)
-      if (current.state === "ready") void load()
+      if (current.state === "ready") load()
       return unlisten
     }
 
@@ -136,5 +134,58 @@ export function useSession(): Session {
     select,
     refresh,
     error,
+  }
+}
+
+/** `alive` is the effect's own teardown flag: nothing is written after it. */
+interface Alive {
+  alive: () => boolean
+  setError: (error: DaemonError) => void
+}
+
+async function loadFeatures({
+  alive,
+  setFeatures,
+  setError,
+}: Alive & { setFeatures: (features: FeatureSummary[]) => void }): Promise<void> {
+  try {
+    const loaded = await listFeatures()
+    if (alive()) setFeatures(loaded)
+  } catch (thrown) {
+    if (alive()) setError(asDaemonError(thrown))
+  }
+}
+
+async function loadDevices({
+  alive,
+  setDevices,
+  setDevicesLoaded,
+  setError,
+  subscription,
+}: Alive & {
+  setDevices: (devices: Device[]) => void
+  setDevicesLoaded: (loaded: boolean) => void
+  subscription: { current: Subscription | null }
+}): Promise<void> {
+  try {
+    const loaded = await listDevices()
+    if (!alive()) return
+    setDevices(loaded)
+    setDevicesLoaded(true)
+    const live = await watchDevices((update) => {
+      // A devices batch is the whole list, not an addition — and an empty one
+      // is how the daemon says everything was unplugged.
+      if (update.event === "batch") {
+        setDevices(update.items)
+        setDevicesLoaded(true)
+      }
+    })
+    if (!alive()) {
+      void live.stop()
+      return
+    }
+    subscription.current = live
+  } catch (thrown) {
+    if (alive()) setError(asDaemonError(thrown))
   }
 }

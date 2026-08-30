@@ -163,6 +163,19 @@ export function revealPath(path: string): Promise<void> {
   return invoke("reveal_path", { path })
 }
 
+/**
+ * Posts a native notification. Rejects when the platform would not show one —
+ * a Linux session with no notification daemon running, say — which is never
+ * worth reporting: the toast already said it in the window being returned to.
+ */
+export function postNotification(args: {
+  title: string
+  body: string
+  sound: boolean
+}): Promise<void> {
+  return invoke("post_notification", args)
+}
+
 /** Where pulls and exports land, as the Rust side resolves it. */
 export function capturesFolder(): Promise<string> {
   return invoke<string>("captures_folder")

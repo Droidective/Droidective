@@ -12,6 +12,7 @@ use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_opener::OpenerExt;
 
 use crate::daemon::stream::StreamMessage;
@@ -519,6 +520,43 @@ pub fn copy_text(app: AppHandle, text: String) -> Result<(), DaemonError> {
     app.clipboard()
         .write_text(text)
         .map_err(|error| DaemonError::Host(format!("could not copy to the clipboard: {error}")))
+}
+
+/// Posts a native notification — what an important result does when the window
+/// is not the one you are looking at.
+///
+/// The Mac's `SystemNotifier` is the model. What does *not* come across is its
+/// permission dance: `UNUserNotificationCenter` has to be asked, and asking at
+/// the right moment is half of that code, but the plugin's desktop
+/// implementation answers `Granted` to both `permission_state` and
+/// `request_permission` unconditionally — Windows and Linux put the switch in
+/// the OS's own settings rather than behind an in-app grant. Writing the dance
+/// anyway would be a branch that never runs pretending to be a decision.
+///
+/// Failing to notify is never worth interrupting anyone over: the toast already
+/// said what happened, in the window they are about to come back to. The error
+/// is returned honestly and the caller drops it.
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "tauri's command macro hands AppHandle in by value"
+)]
+pub fn post_notification(
+    app: AppHandle,
+    title: String,
+    body: String,
+    sound: bool,
+) -> Result<(), DaemonError> {
+    let mut builder = app.notification().builder().title(title).body(body);
+    if sound {
+        // The platform's own alert sound. Named rather than a file we ship:
+        // Windows and every Linux desktop have one, and it is the sound the
+        // person has already agreed to hear.
+        builder = builder.sound("default");
+    }
+    builder
+        .show()
+        .map_err(|error| DaemonError::Host(format!("could not post a notification: {error}")))
 }
 
 /// Shows a file in the system file manager — the affordance behind an action

@@ -243,8 +243,12 @@ before adding to it.
 
    The subscription's `filter` field went with it: it was documented in the
    protocol as a level filter and had never been read by anything.
-5. **Notifications** (backlog 18). Small, and several screens already want it:
-   an install that finishes while you are elsewhere, a watched crash landing.
+5. ~~**Notifications** (backlog 18).~~ **Landed** — and smaller than it looked,
+   because the Mac does not decide per event: `SystemNotifier` mirrors the
+   toasts already marked important whenever the window is not the one being
+   looked at, so an install finishing and a watched crash landing both arrive
+   without either screen knowing a tray exists. No Settings switch: the Mac has
+   none (see the Look section).
 6. **Background mode and the tray** (20), then **Quick Actions** (19). In that
    order because the panel needs the global shortcut and the resident process
    the first one establishes. Together they are the most distinctive thing the
@@ -509,9 +513,30 @@ somebody already has in their fingers.
       the text size move on its own.
 - [x] **Empty states per feature** ("connect a device") — the Mac's
       `NoDeviceView` shape, with its per-feature copy table ported.
-- [ ] **Native notifications** — a finished background install, a crash caught
-      while watching, an update staged. `tauri-plugin-notification`, behind the
-      same Settings ▸ General switch the Mac puts it behind.
+- [x] **Native notifications** — an important result that lands while you are
+      in another app posts one, which is `SystemNotifier`'s rule rather than a
+      list of events: `postToastIfBackgrounded` mirrors the toasts already
+      marked important, so a crash caught while watching and a finished install
+      arrive without either screen knowing about the tray. The titles are its
+      titles ("Task finished" / "Task failed" / "Droidective"), a failure
+      carries the sound, and a batch can opt its members out and post one
+      summary — which the install does, with the Mac's own two titles.
+
+      **There is no Settings switch, because the Mac has none.** This entry
+      used to promise one; reading `SettingsView.swift` rather than trusting
+      the note is what found that the Mac leaves the choice to the OS's own
+      per-app notification settings. Adding one here only would be a
+      difference to relearn, and the rule says a better idea goes in the Mac
+      app first.
+
+      Two things it does not read from the DOM, both because the DOM answers a
+      different question. Backgrounded is the window manager's `isFocused()`,
+      not `document.hasFocus()` — the latter is about the *document*, so a
+      window plainly in front reports false whenever focus sits somewhere the
+      DOM does not own, and posting a notification for a result already on
+      screen is the most irritating thing a desktop app does. And permission is
+      asked for at the moment one is first needed, not at launch, exactly as
+      `requestAuthorizationOnce` does.
 - [ ] **Background mode and a tray icon** — closing the window keeps the app
       resident, stops the kept-alive sessions, and leaves the global hotkey
       working.
@@ -882,10 +907,13 @@ after the screens rather than instead of them.
     so this needs Tauri's native drop **and** HTML5 drag to coexist rather than
     one being turned off for the other. That is the actual engineering problem;
     it is not a reason to skip the feature.
-18. **Notifications and their settings.** The Mac posts a native notification
-    when a background install finishes, when a watched crash lands, and when an
-    update is staged, with a Settings ▸ General switch behind it.
-    `tauri-plugin-notification` is the equivalent; the settings pane is item 8.
+18. ~~**Notifications and their settings.**~~ **Landed.** `post_notification`
+    over `tauri-plugin-notification`, registered for its Rust API only like the
+    clipboard and the opener, so the webview's capability file stays at
+    `core:default`. The decision of *what* earns one is the Mac's and lives in
+    `lib/notifications.ts` beside the decision of what is kept in the history.
+    The settings switch turned out not to exist on the Mac — see the Look
+    section for why this app does not grow one either.
 19. **The Quick Actions panel** — the non-activating global-hotkey mini app:
     the grid of every runnable action, pinned first, custom commands, the
     pick-device interstitial, ⌘⏎ run-on-all. Needs a second Tauri window with

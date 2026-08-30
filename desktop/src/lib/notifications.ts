@@ -22,6 +22,12 @@ export interface ToastInput {
   revealPath?: string
   /** Overrides the "is this worth keeping" rule below. */
   important?: boolean
+  /**
+   * Overrides the "is this worth interrupting for" rule. Defaults to
+   * `important`; a batch that posts one summary opts its members out, as the
+   * Mac's per-APK install toasts do.
+   */
+  notifiesWhenBackgrounded?: boolean
 }
 
 export interface Toast {
@@ -31,6 +37,9 @@ export interface Toast {
   copyText: string | undefined
   revealPath: string | undefined
   important: boolean
+  /** Whether this mirrors to a native notification while the window is not the
+   * one being looked at. The Mac's `Toast.notifiesWhenBackgrounded`. */
+  notifiesWhenBackgrounded: boolean
 }
 
 /** A kept toast. The Mac's `AppNotification`. */
@@ -69,13 +78,47 @@ export function resolveLevel(input: ToastInput): ToastLevel {
 }
 
 export function toToast(input: ToastInput, id: string): Toast {
+  const important = isImportant(input)
   return {
     id,
     message: input.message,
     level: resolveLevel(input),
     copyText: input.copyText,
     revealPath: input.revealPath,
-    important: isImportant(input),
+    important,
+    notifiesWhenBackgrounded: input.notifiesWhenBackgrounded ?? important,
+  }
+}
+
+/** A native notification's title and body, or null when this toast earns none.
+ *
+ * The Mac's `SystemNotifier` decides the same two things, and the titles are
+ * its titles verbatim: someone who moves between the two apps sees the same
+ * words in the same tray. The `backgrounded` argument is the whole condition —
+ * a result you are already looking at needs no second surface, and posting one
+ * anyway is the failure mode every chatty app has.
+ */
+export function systemNotification(
+  toast: Toast,
+  backgrounded: boolean,
+): { title: string; body: string; sound: boolean } | null {
+  if (!toast.notifiesWhenBackgrounded || !backgrounded) return null
+  return {
+    title: systemTitle(toast.level),
+    body: toast.message,
+    sound: toast.level === "error",
+  }
+}
+
+/** `SystemNotifier.title(for:)`, word for word. */
+export function systemTitle(level: ToastLevel): string {
+  switch (level) {
+    case "success":
+      return "Task finished"
+    case "error":
+      return "Task failed"
+    default:
+      return "Droidective"
   }
 }
 

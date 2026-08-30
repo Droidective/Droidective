@@ -37,6 +37,10 @@ pub fn run() -> tauri::Result<()> {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        // Same arrangement: an important result that lands while you are in
+        // another app posts a native notification through our own command, so
+        // the page cannot post one on its own.
+        .plugin(tauri_plugin_notification::init())
         .manage(Supervisor::default())
         .invoke_handler(handlers())
         .setup(|app| {
@@ -153,6 +157,7 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         commands::stop_watching,
         commands::copy_text,
         commands::reveal_path,
+        commands::post_notification,
         commands::open_url,
         commands::captures_folder,
         commands::export_text,
