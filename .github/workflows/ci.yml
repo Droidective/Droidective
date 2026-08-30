@@ -74,6 +74,19 @@ jobs:
         run: |
           cd ADBKit
           swift test -Xswiftc -warnings-as-errors
+      # The one call both ports fell over on, timed on a real Windows host.
+      # The Linux app's first launch hung here forever; the Windows app's first
+      # launch showed "0 features" in a screenshot taken at 30 s, and a hang and
+      # a slow answer explain that picture equally well. A stopwatch does not.
+      #
+      # A step of its own because it is opt-in and because it takes the runner's
+      # adb server down, which no other test may have running under it.
+      - name: Probe the cold `adb devices`
+        env:
+          ADB_COLD_START_PROBE: "1"
+        run: |
+          cd ADBKit
+          swift test --filter AdbColdStartProbeTests
       # The shipped artifact, not just the library: the beta channel publishes
       # a Windows daemon, so a tag depends on this compiling.
       - name: Build droidectived (Windows, release)
