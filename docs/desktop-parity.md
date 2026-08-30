@@ -11,8 +11,8 @@ rewriting one when something turns out to be more work than it looked.
 
 | | Count |
 | --- | --- |
-| ⬜ Not started | 7 |
-| 🟡 Partial | 52 |
+| ⬜ Not started | 4 |
+| 🟡 Partial | 55 |
 | ⛔ Not applicable off-Apple | 2 |
 | **Total registry features** | **61** |
 
@@ -21,12 +21,10 @@ run from the palette but have no screen of their own, and the 33 that do have
 screens are each missing something the Mac version offers. Read it as *nothing
 is finished*, not as *most of it is done*.
 
-The seven not started are the three remaining hub screens (`react-native`,
-`simulate`, `connection` — their member actions all run today, just not
-gathered), `frida-console`, `api-client`, and the two that are **blocked rather
-than unscheduled**: `screen-record` and `video-editor` both need ffmpeg
-provisioned for Windows and Linux, and this repo only commits a macOS universal
-binary.
+The four not started are `frida-console`, `api-client`, and the two that are
+**blocked rather than unscheduled**: `screen-record` and `video-editor` both
+need ffmpeg provisioned for Windows and Linux, and this repo only commits a
+macOS universal binary.
 
 **Screens with a real pane today** (23): Terminal, Apps, Logcat, Device Info, File
 Explorer, Crash Catcher, Bug Report, Performance, Root Status, Developer
@@ -260,10 +258,29 @@ before adding to it.
    looked at, so an install finishing and a watched crash landing both arrive
    without either screen knowing a tray exists. No Settings switch: the Mac has
    none (see the Look section).
-6. **Background mode and the tray** (20), then **Quick Actions** (19). In that
-   order because the panel needs the global shortcut and the resident process
-   the first one establishes. Together they are the most distinctive thing the
-   Mac app does that this one does not.
+6. ~~**Background mode and the tray** (20), then **Quick Actions** (19).~~
+   **Landed**, in that order and for the stated reason. Closing the window hides
+   the app, stops the work that was only running because a window was open, and
+   leaves a tray icon whose menu is `MenuBarView` row for row. The recorded
+   shortcuts are now registered with the OS, so they fire from whatever app you
+   are in — the divergence the recorder used to apologise for. And the panel
+   itself: a search field over a five-across grid, arrows moving it while the
+   query is being typed, the destructive second press, the pick-device
+   interstitial, form actions in place.
+
+   **Two conditions the Mac does not need**, both forced: a hidden window is
+   only offered where a tray icon actually exists (a Linux session can decline
+   to give one, and hiding a window nobody can bring back is not a mode), and
+   the Mac's "Show menu bar icon" switch is absent, because turning the tray off
+   while the window is hidden would be exactly that trap. The panel is also not
+   a non-activating `NSPanel` — no such window exists on Windows or Linux — so
+   it takes focus and hands it back by hiding.
+
+   **What the panel does not have yet**: Manage Apps, Emulators, Install APK,
+   the pick-bundle interstitial, and the resume-where-I-left-off window. The
+   first three are screens of their own; the last is a preference over
+   behaviour this panel does not have, since it is created on demand rather
+   than kept alive behind the app.
 7. **API Testing** (`api-client`). The largest remaining feature and the easiest
    to be confident about: device-free, and ADBKit's `ApiClient/` group is
    already fully portable.
@@ -355,17 +372,24 @@ the chrome and the device bar have not.
       Settings ▸ Hotkeys or a sidebar row's right-click. The Mac's rules: at
       least one of Ctrl/Alt/⌘, Esc cancels, Backspace clears, an instant action
       runs where anything else opens. Two differences, both stated where they
-      occur. They fire **while the window has focus**, not globally: the OS
-      registration arrives with the Quick Actions panel below, and the recorder
-      says so rather than promising it now. And a **toggle opens rather than
-      running** — the Mac flips it from the override state it tracks, which this
-      app does not keep, so it would have to guess a direction and write it to a
-      device. The combinations the shell owns (⌘K/T/W/\\/,/1–9) are refused with
+      occur. They are **registered with the OS**, so they fire from whatever app
+      you are in and from a window closed into the tray; a combination another
+      app already holds is refused by the platform, and the window listener goes
+      on answering for exactly those, because a shortcut that then worked
+      nowhere would be worse than one that works in the window. And a **toggle
+      opens rather than running** — the Mac flips it from the override state it
+      tracks, which this app does not keep, so it would have to guess a
+      direction and write it to a device. The combinations the shell owns (⌘K/T/W/\\/,/1–9) are refused with
       the name of the command that holds them, because a window shortcut cannot
       outrank the shell the way an OS-registered one does.
-- [ ] **Global hotkey → Quick Actions panel** — the non-activating mini app:
-      grid of every runnable action, pinned first, custom commands, pick-device
-      interstitial, ⌘⏎ run-on-all.
+- [x] **Global hotkey → Quick Actions panel** — the mini app: the grid of every
+      runnable action with the pinned ones leading, the custom commands, the
+      "Open in Droidective" list, the pick-device interstitial and its All
+      devices row for a `supportsRunAll` feature. Recorded in Settings ▸ Hotkeys
+      ▸ Global, and also the tray's first item. **Not** non-activating: no such
+      window exists on Windows or Linux, so it takes focus and gives it back by
+      hiding. Manage Apps, Emulators, Install APK and the pick-bundle
+      interstitial are still to come.
 - [x] **Pinned / favourites** — a Pinned section leading the sidebar and the
       palette's empty-query list, pinned from either. Members are lifted out of
       their categories rather than listed twice, as `enabledFeatures(in:)` does
@@ -430,10 +454,13 @@ memory — the file each item names is the thing to replicate.
 
 #### Settings (`SettingsView`, 969 lines, seven tabs)
 
-- [ ] **General** — every item is still waiting on its subsystem: the role
-      picker, Open at login, background mode, the Quick Actions preferences,
-      and the updater. The tab lists them and says which backlog item each
-      arrives with, rather than showing switches that control nothing.
+- [~] **General** — Background (the keep-running switch, with its reason when
+      no tray exists), Quick Actions (close-after-run, and the per-action list
+      that keeps one out of the panel) and Tray (which features the menu lists)
+      all work. **Still waiting:** the role picker, Open at login and the
+      updater, which the tab names rather than showing switches that control
+      nothing. The Mac's "Resume where I left off" is deliberately absent — see
+      the panel's entry.
 - [x] **Appearance** — Theme (light/dark/system) and Accent as presets *and* a
       colour well *and* a hex field with Reset, plus the light theme itself
       and the low-contrast warning. A Window section carries the sidebar mode
@@ -548,9 +575,20 @@ somebody already has in their fingers.
       screen is the most irritating thing a desktop app does. And permission is
       asked for at the moment one is first needed, not at launch, exactly as
       `requestAuthorizationOnce` does.
-- [ ] **Background mode and a tray icon** — closing the window keeps the app
-      resident, stops the kept-alive sessions, and leaves the global hotkey
-      working.
+- [x] **Background mode and a tray icon** — closing the window hides it, stops
+      every live subscription (`stopAllStreams`, which is what
+      `AppState.enterBackground` does by walking its open features), and leaves
+      the tray and the global shortcuts working. The tray menu is `MenuBarView`
+      row for row, pushed from the page because everything in it — the device's
+      name, the chosen features — lives there.
+
+      **Only where a tray exists.** macOS always has a menu bar; a Linux session
+      can decline to give the app an indicator, and hiding a window nobody can
+      bring back is not a mode worth having. The app records whether the icon
+      was really created and Settings says so instead of offering the switch.
+      The `.deb` therefore depends on `libayatana-appindicator3-1`. For the same
+      reason the Mac's **"Show menu bar icon" switch is absent**: turning the
+      tray off while the window is hidden is exactly that trap.
 
 
 ---
@@ -809,11 +847,12 @@ often someone opens them rather than by how hard they look.
   device. Writing a zip without an external tool would mean a new dependency for
   one button.
 
-- **No global hotkeys.** The recorded shortcuts are window shortcuts: they fire
-  while Droidective has focus, where the Mac registers them with the OS and they
-  fire from anywhere. The recorder and the Hotkeys tab both say so. It arrives
-  with the Quick Actions panel (backlog 19), which needs the same
-  `tauri-plugin-global-shortcut`.
+- **A shortcut another app already holds stays a window shortcut.** The
+  registration is offered to the OS for every binding, and the platform refuses
+  the ones it cannot grant. The window listener answers for exactly those, which
+  is better than the alternative in both directions: nothing fires twice
+  (a registered shortcut is grabbed before the webview sees it), and a
+  combination the OS would not take still works where the app has focus.
 
 - **A hotkey on a toggle opens it rather than running it.** The Mac flips a
   state override from `activeOverrides`, which it tracks and this app does not,
@@ -925,14 +964,18 @@ after the screens rather than instead of them.
     `lib/notifications.ts` beside the decision of what is kept in the history.
     The settings switch turned out not to exist on the Mac — see the Look
     section for why this app does not grow one either.
-19. **The Quick Actions panel** — the non-activating global-hotkey mini app:
-    the grid of every runnable action, pinned first, custom commands, the
-    pick-device interstitial, ⌘⏎ run-on-all. Needs a second Tauri window with
-    `alwaysOnTop` + no focus steal, and a global shortcut.
-20. **Background mode and the menu bar** — closing the window keeps the app
-    resident behind a tray icon, stops the kept-alive sessions, and the global
-    hotkey still opens Quick Actions. `tauri-plugin-global-shortcut` plus a
-    tray icon.
+19. ~~**The Quick Actions panel.**~~ **Landed.** A second Tauri window with
+    `alwaysOnTop`, no decorations and no taskbar entry, created on first use —
+    a second webview costs real memory, and someone who never presses the
+    hotkey should never pay it. One bundle, two entry points: the URL says
+    which app to render. `lib/quick-actions.ts` is the ported
+    `PaletteSearch.quickActions`, including the rule that is easy to get
+    backwards — a hub member **is** offered here, and its enabledness rides on
+    its hub. Not non-activating, which no window on these platforms can be.
+20. ~~**Background mode and the menu bar.**~~ **Landed.** `tauri-plugin-global-shortcut`
+    plus a tray icon, and the close handler that hides rather than quits —
+    guarded on the tray having actually been created, since a Linux session can
+    decline to give one and a window hidden with no way back is not a mode.
 21. **Multi-window** (`docs/multi-window.md`) — one window per device, the
     per-window workspace split, the Focus / Take Over banner for the exclusive
     features, and the window tint.
