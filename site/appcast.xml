@@ -6,10 +6,10 @@
     <description>Most recent Droidective updates.</description>
     <language>en</language>
     <item>
-      <title>Droidective 3.10.0-beta.2</title>
+      <title>Droidective 3.10.0-beta.3</title>
       <sparkle:channel>beta</sparkle:channel>
-      <sparkle:version>875</sparkle:version>
-      <sparkle:shortVersionString>3.10.0-beta.2</sparkle:shortVersionString>
+      <sparkle:version>889</sparkle:version>
+      <sparkle:shortVersionString>3.10.0-beta.3</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <description><![CDATA[
 <style>
@@ -25,81 +25,96 @@ pre { background: color-mix(in srgb, currentColor 8%, transparent); padding: .6e
 pre code { background: none; padding: 0; }
 a { color: #2f9e44; }
 </style>
-<p>The first beta shipped a Windows and Linux app that nobody had ever launched.
-This one launches it — in CI, on every pull request — and fixes the three
-things that stopped it working when somebody finally did.</p>
-<h3>Linux, actually running</h3>
+<p>The Windows and Linux app grows the three things it was missing that people
+notice first: it tells you when something finishes while you are elsewhere, it
+stays out of the way without quitting, and it can be summoned over whatever you
+are working in. Behind all of that, the reason the Windows app looked broken on
+its first launch turned out not to be what the note in the tracker said.</p>
+<h3>The Windows app was hanging, not being slow</h3>
 <ul>
 <li>
-<strong>The app now starts, and CI proves it on every change.</strong> A new job installs
-the <code>.deb</code> in a bare <code>ubuntu:24.04</code> — so apt resolves the package's own
-declared dependencies and nothing the build machine happened to leave behind
-— launches it under Xvfb, drives the command palette to open a screen, and
-photographs both frames. Every check fails the build rather than warning.</li>
+<strong>The first <code>adb devices</code> on Windows never returned.</strong> The app came up
+showing "0 features" and no error, which is exactly what Linux did before the
+last beta fixed it there. It had been written down as <em>slow rather than dead</em>
+on the evidence of a stand-in that returned after thirty seconds — but the
+stand-in slept, and adb's grandchild is a <em>server</em>, which does not exit at
+all. Timing the real call settled it.</li>
 <li>
-<strong>The daemon could not start at all.</strong> <code>droidectived</code> was dynamically linked
-against the Swift runtime, so on any machine without a Swift toolchain it
-died at exec with <code>libswiftCore.so: cannot open shared object file</code>, and the
-app came up showing "droidectived would not start" with all thirty-three
-screens behind it. It now carries its own runtime.</li>
+<strong>The fix is a second way to notice a child has gone.</strong> Windows now waits on
+the process handle, which the OS signals the moment the child exits —
+inherited pipes and surviving grandchildren included. The whole ADBKit suite
+runs there in six seconds where one test used to sit at thirty, and the
+regression test that was gated off Windows for "destabilising" a neighbour
+runs again: that neighbour was the same missing exit report, seen from the
+other end.</li>
 <li>
-<strong>Then it could not find <code>libcurl</code>.</strong> Declared as a dependency of the <code>.deb</code>
-rather than assumed.</li>
+<strong>Both smoke tests now time it.</strong> The Linux one, on every pull request, and
+the Windows one on every beta tag, ask the running app for its device list
+and fail if the answer takes longer than ten seconds. An empty answer is
+fine; an answer arriving is the point.</li>
 <li>
-<strong>Then it came up and did nothing.</strong> <code>adb devices</code> on a machine whose adb
-<em>server</em> is not yet running forks that server and exits — and Linux left the
-exited process unreaped, so the call never returned and the window sat at
-"0 features" with no error. The process runner now notices that exit itself.
-The cold call went from hanging indefinitely to 0.185 s.</li>
+<strong>The app no longer waits for the device list to show anything.</strong> Its two
+startup calls used to arrive together, which handed the slower of them the
+decision about when the app became usable. The sidebar now paints as soon as
+the registry answers, whatever adb is doing.</li>
 </ul>
-<h3>Windows</h3>
+<h3>It tells you when you are looking somewhere else</h3>
 <ul>
 <li>
-<strong>It gets launched too, on every beta tag.</strong> The installer runs silently, the
-app starts, and the release fails if the app or its daemon is not alive
-thirty seconds later. There is no Windows container, so this proves less than
-the Linux check does — the runner already has what the toolchain left — but
-it is the first time the Windows build has been started at all.</li>
+<strong>A result that lands while you are in another app posts a notification.</strong>
+Not a list of events, but the same rule the Mac uses: the results already
+worth keeping in the notification panel are the ones worth interrupting for,
+so an install finishing and a watched crash landing both arrive without
+either screen knowing a tray exists. Failures carry a sound; routine
+confirmations stay quiet.</li>
 </ul>
-<h3>New in the app</h3>
+<h3>It stays running without staying in the way</h3>
 <ul>
 <li>
-<strong>Three more screens: React Native, Simulate and Connection.</strong> The hub
-screens, each matching the Mac's section for section — the RN quick actions
-and both Metro paths, Simulate's battery, appearance, layout, locale, network
-and proxy, and Connection's live Wi-Fi and IP with the pairing and Private DNS
-sections it shares with their standalone screens. With these the sidebar
-matches the Mac's.</li>
+<strong>Closing the window leaves Droidective in the tray</strong> instead of quitting it,
+stops the work that was only running because a window was open — terminal
+shells included — and keeps the shortcuts alive. The tray menu is the Mac's
+menu-bar menu: the selected device, Quick Actions, Screenshot, Mirror Screen,
+the features you chose in Settings, then Open and Quit.</li>
 <li>
-<strong>Logcat can follow one app.</strong> Pick it in Apps or press "App on screen", and
-the log narrows to that process — filtered on the device with
-<code>adb logcat --pid</code>, so the buffer holds only that app's lines instead of
-hiding the rest after the fact. It waits for an app that has not launched
-yet, and follows it when it relaunches under a new process id.</li>
+<strong>Only where there is somewhere to click.</strong> A Linux session can decline to
+give an app a tray icon, and hiding a window nobody can bring back is not a
+mode worth having, so the app checks and Settings says so instead of
+offering the switch. The <code>.deb</code> now depends on <code>libayatana-appindicator3-1</code>.</li>
 <li>
-<strong>Install App is in the sidebar.</strong> It had a working screen and was missing
-from the list, along with four others the daemon was reporting as not built.</li>
+<strong>Recorded shortcuts are registered with the system.</strong> They fire from
+whatever app you are in, and from a window closed into the tray. A
+combination another app already holds is refused by the platform and goes on
+working while Droidective has focus, rather than working nowhere.</li>
 </ul>
-<h3>Fixed</h3>
+<h3>Quick Actions</h3>
 <ul>
 <li>
-<strong>The mirror's codec check is now a real decode.</strong> Linux needs
-<code>gstreamer1.0-libav</code> for H.264, which the <code>.deb</code> pulls in by default; without
-it the mirror says which package to install rather than showing a black
-rectangle. That is now verified by decoding an actual frame rather than
-asking the webview whether it thinks it could.</li>
+<strong>A panel over whatever you are doing</strong>, on a shortcut you record in
+Settings ▸ Hotkeys or from the tray's first item: a search field over a grid
+of everything runnable in place, your saved commands under it, and the
+full-app screens under those. Arrows move the grid while you are still
+typing, Enter runs, Escape closes.</li>
+<li>
+<strong>It asks before it acts.</strong> A destructive action waits for a second Enter. A
+device-scoped one asks which device when more than one is connected, with an
+All devices row for the actions that fan out. A form action shows its fields;
+so does a toggle, because guessing a direction and writing it to a device is
+worse than asking.</li>
+<li>Manage Apps, Emulators and Install APK are not in the panel yet.</li>
 </ul>
-<h3>macOS</h3>
+<h3>Appearance</h3>
 <ul>
 <li>
-<strong>This is a rebuild, not a Mac release.</strong> The Mac app is identical to v3.9.2
-and is offered only to installs that opted into beta updates in Settings ▸
-General. The stable channel is untouched: the download button and
-<code>/releases/latest/download/</code> keep serving v3.9.2.</li>
+<strong>Pick the window's background and text colour.</strong> Eight presets, a colour
+well and a hex field, with the lifted surfaces, the hairlines and the muted
+text derived from what you picked — so a custom colour keeps the same
+hierarchy the stock one has. A light background switches the whole app to
+the light treatment, and the Theme picker says so rather than fighting it.</li>
 </ul>
 ]]></description>
-      <pubDate>Sun, 30 Aug 2026 14:48:34 +0000</pubDate>
-      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.10.0-beta.2/Droidective-v3.10.0-beta.2.dmg" sparkle:edSignature="gG0Ouw12UrR/j91lNhssZeoA2fIN/4ns/Xv7/MvnAL0HjJi95vPyYz/qlL9uvYghXlxKLa9Bcjs/1EZpe1QRBw==" length="145117761" type="application/octet-stream" />
+      <pubDate>Sun, 30 Aug 2026 21:44:26 +0000</pubDate>
+      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.10.0-beta.3/Droidective-v3.10.0-beta.3.dmg" sparkle:edSignature="tfR+G7sqCYiarkD6vhUz1oDv7hTBh7rwesqk2Dm5AwWncKWJ/ULf0oVLPCFsJk+/2iXKYGD2o3X/9kshCVlNDg==" length="145189856" type="application/octet-stream" />
     </item>
     <item>
       <title>Droidective 3.9.2</title>
