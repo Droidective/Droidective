@@ -49,4 +49,25 @@ import Testing
                 """)
         }
     }
+
+    /// A routed screen the engine does not call implemented.
+    ///
+    /// Invisible on the Mac — `detailByKind` sends a `.view` straight to its
+    /// route and never consults `implementedIDs` — and wrong everywhere else,
+    /// because `droidectived` serves that set as the wire's `implemented` flag
+    /// and a client uses it to decide which screens exist. The three hub
+    /// screens sat here for three releases: the Mac drew them, and the desktop
+    /// app was told they were not built, which would have folded their members
+    /// away behind a hub it then refused to list.
+    @Test func everyRoutedViewIsImplemented() {
+        for route in FeatureDetailRoute.allCases {
+            guard let feature = FeatureRegistry.byID[route.rawValue] else { continue }
+            #expect(
+                FeatureEngine.implementedIDs.contains(feature.id),
+                """
+                \(feature.id) has a pane but is missing from FeatureEngine.implementedIDs — \
+                the Mac would draw it while every other client is told it does not exist
+                """)
+        }
+    }
 }
