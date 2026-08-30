@@ -62,11 +62,6 @@ enum ChildCommands {
     static let sleepThenPrint = script(
         "sleepprint", "ping -n 2 127.0.0.1 > nul\r\necho done\r\n")
 
-    /// A child that leaves a grandchild holding the pipes and exits at once —
-    /// the shape `adb` has when it starts its own server. See the POSIX twin.
-    static let forksAndExits = script(
-        "forkexit", "start /b ping -n 31 127.0.0.1 > nul\r\necho started\r\n")
-
     /// The host's own line ending, so the assertions stay exact.
     static let echoOutput = "hello\r\n"
     static let stderrOutput = "oops\r\n"

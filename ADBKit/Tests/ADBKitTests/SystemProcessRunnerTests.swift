@@ -86,6 +86,20 @@ import Testing
     /// The bound is what matters. The timeout here is generous *and* the
     /// assertion is that it finished well inside it — a run that takes the
     /// whole timeout has regressed even though it returned.
+    ///
+    /// POSIX only. The bug is a corelibs one, and `adb` does not have this
+    /// shape on Windows anyway — but the reason for the gate is sharper than
+    /// that: the child leaves a grandchild alive for thirty seconds, and on
+    /// the Windows runner that was enough to push `timeoutKillsAndFlags` (a
+    /// neighbour, measuring its own wall clock) from milliseconds to the same
+    /// 30.3 s. A regression test that destabilises the suite around it is
+    /// worse than no coverage on the platform it was never about.
+    ///
+    /// What that run *did* establish about Windows is written down in the
+    /// parity tracker rather than left as folklore: the call returns correctly
+    /// there, but only once the grandchild is gone, so the collector's grace
+    /// does not bound the wait on that host.
+    #if !os(Windows)
     @Test func aChildThatForksAGrandchildAndExitsIsStillReaped() async {
         let started = ContinuousClock().now
         let output = await runner.run(
@@ -103,19 +117,9 @@ import Testing
         // collector's grace, so this is a few seconds at most and nowhere near
         // the timeout.
         //
-        // **Windows is exempt, and that is a finding rather than a
-        // concession.** This test measured 30.3 s there — the grandchild's own
-        // lifetime — so the grace does not bound the wait on that host: the
-        // call returns correctly, with the right output and no timeout flag,
-        // but only once the grandchild is gone. Nothing above depends on the
-        // platform, so Windows still asserts every part of the answer; it is
-        // only *when* that is unproven. Closing the handle out from under a
-        // blocked read to force it is exactly the change that cannot be made
-        // blind, so it is written down instead — see the parity tracker.
-        #if !os(Windows)
         #expect(elapsed < .seconds(15), "took \(elapsed), which means it waited on something")
-        #endif
     }
+    #endif
 
     @Test func manyConcurrentInvocationsDoNotStarveTheRuntime() async {
         // 16 concurrent slow-ish processes — far past the old failure point.

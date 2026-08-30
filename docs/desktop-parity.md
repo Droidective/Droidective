@@ -140,16 +140,19 @@ before adding to it.
      `aChildThatForksAGrandchildAndExitsIsStillReaped` is the regression test,
      and nothing else in that suite produced the shape.
 
-     **The same test found a second one, on Windows.** There the call returns
-     correctly - right output, no timeout flag - but only after **30 s**, the
-     grandchild's own lifetime, so the pipe collector's grace does not bound
-     the wait on that host the way it does on Linux and macOS. Every part of
-     the *answer* is still asserted there; only *when* is unproven, and the
-     timing bound is `#if !os(Windows)` with the reason written beside it.
-     Forcing it would mean closing a handle out from under a blocked read on a
-     platform nobody here can iterate on, which is how a shipping path gets
-     broken blind. Worth fixing when there is a Windows machine to fix it on;
-     the cost today is a slow first `adb devices` there, not a hang.
+     **The same test found something about Windows, and is not run there.**
+     On that host the call returned correctly - right output, no timeout flag -
+     but only after **30 s**, the grandchild's own lifetime, so the collector's
+     grace does not bound the wait there the way it does on Linux and macOS.
+     The test is POSIX-only now, and for a sharper reason than "the bug is a
+     corelibs one": its child leaves a grandchild alive for thirty seconds, and
+     on the Windows runner that was enough to push a neighbouring test
+     measuring its own wall clock to the same 30.3 s. A regression test that
+     destabilises the suite around it is worse than no coverage on a platform
+     it was never about. Fixing the Windows side would mean closing a handle
+     out from under a blocked read on a machine nobody here can iterate on -
+     worth doing when there is one, and the cost until then is a slow first
+     `adb devices` on Windows rather than a hang.
 
    **It works now**, and the smoke shows it rather than asserting it: the
    window comes up with 42 features and a device bar that has finished
