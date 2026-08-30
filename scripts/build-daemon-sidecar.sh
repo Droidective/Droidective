@@ -35,8 +35,27 @@ case "$TRIPLE" in
 *windows*) SUFFIX=".exe" ;;
 esac
 
+# Linux has no system Swift runtime, so the daemon carries its own.
+#
+# Without this the .deb installs a binary that dies at exec with
+# "libswiftCore.so: cannot open shared object file", and the app comes up
+# showing "droidectived would not start" with every screen behind it
+# unreachable — which is exactly what `smoke-desktop-linux.sh` caught the first
+# time anyone ran the app on Linux. The build machine has a toolchain and a
+# user's machine has nothing, so a dynamic link is a build that only works
+# where it was built.
+#
+# macOS ships the runtime in the OS and Windows resolves it from the
+# toolchain's redistributables, so neither wants the flag: on macOS it is a
+# larger binary for no reason, and Swift on Windows has no static stdlib to
+# link at all.
+BUILD_ARGS=(-c "$CONFIGURATION" --product droidectived)
+case "$TRIPLE" in
+*linux*) BUILD_ARGS+=(--static-swift-stdlib) ;;
+esac
+
 echo "building droidectived ($CONFIGURATION) for $TRIPLE"
-(cd "$ROOT/droidectived" && swift build -c "$CONFIGURATION" --product droidectived)
+(cd "$ROOT/droidectived" && swift build "${BUILD_ARGS[@]}")
 
 BUILT="$ROOT/droidectived/.build/$CONFIGURATION/droidectived$SUFFIX"
 [ -f "$BUILT" ] || {
