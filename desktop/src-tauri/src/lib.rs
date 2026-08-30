@@ -3,6 +3,7 @@ mod daemon;
 mod error;
 mod menu;
 mod metro;
+mod shortcuts;
 mod tray;
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -94,6 +95,10 @@ pub fn run() -> tauri::Result<()> {
         // another app posts a native notification through our own command, so
         // the page cannot post one on its own.
         .plugin(tauri_plugin_notification::init())
+        // A recorded shortcut fires from wherever you are, which is what makes
+        // it worth recording. Registration is driven by the page (`shortcuts`)
+        // rather than declared here, because the bindings are the user's.
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(Supervisor::default())
         .manage(BackgroundMode::default())
         .manage(TrayState::default())
@@ -225,6 +230,7 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         commands::background_available,
         commands::show_main_window,
         commands::quit_app,
+        commands::set_global_shortcuts,
         commands::open_url,
         commands::captures_folder,
         commands::export_text,

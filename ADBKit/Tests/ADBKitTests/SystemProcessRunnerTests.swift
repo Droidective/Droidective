@@ -81,25 +81,21 @@ import Testing
     /// app unusable on its first launch: the child exited, corelibs never
     /// reaped it, `terminationHandler` never fired, and the call was suspended
     /// for the life of the process. The window came up with "0 features" and
-    /// no error, because the promise behind it simply never settled.
+    /// no error, because the promise behind it simply never settled. Windows
+    /// showed the identical picture for a different internal reason — see
+    /// `ExitWatcher`, which is why that type has two implementations.
     ///
     /// The bound is what matters. The timeout here is generous *and* the
     /// assertion is that it finished well inside it — a run that takes the
     /// whole timeout has regressed even though it returned.
     ///
-    /// POSIX only. The bug is a corelibs one, and `adb` does not have this
-    /// shape on Windows anyway — but the reason for the gate is sharper than
-    /// that: the child leaves a grandchild alive for thirty seconds, and on
-    /// the Windows runner that was enough to push `timeoutKillsAndFlags` (a
-    /// neighbour, measuring its own wall clock) from milliseconds to the same
-    /// 30.3 s. A regression test that destabilises the suite around it is
-    /// worse than no coverage on the platform it was never about.
-    ///
-    /// What that run *did* establish about Windows is written down in the
-    /// parity tracker rather than left as folklore: the call returns correctly
-    /// there, but only once the grandchild is gone, so the collector's grace
-    /// does not bound the wait on that host.
-    #if !os(Windows)
+    /// **It runs on Windows too now**, and it did not use to. It was gated off
+    /// for destabilising `timeoutKillsAndFlags` beside it — a neighbour that
+    /// measures its own wall clock and was reading 30.3 s. That was never
+    /// interference: `sleepForever` on Windows *is* a 30 s ping, so a neighbour
+    /// stuck at exactly its length was the same missing exit report, seen from
+    /// the other end. Fixing one fixed both, and gating this away was reading a
+    /// second symptom as a property of the runner.
     @Test func aChildThatForksAGrandchildAndExitsIsStillReaped() async {
         let started = ContinuousClock().now
         let output = await runner.run(
@@ -119,7 +115,6 @@ import Testing
         //
         #expect(elapsed < .seconds(15), "took \(elapsed), which means it waited on something")
     }
-    #endif
 
     @Test func manyConcurrentInvocationsDoNotStarveTheRuntime() async {
         // 16 concurrent slow-ish processes — far past the old failure point.

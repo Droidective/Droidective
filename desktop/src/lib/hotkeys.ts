@@ -268,8 +268,8 @@ const RESERVED: readonly { readonly code: string; readonly command: string }[] =
 export function reservedCommand(hotkey: Hotkey, mac: boolean): string | null {
   const claimed = menuCommandFor(hotkey, mac)
   if (claimed !== null) return claimed
-  const accelerator = mac ? hotkey.meta : hotkey.ctrl
-  if (!accelerator || hotkey.alt || hotkey.shift) return null
+  const commandKey = mac ? hotkey.meta : hotkey.ctrl
+  if (!commandKey || hotkey.alt || hotkey.shift) return null
   if (/^Digit[1-9]$/u.test(hotkey.code)) return `Show Tab ${hotkey.code.slice(5)}`
   return RESERVED.find((entry) => entry.code === hotkey.code)?.command ?? null
 }

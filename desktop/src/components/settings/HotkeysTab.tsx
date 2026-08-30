@@ -65,18 +65,13 @@ export function HotkeysTab(props: HotkeysTabProps) {
   return (
     <div className="flex flex-col gap-5">
       <p className="text-[11.5px] text-text-tertiary">
-        Shortcuts fire while a Droidective window has focus. On macOS they are registered with the
-        system and fire from anywhere; that arrives here with the Quick Actions panel and its tray
-        icon. While recording, Esc cancels and Backspace clears.
+        Shortcuts are registered with the system, so they fire from whatever app you are in — and
+        from a window closed into the tray. A combination another app already holds is refused by
+        the platform and keeps working while Droidective has focus. While recording, Esc cancels
+        and Backspace clears.
       </p>
 
       <Section title="Global">
-        <Row
-          label="Show Droidective"
-          detail="Needs the app to stay resident with the window closed — backlog item 20."
-        >
-          <Waiting />
-        </Row>
         <Row
           label="Quick Actions panel"
           detail="The mini app it opens is backlog item 19; its hotkey arrives with it."

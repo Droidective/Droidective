@@ -36,6 +36,7 @@ use crate::daemon::wire::{
 };
 use crate::daemon::{DaemonStatus, Supervisor};
 use crate::error::DaemonError;
+use crate::shortcuts::{self, Registered};
 use crate::tray::{self, TrayEntry, TrayState};
 use crate::BackgroundMode;
 
@@ -577,6 +578,18 @@ pub fn post_notification(
 pub fn set_tray_menu(app: AppHandle, entries: Vec<TrayEntry>) -> Result<(), DaemonError> {
     tray::set_menu(&app, &entries)
         .map_err(|error| DaemonError::Host(format!("could not build the tray menu: {error}")))
+}
+
+/// Registers the recorded shortcuts with the OS, answering with the ones the
+/// platform accepted — see `shortcuts.rs` for why a refusal is ordinary and
+/// why the answer comes back in two spellings.
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "tauri's command macro hands AppHandle in by value"
+)]
+pub fn set_global_shortcuts(app: AppHandle, accelerators: Vec<String>) -> Vec<Registered> {
+    shortcuts::set(&app, &accelerators)
 }
 
 /// Settings ▸ General ▸ "Keep running in the background", pushed down from the

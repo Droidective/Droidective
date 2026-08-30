@@ -14,13 +14,13 @@ import Testing
 ///   two lines and exits; corelibs left the child a zombie it never reaped, so
 ///   `terminationHandler` never fired and the continuation waiting on it was
 ///   suspended for the life of the process. The app came up with "0 features".
-///   Fixed by `ExitReaper`.
-/// - **Windows**: unknown, and that is the point of this file. A synthetic
-///   stand-in (a child that leaves a grandchild alive for 30 s) returned the
-///   right answer after 30 s rather than promptly, so *something* there waits
-///   on the grandchild — but a synthetic child is not adb, and the app's own
-///   symptom ("0 features" in the launch screenshot at 30 s) is equally
-///   explained by a hang and by a 30 s wait.
+///   Fixed by `ExitWatcher`'s POSIX half.
+/// - **Windows**: the same picture, and this file is how that was established
+///   rather than guessed. The first run of this probe **hung** — thirty
+///   minutes in CI against ten for the whole suite beside it — where the app's
+///   own symptom ("0 features" in a launch screenshot taken at 30 s) was
+///   equally explained by a hang and by a slow answer. Fixed by `ExitWatcher`'s
+///   Windows half, which waits on the process handle.
 ///
 /// A screenshot cannot tell those apart. A stopwatch on the actual call can,
 /// which is all this does: kill the server, time `adb devices`, print it, and
@@ -69,7 +69,11 @@ import Testing
     /// Windows to tell the two apart.
     static let promptEnough: Duration = .seconds(10)
 
-    @Test(.enabled(if: enabled))
+    /// The time limit is not decoration. The first run of this probe hung — on
+    /// Windows, exactly as Linux used to — and with no limit it sat in CI for
+    /// thirty minutes against ten for the whole suite beside it, until it was
+    /// cancelled by hand. A probe that can hang has to fail instead.
+    @Test(.enabled(if: enabled), .timeLimit(.minutes(2)))
     func theFirstAdbDevicesReturnsPromptly() async throws {
         let adb = try #require(Self.adbPath(), "no adb on this host — set ANDROID_HOME or PATH")
         print("=== probing \(adb) ===")
@@ -104,7 +108,7 @@ import Testing
     /// to start a server on this host, which is nothing the runner can fix. A
     /// warm call is a socket round-trip through the identical code path, so the
     /// difference between the two is the cost of the fork-and-exit shape.
-    @Test(.enabled(if: enabled))
+    @Test(.enabled(if: enabled), .timeLimit(.minutes(2)))
     func aWarmAdbDevicesIsTheControl() async throws {
         let adb = try #require(Self.adbPath(), "no adb on this host — set ANDROID_HOME or PATH")
         let runner = SystemProcessRunner()

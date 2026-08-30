@@ -182,6 +182,7 @@ export {
   quitApp,
   revealPath,
   setBackgroundMode,
+  setGlobalShortcuts,
   setTrayMenu,
   showMainWindow,
 } from "@/lib/daemon-host"

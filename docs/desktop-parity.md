@@ -140,19 +140,30 @@ before adding to it.
      `aChildThatForksAGrandchildAndExitsIsStillReaped` is the regression test,
      and nothing else in that suite produced the shape.
 
-     **The same test found something about Windows, and is not run there.**
-     On that host the call returned correctly - right output, no timeout flag -
-     but only after **30 s**, the grandchild's own lifetime, so the collector's
-     grace does not bound the wait there the way it does on Linux and macOS.
-     The test is POSIX-only now, and for a sharper reason than "the bug is a
-     corelibs one": its child leaves a grandchild alive for thirty seconds, and
-     on the Windows runner that was enough to push a neighbouring test
-     measuring its own wall clock to the same 30.3 s. A regression test that
-     destabilises the suite around it is worse than no coverage on a platform
-     it was never about. Fixing the Windows side would mean closing a handle
-     out from under a blocked read on a machine nobody here can iterate on -
-     worth doing when there is one, and the cost until then is a slow first
-     `adb devices` on Windows rather than a hang.
+     **Windows had it too, and worse than it first read.** It was written down
+     as "slow, not dead": a synthetic stand-in returned after 30 s — the
+     grandchild's own lifetime — and the test was gated off the platform for
+     destabilising a neighbour. Both readings were wrong.
+     `AdbColdStartProbeTests` times the real call on a real Windows host, and
+     its first run **hung**: thirty minutes in CI against ten for the whole
+     suite beside it, until it was cancelled by hand. adb's grandchild is a
+     *server*, and a server does not exit — so what looked like a bounded 30 s
+     wait on a sleeping stand-in is an unbounded one on the thing itself. The
+     Windows app's "0 features" launch screenshot was the Linux bug exactly,
+     and one frame could not say so.
+
+     `ExitWatcher` — the reaper, renamed for having two implementations — waits
+     on the process handle there. `WaitForSingleObject` is signalled the moment
+     the child exits, inherited pipes and surviving grandchildren included, and
+     holding that handle open is also what stops the pid being recycled under
+     the kill paths, which is the hazard its POSIX half has to guard against.
+     The neighbour blamed for interference — `timeoutKillsAndFlags`, reading
+     30.3 s — was never interference either: `sleepForever` on Windows *is* a
+     30 s ping, so a test stuck at exactly its length was the same missing exit
+     report seen from the other end. Both run on Windows now. The two pipe
+     drains also became concurrent, since a grandchild inherits the pair and
+     waiting them out one after the other doubled the only case the grace
+     exists for.
 
    **It works now**, and the smoke shows it rather than asserting it: the
    window comes up with 42 features and a device bar that has finished

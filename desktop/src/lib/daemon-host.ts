@@ -66,6 +66,20 @@ export function quitApp(): Promise<void> {
   return invoke("quit_app")
 }
 
+/**
+ * Registers these accelerators with the OS, replacing whatever was registered
+ * before, and answers with the ones the platform accepted — in the requested
+ * spelling and in the one a press will arrive as.
+ */
+export function setGlobalShortcuts(accelerators: string[]): Promise<RegisteredShortcut[]> {
+  return invoke<RegisteredShortcut[]>("set_global_shortcuts", { accelerators })
+}
+
+export interface RegisteredShortcut {
+  requested: string
+  canonical: string
+}
+
 /** Where pulls and exports land, as the Rust side resolves it. */
 export function capturesFolder(): Promise<string> {
   return invoke<string>("captures_folder")

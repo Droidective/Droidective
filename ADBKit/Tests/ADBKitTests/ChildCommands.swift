@@ -62,6 +62,16 @@ enum ChildCommands {
     static let sleepThenPrint = script(
         "sleepprint", "ping -n 2 127.0.0.1 > nul\r\necho done\r\n")
 
+    /// `adb`'s shape: leave a grandchild holding the pipes, and exit at once.
+    ///
+    /// `start /b` is what makes it a grandchild — cmd returns as soon as it has
+    /// launched the thing, where a plain command line would wait for it. The
+    /// ping is deliberately *not* redirected to nul: a grandchild still writing
+    /// to the inherited stdout is the whole point, and it is what stops the
+    /// pipes reaching EOF when the child goes.
+    static let forksAndExits = script(
+        "forkexit", "start /b ping -n 31 127.0.0.1\r\necho started\r\n")
+
     /// The host's own line ending, so the assertions stay exact.
     static let echoOutput = "hello\r\n"
     static let stderrOutput = "oops\r\n"
