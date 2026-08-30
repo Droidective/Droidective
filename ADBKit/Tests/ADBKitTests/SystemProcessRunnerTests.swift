@@ -73,6 +73,37 @@ import Testing
         #expect(output.stdout.count == 64 * 1024)
     }
 
+    /// A child that forks a long-lived grandchild and exits immediately must
+    /// still be reported promptly.
+    ///
+    /// This is the exact shape of `adb devices` on a machine where the adb
+    /// server is not yet running, and it is the failure that made the Linux
+    /// app unusable on its first launch: the child exited, corelibs never
+    /// reaped it, `terminationHandler` never fired, and the call was suspended
+    /// for the life of the process. The window came up with "0 features" and
+    /// no error, because the promise behind it simply never settled.
+    ///
+    /// The bound is what matters. The timeout here is generous *and* the
+    /// assertion is that it finished well inside it — a run that takes the
+    /// whole timeout has regressed even though it returned.
+    @Test func aChildThatForksAGrandchildAndExitsIsStillReaped() async {
+        let started = ContinuousClock().now
+        let output = await runner.run(
+            executable: ChildCommands.forksAndExits.executable,
+            arguments: ChildCommands.forksAndExits.arguments,
+            timeout: Self.generousTimeout
+        )
+        let elapsed = ContinuousClock().now - started
+
+        #expect(output.exitCode == 0)
+        #expect(!output.timedOut)
+        #expect(output.stdoutText.contains("started"))
+        // The grandchild holds the pipe open for 30 s; EOF is bounded by the
+        // collector's grace, so this is a few seconds at most and nowhere near
+        // the timeout.
+        #expect(elapsed < .seconds(15), "took \(elapsed), which means it waited on something")
+    }
+
     @Test func manyConcurrentInvocationsDoNotStarveTheRuntime() async {
         // 16 concurrent slow-ish processes — far past the old failure point.
         // A canary task must keep making progress while they run.

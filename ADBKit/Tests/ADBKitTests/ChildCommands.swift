@@ -62,6 +62,11 @@ enum ChildCommands {
     static let sleepThenPrint = script(
         "sleepprint", "ping -n 2 127.0.0.1 > nul\r\necho done\r\n")
 
+    /// A child that leaves a grandchild holding the pipes and exits at once —
+    /// the shape `adb` has when it starts its own server. See the POSIX twin.
+    static let forksAndExits = script(
+        "forkexit", "start /b ping -n 31 127.0.0.1 > nul\r\necho started\r\n")
+
     /// The host's own line ending, so the assertions stay exact.
     static let echoOutput = "hello\r\n"
     static let stderrOutput = "oops\r\n"
@@ -74,6 +79,19 @@ enum ChildCommands {
     static let spewForever = (executable: "/usr/bin/yes", arguments: [String]())
     static let sleepThenPrint = (
         executable: "/bin/sh", arguments: ["-c", "sleep 1; echo done"]
+    )
+
+    /// A child that leaves a grandchild holding its stdout and exits at once.
+    ///
+    /// This is `adb`'s shape on a machine whose adb server is not yet running:
+    /// it forks the server, prints a line, and exits — and the server inherits
+    /// the pipe. On Linux that child is then left a **zombie** that corelibs
+    /// never reaps, so `Process.terminationHandler` never fires. Nothing else
+    /// in this suite produces that, which is why it was the one failure the
+    /// whole desktop app fell over: the first `adb devices` on a fresh machine
+    /// never returned.
+    static let forksAndExits = (
+        executable: "/bin/sh", arguments: ["-c", "sleep 30 & echo started"]
     )
 
     static let echoOutput = "hello\n"
