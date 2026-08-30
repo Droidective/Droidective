@@ -58,6 +58,19 @@ windows) BUNDLES="nsis,msi" ;;
   ;;
 esac
 
+# Narrowing the set for a local run. Not for CI or a release — those want every
+# artifact the channel publishes, which is what the table above is.
+#
+# It exists because the AppImage bundler downloads linuxdeploy, its GTK plugin
+# and an AppRun binary from GitHub on every build, and those downloads time out
+# inside a container often enough that `DESKTOP_BUNDLES=deb` is the difference
+# between iterating on the smoke test and not. The .deb is what the smoke
+# installs.
+if [[ -n "${DESKTOP_BUNDLES:-}" ]]; then
+  echo "note: DESKTOP_BUNDLES overrides the bundler set with '$DESKTOP_BUNDLES'" >&2
+  BUNDLES="$DESKTOP_BUNDLES"
+fi
+
 case "$CONFIGURATION" in
 debug | release) ;;
 *)
@@ -123,4 +136,24 @@ BUNDLE_DIR="$TARGET_DIR/$CONFIGURATION/bundle"
   exit 1
 }
 
-"$ROOT/scripts/package-desktop.sh" "$BUNDLE_DIR" "$PLATFORM" "$OUT_DIR"
+# Which extensions must be there is derived from the bundlers that actually
+# ran, so a narrowed local build is packaged rather than failing on the
+# AppImage it was told not to build. An unnarrowed build passes nothing and
+# gets the platform's full set, which is what a release must produce.
+EXTENSIONS=""
+if [[ -n "${DESKTOP_BUNDLES:-}" ]]; then
+  for bundler in ${BUNDLES//,/ }; do
+    case "$bundler" in
+    deb) EXTENSIONS="$EXTENSIONS deb" ;;
+    appimage) EXTENSIONS="$EXTENSIONS AppImage" ;;
+    nsis) EXTENSIONS="$EXTENSIONS exe" ;;
+    msi) EXTENSIONS="$EXTENSIONS msi" ;;
+    *)
+      echo "error: DESKTOP_BUNDLES names '$bundler', which has no artifact name" >&2
+      exit 2
+      ;;
+    esac
+  done
+fi
+
+"$ROOT/scripts/package-desktop.sh" "$BUNDLE_DIR" "$PLATFORM" "$OUT_DIR" "${EXTENSIONS# }"

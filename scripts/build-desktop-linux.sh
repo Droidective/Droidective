@@ -61,6 +61,7 @@ mkdir -p "$OUT" "$CACHE/cargo" "$CACHE/target"
 exec "$RUNTIME" run --rm \
   --cpus "${BUILD_CPUS:-8}" --memory 10g \
   --env "CONFIGURATION=$CONFIGURATION" \
+  --env "DESKTOP_BUNDLES=${DESKTOP_BUNDLES:-}" \
   --env CARGO_TARGET_DIR=/cache/target \
   --volume "$ROOT:/repo:ro" \
   --volume "$OUT:/out" \
