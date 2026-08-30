@@ -86,7 +86,7 @@ jobs:
           ADB_COLD_START_PROBE: "1"
         run: |
           cd ADBKit
-          swift test --filter AdbColdStartProbeTests
+          swift test --filter AdbColdStartProbeTests -Xswiftc -warnings-as-errors
       # The shipped artifact, not just the library: the beta channel publishes
       # a Windows daemon, so a tag depends on this compiling.
       - name: Build droidectived (Windows, release)

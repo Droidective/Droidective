@@ -16,15 +16,22 @@ import Testing
 ///   suspended for the life of the process. The app came up with "0 features".
 ///   Fixed by `ExitWatcher`'s POSIX half.
 /// - **Windows**: the same picture, and this file is how that was established
-///   rather than guessed. The first run of this probe **hung** — thirty
-///   minutes in CI against ten for the whole suite beside it — where the app's
-///   own symptom ("0 features" in a launch screenshot taken at 30 s) was
-///   equally explained by a hang and by a slow answer. Fixed by `ExitWatcher`'s
-///   Windows half, which waits on the process handle.
+///   rather than guessed. The first run of this probe **hung** — thirty minutes
+///   in CI against ten for the whole suite beside it — where the app's own
+///   symptom ("0 features" in a launch screenshot taken at 30 s) was equally
+///   explained by a hang and by a slow answer.
 ///
 /// A screenshot cannot tell those apart. A stopwatch on the actual call can,
 /// which is all this does: kill the server, time `adb devices`, print it, and
 /// fail if it is not prompt.
+///
+/// **It bounds itself**, and that is not belt and braces. The call under
+/// measurement is exactly the one that can fail to return at all, and neither
+/// the runner's own watchdog nor swift-testing's `.timeLimit` can rescue a
+/// continuation nobody will resume — the first one recovers by terminating a
+/// process that is *still running*, and this one is already gone. So the wait
+/// is raced against a sleep and a probe that would hang fails instead, with
+/// every stage timestamped so the log says which one it stopped in.
 ///
 /// Gated on `ADB_COLD_START_PROBE=1` and skipped otherwise, like the emulator
 /// suites: it needs a real adb, and it kills the machine's adb server, which no
@@ -63,17 +70,42 @@ import Testing
         return candidates.first { manager.isExecutableFile(atPath: $0) }
     }
 
-    /// The bound. A healthy cold call is ~0.2 s on macOS and on Linux since the
-    /// reaper landed; ten seconds is far enough above that to survive a loaded
-    /// runner and far enough below the 30 s the synthetic child produced on
-    /// Windows to tell the two apart.
+    /// The bound. A healthy cold call is ~3 s on macOS (adb's own wait for the
+    /// server it just started) and ~0.2 s on Linux; ten seconds is far enough
+    /// above both to survive a loaded runner and far below the point where
+    /// someone would call the app broken.
     static let promptEnough: Duration = .seconds(10)
 
-    /// The time limit is not decoration. The first run of this probe hung — on
-    /// Windows, exactly as Linux used to — and with no limit it sat in CI for
-    /// thirty minutes against ten for the whole suite beside it, until it was
-    /// cancelled by hand. A probe that can hang has to fail instead.
-    @Test(.enabled(if: enabled), .timeLimit(.minutes(2)))
+    /// How long the probe itself waits before calling it a hang. Well past
+    /// `promptEnough`, so a slow answer is reported as slow rather than as a
+    /// hang, and well under any CI job's patience.
+    static let giveUpAfter: Duration = .seconds(45)
+
+    /// Runs a command, or answers nil if it never came back.
+    ///
+    /// The losing branch is cancelled, which is what tears the child down —
+    /// `SystemProcessRunner.run` kills it from its cancellation handler.
+    static func bounded(
+        _ label: String, _ work: @escaping @Sendable () async -> ProcessOutput
+    ) async -> (output: ProcessOutput?, elapsed: Duration) {
+        let clock = ContinuousClock()
+        let started = clock.now
+        let output = await withTaskGroup(of: ProcessOutput?.self) { group in
+            group.addTask { await work() }
+            group.addTask {
+                try? await Task.sleep(for: giveUpAfter)
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
+        let elapsed = clock.now - started
+        print("=== \(label) took \(elapsed)\(output == nil ? " AND NEVER RETURNED" : "") ===")
+        return (output, elapsed)
+    }
+
+    @Test(.enabled(if: enabled))
     func theFirstAdbDevicesReturnsPromptly() async throws {
         let adb = try #require(Self.adbPath(), "no adb on this host — set ANDROID_HOME or PATH")
         print("=== probing \(adb) ===")
@@ -82,24 +114,26 @@ import Testing
         // Cold means cold: with a server already up, `adb devices` is a socket
         // round-trip and measures nothing. This is why the suite is serialized
         // and opt-in — it takes the host's adb server down.
-        let killed = await runner.run(executable: adb, arguments: ["kill-server"], timeout: .seconds(30))
-        print("=== kill-server exit \(String(describing: killed.exitCode)) ===")
+        let killed = await Self.bounded("kill-server") {
+            await runner.run(executable: adb, arguments: ["kill-server"], timeout: .seconds(30))
+        }
+        print("=== kill-server exit \(String(describing: killed.output?.exitCode)) ===")
 
-        let clock = ContinuousClock()
-        let started = clock.now
-        let output = await runner.run(executable: adb, arguments: ["devices"], timeout: .seconds(120))
-        let elapsed = clock.now - started
-
-        print("=== cold `adb devices` took \(elapsed) ===")
+        let cold = await Self.bounded("cold `adb devices`") {
+            await runner.run(executable: adb, arguments: ["devices"], timeout: .seconds(30))
+        }
+        let output = try #require(
+            cold.output,
+            "the first adb devices never returned — this is the hang the ports fell over on")
         print("=== exit \(String(describing: output.exitCode)), timedOut \(output.timedOut) ===")
         print("=== stdout: \(output.stdoutText.replacingOccurrences(of: "\n", with: "\\n")) ===")
         print("=== stderr: \(output.stderrText.replacingOccurrences(of: "\n", with: "\\n")) ===")
 
-        #expect(!output.timedOut, "the first adb devices never returned — this is the Linux hang's shape")
+        #expect(!output.timedOut, "the runner had to kill it, which is a hang by another name")
         #expect(output.stdoutText.contains("List of devices"))
         #expect(
-            elapsed < Self.promptEnough,
-            "the first adb devices took \(elapsed): the app is unusable for that long at every launch")
+            cold.elapsed < Self.promptEnough,
+            "the first adb devices took \(cold.elapsed): the app is unusable for that long at every launch")
     }
 
     /// The same measurement for a *warm* server, as the control.
@@ -108,19 +142,19 @@ import Testing
     /// to start a server on this host, which is nothing the runner can fix. A
     /// warm call is a socket round-trip through the identical code path, so the
     /// difference between the two is the cost of the fork-and-exit shape.
-    @Test(.enabled(if: enabled), .timeLimit(.minutes(2)))
+    @Test(.enabled(if: enabled))
     func aWarmAdbDevicesIsTheControl() async throws {
         let adb = try #require(Self.adbPath(), "no adb on this host — set ANDROID_HOME or PATH")
         let runner = SystemProcessRunner()
-        _ = await runner.run(executable: adb, arguments: ["start-server"], timeout: .seconds(120))
+        _ = await Self.bounded("start-server") {
+            await runner.run(executable: adb, arguments: ["start-server"], timeout: .seconds(30))
+        }
 
-        let clock = ContinuousClock()
-        let started = clock.now
-        let output = await runner.run(executable: adb, arguments: ["devices"], timeout: .seconds(60))
-        let elapsed = clock.now - started
-
-        print("=== warm `adb devices` took \(elapsed) ===")
+        let warm = await Self.bounded("warm `adb devices`") {
+            await runner.run(executable: adb, arguments: ["devices"], timeout: .seconds(30))
+        }
+        let output = try #require(warm.output, "even a warm adb devices never returned")
         #expect(!output.timedOut)
-        #expect(elapsed < Self.promptEnough)
+        #expect(warm.elapsed < Self.promptEnough)
     }
 }
