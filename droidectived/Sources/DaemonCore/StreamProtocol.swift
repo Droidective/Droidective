@@ -59,7 +59,16 @@ public enum StreamProtocol {
 
         public struct Params: Codable, Equatable, Sendable {
             public let serial: String?
-            public let filter: String?
+            /// One app's process id, for `logcat`. Becomes `adb logcat --pid`,
+            /// so the device filters at the source and the ring buffer holds
+            /// only that app's lines — filtering a mixed buffer client-side
+            /// would let a chatty neighbour evict the lines being looked for.
+            ///
+            /// A *pid*, not a package: the client resolves it through
+            /// `/v1/logcat/pid` because it is the one that knows when to wait
+            /// for an app that is not running yet and when a relaunch has
+            /// moved it. Absent means the whole device.
+            public let pid: Int?
             /// The app whose FPS and memory to sample, for `performance`.
             /// Absent means device-wide figures only.
             public let packageId: String?
@@ -89,13 +98,13 @@ public enum StreamProtocol {
             public let maxFps: Int?
 
             public init(
-                serial: String? = nil, filter: String? = nil,
+                serial: String? = nil, pid: Int? = nil,
                 packageId: String? = nil, processes: Bool? = nil,
                 data: String? = nil, columns: Int? = nil, rows: Int? = nil,
                 maxSize: Int? = nil, maxFps: Int? = nil
             ) {
                 self.serial = serial
-                self.filter = filter
+                self.pid = pid
                 self.packageId = packageId
                 self.processes = processes
                 self.data = data

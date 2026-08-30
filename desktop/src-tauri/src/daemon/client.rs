@@ -16,11 +16,12 @@ use crate::daemon::wire::{
     EmulatorActionRequest, EmulatorsResponse, ErrorEnvelope, FeatureSummary, FeaturesResponse,
     FileInfoRequest, FileInfoResponse, FileOperationRequest, FilePullRequest, FilePullResponse,
     FilesListRequest, FilesListResponse, ForegroundResponse, InstallFormatsResponse,
-    InstallRequest, InstallResponse, LaunchResponse, ManagedTools, MemInfoResponse, PairResponse,
-    PermissionWriteRequest, PermissionsResponse, ReactotronReverseRequest,
-    ReactotronReverseResponse, RestrictionWriteRequest, RestrictionsResponse, RootStatusResponse,
-    RunRequest, RunResponse, SandboxRequest, SandboxResponse, ToolInstallRequest,
-    ToolInstallResponse, ToolsResponse, WifiResponse, WifiWriteRequest, WirelessActionRequest,
+    InstallRequest, InstallResponse, LaunchResponse, LogcatPidResponse, ManagedTools,
+    MemInfoResponse, PairResponse, PermissionWriteRequest, PermissionsResponse,
+    ReactotronReverseRequest, ReactotronReverseResponse, RestrictionWriteRequest,
+    RestrictionsResponse, RootStatusResponse, RunRequest, RunResponse, SandboxRequest,
+    SandboxResponse, ToolInstallRequest, ToolInstallResponse, ToolsResponse, WifiResponse,
+    WifiWriteRequest, WirelessActionRequest,
 };
 use crate::error::DaemonError;
 
@@ -346,6 +347,16 @@ impl DaemonClient {
     /// The frontmost app's package, when there is one worth naming.
     pub async fn foreground_app(&self, serial: String) -> Result<ForegroundResponse, DaemonError> {
         self.post("/v1/apps/foreground", &DeviceRequest { serial })
+            .await
+    }
+
+    /// The process id an app is running under, for the log's app filter.
+    pub async fn logcat_pid(
+        &self,
+        serial: String,
+        package_id: String,
+    ) -> Result<LogcatPidResponse, DaemonError> {
+        self.post("/v1/logcat/pid", &AppRequest { serial, package_id })
             .await
     }
 

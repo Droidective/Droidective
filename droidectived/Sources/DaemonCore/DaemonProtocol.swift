@@ -15,6 +15,9 @@ public enum DaemonProtocol {
         case appsControl = "/v1/apps/control"
         /// Which package is in front, for a caller that has to guess at one.
         case appsForeground = "/v1/apps/foreground"
+        /// One app's process id, so a log client can narrow to it. See
+        /// `LogcatProtocol`.
+        case logcatPid = "/v1/logcat/pid"
         case deviceProps = "/v1/device/props"
         case deviceRoot = "/v1/device/root"
         case filesList = "/v1/files/list"

@@ -67,7 +67,7 @@ private let hasWebSocketClient: Bool = {
                 continuation.finish()
             }
         }
-        func logcat(serial: String) async throws -> AsyncStream<[LogLine]> {
+        func logcat(serial: String, pid: Int?) async throws -> AsyncStream<[LogLine]> {
             AsyncStream { $0.finish() }
         }
         func stopLogcat(serial: String) async {}

@@ -26,8 +26,8 @@ use crate::daemon::wire::{
     DevSettingsWriteRequest, Device, DevicePropsResponse, DnsResponse, DnsWriteRequest,
     EmulatorActionRequest, EmulatorsResponse, FeatureSummary, FileInfoRequest, FileInfoResponse,
     FileOperationRequest, FilePullRequest, FilePullResponse, FilesListRequest, FilesListResponse,
-    ForegroundResponse, InstallRequest, InstallResponse, LaunchResponse, ManagedTools,
-    MemInfoResponse, PairResponse, PermissionWriteRequest, PermissionsResponse,
+    ForegroundResponse, InstallRequest, InstallResponse, LaunchResponse, LogcatPidResponse,
+    ManagedTools, MemInfoResponse, PairResponse, PermissionWriteRequest, PermissionsResponse,
     ReactotronReverseRequest, ReactotronReverseResponse, RestrictionWriteRequest,
     RestrictionsResponse, RootStatusResponse, RunRequest, RunResponse, SandboxRequest,
     SandboxResponse, StreamParams, ToolInstallRequest, ToolInstallResponse, ToolsResponse,
@@ -650,7 +650,7 @@ pub async fn watch_devices(
 pub async fn watch_logcat(
     supervisor: State<'_, Supervisor>,
     serial: String,
-    filter: Option<String>,
+    pid: Option<i64>,
     on_event: Channel<StreamUpdate>,
 ) -> Result<i64, DaemonError> {
     let stream = supervisor.stream().await?;
@@ -658,7 +658,7 @@ pub async fn watch_logcat(
         "logcat",
         Some(StreamParams {
             serial: Some(serial),
-            filter,
+            pid,
             ..StreamParams::default()
         }),
         forward(on_event),
@@ -1260,6 +1260,25 @@ pub async fn foreground_app(
     serial: String,
 ) -> Result<ForegroundResponse, DaemonError> {
     supervisor.client().await?.foreground_app(serial).await
+}
+
+/// The process id an app is running under, or nothing when it is not running.
+///
+/// The log's app filter is built on this: the client resolves the pid, hands it
+/// to `watch_logcat`, and re-asks while the log is open — an app that has not
+/// launched yet and an app that relaunched under a new pid are both ordinary,
+/// and only the client knows which of the two it is waiting on.
+#[tauri::command]
+pub async fn logcat_pid(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    package_id: String,
+) -> Result<LogcatPidResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .logcat_pid(serial, package_id)
+        .await
 }
 
 /// Everything the Reactotron relay sees, until `stop_watching`.

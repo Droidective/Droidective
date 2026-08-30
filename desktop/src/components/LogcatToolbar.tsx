@@ -1,6 +1,8 @@
 import { Download, Filter, Search, X } from "lucide-react"
 import { Select } from "@/components/Controls"
 import { cn } from "@/lib/cn"
+import { LogcatAppBar as AppBar } from "@/components/LogcatAppBar"
+import type { AppFilter } from "@/lib/logcat-app"
 import { LEVELS, type Level, type LogFilter } from "@/lib/logbuffer"
 
 const LEVEL_NAMES: Record<Level, string> = {
@@ -27,6 +29,12 @@ export function LogcatToolbar({
   hits,
   tags,
   onExport,
+  appFilter,
+  packageId,
+  canNarrow,
+  narrowed,
+  onNarrow,
+  onUseForegroundApp,
 }: {
   filter: LogFilter
   onFilter: (filter: LogFilter) => void
@@ -35,52 +43,34 @@ export function LogcatToolbar({
   hits: number
   tags: string[]
   onExport: () => void
+  /** What the log is actually narrowed to right now. */
+  appFilter: AppFilter
+  /** The app chosen in Apps, which is what narrowing follows. */
+  packageId: string | null
+  canNarrow: boolean
+  narrowed: boolean
+  onNarrow: (narrowed: boolean) => void
+  onUseForegroundApp: () => void
 }) {
   return (
     <div className="shrink-0 border-b border-border-subtle bg-bg-chrome">
-      <div className="flex items-center gap-2 px-3 py-2">
-        <Field
-          icon={Filter}
-          value={filter.text}
-          label="Filter lines"
-          placeholder="Filter — hides the rest…"
-          onChange={(text) => {
-            onFilter({ ...filter, text })
-          }}
-        />
-        <Field
-          icon={Search}
-          value={find}
-          label="Find in the log"
-          placeholder="Find — highlights only…"
-          onChange={onFind}
-        />
-        {find.trim() === "" ? null : (
-          <span className="shrink-0 text-[11.5px] text-text-tertiary">
-            {hits.toLocaleString()} {hits === 1 ? "hit" : "hits"}
-          </span>
-        )}
+      <FilterRow
+        filter={filter}
+        onFilter={onFilter}
+        find={find}
+        onFind={onFind}
+        hits={hits}
+        onExport={onExport}
+      />
 
-        <div className="w-[124px] shrink-0">
-          <Select
-            value={filter.minLevel}
-            options={LEVELS.map((level) => ({ value: level, label: LEVEL_NAMES[level] }))}
-            onChange={(value) => {
-              onFilter({ ...filter, minLevel: value as Level })
-            }}
-          />
-        </div>
-
-        <button
-          type="button"
-          onClick={onExport}
-          title="Export what is shown to ~/Downloads/Droidective"
-          aria-label="Export the log"
-          className="flex size-7 shrink-0 items-center justify-center rounded-md bg-bg-raised text-text-secondary hover:bg-border-subtle hover:text-text-primary"
-        >
-          <Download size={13} />
-        </button>
-      </div>
+      <AppBar
+        appFilter={appFilter}
+        packageId={packageId}
+        canNarrow={canNarrow}
+        narrowed={narrowed}
+        onNarrow={onNarrow}
+        onUseForegroundApp={onUseForegroundApp}
+      />
 
       <TagBar
         chosen={filter.tags}
@@ -97,6 +87,75 @@ export function LogcatToolbar({
           onFilter({ ...filter, tags: [] })
         }}
       />
+    </div>
+  )
+}
+
+/**
+ * Filter, Find, the level floor, and export.
+ *
+ * Filter and Find are deliberately two fields, as they are on the Mac: "show me
+ * only this" and "where is this?" are different questions, and one box that did
+ * both would answer neither well.
+ */
+function FilterRow({
+  filter,
+  onFilter,
+  find,
+  onFind,
+  hits,
+  onExport,
+}: {
+  filter: LogFilter
+  onFilter: (filter: LogFilter) => void
+  find: string
+  onFind: (find: string) => void
+  hits: number
+  onExport: () => void
+}) {
+  return (
+    <div className="flex items-center gap-2 px-3 py-2">
+      <Field
+        icon={Filter}
+        value={filter.text}
+        label="Filter lines"
+        placeholder="Filter — hides the rest…"
+        onChange={(text) => {
+          onFilter({ ...filter, text })
+        }}
+      />
+      <Field
+        icon={Search}
+        value={find}
+        label="Find in the log"
+        placeholder="Find — highlights only…"
+        onChange={onFind}
+      />
+      {find.trim() === "" ? null : (
+        <span className="shrink-0 text-[11.5px] text-text-tertiary">
+          {hits.toLocaleString()} {hits === 1 ? "hit" : "hits"}
+        </span>
+      )}
+
+      <div className="w-[124px] shrink-0">
+        <Select
+          value={filter.minLevel}
+          options={LEVELS.map((level) => ({ value: level, label: LEVEL_NAMES[level] }))}
+          onChange={(value) => {
+            onFilter({ ...filter, minLevel: value as Level })
+          }}
+        />
+      </div>
+
+      <button
+        type="button"
+        onClick={onExport}
+        title="Export what is shown to ~/Downloads/Droidective"
+        aria-label="Export the log"
+        className="flex size-7 shrink-0 items-center justify-center rounded-md bg-bg-raised text-text-secondary hover:bg-border-subtle hover:text-text-primary"
+      >
+        <Download size={13} />
+      </button>
     </div>
   )
 }

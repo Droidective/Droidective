@@ -25,6 +25,8 @@ extension DaemonBackend {
 
     func foregroundPackage(serial: String) async throws -> String? { nil }
 
+    func logcatPid(serial: String, packageId: String) async throws -> Int? { nil }
+
     func controlApp(
         serial: String, packageId: String, action: AppControlService.AppAction
     ) async throws -> FeatureResult { FeatureResult(ok: true, message: "stub") }

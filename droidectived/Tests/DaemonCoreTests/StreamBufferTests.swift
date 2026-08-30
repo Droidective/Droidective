@@ -253,14 +253,14 @@ import Testing
 
     @Test func commandsRoundTripThroughJSON() throws {
         let json = Data(
-            #"{"op":"subscribe","id":3,"topic":"logcat","params":{"serial":"R58M","filter":"E"}}"#
+            #"{"op":"subscribe","id":3,"topic":"logcat","params":{"serial":"R58M","pid":4211}}"#
                 .utf8)
         let decoded = try JSONDecoder().decode(StreamProtocol.Command.self, from: json)
         #expect(decoded.op == .subscribe)
         #expect(decoded.id == 3)
         #expect(decoded.topic == .logcat)
         #expect(decoded.params?.serial == "R58M")
-        #expect(decoded.params?.filter == "E")
+        #expect(decoded.params?.pid == 4211)
     }
 
     @Test func terminalCommandsRoundTripThroughJSON() throws {

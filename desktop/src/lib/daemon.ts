@@ -66,6 +66,18 @@ export function deviceProps(serial: string): Promise<{ properties: Record<string
 }
 
 /** The frontmost app on the device, when there is one worth naming. */
+/**
+ * The process id an app is running under, or null when it is not running.
+ *
+ * Null is an answer rather than a failure: an app whose log you opened before
+ * launching it is the ordinary case, and the log waits for it.
+ */
+export function logcatPid(serial: string, packageId: string): Promise<number | null> {
+  return invoke<{ pid: number | null }>("logcat_pid", { serial, packageId }).then(
+    (answer) => answer.pid ?? null,
+  )
+}
+
 export function foregroundApp(serial: string): Promise<ForegroundResponse> {
   return invoke<ForegroundResponse>("foreground_app", { serial })
 }

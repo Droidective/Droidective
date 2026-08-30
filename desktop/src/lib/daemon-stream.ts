@@ -67,11 +67,21 @@ export function watchDevices(
   return subscribe("watch_devices", {}, onUpdate)
 }
 
+/**
+ * One device's live log.
+ *
+ * `pid` narrows it to a single process through `adb logcat --pid`, so the
+ * device filters at the source: the ring buffer then holds only that app's
+ * lines, where a client-side filter over a mixed buffer would let a chatty
+ * neighbour evict them first. Null is the whole device, which is what the log
+ * opens as. Resolving a package to a pid is `logcatPid`.
+ */
 export function watchLogcat(
   serial: string,
+  pid: number | null,
   onUpdate: (update: StreamUpdate<LogLine>) => void,
 ): Promise<Subscription> {
-  return subscribe("watch_logcat", { serial, filter: null }, onUpdate)
+  return subscribe("watch_logcat", { serial, pid }, onUpdate)
 }
 
 /**

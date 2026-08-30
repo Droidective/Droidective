@@ -731,6 +731,17 @@ pub struct ForegroundResponse {
     pub package_id: Option<String>,
 }
 
+/// One app's process id, or nothing when it is not running.
+///
+/// `Option` rather than a sentinel for the same reason `ForegroundResponse`
+/// uses one: an app that has not been launched is the ordinary state of one
+/// whose log you opened first, and the daemon omits the key entirely, which
+/// serde reads as None.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct LogcatPidResponse {
+    pub pid: Option<i64>,
+}
+
 /// Which devices should be able to reach the Reactotron relay, and on what
 /// port.
 ///
@@ -823,8 +834,11 @@ pub struct StreamCommand {
 pub struct StreamParams {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub serial: Option<String>,
+    /// One app's process id, for `logcat`. Becomes `adb logcat --pid`, so the
+    /// device filters at the source rather than the client hiding lines a
+    /// chatty neighbour has already evicted from the ring.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub filter: Option<String>,
+    pub pid: Option<i64>,
     /// The app whose FPS and memory to sample, for `performance`.
     #[serde(rename = "packageId", skip_serializing_if = "Option::is_none")]
     pub package_id: Option<String>,
