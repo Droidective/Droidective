@@ -1,3 +1,81 @@
+## Droidective v3.10.0-beta.2
+
+The first beta shipped a Windows and Linux app that nobody had ever launched.
+This one launches it — in CI, on every pull request — and fixes the three
+things that stopped it working when somebody finally did.
+
+### Linux, actually running
+
+- **The app now starts, and CI proves it on every change.** A new job installs
+  the `.deb` in a bare `ubuntu:24.04` — so apt resolves the package's own
+  declared dependencies and nothing the build machine happened to leave behind
+  — launches it under Xvfb, drives the command palette to open a screen, and
+  photographs both frames. Every check fails the build rather than warning.
+- **The daemon could not start at all.** `droidectived` was dynamically linked
+  against the Swift runtime, so on any machine without a Swift toolchain it
+  died at exec with `libswiftCore.so: cannot open shared object file`, and the
+  app came up showing "droidectived would not start" with all thirty-three
+  screens behind it. It now carries its own runtime.
+- **Then it could not find `libcurl`.** Declared as a dependency of the `.deb`
+  rather than assumed.
+- **Then it came up and did nothing.** `adb devices` on a machine whose adb
+  *server* is not yet running forks that server and exits — and Linux left the
+  exited process unreaped, so the call never returned and the window sat at
+  "0 features" with no error. The process runner now notices that exit itself.
+  The cold call went from hanging indefinitely to 0.185 s.
+
+### Windows
+
+- **It gets launched too, on every beta tag.** The installer runs silently, the
+  app starts, and the release fails if the app or its daemon is not alive
+  thirty seconds later. There is no Windows container, so this proves less than
+  the Linux check does — the runner already has what the toolchain left — but
+  it is the first time the Windows build has been started at all.
+
+### New in the app
+
+- **Three more screens: React Native, Simulate and Connection.** The hub
+  screens, each matching the Mac's section for section — the RN quick actions
+  and both Metro paths, Simulate's battery, appearance, layout, locale, network
+  and proxy, and Connection's live Wi-Fi and IP with the pairing and Private DNS
+  sections it shares with their standalone screens. With these the sidebar
+  matches the Mac's.
+- **Logcat can follow one app.** Pick it in Apps or press "App on screen", and
+  the log narrows to that process — filtered on the device with
+  `adb logcat --pid`, so the buffer holds only that app's lines instead of
+  hiding the rest after the fact. It waits for an app that has not launched
+  yet, and follows it when it relaunches under a new process id.
+- **Install App is in the sidebar.** It had a working screen and was missing
+  from the list, along with four others the daemon was reporting as not built.
+
+### Fixed
+
+- **The mirror's codec check is now a real decode.** Linux needs
+  `gstreamer1.0-libav` for H.264, which the `.deb` pulls in by default; without
+  it the mirror says which package to install rather than showing a black
+  rectangle. That is now verified by decoding an actual frame rather than
+  asking the webview whether it thinks it could.
+
+### macOS
+
+- **This is a rebuild, not a Mac release.** The Mac app is identical to v3.9.2
+  and is offered only to installs that opted into beta updates in Settings ▸
+  General. The stable channel is untouched: the download button and
+  `/releases/latest/download/` keep serving v3.9.2.
+
+### Install
+
+**Windows** — download the `-setup.exe` and run it, clicking through the
+SmartScreen warning. The `.msi` is there for anyone deploying it centrally.
+
+**Linux** — `sudo apt install ./Droidective-0.0.2-beta.1-linux-x86_64.deb`, or
+make the `.AppImage` executable and run it. Both need `adb` on `PATH`; the
+`.deb` declares it as a dependency, along with `libcurl4` and a recommendation
+of `gstreamer1.0-libav` for the mirror.
+
+**macOS** — download the DMG and drag Droidective to Applications. Existing
+installs on the beta channel update themselves.
+
 ## Droidective v3.10.0-beta.1
 
 The first Windows and Linux build of the app itself. Until now a beta carried
