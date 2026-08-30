@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { Banner, Button, Switch, TextInput } from "@/components/Controls"
+import { BackgroundSection, TextSection } from "@/components/settings/AppearanceColors"
 import { Row, Section } from "@/components/settings/SettingsKit"
 import { useAppearance } from "@/hooks/useAppearance"
 import {
@@ -34,7 +35,8 @@ export interface AppearanceTabProps {
 }
 
 export function AppearanceTab(props: AppearanceTabProps) {
-  const { theme, setTheme } = useAppearance()
+  const { theme, background, setTheme } = useAppearance()
+  const overridden = background !== ""
   return (
     <div className="flex flex-col gap-5">
       <Section title="Theme">
@@ -43,12 +45,13 @@ export function AppearanceTab(props: AppearanceTabProps) {
             <button
               key={option.value}
               type="button"
+              disabled={overridden}
               onClick={() => {
                 setTheme(option.value)
               }}
               aria-pressed={theme === option.value}
               className={cn(
-                "flex-1 rounded px-3 py-1 text-[12.5px] transition",
+                "flex-1 rounded px-3 py-1 text-[12.5px] transition disabled:opacity-40",
                 theme === option.value
                   ? "bg-bg-raised text-text-primary"
                   : "text-text-secondary hover:text-text-primary",
@@ -58,9 +61,17 @@ export function AppearanceTab(props: AppearanceTabProps) {
             </button>
           ))}
         </div>
+        {overridden ? (
+          <p className="text-[11.5px] text-text-tertiary">
+            Overridden by your custom background below — light/dark follows that colour. Reset the
+            background to use the theme.
+          </p>
+        ) : null}
       </Section>
 
       <AccentSection />
+      <BackgroundSection />
+      <TextSection />
 
       <Section title="Window">
         <Row

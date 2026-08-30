@@ -2,18 +2,35 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react"
 import {
   accentFor,
   DEFAULT_ACCENT,
+  normalizeHex,
   palette,
   resolveTheme,
   type Theme,
 } from "@/lib/appearance"
+import { backgroundPalette, isLightHex, textPalette } from "@/lib/background"
+
+/** A stored colour, or "" for "none chosen" — which a malformed one becomes. */
+function hexOrNone(value: unknown): string {
+  return typeof value === "string" ? (normalizeHex(value) ?? "") : ""
+}
 
 export interface Appearance {
   theme: Theme
   accent: string
-  /** What `theme` resolves to right now — never "system". */
+  /** A chosen window background, or "" for the stock palette. */
+  background: string
+  /** A chosen primary text colour, or "" for the palette's own. */
+  text: string
+  /**
+   * What the app is actually painted as right now — never "system", and never
+   * the Theme picker's answer while a custom background is set, since the
+   * scheme follows that colour.
+   */
   resolved: "light" | "dark"
   setTheme: (theme: Theme) => void
   setAccent: (accent: string) => void
+  setBackground: (hex: string) => void
+  setText: (hex: string) => void
 }
 
 const AppearanceContext = createContext<Appearance | null>(null)
@@ -23,10 +40,12 @@ const STORAGE_KEY = "droidective.appearance"
 interface Saved {
   theme: Theme
   accent: string
+  background: string
+  text: string
 }
 
 function load(): Saved {
-  const fallback: Saved = { theme: "dark", accent: DEFAULT_ACCENT }
+  const fallback: Saved = { theme: "dark", accent: DEFAULT_ACCENT, background: "", text: "" }
   try {
     const raw = globalThis.localStorage.getItem(STORAGE_KEY)
     if (raw === null) return fallback
@@ -37,6 +56,10 @@ function load(): Saved {
           ? parsed.theme
           : fallback.theme,
       accent: typeof parsed.accent === "string" ? parsed.accent : fallback.accent,
+      // A malformed colour reads as "none chosen" rather than taking the
+      // window down with it — `normalizeHex` is what decides, in one place.
+      background: hexOrNone(parsed.background),
+      text: hexOrNone(parsed.text),
     }
   } catch {
     // Persisted JSON a previous version wrote. A shape that has since changed
@@ -72,17 +95,34 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
     }
   }, [])
 
-  const resolved = resolveTheme(saved.theme, prefersDark)
+  // A custom background overrides the Theme picker rather than sitting beside
+  // it, exactly as on the Mac: the scheme follows the colour, because a light
+  // background under dark-mode text is unreadable and nobody should have to
+  // keep two settings in step by hand.
+  const custom = saved.background === "" ? null : backgroundPalette(saved.background)
+  const resolved =
+    custom === null ? resolveTheme(saved.theme, prefersDark) : isLightHex(saved.background)
+      ? "light"
+      : "dark"
 
   useEffect(() => {
     const root = globalThis.document.documentElement
-    for (const [token, value] of Object.entries(palette(resolved))) {
+    const base = custom ?? palette(resolved)
+    const text =
+      saved.text === ""
+        ? null
+        : textPalette(saved.text, base["--color-bg-root"] ?? "#1a1a1a")
+    for (const [token, value] of Object.entries({ ...base, ...text })) {
       root.style.setProperty(token, value)
     }
     root.style.setProperty("--color-accent", accentFor(saved.accent, resolved))
     // So the webview paints native scrollbars and form controls to match.
     root.style.colorScheme = resolved
-  }, [resolved, saved.accent])
+    // `custom` is derived from `saved.background`, which is the dependency
+    // that actually changes; depending on the object would re-apply the whole
+    // palette on every render.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolved, saved.accent, saved.background, saved.text])
 
   useEffect(() => {
     try {
@@ -96,6 +136,8 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
     () => ({
       theme: saved.theme,
       accent: saved.accent,
+      background: saved.background,
+      text: saved.text,
       resolved,
       setTheme: (theme) => {
         setSaved((current) => ({ ...current, theme }))
@@ -103,8 +145,14 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
       setAccent: (accent) => {
         setSaved((current) => ({ ...current, accent }))
       },
+      setBackground: (background) => {
+        setSaved((current) => ({ ...current, background }))
+      },
+      setText: (text) => {
+        setSaved((current) => ({ ...current, text }))
+      },
     }),
-    [resolved, saved.accent, saved.theme],
+    [resolved, saved.accent, saved.theme, saved.background, saved.text],
   )
 
   return <AppearanceContext value={value}>{children}</AppearanceContext>

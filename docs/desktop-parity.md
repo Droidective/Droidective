@@ -463,10 +463,12 @@ memory — the file each item names is the thing to replicate.
       the panel's entry.
 - [x] **Appearance** — Theme (light/dark/system) and Accent as presets *and* a
       colour well *and* a hex field with Reset, plus the light theme itself
-      and the low-contrast warning. A Window section carries the sidebar mode
-      and the UI size. **Still missing:** Background and Text colour, Font
-      family, the Window opacity/blur/grain sliders (which the section names as
-      not ported), and the Developer self-metrics overlay.
+      and the low-contrast warning — and the same three ways for **Background**
+      and **Text**, with the scheme following a custom background. A Window
+      section carries the sidebar mode and the UI size. **Still missing:** Font
+      family and the text-size scale, the Window opacity/blur/grain sliders
+      (which the section names as not ported), and the Developer self-metrics
+      overlay.
 - [x] **Privacy** — Data & Storage ▸ the captures and pulls folder, with Open.
       Telemetry says outright that this app sends nothing, which is true and
       worth stating rather than leaving as an unchecked box. **Still
@@ -544,8 +546,15 @@ somebody already has in their fingers.
 - [x] **Light theme** — ported from the asset catalog's own colorset values,
       applied as CSS custom properties on `:root` so every existing token
       follows it.
-- [x] **Custom accent**, with the low-contrast warning. **Background and text
-      colour are still missing**, as is the luminance-following scheme.
+- [x] **Custom accent**, with the low-contrast warning, and **Background and
+      Text colour** beside it: the Mac's eight presets, a colour well, a hex
+      field and a Reset. `BackgroundPalette` and `TextPalette` are ported to
+      `lib/background.ts` and tested against the stock steps — fed `#1A1A1A` the
+      derivation has to land on the asset catalog's own `#232323` and `#333333`,
+      or a custom colour would not have the hierarchy the stock one does. The
+      **luminance-following scheme** came with them: a custom background decides
+      light or dark, and the Theme picker greys out saying so, exactly as on the
+      Mac.
 - [x] **The ⌘= / ⌘- zoom.** **Font family and the text-size scale are still
       missing** — the zoom scales everything together, where the Mac also lets
       the text size move on its own.
