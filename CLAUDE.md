@@ -21,6 +21,14 @@ UI over it for Windows/Linux (`desktop/README.md`; the feature-by-feature
 parity tracker is `docs/desktop-parity.md`). **macOS never talks to the
 daemon** — the Mac app keeps linking ADBKit directly, by decision, so no daemon
 or desktop work can reach the shipping Mac flow.
+**The Linux app is launched on every PR**, not merely compiled:
+`desktop-linux-smoke` installs the `.deb` in a bare `ubuntu:24.04`, starts it
+under Xvfb, drives the palette to open a screen and photographs both frames
+(`scripts/smoke-desktop-linux.sh`, runnable locally). Every check there is
+fatal, because the first run found the app unusable three ways over — so when
+touching anything the app needs at *runtime* rather than at compile time, that
+job is the one that will tell you. Windows gets a narrower version on beta
+tags only (`scripts/smoke-desktop-windows.ps1`); there is no Windows container.
 
 **The desktop UI is the Mac's UI.** The Mac app is the proven one; the point of
 the port is that someone moving between the two does not have to relearn
