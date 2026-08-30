@@ -180,12 +180,17 @@ before adding to it.
    canvas, which needs a device the container does not have.
 2. ~~**Do the same for Windows, as far as it goes.**~~ **Landed, and it does not
    go as far.** `scripts/smoke-desktop-windows.ps1` silently installs the NSIS
-   package, launches the app, and asserts the two things the Linux run proved
-   were worth asserting: the app is still up after thirty seconds, and
-   `droidectived` is running beside it. The window title and a screenshot are
-   *reported* rather than asserted — a runner's session may have no interactive
-   window station, and failing on that would be failing on a property of the
-   runner rather than of the app.
+   package, launches the app, and asserts the three things the Linux run proved
+   were worth asserting: the app is still up after thirty seconds,
+   `droidectived` is running beside it, and **the first `/v1/devices/list`
+   comes back inside ten seconds**. That last one is where the Windows hang was
+   finally caught and where it is now kept caught: on the `v3.10.0-beta.3` tag
+   the installed app answered it in **0.2 s**, against never. No device is
+   needed and none is present — an empty answer is fine, an answer *arriving*
+   is the assertion. The window title and a screenshot are *reported* rather
+   than asserted — a runner's session may have no interactive window station,
+   and failing on that would be failing on a property of the runner rather than
+   of the app.
 
    Two limits, both real. There is **no Windows container**, so it runs on the
    runner itself: the machine already has whatever the toolchain left behind,
