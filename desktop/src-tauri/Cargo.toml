@@ -20,7 +20,11 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2.6.3", features = [] }
 
 [dependencies]
-tauri = { version = "2.11.5", features = [] }
+# `tray-icon` is what background mode stands on: closing the window hides it,
+# and the tray is the way back. On Linux that means libayatana-appindicator,
+# which the .deb declares — a runtime dependency, so the class of bug only the
+# smoke test finds.
+tauri = { version = "2.11.5", features = ["tray-icon"] }
 # The supported way to spawn a bundled sidecar and own its lifetime: it
 # resolves the per-platform binary location that a hand-rolled path would get
 # wrong on at least one of the three targets.
@@ -36,6 +40,12 @@ tauri-plugin-opener = "2.5.4"
 # without one. Registered for its Rust API only, so the webview keeps
 # `core:default` and a page cannot open a dialog on its own.
 tauri-plugin-dialog = "2.7.2"
+# An important result that lands while you are looking at another app has to
+# say so somewhere the app is not. Rust API only, like the rest.
+tauri-plugin-notification = "2.3.3"
+# A recorded shortcut has to fire from wherever you are — that is what makes it
+# worth recording, and it is what the Quick Actions panel is opened with.
+tauri-plugin-global-shortcut = "2.3.2"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 # Loopback plain HTTP only — no TLS features, so no rustls/openssl in the tree.

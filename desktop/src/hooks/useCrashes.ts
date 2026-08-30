@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useCrashBuffer } from "@/hooks/useCrashBuffer"
+import { useNotifications } from "@/hooks/useNotifications"
 import { asDaemonError, clearCrashes } from "@/lib/daemon"
+import { systemTitle } from "@/lib/notifications"
 import {
   filterCrashes,
   keptSelection,
@@ -68,6 +70,7 @@ export function useCrashes(serial: string | null): Crashes {
     setSelectedID(kept)
   }, [kept])
 
+  useArrivalNotice(buffer.arrival)
   const clear = useClearBuffer({ serial, buffer, setCleared, setSelectedID, setNotice })
 
   return {
@@ -93,6 +96,29 @@ export function useCrashes(serial: string | null): Crashes {
       setNotice(null)
     }, [buffer]),
   }
+}
+
+/**
+ * Say it outside the window too.
+ *
+ * Watch is the one thing on this screen someone leaves running while they go
+ * and use the app they are debugging — which is the whole point of it — so a
+ * crash arriving has to reach them where they are. The Mac announces the same
+ * arrival as an error toast and mirrors error toasts to the tray, so both apps
+ * put the same two lines there.
+ *
+ * The strip in the toolbar stays: it is this screen's own record of what
+ * arrived, and unlike a notification it is still there four minutes later.
+ */
+function useArrivalNotice(arrival: CrashReport | null) {
+  const { notifyIfBackgrounded } = useNotifications()
+  // Which crash has been announced, so a re-render cannot announce it twice.
+  const announced = useRef<string | null>(null)
+  useEffect(() => {
+    if (arrival === null || announced.current === arrival.id) return
+    announced.current = arrival.id
+    notifyIfBackgrounded(systemTitle("error"), `New crash: ${arrival.title}`, true)
+  }, [arrival, notifyIfBackgrounded])
 }
 
 /**

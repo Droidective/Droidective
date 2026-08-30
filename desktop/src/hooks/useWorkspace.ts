@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import { usePreferenceEditors } from "@/hooks/useLayoutPreferences"
 import {
   HOME_TAB,
   loadLayout,
@@ -12,7 +13,6 @@ import { clampedFraction } from "@/lib/panes"
 import { togglePinned } from "@/lib/palette"
 import { toggleCollapsed } from "@/lib/sidebar"
 import type { FeatureSummary } from "@/lib/wire"
-import { clampZoomStep, DEFAULT_ZOOM_STEP } from "@/lib/zoom"
 import {
   activateAt,
   close,
@@ -56,6 +56,15 @@ export interface WorkspaceController {
   setRunOnAll: (on: boolean) => void
   /** Pinned sidebar or Dock-style auto-hide. */
   setSidebarAutoHide: (autoHide: boolean) => void
+  /** Whether closing the window hides the app behind the tray. */
+  setKeepRunningInBackground: (on: boolean) => void
+  /** Adds or removes one feature from the tray's chosen list. */
+  setTrayItem: (id: string, listed: boolean) => void
+  /** Shows or hides one action in the Quick Actions panel. */
+  setQuickPanelAction: (id: string, shown: boolean) => void
+  setQuickPanelCloseAfterRun: (on: boolean) => void
+  /** The panel's global shortcut, or null to clear it. */
+  setQuickPanelHotkey: (hotkey: Hotkey | null) => void
   /** +1 zooms in, -1 out, 0 back to Actual Size. */
   zoom: (direction: -1 | 0 | 1) => void
 }
@@ -106,6 +115,7 @@ export function useWorkspace(features: FeatureSummary[]): WorkspaceController {
     workspace,
     layout,
     ...useLayoutEditors(setLayout),
+    ...usePreferenceEditors(setLayout),
     open: useCallback((id: string) => {
       edit((current) => open(current, id))
     }, [edit]),
@@ -157,9 +167,6 @@ function useLayoutEditors(
   | "setFeatureEnabled"
   | "setGroupEnabled"
   | "setHotkey"
-  | "setRunOnAll"
-  | "setSidebarAutoHide"
-  | "zoom"
   | "toggleCategory"
 > {
   return {
@@ -211,28 +218,6 @@ function useLayoutEditors(
       },
       [setLayout],
     ),
-    setRunOnAll: useCallback(
-      (runOnAll: boolean) => {
-        setLayout((current) => ({ ...current, runOnAll }))
-      },
-      [setLayout],
-    ),
-    setSidebarAutoHide: useCallback(
-      (sidebarAutoHide: boolean) => {
-        setLayout((current) => ({ ...current, sidebarAutoHide }))
-      },
-      [setLayout],
-    ),
-    zoom: useCallback(
-      (direction: -1 | 0 | 1) => {
-        setLayout((current) => ({
-          ...current,
-          zoomStep:
-            direction === 0 ? DEFAULT_ZOOM_STEP : clampZoomStep(current.zoomStep + direction),
-        }))
-      },
-      [setLayout],
-    ),
     toggleCategory: useCallback(
       (category: string) => {
         setLayout((current) => ({
@@ -244,3 +229,4 @@ function useLayoutEditors(
     ),
   }
 }
+

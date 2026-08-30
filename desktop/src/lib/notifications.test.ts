@@ -5,6 +5,8 @@ import {
   NOTIFICATION_LIMIT,
   relativeTime,
   resolveLevel,
+  systemNotification,
+  systemTitle,
   toNotification,
   toToast,
   withNotification,
@@ -59,6 +61,7 @@ describe("toToast", () => {
       copyText: "abc",
       revealPath: "/tmp/x",
       important: true,
+      notifiesWhenBackgrounded: true,
     })
   })
 })
@@ -131,5 +134,55 @@ describe("badgeText", () => {
     expect(badgeText(7)).toBe("7")
     expect(badgeText(99)).toBe("99")
     expect(badgeText(100)).toBe("99+")
+  })
+})
+
+/** A kept success — the shape an install's summary has. */
+const installed = () => toToast({ message: "Installed app.apk", ok: true, important: true }, "t1")
+
+describe("systemNotification", () => {
+  it("says nothing while the window is the one being looked at", () => {
+    expect(systemNotification(installed(), false)).toBeNull()
+  })
+
+  it("mirrors an important result once the window is not", () => {
+    expect(systemNotification(installed(), true)).toEqual({
+      title: "Task finished",
+      body: "Installed app.apk",
+      sound: false,
+    })
+  })
+
+  it("stays quiet for a routine confirmation, which is not kept either", () => {
+    const copied = toToast({ message: "Copied", ok: true }, "t2")
+    expect(copied.notifiesWhenBackgrounded).toBe(false)
+    expect(systemNotification(copied, true)).toBeNull()
+  })
+
+  it("carries a sound only for a failure", () => {
+    const failed = toToast({ message: "adb refused it", ok: false }, "t3")
+    expect(systemNotification(failed, true)).toEqual({
+      title: "Task failed",
+      body: "adb refused it",
+      sound: true,
+    })
+  })
+
+  it("lets a batch opt its members out while staying in the history", () => {
+    const member = toToast(
+      { message: "Installed one of four", ok: true, important: true, notifiesWhenBackgrounded: false },
+      "t4",
+    )
+    expect(member.important).toBe(true)
+    expect(systemNotification(member, true)).toBeNull()
+  })
+})
+
+describe("systemTitle", () => {
+  it("is SystemNotifier's three titles", () => {
+    expect(systemTitle("success")).toBe("Task finished")
+    expect(systemTitle("error")).toBe("Task failed")
+    expect(systemTitle("warning")).toBe("Droidective")
+    expect(systemTitle("info")).toBe("Droidective")
   })
 })

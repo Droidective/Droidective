@@ -1,5 +1,7 @@
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react"
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
+import { postNotification } from "@/lib/daemon"
 import {
+  systemNotification,
   toNotification,
   toToast,
   withNotification,
@@ -8,6 +10,44 @@ import {
   type Toast,
   type ToastInput,
 } from "@/lib/notifications"
+import { isWindowFocused, onWindowFocusChanged } from "@/lib/window-focus"
+
+/** A rejection with nowhere useful to go. Named so the intent is not "oops". */
+const ignore = () => {}
+
+/**
+ * Whether this window is the one being looked at, as a ref.
+ *
+ * A ref rather than state: this changes every time someone switches app, and
+ * re-rendering every screen in the window for that would be absurd. Nothing
+ * renders from it — it is read at the moment a result lands.
+ *
+ * It starts optimistic. Until the window manager has answered, a result is
+ * assumed to be one you are looking at: missing a notification costs someone a
+ * glance at the window, where posting a spurious one interrupts them for
+ * something already on their screen.
+ */
+function useWindowFocus(): { current: boolean } {
+  const focused = useRef(true)
+  useEffect(() => {
+    let live = true
+    let unlisten: (() => void) | null = null
+    void isWindowFocused().then((current) => {
+      if (live) focused.current = current
+    }, ignore)
+    void onWindowFocusChanged((next) => {
+      focused.current = next
+    }).then((stop) => {
+      if (live) unlisten = stop
+      else stop()
+    }, ignore)
+    return () => {
+      live = false
+      unlisten?.()
+    }
+  }, [])
+  return focused
+}
 
 export interface Notifications {
   toasts: Toast[]
@@ -17,6 +57,15 @@ export interface Notifications {
 
   /** Report an action's result. The one call every screen makes. */
   show: (input: ToastInput) => void
+  /**
+   * Post a native notification directly, with no toast.
+   *
+   * `SystemNotifier.postIfBackgrounded` on the Mac, and it exists for the same
+   * one caller: a batch of installs reports each APK as its own toast and then
+   * says one thing about the batch. Only reaches the tray while the window is
+   * not the one being looked at.
+   */
+  notifyIfBackgrounded: (title: string, body: string, sound?: boolean) => void
   dismissToast: (id: string) => void
   togglePanel: () => void
   dismiss: (id: string) => void
@@ -43,15 +92,29 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   // dismissed as one thing.
   const nextID = useRef(0)
 
+  const focused = useWindowFocus()
+
   const dismissToast = useCallback((id: string) => {
     setToasts((current) => current.filter((toast) => toast.id !== id))
   }, [])
+
+  const notifyIfBackgrounded = useCallback((title: string, body: string, sound = false) => {
+    if (focused.current) return
+    // A notification that cannot be posted is not worth a second failure on
+    // screen — the toast already said what happened, in the window the person
+    // is about to come back to.
+    void postNotification({ title, body, sound }).catch(() => {})
+  }, [focused])
 
   const show = useCallback(
     (input: ToastInput) => {
       nextID.current += 1
       const toast = toToast(input, `t${String(nextID.current)}`)
       setToasts((current) => [...current, toast])
+      const native = systemNotification(toast, !focused.current)
+      if (native !== null) {
+        void postNotification(native).catch(() => {})
+      }
       if (toast.important) {
         setHistory((current) => withNotification(current, toNotification(toast, Date.now())))
         // Only counts while the panel is shut; opening it is what marks read.
@@ -64,7 +127,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
         dismissToast(toast.id)
       }, TOAST_TTL_MS)
     },
-    [dismissToast],
+    [dismissToast, focused],
   )
 
   const value = useMemo<Notifications>(
@@ -74,6 +137,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
       unread,
       panelOpen,
       show,
+      notifyIfBackgrounded,
       dismissToast,
       togglePanel: () => {
         setPanelOpen((open) => {
@@ -88,7 +152,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
         setHistory([])
       },
     }),
-    [toasts, history, unread, panelOpen, show, dismissToast],
+    [toasts, history, unread, panelOpen, show, notifyIfBackgrounded, dismissToast],
   )
 
   return <NotificationsContext value={value}>{children}</NotificationsContext>

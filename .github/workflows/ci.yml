@@ -74,6 +74,19 @@ jobs:
         run: |
           cd ADBKit
           swift test -Xswiftc -warnings-as-errors
+      # `AdbColdStartProbeTests` is deliberately *not* run here. It answered
+      # what it was written for — the first `adb devices` on Windows never
+      # returned, which is why `ExitWatcher` has a Windows half — but a test
+      # whose subject is a call that can fail to return cannot be made safe to
+      # run in a build job: three shapes of bound were tried and each parked
+      # this job for a quarter of an hour, because the abandoned task keeps the
+      # test process alive after the assertions are done. It stays opt-in
+      # (`ADB_COLD_START_PROBE=1`) for a person with a machine in front of them.
+      #
+      # The same question is asked of the shipped artifact instead, where it
+      # belongs and where a timeout is a timeout: both smoke scripts now time a
+      # real `/v1/devices/list` and fail if the app would be unusable for that
+      # long at every launch.
       # The shipped artifact, not just the library: the beta channel publishes
       # a Windows daemon, so a tag depends on this compiling.
       - name: Build droidectived (Windows, release)

@@ -1,5 +1,11 @@
 import Foundation
 
+#if os(Windows)
+// For the process handle the exit watcher waits on. Foundation does not
+// surface one, and the pid on its own cannot be waited for.
+import WinSDK
+#endif
+
 /// Foundation.Process-backed runner.
 ///
 /// Fully non-blocking: pipes are drained via `readabilityHandler` callbacks
@@ -55,11 +61,11 @@ public struct SystemProcessRunner: ProcessRunning {
 
         let timedOut = LockedBox(false)
         let cancelled = LockedBox(false)
-        // Set once *we* have reaped the child ourselves (see `ExitReaper`,
-        // which runs off-Darwin only). After that its pid may be recycled by
-        // the kernel, so nothing may signal it again — terminating a stranger
-        // is worse than any hang. Never set on Darwin, where the guards below
-        // are a constant false.
+        // Set once *we* have observed the child's exit ourselves (see
+        // `ExitWatcher`, which runs off-Darwin only). On POSIX that means we
+        // reaped it, after which the kernel may recycle its pid, so nothing may
+        // signal it again — terminating a stranger is worse than any hang.
+        // Never set on Darwin, where the guards below are a constant false.
         let reaped = LockedBox(false)
         let boxed = UncheckedSendable(process)
 
@@ -116,13 +122,20 @@ public struct SystemProcessRunner: ProcessRunning {
                     // Cancelled during launch: tear the child down now so it
                     // doesn't keep running after the caller's Task is gone.
                     if cancelled.get(), boxed.value.isRunning { boxed.value.terminate() }
-                    #if !canImport(Darwin) && !os(Windows)
-                    ExitReaper.watch(
+                    #if !canImport(Darwin)
+                    ExitWatcher.watch(
                         pid: boxed.value.processIdentifier,
                         onExit: { status in
                             guard !resumed.swap(true) else { return }
                             reaped.set(true)
-                            continuation.resume(returning: status)
+                            // A child *we* killed has no clean exit code, and
+                            // must not report one just because this path won
+                            // the race to notice it. The handler above says the
+                            // same thing from the flags; the OS would say
+                            // 0xC000013A on Windows and 128+SIGTERM on Linux,
+                            // both of which read as the child's own answer.
+                            let killed = timedOut.get() || cancelled.get()
+                            continuation.resume(returning: killed ? nil : status)
                         })
                     #endif
                 } catch {
@@ -136,9 +149,14 @@ public struct SystemProcessRunner: ProcessRunning {
             watchdog.cancel()
 
             // Bounded: a grandchild (e.g. a spawned daemon) can inherit the pipe
-            // and delay EOF past the parent's exit.
-            await stdout.waitUntilEOF(grace: .seconds(3))
-            await stderr.waitUntilEOF(grace: .seconds(3))
+            // and delay EOF past the parent's exit. Concurrently, because when
+            // that happens it happens to *both* pipes — the grandchild inherits
+            // the pair — and waiting them out one after the other doubles the
+            // only case the grace exists for. The first `adb devices` on a
+            // machine with no adb server is exactly that case.
+            async let drainedOut: Void = stdout.waitUntilEOF(grace: .seconds(3))
+            async let drainedErr: Void = stderr.waitUntilEOF(grace: .seconds(3))
+            _ = await (drainedOut, drainedErr)
 
             return ProcessOutput(
                 stdout: stdout.data,
@@ -170,40 +188,70 @@ public struct SystemProcessRunner: ProcessRunning {
     }
 }
 
-#if !canImport(Darwin) && !os(Windows)
+#if !canImport(Darwin)
 /// A second way to notice a child has exited, because the first one can miss.
 ///
 /// `Process.terminationHandler` is the primary path and normally fires within
-/// milliseconds. It does not always: on Linux, `adb devices` run on a machine
-/// where the adb *server* is not yet up forks that server, exits, and is left a
-/// **zombie** — corelibs never reaps it and never calls the handler, so the
-/// continuation waiting on it is suspended for the life of the process. The
-/// watchdog is no escape either: its only recovery is terminating a process
-/// that is still running, and this one is already gone.
+/// milliseconds. Off-Darwin it does not always — and the two hosts fail
+/// differently while producing the identical symptom, which is why they get one
+/// type and two implementations rather than one clever one.
 ///
-/// That is not a hypothetical. It is what the first launch of the Linux app
-/// did: `list_features` answered with all 61 features while `list_devices`
-/// never returned, so the window came up with an empty sidebar, "0 features",
-/// and no error to explain it — the client was still awaiting a promise that
-/// would never settle.
+/// The command is the same on both: `adb devices` on a machine whose adb
+/// *server* is not running forks that server, prints two lines, and exits at
+/// once. The server outlives it and inherits its pipes.
 ///
-/// So this polls `waitpid(WNOHANG)` and reports the exit itself. Racing
-/// corelibs for the reap is safe in both directions: whoever wins resumes the
-/// continuation exactly once (`resumed`), and the loser's `waitpid` answers
-/// -1/ECHILD and does nothing. What is *not* safe is signalling a pid after it
-/// has been reaped — the number can be recycled — which is why a win here
-/// raises `reaped` and the watchdog checks it.
+/// - **Linux.** The child is left a **zombie** corelibs never reaps, so the
+///   handler never runs. It is what the first launch of the Linux app did:
+///   `list_features` answered with all 61 features while `list_devices` never
+///   returned, and the window came up with an empty sidebar, "0 features", and
+///   no error to explain it.
+/// - **Windows.** The handler does not arrive either — measured, not assumed: a
+///   CI step that timed this exact call sat on it for thirty minutes before it
+///   was cancelled, against ten for the whole test suite beside it. The app's
+///   first launch there showed the same "0 features" as Linux's, and a
+///   screenshot cannot tell a hang from a slow answer. A stopwatch can.
 ///
-/// **Off-Darwin only, deliberately.** This is a corelibs gap: Darwin's
-/// `Process` reaps and reports reliably, and the Mac app is the shipping one —
-/// racing Foundation for a `waitpid` there would be a change to a proven path
-/// in exchange for fixing nothing. The pipe collectors are split the same way
-/// and for the same kind of reason.
+/// The watchdog is no escape on either: its only recovery is terminating a
+/// process that is still running, and this one is already gone.
 ///
-/// One thread for every child in flight, parked in `nanosleep`, which is a
-/// thread the cooperative pool does not own — the same reason the pipe
-/// collectors get their own.
-enum ExitReaper {
+/// **Off-Darwin only, deliberately.** Darwin's `Process` reports reliably, and
+/// the Mac app is the shipping one — racing Foundation there would be a change
+/// to a proven path in exchange for fixing nothing. The pipe collectors are
+/// split the same way and for the same kind of reason.
+///
+/// One thread per child in flight, blocked in a wait the cooperative pool does
+/// not own — the same reason the pipe collectors get their own.
+enum ExitWatcher {
+    #if os(Windows)
+    /// Waits on the process handle, which the OS signals the moment the child
+    /// exits — inherited pipes and surviving grandchildren included.
+    ///
+    /// Holding the handle open is also what makes this safe: Windows does not
+    /// recycle a pid while a handle to it is open, so unlike the POSIX side
+    /// there is no window in which a kill could reach a stranger. The `reaped`
+    /// flag is still raised, because the *caller* cannot tell the two hosts
+    /// apart and must not signal a process it has already been told is gone.
+    static func watch(pid: Int32, onExit: @escaping @Sendable (Int32) -> Void) {
+        let thread = Thread {
+            // SYNCHRONIZE to wait on it, QUERY_LIMITED_INFORMATION to read the
+            // status afterwards. Nothing here opens it for anything else.
+            let access = DWORD(SYNCHRONIZE) | DWORD(PROCESS_QUERY_LIMITED_INFORMATION)
+            guard let handle = OpenProcess(access, false, DWORD(bitPattern: pid)) else {
+                // Already gone and already closed by corelibs, which means the
+                // handler is about to fire (or has). Nothing to add.
+                return
+            }
+            defer { CloseHandle(handle) }
+            guard WaitForSingleObject(handle, INFINITE) == WAIT_OBJECT_0 else { return }
+            var status: DWORD = 0
+            guard GetExitCodeProcess(handle, &status) else { return }
+            onExit(Int32(bitPattern: status))
+        }
+        thread.name = "adbkit-exit-watcher"
+        thread.stackSize = 128 * 1024
+        thread.start()
+    }
+    #else
     /// How often to ask. Short enough that a missed handler costs no visible
     /// delay, long enough that a hundred concurrent children are not a hundred
     /// busy loops.
@@ -239,6 +287,7 @@ enum ExitReaper {
         thread.stackSize = 128 * 1024
         thread.start()
     }
+    #endif
 }
 #endif
 

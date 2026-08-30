@@ -11,8 +11,8 @@ rewriting one when something turns out to be more work than it looked.
 
 | | Count |
 | --- | --- |
-| ⬜ Not started | 7 |
-| 🟡 Partial | 52 |
+| ⬜ Not started | 4 |
+| 🟡 Partial | 55 |
 | ⛔ Not applicable off-Apple | 2 |
 | **Total registry features** | **61** |
 
@@ -21,12 +21,10 @@ run from the palette but have no screen of their own, and the 33 that do have
 screens are each missing something the Mac version offers. Read it as *nothing
 is finished*, not as *most of it is done*.
 
-The seven not started are the three remaining hub screens (`react-native`,
-`simulate`, `connection` — their member actions all run today, just not
-gathered), `frida-console`, `api-client`, and the two that are **blocked rather
-than unscheduled**: `screen-record` and `video-editor` both need ffmpeg
-provisioned for Windows and Linux, and this repo only commits a macOS universal
-binary.
+The four not started are `frida-console`, `api-client`, and the two that are
+**blocked rather than unscheduled**: `screen-record` and `video-editor` both
+need ffmpeg provisioned for Windows and Linux, and this repo only commits a
+macOS universal binary.
 
 **Screens with a real pane today** (23): Terminal, Apps, Logcat, Device Info, File
 Explorer, Crash Catcher, Bug Report, Performance, Root Status, Developer
@@ -140,19 +138,30 @@ before adding to it.
      `aChildThatForksAGrandchildAndExitsIsStillReaped` is the regression test,
      and nothing else in that suite produced the shape.
 
-     **The same test found something about Windows, and is not run there.**
-     On that host the call returned correctly - right output, no timeout flag -
-     but only after **30 s**, the grandchild's own lifetime, so the collector's
-     grace does not bound the wait there the way it does on Linux and macOS.
-     The test is POSIX-only now, and for a sharper reason than "the bug is a
-     corelibs one": its child leaves a grandchild alive for thirty seconds, and
-     on the Windows runner that was enough to push a neighbouring test
-     measuring its own wall clock to the same 30.3 s. A regression test that
-     destabilises the suite around it is worse than no coverage on a platform
-     it was never about. Fixing the Windows side would mean closing a handle
-     out from under a blocked read on a machine nobody here can iterate on -
-     worth doing when there is one, and the cost until then is a slow first
-     `adb devices` on Windows rather than a hang.
+     **Windows had it too, and worse than it first read.** It was written down
+     as "slow, not dead": a synthetic stand-in returned after 30 s — the
+     grandchild's own lifetime — and the test was gated off the platform for
+     destabilising a neighbour. Both readings were wrong.
+     `AdbColdStartProbeTests` times the real call on a real Windows host, and
+     its first run **hung**: thirty minutes in CI against ten for the whole
+     suite beside it, until it was cancelled by hand. adb's grandchild is a
+     *server*, and a server does not exit — so what looked like a bounded 30 s
+     wait on a sleeping stand-in is an unbounded one on the thing itself. The
+     Windows app's "0 features" launch screenshot was the Linux bug exactly,
+     and one frame could not say so.
+
+     `ExitWatcher` — the reaper, renamed for having two implementations — waits
+     on the process handle there. `WaitForSingleObject` is signalled the moment
+     the child exits, inherited pipes and surviving grandchildren included, and
+     holding that handle open is also what stops the pid being recycled under
+     the kill paths, which is the hazard its POSIX half has to guard against.
+     The neighbour blamed for interference — `timeoutKillsAndFlags`, reading
+     30.3 s — was never interference either: `sleepForever` on Windows *is* a
+     30 s ping, so a test stuck at exactly its length was the same missing exit
+     report seen from the other end. Both run on Windows now. The two pipe
+     drains also became concurrent, since a grandchild inherits the pair and
+     waiting them out one after the other doubled the only case the grace
+     exists for.
 
    **It works now**, and the smoke shows it rather than asserting it: the
    window comes up with 42 features and a device bar that has finished
@@ -243,12 +252,35 @@ before adding to it.
 
    The subscription's `filter` field went with it: it was documented in the
    protocol as a level filter and had never been read by anything.
-5. **Notifications** (backlog 18). Small, and several screens already want it:
-   an install that finishes while you are elsewhere, a watched crash landing.
-6. **Background mode and the tray** (20), then **Quick Actions** (19). In that
-   order because the panel needs the global shortcut and the resident process
-   the first one establishes. Together they are the most distinctive thing the
-   Mac app does that this one does not.
+5. ~~**Notifications** (backlog 18).~~ **Landed** — and smaller than it looked,
+   because the Mac does not decide per event: `SystemNotifier` mirrors the
+   toasts already marked important whenever the window is not the one being
+   looked at, so an install finishing and a watched crash landing both arrive
+   without either screen knowing a tray exists. No Settings switch: the Mac has
+   none (see the Look section).
+6. ~~**Background mode and the tray** (20), then **Quick Actions** (19).~~
+   **Landed**, in that order and for the stated reason. Closing the window hides
+   the app, stops the work that was only running because a window was open, and
+   leaves a tray icon whose menu is `MenuBarView` row for row. The recorded
+   shortcuts are now registered with the OS, so they fire from whatever app you
+   are in — the divergence the recorder used to apologise for. And the panel
+   itself: a search field over a five-across grid, arrows moving it while the
+   query is being typed, the destructive second press, the pick-device
+   interstitial, form actions in place.
+
+   **Two conditions the Mac does not need**, both forced: a hidden window is
+   only offered where a tray icon actually exists (a Linux session can decline
+   to give one, and hiding a window nobody can bring back is not a mode), and
+   the Mac's "Show menu bar icon" switch is absent, because turning the tray off
+   while the window is hidden would be exactly that trap. The panel is also not
+   a non-activating `NSPanel` — no such window exists on Windows or Linux — so
+   it takes focus and hands it back by hiding.
+
+   **What the panel does not have yet**: Manage Apps, Emulators, Install APK,
+   the pick-bundle interstitial, and the resume-where-I-left-off window. The
+   first three are screens of their own; the last is a preference over
+   behaviour this panel does not have, since it is created on demand rather
+   than kept alive behind the app.
 7. **API Testing** (`api-client`). The largest remaining feature and the easiest
    to be confident about: device-free, and ADBKit's `ApiClient/` group is
    already fully portable.
@@ -340,17 +372,24 @@ the chrome and the device bar have not.
       Settings ▸ Hotkeys or a sidebar row's right-click. The Mac's rules: at
       least one of Ctrl/Alt/⌘, Esc cancels, Backspace clears, an instant action
       runs where anything else opens. Two differences, both stated where they
-      occur. They fire **while the window has focus**, not globally: the OS
-      registration arrives with the Quick Actions panel below, and the recorder
-      says so rather than promising it now. And a **toggle opens rather than
-      running** — the Mac flips it from the override state it tracks, which this
-      app does not keep, so it would have to guess a direction and write it to a
-      device. The combinations the shell owns (⌘K/T/W/\\/,/1–9) are refused with
+      occur. They are **registered with the OS**, so they fire from whatever app
+      you are in and from a window closed into the tray; a combination another
+      app already holds is refused by the platform, and the window listener goes
+      on answering for exactly those, because a shortcut that then worked
+      nowhere would be worse than one that works in the window. And a **toggle
+      opens rather than running** — the Mac flips it from the override state it
+      tracks, which this app does not keep, so it would have to guess a
+      direction and write it to a device. The combinations the shell owns (⌘K/T/W/\\/,/1–9) are refused with
       the name of the command that holds them, because a window shortcut cannot
       outrank the shell the way an OS-registered one does.
-- [ ] **Global hotkey → Quick Actions panel** — the non-activating mini app:
-      grid of every runnable action, pinned first, custom commands, pick-device
-      interstitial, ⌘⏎ run-on-all.
+- [x] **Global hotkey → Quick Actions panel** — the mini app: the grid of every
+      runnable action with the pinned ones leading, the custom commands, the
+      "Open in Droidective" list, the pick-device interstitial and its All
+      devices row for a `supportsRunAll` feature. Recorded in Settings ▸ Hotkeys
+      ▸ Global, and also the tray's first item. **Not** non-activating: no such
+      window exists on Windows or Linux, so it takes focus and gives it back by
+      hiding. Manage Apps, Emulators, Install APK and the pick-bundle
+      interstitial are still to come.
 - [x] **Pinned / favourites** — a Pinned section leading the sidebar and the
       palette's empty-query list, pinned from either. Members are lifted out of
       their categories rather than listed twice, as `enabledFeatures(in:)` does
@@ -415,16 +454,21 @@ memory — the file each item names is the thing to replicate.
 
 #### Settings (`SettingsView`, 969 lines, seven tabs)
 
-- [ ] **General** — every item is still waiting on its subsystem: the role
-      picker, Open at login, background mode, the Quick Actions preferences,
-      and the updater. The tab lists them and says which backlog item each
-      arrives with, rather than showing switches that control nothing.
+- [~] **General** — Background (the keep-running switch, with its reason when
+      no tray exists), Quick Actions (close-after-run, and the per-action list
+      that keeps one out of the panel) and Tray (which features the menu lists)
+      all work. **Still waiting:** the role picker, Open at login and the
+      updater, which the tab names rather than showing switches that control
+      nothing. The Mac's "Resume where I left off" is deliberately absent — see
+      the panel's entry.
 - [x] **Appearance** — Theme (light/dark/system) and Accent as presets *and* a
       colour well *and* a hex field with Reset, plus the light theme itself
-      and the low-contrast warning. A Window section carries the sidebar mode
-      and the UI size. **Still missing:** Background and Text colour, Font
-      family, the Window opacity/blur/grain sliders (which the section names as
-      not ported), and the Developer self-metrics overlay.
+      and the low-contrast warning — and the same three ways for **Background**
+      and **Text**, with the scheme following a custom background. A Window
+      section carries the sidebar mode and the UI size. **Still missing:** Font
+      family and the text-size scale, the Window opacity/blur/grain sliders
+      (which the section names as not ported), and the Developer self-metrics
+      overlay.
 - [x] **Privacy** — Data & Storage ▸ the captures and pulls folder, with Open.
       Telemetry says outright that this app sends nothing, which is true and
       worth stating rather than leaving as an unchecked box. **Still
@@ -502,19 +546,58 @@ somebody already has in their fingers.
 - [x] **Light theme** — ported from the asset catalog's own colorset values,
       applied as CSS custom properties on `:root` so every existing token
       follows it.
-- [x] **Custom accent**, with the low-contrast warning. **Background and text
-      colour are still missing**, as is the luminance-following scheme.
+- [x] **Custom accent**, with the low-contrast warning, and **Background and
+      Text colour** beside it: the Mac's eight presets, a colour well, a hex
+      field and a Reset. `BackgroundPalette` and `TextPalette` are ported to
+      `lib/background.ts` and tested against the stock steps — fed `#1A1A1A` the
+      derivation has to land on the asset catalog's own `#232323` and `#333333`,
+      or a custom colour would not have the hierarchy the stock one does. The
+      **luminance-following scheme** came with them: a custom background decides
+      light or dark, and the Theme picker greys out saying so, exactly as on the
+      Mac.
 - [x] **The ⌘= / ⌘- zoom.** **Font family and the text-size scale are still
       missing** — the zoom scales everything together, where the Mac also lets
       the text size move on its own.
 - [x] **Empty states per feature** ("connect a device") — the Mac's
       `NoDeviceView` shape, with its per-feature copy table ported.
-- [ ] **Native notifications** — a finished background install, a crash caught
-      while watching, an update staged. `tauri-plugin-notification`, behind the
-      same Settings ▸ General switch the Mac puts it behind.
-- [ ] **Background mode and a tray icon** — closing the window keeps the app
-      resident, stops the kept-alive sessions, and leaves the global hotkey
-      working.
+- [x] **Native notifications** — an important result that lands while you are
+      in another app posts one, which is `SystemNotifier`'s rule rather than a
+      list of events: `postToastIfBackgrounded` mirrors the toasts already
+      marked important, so a crash caught while watching and a finished install
+      arrive without either screen knowing about the tray. The titles are its
+      titles ("Task finished" / "Task failed" / "Droidective"), a failure
+      carries the sound, and a batch can opt its members out and post one
+      summary — which the install does, with the Mac's own two titles.
+
+      **There is no Settings switch, because the Mac has none.** This entry
+      used to promise one; reading `SettingsView.swift` rather than trusting
+      the note is what found that the Mac leaves the choice to the OS's own
+      per-app notification settings. Adding one here only would be a
+      difference to relearn, and the rule says a better idea goes in the Mac
+      app first.
+
+      Two things it does not read from the DOM, both because the DOM answers a
+      different question. Backgrounded is the window manager's `isFocused()`,
+      not `document.hasFocus()` — the latter is about the *document*, so a
+      window plainly in front reports false whenever focus sits somewhere the
+      DOM does not own, and posting a notification for a result already on
+      screen is the most irritating thing a desktop app does. And permission is
+      asked for at the moment one is first needed, not at launch, exactly as
+      `requestAuthorizationOnce` does.
+- [x] **Background mode and a tray icon** — closing the window hides it, stops
+      every live subscription (`stopAllStreams`, which is what
+      `AppState.enterBackground` does by walking its open features), and leaves
+      the tray and the global shortcuts working. The tray menu is `MenuBarView`
+      row for row, pushed from the page because everything in it — the device's
+      name, the chosen features — lives there.
+
+      **Only where a tray exists.** macOS always has a menu bar; a Linux session
+      can decline to give the app an indicator, and hiding a window nobody can
+      bring back is not a mode worth having. The app records whether the icon
+      was really created and Settings says so instead of offering the switch.
+      The `.deb` therefore depends on `libayatana-appindicator3-1`. For the same
+      reason the Mac's **"Show menu bar icon" switch is absent**: turning the
+      tray off while the window is hidden is exactly that trap.
 
 
 ---
@@ -773,11 +856,12 @@ often someone opens them rather than by how hard they look.
   device. Writing a zip without an external tool would mean a new dependency for
   one button.
 
-- **No global hotkeys.** The recorded shortcuts are window shortcuts: they fire
-  while Droidective has focus, where the Mac registers them with the OS and they
-  fire from anywhere. The recorder and the Hotkeys tab both say so. It arrives
-  with the Quick Actions panel (backlog 19), which needs the same
-  `tauri-plugin-global-shortcut`.
+- **A shortcut another app already holds stays a window shortcut.** The
+  registration is offered to the OS for every binding, and the platform refuses
+  the ones it cannot grant. The window listener answers for exactly those, which
+  is better than the alternative in both directions: nothing fires twice
+  (a registered shortcut is grabbed before the webview sees it), and a
+  combination the OS would not take still works where the app has focus.
 
 - **A hotkey on a toggle opens it rather than running it.** The Mac flips a
   state override from `activeOverrides`, which it tracks and this app does not,
@@ -882,18 +966,25 @@ after the screens rather than instead of them.
     so this needs Tauri's native drop **and** HTML5 drag to coexist rather than
     one being turned off for the other. That is the actual engineering problem;
     it is not a reason to skip the feature.
-18. **Notifications and their settings.** The Mac posts a native notification
-    when a background install finishes, when a watched crash lands, and when an
-    update is staged, with a Settings ▸ General switch behind it.
-    `tauri-plugin-notification` is the equivalent; the settings pane is item 8.
-19. **The Quick Actions panel** — the non-activating global-hotkey mini app:
-    the grid of every runnable action, pinned first, custom commands, the
-    pick-device interstitial, ⌘⏎ run-on-all. Needs a second Tauri window with
-    `alwaysOnTop` + no focus steal, and a global shortcut.
-20. **Background mode and the menu bar** — closing the window keeps the app
-    resident behind a tray icon, stops the kept-alive sessions, and the global
-    hotkey still opens Quick Actions. `tauri-plugin-global-shortcut` plus a
-    tray icon.
+18. ~~**Notifications and their settings.**~~ **Landed.** `post_notification`
+    over `tauri-plugin-notification`, registered for its Rust API only like the
+    clipboard and the opener, so the webview's capability file stays at
+    `core:default`. The decision of *what* earns one is the Mac's and lives in
+    `lib/notifications.ts` beside the decision of what is kept in the history.
+    The settings switch turned out not to exist on the Mac — see the Look
+    section for why this app does not grow one either.
+19. ~~**The Quick Actions panel.**~~ **Landed.** A second Tauri window with
+    `alwaysOnTop`, no decorations and no taskbar entry, created on first use —
+    a second webview costs real memory, and someone who never presses the
+    hotkey should never pay it. One bundle, two entry points: the URL says
+    which app to render. `lib/quick-actions.ts` is the ported
+    `PaletteSearch.quickActions`, including the rule that is easy to get
+    backwards — a hub member **is** offered here, and its enabledness rides on
+    its hub. Not non-activating, which no window on these platforms can be.
+20. ~~**Background mode and the menu bar.**~~ **Landed.** `tauri-plugin-global-shortcut`
+    plus a tray icon, and the close handler that hides rather than quits —
+    guarded on the tray having actually been created, since a Linux session can
+    decline to give one and a window hidden with no way back is not a mode.
 21. **Multi-window** (`docs/multi-window.md`) — one window per device, the
     per-window workspace split, the Focus / Take Over banner for the exclusive
     features, and the window tint.

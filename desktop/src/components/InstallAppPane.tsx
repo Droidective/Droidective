@@ -24,7 +24,7 @@ import type { Device, InstallOutcome } from "@/lib/wire"
  * success, not a single verdict.
  */
 export function InstallAppPane({ device }: { device: Device | null }) {
-  const { show } = useNotifications()
+  const { show, notifyIfBackgrounded } = useNotifications()
   const { serials, runningOnAll } = useTargets()
   const [installing, setInstalling] = useState(false)
   const [outcomes, setOutcomes] = useState<InstallOutcome[]>([])
@@ -45,10 +45,17 @@ export function InstallAppPane({ device }: { device: Device | null }) {
         setOutcomes(response.outcomes)
         setFileName(response.fileName)
         const summary = summarise(response.outcomes)
-        show(
-          summary.ok
-            ? { ok: true, message: `Installed ${response.fileName}` }
-            : { ok: false, message: `${response.fileName} — ${summary.message}` },
+        const message = summary.ok
+          ? `Installed ${response.fileName}`
+          : `${response.fileName} — ${summary.message}`
+        show(summary.ok ? { ok: true, message } : { ok: false, message })
+        // The one thing an install is most likely to outlast: attention. An
+        // `.xapk` is a minute of unpacking and pushing, and nobody watches it.
+        // The Mac posts the same two titles from `installAPKs`.
+        notifyIfBackgrounded(
+          summary.ok ? "Install finished" : "Install failed",
+          message,
+          !summary.ok,
         )
       } catch (thrown) {
         show({ ok: false, message: asDaemonError(thrown).message })

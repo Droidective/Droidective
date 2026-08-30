@@ -5,10 +5,16 @@ import { type Hotkey, type HotkeyBindings, hotkeyEffect } from "@/lib/hotkeys"
 import { sidebarSections, visibleFeatures } from "@/lib/sidebar"
 import type { FeatureSummary } from "@/lib/wire"
 
+/** The one row that is not a feature, so it needs an id of its own. */
+const PANEL_ROW = "quick-actions-panel"
+
 export interface HotkeysTabProps {
   features: FeatureSummary[]
   bindings: HotkeyBindings
   onChange: (id: string, hotkey: Hotkey | null) => void
+  /** The Quick Actions panel's shortcut, which is not a feature's. */
+  panelHotkey: Hotkey | null
+  onPanelHotkey: (hotkey: Hotkey | null) => void
   /** The sidebar's arrangement, so this lists features in the order it shows them. */
   sidebarOrder: readonly string[]
   categoryOrder: readonly string[]
@@ -65,23 +71,29 @@ export function HotkeysTab(props: HotkeysTabProps) {
   return (
     <div className="flex flex-col gap-5">
       <p className="text-[11.5px] text-text-tertiary">
-        Shortcuts fire while a Droidective window has focus. On macOS they are registered with the
-        system and fire from anywhere; that arrives here with the Quick Actions panel and its tray
-        icon. While recording, Esc cancels and Backspace clears.
+        Shortcuts are registered with the system, so they fire from whatever app you are in — and
+        from a window closed into the tray. A combination another app already holds is refused by
+        the platform and keeps working while Droidective has focus. While recording, Esc cancels
+        and Backspace clears.
       </p>
 
       <Section title="Global">
         <Row
-          label="Show Droidective"
-          detail="Needs the app to stay resident with the window closed — backlog item 20."
-        >
-          <Waiting />
-        </Row>
-        <Row
           label="Quick Actions panel"
-          detail="The mini app it opens is backlog item 19; its hotkey arrives with it."
+          detail="Summons the panel over whatever you are working in. Ctrl+Shift+Space is a good one."
         >
-          <Waiting />
+          <HotkeyRecorder
+            hotkey={props.panelHotkey}
+            recording={recording === PANEL_ROW}
+            label="Quick Actions panel"
+            onStart={() => {
+              setRecording(PANEL_ROW)
+            }}
+            onStop={() => {
+              setRecording(null)
+            }}
+            onChange={props.onPanelHotkey}
+          />
         </Row>
       </Section>
 
@@ -111,6 +123,3 @@ function effectDetail(feature: FeatureSummary): string {
   return hotkeyEffect(feature.kind) === "run" ? "Runs it" : "Opens it"
 }
 
-function Waiting() {
-  return <span className="text-[11.5px] text-text-tertiary">Not yet</span>
-}

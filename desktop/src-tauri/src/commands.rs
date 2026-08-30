@@ -12,6 +12,7 @@ use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_opener::OpenerExt;
 
 use crate::daemon::stream::StreamMessage;
@@ -35,6 +36,10 @@ use crate::daemon::wire::{
 };
 use crate::daemon::{DaemonStatus, Supervisor};
 use crate::error::DaemonError;
+use crate::panel;
+use crate::shortcuts::{self, Registered};
+use crate::tray::{self, TrayEntry, TrayState};
+use crate::BackgroundMode;
 
 /// One subscription update, shaped like the daemon's own stream event so the
 /// UI's handling of a gap or an end is the same code either side of the IPC.
@@ -519,6 +524,156 @@ pub fn copy_text(app: AppHandle, text: String) -> Result<(), DaemonError> {
     app.clipboard()
         .write_text(text)
         .map_err(|error| DaemonError::Host(format!("could not copy to the clipboard: {error}")))
+}
+
+/// Posts a native notification — what an important result does when the window
+/// is not the one you are looking at.
+///
+/// The Mac's `SystemNotifier` is the model. What does *not* come across is its
+/// permission dance: `UNUserNotificationCenter` has to be asked, and asking at
+/// the right moment is half of that code, but the plugin's desktop
+/// implementation answers `Granted` to both `permission_state` and
+/// `request_permission` unconditionally — Windows and Linux put the switch in
+/// the OS's own settings rather than behind an in-app grant. Writing the dance
+/// anyway would be a branch that never runs pretending to be a decision.
+///
+/// Failing to notify is never worth interrupting anyone over: the toast already
+/// said what happened, in the window they are about to come back to. The error
+/// is returned honestly and the caller drops it.
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "tauri's command macro hands AppHandle in by value"
+)]
+pub fn post_notification(
+    app: AppHandle,
+    title: String,
+    body: String,
+    sound: bool,
+) -> Result<(), DaemonError> {
+    let mut builder = app.notification().builder().title(title).body(body);
+    if sound {
+        // The platform's own alert sound. Named rather than a file we ship:
+        // Windows and every Linux desktop have one, and it is the sound the
+        // person has already agreed to hear.
+        builder = builder.sound("default");
+    }
+    builder
+        .show()
+        .map_err(|error| DaemonError::Host(format!("could not post a notification: {error}")))
+}
+
+/// Replaces the tray menu with what the page is showing now.
+///
+/// The rows come from the page because everything in them does: the device's
+/// name, which features the user chose, and the wording. See `tray.rs`.
+///
+/// # Errors
+///
+/// Fails only if the platform refuses to build the menu.
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "tauri's command macro hands AppHandle in by value"
+)]
+pub fn set_tray_menu(app: AppHandle, entries: Vec<TrayEntry>) -> Result<(), DaemonError> {
+    tray::set_menu(&app, &entries)
+        .map_err(|error| DaemonError::Host(format!("could not build the tray menu: {error}")))
+}
+
+/// Summons the Quick Actions panel, or dismisses it. The hotkey's whole job.
+///
+/// # Errors
+///
+/// Fails only if the platform refuses to create the window.
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "tauri's command macro hands AppHandle in by value"
+)]
+pub fn toggle_quick_panel(app: AppHandle) -> Result<(), DaemonError> {
+    panel::toggle(&app)
+        .map_err(|error| DaemonError::Host(format!("could not open Quick Actions: {error}")))
+}
+
+/// Dismisses the panel — Esc at its root, and a run that asked to close it.
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "tauri's command macro hands AppHandle in by value"
+)]
+pub fn hide_quick_panel(app: AppHandle) {
+    panel::hide(&app);
+}
+
+/// Registers the recorded shortcuts with the OS, answering with the ones the
+/// platform accepted — see `shortcuts.rs` for why a refusal is ordinary and
+/// why the answer comes back in two spellings.
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "tauri's command macro hands AppHandle in by value"
+)]
+pub fn set_global_shortcuts(app: AppHandle, accelerators: Vec<String>) -> Vec<Registered> {
+    shortcuts::set(&app, &accelerators)
+}
+
+/// Settings ▸ General ▸ "Keep running in the background", pushed down from the
+/// page whenever it changes.
+///
+/// The preference lives in the webview's storage with the rest of what this app
+/// remembers, but the decision it drives — whether closing the window hides or
+/// quits — is taken in this process, before the page is asked anything. So it
+/// is mirrored here rather than queried at close time.
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "tauri's command macro hands State in by value"
+)]
+pub fn set_background_mode(mode: State<'_, BackgroundMode>, enabled: bool) {
+    mode.set(enabled);
+}
+
+/// Whether hiding the window would leave a way back to it.
+///
+/// False means no tray icon was created — a desktop with no system tray, or a
+/// Linux session without an indicator host — and Settings says so instead of
+/// offering a switch that would strand the app.
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "tauri's command macro hands State in by value"
+)]
+pub fn background_available(tray: State<'_, TrayState>) -> bool {
+    tray.is_present()
+}
+
+/// Brings the window back — the tray's "Open Droidective", and the Mac's
+/// `activateMainWindow`.
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "tauri's command macro hands AppHandle in by value"
+)]
+pub fn show_main_window(app: AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+/// Quits for real, from the tray. `⌘Q` on the Mac; this is its only spelling
+/// here, because the window's close button is what background mode intercepts.
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "tauri's command macro hands AppHandle in by value"
+)]
+pub fn quit_app(app: AppHandle) {
+    // Not `process::exit`: this runs Tauri's exit path, which is what stops the
+    // daemon (`RunEvent::Exit` in `lib.rs`).
+    app.exit(0);
 }
 
 /// Shows a file in the system file manager — the affordance behind an action

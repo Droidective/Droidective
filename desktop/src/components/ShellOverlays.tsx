@@ -72,6 +72,21 @@ export function ShellOverlays({
 
       {state.settings ? (
         <SettingsWindow
+          general={{
+            features,
+            keepRunningInBackground: workspace.layout.keepRunningInBackground,
+            onKeepRunningInBackground: workspace.setKeepRunningInBackground,
+            trayItems: workspace.layout.trayItems,
+            onTrayItem: workspace.setTrayItem,
+            quickPanelHiddenIds: workspace.layout.quickPanelHiddenIds,
+            onQuickPanelAction: workspace.setQuickPanelAction,
+            quickPanelCloseAfterRun: workspace.layout.quickPanelCloseAfterRun,
+            onQuickPanelCloseAfterRun: workspace.setQuickPanelCloseAfterRun,
+            sidebarOrder: workspace.layout.sidebarOrder,
+            categoryOrder: workspace.layout.categoryOrder,
+            favorites: workspace.layout.favorites,
+            disabledFeatures: workspace.layout.disabledFeatures,
+          }}
           appearance={{
             sidebarAutoHide: workspace.layout.sidebarAutoHide,
             onSidebarAutoHide: workspace.setSidebarAutoHide,
@@ -82,6 +97,8 @@ export function ShellOverlays({
             features,
             bindings: workspace.layout.hotkeys,
             onChange: workspace.setHotkey,
+            panelHotkey: workspace.layout.quickPanelHotkey,
+            onPanelHotkey: workspace.setQuickPanelHotkey,
             sidebarOrder: workspace.layout.sidebarOrder,
             categoryOrder: workspace.layout.categoryOrder,
             favorites: workspace.layout.favorites,
