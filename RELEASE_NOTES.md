@@ -1,3 +1,96 @@
+## Droidective v3.10.0-beta.3
+
+The Windows and Linux app grows the three things it was missing that people
+notice first: it tells you when something finishes while you are elsewhere, it
+stays out of the way without quitting, and it can be summoned over whatever you
+are working in. Behind all of that, the reason the Windows app looked broken on
+its first launch turned out not to be what the note in the tracker said.
+
+### The Windows app was hanging, not being slow
+
+- **The first `adb devices` on Windows never returned.** The app came up
+  showing "0 features" and no error, which is exactly what Linux did before the
+  last beta fixed it there. It had been written down as *slow rather than dead*
+  on the evidence of a stand-in that returned after thirty seconds — but the
+  stand-in slept, and adb's grandchild is a *server*, which does not exit at
+  all. Timing the real call settled it.
+- **The fix is a second way to notice a child has gone.** Windows now waits on
+  the process handle, which the OS signals the moment the child exits —
+  inherited pipes and surviving grandchildren included. The whole ADBKit suite
+  runs there in six seconds where one test used to sit at thirty, and the
+  regression test that was gated off Windows for "destabilising" a neighbour
+  runs again: that neighbour was the same missing exit report, seen from the
+  other end.
+- **Both smoke tests now time it.** The Linux one, on every pull request, and
+  the Windows one on every beta tag, ask the running app for its device list
+  and fail if the answer takes longer than ten seconds. An empty answer is
+  fine; an answer arriving is the point.
+- **The app no longer waits for the device list to show anything.** Its two
+  startup calls used to arrive together, which handed the slower of them the
+  decision about when the app became usable. The sidebar now paints as soon as
+  the registry answers, whatever adb is doing.
+
+### It tells you when you are looking somewhere else
+
+- **A result that lands while you are in another app posts a notification.**
+  Not a list of events, but the same rule the Mac uses: the results already
+  worth keeping in the notification panel are the ones worth interrupting for,
+  so an install finishing and a watched crash landing both arrive without
+  either screen knowing a tray exists. Failures carry a sound; routine
+  confirmations stay quiet.
+
+### It stays running without staying in the way
+
+- **Closing the window leaves Droidective in the tray** instead of quitting it,
+  stops the work that was only running because a window was open — terminal
+  shells included — and keeps the shortcuts alive. The tray menu is the Mac's
+  menu-bar menu: the selected device, Quick Actions, Screenshot, Mirror Screen,
+  the features you chose in Settings, then Open and Quit.
+- **Only where there is somewhere to click.** A Linux session can decline to
+  give an app a tray icon, and hiding a window nobody can bring back is not a
+  mode worth having, so the app checks and Settings says so instead of
+  offering the switch. The `.deb` now depends on `libayatana-appindicator3-1`.
+- **Recorded shortcuts are registered with the system.** They fire from
+  whatever app you are in, and from a window closed into the tray. A
+  combination another app already holds is refused by the platform and goes on
+  working while Droidective has focus, rather than working nowhere.
+
+### Quick Actions
+
+- **A panel over whatever you are doing**, on a shortcut you record in
+  Settings ▸ Hotkeys or from the tray's first item: a search field over a grid
+  of everything runnable in place, your saved commands under it, and the
+  full-app screens under those. Arrows move the grid while you are still
+  typing, Enter runs, Escape closes.
+- **It asks before it acts.** A destructive action waits for a second Enter. A
+  device-scoped one asks which device when more than one is connected, with an
+  All devices row for the actions that fan out. A form action shows its fields;
+  so does a toggle, because guessing a direction and writing it to a device is
+  worse than asking.
+- Manage Apps, Emulators and Install APK are not in the panel yet.
+
+### Appearance
+
+- **Pick the window's background and text colour.** Eight presets, a colour
+  well and a hex field, with the lifted surfaces, the hairlines and the muted
+  text derived from what you picked — so a custom colour keeps the same
+  hierarchy the stock one has. A light background switches the whole app to
+  the light treatment, and the Theme picker says so rather than fighting it.
+
+### Install
+
+**Windows** — download the `-setup.exe` and run it, clicking through the
+SmartScreen warning. The `.msi` is there for anyone deploying it centrally.
+
+**Linux** — `sudo apt install ./Droidective-0.0.3-beta.1-linux-x86_64.deb`, or
+make the `.AppImage` executable and run it. Both need `adb` on `PATH`; the
+`.deb` declares it as a dependency, along with `libcurl4` and
+`libayatana-appindicator3-1` for the tray, and a recommendation of
+`gstreamer1.0-libav` for the mirror.
+
+**macOS** — download the DMG and drag Droidective to Applications. Existing
+installs on the beta channel update themselves.
+
 ## Droidective v3.10.0-beta.2
 
 The first beta shipped a Windows and Linux app that nobody had ever launched.
