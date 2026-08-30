@@ -142,6 +142,61 @@ jobs:
           cargo fmt --check
           cargo clippy --all-targets -- -D warnings
           cargo test
+      # The bundle the smoke job installs. Debug, and only the .deb: this is
+      # not a release, and the AppImage bundler downloads three tools from
+      # GitHub on every run for an artifact nothing here opens. The cargo
+      # profile is the same one `cargo test` above just built, so the compile
+      # is nearly free.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - name: Bundle the .deb
+        env:
+          DESKTOP_BUNDLES: deb
+        run: ./scripts/build-desktop-app.sh linux debug dist
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: desktop-linux-deb
+          path: dist/*.deb
+          if-no-files-found: error
+
+  # Does the app actually run?
+  #
+  # Everything above this compiles the Linux app and runs its unit suites; none
+  # of it launches the thing. That gap shipped a daemon dynamically linked
+  # against the Swift runtime — it died at exec on any machine without a
+  # toolchain, and every screen sat behind "droidectived would not start". A
+  # build cannot tell you that; installing the package somewhere clean and
+  # looking at the window can.
+  #
+  # Not in the container: the smoke *is* a container run (a bare ubuntu:24.04,
+  # so apt resolves the package's own Depends and a missing one fails here
+  # rather than on a user's machine), and nesting one inside the job's own
+  # image would need docker-in-docker for nothing.
+  desktop-linux-smoke:
+    needs: desktop-native
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: desktop-linux-deb
+          path: dist
+      - name: Launch it, drive it, photograph it
+        env:
+          RUNTIME: docker
+        run: ./scripts/smoke-desktop-linux.sh "$(find dist -name '*.deb' | head -1)"
+      # The frames the run produced, so a failure is a picture rather than a
+      # description of one.
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: desktop-linux-screenshots
+          path: dist/*.png
+          if-no-files-found: warn
 
   build:
     runs-on: macos-15
@@ -340,6 +395,25 @@ jobs:
       - name: Build and package the app
         shell: bash
         run: ./scripts/build-desktop-app.sh "${{ matrix.platform }}" release dist
+      # Windows gets its smoke here rather than on every PR, because this is
+      # the only job that builds a Windows app at all — the Swift toolchain
+      # makes it far too slow to run per push. It is late feedback, and late
+      # feedback about whether the thing starts still beats none: nobody had
+      # ever launched it. There is no Windows container, so this runs on the
+      # runner itself and proves less than the Linux smoke does — the header
+      # of the script says exactly what.
+      - if: matrix.platform == 'windows'
+        name: Install it, launch it, photograph it
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem dist -Filter '*-setup.exe' | Select-Object -First 1
+          ./scripts/smoke-desktop-windows.ps1 -Installer $setup.FullName
+      - if: always() && matrix.platform == 'windows'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: desktop-windows-screenshot
+          path: smoke/*.png
+          if-no-files-found: warn
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: desktop-${{ matrix.platform }}
