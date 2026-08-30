@@ -1,6 +1,8 @@
+import { useEffect } from "react"
 import { useSidebarMode, type SidebarModeController } from "@/hooks/useSidebarMode"
 import { useWorkspace, type WorkspaceController } from "@/hooks/useWorkspace"
 import { useZoom } from "@/hooks/useZoom"
+import { setBackgroundMode } from "@/lib/daemon"
 import type { FeatureSummary } from "@/lib/wire"
 import { activeTab } from "@/lib/workspace"
 
@@ -29,6 +31,17 @@ export function useWindowChrome(features: FeatureSummary[]): WindowChrome {
   const workspace = useWorkspace(features)
   const sidebar = useSidebarMode(workspace.layout.sidebarAutoHide, workspace.setSidebarAutoHide)
   useZoom(workspace.layout.zoomStep)
+
+  // The preference is remembered here; the decision it drives — whether the
+  // close button hides the window or quits — is taken in the Rust process
+  // before the page is asked anything, so it is mirrored there rather than
+  // read at the moment of the click.
+  const keepRunning = workspace.layout.keepRunningInBackground
+  useEffect(() => {
+    void setBackgroundMode(keepRunning).catch(() => {
+      // Outside a Tauri webview, which is a test. Nothing to say about it.
+    })
+  }, [keepRunning])
 
   const focused = activeTab(workspace.workspace)
   return {

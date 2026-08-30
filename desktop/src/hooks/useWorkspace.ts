@@ -56,6 +56,10 @@ export interface WorkspaceController {
   setRunOnAll: (on: boolean) => void
   /** Pinned sidebar or Dock-style auto-hide. */
   setSidebarAutoHide: (autoHide: boolean) => void
+  /** Whether closing the window hides the app behind the tray. */
+  setKeepRunningInBackground: (on: boolean) => void
+  /** Adds or removes one feature from the tray's chosen list. */
+  setTrayItem: (id: string, listed: boolean) => void
   /** +1 zooms in, -1 out, 0 back to Actual Size. */
   zoom: (direction: -1 | 0 | 1) => void
 }
@@ -106,6 +110,7 @@ export function useWorkspace(features: FeatureSummary[]): WorkspaceController {
     workspace,
     layout,
     ...useLayoutEditors(setLayout),
+    ...usePreferenceEditors(setLayout),
     open: useCallback((id: string) => {
       edit((current) => open(current, id))
     }, [edit]),
@@ -157,9 +162,6 @@ function useLayoutEditors(
   | "setFeatureEnabled"
   | "setGroupEnabled"
   | "setHotkey"
-  | "setRunOnAll"
-  | "setSidebarAutoHide"
-  | "zoom"
   | "toggleCategory"
 > {
   return {
@@ -211,6 +213,33 @@ function useLayoutEditors(
       },
       [setLayout],
     ),
+    toggleCategory: useCallback(
+      (category: string) => {
+        setLayout((current) => ({
+          ...current,
+          collapsedCategories: toggleCollapsed(current.collapsedCategories, category),
+        }))
+      },
+      [setLayout],
+    ),
+  }
+}
+
+/**
+ * The preferences, as opposed to the arrangement.
+ *
+ * `useLayoutEditors` above changes how the window is *laid out*; these four are
+ * settings that happen to be persisted in the same place — the device bar's Run
+ * on all, the sidebar's mode, background mode, and what the tray lists. Split
+ * because the two grew past one readable function, and this is the seam.
+ */
+function usePreferenceEditors(
+  setLayout: React.Dispatch<React.SetStateAction<LayoutState>>,
+): Pick<
+  WorkspaceController,
+  "setRunOnAll" | "setSidebarAutoHide" | "setKeepRunningInBackground" | "setTrayItem" | "zoom"
+> {
+  return {
     setRunOnAll: useCallback(
       (runOnAll: boolean) => {
         setLayout((current) => ({ ...current, runOnAll }))
@@ -223,21 +252,29 @@ function useLayoutEditors(
       },
       [setLayout],
     ),
+    setKeepRunningInBackground: useCallback(
+      (keepRunningInBackground: boolean) => {
+        setLayout((current) => ({ ...current, keepRunningInBackground }))
+      },
+      [setLayout],
+    ),
+    setTrayItem: useCallback(
+      (id: string, listed: boolean) => {
+        setLayout((current) => ({
+          ...current,
+          trayItems: listed
+            ? [...current.trayItems.filter((item) => item !== id), id]
+            : current.trayItems.filter((item) => item !== id),
+        }))
+      },
+      [setLayout],
+    ),
     zoom: useCallback(
       (direction: -1 | 0 | 1) => {
         setLayout((current) => ({
           ...current,
           zoomStep:
             direction === 0 ? DEFAULT_ZOOM_STEP : clampZoomStep(current.zoomStep + direction),
-        }))
-      },
-      [setLayout],
-    ),
-    toggleCategory: useCallback(
-      (category: string) => {
-        setLayout((current) => ({
-          ...current,
-          collapsedCategories: toggleCollapsed(current.collapsedCategories, category),
         }))
       },
       [setLayout],

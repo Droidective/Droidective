@@ -36,6 +36,8 @@ describe("loadLayout", () => {
       ],
       focusedPane: 1,
       splitFraction: 0.42,
+      keepRunningInBackground: false,
+      trayItems: ["logcat"],
     }
     saveLayout(storage, layout)
     expect(loadLayout(storage)).toEqual(layout)
@@ -65,6 +67,10 @@ describe("loadLayout", () => {
       panes: [{ tabs: [HOME_TAB, 3], activeTab: 9 }, "not a pane", { tabs: [] }],
       focusedPane: "second",
       splitFraction: "half",
+      // The one boolean whose default is true: anything but a literal false
+      // has to read as on, or a bad value would silently turn it off.
+      keepRunningInBackground: "no",
+      trayItems: { logcat: true },
     })
     expect(loadLayout(fakeStorage(stored))).toEqual({
       sidebarOrder: ["logcat"],
@@ -79,6 +85,8 @@ describe("loadLayout", () => {
       panes: [{ tabs: [HOME_TAB], activeTab: null }],
       focusedPane: 0,
       splitFraction: 0.5,
+      keepRunningInBackground: true,
+      trayItems: [],
     })
   })
 

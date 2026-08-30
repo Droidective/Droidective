@@ -45,7 +45,8 @@
       "deb": {
         "depends": [
           "android-tools-adb",
-          "libcurl4"
+          "libcurl4",
+          "libayatana-appindicator3-1"
         ],
         "recommends": [
           "gstreamer1.0-libav"

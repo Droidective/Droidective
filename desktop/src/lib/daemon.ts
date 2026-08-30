@@ -151,47 +151,6 @@ export function pullFile(args: {
 }
 
 /**
- * Host capabilities, not daemon calls — but they arrive the same way and fail
- * the same way, so they live beside the rest rather than in a second module
- * with its own error shape.
- */
-export function copyText(text: string): Promise<void> {
-  return invoke("copy_text", { text })
-}
-
-export function revealPath(path: string): Promise<void> {
-  return invoke("reveal_path", { path })
-}
-
-/**
- * Posts a native notification. Rejects when the platform would not show one —
- * a Linux session with no notification daemon running, say — which is never
- * worth reporting: the toast already said it in the window being returned to.
- */
-export function postNotification(args: {
-  title: string
-  body: string
-  sound: boolean
-}): Promise<void> {
-  return invoke("post_notification", args)
-}
-
-/** Where pulls and exports land, as the Rust side resolves it. */
-export function capturesFolder(): Promise<string> {
-  return invoke<string>("captures_folder")
-}
-
-/** Opens an external link. The Rust side refuses anything but https. */
-export function openUrl(url: string): Promise<void> {
-  return invoke("open_url", { url })
-}
-
-/** Writes into ~/Downloads/Droidective and returns where it landed. */
-export function exportText(name: string, contents: string): Promise<string> {
-  return invoke<string>("export_text", { name, contents })
-}
-
-/**
  * Normalises whatever `invoke` rejected with.
  *
  * Rust serialises `DaemonError` as the daemon's own `{code,message,detail}`,
@@ -210,9 +169,22 @@ export function asDaemonError(error: unknown): DaemonError {
   return { code: "unknown", message: String(error), detail: null }
 }
 
-// The stream subscriptions and the per-device settings calls live next door, so
-// this file stays inside its line budget; `@/lib/daemon` remains the one import
-// for all of them.
+// The host capabilities, the stream subscriptions and the per-device settings
+// calls live next door, so this file stays inside its line budget;
+// `@/lib/daemon` remains the one import for all of them.
+export {
+  backgroundAvailable,
+  capturesFolder,
+  copyText,
+  exportText,
+  openUrl,
+  postNotification,
+  quitApp,
+  revealPath,
+  setBackgroundMode,
+  setTrayMenu,
+  showMainWindow,
+} from "@/lib/daemon-host"
 export type { MirrorSession, Subscription, TerminalSession } from "@/lib/daemon-stream"
 export {
   openTerminal,

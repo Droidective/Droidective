@@ -3,13 +3,66 @@ mod daemon;
 mod error;
 mod menu;
 mod metro;
+mod tray;
 
-use tauri::{Emitter, Manager, RunEvent};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+use tauri::{Emitter, Manager, RunEvent, WindowEvent};
 
 use crate::daemon::{DaemonStatus, Supervisor};
+use crate::tray::TrayState;
 
 /// The event the UI waits on before it asks the daemon for anything.
 const STATUS_EVENT: &str = "daemon://status";
+
+/// Told to the page when the window is hidden rather than closed, so it can do
+/// what the Mac's `AppState.enterBackground` does: stop the work that was only
+/// running because a window was open.
+const BACKGROUND_EVENT: &str = "app://background";
+
+/// Settings ▸ General ▸ "Keep running in the background", mirrored from the
+/// page. Defaults to on, as it does on the Mac.
+#[derive(Debug)]
+pub struct BackgroundMode(AtomicBool);
+
+impl Default for BackgroundMode {
+    fn default() -> Self {
+        Self(AtomicBool::new(true))
+    }
+}
+
+impl BackgroundMode {
+    fn is_enabled(&self) -> bool {
+        self.0.load(Ordering::Relaxed)
+    }
+
+    fn set(&self, enabled: bool) {
+        self.0.store(enabled, Ordering::Relaxed);
+    }
+}
+
+/// Hides the window instead of closing it, when there is a tray to get it back
+/// from and the user has asked for that.
+///
+/// The tray check is not belt and braces: a desktop that gave us no tray icon
+/// would otherwise hide the window into a process nobody can reach, and
+/// "closing the window quits" is the correct behaviour there rather than a
+/// degraded one.
+fn on_window_event(window: &tauri::Window, event: &WindowEvent) {
+    let WindowEvent::CloseRequested { api, .. } = event else {
+        return;
+    };
+    if window.label() != "main" {
+        return;
+    }
+    let app = window.app_handle();
+    if !app.state::<BackgroundMode>().is_enabled() || !app.state::<TrayState>().is_present() {
+        return;
+    }
+    api.prevent_close();
+    let _ = window.hide();
+    let _ = window.emit(BACKGROUND_EVENT, true);
+}
 
 /// Builds the app, starts the daemon in the background, and runs the event
 /// loop until the window closes.
@@ -42,8 +95,17 @@ pub fn run() -> tauri::Result<()> {
         // the page cannot post one on its own.
         .plugin(tauri_plugin_notification::init())
         .manage(Supervisor::default())
+        .manage(BackgroundMode::default())
+        .manage(TrayState::default())
         .invoke_handler(handlers())
+        .on_window_event(|window, event| {
+            on_window_event(window, event);
+        })
         .setup(|app| {
+            // Before the daemon: the tray is what a hidden window is reached
+            // through, and whether one exists decides what the close button
+            // does from the first click.
+            tray::install(app.handle());
             // Off the setup path: spawning the sidecar and waiting for its
             // port line takes as long as it takes, and blocking here would
             // hold the window back with nothing to show for it.
@@ -158,6 +220,11 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         commands::copy_text,
         commands::reveal_path,
         commands::post_notification,
+        commands::set_tray_menu,
+        commands::set_background_mode,
+        commands::background_available,
+        commands::show_main_window,
+        commands::quit_app,
         commands::open_url,
         commands::captures_folder,
         commands::export_text,

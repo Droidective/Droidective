@@ -72,6 +72,17 @@ export function ShellOverlays({
 
       {state.settings ? (
         <SettingsWindow
+          general={{
+            features,
+            keepRunningInBackground: workspace.layout.keepRunningInBackground,
+            onKeepRunningInBackground: workspace.setKeepRunningInBackground,
+            trayItems: workspace.layout.trayItems,
+            onTrayItem: workspace.setTrayItem,
+            sidebarOrder: workspace.layout.sidebarOrder,
+            categoryOrder: workspace.layout.categoryOrder,
+            favorites: workspace.layout.favorites,
+            disabledFeatures: workspace.layout.disabledFeatures,
+          }}
           appearance={{
             sidebarAutoHide: workspace.layout.sidebarAutoHide,
             onSidebarAutoHide: workspace.setSidebarAutoHide,

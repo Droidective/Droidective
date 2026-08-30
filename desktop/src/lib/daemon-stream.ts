@@ -31,6 +31,28 @@ export interface Subscription {
   stop: () => Promise<void>
 }
 
+/**
+ * Every subscription this window has open.
+ *
+ * Kept because background mode has to end all of them at once: the Mac's
+ * `AppState.enterBackground` walks its open features and stops each one's work,
+ * and the equivalent here is that nothing keeps streaming out of a device into
+ * a window nobody can see. A window's worth of live subscriptions is a handful,
+ * so a Set is the whole data structure this needs.
+ */
+const live = new Set<Subscription>()
+
+/**
+ * Stops everything, for a window that has just been hidden.
+ *
+ * Deliberately a stop and not a pause: the Mac stops this work rather than
+ * suspending it — terminal shells included — and says so in Settings. A screen
+ * re-entered afterwards subscribes again the way it did the first time.
+ */
+export async function stopAllStreams(): Promise<void> {
+  await Promise.all([...live].map((subscription) => subscription.stop()))
+}
+
 async function subscribe<Item>(
   command:
     | "open_terminal"
@@ -49,16 +71,22 @@ async function subscribe<Item>(
   // oxlint-disable-next-line unicorn/prefer-add-event-listener
   channel.onmessage = onUpdate
   const id = await invoke<number>(command, { ...args, onEvent: channel })
-  return {
+  const subscription: Subscription = {
     id,
     stop: async () => {
       // Detach first: a batch already in flight must not reach a view that
       // has unmounted.
       // oxlint-disable-next-line unicorn/prefer-add-event-listener
       channel.onmessage = () => {}
+      // Before the await, so a pane unmounting after the background teardown
+      // already stopped its stream does not send a second request for an id
+      // the daemon has forgotten.
+      if (!live.delete(subscription)) return
       await invoke("stop_watching", { id })
     },
   }
+  live.add(subscription)
+  return subscription
 }
 
 export function watchDevices(

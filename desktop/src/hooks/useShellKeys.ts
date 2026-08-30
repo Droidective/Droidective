@@ -4,6 +4,7 @@ import { useMenuCommands } from "@/hooks/useMenuCommands"
 import { useRunFeature } from "@/hooks/useRunFeature"
 import { useShellShortcuts } from "@/hooks/useShellShortcuts"
 import { useTerminalCommands } from "@/hooks/useTerminalCommands"
+import { useTray } from "@/hooks/useTray"
 import type { SidebarModeController } from "@/hooks/useSidebarMode"
 import type { WorkspaceController } from "@/hooks/useWorkspace"
 import type { Device, FeatureSummary } from "@/lib/wire"
@@ -50,10 +51,25 @@ export function useShellKeys({
     onZoom: workspace.zoom,
   })
 
+  const run = useRunFeature({ device, packageId })
+
   useFeatureHotkeys({
     bindings: workspace.layout.hotkeys,
     features,
-    onRun: useRunFeature({ device, packageId }),
+    onRun: run,
+    onOpen: workspace.open,
+  })
+
+  // The tray is a third way to reach these same commands, so it dispatches
+  // from here for the reason the menu does: two call sites is how a click and
+  // its keystroke come to do different things.
+  useTray({
+    device,
+    features,
+    chosen: workspace.layout.trayItems,
+    favorites: workspace.layout.favorites,
+    disabled: workspace.layout.disabledFeatures,
+    onRun: run,
     onOpen: workspace.open,
   })
 

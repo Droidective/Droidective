@@ -20,7 +20,11 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2.6.3", features = [] }
 
 [dependencies]
-tauri = { version = "2.11.5", features = [] }
+# `tray-icon` is what background mode stands on: closing the window hides it,
+# and the tray is the way back. On Linux that means libayatana-appindicator,
+# which the .deb declares — a runtime dependency, so the class of bug only the
+# smoke test finds.
+tauri = { version = "2.11.5", features = ["tray-icon"] }
 # The supported way to spawn a bundled sidecar and own its lifetime: it
 # resolves the per-platform binary location that a hand-rolled path would get
 # wrong on at least one of the three targets.

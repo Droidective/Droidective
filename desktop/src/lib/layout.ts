@@ -73,6 +73,23 @@ export interface LayoutState {
   focusedPane: number
   /** Where the divider sits when split, as a fraction of the split area. */
   splitFraction: number
+  /**
+   * Closing the window hides the app behind the tray instead of quitting.
+   *
+   * The Mac's `keepRunningInBackground`, default on — and like the Mac's it is
+   * only half the condition: closing quits anyway on a desktop that gave the
+   * app no tray icon, because hiding a window nobody can bring back is not a
+   * mode worth having.
+   */
+  keepRunningInBackground: boolean
+  /**
+   * The features the tray lists, when the user has chosen some.
+   *
+   * The Mac's `LayoutState.menuBarItems`, with the same meaning for empty:
+   * *not chosen*, so the pinned features are shown instead — and failing
+   * those, the enabled instant actions.
+   */
+  trayItems: string[]
 }
 
 const STORAGE_KEY = "droidective.layout"
@@ -91,6 +108,8 @@ export function emptyLayout(): LayoutState {
     panes: [{ tabs: [HOME_TAB], activeTab: HOME_TAB }],
     focusedPane: 0,
     splitFraction: 0.5,
+    keepRunningInBackground: true,
+    trayItems: [],
   }
 }
 
@@ -129,6 +148,10 @@ export function loadLayout(storage: Pick<Storage, "getItem">): LayoutState {
     panes: panes.length === 0 ? emptyLayout().panes : panes,
     focusedPane: typeof saved.focusedPane === "number" ? saved.focusedPane : 0,
     splitFraction: typeof saved.splitFraction === "number" ? saved.splitFraction : 0.5,
+    // Absent means default-on, which is not what `=== true` says — this is the
+    // one boolean here whose default is true.
+    keepRunningInBackground: saved.keepRunningInBackground !== false,
+    trayItems: stringArray(saved.trayItems),
   }
 }
 

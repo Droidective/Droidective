@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import { X } from "lucide-react"
 import { AppearanceTab, type AppearanceTabProps } from "@/components/settings/AppearanceTab"
 import { DoctorTab } from "@/components/settings/DoctorTab"
-import { GeneralTab } from "@/components/settings/GeneralTab"
+import { GeneralTab, type GeneralTabProps } from "@/components/settings/GeneralTab"
 import { HotkeysTab, type HotkeysTabProps } from "@/components/settings/HotkeysTab"
 import { PrivacyTab } from "@/components/settings/PrivacyTab"
 import { SETTINGS_TABS, type SettingsTab } from "@/lib/settings"
@@ -23,10 +23,13 @@ import { cn } from "@/lib/cn"
  */
 export function SettingsWindow({
   onDismiss,
+  general,
   hotkeys,
   appearance,
 }: {
   onDismiss: () => void
+  /** Background mode and the tray's chosen features, from the workspace. */
+  general: GeneralTabProps
   /** Everything Settings ▸ Hotkeys needs, forwarded from the workspace. */
   hotkeys: HotkeysTabProps
   /** The two Window controls, which live on the workspace's layout. */
@@ -83,7 +86,7 @@ export function SettingsWindow({
         </nav>
 
         <div className="min-w-0 flex-1 overflow-y-auto p-5">
-          <Pane tab={tab} hotkeys={hotkeys} appearance={appearance} />
+          <Pane tab={tab} general={general} hotkeys={hotkeys} appearance={appearance} />
         </div>
 
         <button
@@ -101,16 +104,18 @@ export function SettingsWindow({
 
 function Pane({
   tab,
+  general,
   hotkeys,
   appearance,
 }: {
   tab: SettingsTab
+  general: GeneralTabProps
   hotkeys: HotkeysTabProps
   appearance: AppearanceTabProps
 }) {
   switch (tab) {
     case "general":
-      return <GeneralTab />
+      return <GeneralTab {...general} />
     case "appearance":
       return <AppearanceTab {...appearance} />
     case "privacy":
