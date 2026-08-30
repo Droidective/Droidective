@@ -83,22 +83,34 @@ import Testing
 
     /// Runs a command, or answers nil if it never came back.
     ///
-    /// The losing branch is cancelled, which is what tears the child down —
-    /// `SystemProcessRunner.run` kills it from its cancellation handler.
+    /// **Deliberately not a task group.** A group awaits every child before it
+    /// returns, and cancelling one that is suspended on a continuation nobody
+    /// will resume does not wake it — so the obvious spelling of this
+    /// *inherits* the hang it exists to bound, which is how the first two
+    /// attempts each parked a Windows job for a quarter of an hour. Two
+    /// unstructured tasks racing one continuation is the shape that can walk
+    /// away, and walking away from a wedged call is the whole point.
+    ///
+    /// The abandoned task is cancelled on the way past, which is what tears the
+    /// child down (`SystemProcessRunner.run` kills it from its cancellation
+    /// handler) for every case where cancellation *can* be observed.
     static func bounded(
         _ label: String, _ work: @escaping @Sendable () async -> ProcessOutput
     ) async -> (output: ProcessOutput?, elapsed: Duration) {
         let clock = ContinuousClock()
         let started = clock.now
-        let output = await withTaskGroup(of: ProcessOutput?.self) { group in
-            group.addTask { await work() }
-            group.addTask {
-                try? await Task.sleep(for: giveUpAfter)
-                return nil
+        let answered = LockedBox(false)
+        let output: ProcessOutput? = await withCheckedContinuation { continuation in
+            let running = Task {
+                let result = await work()
+                if !answered.swap(true) { continuation.resume(returning: result) }
             }
-            let first = await group.next() ?? nil
-            group.cancelAll()
-            return first
+            Task {
+                try? await Task.sleep(for: giveUpAfter)
+                guard !answered.swap(true) else { return }
+                running.cancel()
+                continuation.resume(returning: nil)
+            }
         }
         let elapsed = clock.now - started
         print("=== \(label) took \(elapsed)\(output == nil ? " AND NEVER RETURNED" : "") ===")
