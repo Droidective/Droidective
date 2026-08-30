@@ -61,6 +61,25 @@ right on your GNOME, at your DPI, with your GPU.
 - [ ] **Fonts and DPI look right** at 100% and at a scaled display.
 - [ ] **The menu bar** appears where that OS puts it, and its accelerators fire
       (Ctrl, not ⌘).
+- [ ] **The tray icon appears, and closing the window hides rather than quits.**
+      Verified end to end on macOS — the menu is built, the window closes to it,
+      and "Open Droidective" brings it back — but the tray is the one part of
+      that chain the *desktop* owns. On Linux it needs an indicator host: the
+      `.deb` depends on `libayatana-appindicator3-1`, and GNOME additionally
+      wants its AppIndicator extension, which Ubuntu ships and a stock Fedora
+      does not. The app already refuses to hide a window it cannot bring back —
+      Settings ▸ General says so when no icon was created — so what needs a
+      person is whether the icon is *there* on your desktop, and whether it
+      looks right in that panel.
+- [ ] **A global shortcut fires from another app.** The recorded shortcuts are
+      registered with the OS, and the platform refuses one another app already
+      holds. Which combinations are already taken is a fact about the machine,
+      so this needs a real desktop: record one, switch to a browser, press it.
+- [ ] **The Quick Actions panel behaves like a panel.** It is not the Mac's
+      non-activating `NSPanel` — no such window exists here — so it takes focus
+      and hands it back by hiding. Whether that reads as a summonable panel or
+      as a window that stole your place is a judgement nobody can make from a
+      screenshot.
 
 ## 2. A physical Android device
 
