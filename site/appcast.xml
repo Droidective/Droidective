@@ -6,10 +6,10 @@
     <description>Most recent Droidective updates.</description>
     <language>en</language>
     <item>
-      <title>Droidective 3.10.0-beta.3</title>
+      <title>Droidective 3.10.0-beta.4</title>
       <sparkle:channel>beta</sparkle:channel>
-      <sparkle:version>889</sparkle:version>
-      <sparkle:shortVersionString>3.10.0-beta.3</sparkle:shortVersionString>
+      <sparkle:version>901</sparkle:version>
+      <sparkle:shortVersionString>3.10.0-beta.4</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <description><![CDATA[
 <style>
@@ -25,96 +25,106 @@ pre { background: color-mix(in srgb, currentColor 8%, transparent); padding: .6e
 pre code { background: none; padding: 0; }
 a { color: #2f9e44; }
 </style>
-<p>The Windows and Linux app grows the three things it was missing that people
-notice first: it tells you when something finishes while you are elsewhere, it
-stays out of the way without quitting, and it can be summoned over whatever you
-are working in. Behind all of that, the reason the Windows app looked broken on
-its first launch turned out not to be what the note in the tracker said.</p>
-<h3>The Windows app was hanging, not being slow</h3>
+<p>Five more of the Mac's features reach Windows and Linux, and two of them could
+not simply be moved across — the recorder and the file drops both needed a
+different answer here than the one macOS gave. Everything else is the same
+screen, the same wording, the same gestures.</p>
+<h3>API Testing</h3>
 <ul>
 <li>
-<strong>The first <code>adb devices</code> on Windows never returned.</strong> The app came up
-showing "0 features" and no error, which is exactly what Linux did before the
-last beta fixed it there. It had been written down as <em>slow rather than dead</em>
-on the evidence of a stand-in that returned after thirty seconds — but the
-stand-in slept, and adb's grandchild is a <em>server</em>, which does not exit at
-all. Timing the real call settled it.</li>
+<strong>The whole client is here.</strong> Collections and nested folders, environments,
+<code>{{variable}}</code> scopes with the unresolved ones surfaced before a send rather
+than sent as literal braces, assertions on status, timing, body, header and
+JSON path, a collection runner, code generation to six targets, Postman
+import and export, and a cURL paste that parses back into a request.</li>
 <li>
-<strong>The fix is a second way to notice a child has gone.</strong> Windows now waits on
-the process handle, which the OS signals the moment the child exits —
-inherited pipes and surviving grandchildren included. The whole ADBKit suite
-runs there in six seconds where one test used to sit at thirty, and the
-regression test that was gated off Windows for "destabilising" a neighbour
-runs again: that neighbour was the same missing exit report, seen from the
-other end.</li>
-<li>
-<strong>Both smoke tests now time it.</strong> The Linux one, on every pull request, and
-the Windows one on every beta tag, ask the running app for its device list
-and fail if the answer takes longer than ten seconds. An empty answer is
-fine; an answer arriving is the point.</li>
-<li>
-<strong>The app no longer waits for the device list to show anything.</strong> Its two
-startup calls used to arrive together, which handed the slower of them the
-decision about when the app became usable. The sidebar now paints as soon as
-the registry answers, whatever adb is doing.</li>
+<strong>The collection runner deliberately stayed in the app.</strong> It would have been
+one daemon call; instead the client walks the tree and sends one request at a
+time, so progress is live and Stop is instant rather than "the run finishes
+and then tells you".</li>
 </ul>
-<h3>It tells you when you are looking somewhere else</h3>
+<h3>Recording the screen</h3>
 <ul>
 <li>
-<strong>A result that lands while you are in another app posts a notification.</strong>
-Not a list of events, but the same rule the Mac uses: the results already
-worth keeping in the notification panel are the ones worth interrupting for,
-so an install finishing and a watched crash landing both arrive without
-either screen knowing a tray exists. Failures carry a sound; routine
-confirmations stay quiet.</li>
+<strong>The recorder is a new pipeline, not a port.</strong> The Mac records through its
+Apple-only media stack, so there was nothing to move: the daemon now feeds
+the scrcpy H.264 stream straight into ffmpeg and copies the video track
+without re-encoding. Pause and resume produce segments that the concat
+demuxer joins at the end, so a paused take is one file.</li>
+<li>
+<strong>A recording said 30 seconds for a 12-second file.</strong> The clock had been
+running from the button press, and scrcpy takes a few seconds to produce its
+first frame. It is measured from the first frame to the last now — 13.820
+reported against 13.819 in the file.</li>
+<li>
+<strong>ffmpeg is downloaded rather than bundled.</strong> Digest-verified from a pinned
+release, <code>.tar.xz</code> on Linux and <code>.zip</code> on Windows, which is also what
+unblocked <strong>Settings ▸ Tools</strong> — the managed-tool store, with sizes, upgrades
+and removal.</li>
 </ul>
-<h3>It stays running without staying in the way</h3>
+<h3>More than one window</h3>
 <ul>
 <li>
-<strong>Closing the window leaves Droidective in the tray</strong> instead of quitting it,
-stops the work that was only running because a window was open — terminal
-shells included — and keeps the shortcuts alive. The tray menu is the Mac's
-menu-bar menu: the selected device, Quick Actions, Screenshot, Mirror Screen,
-the features you chose in Settings, then Open and Quit.</li>
+<strong>One window per device</strong>, each with its own tabs, its own arrangement and
+its own device selection, restored where you left them.</li>
 <li>
-<strong>Only where there is somewhere to click.</strong> A Linux session can decline to
-give an app a tray icon, and hiding a window nobody can bring back is not a
-mode worth having, so the app checks and Settings says so instead of
-offering the switch. The <code>.deb</code> now depends on <code>libayatana-appindicator3-1</code>.</li>
+<strong>The Focus / Take Over banner</strong> for the features that cannot run twice on
+one device — the mirror, the recorder, the JS console — instead of two
+windows racing each other for the same encoder.</li>
 <li>
-<strong>Recorded shortcuts are registered with the system.</strong> They fire from
-whatever app you are in, and from a window closed into the tray. A
-combination another app already holds is refused by the platform and goes on
-working while Droidective has focus, rather than working nowhere.</li>
+<strong>Every window after the first tints its device icon</strong>, so which window you
+are looking at is answerable without reading the tab strip.</li>
 </ul>
-<h3>Quick Actions</h3>
+<h3>Files dropped on the window</h3>
 <ul>
 <li>
-<strong>A panel over whatever you are doing</strong>, on a shortcut you record in
-Settings ▸ Hotkeys or from the tray's first item: a search field over a grid
-of everything runnable in place, your saved commands under it, and the
-full-app screens under those. Arrows move the grid while you are still
-typing, Enter runs, Escape closes.</li>
+<strong>An APK or app bundle dropped anywhere installs it</strong>, whatever screen is in
+front; anything else dropped on the File Explorer is pushed to the directory
+it is showing. Anywhere else says which of the two to do rather than guessing
+a destination on someone else's device.</li>
 <li>
-<strong>It asks before it acts.</strong> A destructive action waits for a second Enter. A
-device-scoped one asks which device when more than one is connected, with an
-All devices row for the actions that fan out. A form action shows its fields;
-so does a toggle, because guessing a direction and writing it to a device is
-worse than asking.</li>
-<li>Manage Apps, Emulators and Install APK are not in the panel yet.</li>
+<strong>The in-app drags were the constraint.</strong> Turning on the toolkit's own
+file-drop handler stops every drag inside the page working — the tab strip,
+the sidebar, the mirror wall — so instead of trading one for the other, a
+dropped file's <em>bytes</em> are staged on the way through. One copy, and nothing
+that already worked had to be rewritten.</li>
 </ul>
-<h3>Appearance</h3>
+<h3>Look and first launch</h3>
 <ul>
 <li>
-<strong>Pick the window's background and text colour.</strong> Eight presets, a colour
-well and a hex field, with the lifted surfaces, the hairlines and the muted
-text derived from what you picked — so a custom colour keeps the same
-hierarchy the stock one has. A light background switches the whole app to
-the light treatment, and the Theme picker says so rather than fighting it.</li>
+<strong>The window can be glass.</strong> Settings ▸ Appearance ▸ Window gains Opacity and
+Grain — the Mac's sliders, with the Mac's arithmetic, so a window set up on
+one machine looks the same on the other. At 100% nothing changes at all.</li>
+<li>
+<strong>Blur is a switch here, not a slider.</strong> No desktop platform lets an
+application ask for a blur <em>radius</em>: Windows has Acrylic, which is on or off,
+and on Linux the compositor decides entirely. A slider with two positions
+would be a worse lie than a switch, so the row says what the platform will
+actually do.</li>
+<li>
+<strong>First launch asks what you do.</strong> The role picker curates the sidebar to
+Android, React Native, iOS, QA, support or security work — with the tool
+counts following the "I work with React Native" switch live — and Settings ▸
+General names the role in effect and lets you change it. Escape leaves it.</li>
+</ul>
+<h3>Fixes</h3>
+<ul>
+<li>
+<strong>A form action with two devices connected was a Run button that did
+nothing.</strong> Only one screen can be in front of the Quick Actions panel, and it
+checked the form first, so the pick-a-device step opened behind the form that
+had just been submitted. Found while adding the step that asks <em>which app</em> an
+action that needs one should run against.</li>
+<li>
+<strong>The Linux smoke test was photographing the wrong thing.</strong> It drives the app
+on every pull request, and once the role picker appeared on first launch its
+keystrokes were going into that instead. It now dismisses the picker and
+proves it went away before driving anything, so the job checks three things
+where it had been checking one.</li>
 </ul>
 ]]></description>
-      <pubDate>Sun, 30 Aug 2026 21:44:26 +0000</pubDate>
-      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.10.0-beta.3/Droidective-v3.10.0-beta.3.dmg" sparkle:edSignature="tfR+G7sqCYiarkD6vhUz1oDv7hTBh7rwesqk2Dm5AwWncKWJ/ULf0oVLPCFsJk+/2iXKYGD2o3X/9kshCVlNDg==" length="145189856" type="application/octet-stream" />
+      <pubDate>Mon, 31 Aug 2026 20:05:02 +0000</pubDate>
+      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.10.0-beta.4/Droidective-v3.10.0-beta.4.dmg" sparkle:edSignature="qej8n9oTVg5NA5RiAMW9S/fRGOHT8HNjqSoI/yOs0tinf5EFX7Hf/MFt8Eju2qJzLMdJnTssT4FQ4q6Ghfr1Cw==" length="145188178" type="application/octet-stream" />
     </item>
     <item>
       <title>Droidective 3.9.2</title>
