@@ -117,14 +117,33 @@ import Testing
 
     // MARK: catalog invariants
 
-    @Test func everyManagedToolHasASpecWithAPinnedReleaseURL() {
-        for tool in ManagedTool.allCases {
-            let spec = ManagedToolSpec.catalog[tool]
-            #expect(spec != nil, "missing catalog spec for \(tool.rawValue)")
-            #expect(spec?.tool == tool)
-            #expect(spec?.pinnedTag.isEmpty == false, "\(tool.rawValue) needs a pinned tag")
-            #expect(spec?.pinnedReleaseURL?.absoluteString
-                == "https://api.github.com/repos/\(spec!.owner)/\(spec!.repo)/releases/tags/\(spec!.pinnedTag)")
+    /// Every spec this host offers is complete and pinned.
+    ///
+    /// `hostCatalog` rather than `ManagedTool.allCases`: not every tool is
+    /// managed on every platform. ffmpeg is *bundled* on the Mac and downloaded
+    /// off it, so the enum has a case the Mac's catalog deliberately does not
+    /// carry — asking every case for a spec would fail on the one platform that
+    /// does not need one.
+    @Test func everyOfferedToolHasASpecWithAPinnedReleaseURL() throws {
+        for (tool, spec) in ManagedToolSpec.hostCatalog {
+            #expect(spec.tool == tool)
+            #expect(!spec.pinnedTag.isEmpty, "\(tool.rawValue) needs a pinned tag")
+            #expect(spec.pinnedReleaseURL?.absoluteString
+                == "https://api.github.com/repos/\(spec.owner)/\(spec.repo)/releases/tags/\(spec.pinnedTag)")
         }
+    }
+
+    /// And what each platform offers is the platform's own answer, not a
+    /// leftover: the Mac bundles ffmpeg, so it must not appear there, and every
+    /// other platform must download it — a missing entry would be a Tools
+    /// screen that silently cannot record.
+    @Test func ffmpegIsManagedEverywhereItIsNotBundled() throws {
+        #if os(macOS)
+        #expect(ManagedToolSpec.hostCatalog[.ffmpeg] == nil, "ffmpeg is bundled on macOS")
+        #else
+        let spec = try #require(ManagedToolSpec.hostCatalog[.ffmpeg])
+        #expect(!spec.runnableName.isEmpty)
+        #expect(!spec.assetPattern.isEmpty)
+        #endif
     }
 }
