@@ -231,6 +231,23 @@ export {
   writeDevSetting,
   writeRestriction,
 } from "@/lib/daemon-settings"
+export type {
+  ApiSendResponse,
+  AssertionOutcomeWire,
+  RedirectHop,
+  ResponseCookie,
+  ResponseTiming,
+} from "@/lib/daemon-api"
+export {
+  apiCancel,
+  apiCode,
+  apiCurl,
+  apiExport,
+  apiImport,
+  apiSend,
+  apiWorkspace,
+  apiWrite,
+} from "@/lib/daemon-api"
 export { customCommands, runCustomCommand, writeCustomCommands } from "@/lib/daemon-commands"
 export {
   apkToolchain,

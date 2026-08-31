@@ -97,6 +97,21 @@ public enum DaemonProtocol {
         case toolsDetect = "/v1/tools/detect"
         case reactotronReverse = "/v1/reactotron/reverse"
         case reactotronUnreverse = "/v1/reactotron/unreverse"
+        /// API Testing. The workspace read/write pair takes the whole document
+        /// for the reason the deep links and custom commands do — the client
+        /// holds what it is showing — and the rest are the four things a
+        /// browser-side client cannot do for itself: send a request without a
+        /// CORS opinion, generate code, parse a cURL line, and read or write a
+        /// Postman file. There is deliberately no runner route: see
+        /// `ApiClientProtocol`.
+        case apiRead = "/v1/api/read"
+        case apiWrite = "/v1/api/write"
+        case apiSend = "/v1/api/send"
+        case apiCancel = "/v1/api/cancel"
+        case apiCode = "/v1/api/code"
+        case apiCurl = "/v1/api/curl"
+        case apiImport = "/v1/api/import"
+        case apiExport = "/v1/api/export"
     }
 
     /// The multiplexed stream socket. Not a `Route`: it is a WebSocket upgrade

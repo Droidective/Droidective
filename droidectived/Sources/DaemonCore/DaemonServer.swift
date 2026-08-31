@@ -189,6 +189,30 @@ public protocol DaemonBackend: Sendable {
     /// is not. Best-effort by construction — a tool that cannot be found is the
     /// answer, not an error.
     func detectTools() async -> [Tool: ToolStatus]
+    /// The saved API Testing workspace. Best-effort like the other stores: one
+    /// that will not load reads as an empty workspace rather than a screen that
+    /// refuses to draw.
+    func apiWorkspace() async -> ApiClientData
+    /// Replaces the whole document. Throws only when the store cannot be written.
+    func writeApiWorkspace(_ data: ApiClientData) async throws
+    /// Sends one HTTP request. Throws when the transport never reached a
+    /// response — a non-2xx status is an answer, not a failure.
+    func sendApiRequest(_ request: ApiClientProtocol.SendRequest) async throws -> ApiSendOutcome
+    /// Stops an in-flight send. False when there was nothing to stop, which is
+    /// the ordinary race rather than a failure.
+    func cancelApiSend(sendId: String) async -> Bool
+    /// A code snippet for one request. Device-free and pure, so there is no
+    /// failure branch: an unknown target is refused before it gets here.
+    func apiCode(_ request: ApiClientProtocol.CodeRequest) async -> String
+    /// Parses a cURL command line, or nil when the text is not one.
+    func parseCurl(_ text: String) async -> CurlImport?
+    /// Reads a Postman collection, a Postman environment, or a Droidective
+    /// workspace export, with fresh ids applied.
+    func importApiFile(path: String) async throws -> ApiClientProtocol.ImportResponse
+    /// Builds the JSON for an export, and the name to offer for it.
+    func exportApi(
+        _ request: ApiClientProtocol.ExportRequest
+    ) async throws -> ApiClientProtocol.ExportResponse
 }
 
 /// `DeviceMonitor` in production.
@@ -203,6 +227,15 @@ public struct LiveBackend: DaemonBackend {
     /// The same on-disk stores the Mac app uses, under the shared support dir.
     private let deepLinkStore: JSONStore<DeepLinksMap>
     private let customCommandStore: JSONStore<[CustomCommand]>
+    /// The API Testing workspace — the Mac's own `api-client.json`.
+    private let apiClientStore: JSONStore<ApiClientData>
+    /// One actor for every send, as the Mac keeps one on `FeatureEngine`: it
+    /// holds no per-request state, and building one per call would throw away
+    /// nothing but is a needless allocation on a route that can be hot during a
+    /// collection run.
+    private let httpClient = HttpClientService()
+    /// Sends a client may still ask to stop. See `sendApiRequest`.
+    private let inFlight = InFlightSends()
     /// The APK tools, over the same managed-tool directory the feature engine
     /// uses — one download of jadx or bundletool serves both.
     private let apkToolchainValue: ApkToolchain
@@ -219,6 +252,7 @@ public struct LiveBackend: DaemonBackend {
         emulators: EmulatorService, locator: ToolLocator,
         deepLinks: JSONStore<DeepLinksMap>,
         customCommands: JSONStore<[CustomCommand]>,
+        apiClient: JSONStore<ApiClientData>,
         toolsDirectory: URL
     ) {
         self.monitor = monitor
@@ -228,6 +262,7 @@ public struct LiveBackend: DaemonBackend {
         self.locator = locator
         deepLinkStore = deepLinks
         customCommandStore = customCommands
+        apiClientStore = apiClient
         apkToolchainValue = ApkToolchain(
             locator: locator, store: ManagedToolStore(rootDirectory: toolsDirectory))
         decompileCache = AppPaths.decompiledCacheDir
@@ -707,6 +742,109 @@ public struct LiveBackend: DaemonBackend {
         await ToolDetectionService(locator: locator).detectAll()
     }
 
+    public func apiWorkspace() async -> ApiClientData {
+        await apiClientStore.load()
+    }
+
+    public func writeApiWorkspace(_ data: ApiClientData) async throws {
+        try await apiClientStore.save(data)
+    }
+
+    /// Sends, registering the work so `cancelApiSend` can reach it.
+    ///
+    /// The `Task` is not ceremony: cancellation rides Swift's own, and the
+    /// route handler's task belongs to one HTTP request that is *still open* —
+    /// so without a handle a second request has nothing to cancel. A send with
+    /// no `sendId` skips the registry entirely, which is what the collection
+    /// runner sends.
+    public func sendApiRequest(
+        _ request: ApiClientProtocol.SendRequest
+    ) async throws -> ApiSendOutcome {
+        let client = httpClient
+        let send = {
+            try await client.send(
+                request.request, scope: request.scope.model,
+                inheritedAuth: request.inheritedAuth)
+        }
+        guard let sendId = request.sendId, !sendId.isEmpty else { return try await send() }
+
+        let task = Task { try await send() }
+        await inFlight.register(sendId, task: task)
+        defer { Task { await inFlight.finished(sendId) } }
+        return try await task.value
+    }
+
+    public func cancelApiSend(sendId: String) async -> Bool {
+        await inFlight.cancel(sendId)
+    }
+
+    public func apiCode(_ request: ApiClientProtocol.CodeRequest) async -> String {
+        // `.curl` rather than a throw for an unknown target: the route already
+        // refused one, so this branch is unreachable and a trap here would be a
+        // crash for a value that cannot arrive.
+        let target = CodeTarget(rawValue: request.target) ?? .curl
+        var source = request.request
+        if source.auth.type == .none, let inherited = request.inheritedAuth,
+           inherited.type != .none {
+            source.auth = inherited
+        }
+        return CodeGenerator.generate(target, for: source, scope: request.scope.model)
+    }
+
+    public func parseCurl(_ text: String) async -> CurlImport? {
+        CurlParser.parseWithWarnings(text)
+    }
+
+    public func importApiFile(
+        path: String
+    ) async throws -> ApiClientProtocol.ImportResponse {
+        let payload = try Data(contentsOf: URL(fileURLWithPath: path))
+        let result = try PostmanFormat.importFile(payload)
+        // Fresh ids before anything is answered: importing the same file twice
+        // must not produce two collections that share every id, which is what
+        // the Mac's own import does on the way in.
+        let collections = result.collections.map { collection -> ApiCollection in
+            var copy = collection
+            copy.id = UUID().uuidString
+            copy.items = ApiCollectionTree.reidentifying(copy.items)
+            return copy
+        }
+        let environments = result.environments.map { environment -> ApiEnvironment in
+            var copy = environment
+            copy.id = UUID().uuidString
+            return copy
+        }
+        return ApiClientProtocol.ImportResponse(
+            collections: collections, environments: environments,
+            summary: result.isEmpty
+                ? "Nothing in that file could be imported." : result.summary,
+            warnings: result.warnings)
+    }
+
+    public func exportApi(
+        _ request: ApiClientProtocol.ExportRequest
+    ) async throws -> ApiClientProtocol.ExportResponse {
+        switch request.payload {
+        case .collection(let collection):
+            let json = try PostmanFormat.exportCollection(
+                collection, includeSecrets: request.includeSecrets)
+            return ApiClientProtocol.ExportResponse(
+                json: String(decoding: json, as: UTF8.self),
+                suggestedName: "\(collection.name).postman_collection.json")
+        case .environment(let environment):
+            let json = try PostmanFormat.exportEnvironment(environment)
+            return ApiClientProtocol.ExportResponse(
+                json: String(decoding: json, as: UTF8.self),
+                suggestedName: "\(environment.name).postman_environment.json")
+        case .workspace(let data):
+            let json = try PostmanFormat.exportWorkspace(
+                data, includeSecrets: request.includeSecrets)
+            return ApiClientProtocol.ExportResponse(
+                json: String(decoding: json, as: UTF8.self),
+                suggestedName: "droidective-api.json")
+        }
+    }
+
     private func waitForShutdown(serial: String) async {
         for _ in 0 ..< 20 {
             let devices = await monitor.list(force: true)
@@ -1117,6 +1255,30 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
                 body: Data(body.readableBytesView), backend: backend))
         case .reactotronUnreverse:
             return Self.answer(await ReactotronRoutes.unreverse(
+                body: Data(body.readableBytesView), backend: backend))
+
+        case .apiRead:
+            return Self.answer(await ApiClientRoutes.read(backend: backend))
+        case .apiWrite:
+            return Self.answer(await ApiClientRoutes.write(
+                body: Data(body.readableBytesView), backend: backend))
+        case .apiSend:
+            return Self.answer(await ApiClientRoutes.send(
+                body: Data(body.readableBytesView), backend: backend))
+        case .apiCancel:
+            return Self.answer(await ApiClientRoutes.cancel(
+                body: Data(body.readableBytesView), backend: backend))
+        case .apiCode:
+            return Self.answer(await ApiClientRoutes.code(
+                body: Data(body.readableBytesView), backend: backend))
+        case .apiCurl:
+            return Self.answer(await ApiClientRoutes.curl(
+                body: Data(body.readableBytesView), backend: backend))
+        case .apiImport:
+            return Self.answer(await ApiClientRoutes.importFile(
+                body: Data(body.readableBytesView), backend: backend))
+        case .apiExport:
+            return Self.answer(await ApiClientRoutes.export(
                 body: Data(body.readableBytesView), backend: backend))
 
         case .actionsRun:

@@ -5,6 +5,7 @@ import { CatalogPane } from "@/components/CatalogPane"
 import { HomeView } from "@/components/HomeView"
 import {
   AabConvertPane,
+  ApiClientPane,
   ApkInspectorPane,
   ApkSignPane,
   ApkStudioPane,
@@ -231,6 +232,11 @@ function hostPane({ id, device, packageId, onOpen }: FeaturePaneProps) {
       // The hub over the three above. Reachable on its own too — the members
       // fold into it once this app has the screen (`lib/hubs.ts`).
       return <ApkStudioPane />
+    case "api-client":
+      // Device-free by construction: nothing on this screen touches adb, which
+      // is why it draws with nothing connected — the Mac's own reason for
+      // keeping it out of `NoDeviceView`.
+      return <ApiClientPane />
     case "wireless-adb":
       // Host-side: it is about the devices themselves, so it works — and is
       // most wanted — with nothing selected in the bar.

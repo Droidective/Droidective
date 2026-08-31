@@ -7,6 +7,7 @@
  */
 
 export { AabConvertPane } from "@/components/AabConvertPane"
+export { ApiClientPane } from "@/components/api/ApiClientPane"
 export { ApkInspectorPane } from "@/components/ApkInspectorPane"
 export { ApkSignPane } from "@/components/ApkSignPane"
 export { ApkStudioPane } from "@/components/ApkStudioPane"

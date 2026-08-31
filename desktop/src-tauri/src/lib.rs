@@ -1,3 +1,4 @@
+mod api;
 mod commands;
 mod daemon;
 mod error;
@@ -237,5 +238,13 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         commands::open_url,
         commands::captures_folder,
         commands::export_text,
+        api::api_workspace,
+        api::api_write,
+        api::api_send,
+        api::api_cancel,
+        api::api_code,
+        api::api_curl,
+        api::api_import,
+        api::api_export,
     ]
 }

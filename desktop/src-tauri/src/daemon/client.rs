@@ -381,6 +381,23 @@ impl DaemonClient {
         self.post("/v1/reactotron/unreverse", request).await
     }
 
+    /// The API Testing routes, as untyped JSON in both directions.
+    ///
+    /// Deliberately not mirrored into `wire.rs`. The models behind these are
+    /// the ones in `ADBKit` — a saved request, a whole workspace — and this
+    /// process
+    /// makes no decision about any field in them: it forwards them and forwards
+    /// the answer back. A third copy of an 800-line model would only be a third
+    /// place for it to drift, and the daemon rejects anything it cannot decode.
+    /// The routes above are typed because this process actually reads them.
+    pub async fn api_call(
+        &self,
+        route: ApiRoute,
+        body: &serde_json::Value,
+    ) -> Result<serde_json::Value, DaemonError> {
+        self.post(route.path(), body).await
+    }
+
     /// One request path, so every route shares one error contract.
     ///
     /// `Host` comes from the URL and no `Origin` is ever sent, which is what
@@ -427,6 +444,40 @@ impl DaemonClient {
 /// The no-argument routes still take a JSON body; an empty object is the
 /// smallest thing the daemon's decoder accepts.
 static EMPTY: &str = "{}";
+
+/// The API Testing routes this process will forward to.
+///
+/// An enum rather than a `&str` parameter, and that is the whole point of it:
+/// `api_call` takes an untyped body, so without this the webview would be one
+/// string away from posting arbitrary JSON to *any* daemon route. The
+/// boundary's job is to decide what may be reached, and a closed set is how it
+/// keeps deciding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ApiRoute {
+    Read,
+    Write,
+    Send,
+    Cancel,
+    Code,
+    Curl,
+    Import,
+    Export,
+}
+
+impl ApiRoute {
+    const fn path(self) -> &'static str {
+        match self {
+            Self::Read => "/v1/api/read",
+            Self::Write => "/v1/api/write",
+            Self::Send => "/v1/api/send",
+            Self::Cancel => "/v1/api/cancel",
+            Self::Code => "/v1/api/code",
+            Self::Curl => "/v1/api/curl",
+            Self::Import => "/v1/api/import",
+            Self::Export => "/v1/api/export",
+        }
+    }
+}
 
 #[cfg(test)]
 #[expect(

@@ -239,6 +239,35 @@ extension DaemonBackend {
     ) async throws -> String { destination }
 
     func detectTools() async -> [Tool: ToolStatus] { [:] }
+
+    func apiWorkspace() async -> ApiClientData { ApiClientData() }
+
+    func writeApiWorkspace(_ data: ApiClientData) async throws {}
+
+    func sendApiRequest(_ request: ApiClientProtocol.SendRequest) async throws -> ApiSendOutcome {
+        ApiSendOutcome(
+            response: ApiResponse(
+                statusCode: 200, headers: [], body: Data(), elapsedMs: 0, size: 0),
+            prepared: PreparedRequest(
+                url: request.request.url, method: request.request.method, headers: []))
+    }
+
+    func cancelApiSend(sendId: String) async -> Bool { false }
+
+    func apiCode(_ request: ApiClientProtocol.CodeRequest) async -> String { "stub" }
+
+    func parseCurl(_ text: String) async -> CurlImport? { nil }
+
+    func importApiFile(path: String) async throws -> ApiClientProtocol.ImportResponse {
+        ApiClientProtocol.ImportResponse(
+            collections: [], environments: [], summary: "stub", warnings: [])
+    }
+
+    func exportApi(
+        _ request: ApiClientProtocol.ExportRequest
+    ) async throws -> ApiClientProtocol.ExportResponse {
+        ApiClientProtocol.ExportResponse(json: "{}", suggestedName: "stub.json")
+    }
 }
 
 /// The same trick for `StreamSource`, and for the same reason: a stub testing
