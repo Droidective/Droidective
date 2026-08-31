@@ -142,8 +142,12 @@ import Testing
         #expect(ManagedToolSpec.hostCatalog[.ffmpeg] == nil, "ffmpeg is bundled on macOS")
         #else
         let spec = try #require(ManagedToolSpec.hostCatalog[.ffmpeg])
-        #expect(!spec.runnableName.isEmpty)
         #expect(!spec.assetPattern.isEmpty)
+        // The name of the thing to run after extracting — `ffmpeg.exe` on
+        // Windows. Without it the store unpacks an archive and has nothing to
+        // hand the recorder.
+        let runnable = try #require(spec.runnableName)
+        #expect(!runnable.isEmpty)
         #endif
     }
 }
