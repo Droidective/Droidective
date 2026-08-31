@@ -1,6 +1,7 @@
 import { useRef, type DragEvent } from "react"
 import { GripVertical } from "lucide-react"
 
+import { carriesFiles } from "@/components/dnd"
 import { useMirror } from "@/hooks/useMirror"
 import { useMirrorPointer } from "@/hooks/useMirrorPointer"
 import { cn } from "@/lib/cn"
@@ -38,6 +39,9 @@ export function MirrorTile({
   }
 
   const onDrop = (event: DragEvent<HTMLDivElement>) => {
+    // A file dropped from the file manager belongs to the window's handler,
+    // and its empty `text/plain` would read back as index 0.
+    if (carriesFiles(event)) return
     event.preventDefault()
     const from = Number(event.dataTransfer.getData("text/plain"))
     // A drag from somewhere else entirely carries text that is not an index.

@@ -116,9 +116,24 @@ WKWebView. This is a platform limit, not a missing tool — see the
 - [ ] **Sidebar reorder** — drag a feature within its group; drag a category
       header to move the whole group. The insertion guideline shows.
 - [ ] **Tab drag to split**, and dragging a tab out.
-- [ ] **Drop a file** on File Explorer to push it, and an APK on the window to
-      install it (once backlog 17 lands — until then, confirm it is refused
-      cleanly rather than silently doing nothing).
+- [ ] **Drop an APK on the window** — anywhere, whatever is on screen. It
+      installs, and the notification names the file.
+- [ ] **Drop a plain file on the File Explorer** — it lands in the directory
+      showing, and the listing has it after a refresh.
+- [ ] **Drop a plain file on any other screen** — the overlay says to open the
+      File Explorer, and nothing is pushed.
+- [ ] **Drop with no device connected** — the overlay says to connect one.
+- [ ] **Drag a tab or a sidebar row while the drop layer exists** — the in-app
+      drags must be unaffected. This is the regression the design is built to
+      avoid: Tauri's own file-drop handler kills every HTML5 drag in the page,
+      which is why the dropped *bytes* are staged through a Rust command
+      instead of turning that handler on. If the tab drags stop working, that
+      trade has been undone somewhere.
+
+  What *is* automated, so the gesture is the only unknown: the daemon's `push`
+  operation is driven against a real emulator (a name with a space included),
+  staging is covered by Rust tests, and which of install/push/refuse a drop
+  means is `lib/file-drop.ts`, tested without a drag.
 
 ## 5. Sound
 

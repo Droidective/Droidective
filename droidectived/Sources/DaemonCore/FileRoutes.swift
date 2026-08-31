@@ -69,6 +69,12 @@ public enum FileProtocol {
         case delete
         case copy
         case move
+        /// A *host* file onto the device — the one operation whose source is
+        /// not a device path. It rides here rather than on a route of its own
+        /// for the reason the others do: the daemon owns the list of what may
+        /// be done to a device's filesystem, and a second route would be a
+        /// second place for that list to drift.
+        case push
     }
 
     /// A resolved operation. Modelled with associated values so there is no
@@ -79,6 +85,7 @@ public enum FileProtocol {
         case delete(path: String)
         case copy(source: String, destination: String)
         case move(source: String, destination: String)
+        case push(localPath: String, destination: String)
     }
 
     public struct OperationRequest: Codable, Equatable, Sendable {
@@ -118,6 +125,9 @@ public enum FileProtocol {
             case .move:
                 guard let destination else { return nil }
                 return .move(source: path, destination: destination)
+            case .push:
+                guard let destination else { return nil }
+                return .push(localPath: path, destination: destination)
             case nil: return nil
             }
         }

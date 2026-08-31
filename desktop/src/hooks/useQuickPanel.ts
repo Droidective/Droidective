@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { useQuickRun } from "@/hooks/useQuickRun"
 import { useQuickSession, type QuickSession } from "@/hooks/useQuickSession"
-import { asDaemonError, hideQuickPanel, runAction } from "@/lib/daemon"
-import { runFields, type FormValues } from "@/lib/fields"
+import { asDaemonError } from "@/lib/daemon"
+import { type FormValues } from "@/lib/fields"
 import { moveInGrid, openableScreens, quickActions, quickCommands } from "@/lib/quick-actions"
-import { runOnTargets } from "@/lib/runner"
 import type { CustomCommand, Device, FeatureSummary } from "@/lib/wire"
 
 /** The columns the grid wraps at — the Mac's five. */
@@ -22,6 +22,10 @@ export interface QuickPanelState {
   /** The screen in front: null for the grid, else a form or the device picker. */
   form: FeatureSummary | null
   picking: FeatureSummary | null
+  /** The action waiting on an app, after its device was settled. */
+  pickingApp: FeatureSummary | null
+  /** Which device that app list belongs to. */
+  bundleSerial: string | null
   running: boolean
   /** A destructive action waiting for its confirming second press. */
   armed: string | null
@@ -29,6 +33,7 @@ export interface QuickPanelState {
   activate: (feature: FeatureSummary) => void
   submitForm: (values: FormValues, toggleOn: boolean) => void
   pickDevice: (serials: string[]) => void
+  pickApp: (packageId: string) => void
   move: (direction: "up" | "down" | "left" | "right") => void
   enter: () => void
   back: () => void
@@ -104,138 +109,5 @@ export function useQuickPanel(): QuickPanelState {
       },
       [session, run],
     ),
-  }
-}
-
-/** One action against the chosen targets, as a message for the footer. */
-async function runOne(
-  feature: FeatureSummary,
-  serials: string[],
-  values: FormValues,
-  on: boolean,
-  ready: readonly Device[],
-): Promise<{ message: string; ok: boolean }> {
-  try {
-    const result = await runOnTargets(runAction, {
-      featureId: feature.id,
-      // A device-free action still needs one target, so it runs once.
-      serials: serials.length > 0 ? serials : [""],
-      platform: ready.find((device) => device.serial === serials[0])?.platform ?? "android",
-      fields: runFields(feature, values, on, null),
-    })
-    if (result === null) return { message: "Nothing to run on.", ok: false }
-    return { message: result.message, ok: result.ok }
-  } catch (thrown) {
-    return { message: asDaemonError(thrown).message, ok: false }
-  }
-}
-
-/**
- * Running something, and the two questions that can come first.
- *
- * A destructive action arms and waits for a second press, as it does
- * everywhere else in both apps. A device-scoped one with several devices
- * connected pushes the interstitial rather than guessing — the panel has no
- * device bar to have chosen with, which is the Mac's reason too. A form action
- * and a toggle both push their own screen, the toggle because this app does
- * not track the override state the Mac flips one from.
- */
-function useQuickRun({
-  ready,
-  closeAfterRun,
-}: {
-  ready: readonly Device[]
-  closeAfterRun: boolean
-}) {
-  const [form, setForm] = useState<FeatureSummary | null>(null)
-  const [picking, setPicking] = useState<FeatureSummary | null>(null)
-  const [held, setHeld] = useState<{ values: FormValues; on: boolean } | null>(null)
-  const [outcome, setOutcome] = useState<{ message: string; ok: boolean } | null>(null)
-  const [running, setRunning] = useState(false)
-  const [armed, setArmed] = useState<string | null>(null)
-
-  const perform = useCallback(
-    async (feature: FeatureSummary, serials: string[], values: FormValues, on: boolean) => {
-      setRunning(true)
-      try {
-        const answer = await runOne(feature, serials, values, on, ready)
-        setOutcome(answer)
-        if (answer.ok && closeAfterRun) void hideQuickPanel()
-      } finally {
-        setRunning(false)
-        setForm(null)
-        setPicking(null)
-        setHeld(null)
-      }
-    },
-    [ready, closeAfterRun],
-  )
-
-  const start = useCallback(
-    (feature: FeatureSummary, values: FormValues, on: boolean) => {
-      if (!feature.needsDevice) {
-        void perform(feature, [], values, on)
-        return
-      }
-      if (ready.length === 0) {
-        setOutcome({ message: "No device connected.", ok: false })
-        return
-      }
-      if (ready.length > 1) {
-        setHeld({ values, on })
-        setPicking(feature)
-        return
-      }
-      void perform(feature, [ready[0]?.serial ?? ""], values, on)
-    },
-    [ready, perform],
-  )
-
-  return {
-    form,
-    picking,
-    running,
-    armed,
-    outcome,
-    report: setOutcome,
-    disarm: useCallback(() => {
-      setArmed(null)
-    }, []),
-    activate: useCallback(
-      (feature: FeatureSummary) => {
-        if (feature.isDestructive && armed !== feature.id) {
-          setArmed(feature.id)
-          return
-        }
-        setArmed(null)
-        if (feature.kind === "formAction" || feature.kind === "toggleAction") {
-          setForm(feature)
-          return
-        }
-        start(feature, {}, true)
-      },
-      [armed, start],
-    ),
-    submitForm: useCallback(
-      (values: FormValues, on: boolean) => {
-        if (form !== null) start(form, values, on)
-      },
-      [form, start],
-    ),
-    pickDevice: useCallback(
-      (serials: string[]) => {
-        if (picking !== null) void perform(picking, serials, held?.values ?? {}, held?.on ?? true)
-      },
-      [picking, held, perform],
-    ),
-    back: useCallback(() => {
-      if (form === null && picking === null) {
-        void hideQuickPanel()
-        return
-      }
-      setForm(null)
-      setPicking(null)
-      setHeld(null)
-    }, [form, picking]),
   }
 }

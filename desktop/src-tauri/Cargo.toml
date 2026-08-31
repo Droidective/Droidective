@@ -24,7 +24,12 @@ tauri-build = { version = "2.6.3", features = [] }
 # and the tray is the way back. On Linux that means libayatana-appindicator,
 # which the .deb declares — a runtime dependency, so the class of bug only the
 # smoke test finds.
-tauri = { version = "2.11.5", features = ["tray-icon"] }
+# `macos-private-api` is what lets a window be transparent on macOS, which is
+# where this app is developed. It costs the shipping Windows and Linux builds
+# nothing — the feature compiles to nothing off Darwin — and the desktop app
+# is not distributed on macOS at all, so the App Store rule it trips does not
+# apply. Without it the translucent window could not be seen while building it.
+tauri = { version = "2.11.5", features = ["tray-icon", "macos-private-api"] }
 # The supported way to spawn a bundled sidecar and own its lifetime: it
 # resolves the per-platform binary location that a hand-rolled path would get
 # wrong on at least one of the three targets.

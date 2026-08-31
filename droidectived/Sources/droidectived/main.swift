@@ -50,9 +50,16 @@ let server = DaemonServer(
         // of custom commands, not two.
         customCommands: JSONStore<[CustomCommand]>(
             filename: "custom-commands.json", default: []),
+        // And the Mac's API Testing workspace, for the same reason: someone
+        // running both apps has one set of collections and environments.
+        apiClient: JSONStore<ApiClientData>(
+            filename: "api-client.json", default: ApiClientData()),
         // The same managed-tool directory the engine uses, so a jadx or
         // bundletool downloaded once serves every feature that wants it.
-        toolsDirectory: AppPaths.supportDir.appendingPathComponent("tools")),
+        toolsDirectory: AppPaths.supportDir.appendingPathComponent("tools"),
+        // The same jar the mirror streams through: a recording is that stream
+        // piped into ffmpeg rather than into a decoder.
+        scrcpyServer: options.scrcpyServer),
     token: token,
     streamSource: LiveStreamSource(
         monitor: monitor, streamer: LogcatStreamer(client: client),

@@ -100,6 +100,33 @@ pub struct FeaturesResponse {
     pub features: Vec<FeatureSummary>,
 }
 
+/// One role from the picker's catalogue.
+///
+/// Served rather than listed in this app, because a role is six lists of
+/// feature ids in the registry and a second copy would drift the first time a
+/// feature joined a role — with nothing failing to say so.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Role {
+    pub id: String,
+    pub label: String,
+    pub blurb: String,
+    #[serde(rename = "featureIDs")]
+    pub feature_ids: Vec<String>,
+    #[serde(rename = "categoryOrder")]
+    pub category_order: Vec<String>,
+    /// The `DevicePlatform` raw values the role works with — "android",
+    /// "ios-simulator".
+    pub platforms: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RolesResponse {
+    pub roles: Vec<Role>,
+    /// What the picker's "I work with React Native" switch adds to any role.
+    #[serde(rename = "reactNativeStackIDs")]
+    pub react_native_stack_ids: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct RunRequest {
     #[serde(rename = "featureId")]
@@ -1250,4 +1277,69 @@ pub struct AabConvertRequest {
 pub struct AabConvertResponse {
     pub path: String,
     pub size_bytes: i64,
+}
+
+/// A recording's knobs. Zero means the device's or scrcpy's own default on all
+/// three, so they travel as zero rather than as absent.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordOptions {
+    pub max_size: i64,
+    pub bit_rate_mbps: i64,
+    pub max_fps: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordStartRequest {
+    pub serial: String,
+    pub options: RecordOptions,
+}
+
+/// What is being recorded, if anything.
+///
+/// `recording: false` is an answer rather than an error: a screen that has just
+/// opened asks this to find out whether a recording it did not start is already
+/// running, and "no" is the ordinary reply. `ffmpeg_ready` is what lets it
+/// offer the download *before* someone presses record.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordStatusResponse {
+    pub recording: bool,
+    pub paused: bool,
+    pub serial: Option<String>,
+    pub elapsed_seconds: f64,
+    pub segments: i64,
+    pub ffmpeg_ready: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordStoppedResponse {
+    pub path: String,
+    pub duration_seconds: f64,
+    pub size_bytes: i64,
+}
+
+/// One managed tool, as Settings ▸ Tools lists it.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManagedToolEntry {
+    pub id: String,
+    pub installed: bool,
+    pub version: Option<String>,
+    pub pinned_version: String,
+    pub size_bytes: i64,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManagedToolsListResponse {
+    pub tools: Vec<ManagedToolEntry>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManagedToolRequest {
+    pub id: String,
 }

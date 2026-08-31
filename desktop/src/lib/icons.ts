@@ -2,6 +2,7 @@ import {
   AppWindow,
   ArrowLeftRight,
   Atom,
+  BadgeCheck,
   BatteryLow,
   BellRing,
   Boxes,
@@ -19,10 +20,12 @@ import {
   Gauge,
   Globe,
   Grid2x2,
+  Hammer,
   HardDrive,
   Info,
   Keyboard,
   Languages,
+  LifeBuoy,
   Layers,
   LayoutGrid,
   Link,
@@ -176,6 +179,29 @@ const BY_CATEGORY: Record<string, LucideIcon> = {
 }
 
 /** The glyph for a feature, falling back to its category and then to a tool. */
+/**
+ * A role's glyph, standing in for the SF Symbol the Mac's `UserRole.icon`
+ * names.
+ *
+ * The symbol names never cross the wire — they mean nothing off Apple — so the
+ * mapping is here, chosen to say the same thing: a hammer for the Android
+ * developer, an atom for React Native, a seal for QA, a life ring for support,
+ * a shield for security.
+ */
+const BY_ROLE: Record<string, LucideIcon> = {
+  "android-dev": Hammer,
+  "rn-dev": Atom,
+  "ios-dev": Smartphone,
+  qa: BadgeCheck,
+  support: LifeBuoy,
+  security: ShieldCheck,
+}
+
+/** A role's glyph; a plain wrench for a role this build has not heard of. */
+export function iconForRole(id: string): LucideIcon {
+  return BY_ROLE[id] ?? Wrench
+}
+
 export function iconForFeature(id: string, category: string): LucideIcon {
   return BY_FEATURE[id] ?? BY_CATEGORY[category] ?? Wrench
 }

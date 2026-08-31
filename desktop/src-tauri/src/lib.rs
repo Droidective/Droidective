@@ -1,11 +1,16 @@
+mod api;
 mod commands;
 mod daemon;
+mod dropped;
 mod error;
+mod glass;
 mod menu;
 mod metro;
 mod panel;
+mod record;
 mod shortcuts;
 mod tray;
+mod workspace;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -103,6 +108,7 @@ pub fn run() -> tauri::Result<()> {
         .manage(Supervisor::default())
         .manage(BackgroundMode::default())
         .manage(TrayState::default())
+        .manage(workspace::Workspaces::default())
         .invoke_handler(handlers())
         .on_window_event(|window, event| {
             on_window_event(window, event);
@@ -145,12 +151,22 @@ pub fn run() -> tauri::Result<()> {
 ///
 /// Its own function so `run` stays readable: the list is a declaration rather
 /// than logic, and inline it pushed the builder past the line limit — which is
-/// a real signal about `run`, and a useless one about a list of names.
+/// a real signal about `run`, and a useless one about a list of names — which
+/// is also why the length lint is turned off for it rather than the list being
+/// broken up: `generate_handler!` takes one list, and splitting it would mean
+/// splitting the macro.
+#[expect(
+    clippy::too_many_lines,
+    reason = "a declaration of every command, not logic; one macro takes one list"
+)]
 fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync + 'static {
     tauri::generate_handler![
+        glass::set_window_blur,
+        glass::window_blur_supported,
         commands::daemon_status,
         commands::list_devices,
         commands::list_features,
+        commands::list_roles,
         commands::run_action,
         commands::list_apps,
         commands::control_app,
@@ -237,5 +253,31 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         commands::open_url,
         commands::captures_folder,
         commands::export_text,
+        api::api_workspace,
+        api::api_write,
+        api::api_send,
+        api::api_cancel,
+        api::api_code,
+        api::api_curl,
+        api::api_import,
+        api::api_export,
+        record::record_status,
+        record::record_start,
+        record::record_pause,
+        record::record_resume,
+        record::record_stop,
+        record::save_recording,
+        record::discard_recording,
+        record::managed_tool_list,
+        record::managed_tool_install,
+        record::managed_tool_remove,
+        workspace::publish_claim,
+        workspace::workspace_claims,
+        workspace::open_workspace_window,
+        workspace::focus_workspace_window,
+        workspace::release_claim,
+        workspace::request_close_feature,
+        dropped::stage_dropped_file,
+        dropped::discard_dropped_file,
     ]
 }

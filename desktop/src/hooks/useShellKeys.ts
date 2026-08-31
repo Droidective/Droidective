@@ -1,6 +1,6 @@
 import { useCallback, useEffect } from "react"
 import { useFeatureHotkeys } from "@/hooks/useFeatureHotkeys"
-import { useMenuCommands } from "@/hooks/useMenuCommands"
+import { useMenuCommands, useWindowMenu } from "@/hooks/useMenuCommands"
 import { useRunFeature } from "@/hooks/useRunFeature"
 import { useShellShortcuts } from "@/hooks/useShellShortcuts"
 import { useTerminalCommands } from "@/hooks/useTerminalCommands"
@@ -77,6 +77,7 @@ export function useShellKeys({
     onOpen: workspace.open,
   })
 
+  const windowMenu = useWindowMenu(workspace, device?.serial ?? null)
   const { open } = workspace
   useMenuCommands({
     workspace,
@@ -88,6 +89,7 @@ export function useShellKeys({
     onOpenTerminal: useCallback(() => {
       open("terminal")
     }, [open]),
+    ...windowMenu,
   })
 }
 

@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { Banner, Button, Switch, TextInput } from "@/components/Controls"
 import { BackgroundSection, TextSection } from "@/components/settings/AppearanceColors"
+import { WindowEffectsSection } from "@/components/settings/AppearanceWindow"
 import { Row, Section } from "@/components/settings/SettingsKit"
 import { useAppearance } from "@/hooks/useAppearance"
 import {
@@ -22,10 +23,9 @@ import { ZOOM_STEPS, zoomLabel } from "@/lib/zoom"
  * in three different forms — a vague preference, a swatch, or a brand hex —
  * and making them convert is the friction.
  *
- * The Window section carries the sidebar mode and the UI size — the same two
- * the Mac keeps there — and says outright that opacity, blur and grain are not
- * ported, since blur is a compositor-level effect Windows and Linux each need
- * their own answer for (backlog 15).
+ * The Window section carries the sidebar mode, the UI size and the
+ * translucency controls — the same set the Mac keeps there. Blur is the one
+ * control whose *shape* differs, and `AppearanceWindow.tsx` says why.
  */
 export interface AppearanceTabProps {
   sidebarAutoHide: boolean
@@ -90,12 +90,7 @@ export function AppearanceTab(props: AppearanceTabProps) {
         >
           <ZoomControl step={props.zoomStep} onZoom={props.onZoom} />
         </Row>
-        <Row
-          label="Opacity, blur and grain"
-          detail="The Mac's translucent window. Blur needs a per-platform answer (Mica on Windows, a compositor effect on Linux) — backlog 15."
-        >
-          <span className="text-[11.5px] text-text-tertiary">Not yet</span>
-        </Row>
+        <WindowEffectsSection />
       </Section>
     </div>
   )

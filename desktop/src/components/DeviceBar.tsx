@@ -1,12 +1,12 @@
 import { useState } from "react"
-import { Apple, Layers, PanelLeft, PanelLeftDashed, RefreshCw, Smartphone, WifiOff } from "lucide-react"
+import { Layers, PanelLeft, PanelLeftDashed, RefreshCw, WifiOff } from "lucide-react"
 import { AdbWarning } from "@/components/AdbWarning"
 import { Switch } from "@/components/Controls"
 import { DeviceMenu, DevicePill, IconButton } from "@/components/DeviceMenu"
 import { NotificationBell } from "@/components/NotificationPanel"
 import { WirelessSheet, type WirelessMode } from "@/components/WirelessSheet"
 import { useDeviceBarActions } from "@/hooks/useDeviceBarActions"
-import { cn } from "@/lib/cn"
+import { StatusIcon } from "@/components/DeviceStatusIcon"
 import type { Device } from "@/lib/wire"
 
 export interface DeviceBarProps {
@@ -182,30 +182,3 @@ function Empty({ loaded, onRefresh }: { loaded: boolean; onRefresh: () => Promis
   )
 }
 
-/**
- * The leading status icon: the colour and the tooltip live here, outside the
- * menu, exactly as the Mac splits them.
- */
-function StatusIcon({ device }: { device: Device | null }) {
-  const simulator = device?.platform === "ios-simulator"
-  return (
-    <span className={cn("shrink-0", tone(device))} title={help(device)}>
-      {simulator ? <Apple size={14} /> : <Smartphone size={14} />}
-    </span>
-  )
-}
-
-function tone(device: Device | null): string {
-  if (device === null) return "text-text-tertiary"
-  if (device.state === "device") return "text-accent"
-  // Trouble states keep their semaphore colours: unauthorised is something to
-  // go and tap on the device, anything else is a fault.
-  return device.state === "unauthorized" ? "text-warn" : "text-danger"
-}
-
-function help(device: Device | null): string {
-  if (device === null) return "No device connected"
-  if (device.state === "device") return `${device.label} — connected`
-  if (device.state === "unauthorized") return `${device.label} — accept the prompt on the device`
-  return `${device.label} — ${device.state}`
-}

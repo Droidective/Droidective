@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useDropTarget } from "@/hooks/useDropTarget"
 import { asDaemonError, listFiles, rootStatus } from "@/lib/daemon"
 import {
   currentPath,
@@ -52,6 +53,18 @@ export function useFileListing(serial: string | null): FileListing {
   })
 
   const path = currentPath(components, rootMode)
+
+  // Where a file dropped on the window would land. Published from here rather
+  // than from the pane because this is what knows the path; cleared on the way
+  // out, so a hidden keep-alive tab does not keep claiming drops for a screen
+  // nobody can see.
+  const { register } = useDropTarget()
+  useEffect(() => {
+    register(serial === null ? null : path)
+    return () => {
+      register(null)
+    }
+  }, [register, serial, path])
 
   // A different device is a different filesystem: a path from the last one
   // means nothing here.

@@ -239,6 +239,55 @@ extension DaemonBackend {
     ) async throws -> String { destination }
 
     func detectTools() async -> [Tool: ToolStatus] { [:] }
+
+    func apiWorkspace() async -> ApiClientData { ApiClientData() }
+
+    func writeApiWorkspace(_ data: ApiClientData) async throws {}
+
+    func sendApiRequest(_ request: ApiClientProtocol.SendRequest) async throws -> ApiSendOutcome {
+        ApiSendOutcome(
+            response: ApiResponse(
+                statusCode: 200, headers: [], body: Data(), elapsedMs: 0, size: 0),
+            prepared: PreparedRequest(
+                url: request.request.url, method: request.request.method, headers: []))
+    }
+
+    func cancelApiSend(sendId: String) async -> Bool { false }
+
+    func apiCode(_ request: ApiClientProtocol.CodeRequest) async -> String { "stub" }
+
+    func parseCurl(_ text: String) async -> CurlImport? { nil }
+
+    func importApiFile(path: String) async throws -> ApiClientProtocol.ImportResponse {
+        ApiClientProtocol.ImportResponse(
+            collections: [], environments: [], summary: "stub", warnings: [])
+    }
+
+    func exportApi(
+        _ request: ApiClientProtocol.ExportRequest
+    ) async throws -> ApiClientProtocol.ExportResponse {
+        ApiClientProtocol.ExportResponse(json: "{}", suggestedName: "stub.json")
+    }
+
+    func recordingStatus() async -> RecordProtocol.StatusResponse {
+        RecordProtocol.StatusResponse(nil, ffmpegReady: false)
+    }
+
+    func startRecording(_ request: RecordProtocol.StartRequest) async throws {}
+
+    func pauseRecording() async throws {}
+
+    func resumeRecording(_ options: RecordProtocol.Options) async throws {}
+
+    func stopRecording() async throws -> DeviceRecorder.Finished {
+        DeviceRecorder.Finished(path: "/tmp/stub.mp4", durationSeconds: 0, sizeBytes: 0)
+    }
+
+    func managedToolEntries() async -> [ToolStoreProtocol.Entry] { [] }
+
+    func installManagedTool(_ tool: ManagedTool) async throws -> String { "/tmp/stub" }
+
+    func removeManagedTool(_ tool: ManagedTool) async throws {}
 }
 
 /// The same trick for `StreamSource`, and for the same reason: a stub testing

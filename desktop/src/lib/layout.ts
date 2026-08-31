@@ -99,6 +99,21 @@ export interface LayoutState {
   quickPanelCloseAfterRun: boolean
   /** The panel's global shortcut, or null while none is recorded. */
   quickPanelHotkey: Hotkey | null
+  /**
+   * The role picked on first launch, or null for "show me everything".
+   *
+   * The Mac's `LayoutState.selectedRole`. Kept after it has been applied
+   * because Settings shows which one is in effect, and re-picking is how a
+   * curation is changed.
+   */
+  selectedRole: string | null
+  /**
+   * True once the picker has been through — picked, dismissed, or answered
+   * with "everything". The Mac's `roleChosen`, and it means the same thing: a
+   * *seen* flag, not a *curated* one, so someone who skipped it is not asked
+   * again at every launch.
+   */
+  roleChosen: boolean
 }
 
 const STORAGE_KEY = "droidective.layout"
@@ -121,6 +136,8 @@ export function emptyLayout(): LayoutState {
     trayItems: [],
     quickPanelHiddenIds: [],
     quickPanelCloseAfterRun: false,
+    selectedRole: null,
+    roleChosen: false,
     quickPanelHotkey: null,
   }
 }
@@ -169,6 +186,10 @@ export function loadLayout(storage: Pick<Storage, "getItem">): LayoutState {
     // Through the same validation the per-feature bindings get: a half-written
     // one would match a keydown that reported no code.
     quickPanelHotkey: savedHotkeys({ panel: saved.quickPanelHotkey })["panel"] ?? null,
+    selectedRole: typeof saved.selectedRole === "string" ? saved.selectedRole : null,
+    // Absent means "not seen yet", which is what shows the picker — so a
+    // layout written before roles existed gets asked once, as it should.
+    roleChosen: saved.roleChosen === true,
   }
 }
 
@@ -247,3 +268,17 @@ function stringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return []
   return value.filter((entry): entry is string => typeof entry === "string")
 }
+
+// The per-window half lives next door — two windows share one `localStorage`,
+// so what belongs to a window is kept under a key of its own. Re-exported here
+// because "what this app remembers" is one question with two halves, and a
+// caller should not have to know which half a field is in.
+export {
+  currentWindowLabel,
+  emptyWindowLayout,
+  forgetWindowLayout,
+  loadWindowLayout,
+  requestedSerial,
+  saveWindowLayout,
+  type WindowLayout,
+} from "@/lib/window-layout"

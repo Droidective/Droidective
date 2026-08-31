@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react"
-import { QuickFooter, QuickGrid, QuickHeader, QuickList } from "@/components/quick/QuickParts"
+import { QuickBundlePicker } from "@/components/quick/QuickBundlePicker"
 import { QuickForm } from "@/components/quick/QuickForm"
+import { QuickFooter, QuickGrid, QuickHeader, QuickList } from "@/components/quick/QuickParts"
 import { COLUMNS, useQuickPanel } from "@/hooks/useQuickPanel"
 
 /**
@@ -16,7 +17,7 @@ import { COLUMNS, useQuickPanel } from "@/hooks/useQuickPanel"
  */
 export function QuickPanel() {
   const panel = useQuickPanel()
-  const atRoot = panel.form === null && panel.picking === null
+  const atRoot = panel.form === null && panel.picking === null && panel.pickingApp === null
 
   useKeys({
     onEscape: panel.back,
@@ -52,6 +53,14 @@ export function QuickPanel() {
               }
             : {})}
         />
+      </Screen>
+    )
+  }
+
+  if (panel.pickingApp !== null) {
+    return (
+      <Screen onBack={panel.back} title={`Run ${panel.pickingApp.title} on which app?`}>
+        <QuickBundlePicker serial={panel.bundleSerial} onPick={panel.pickApp} />
       </Screen>
     )
   }

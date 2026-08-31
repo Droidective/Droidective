@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { X } from "lucide-react"
 import { AppearanceTab, type AppearanceTabProps } from "@/components/settings/AppearanceTab"
 import { DoctorTab } from "@/components/settings/DoctorTab"
+import { ToolsTab } from "@/components/settings/ToolsTab"
 import { GeneralTab, type GeneralTabProps } from "@/components/settings/GeneralTab"
 import { HotkeysTab, type HotkeysTabProps } from "@/components/settings/HotkeysTab"
 import { PrivacyTab } from "@/components/settings/PrivacyTab"
@@ -124,6 +125,8 @@ function Pane({
       return <HotkeysTab {...hotkeys} />
     case "doctor":
       return <DoctorTab />
+    case "tools":
+      return <ToolsTab />
     default:
       return <NotYet tab={tab} />
   }

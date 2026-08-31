@@ -62,6 +62,17 @@ const SECTIONS: &[Section] = &[
         title: "File",
         items: &[
             Item {
+                id: "window.new",
+                label: "New Window",
+                accelerator: Some("CmdOrCtrl+Shift+Alt+N"),
+            },
+            Item {
+                id: "window.new-for-device",
+                label: "New Window for Device",
+                accelerator: None,
+            },
+            SEPARATOR,
+            Item {
                 id: "terminal.new",
                 label: "New Terminal",
                 accelerator: Some("CmdOrCtrl+Shift+N"),

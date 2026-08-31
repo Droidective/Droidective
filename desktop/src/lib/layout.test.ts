@@ -41,6 +41,8 @@ describe("loadLayout", () => {
       quickPanelHiddenIds: ["monkey"],
       quickPanelCloseAfterRun: true,
       quickPanelHotkey: { code: "Space", ctrl: true, alt: false, shift: true, meta: false },
+      selectedRole: "qa",
+      roleChosen: true,
     }
     saveLayout(storage, layout)
     expect(loadLayout(storage)).toEqual(layout)
@@ -81,6 +83,8 @@ describe("loadLayout, against what a previous version wrote", () => {
       quickPanelCloseAfterRun: 1,
       // A shortcut with no key would match a keydown that reported no code.
       quickPanelHotkey: { ctrl: true },
+      selectedRole: 7,
+      roleChosen: "yes",
     })
     expect(loadLayout(fakeStorage(stored))).toEqual({
       sidebarOrder: ["logcat"],
@@ -100,6 +104,10 @@ describe("loadLayout, against what a previous version wrote", () => {
       quickPanelHiddenIds: [],
       quickPanelCloseAfterRun: false,
       quickPanelHotkey: null,
+      selectedRole: null,
+      // A layout written before roles existed reads as "not seen yet", which
+      // is what gets it asked once — so anything but a literal true is false.
+      roleChosen: false,
     })
   })
 

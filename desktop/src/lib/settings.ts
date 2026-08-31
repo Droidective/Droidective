@@ -32,19 +32,13 @@ export const SETTINGS_TABS: readonly SettingsTabDef[] = [
   { id: "appearance", label: "Appearance", icon: Palette },
   { id: "privacy", label: "Privacy", icon: Info },
   { id: "doctor", label: "Doctor", icon: Bug },
-  {
-    id: "tools",
-    label: "Tools",
-    icon: Wrench,
-    blockedBy:
-      "The managed-tool store — jadx, apktool, frida, a bundled JRE — is not ported yet. It arrives with the APK features.",
-  },
+  { id: "tools", label: "Tools", icon: Wrench },
   { id: "hotkeys", label: "Hotkeys", icon: Keyboard },
   {
     id: "mcp",
     label: "MCP",
     icon: Plug,
     blockedBy:
-      "The Reactotron MCP server follows the Reactotron relay, which needs its Network.framework listener ported to NIO.",
+      "Reactotron itself has landed; the MCP server has not. Its package is gated to Apple end to end and reads ADBKit's Network.framework relay, so serving it here means feeding the MCP command store from the daemon's NIO relay instead.",
   },
 ]

@@ -189,6 +189,46 @@ public protocol DaemonBackend: Sendable {
     /// is not. Best-effort by construction — a tool that cannot be found is the
     /// answer, not an error.
     func detectTools() async -> [Tool: ToolStatus]
+    /// The saved API Testing workspace. Best-effort like the other stores: one
+    /// that will not load reads as an empty workspace rather than a screen that
+    /// refuses to draw.
+    func apiWorkspace() async -> ApiClientData
+    /// Replaces the whole document. Throws only when the store cannot be written.
+    func writeApiWorkspace(_ data: ApiClientData) async throws
+    /// Sends one HTTP request. Throws when the transport never reached a
+    /// response — a non-2xx status is an answer, not a failure.
+    func sendApiRequest(_ request: ApiClientProtocol.SendRequest) async throws -> ApiSendOutcome
+    /// Stops an in-flight send. False when there was nothing to stop, which is
+    /// the ordinary race rather than a failure.
+    func cancelApiSend(sendId: String) async -> Bool
+    /// A code snippet for one request. Device-free and pure, so there is no
+    /// failure branch: an unknown target is refused before it gets here.
+    func apiCode(_ request: ApiClientProtocol.CodeRequest) async -> String
+    /// Parses a cURL command line, or nil when the text is not one.
+    func parseCurl(_ text: String) async -> CurlImport?
+    /// Reads a Postman collection, a Postman environment, or a Droidective
+    /// workspace export, with fresh ids applied.
+    func importApiFile(path: String) async throws -> ApiClientProtocol.ImportResponse
+    /// Builds the JSON for an export, and the name to offer for it.
+    func exportApi(
+        _ request: ApiClientProtocol.ExportRequest
+    ) async throws -> ApiClientProtocol.ExportResponse
+    /// What is being recorded, if anything, and whether ffmpeg is here to do
+    /// it. Never throws: "nothing is recording" is an answer.
+    func recordingStatus() async -> RecordProtocol.StatusResponse
+    /// Starts one. Throws when ffmpeg is missing, a recording is already up, or
+    /// the device would not stream.
+    func startRecording(_ request: RecordProtocol.StartRequest) async throws
+    func pauseRecording() async throws
+    func resumeRecording(_ options: RecordProtocol.Options) async throws
+    /// Finishes, assembles, and answers where the file landed.
+    func stopRecording() async throws -> DeviceRecorder.Finished
+    /// Every tool this host can download, and what is on disk. Best-effort:
+    /// a store that cannot be read reads as nothing installed.
+    func managedToolEntries() async -> [ToolStoreProtocol.Entry]
+    /// Downloads one, verifying the release asset's digest.
+    func installManagedTool(_ tool: ManagedTool) async throws -> String
+    func removeManagedTool(_ tool: ManagedTool) async throws
 }
 
 /// `DeviceMonitor` in production.
@@ -203,6 +243,18 @@ public struct LiveBackend: DaemonBackend {
     /// The same on-disk stores the Mac app uses, under the shared support dir.
     private let deepLinkStore: JSONStore<DeepLinksMap>
     private let customCommandStore: JSONStore<[CustomCommand]>
+    /// The API Testing workspace — the Mac's own `api-client.json`.
+    private let apiClientStore: JSONStore<ApiClientData>
+    /// The one recording this daemon will run. An actor, so the routes can be
+    /// four verbs over state that outlives any single request.
+    private let recorder: DeviceRecorder
+    /// One actor for every send, as the Mac keeps one on `FeatureEngine`: it
+    /// holds no per-request state, and building one per call would throw away
+    /// nothing but is a needless allocation on a route that can be hot during a
+    /// collection run.
+    private let httpClient = HttpClientService()
+    /// Sends a client may still ask to stop. See `sendApiRequest`.
+    private let inFlight = InFlightSends()
     /// The APK tools, over the same managed-tool directory the feature engine
     /// uses — one download of jadx or bundletool serves both.
     private let apkToolchainValue: ApkToolchain
@@ -219,7 +271,9 @@ public struct LiveBackend: DaemonBackend {
         emulators: EmulatorService, locator: ToolLocator,
         deepLinks: JSONStore<DeepLinksMap>,
         customCommands: JSONStore<[CustomCommand]>,
-        toolsDirectory: URL
+        apiClient: JSONStore<ApiClientData>,
+        toolsDirectory: URL,
+        scrcpyServer: String? = nil
     ) {
         self.monitor = monitor
         self.engine = engine
@@ -228,10 +282,57 @@ public struct LiveBackend: DaemonBackend {
         self.locator = locator
         deepLinkStore = deepLinks
         customCommandStore = customCommands
+        apiClientStore = apiClient
         apkToolchainValue = ApkToolchain(
             locator: locator, store: ManagedToolStore(rootDirectory: toolsDirectory))
         decompileCache = AppPaths.decompiledCacheDir
         managedToolsDirectory = toolsDirectory
+        recorder = DeviceRecorder(
+            adb: client,
+            workDirectory: AppPaths.supportDir.appendingPathComponent("recordings"),
+            resolveTools: {
+                // Resolved per recording rather than at startup: ffmpeg can be
+                // downloaded from Settings ▸ Tools between one and the next, and
+                // a path captured here would still say it was missing.
+                guard let ffmpeg = await LiveBackend.resolveFfmpeg(
+                    locator: locator, toolsDirectory: toolsDirectory)
+                else { throw DeviceRecorder.RecordError.ffmpegMissing }
+                guard let server = await LiveBackend.resolveScrcpyServer(
+                    bundled: scrcpyServer, locator: locator)
+                else {
+                    throw DeviceRecorder.RecordError.startFailed(
+                        "The scrcpy server this app records through is missing.")
+                }
+                return DeviceRecorder.Tools(
+                    ffmpeg: ffmpeg, scrcpyJar: server.jarPath, scrcpyVersion: server.version)
+            })
+    }
+
+    /// The managed download first, then whatever the host has on PATH.
+    ///
+    /// That order and not the other way round: the managed copy is the one this
+    /// app pinned and verified, where a system ffmpeg is whatever version the
+    /// machine happens to carry. macOS never gets here — it bundles one, and
+    /// `ManagedToolSpec.hostCatalog` leaves ffmpeg out there for that reason.
+    static func resolveFfmpeg(locator: ToolLocator, toolsDirectory: URL) async -> String? {
+        let store = ManagedToolStore(rootDirectory: toolsDirectory)
+        if let managed = await store.resolve(.ffmpeg) { return managed }
+        return await locator.resolve(.ffmpeg)
+    }
+
+    /// The app's own scrcpy server jar, else an installed scrcpy's.
+    ///
+    /// The same rule `LiveStreamSource` follows: mirroring through some other
+    /// scrcpy the machine happens to have is a version mismatch waiting to
+    /// happen, and the server aborts on one.
+    static func resolveScrcpyServer(
+        bundled: String?, locator: ToolLocator
+    ) async -> ScrcpyServerInfo? {
+        if let bundled {
+            let exists = FileManager.default.isReadableFile(atPath: bundled)
+            return exists ? ScrcpyServerLocator.bundled(jarPath: bundled) : nil
+        }
+        return await ScrcpyServerLocator.resolve(locator: locator)
     }
 
     public func listDevices() async -> [Device] { await monitor.list(force: true) }
@@ -290,6 +391,9 @@ public struct LiveBackend: DaemonBackend {
         case .move(let source, let destination):
             return try await explorer.move(
                 serial: serial, from: source, toDir: destination, asRoot: asRoot)
+        case .push(let localPath, let destination):
+            return try await explorer.push(
+                serial: serial, localPath: localPath, toDir: destination, asRoot: asRoot)
         }
     }
 
@@ -707,6 +811,161 @@ public struct LiveBackend: DaemonBackend {
         await ToolDetectionService(locator: locator).detectAll()
     }
 
+    public func recordingStatus() async -> RecordProtocol.StatusResponse {
+        let ready = await Self.resolveFfmpeg(
+            locator: locator, toolsDirectory: managedToolsDirectory) != nil
+        return RecordProtocol.StatusResponse(await recorder.status(), ffmpegReady: ready)
+    }
+
+    public func startRecording(_ request: RecordProtocol.StartRequest) async throws {
+        try await recorder.start(serial: request.serial, options: request.options.model)
+    }
+
+    public func pauseRecording() async throws {
+        try await recorder.pause()
+    }
+
+    public func resumeRecording(_ options: RecordProtocol.Options) async throws {
+        try await recorder.resume(options: options.model)
+    }
+
+    public func stopRecording() async throws -> DeviceRecorder.Finished {
+        try await recorder.stop()
+    }
+
+    public func managedToolEntries() async -> [ToolStoreProtocol.Entry] {
+        let store = ManagedToolStore(rootDirectory: managedToolsDirectory)
+        var entries: [ToolStoreProtocol.Entry] = []
+        // Sorted by id so the list does not reshuffle between reads — a
+        // dictionary's order is not one.
+        for (tool, spec) in ManagedToolSpec.hostCatalog.sorted(by: { $0.key.rawValue < $1.key.rawValue }) {
+            let version = await store.installedVersion(tool)
+            let location = await store.location(tool)
+            entries.append(ToolStoreProtocol.Entry(
+                id: tool.rawValue,
+                installed: version != nil,
+                version: version,
+                pinnedVersion: spec.pinnedTag,
+                sizeBytes: location.map { ManagedToolStore.size(at: $0) } ?? 0))
+        }
+        return entries
+    }
+
+    public func installManagedTool(_ tool: ManagedTool) async throws -> String {
+        let store = ManagedToolStore(rootDirectory: managedToolsDirectory)
+        // The arch matters for two of them — Temurin uses this machine's, and
+        // frida uses the *device's* ABI, which no settings screen knows. Only
+        // the host-arch ones are offered here for that reason.
+        return try await store.install(tool, arch: ManagedToolStore.hostArch)
+    }
+
+    public func removeManagedTool(_ tool: ManagedTool) async throws {
+        try await ManagedToolStore(rootDirectory: managedToolsDirectory).remove(tool)
+    }
+
+    public func apiWorkspace() async -> ApiClientData {
+        await apiClientStore.load()
+    }
+
+    public func writeApiWorkspace(_ data: ApiClientData) async throws {
+        try await apiClientStore.save(data)
+    }
+
+    /// Sends, registering the work so `cancelApiSend` can reach it.
+    ///
+    /// The `Task` is not ceremony: cancellation rides Swift's own, and the
+    /// route handler's task belongs to one HTTP request that is *still open* —
+    /// so without a handle a second request has nothing to cancel. A send with
+    /// no `sendId` skips the registry entirely, which is what the collection
+    /// runner sends.
+    public func sendApiRequest(
+        _ request: ApiClientProtocol.SendRequest
+    ) async throws -> ApiSendOutcome {
+        let client = httpClient
+        let send = {
+            try await client.send(
+                request.request, scope: request.scope.model,
+                inheritedAuth: request.inheritedAuth)
+        }
+        guard let sendId = request.sendId, !sendId.isEmpty else { return try await send() }
+
+        let task = Task { try await send() }
+        await inFlight.register(sendId, task: task)
+        defer { Task { await inFlight.finished(sendId) } }
+        return try await task.value
+    }
+
+    public func cancelApiSend(sendId: String) async -> Bool {
+        await inFlight.cancel(sendId)
+    }
+
+    public func apiCode(_ request: ApiClientProtocol.CodeRequest) async -> String {
+        // `.curl` rather than a throw for an unknown target: the route already
+        // refused one, so this branch is unreachable and a trap here would be a
+        // crash for a value that cannot arrive.
+        let target = CodeTarget(rawValue: request.target) ?? .curl
+        var source = request.request
+        if source.auth.type == .none, let inherited = request.inheritedAuth,
+           inherited.type != .none {
+            source.auth = inherited
+        }
+        return CodeGenerator.generate(target, for: source, scope: request.scope.model)
+    }
+
+    public func parseCurl(_ text: String) async -> CurlImport? {
+        CurlParser.parseWithWarnings(text)
+    }
+
+    public func importApiFile(
+        path: String
+    ) async throws -> ApiClientProtocol.ImportResponse {
+        let payload = try Data(contentsOf: URL(fileURLWithPath: path))
+        let result = try PostmanFormat.importFile(payload)
+        // Fresh ids before anything is answered: importing the same file twice
+        // must not produce two collections that share every id, which is what
+        // the Mac's own import does on the way in.
+        let collections = result.collections.map { collection -> ApiCollection in
+            var copy = collection
+            copy.id = UUID().uuidString
+            copy.items = ApiCollectionTree.reidentifying(copy.items)
+            return copy
+        }
+        let environments = result.environments.map { environment -> ApiEnvironment in
+            var copy = environment
+            copy.id = UUID().uuidString
+            return copy
+        }
+        return ApiClientProtocol.ImportResponse(
+            collections: collections, environments: environments,
+            summary: result.isEmpty
+                ? "Nothing in that file could be imported." : result.summary,
+            warnings: result.warnings)
+    }
+
+    public func exportApi(
+        _ request: ApiClientProtocol.ExportRequest
+    ) async throws -> ApiClientProtocol.ExportResponse {
+        switch request.payload {
+        case .collection(let collection):
+            let json = try PostmanFormat.exportCollection(
+                collection, includeSecrets: request.includeSecrets)
+            return ApiClientProtocol.ExportResponse(
+                json: String(decoding: json, as: UTF8.self),
+                suggestedName: "\(collection.name).postman_collection.json")
+        case .environment(let environment):
+            let json = try PostmanFormat.exportEnvironment(environment)
+            return ApiClientProtocol.ExportResponse(
+                json: String(decoding: json, as: UTF8.self),
+                suggestedName: "\(environment.name).postman_environment.json")
+        case .workspace(let data):
+            let json = try PostmanFormat.exportWorkspace(
+                data, includeSecrets: request.includeSecrets)
+            return ApiClientProtocol.ExportResponse(
+                json: String(decoding: json, as: UTF8.self),
+                suggestedName: "droidective-api.json")
+        }
+    }
+
     private func waitForShutdown(serial: String) async {
         for _ in 0 ..< 20 {
             let devices = await monitor.list(force: true)
@@ -949,6 +1208,9 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
         case .featuresList:
             return (.ok, encoded(ActionProtocol.features()))
 
+        case .featuresRoles:
+            return (.ok, encoded(RoleProtocol.roles()))
+
         case .deviceProps:
             let raw = Data(body.readableBytesView)
             guard let request = try? JSONDecoder().decode(
@@ -1117,6 +1379,52 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
                 body: Data(body.readableBytesView), backend: backend))
         case .reactotronUnreverse:
             return Self.answer(await ReactotronRoutes.unreverse(
+                body: Data(body.readableBytesView), backend: backend))
+
+        case .apiRead:
+            return Self.answer(await ApiClientRoutes.read(backend: backend))
+        case .apiWrite:
+            return Self.answer(await ApiClientRoutes.write(
+                body: Data(body.readableBytesView), backend: backend))
+        case .apiSend:
+            return Self.answer(await ApiClientRoutes.send(
+                body: Data(body.readableBytesView), backend: backend))
+        case .apiCancel:
+            return Self.answer(await ApiClientRoutes.cancel(
+                body: Data(body.readableBytesView), backend: backend))
+        case .apiCode:
+            return Self.answer(await ApiClientRoutes.code(
+                body: Data(body.readableBytesView), backend: backend))
+        case .apiCurl:
+            return Self.answer(await ApiClientRoutes.curl(
+                body: Data(body.readableBytesView), backend: backend))
+        case .apiImport:
+            return Self.answer(await ApiClientRoutes.importFile(
+                body: Data(body.readableBytesView), backend: backend))
+        case .apiExport:
+            return Self.answer(await ApiClientRoutes.export(
+                body: Data(body.readableBytesView), backend: backend))
+
+        case .recordStatus:
+            return Self.answer(await RecordRoutes.status(backend: backend))
+        case .recordStart:
+            return Self.answer(await RecordRoutes.start(
+                body: Data(body.readableBytesView), backend: backend))
+        case .recordPause:
+            return Self.answer(await RecordRoutes.pause(backend: backend))
+        case .recordResume:
+            return Self.answer(await RecordRoutes.resume(
+                body: Data(body.readableBytesView), backend: backend))
+        case .recordStop:
+            return Self.answer(await RecordRoutes.stop(backend: backend))
+
+        case .managedToolsList:
+            return Self.answer(await ToolStoreRoutes.list(backend: backend))
+        case .managedToolsInstall:
+            return Self.answer(await ToolStoreRoutes.install(
+                body: Data(body.readableBytesView), backend: backend))
+        case .managedToolsRemove:
+            return Self.answer(await ToolStoreRoutes.remove(
                 body: Data(body.readableBytesView), backend: backend))
 
         case .actionsRun:

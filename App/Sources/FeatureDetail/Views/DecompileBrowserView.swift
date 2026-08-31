@@ -326,7 +326,7 @@ struct DecompileBrowserView: View {
     private func setUpTools() async {
         do {
             if await state.env.engine.toolchain.java() == nil {
-                try await installTool(.temurinJre, arch: ManagedToolStore.macArch, label: "Java runtime")
+                try await installTool(.temurinJre, arch: ManagedToolStore.hostArch, label: "Java runtime")
             }
             let tool: ManagedTool = mode == .jadx ? .jadx : .apktool
             if await state.env.engine.managedTools.resolve(tool) == nil {

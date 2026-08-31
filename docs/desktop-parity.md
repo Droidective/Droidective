@@ -281,26 +281,60 @@ before adding to it.
    a non-activating `NSPanel` — no such window exists on Windows or Linux — so
    it takes focus and hands it back by hiding.
 
-   **What the panel does not have yet**: Manage Apps, Emulators, Install APK,
-   the pick-bundle interstitial, and the resume-where-I-left-off window. The
-   first three are screens of their own; the last is a preference over
-   behaviour this panel does not have, since it is created on demand rather
-   than kept alive behind the app.
-7. **API Testing** (`api-client`). The largest remaining feature and the easiest
-   to be confident about: device-free, and ADBKit's `ApiClient/` group is
-   already fully portable.
-8. **ffmpeg for Windows and Linux**, which unblocks **screen record** and the
-   **video editor** — the only two features blocked rather than unscheduled.
-   `App/Resources/ffmpeg` is a committed macOS universal binary and
-   `scripts/unpack-ffmpeg.sh` verifies it with `lipo`.
-9. **Multi-window** (21). Large, and the shell is the right shape for it now.
-10. **Drag and drop** (17). Deliberately late: it is the one item whose
-    *verification* an agent cannot do at all — synthetic drags never fire
-    `dragstart` in a webview — so it should land when there is a person to try
-    it, and it goes on the manual list the moment it does.
-11. **The polish** — Settings' remaining tabs and the background/text colour (8),
-    window translucency and its per-platform blur (15), the role picker (9),
-    the welcome tour (22), the updater (23).
+   **The pick-an-app step has landed**: a `needsBundle` action asks which app,
+   after its device is settled — "which app" is a question about a particular
+   device, so asking the other way round would offer a list that might not
+   exist on the one finally chosen. It lists the device's *user* apps, where
+   the Mac lists its saved bundles first; there is no bundle store here yet.
+   Landing it uncovered an older bug: only one screen can be in front and the
+   panel checks the form first, so a form action that then pushed an
+   interstitial left the form up with the interstitial behind it — a form
+   action with two devices connected had been a Run button that did nothing.
+
+   **What the panel still does not have**: Manage Apps, Emulators, Install APK,
+   and the resume-where-I-left-off window. The first three are screens of their
+   own; the last is a preference over behaviour this panel does not have, since
+   it is created on demand rather than kept alive behind the app.
+7. ~~**API Testing** (`api-client`)~~ — **landed.** Collections, folders,
+   environments, `{{variable}}` scopes with the unresolved ones surfaced rather
+   than sent, assertions, the runner, six code-generation targets, Postman
+   import and export, and a cURL paste that parses back. The collection runner
+   is deliberately *not* a daemon route: the client walks the tree and sends one
+   request at a time, so progress is live and Stop is instant.
+8. ~~**ffmpeg for Windows and Linux**~~ — **screen record landed;** the video
+   editor has not. Off Apple this could not be provisioned and reused: the Mac
+   records through the Apple-gated mirror media stack, so the daemon grew its
+   own pipeline — `FfmpegPipe` feeding the scrcpy H.264 stream to `ffmpeg -f
+   h264 -i pipe:0 -c:v copy`, with segmented pause/resume through the concat
+   demuxer. ffmpeg itself is now a managed download (BtbN's builds, digest
+   verified, `.tar.xz` on Linux and `.zip` on Windows) rather than a bundled
+   binary, which is also what unblocked Settings ▸ Tools.
+9. ~~**Multi-window** (21)~~ — **landed.** One window per device, each with its
+   own tabs and its own `localStorage` key, the exclusivity banner with Focus
+   and Take Over, and a tinted device icon on every window after the first.
+   Two traps worth keeping in mind: the window's label must be in the URL it is
+   opened with, or both windows read as `main` and share one layout; and Tauri
+   2's `Emitter::emit` reaches *every* listener whatever object it is called on,
+   so a targeted event needs `emit_to`.
+10. ~~**Drag and drop** (17)~~ — **landed, and on the manual list.** An APK or
+    app bundle dropped anywhere installs; anything else dropped on the File
+    Explorer is pushed to the directory it is showing. The dropped *bytes* are
+    staged through a Rust command rather than the path being read from Tauri's
+    own drop handler, and that is forced rather than chosen: turning that
+    handler on stops every HTML5 drag in the page working — the tab strip, the
+    sidebar, the mirror wall — which was checked rather than assumed. One file
+    copy against rewriting every in-app drag onto pointer events. The gesture
+    itself is in `docs/manual-verification.md`, because no synthetic event on
+    this platform can produce a drag.
+11. **The polish.** Window translucency (15) and the role picker (9) have
+    landed; the welcome tour (22) has not, and the updater (23) is blocked on a
+    signing keypair rather than on effort — `tauri-plugin-updater` needs one
+    whose private half lives in a GitHub secret, which is the maintainer's to
+    create. Settings ▸ MCP is the remaining tab, and it is a port task of its
+    own size rather than a checkbox: `ReactotronMCP` is `#if
+    canImport(Network)`-gated end to end and taps ADBKit's Apple-only
+    `ReactotronServer`, so serving it off Apple means feeding
+    `McpCommandStore` from the daemon's NIO relay instead.
 12. **`frida-console`**, last of the real features: it needs a rooted device to
     verify, which makes it the hardest to be sure of and the least used.
 
@@ -352,12 +386,16 @@ the chrome and the device bar have not.
       people already have from VS Code.
 - [x] **Drop-to-split** — dragging a tab onto the trailing edge of the only
       pane splits there; dropping it on the other pane's strip moves it.
-- [ ] **Drops from outside the app** — a file dragged from the file manager
-      onto the File Explorer (`adb push`), and an APK or AAB dropped on the
-      window to install it. The blocker is that `dragDropEnabled: false` is
-      what makes the *tab* drags work at all, so the two have to coexist rather
-      than one being switched off for the other.
-- [ ] **Multi-window** (`docs/multi-window.md`).
+- [x] **Drops from outside the app** — a file dragged from the file manager
+      onto the File Explorer (`adb push`), and an APK or app bundle dropped
+      anywhere on the window to install it. The two coexist rather than one
+      being switched off for the other: `dragDropEnabled: false` stays, so the
+      in-app drags keep working, and the dropped *bytes* are staged through a
+      Rust command instead of Tauri handing over a path. The gesture is on the
+      manual list — no synthetic event can produce a drag in a webview.
+- [x] **Multi-window** (`docs/multi-window.md`) — one window per device, its
+      own tabs and layout key, the Focus / Take Over banner, and a tinted
+      device icon on every window after the first.
 - [x] **⌘= / ⌘- zoom** of the whole UI, with ⌘0 for Actual Size and the same
       eight steps the Mac walks, so the same number of presses lands on the same
       size in both apps. The content is laid out at `size / scale` and scaled up
@@ -399,7 +437,7 @@ the chrome and the device bar have not.
       palette's empty-query list, pinned from either. Members are lifted out of
       their categories rather than listed twice, as `enabledFeatures(in:)` does
       on the Mac. Quick Actions does not exist here yet to share them with.
-- [ ] **Manage features catalog** — turn features off; everything is on by
+- [x] **Manage features catalog** — turn features off; everything is on by
       default.
 
 ### Device bar
@@ -485,14 +523,21 @@ memory — the file each item names is the thing to replicate.
       the features that would need them are not ported yet. The app never
       installs a tool itself, on either platform. The device bar carries the
       "adb not found" warning off the same one detection.
-- [ ] **Tools** — the managed-tool store: download, size, remove, upgrade.
+- [x] **Tools** — the managed-tool store: download, size, remove, upgrade.
+      ffmpeg and the Temurin JRE join the catalogue off Apple, since neither is
+      bundled there.
 - [x] **Hotkeys** — every feature in sidebar order with a live-preview
       recorder, plus the Mac's "Hidden features with shortcuts" section, since a
       feature turned off in the catalog keeps its shortcut and would otherwise
       be unbindable. The Global pair names what it waits on rather than showing
       a recorder that controls nothing.
 - [ ] **MCP** — shown conditionally on the Mac; the Reactotron MCP server's
-      switches. Follows Reactotron (backlog 23).
+      switches. Reactotron itself has landed, so that is no longer the blocker:
+      the `ReactotronMCP` package is `#if canImport(Network)`-gated end to end
+      and taps ADBKit's Apple-only `ReactotronServer`, so serving it off Apple
+      means feeding `McpCommandStore` from the daemon's NIO relay instead. A
+      port task of its own size rather than a checkbox — the tab says so
+      instead of showing switches that control nothing.
 
 #### Panels and sheets
 
@@ -504,16 +549,21 @@ memory — the file each item names is the thing to replicate.
       off its inline banner.
 - [ ] **Command Log** (`CommandLogView`) — every `CommandLog.userInitiated`
       adb call, opened from Privacy.
-- [ ] **Role picker** (`RolePickerView`) — shown on first launch before the
-      tour (`LaunchPrompt.rolePicker`), and re-openable from General. A role
-      curates which features the sidebar lists.
+- [x] **Role picker** (`RolePickerView`) — shown on first launch, and
+      re-openable from Settings ▸ General, which also names the role in effect.
+      The catalogue is served (`/v1/features/roles`) rather than re-listed in
+      TypeScript: a role is six lists of feature ids, and a second copy would
+      drift the first time a feature joined one.
 - [x] **Manage Features catalog** (`CatalogView`) — everything on by default;
       this is for turning things off, with a right-click on a group header for
       the whole group.
 - [x] **About & Feedback** — the `about` tab: version, Report an Issue, Request
       a Feature, GitHub, Releases.
 - [ ] **Welcome tour** (`TourView` + `TourDemos`) — skippable, ending on the
-      two Quick Actions pages and the confetti finale.
+      two Quick Actions pages and the confetti finale. The Mac's demo stage
+      plays recordings of the *Mac* app, which would be the wrong window
+      chrome and the wrong modifier keys here, so the six drawn fallbacks are
+      what a port would follow.
 - [ ] **What's New** (`WhatsNewPresenter`) — on first launch of a new version.
 - [ ] **Star prompt** (`StarPromptView`) — the recurring, capped GitHub nudge.
 - [x] **Wireless connect sheet** (`WirelessConnectSheet`) — the three-tab
@@ -532,22 +582,38 @@ A webview has no menu bar of its own, so this is a real port: Tauri's native
 menu plus the accelerators. Every item here is also a keyboard shortcut
 somebody already has in their fingers.
 
-- [ ] **File** ▸ New Window.
-- [ ] **Terminal** ▸ New, Split Vertically, Split Horizontally, Close, Rename…,
+- [x] **File** ▸ New Window, New Window for Device.
+- [x] **Terminal** ▸ New, Split Vertically, Split Horizontally, Close, Rename…,
       Next, Previous.
-- [ ] **Tab** ▸ New Tab, Close Tab, Next, Previous, Show Tab 1–9.
-- [ ] **Go**, **View** ▸ the sidebar commands, and the zoom pair.
-- [ ] **Edit** ▸ Find Feature, Manage Features, Find in Terminal…, Find Next,
-      Find Previous.
-- [ ] **Help** ▸ Report an Issue…, Request a Feature…, Droidective on GitHub,
-      Release Notes. **About Droidective** in the app menu.
+- [x] **Tab** ▸ New Tab, Close Tab, Next, Previous. **Show Tab 1–9** is instead
+      Alt+1–9 on the *sidebar*, matching what those keys do in this app.
+- [x] **View** ▸ Toggle Sidebar and the zoom trio.
+- [x] **Edit** ▸ Find Feature, Manage Features. **Find in Terminal** is not
+      here: the terminal's find bar is Ctrl+F inside the pane, and a menu item
+      that only worked while one particular tab was focused would be a menu
+      item that is usually dead.
+- [x] **Help** ▸ Report an Issue…, Request a Feature…, Droidective on GitHub,
+      Release Notes, About Droidective.
+
+`lib/menuKeys.ts` mirrors the Rust table and `menuKeys.test.ts` fails if the
+two disagree, so a relabelled item cannot leave a stale accelerator behind.
 
 #### Look
 
-- [ ] **Window translucency** — the `.bgRoot`/`.bgSurface` token system, with
-      `WindowEffects` already pure-tested in ADBKit. Note the Mac's blur is a
-      private CoreGraphics call; Windows and Linux need their own (Mica /
-      compositor blur) or the slider limits to opacity.
+- [x] **Window translucency** — Opacity and Grain are the Mac's sliders, with
+      the Mac's arithmetic ported to `lib/window-effects.ts` and checked
+      against `WindowEffectsTests`' own numbers; the tokens are re-expressed at
+      an alpha in `lib/glass.ts` (root carries the opacity, lifted surfaces only
+      the contrast step) and 100% hands the palette back untouched, so an
+      untouched window renders exactly as before. Grain is an SVG
+      `feTurbulence` film rather than a Metal shader, portalled outside the zoom
+      transform so zoom does not magnify the specks. **Divergence:** Blur is a
+      *switch*, not a slider — no platform exposes a radius (Windows has
+      Acrylic and Mica, both on-or-off; Linux leaves window blur to the
+      compositor entirely), and a slider with two positions would be a worse
+      lie than a switch. `src-tauri/src/glass.rs` picks Acrylic on Windows
+      (Mica is 11-only and tints rather than blurs) and disables the row with
+      the reason on Linux.
 - [x] **Light theme** — ported from the asset catalog's own colorset values,
       applied as CSS custom properties on `:root` so every existing token
       follows it.
@@ -1369,7 +1435,6 @@ job, and the checklist now says which.
 ---
 
 ## Per-feature checklists
-
 ### Input & Clipboard
 #### `send-text` — Send Text  ·  🟡 partial
 > Type text, URLs, or symbols on the device
@@ -1379,10 +1444,10 @@ job, and the checklist now says which.
 
 
 ### Connection
-#### `connection` — Connection  ·  ⬜ todo
+#### `connection` — Connection  ·  🟡 partial
 > Copy IP, reverse port, disconnect, DNS & wireless setup
 - **Kind** `view`
-- **Note** Not implemented on macOS either.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `NetworkConnectionView` — `App/Sources/FeatureDetail/Views/NetworkConnectionView.swift`
 - **Must replicate**
   - [ ] button: Forward
@@ -1522,10 +1587,10 @@ job, and the checklist now says which.
 - **Kind** `instantAction` · **hub member**
 - **Note** Runs from the palette; no dedicated screen.
 
-#### `react-native` — React Native  ·  ⬜ todo
+#### `react-native` — React Native  ·  🟡 partial
 > Dev menu, reload, deep links, dev server, process death
 - **Kind** `view`
-- **Note** Not implemented on macOS either.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `ReactNativeView` — `App/Sources/FeatureDetail/Views/ReactNativeView.swift`
 - **Must replicate**
   - [ ] button: Forward
@@ -1648,10 +1713,10 @@ job, and the checklist now says which.
   - [ ] tooltip: Recording audio — device playback or mic, plus the Mac's mic
   - [ ] tooltip: Mute or unmute what's being recorded
 
-#### `screen-record` — Screen Record  ·  ⬜ todo
+#### `screen-record` — Screen Record  ·  🟡 partial
 > Record via scrcpy — no time limit, with audio
 - **Kind** `view`
-- **Note** Not started — rides the mirror session, so it follows the mirror. Backlog 25.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `ScreenRecordView` — `App/Sources/FeatureDetail/Views/ScreenRecordView.swift`
 - **Must replicate**
   - [ ] label: Stop & Save
@@ -1665,7 +1730,7 @@ job, and the checklist now says which.
 #### `video-editor` — Video Editor  ·  ⬜ todo
 > Trim, rotate, crop, convert & compress video
 - **Kind** `view`
-- **Note** Not started — needs the mirror pipeline plus the bundled ffmpeg. Backlog 25.
+- **Note** Not started — needs ffmpeg's filter graph and a preview scrubber. The managed ffmpeg it would use is now downloaded (Settings ▸ Tools), so this is the editor itself rather than the toolchain.
 - **macOS view** `VideoEditorView` — `App/Sources/FeatureDetail/Views/VideoEditorView.swift`
 - **Must replicate**
   - [ ] label: Open video…
@@ -1759,10 +1824,10 @@ job, and the checklist now says which.
 - **Note** iOS Simulator only (simctl push).
 - **Parameters** `bundleId` (text), `title` (text), `body` (text), `badge` (number, optional)
 
-#### `simulate` — Simulate  ·  ⬜ todo
+#### `simulate` — Simulate  ·  🟡 partial
 > Fake battery, appearance, locale, network & proxy
 - **Kind** `view`
-- **Note** Not implemented on macOS either.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `SimulateView` — `App/Sources/FeatureDetail/Views/SimulateView.swift`
 - **Must replicate**
   - [ ] button: Reset all overrides
@@ -2033,10 +2098,10 @@ job, and the checklist now says which.
 
 
 ### Tool UX
-#### `api-client` — API Testing  ·  ⬜ todo
+#### `api-client` — API Testing  ·  🟡 partial
 > Send HTTP requests, import Postman collections, assert on responses
 - **Kind** `view`
-- **Note** Not started on Windows/Linux.
+- **Note** A pane exists; the checklist below is what it is missing.
 - **macOS view** `ApiClientView` — `App/Sources/FeatureDetail/Views/ApiClient/ApiClientView.swift`
 - **Must replicate**
   - [ ] button: OK
@@ -2107,4 +2172,4 @@ job, and the checklist now says which.
   - [ ] drag: drag and drop
 
 
-<!-- counts: {'done': 0, 'partial': 52, 'todo': 7, 'gated': 2} -->
+<!-- counts: {'done': 0, 'partial': 57, 'todo': 2, 'gated': 2} -->

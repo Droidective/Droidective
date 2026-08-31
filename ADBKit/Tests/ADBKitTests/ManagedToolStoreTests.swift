@@ -128,7 +128,15 @@ private let isWindows: Bool = {
         // Real .tar.gz fixture, extracted by the real runner — exercises the
         // tar path and the recursive runnable search (Temurin's java is nested).
         let tgz = try Self.makeTarGz(runnableRelPath: "Contents/Home/bin/java")
+        // Named for the platform running the test, because the Temurin spec is
+        // per-host — the Mac's pattern wants `_mac_` and Linux's wants
+        // `_linux_`, and an asset that matched neither would fail here for a
+        // reason that has nothing to do with tar.
+        #if os(macOS)
         let asset = "OpenJDK21U-jre_aarch64_mac_hotspot_21.0.4_7.tar.gz"
+        #else
+        let asset = "OpenJDK21U-jre_aarch64_linux_hotspot_21.0.4_7.tar.gz"
+        #endif
         let http = MockHTTP(releaseJSON: releaseJSON(tag: "jdk-21.0.4+7", assetName: asset), assetBytes: tgz)
         let store = ManagedToolStore(rootDirectory: tempRoot(), http: http)
 

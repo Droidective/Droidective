@@ -167,7 +167,13 @@ export interface FilesListResponse {
  * The daemon owns this list and refuses anything else before it reaches a
  * device shell; these are the strings it knows, spelled its way.
  */
-export type FileOperation = "makeDirectory" | "delete" | "copy" | "move"
+/**
+ * `FileProtocol.OperationKind`. `push` is the one whose source is a *host*
+ * path rather than a device one — it rides here rather than on a route of its
+ * own because the daemon owns the list of what may be done to a device's
+ * filesystem.
+ */
+export type FileOperation = "makeDirectory" | "delete" | "copy" | "move" | "push"
 
 export interface FileDetails {
   type: string

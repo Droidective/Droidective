@@ -33,7 +33,7 @@ struct ManagedToolsSettingsView: View {
     ]
 
     private func arch(for tool: ManagedTool) -> String {
-        tool == .temurinJre ? ManagedToolStore.macArch : ""
+        tool == .temurinJre ? ManagedToolStore.hostArch : ""
     }
 
     var body: some View {

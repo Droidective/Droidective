@@ -1,5 +1,7 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react"
 import { FeaturePane } from "@/components/FeaturePane"
+import { WindowConflictBanner } from "@/components/WindowConflictBanner"
+import { useWindows } from "@/hooks/useWindows"
 import { TabStrip } from "@/components/TabStrip"
 import { cn } from "@/lib/cn"
 import { DIVIDER_WIDTH, fractionForDrag, leftWidth } from "@/lib/panes"
@@ -183,7 +185,7 @@ function PaneBody({
             id === group.activeTab ? "flex flex-col bg-bg-root" : "hidden",
           )}
         >
-          <FeaturePane
+          <PaneContents
             id={id}
             feature={props.featureByID(id)}
             features={props.features}
@@ -202,5 +204,36 @@ function PaneBody({
       ))}
       {splitZone === null ? null : <SplitZone onDrop={splitZone} />}
     </div>
+  )
+}
+
+/**
+ * A tab's contents, or the banner saying another window is already running it.
+ *
+ * The check sits here rather than inside `FeaturePane` so that stays a routing
+ * table: whether a feature *may* run is a question about windows, not about
+ * which screen to draw.
+ */
+function PaneContents(props: React.ComponentProps<typeof FeaturePane>) {
+  const windows = useWindows()
+  const [takingOver, setTakingOver] = useState(false)
+  const owner = windows.conflict(props.id, props.device?.serial ?? null)
+
+  if (owner === null) return <FeaturePane {...props} />
+  return (
+    <WindowConflictBanner
+      owner={owner}
+      featureTitle={props.feature?.title ?? props.id}
+      busy={takingOver}
+      onFocus={() => {
+        windows.focus(owner.label)
+      }}
+      onTakeOver={() => {
+        setTakingOver(true)
+        void windows.takeOver(owner.label, props.id).finally(() => {
+          setTakingOver(false)
+        })
+      }}
+    />
   )
 }

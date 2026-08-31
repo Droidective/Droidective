@@ -44,6 +44,12 @@ enum HostArchive {
     }
     #endif
 
+    /// `.tar.xz`, with the compression left for tar to recognise: bsdtar always
+    /// has, and GNU tar has since 1.15, so this needs no `xz` binary of its own.
+    static func tarXzArguments(archive: String, into dir: String) -> [String] {
+        ["-xf", archive, "-C", dir]
+    }
+
     static func tarGzArguments(archive: String, into dir: String) -> [String] {
         ["-xzf", archive, "-C", dir]
     }

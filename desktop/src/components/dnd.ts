@@ -29,3 +29,15 @@ export function pastMidpointX(event: React.DragEvent<HTMLElement>): boolean {
   const box = event.currentTarget.getBoundingClientRect()
   return event.clientX > box.left + box.width / 2
 }
+
+/**
+ * Whether a drag is carrying files from outside the window.
+ *
+ * `types` rather than `files`, because during a drag the file list is empty for
+ * security and this is the only signal. In-app reorder targets check it so an
+ * APK dragged in from the file manager is not also read as a reorder: an empty
+ * `text/plain` reads back as `Number("") === 0`, a perfectly valid index.
+ */
+export function carriesFiles(event: React.DragEvent<HTMLElement>): boolean {
+  return event.dataTransfer.types.includes("Files")
+}

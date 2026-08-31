@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core"
 import { listen, type UnlistenFn } from "@tauri-apps/api/event"
+
+import type { RoleCatalogue } from "@/lib/roles"
 import type {
   AppsResponse,
   CrashListResponse,
@@ -45,6 +47,11 @@ export function listDevices(): Promise<Device[]> {
 
 export function listFeatures(): Promise<FeatureSummary[]> {
   return invoke<FeatureSummary[]>("list_features")
+}
+
+/** The role picker's catalogue — served, so the six lists never drift. */
+export function listRoles(): Promise<RoleCatalogue> {
+  return invoke<RoleCatalogue>("list_roles")
 }
 
 export function runAction(args: {
@@ -231,6 +238,38 @@ export {
   writeDevSetting,
   writeRestriction,
 } from "@/lib/daemon-settings"
+export type {
+  ApiSendResponse,
+  AssertionOutcomeWire,
+  RedirectHop,
+  ResponseCookie,
+  ResponseTiming,
+} from "@/lib/daemon-api"
+export {
+  apiCancel,
+  apiCode,
+  apiCurl,
+  apiExport,
+  apiImport,
+  apiSend,
+  apiWorkspace,
+  apiWrite,
+} from "@/lib/daemon-api"
+export type { RecordStatus, RecordWireOptions, StoppedRecording } from "@/lib/daemon-record"
+export {
+  discardDroppedFile,
+  discardRecording,
+  managedToolInstall,
+  managedToolList,
+  managedToolRemove,
+  recordPause,
+  recordResume,
+  recordStart,
+  recordStatus,
+  recordStop,
+  saveRecording,
+  stageDroppedFile,
+} from "@/lib/daemon-record"
 export { customCommands, runCustomCommand, writeCustomCommands } from "@/lib/daemon-commands"
 export {
   apkToolchain,
