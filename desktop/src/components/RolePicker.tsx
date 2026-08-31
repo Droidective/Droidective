@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Atom, Grid3x3 } from "lucide-react"
 
 import { RoleCard } from "@/components/RoleCard"
@@ -30,6 +30,19 @@ export function RolePicker({
   onDismiss: () => void
 }) {
   const [includeReactNative, setIncludeReactNative] = useState(false)
+
+  // Escape leaves it, as it leaves every other full-screen thing in this app —
+  // the palette, the settings sheet, a Quick Actions screen. A first-launch
+  // overlay with no keyboard way out is the one that traps people.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onDismiss()
+    }
+    globalThis.addEventListener("keydown", onKey)
+    return () => {
+      globalThis.removeEventListener("keydown", onKey)
+    }
+  }, [onDismiss])
 
   return (
     <div className="fixed inset-0 z-50 overflow-auto bg-bg-root">

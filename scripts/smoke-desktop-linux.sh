@@ -142,15 +142,46 @@ grep -q "\"Droidective\"" /tmp/windows.txt || fail "no window named Droidective"
 WINDOW="$(xdotool search --name "^Droidective$" | head -1)"
 [ -n "$WINDOW" ] || fail "xdotool cannot find the window"
 
-import -window root -display :99 /dist/linux-launch.png
-
 # A blank framebuffer is what a webview that never painted looks like, and it
 # passes every check above. The standard deviation of a flat rectangle is 0;
 # a drawn UI is far from it.
 spread() { identify -format "%[fx:standard_deviation*255]" "$1"; }
+
+# Counts differing pixels between two frames, or fails saying so.
+changed() {
+  count="$(compare -metric AE "$1" "$2" null: 2>&1 || true)"
+  case "$count" in
+    *[!0-9]*|"") fail "could not compare $1 and $2 (got: $count)" ;;
+  esac
+  echo "$count"
+}
+
+# A container has no stored layout, so this *is* a first launch: the role
+# picker is what comes up, and the app is behind it. Photograph it, then leave
+# it with Escape — which is both how the picker is meant to be escapable and
+# the only deterministic way to dismiss it with no window manager to click in.
+#
+# Getting this wrong is not theoretical: when the picker first landed, this
+# script drove the palette straight into it. The palette keystrokes went
+# nowhere, the picker shifted a few pixels under them, and the frame diff
+# called that a screen opening. So the dismissal is *asserted* rather than
+# assumed.
+import -window root -display :99 /dist/linux-picker.png
+PICKER_SPREAD="$(spread /dist/linux-picker.png)"
+echo "picker pixel spread: $PICKER_SPREAD"
+[ "${PICKER_SPREAD%%.*}" -ge 3 ] || fail "the window painted nothing (spread $PICKER_SPREAD)"
+
+xdotool windowfocus "$WINDOW" || true
+xdotool key --window "$WINDOW" Escape
+sleep 3
+import -window root -display :99 /dist/linux-launch.png
+DISMISSED="$(changed /dist/linux-picker.png /dist/linux-launch.png)"
+echo "pixels changed after leaving the role picker: $DISMISSED"
+[ "$DISMISSED" -gt 50000 ] || fail "the role picker did not go away ($DISMISSED pixels changed)"
+
 LAUNCH_SPREAD="$(spread /dist/linux-launch.png)"
 echo "launch pixel spread: $LAUNCH_SPREAD"
-[ "${LAUNCH_SPREAD%%.*}" -ge 3 ] || fail "the window painted nothing (spread $LAUNCH_SPREAD)"
+[ "${LAUNCH_SPREAD%%.*}" -ge 3 ] || fail "the app painted nothing (spread $LAUNCH_SPREAD)"
 
 # Drive it far enough to open a screen. There is no window manager here, so
 # focus is set directly rather than by clicking. Ctrl+K is the command
@@ -182,11 +213,8 @@ echo "screen pixel spread: $SCREEN_SPREAD"
 # Same picture means nothing opened. `compare -metric AE` counts differing
 # pixels; a tab plus a terminal is tens of thousands of them, while a couple of
 # hundred is a caret blinking.
-CHANGED="$(compare -metric AE /dist/linux-launch.png /dist/linux-screen.png null: 2>&1 || true)"
+CHANGED="$(changed /dist/linux-launch.png /dist/linux-screen.png)"
 echo "pixels changed after opening a screen: $CHANGED"
-case "$CHANGED" in
-  *[!0-9]*|"") fail "could not compare the two frames (got: $CHANGED)" ;;
-esac
 [ "$CHANGED" -gt 5000 ] || fail "the palette opened nothing ($CHANGED pixels changed)"
 
 kill -0 "$APP" 2>/dev/null || fail "the app died while a screen was being opened"
@@ -194,6 +222,6 @@ kill -0 "$APP" 2>/dev/null || fail "the app died while a screen was being opened
 echo "=== app log ==="
 tail -20 /tmp/app.log || true
 kill "$APP" 2>/dev/null || true
-ls -la /dist/linux-launch.png /dist/linux-palette.png /dist/linux-screen.png
+ls -la /dist/linux-picker.png /dist/linux-launch.png /dist/linux-palette.png /dist/linux-screen.png
 echo "SMOKE PASSED"
 '
