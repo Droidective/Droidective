@@ -70,6 +70,14 @@ export interface WorkspaceController {
   setQuickPanelHotkey: (hotkey: Hotkey | null) => void
   /** +1 zooms in, -1 out, 0 back to Actual Size. */
   zoom: (direction: -1 | 0 | 1) => void
+  /**
+   * Curate the layout, from the role picker.
+   *
+   * A whole-layout transform rather than another setter per field, because a
+   * role changes three of them at once and applying them one at a time would
+   * put the sidebar through two intermediate arrangements.
+   */
+  curate: (transform: (layout: LayoutState) => LayoutState) => void
 }
 
 /**
@@ -132,6 +140,12 @@ export function useWorkspace(features: FeatureSummary[]): WorkspaceController {
   return {
     workspace,
     layout,
+    curate: useCallback(
+      (transform: (layout: LayoutState) => LayoutState) => {
+        setLayout(transform)
+      },
+      [setLayout],
+    ),
     ...useLayoutEditors(setLayout),
     ...usePreferenceEditors(setLayout),
     open: useCallback((id: string) => {

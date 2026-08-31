@@ -1208,6 +1208,9 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
         case .featuresList:
             return (.ok, encoded(ActionProtocol.features()))
 
+        case .featuresRoles:
+            return (.ok, encoded(RoleProtocol.roles()))
+
         case .deviceProps:
             let raw = Data(body.readableBytesView)
             guard let request = try? JSONDecoder().decode(

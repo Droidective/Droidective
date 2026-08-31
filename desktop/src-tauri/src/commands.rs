@@ -30,9 +30,9 @@ use crate::daemon::wire::{
     ForegroundResponse, InstallRequest, InstallResponse, LaunchResponse, LogcatPidResponse,
     ManagedTools, MemInfoResponse, PairResponse, PermissionWriteRequest, PermissionsResponse,
     ReactotronReverseRequest, ReactotronReverseResponse, RestrictionWriteRequest,
-    RestrictionsResponse, RootStatusResponse, RunRequest, RunResponse, SandboxRequest,
-    SandboxResponse, StreamParams, ToolInstallRequest, ToolInstallResponse, ToolsResponse,
-    WifiResponse, WifiWriteRequest, WirelessActionRequest,
+    RestrictionsResponse, RolesResponse, RootStatusResponse, RunRequest, RunResponse,
+    SandboxRequest, SandboxResponse, StreamParams, ToolInstallRequest, ToolInstallResponse,
+    ToolsResponse, WifiResponse, WifiWriteRequest, WirelessActionRequest,
 };
 use crate::daemon::{DaemonStatus, Supervisor};
 use crate::error::DaemonError;
@@ -95,6 +95,12 @@ pub async fn list_features(
     supervisor: State<'_, Supervisor>,
 ) -> Result<Vec<FeatureSummary>, DaemonError> {
     supervisor.client().await?.list_features().await
+}
+
+/// The role picker's catalogue.
+#[tauri::command]
+pub async fn list_roles(supervisor: State<'_, Supervisor>) -> Result<RolesResponse, DaemonError> {
+    supervisor.client().await?.list_roles().await
 }
 
 #[tauri::command]

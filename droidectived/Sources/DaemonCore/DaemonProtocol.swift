@@ -10,6 +10,7 @@ public enum DaemonProtocol {
     public enum Route: String, CaseIterable, Sendable {
         case devicesList = "/v1/devices/list"
         case featuresList = "/v1/features/list"
+        case featuresRoles = "/v1/features/roles"
         case actionsRun = "/v1/actions/run"
         case appsList = "/v1/apps/list"
         case appsControl = "/v1/apps/control"

@@ -118,6 +118,20 @@ import FoundationNetworking
         }
     }
 
+    /// The route is dispatched inline in the server's switch, so this is the
+    /// only thing that would catch it never being wired: without the case it
+    /// answers 404 and the role picker comes up empty.
+    @Test func servesTheRoleCatalogue() async throws {
+        try await withServer { port, token in
+            let (status, body) = try await send(
+                port: port, path: DaemonProtocol.Route.featuresRoles.rawValue, token: token)
+            #expect(status == 200)
+            let decoded = try JSONDecoder().decode(
+                RoleProtocol.RolesResponse.self, from: body)
+            #expect(decoded == RoleProtocol.roles())
+        }
+    }
+
     @Test func refusesAMissingOrWrongToken() async throws {
         try await withServer { port, _ in
             let missing = try await send(port: port, token: nil)

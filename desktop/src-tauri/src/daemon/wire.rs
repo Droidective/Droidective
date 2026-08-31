@@ -100,6 +100,33 @@ pub struct FeaturesResponse {
     pub features: Vec<FeatureSummary>,
 }
 
+/// One role from the picker's catalogue.
+///
+/// Served rather than listed in this app, because a role is six lists of
+/// feature ids in the registry and a second copy would drift the first time a
+/// feature joined a role — with nothing failing to say so.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Role {
+    pub id: String,
+    pub label: String,
+    pub blurb: String,
+    #[serde(rename = "featureIDs")]
+    pub feature_ids: Vec<String>,
+    #[serde(rename = "categoryOrder")]
+    pub category_order: Vec<String>,
+    /// The `DevicePlatform` raw values the role works with — "android",
+    /// "ios-simulator".
+    pub platforms: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RolesResponse {
+    pub roles: Vec<Role>,
+    /// What the picker's "I work with React Native" switch adds to any role.
+    #[serde(rename = "reactNativeStackIDs")]
+    pub react_native_stack_ids: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct RunRequest {
     #[serde(rename = "featureId")]

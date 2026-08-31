@@ -20,9 +20,9 @@ use crate::daemon::wire::{
     ManagedTools, ManagedToolsListResponse, MemInfoResponse, PairResponse, PermissionWriteRequest,
     PermissionsResponse, ReactotronReverseRequest, ReactotronReverseResponse, RecordOptions,
     RecordStartRequest, RecordStatusResponse, RecordStoppedResponse, RestrictionWriteRequest,
-    RestrictionsResponse, RootStatusResponse, RunRequest, RunResponse, SandboxRequest,
-    SandboxResponse, ToolInstallRequest, ToolInstallResponse, ToolsResponse, WifiResponse,
-    WifiWriteRequest, WirelessActionRequest,
+    RestrictionsResponse, RolesResponse, RootStatusResponse, RunRequest, RunResponse,
+    SandboxRequest, SandboxResponse, ToolInstallRequest, ToolInstallResponse, ToolsResponse,
+    WifiResponse, WifiWriteRequest, WirelessActionRequest,
 };
 use crate::error::DaemonError;
 
@@ -58,6 +58,10 @@ impl DaemonClient {
     pub async fn list_features(&self) -> Result<Vec<FeatureSummary>, DaemonError> {
         let response: FeaturesResponse = self.post("/v1/features/list", &EMPTY).await?;
         Ok(response.features)
+    }
+
+    pub async fn list_roles(&self) -> Result<RolesResponse, DaemonError> {
+        self.post("/v1/features/roles", &EMPTY).await
     }
 
     pub async fn run_action(&self, request: &RunRequest) -> Result<RunResponse, DaemonError> {

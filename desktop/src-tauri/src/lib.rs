@@ -166,6 +166,7 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         commands::daemon_status,
         commands::list_devices,
         commands::list_features,
+        commands::list_roles,
         commands::run_action,
         commands::list_apps,
         commands::control_app,

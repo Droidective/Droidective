@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core"
 import { listen, type UnlistenFn } from "@tauri-apps/api/event"
+
+import type { RoleCatalogue } from "@/lib/roles"
 import type {
   AppsResponse,
   CrashListResponse,
@@ -45,6 +47,11 @@ export function listDevices(): Promise<Device[]> {
 
 export function listFeatures(): Promise<FeatureSummary[]> {
   return invoke<FeatureSummary[]>("list_features")
+}
+
+/** The role picker's catalogue — served, so the six lists never drift. */
+export function listRoles(): Promise<RoleCatalogue> {
+  return invoke<RoleCatalogue>("list_roles")
 }
 
 export function runAction(args: {

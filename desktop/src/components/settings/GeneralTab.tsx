@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Switch } from "@/components/Controls"
+import { Button, Switch } from "@/components/Controls"
 import { Row, Section } from "@/components/settings/SettingsKit"
 import { backgroundAvailable } from "@/lib/daemon"
 import { panelEligibleActions } from "@/lib/quick-actions"
@@ -22,29 +22,28 @@ export interface GeneralTabProps {
   categoryOrder: readonly string[]
   favorites: readonly string[]
   disabledFeatures: readonly string[]
+  /** The role in effect, or null for "everything". */
+  selectedRole: string | null
+  /** Re-opens the picker — the Mac's "Change role…". */
+  onChangeRole: () => void
 }
 
 /**
  * Settings ▸ General.
  *
  * The Mac's General holds the role picker, Open at login, background mode, the
- * Quick Actions preferences, the updater and the menu-bar switch. Background
- * and the tray are here; the rest still name what they wait on rather than
- * showing switches that control nothing.
+ * Quick Actions preferences, the updater and the menu-bar switch. All but the
+ * last two are here; those still name what they wait on rather than showing a
+ * control that does nothing.
  */
 export function GeneralTab(props: GeneralTabProps) {
   return (
     <div className="flex flex-col gap-5">
+      <RoleSection {...props} />
       <BackgroundSection {...props} />
       <QuickActionsSection {...props} />
       <TraySection {...props} />
       <Section title="Not ported yet">
-        <Row
-          label="Role"
-          detail="The role picker curates which features the sidebar lists. Backlog item 9."
-        >
-          <Waiting />
-        </Row>
         <Row
           label="Open at login"
           detail="Needs tauri-plugin-autostart. Backlog item 8."
@@ -71,6 +70,43 @@ export function GeneralTab(props: GeneralTabProps) {
  * icon actually exists, and says why when it does not, rather than hiding the
  * window somewhere nobody can reach.
  */
+/**
+ * The role in effect, and the way back to the picker.
+ *
+ * It names the role rather than only offering the button, because a curated
+ * sidebar with no visible cause is the thing people come to Settings to
+ * understand — "where did half my features go?" is answered here.
+ */
+function RoleSection({ selectedRole, onChangeRole }: GeneralTabProps) {
+  return (
+    <Section title="Role">
+      <Row
+        label={selectedRole === null ? "Showing everything" : ROLE_LABELS[selectedRole] ?? selectedRole}
+        detail="A role curates which features the sidebar lists. Everything else stays one search away."
+      >
+        <Button onClick={onChangeRole}>Change role…</Button>
+      </Row>
+    </Section>
+  )
+}
+
+/**
+ * The role names, for the one place a role has to be named without the
+ * catalogue at hand.
+ *
+ * A second copy of six strings, and the only one in this app — the *lists*
+ * that would really drift are served. Falling back to the raw id means a role
+ * added to the registry later reads as its id here rather than not at all.
+ */
+const ROLE_LABELS: Record<string, string> = {
+  "android-dev": "Android Developer",
+  "rn-dev": "React Native Developer",
+  "ios-dev": "iOS Developer",
+  qa: "QA / Tester",
+  support: "Support / Triage",
+  security: "Security / Pentest",
+}
+
 function BackgroundSection({
   keepRunningInBackground,
   onKeepRunningInBackground,
