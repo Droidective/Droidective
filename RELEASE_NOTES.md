@@ -1,3 +1,88 @@
+## Droidective v3.10.0-beta.4
+
+Five more of the Mac's features reach Windows and Linux, and two of them could
+not simply be moved across — the recorder and the file drops both needed a
+different answer here than the one macOS gave. Everything else is the same
+screen, the same wording, the same gestures.
+
+### API Testing
+
+- **The whole client is here.** Collections and nested folders, environments,
+  `{{variable}}` scopes with the unresolved ones surfaced before a send rather
+  than sent as literal braces, assertions on status, timing, body, header and
+  JSON path, a collection runner, code generation to six targets, Postman
+  import and export, and a cURL paste that parses back into a request.
+- **The collection runner deliberately stayed in the app.** It would have been
+  one daemon call; instead the client walks the tree and sends one request at a
+  time, so progress is live and Stop is instant rather than "the run finishes
+  and then tells you".
+
+### Recording the screen
+
+- **The recorder is a new pipeline, not a port.** The Mac records through its
+  Apple-only media stack, so there was nothing to move: the daemon now feeds
+  the scrcpy H.264 stream straight into ffmpeg and copies the video track
+  without re-encoding. Pause and resume produce segments that the concat
+  demuxer joins at the end, so a paused take is one file.
+- **A recording said 30 seconds for a 12-second file.** The clock had been
+  running from the button press, and scrcpy takes a few seconds to produce its
+  first frame. It is measured from the first frame to the last now — 13.820
+  reported against 13.819 in the file.
+- **ffmpeg is downloaded rather than bundled.** Digest-verified from a pinned
+  release, `.tar.xz` on Linux and `.zip` on Windows, which is also what
+  unblocked **Settings ▸ Tools** — the managed-tool store, with sizes, upgrades
+  and removal.
+
+### More than one window
+
+- **One window per device**, each with its own tabs, its own arrangement and
+  its own device selection, restored where you left them.
+- **The Focus / Take Over banner** for the features that cannot run twice on
+  one device — the mirror, the recorder, the JS console — instead of two
+  windows racing each other for the same encoder.
+- **Every window after the first tints its device icon**, so which window you
+  are looking at is answerable without reading the tab strip.
+
+### Files dropped on the window
+
+- **An APK or app bundle dropped anywhere installs it**, whatever screen is in
+  front; anything else dropped on the File Explorer is pushed to the directory
+  it is showing. Anywhere else says which of the two to do rather than guessing
+  a destination on someone else's device.
+- **The in-app drags were the constraint.** Turning on the toolkit's own
+  file-drop handler stops every drag inside the page working — the tab strip,
+  the sidebar, the mirror wall — so instead of trading one for the other, a
+  dropped file's *bytes* are staged on the way through. One copy, and nothing
+  that already worked had to be rewritten.
+
+### Look and first launch
+
+- **The window can be glass.** Settings ▸ Appearance ▸ Window gains Opacity and
+  Grain — the Mac's sliders, with the Mac's arithmetic, so a window set up on
+  one machine looks the same on the other. At 100% nothing changes at all.
+- **Blur is a switch here, not a slider.** No desktop platform lets an
+  application ask for a blur *radius*: Windows has Acrylic, which is on or off,
+  and on Linux the compositor decides entirely. A slider with two positions
+  would be a worse lie than a switch, so the row says what the platform will
+  actually do.
+- **First launch asks what you do.** The role picker curates the sidebar to
+  Android, React Native, iOS, QA, support or security work — with the tool
+  counts following the "I work with React Native" switch live — and Settings ▸
+  General names the role in effect and lets you change it. Escape leaves it.
+
+### Fixes
+
+- **A form action with two devices connected was a Run button that did
+  nothing.** Only one screen can be in front of the Quick Actions panel, and it
+  checked the form first, so the pick-a-device step opened behind the form that
+  had just been submitted. Found while adding the step that asks *which app* an
+  action that needs one should run against.
+- **The Linux smoke test was photographing the wrong thing.** It drives the app
+  on every pull request, and once the role picker appeared on first launch its
+  keystrokes were going into that instead. It now dismisses the picker and
+  proves it went away before driving anything, so the job checks three things
+  where it had been checking one.
+
 ## Droidective v3.10.0-beta.3
 
 The Windows and Linux app grows the three things it was missing that people
