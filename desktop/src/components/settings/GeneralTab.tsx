@@ -52,7 +52,7 @@ export function GeneralTab(props: GeneralTabProps) {
         </Row>
         <Row
           label="Updates"
-          detail="Sparkle is macOS-only; tauri-plugin-updater is backlog item 23."
+          detail="Sparkle is macOS-only. tauri-plugin-updater needs a signing keypair whose private half lives in a repository secret, which is the maintainer's to create — so this is blocked on a decision rather than on work."
         >
           <Waiting />
         </Row>

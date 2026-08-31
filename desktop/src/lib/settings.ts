@@ -39,6 +39,6 @@ export const SETTINGS_TABS: readonly SettingsTabDef[] = [
     label: "MCP",
     icon: Plug,
     blockedBy:
-      "The Reactotron MCP server follows the Reactotron relay, which needs its Network.framework listener ported to NIO.",
+      "Reactotron itself has landed; the MCP server has not. Its package is gated to Apple end to end and reads ADBKit's Network.framework relay, so serving it here means feeding the MCP command store from the daemon's NIO relay instead.",
   },
 ]
