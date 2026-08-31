@@ -8,6 +8,7 @@ mod panel;
 mod record;
 mod shortcuts;
 mod tray;
+mod workspace;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -105,6 +106,7 @@ pub fn run() -> tauri::Result<()> {
         .manage(Supervisor::default())
         .manage(BackgroundMode::default())
         .manage(TrayState::default())
+        .manage(workspace::Workspaces::default())
         .invoke_handler(handlers())
         .on_window_event(|window, event| {
             on_window_event(window, event);
@@ -264,5 +266,11 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         record::managed_tool_list,
         record::managed_tool_install,
         record::managed_tool_remove,
+        workspace::publish_claim,
+        workspace::workspace_claims,
+        workspace::open_workspace_window,
+        workspace::focus_workspace_window,
+        workspace::release_claim,
+        workspace::request_close_feature,
     ]
 }

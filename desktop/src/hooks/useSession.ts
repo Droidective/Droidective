@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+
+import {
+  currentWindowLabel,
+  loadLayout,
+  loadWindowLayout,
+  requestedSerial,
+  saveWindowLayout,
+} from "@/lib/layout"
 import {
   asDaemonError,
   daemonStatus,
@@ -54,7 +62,7 @@ export function useSession(): Session {
   const [devicesLoaded, setDevicesLoaded] = useState(false)
   const [features, setFeatures] = useState<FeatureSummary[]>([])
   const [error, setError] = useState<DaemonError | null>(null)
-  const [serial, setSerial] = useState<string | null>(null)
+  const [serial, setSerial] = useWindowSerial()
 
   // StrictMode runs effects twice in development. Without this the second run
   // opens a second device subscription and the first is never torn down.
@@ -110,11 +118,14 @@ export function useSession(): Session {
       if (current !== null && devices.some((device) => device.serial === current)) return current
       return devices.find((device) => device.state === "device")?.serial ?? devices[0]?.serial ?? null
     })
-  }, [devices])
+  }, [devices, setSerial])
 
-  const select = useCallback((next: string) => {
-    setSerial(next)
-  }, [])
+  const select = useCallback(
+    (next: string) => {
+      setSerial(next)
+    },
+    [setSerial],
+  )
 
   const refresh = useCallback(async () => {
     try {
@@ -188,4 +199,32 @@ async function loadDevices({
   } catch (thrown) {
     if (alive()) setError(asDaemonError(thrown))
   }
+}
+
+/**
+ * The selected device, which belongs to *this* window.
+ *
+ * Seeded from the query string when "New Window for Device" named one, and
+ * otherwise from what this window was last pointed at. Written on change
+ * rather than at teardown: a window closed by the window manager gets no
+ * teardown, and the Mac persists on change too.
+ */
+function useWindowSerial(): [string | null, React.Dispatch<React.SetStateAction<string | null>>] {
+  const label = useMemo(() => currentWindowLabel(globalThis.location.search), [])
+  const [serial, setSerial] = useState<string | null>(
+    () =>
+      requestedSerial(globalThis.location.search) ??
+      loadWindowLayout(globalThis.localStorage, label, loadLayout(globalThis.localStorage)).serial,
+  )
+
+  useEffect(() => {
+    const current = loadWindowLayout(
+      globalThis.localStorage,
+      label,
+      loadLayout(globalThis.localStorage),
+    )
+    saveWindowLayout(globalThis.localStorage, label, { ...current, serial })
+  }, [label, serial])
+
+  return [serial, setSerial]
 }

@@ -1,5 +1,14 @@
 import { useEffect } from "react"
-import { Check, ChevronDown, Layers, Link2, PlayCircle, Smartphone, Wifi } from "lucide-react"
+import {
+  Check,
+  ChevronDown,
+  Layers,
+  Link2,
+  PlayCircle,
+  Smartphone,
+  Wifi,
+} from "lucide-react"
+import { WindowsGroup } from "@/components/DeviceMenuWindows"
 import { cn } from "@/lib/cn"
 import type { Avd, Device } from "@/lib/wire"
 
@@ -90,6 +99,8 @@ export function DeviceMenu({
           </Group>
         )}
 
+        <WindowsGroup onDismiss={onDismiss} serial={selected?.serial ?? null} />
+
         <Group title="Wireless debugging">
           <Item icon={<Link2 size={13} />} onSelect={act(onPair)}>
             Pair new device…
@@ -149,7 +160,7 @@ function Devices({
 }
 
 /** A titled run of items, the way an NSMenu `Section` reads. */
-function Group({ title, children }: { title: string; children: React.ReactNode }) {
+export function Group({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <>
       <div className="my-1 h-px bg-border-subtle" />
@@ -161,7 +172,7 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
   )
 }
 
-function Item({
+export function Item({
   icon,
   disabled = false,
   onSelect,

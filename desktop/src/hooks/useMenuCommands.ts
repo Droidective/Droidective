@@ -25,6 +25,10 @@ export interface MenuHandlers {
   onSettings: () => void
   /** Opens the Terminal feature, for New Terminal with nothing open. */
   onOpenTerminal: () => void
+  /** A new workspace window — null opens it on no device in particular. */
+  onNewWindow: (serial: string | null) => void
+  /** The device this window is pointed at, for New Window for Device. */
+  serial: string | null
 }
 
 /**
@@ -83,6 +87,14 @@ const TABLE: Record<string, (handlers: MenuHandlers) => void> = {
   "app.find-feature": (handlers) => handlers.onPalette(),
   "app.catalog": (handlers) => handlers.workspace.open(CATALOG_TAB),
   "app.settings": (handlers) => handlers.onSettings(),
+  "window.new": (handlers) => {
+    handlers.onNewWindow(null)
+  },
+  // With no device selected this is the same as New Window rather than
+  // disabled: the window still opens, it just has nothing to point at yet.
+  "window.new-for-device": (handlers) => {
+    handlers.onNewWindow(handlers.serial)
+  },
   "app.about": (handlers) => handlers.workspace.open(ABOUT_TAB),
 
   "view.toggle-sidebar": (handlers) => handlers.sidebar.toggle(),
@@ -168,3 +180,8 @@ function activeOf(workspace: WorkspaceController): string | null {
 }
 
 function ignore() {}
+
+// The window menu's own two handlers live next door, with the take-over
+// listener they belong to. Re-exported so the shell has one import for
+// "everything the menu needs".
+export { useWindowMenu } from "@/hooks/useWindowMenu"

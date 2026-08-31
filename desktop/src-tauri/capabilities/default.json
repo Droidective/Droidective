@@ -1,7 +1,13 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The app's two windows — the main one and the Quick Actions panel. Deliberately minimal: neither webview gets shell, filesystem, or HTTP permission of its own — every daemon call goes through a Rust command, so the daemon's bearer token never enters a webview and a compromised page cannot reach 127.0.0.1 directly.",
-  "windows": ["main", "quick"],
-  "permissions": ["core:default"]
+  "description": "The app's windows — the workspace windows and the Quick Actions panel. Deliberately minimal: no webview gets shell, filesystem, or HTTP permission of its own — every daemon call goes through a Rust command, so the daemon's bearer token never enters a webview and a compromised page cannot reach 127.0.0.1 directly. `w*` is the workspace windows opened after the first (see src/workspace.rs); it is a pattern rather than a list because the labels are minted at runtime, and it stays as narrow as the set of windows this app actually creates.",
+  "windows": [
+    "main",
+    "quick",
+    "w*"
+  ],
+  "permissions": [
+    "core:default"
+  ]
 }

@@ -1,10 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { usePreferenceEditors } from "@/hooks/useLayoutPreferences"
 import {
+  currentWindowLabel,
   HOME_TAB,
   loadLayout,
+  loadWindowLayout,
   restoreWorkspaceFrom,
   saveLayout,
+  saveWindowLayout,
   type LayoutState,
 } from "@/lib/layout"
 import { withEnabled, withGroupEnabled } from "@/lib/catalog"
@@ -79,6 +82,10 @@ export interface WorkspaceController {
 export function useWorkspace(features: FeatureSummary[]): WorkspaceController {
   const [layout, setLayout] = useState<LayoutState>(() => loadLayout(globalThis.localStorage))
   const [workspace, setWorkspace] = useState<Workspace>(() => newWorkspace(HOME_TAB))
+  // Tabs and panes belong to *this* window. Two windows share one
+  // `localStorage`, so they are kept under separate keys rather than merged
+  // into one document — see `window-layout.ts`.
+  const windowLabel = useMemo(() => currentWindowLabel(globalThis.location.search), [])
 
   // Saved tabs name features, so they cannot be validated until the registry
   // has arrived. Once only: after this, the strip is the user's to change.
@@ -87,22 +94,33 @@ export function useWorkspace(features: FeatureSummary[]): WorkspaceController {
     if (restored.current || features.length === 0) return
     restored.current = true
     const known = new Set(features.map((feature) => feature.id))
-    setWorkspace(restoreWorkspaceFrom(layout, (id) => known.has(id)))
-  }, [features, layout])
+    const own = loadWindowLayout(globalThis.localStorage, windowLabel, layout)
+    setWorkspace(
+      restoreWorkspaceFrom(
+        { ...layout, panes: own.panes, focusedPane: own.focusedPane },
+        (id) => known.has(id),
+      ),
+    )
+  }, [features, layout, windowLabel])
 
   // Writing before the restore would save the placeholder over the real thing
   // — the first launch of a session would forget every tab.
   useEffect(() => {
     if (!restored.current) return
-    saveLayout(globalThis.localStorage, {
-      ...layout,
+    // The shared half keeps the app-wide settings; the panes go to this
+    // window's own key. Writing them to the shared blob is what would let one
+    // window clobber the other's tabs.
+    saveLayout(globalThis.localStorage, layout)
+    const own = loadWindowLayout(globalThis.localStorage, windowLabel, layout)
+    saveWindowLayout(globalThis.localStorage, windowLabel, {
+      ...own,
       panes: workspace.groups.map((group) => ({
         tabs: [...group.openTabs],
         activeTab: group.activeTab,
       })),
       focusedPane: workspace.focusedGroup,
     })
-  }, [layout, workspace])
+  }, [layout, workspace, windowLabel])
 
   const edit = useCallback(
     (transform: (current: Workspace) => Workspace) => {

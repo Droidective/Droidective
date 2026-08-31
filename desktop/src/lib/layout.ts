@@ -247,3 +247,17 @@ function stringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return []
   return value.filter((entry): entry is string => typeof entry === "string")
 }
+
+// The per-window half lives next door — two windows share one `localStorage`,
+// so what belongs to a window is kept under a key of its own. Re-exported here
+// because "what this app remembers" is one question with two halves, and a
+// caller should not have to know which half a field is in.
+export {
+  currentWindowLabel,
+  emptyWindowLayout,
+  forgetWindowLayout,
+  loadWindowLayout,
+  requestedSerial,
+  saveWindowLayout,
+  type WindowLayout,
+} from "@/lib/window-layout"

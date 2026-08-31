@@ -34,6 +34,7 @@ export interface MenuAccelerator {
 }
 
 export const MENU_COMMANDS: readonly MenuAccelerator[] = [
+  { accelerator: "CmdOrCtrl+Shift+Alt+N", command: "New Window" },
   { accelerator: "CmdOrCtrl+Shift+N", command: "New Terminal" },
   { accelerator: "CmdOrCtrl+Shift+D", command: "Split Terminal Vertically" },
   { accelerator: "CmdOrCtrl+Shift+E", command: "Split Terminal Horizontally" },

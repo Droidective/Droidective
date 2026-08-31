@@ -2,10 +2,9 @@ import { Banner } from "@/components/Controls"
 import { DeviceBarHost } from "@/components/DeviceBarHost"
 import { NotificationPanel } from "@/components/NotificationPanel"
 import { ToastOverlay } from "@/components/ToastOverlay"
+import { WindowProviders } from "@/components/WindowProviders"
 import { WorkspaceShell } from "@/components/WorkspaceShell"
 import type { Session } from "@/hooks/useSession"
-import { TargetsProvider } from "@/hooks/useTargets"
-import { TerminalCommandsProvider } from "@/hooks/useTerminalCommands"
 import { useWindowChrome } from "@/hooks/useWindowChrome"
 import type { FeatureSummary } from "@/lib/wire"
 
@@ -24,18 +23,18 @@ export function AppWindow({
   features: FeatureSummary[]
 }) {
   const { workspace, sidebar, focusedFeature } = useWindowChrome(features)
+  // Every open tab, not only the exclusive ones: which of them matter is a
+  // rule in `lib/workspaces.ts`, and the registry should not have an opinion.
+  const openFeatures = workspace.workspace.groups.flatMap((group) => [...group.openTabs])
 
   return (
-    <TargetsProvider
+    <WindowProviders
       devices={session.devices}
       selected={session.selected}
       focusedFeature={focusedFeature}
       runOnAll={workspace.layout.runOnAll}
+      openFeatures={openFeatures}
     >
-      {/* Above the workspace, because the menu's terminal commands are
-          dispatched from the shell and the Terminal pane registers into it
-          from inside a tab. */}
-      <TerminalCommandsProvider>
       <div className="flex h-full flex-col">
         <DeviceBarHost
           session={session}
@@ -62,7 +61,6 @@ export function AppWindow({
         </div>
         <ToastOverlay />
       </div>
-      </TerminalCommandsProvider>
-    </TargetsProvider>
+    </WindowProviders>
   )
 }
