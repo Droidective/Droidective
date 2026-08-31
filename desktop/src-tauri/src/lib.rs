@@ -5,6 +5,7 @@ mod error;
 mod menu;
 mod metro;
 mod panel;
+mod record;
 mod shortcuts;
 mod tray;
 
@@ -146,7 +147,14 @@ pub fn run() -> tauri::Result<()> {
 ///
 /// Its own function so `run` stays readable: the list is a declaration rather
 /// than logic, and inline it pushed the builder past the line limit — which is
-/// a real signal about `run`, and a useless one about a list of names.
+/// a real signal about `run`, and a useless one about a list of names — which
+/// is also why the length lint is turned off for it rather than the list being
+/// broken up: `generate_handler!` takes one list, and splitting it would mean
+/// splitting the macro.
+#[expect(
+    clippy::too_many_lines,
+    reason = "a declaration of every command, not logic; one macro takes one list"
+)]
 fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync + 'static {
     tauri::generate_handler![
         commands::daemon_status,
@@ -246,5 +254,15 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         api::api_curl,
         api::api_import,
         api::api_export,
+        record::record_status,
+        record::record_start,
+        record::record_pause,
+        record::record_resume,
+        record::record_stop,
+        record::save_recording,
+        record::discard_recording,
+        record::managed_tool_list,
+        record::managed_tool_install,
+        record::managed_tool_remove,
     ]
 }

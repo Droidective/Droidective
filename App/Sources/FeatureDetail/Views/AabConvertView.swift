@@ -348,7 +348,7 @@ struct AabConvertView: View {
     private func setUpTools() async {
         do {
             if missingJava {
-                try await installTool(.temurinJre, arch: ManagedToolStore.macArch, label: "Java runtime")
+                try await installTool(.temurinJre, arch: ManagedToolStore.hostArch, label: "Java runtime")
                 missingJava = false
             }
             if missingBundletool {

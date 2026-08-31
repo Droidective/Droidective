@@ -32,13 +32,7 @@ export const SETTINGS_TABS: readonly SettingsTabDef[] = [
   { id: "appearance", label: "Appearance", icon: Palette },
   { id: "privacy", label: "Privacy", icon: Info },
   { id: "doctor", label: "Doctor", icon: Bug },
-  {
-    id: "tools",
-    label: "Tools",
-    icon: Wrench,
-    blockedBy:
-      "The managed-tool store — jadx, apktool, frida, a bundled JRE — is not ported yet. It arrives with the APK features.",
-  },
+  { id: "tools", label: "Tools", icon: Wrench },
   { id: "hotkeys", label: "Hotkeys", icon: Keyboard },
   {
     id: "mcp",

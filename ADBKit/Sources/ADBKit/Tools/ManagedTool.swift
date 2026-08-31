@@ -11,6 +11,10 @@ public enum ManagedTool: String, Sendable, CaseIterable, Codable {
     case fridaGadget = "frida-gadget"
     case temurinJre = "temurin-jre"
     case bundletool
+    /// Windows and Linux only. macOS bundles a static ffmpeg in the app, so a
+    /// downloadable second copy would be another answer to the same question —
+    /// `hostCatalog` leaves it out there.
+    case ffmpeg
 }
 
 /// How a downloaded release asset turns into a runnable artifact.
@@ -23,6 +27,10 @@ public enum ArtifactKind: Sendable, Equatable {
     case tarGz
     /// A bare `.xz`-compressed single binary (frida; pushed to the device).
     case xzBinary
+    /// A `.tar.xz` whose extracted tree contains the runnable. `tar -xf` picks
+    /// the compression itself on bsdtar and on GNU tar since 1.15, so this
+    /// needs no separate `xz` on the host.
+    case tarXz
 }
 
 /// Static metadata for a managed tool: which GitHub repo and release tag to
@@ -88,6 +96,52 @@ public struct ManagedToolSpec: Sendable, Equatable {
             tool: .bundletool, owner: "google", repo: "bundletool", pinnedTag: "1.18.3",
             kind: .jar, assetPattern: #"^bundletool-all-.*\.jar$"#),
     ]
+
+    /// What this host may download, and how.
+    ///
+    /// The base `catalog` is macOS-shaped — Temurin's asset pattern says `mac`
+    /// in it — because that is the app it was written for. Rather than making
+    /// every entry conditional, a host adds or replaces the few that differ,
+    /// and macOS gets exactly what it always got.
+    ///
+    /// ffmpeg is the clearest case: the Mac app bundles one, so it is not in
+    /// this list there; Windows and Linux have no bundle, so it is a managed
+    /// download beside jadx and apktool rather than something a person has to
+    /// install first.
+    public static var hostCatalog: [ManagedTool: ManagedToolSpec] {
+        #if os(macOS)
+        return catalog
+        #elseif os(Windows)
+        return catalog.merging([
+            .ffmpeg: ManagedToolSpec(
+                tool: .ffmpeg, owner: "BtbN", repo: "FFmpeg-Builds",
+                pinnedTag: ffmpegPinnedTag, kind: .zipArchive,
+                assetPattern: #"^ffmpeg-n.*-win64-gpl-.*\.zip$"#, runnableName: "ffmpeg.exe"),
+            .temurinJre: ManagedToolSpec(
+                tool: .temurinJre, owner: "adoptium", repo: "temurin21-binaries",
+                pinnedTag: "jdk-21.0.11+10", kind: .zipArchive,
+                assetPattern: #"^OpenJDK21U-jre_{arch}_windows_hotspot_.*\.zip$"#,
+                runnableName: "java.exe"),
+        ]) { _, new in new }
+        #else
+        return catalog.merging([
+            .ffmpeg: ManagedToolSpec(
+                tool: .ffmpeg, owner: "BtbN", repo: "FFmpeg-Builds",
+                pinnedTag: ffmpegPinnedTag, kind: .tarXz,
+                assetPattern: #"^ffmpeg-n.*-linux64-gpl-.*\.tar\.xz$"#, runnableName: "ffmpeg"),
+            .temurinJre: ManagedToolSpec(
+                tool: .temurinJre, owner: "adoptium", repo: "temurin21-binaries",
+                pinnedTag: "jdk-21.0.11+10", kind: .tarGz,
+                assetPattern: #"^OpenJDK21U-jre_{arch}_linux_hotspot_.*\.tar\.gz$"#,
+                runnableName: "java"),
+        ]) { _, new in new }
+        #endif
+    }
+
+    /// A dated build rather than BtbN's rolling `latest`, for the reason every
+    /// other tool here is pinned: an app update is what should change which
+    /// binary people run, not a repository moving under them.
+    static let ffmpegPinnedTag = "autobuild-2025-06-20-14-16"
 }
 
 /// One GitHub release and its downloadable assets, decoded from the

@@ -749,7 +749,7 @@ pub fn export_text(app: AppHandle, name: String, contents: String) -> Result<Str
 /// The one place this app decides where files land, shared by `export_text`
 /// and `pull_file` — two answers to that question is how a Show in folder
 /// button ends up pointing at the wrong one.
-fn droidective_folder(app: &AppHandle) -> Result<PathBuf, DaemonError> {
+pub fn droidective_folder(app: &AppHandle) -> Result<PathBuf, DaemonError> {
     let folder = app
         .path()
         .download_dir()
@@ -777,7 +777,7 @@ fn leaf_name(path: &str) -> &str {
 /// own. `Path::join` is happy to escape its parent given `..`, an absolute
 /// path, or — the one that is easy to miss — a Windows drive-relative name like
 /// `C:x`, where `join` throws the folder away entirely.
-fn safe_file_name(name: &str) -> Result<&str, DaemonError> {
+pub fn safe_file_name(name: &str) -> Result<&str, DaemonError> {
     let refused = name.is_empty()
         || name == "."
         || name == ".."

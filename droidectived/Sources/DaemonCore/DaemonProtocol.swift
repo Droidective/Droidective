@@ -112,6 +112,21 @@ public enum DaemonProtocol {
         case apiCurl = "/v1/api/curl"
         case apiImport = "/v1/api/import"
         case apiExport = "/v1/api/export"
+        /// Screen recording. Four verbs plus a read rather than a stream: the
+        /// session lives in the daemon, and the only thing that changes second
+        /// to second is an elapsed time the client can count itself.
+        case recordStatus = "/v1/record/status"
+        case recordStart = "/v1/record/start"
+        case recordPause = "/v1/record/pause"
+        case recordResume = "/v1/record/resume"
+        case recordStop = "/v1/record/stop"
+        /// The managed-tool store behind Settings ▸ Tools. Separate from
+        /// `/v1/apk/tools`, which exists for the decompiler's two and says so:
+        /// this one lists whatever the *host* can fetch, which is why ffmpeg
+        /// appears on Windows and Linux and not on macOS.
+        case managedToolsList = "/v1/tools/managed"
+        case managedToolsInstall = "/v1/tools/managed/install"
+        case managedToolsRemove = "/v1/tools/managed/remove"
     }
 
     /// The multiplexed stream socket. Not a `Route`: it is a WebSocket upgrade

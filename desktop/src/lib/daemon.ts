@@ -248,6 +248,19 @@ export {
   apiWorkspace,
   apiWrite,
 } from "@/lib/daemon-api"
+export type { RecordStatus, RecordWireOptions, StoppedRecording } from "@/lib/daemon-record"
+export {
+  discardRecording,
+  managedToolInstall,
+  managedToolList,
+  managedToolRemove,
+  recordPause,
+  recordResume,
+  recordStart,
+  recordStatus,
+  recordStop,
+  saveRecording,
+} from "@/lib/daemon-record"
 export { customCommands, runCustomCommand, writeCustomCommands } from "@/lib/daemon-commands"
 export {
   apkToolchain,

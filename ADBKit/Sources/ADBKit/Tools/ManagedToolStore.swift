@@ -158,14 +158,17 @@ public actor ManagedToolStore {
         self.runner = runner
     }
 
-    /// The Mac's architecture in Adoptium's asset naming — for the Temurin JRE.
-    public static var macArch: String {
+    /// This machine's architecture in Adoptium's asset naming — for the Temurin
+    /// JRE, which ships one build per arch. Named for the host rather than the
+    /// Mac because Windows and Linux download it too.
+    public static var hostArch: String {
         #if arch(arm64)
         "aarch64"
         #else
         "x64"
         #endif
     }
+
 
     /// The installed version tag of `tool`, or nil when it isn't installed.
     public func installedVersion(_ tool: ManagedTool) -> String? {
@@ -177,7 +180,7 @@ public actor ManagedToolStore {
 
     /// Path to the installed tool's runnable (jar or executable), or nil.
     public func resolve(_ tool: ManagedTool) -> String? {
-        guard let tag = installedVersion(tool), let spec = ManagedToolSpec.catalog[tool] else { return nil }
+        guard let tag = installedVersion(tool), let spec = ManagedToolSpec.hostCatalog[tool] else { return nil }
         let versionDir = toolRoot(tool).appendingPathComponent(sanitize(tag), isDirectory: true)
         guard fileManager.fileExists(atPath: versionDir.path) else { return nil }
         return runnable(in: versionDir, spec: spec)
@@ -212,7 +215,7 @@ public actor ManagedToolStore {
     /// ship new pins), or nil when the install is current. A tool that isn't
     /// installed yet reports the pin as "available". No network involved.
     public func upgradeAvailable(_ tool: ManagedTool, arch: String = "") async throws -> String? {
-        guard let spec = ManagedToolSpec.catalog[tool] else { throw StoreError.unsupported(tool) }
+        guard let spec = ManagedToolSpec.hostCatalog[tool] else { throw StoreError.unsupported(tool) }
         guard let installed = installedVersion(tool) else { return spec.pinnedTag }
         return ManagedToolReleases.isNewer(spec.pinnedTag, than: installed) ? spec.pinnedTag : nil
     }
@@ -256,7 +259,7 @@ public actor ManagedToolStore {
     public func seed(_ tool: ManagedTool, version: String, from source: URL) async throws {
         if let installed = installedVersion(tool),
            !ManagedToolReleases.isNewer(version, than: installed) { return }
-        guard let spec = ManagedToolSpec.catalog[tool] else { throw StoreError.unsupported(tool) }
+        guard let spec = ManagedToolSpec.hostCatalog[tool] else { throw StoreError.unsupported(tool) }
         let versionDir = toolRoot(tool).appendingPathComponent(sanitize(version), isDirectory: true)
         try recreateDirectory(versionDir)
         try fileManager.copyItem(at: source, to: versionDir.appendingPathComponent(source.lastPathComponent))
@@ -267,7 +270,7 @@ public actor ManagedToolStore {
     // MARK: - Internals
 
     private func fetchRelease(_ tool: ManagedTool) async throws -> (ManagedToolSpec, GitHubRelease) {
-        guard let spec = ManagedToolSpec.catalog[tool] else { throw StoreError.unsupported(tool) }
+        guard let spec = ManagedToolSpec.hostCatalog[tool] else { throw StoreError.unsupported(tool) }
         guard let url = spec.pinnedReleaseURL else { throw StoreError.noReleaseURL }
         return (spec, try ManagedToolReleases.parse(try await http.data(from: url)))
     }
@@ -287,6 +290,10 @@ public actor ManagedToolStore {
             try await extract(
                 HostArchive.unzipExecutable,
                 HostArchive.unzipArguments(archive: asset.path, into: dir.path))
+        case .tarXz:
+            try await extract(
+                HostArchive.tarExecutable,
+                HostArchive.tarXzArguments(archive: asset.path, into: dir.path))
         case .tarGz:
             try await extract(
                 HostArchive.tarExecutable,

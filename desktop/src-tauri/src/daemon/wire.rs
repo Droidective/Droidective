@@ -1251,3 +1251,68 @@ pub struct AabConvertResponse {
     pub path: String,
     pub size_bytes: i64,
 }
+
+/// A recording's knobs. Zero means the device's or scrcpy's own default on all
+/// three, so they travel as zero rather than as absent.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordOptions {
+    pub max_size: i64,
+    pub bit_rate_mbps: i64,
+    pub max_fps: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordStartRequest {
+    pub serial: String,
+    pub options: RecordOptions,
+}
+
+/// What is being recorded, if anything.
+///
+/// `recording: false` is an answer rather than an error: a screen that has just
+/// opened asks this to find out whether a recording it did not start is already
+/// running, and "no" is the ordinary reply. `ffmpeg_ready` is what lets it
+/// offer the download *before* someone presses record.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordStatusResponse {
+    pub recording: bool,
+    pub paused: bool,
+    pub serial: Option<String>,
+    pub elapsed_seconds: f64,
+    pub segments: i64,
+    pub ffmpeg_ready: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordStoppedResponse {
+    pub path: String,
+    pub duration_seconds: f64,
+    pub size_bytes: i64,
+}
+
+/// One managed tool, as Settings ▸ Tools lists it.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManagedToolEntry {
+    pub id: String,
+    pub installed: bool,
+    pub version: Option<String>,
+    pub pinned_version: String,
+    pub size_bytes: i64,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManagedToolsListResponse {
+    pub tools: Vec<ManagedToolEntry>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManagedToolRequest {
+    pub id: String,
+}

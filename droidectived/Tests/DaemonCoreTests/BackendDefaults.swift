@@ -268,6 +268,26 @@ extension DaemonBackend {
     ) async throws -> ApiClientProtocol.ExportResponse {
         ApiClientProtocol.ExportResponse(json: "{}", suggestedName: "stub.json")
     }
+
+    func recordingStatus() async -> RecordProtocol.StatusResponse {
+        RecordProtocol.StatusResponse(nil, ffmpegReady: false)
+    }
+
+    func startRecording(_ request: RecordProtocol.StartRequest) async throws {}
+
+    func pauseRecording() async throws {}
+
+    func resumeRecording(_ options: RecordProtocol.Options) async throws {}
+
+    func stopRecording() async throws -> DeviceRecorder.Finished {
+        DeviceRecorder.Finished(path: "/tmp/stub.mp4", durationSeconds: 0, sizeBytes: 0)
+    }
+
+    func managedToolEntries() async -> [ToolStoreProtocol.Entry] { [] }
+
+    func installManagedTool(_ tool: ManagedTool) async throws -> String { "/tmp/stub" }
+
+    func removeManagedTool(_ tool: ManagedTool) async throws {}
 }
 
 /// The same trick for `StreamSource`, and for the same reason: a stub testing

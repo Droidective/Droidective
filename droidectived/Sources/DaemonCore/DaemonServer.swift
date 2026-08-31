@@ -213,6 +213,22 @@ public protocol DaemonBackend: Sendable {
     func exportApi(
         _ request: ApiClientProtocol.ExportRequest
     ) async throws -> ApiClientProtocol.ExportResponse
+    /// What is being recorded, if anything, and whether ffmpeg is here to do
+    /// it. Never throws: "nothing is recording" is an answer.
+    func recordingStatus() async -> RecordProtocol.StatusResponse
+    /// Starts one. Throws when ffmpeg is missing, a recording is already up, or
+    /// the device would not stream.
+    func startRecording(_ request: RecordProtocol.StartRequest) async throws
+    func pauseRecording() async throws
+    func resumeRecording(_ options: RecordProtocol.Options) async throws
+    /// Finishes, assembles, and answers where the file landed.
+    func stopRecording() async throws -> DeviceRecorder.Finished
+    /// Every tool this host can download, and what is on disk. Best-effort:
+    /// a store that cannot be read reads as nothing installed.
+    func managedToolEntries() async -> [ToolStoreProtocol.Entry]
+    /// Downloads one, verifying the release asset's digest.
+    func installManagedTool(_ tool: ManagedTool) async throws -> String
+    func removeManagedTool(_ tool: ManagedTool) async throws
 }
 
 /// `DeviceMonitor` in production.
@@ -229,6 +245,9 @@ public struct LiveBackend: DaemonBackend {
     private let customCommandStore: JSONStore<[CustomCommand]>
     /// The API Testing workspace — the Mac's own `api-client.json`.
     private let apiClientStore: JSONStore<ApiClientData>
+    /// The one recording this daemon will run. An actor, so the routes can be
+    /// four verbs over state that outlives any single request.
+    private let recorder: DeviceRecorder
     /// One actor for every send, as the Mac keeps one on `FeatureEngine`: it
     /// holds no per-request state, and building one per call would throw away
     /// nothing but is a needless allocation on a route that can be hot during a
@@ -253,7 +272,8 @@ public struct LiveBackend: DaemonBackend {
         deepLinks: JSONStore<DeepLinksMap>,
         customCommands: JSONStore<[CustomCommand]>,
         apiClient: JSONStore<ApiClientData>,
-        toolsDirectory: URL
+        toolsDirectory: URL,
+        scrcpyServer: String? = nil
     ) {
         self.monitor = monitor
         self.engine = engine
@@ -267,6 +287,52 @@ public struct LiveBackend: DaemonBackend {
             locator: locator, store: ManagedToolStore(rootDirectory: toolsDirectory))
         decompileCache = AppPaths.decompiledCacheDir
         managedToolsDirectory = toolsDirectory
+        recorder = DeviceRecorder(
+            adb: client,
+            workDirectory: AppPaths.supportDir.appendingPathComponent("recordings"),
+            resolveTools: {
+                // Resolved per recording rather than at startup: ffmpeg can be
+                // downloaded from Settings ▸ Tools between one and the next, and
+                // a path captured here would still say it was missing.
+                guard let ffmpeg = await LiveBackend.resolveFfmpeg(
+                    locator: locator, toolsDirectory: toolsDirectory)
+                else { throw DeviceRecorder.RecordError.ffmpegMissing }
+                guard let server = await LiveBackend.resolveScrcpyServer(
+                    bundled: scrcpyServer, locator: locator)
+                else {
+                    throw DeviceRecorder.RecordError.startFailed(
+                        "The scrcpy server this app records through is missing.")
+                }
+                return DeviceRecorder.Tools(
+                    ffmpeg: ffmpeg, scrcpyJar: server.jarPath, scrcpyVersion: server.version)
+            })
+    }
+
+    /// The managed download first, then whatever the host has on PATH.
+    ///
+    /// That order and not the other way round: the managed copy is the one this
+    /// app pinned and verified, where a system ffmpeg is whatever version the
+    /// machine happens to carry. macOS never gets here — it bundles one, and
+    /// `ManagedToolSpec.hostCatalog` leaves ffmpeg out there for that reason.
+    static func resolveFfmpeg(locator: ToolLocator, toolsDirectory: URL) async -> String? {
+        let store = ManagedToolStore(rootDirectory: toolsDirectory)
+        if let managed = await store.resolve(.ffmpeg) { return managed }
+        return await locator.resolve(.ffmpeg)
+    }
+
+    /// The app's own scrcpy server jar, else an installed scrcpy's.
+    ///
+    /// The same rule `LiveStreamSource` follows: mirroring through some other
+    /// scrcpy the machine happens to have is a version mismatch waiting to
+    /// happen, and the server aborts on one.
+    static func resolveScrcpyServer(
+        bundled: String?, locator: ToolLocator
+    ) async -> ScrcpyServerInfo? {
+        if let bundled {
+            let exists = FileManager.default.isReadableFile(atPath: bundled)
+            return exists ? ScrcpyServerLocator.bundled(jarPath: bundled) : nil
+        }
+        return await ScrcpyServerLocator.resolve(locator: locator)
     }
 
     public func listDevices() async -> [Device] { await monitor.list(force: true) }
@@ -740,6 +806,58 @@ public struct LiveBackend: DaemonBackend {
 
     public func detectTools() async -> [Tool: ToolStatus] {
         await ToolDetectionService(locator: locator).detectAll()
+    }
+
+    public func recordingStatus() async -> RecordProtocol.StatusResponse {
+        let ready = await Self.resolveFfmpeg(
+            locator: locator, toolsDirectory: managedToolsDirectory) != nil
+        return RecordProtocol.StatusResponse(await recorder.status(), ffmpegReady: ready)
+    }
+
+    public func startRecording(_ request: RecordProtocol.StartRequest) async throws {
+        try await recorder.start(serial: request.serial, options: request.options.model)
+    }
+
+    public func pauseRecording() async throws {
+        try await recorder.pause()
+    }
+
+    public func resumeRecording(_ options: RecordProtocol.Options) async throws {
+        try await recorder.resume(options: options.model)
+    }
+
+    public func stopRecording() async throws -> DeviceRecorder.Finished {
+        try await recorder.stop()
+    }
+
+    public func managedToolEntries() async -> [ToolStoreProtocol.Entry] {
+        let store = ManagedToolStore(rootDirectory: managedToolsDirectory)
+        var entries: [ToolStoreProtocol.Entry] = []
+        // Sorted by id so the list does not reshuffle between reads — a
+        // dictionary's order is not one.
+        for (tool, spec) in ManagedToolSpec.hostCatalog.sorted(by: { $0.key.rawValue < $1.key.rawValue }) {
+            let version = await store.installedVersion(tool)
+            let location = await store.location(tool)
+            entries.append(ToolStoreProtocol.Entry(
+                id: tool.rawValue,
+                installed: version != nil,
+                version: version,
+                pinnedVersion: spec.pinnedTag,
+                sizeBytes: location.map { ManagedToolStore.size(at: $0) } ?? 0))
+        }
+        return entries
+    }
+
+    public func installManagedTool(_ tool: ManagedTool) async throws -> String {
+        let store = ManagedToolStore(rootDirectory: managedToolsDirectory)
+        // The arch matters for two of them — Temurin uses this machine's, and
+        // frida uses the *device's* ABI, which no settings screen knows. Only
+        // the host-arch ones are offered here for that reason.
+        return try await store.install(tool, arch: ManagedToolStore.hostArch)
+    }
+
+    public func removeManagedTool(_ tool: ManagedTool) async throws {
+        try await ManagedToolStore(rootDirectory: managedToolsDirectory).remove(tool)
     }
 
     public func apiWorkspace() async -> ApiClientData {
@@ -1279,6 +1397,28 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
                 body: Data(body.readableBytesView), backend: backend))
         case .apiExport:
             return Self.answer(await ApiClientRoutes.export(
+                body: Data(body.readableBytesView), backend: backend))
+
+        case .recordStatus:
+            return Self.answer(await RecordRoutes.status(backend: backend))
+        case .recordStart:
+            return Self.answer(await RecordRoutes.start(
+                body: Data(body.readableBytesView), backend: backend))
+        case .recordPause:
+            return Self.answer(await RecordRoutes.pause(backend: backend))
+        case .recordResume:
+            return Self.answer(await RecordRoutes.resume(
+                body: Data(body.readableBytesView), backend: backend))
+        case .recordStop:
+            return Self.answer(await RecordRoutes.stop(backend: backend))
+
+        case .managedToolsList:
+            return Self.answer(await ToolStoreRoutes.list(backend: backend))
+        case .managedToolsInstall:
+            return Self.answer(await ToolStoreRoutes.install(
+                body: Data(body.readableBytesView), backend: backend))
+        case .managedToolsRemove:
+            return Self.answer(await ToolStoreRoutes.remove(
                 body: Data(body.readableBytesView), backend: backend))
 
         case .actionsRun:

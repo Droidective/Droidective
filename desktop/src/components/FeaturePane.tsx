@@ -37,6 +37,7 @@ import {
   RestrictionsPane,
   RootStatusPane,
   SandboxPane,
+  ScreenRecordPane,
   SimulateHubPane,
   TerminalPane,
   WifiPane,
@@ -126,6 +127,8 @@ export function FeaturePane(props: FeaturePaneProps) {
       )
     case "scrcpy":
       return <MirrorPane device={props.device} />
+    case "screen-record":
+      return <ScreenRecordPane device={props.device} />
     case "device-info":
       return <DeviceInfoPane device={props.device} />
     case "file-explorer":

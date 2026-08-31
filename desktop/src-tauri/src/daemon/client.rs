@@ -16,9 +16,10 @@ use crate::daemon::wire::{
     EmulatorActionRequest, EmulatorsResponse, ErrorEnvelope, FeatureSummary, FeaturesResponse,
     FileInfoRequest, FileInfoResponse, FileOperationRequest, FilePullRequest, FilePullResponse,
     FilesListRequest, FilesListResponse, ForegroundResponse, InstallFormatsResponse,
-    InstallRequest, InstallResponse, LaunchResponse, LogcatPidResponse, ManagedTools,
-    MemInfoResponse, PairResponse, PermissionWriteRequest, PermissionsResponse,
-    ReactotronReverseRequest, ReactotronReverseResponse, RestrictionWriteRequest,
+    InstallRequest, InstallResponse, LaunchResponse, LogcatPidResponse, ManagedToolRequest,
+    ManagedTools, ManagedToolsListResponse, MemInfoResponse, PairResponse, PermissionWriteRequest,
+    PermissionsResponse, ReactotronReverseRequest, ReactotronReverseResponse, RecordOptions,
+    RecordStartRequest, RecordStatusResponse, RecordStoppedResponse, RestrictionWriteRequest,
     RestrictionsResponse, RootStatusResponse, RunRequest, RunResponse, SandboxRequest,
     SandboxResponse, ToolInstallRequest, ToolInstallResponse, ToolsResponse, WifiResponse,
     WifiWriteRequest, WirelessActionRequest,
@@ -379,6 +380,50 @@ impl DaemonClient {
         request: &ReactotronReverseRequest,
     ) -> Result<ReactotronReverseResponse, DaemonError> {
         self.post("/v1/reactotron/unreverse", request).await
+    }
+
+    pub async fn managed_tool_list(&self) -> Result<ManagedToolsListResponse, DaemonError> {
+        self.post("/v1/tools/managed", &EMPTY).await
+    }
+
+    pub async fn managed_tool_install(
+        &self,
+        request: &ManagedToolRequest,
+    ) -> Result<ManagedToolsListResponse, DaemonError> {
+        self.post("/v1/tools/managed/install", request).await
+    }
+
+    pub async fn managed_tool_remove(
+        &self,
+        request: &ManagedToolRequest,
+    ) -> Result<ManagedToolsListResponse, DaemonError> {
+        self.post("/v1/tools/managed/remove", request).await
+    }
+
+    pub async fn record_status(&self) -> Result<RecordStatusResponse, DaemonError> {
+        self.post("/v1/record/status", &EMPTY).await
+    }
+
+    pub async fn record_start(
+        &self,
+        request: &RecordStartRequest,
+    ) -> Result<RecordStatusResponse, DaemonError> {
+        self.post("/v1/record/start", request).await
+    }
+
+    pub async fn record_pause(&self) -> Result<RecordStatusResponse, DaemonError> {
+        self.post("/v1/record/pause", &EMPTY).await
+    }
+
+    pub async fn record_resume(
+        &self,
+        options: &RecordOptions,
+    ) -> Result<RecordStatusResponse, DaemonError> {
+        self.post("/v1/record/resume", options).await
+    }
+
+    pub async fn record_stop(&self) -> Result<RecordStoppedResponse, DaemonError> {
+        self.post("/v1/record/stop", &EMPTY).await
     }
 
     /// The API Testing routes, as untyped JSON in both directions.
