@@ -105,6 +105,7 @@ export function WorkspaceShell({
         workspace={workspace}
         state={overlays}
         onChange={patch}
+        activeFeature={focused}
       />
     </div>
   )

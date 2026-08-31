@@ -80,3 +80,23 @@ export function managedToolInstall(id: string): Promise<{ tools: ManagedToolEntr
 export function managedToolRemove(id: string): Promise<{ tools: ManagedToolEntry[] }> {
   return invoke("managed_tool_remove", { id })
 }
+
+/**
+ * Write a dropped file to a temp directory and answer where it landed.
+ *
+ * The bytes go as a raw request body rather than a JSON array: a
+ * hundred-megabyte APK encoded as JSON numbers is several hundred megabytes of
+ * text. The name rides in a header, percent-encoded, because a header value
+ * may not hold a newline and a file name may.
+ */
+export async function stageDroppedFile(file: File): Promise<string> {
+  const bytes = new Uint8Array(await file.arrayBuffer())
+  return invoke("stage_dropped_file", bytes, {
+    headers: { "x-dropped-name": encodeURIComponent(file.name) },
+  })
+}
+
+/** Delete a staged file once it has been installed or pushed. */
+export function discardDroppedFile(path: string): Promise<void> {
+  return invoke("discard_dropped_file", { path })
+}

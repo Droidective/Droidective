@@ -122,6 +122,39 @@ import Testing
         #expect(remove.resolvedOperation == .delete(path: "/sdcard/a"))
     }
 
+    @Test func pushReadsItsPathOnTheHostAndItsDestinationOnTheDevice() async throws {
+        // The one operation whose `path` is *not* a device path: it names a
+        // file on this machine, staged there by the drop. Reversing the two
+        // would push a device path that does not exist on the host.
+        let request = FileProtocol.OperationRequest(
+            serial: "S1", op: "push", path: "/tmp/drop/notes.txt",
+            destination: "/sdcard/Download")
+        #expect(
+            request.resolvedOperation
+                == .push(localPath: "/tmp/drop/notes.txt", destination: "/sdcard/Download"))
+
+        let (stub, log) = backend()
+        let answer = await FileRoutes.operation(
+            body: json(
+                #"{"serial":"S1","op":"push","path":"/tmp/a b.txt","destination":"/sdcard/x y"}"#),
+            backend: stub)
+        #expect(answer.status == 200)
+        // Verbatim, like every other verb: quoting belongs to the service.
+        #expect(
+            await log.operations
+                == [.push(localPath: "/tmp/a b.txt", destination: "/sdcard/x y")])
+    }
+
+    @Test func pushWithNoDestinationIsRefusedBeforeItReachesTheDevice() async throws {
+        // Without one there is nowhere to put the file, and a push that
+        // defaulted to the device's cwd would scatter files unpredictably.
+        let (stub, log) = backend()
+        let answer = await FileRoutes.operation(
+            body: json(#"{"serial":"S1","op":"push","path":"/tmp/a.txt"}"#), backend: stub)
+        #expect(answer.status == 400)
+        #expect(await log.operations.isEmpty)
+    }
+
     // MARK: - What never reaches the device
 
     @Test func anUnknownVerbIsRefusedBeforeItReachesTheDevice() async throws {

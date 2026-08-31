@@ -1,3 +1,4 @@
+import { DropTargetProvider } from "@/hooks/useDropTarget"
 import { TargetsProvider } from "@/hooks/useTargets"
 import { TerminalCommandsProvider } from "@/hooks/useTerminalCommands"
 import { WindowsProvider } from "@/hooks/useWindows"
@@ -35,7 +36,9 @@ export function WindowProviders({
         focusedFeature={focusedFeature}
         runOnAll={runOnAll}
       >
-        <TerminalCommandsProvider>{children}</TerminalCommandsProvider>
+        <TerminalCommandsProvider>
+          <DropTargetProvider>{children}</DropTargetProvider>
+        </TerminalCommandsProvider>
       </TargetsProvider>
     </WindowsProvider>
   )

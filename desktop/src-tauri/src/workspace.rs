@@ -185,8 +185,10 @@ pub fn open_workspace_window(app: AppHandle<Wry>, serial: Option<String>) -> tau
     .title("Droidective")
     .inner_size(1100.0, 720.0)
     .min_inner_size(720.0, 480.0)
-    // The same as the first window's, and for the same reason: Tauri's native
-    // drop handler otherwise swallows the HTML5 tab and sidebar drags.
+    // The same as the first window's: Tauri's native drop handler otherwise
+    // swallows the HTML5 tab and sidebar drags. Files dropped from the file
+    // manager still reach the page — see `useFileDrop` — they simply arrive as
+    // web `File`s rather than as paths.
     .disable_drag_drop_handler()
     .focused(true)
     .build()?;

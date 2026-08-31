@@ -1,6 +1,7 @@
 mod api;
 mod commands;
 mod daemon;
+mod dropped;
 mod error;
 mod menu;
 mod metro;
@@ -272,5 +273,7 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         workspace::focus_workspace_window,
         workspace::release_claim,
         workspace::request_close_feature,
+        dropped::stage_dropped_file,
+        dropped::discard_dropped_file,
     ]
 }

@@ -391,6 +391,9 @@ public struct LiveBackend: DaemonBackend {
         case .move(let source, let destination):
             return try await explorer.move(
                 serial: serial, from: source, toDir: destination, asRoot: asRoot)
+        case .push(let localPath, let destination):
+            return try await explorer.push(
+                serial: serial, localPath: localPath, toDir: destination, asRoot: asRoot)
         }
     }
 

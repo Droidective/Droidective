@@ -1,5 +1,6 @@
 import { CommandPalette } from "@/components/CommandPalette"
 import { FeatureRowMenu, type FeatureMenuTarget } from "@/components/FeatureRowMenu"
+import { FileDropLayer } from "@/components/FileDropLayer"
 import { SettingsWindow } from "@/components/SettingsWindow"
 import { TabContextMenu, type TabMenuTarget } from "@/components/TabContextMenu"
 import type { WorkspaceController } from "@/hooks/useWorkspace"
@@ -32,14 +33,18 @@ export function ShellOverlays({
   workspace,
   state,
   onChange,
+  activeFeature,
 }: {
   features: FeatureSummary[]
   workspace: WorkspaceController
   state: OverlayState
   onChange: (next: Partial<OverlayState>) => void
+  /** The focused tab, which decides where a dropped file would go. */
+  activeFeature: string | null
 }) {
   return (
     <>
+      <FileDropLayer activeFeature={activeFeature} />
       {state.palette ? (
         <CommandPalette
           features={features}

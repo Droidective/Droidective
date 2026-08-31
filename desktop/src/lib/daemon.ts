@@ -250,6 +250,7 @@ export {
 } from "@/lib/daemon-api"
 export type { RecordStatus, RecordWireOptions, StoppedRecording } from "@/lib/daemon-record"
 export {
+  discardDroppedFile,
   discardRecording,
   managedToolInstall,
   managedToolList,
@@ -260,6 +261,7 @@ export {
   recordStatus,
   recordStop,
   saveRecording,
+  stageDroppedFile,
 } from "@/lib/daemon-record"
 export { customCommands, runCustomCommand, writeCustomCommands } from "@/lib/daemon-commands"
 export {
