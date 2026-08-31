@@ -3,6 +3,7 @@ mod commands;
 mod daemon;
 mod dropped;
 mod error;
+mod glass;
 mod menu;
 mod metro;
 mod panel;
@@ -160,6 +161,8 @@ pub fn run() -> tauri::Result<()> {
 )]
 fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync + 'static {
     tauri::generate_handler![
+        glass::set_window_blur,
+        glass::window_blur_supported,
         commands::daemon_status,
         commands::list_devices,
         commands::list_features,

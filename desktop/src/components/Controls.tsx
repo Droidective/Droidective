@@ -168,12 +168,18 @@ export function Slider({
   max,
   step,
   onChange,
+  ariaLabel,
+  format,
 }: {
   value: number
   min: number
   max: number
   step: number
   onChange: (value: number) => void
+  /** For a slider whose only caption is a separate field label. */
+  ariaLabel?: string | undefined
+  /** How the readout beside it reads — raw, unless a caller says otherwise. */
+  format?: ((value: number) => string) | undefined
 }) {
   return (
     <div className="flex items-center gap-3">
@@ -183,12 +189,15 @@ export function Slider({
         min={min}
         max={max}
         step={step}
+        aria-label={ariaLabel ?? "Slider"}
         onChange={(event) => {
           onChange(Number(event.target.value))
         }}
         className="h-1 flex-1 accent-[var(--color-accent)]"
       />
-      <span className="w-10 text-right tabular-nums text-text-secondary">{value}</span>
+      <span className="w-10 text-right tabular-nums text-text-secondary">
+        {format === undefined ? value : format(value)}
+      </span>
     </div>
   )
 }

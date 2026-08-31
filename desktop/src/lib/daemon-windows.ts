@@ -70,3 +70,19 @@ export function onCloseFeatureRequest(
     handler(event.payload)
   })
 }
+
+/**
+ * Ask the native window for the platform's blur, and hear whether it took.
+ *
+ * Not a daemon route for the same reason the registry is not: a window's
+ * appearance is the Rust process's business, and the daemon has never heard of
+ * windows.
+ */
+export function setWindowBlur(label: string, enabled: boolean): Promise<boolean> {
+  return invoke("set_window_blur", { label, enabled })
+}
+
+/** Whether this platform has a window blur an application can ask for. */
+export function windowBlurSupported(): Promise<boolean> {
+  return invoke("window_blur_supported")
+}

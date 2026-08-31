@@ -4,10 +4,13 @@ import {
   DEFAULT_ACCENT,
   normalizeHex,
   palette,
+  type Palette,
   resolveTheme,
   type Theme,
 } from "@/lib/appearance"
 import { backgroundPalette, isLightHex, textPalette } from "@/lib/background"
+import { glassPalette } from "@/lib/glass"
+import { clampedAmount, clampedOpacity } from "@/lib/window-effects"
 
 /** A stored colour, or "" for "none chosen" — which a malformed one becomes. */
 function hexOrNone(value: unknown): string {
@@ -21,6 +24,12 @@ export interface Appearance {
   background: string
   /** A chosen primary text colour, or "" for the palette's own. */
   text: string
+  /** The window's opacity, 0.1…1. At 1 the whole effect is off. */
+  opacity: number
+  /** Whether the platform's window blur is asked for — a switch, not a radius. */
+  blur: boolean
+  /** The grain film's slider amount, 0…1. */
+  grain: number
   /**
    * What the app is actually painted as right now — never "system", and never
    * the Theme picker's answer while a custom background is set, since the
@@ -31,6 +40,9 @@ export interface Appearance {
   setAccent: (accent: string) => void
   setBackground: (hex: string) => void
   setText: (hex: string) => void
+  setOpacity: (opacity: number) => void
+  setBlur: (blur: boolean) => void
+  setGrain: (grain: number) => void
 }
 
 const AppearanceContext = createContext<Appearance | null>(null)
@@ -42,10 +54,23 @@ interface Saved {
   accent: string
   background: string
   text: string
+  opacity: number
+  blur: boolean
+  grain: number
 }
 
 function load(): Saved {
-  const fallback: Saved = { theme: "dark", accent: DEFAULT_ACCENT, background: "", text: "" }
+  const fallback: Saved = {
+    theme: "dark",
+    accent: DEFAULT_ACCENT,
+    background: "",
+    text: "",
+    // The Mac's defaults: opaque, and blur pre-set so turning translucency on
+    // gives glass rather than a plain see-through window nobody wants.
+    opacity: 1,
+    blur: true,
+    grain: 0,
+  }
   try {
     const raw = globalThis.localStorage.getItem(STORAGE_KEY)
     if (raw === null) return fallback
@@ -60,6 +85,9 @@ function load(): Saved {
       // window down with it — `normalizeHex` is what decides, in one place.
       background: hexOrNone(parsed.background),
       text: hexOrNone(parsed.text),
+      opacity: clampedOpacity(Number(parsed.opacity ?? fallback.opacity)),
+      blur: typeof parsed.blur === "boolean" ? parsed.blur : fallback.blur,
+      grain: clampedAmount(Number(parsed.grain ?? fallback.grain)),
     }
   } catch {
     // Persisted JSON a previous version wrote. A shape that has since changed
@@ -105,24 +133,7 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
       ? "light"
       : "dark"
 
-  useEffect(() => {
-    const root = globalThis.document.documentElement
-    const base = custom ?? palette(resolved)
-    const text =
-      saved.text === ""
-        ? null
-        : textPalette(saved.text, base["--color-bg-root"] ?? "#1a1a1a")
-    for (const [token, value] of Object.entries({ ...base, ...text })) {
-      root.style.setProperty(token, value)
-    }
-    root.style.setProperty("--color-accent", accentFor(saved.accent, resolved))
-    // So the webview paints native scrollbars and form controls to match.
-    root.style.colorScheme = resolved
-    // `custom` is derived from `saved.background`, which is the dependency
-    // that actually changes; depending on the object would re-apply the whole
-    // palette on every render.
-    // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [resolved, saved.accent, saved.background, saved.text])
+  useAppliedPalette(saved, resolved, custom)
 
   useEffect(() => {
     try {
@@ -138,6 +149,9 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
       accent: saved.accent,
       background: saved.background,
       text: saved.text,
+      opacity: saved.opacity,
+      blur: saved.blur,
+      grain: saved.grain,
       resolved,
       setTheme: (theme) => {
         setSaved((current) => ({ ...current, theme }))
@@ -151,11 +165,57 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
       setText: (text) => {
         setSaved((current) => ({ ...current, text }))
       },
+      setOpacity: (opacity) => {
+        setSaved((current) => ({ ...current, opacity }))
+      },
+      setBlur: (blur) => {
+        setSaved((current) => ({ ...current, blur }))
+      },
+      setGrain: (grain) => {
+        setSaved((current) => ({ ...current, grain }))
+      },
     }),
-    [resolved, saved.accent, saved.theme, saved.background, saved.text],
+    [
+      resolved,
+      saved.accent,
+      saved.theme,
+      saved.background,
+      saved.text,
+      saved.opacity,
+      saved.blur,
+      saved.grain,
+    ],
   )
 
   return <AppearanceContext value={value}>{children}</AppearanceContext>
+}
+
+/**
+ * Write the resolved palette onto `:root`.
+ *
+ * Its own hook because it is a different job from holding the settings: this
+ * one is about the DOM, and inline it made the provider a hundred lines of two
+ * unrelated concerns.
+ */
+function useAppliedPalette(saved: Saved, resolved: "light" | "dark", custom: Palette | null): void {
+  useEffect(() => {
+    const root = globalThis.document.documentElement
+    const base = custom ?? palette(resolved)
+    const text =
+      saved.text === "" ? null : textPalette(saved.text, base["--color-bg-root"] ?? "#1a1a1a")
+    for (const [token, value] of Object.entries(
+      glassPalette({ ...base, ...text }, saved.opacity),
+    )) {
+      root.style.setProperty(token, value)
+    }
+    root.style.setProperty("--color-accent", accentFor(saved.accent, resolved))
+    // So the webview paints native scrollbars and form controls to match.
+    root.style.colorScheme = resolved
+    // `custom` is derived from `saved.background`, which is the dependency
+    // that actually changes; depending on the object would re-apply the whole
+    // palette on every render.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolved, saved.accent, saved.background, saved.text, saved.opacity])
 }
 
 export function useAppearance(): Appearance {

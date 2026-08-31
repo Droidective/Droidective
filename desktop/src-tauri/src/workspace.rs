@@ -190,6 +190,10 @@ pub fn open_workspace_window(app: AppHandle<Wry>, serial: Option<String>) -> tau
     // manager still reach the page — see `useFileDrop` — they simply arrive as
     // web `File`s rather than as paths.
     .disable_drag_drop_handler()
+    // As the first window is, so the Appearance sliders reach every window
+    // rather than only the one the config declared. At 100% opacity the page
+    // paints its background solid, so a transparent surface changes nothing.
+    .transparent(true)
     .focused(true)
     .build()?;
     window.set_focus()?;

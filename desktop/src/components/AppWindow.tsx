@@ -1,5 +1,6 @@
 import { Banner } from "@/components/Controls"
 import { DeviceBarHost } from "@/components/DeviceBarHost"
+import { GrainOverlay } from "@/components/GrainOverlay"
 import { NotificationPanel } from "@/components/NotificationPanel"
 import { ToastOverlay } from "@/components/ToastOverlay"
 import { WindowProviders } from "@/components/WindowProviders"
@@ -60,6 +61,7 @@ export function AppWindow({
           <NotificationPanel />
         </div>
         <ToastOverlay />
+        <GrainOverlay />
       </div>
     </WindowProviders>
   )

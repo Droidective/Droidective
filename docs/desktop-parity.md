@@ -544,10 +544,20 @@ somebody already has in their fingers.
 
 #### Look
 
-- [ ] **Window translucency** — the `.bgRoot`/`.bgSurface` token system, with
-      `WindowEffects` already pure-tested in ADBKit. Note the Mac's blur is a
-      private CoreGraphics call; Windows and Linux need their own (Mica /
-      compositor blur) or the slider limits to opacity.
+- [x] **Window translucency** — Opacity and Grain are the Mac's sliders, with
+      the Mac's arithmetic ported to `lib/window-effects.ts` and checked
+      against `WindowEffectsTests`' own numbers; the tokens are re-expressed at
+      an alpha in `lib/glass.ts` (root carries the opacity, lifted surfaces only
+      the contrast step) and 100% hands the palette back untouched, so an
+      untouched window renders exactly as before. Grain is an SVG
+      `feTurbulence` film rather than a Metal shader, portalled outside the zoom
+      transform so zoom does not magnify the specks. **Divergence:** Blur is a
+      *switch*, not a slider — no platform exposes a radius (Windows has
+      Acrylic and Mica, both on-or-off; Linux leaves window blur to the
+      compositor entirely), and a slider with two positions would be a worse
+      lie than a switch. `src-tauri/src/glass.rs` picks Acrylic on Windows
+      (Mica is 11-only and tints rather than blurs) and disables the row with
+      the reason on Linux.
 - [x] **Light theme** — ported from the asset catalog's own colorset values,
       applied as CSS custom properties on `:root` so every existing token
       follows it.
