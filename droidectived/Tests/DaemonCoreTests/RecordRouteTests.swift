@@ -82,7 +82,7 @@ import Testing
     /// raw H.264 stream has none at all and ffmpeg invents 25 fps, so a
     /// three-minute capture claims some other length; without `-c:v copy` the
     /// device's encode is thrown away and done again on the host.
-    @Test func theEncodeVectorMuxesRatherThanReEncoding() {
+    @Test func theEncodeVectorMuxesRatherThanReEncoding() throws {
         let arguments = RecordArguments.encode(into: "/tmp/out.mp4")
 
         #expect(arguments.contains("-c:v"))
@@ -91,9 +91,9 @@ import Testing
         #expect(arguments.contains("pipe:0"))
         #expect(arguments.last == "/tmp/out.mp4")
         // `-f h264` has to sit before `-i`, or it describes the output.
-        let format = try? #require(arguments.firstIndex(of: "-f"))
-        let input = try? #require(arguments.firstIndex(of: "-i"))
-        #expect((format ?? 0) < (input ?? 0))
+        let format = try #require(arguments.firstIndex(of: "-f"))
+        let input = try #require(arguments.firstIndex(of: "-i"))
+        #expect(format < input)
     }
 
     @Test func theConcatVectorJoinsWithoutReEncoding() {
