@@ -6,10 +6,10 @@
     <description>Most recent Droidective updates.</description>
     <language>en</language>
     <item>
-      <title>Droidective 3.10.0-beta.4</title>
+      <title>Droidective 3.10.0-beta.5</title>
       <sparkle:channel>beta</sparkle:channel>
-      <sparkle:version>901</sparkle:version>
-      <sparkle:shortVersionString>3.10.0-beta.4</sparkle:shortVersionString>
+      <sparkle:version>907</sparkle:version>
+      <sparkle:shortVersionString>3.10.0-beta.5</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <description><![CDATA[
 <style>
@@ -25,106 +25,47 @@ pre { background: color-mix(in srgb, currentColor 8%, transparent); padding: .6e
 pre code { background: none; padding: 0; }
 a { color: #2f9e44; }
 </style>
-<p>Five more of the Mac's features reach Windows and Linux, and two of them could
-not simply be moved across — the recorder and the file drops both needed a
-different answer here than the one macOS gave. Everything else is the same
-screen, the same wording, the same gestures.</p>
-<h3>API Testing</h3>
+<p>Two fixes from a real Linux install, one of which stopped the app installing at
+all.</p>
+<h3>It installs without adb now</h3>
 <ul>
 <li>
-<strong>The whole client is here.</strong> Collections and nested folders, environments,
-<code>{{variable}}</code> scopes with the unresolved ones surfaced before a send rather
-than sent as literal braces, assertions on status, timing, body, header and
-JSON path, a collection runner, code generation to six targets, Postman
-import and export, and a cURL paste that parses back into a request.</li>
+<strong>adb was a hard dependency of the <code>.deb</code>,</strong> so apt refused to install
+Droidective on a machine that did not already have it. That is backwards: the
+app has a setup Doctor whose whole job is to tell you a tool is missing and
+where to get it, and it never got the chance to run. adb is a recommendation
+now — apt still installs it alongside the app by default, and a machine
+without it still gets the app.</li>
 <li>
-<strong>The collection runner deliberately stayed in the app.</strong> It would have been
-one daemon call; instead the client walks the tree and sends one request at a
-time, so progress is live and Stop is instant rather than "the run finishes
-and then tells you".</li>
+<strong>The advice it gives afterwards fits the machine.</strong> "Install it via Android
+Studio" is the right sentence on a Mac and useless on Ubuntu, where the answer
+is one command. Droidective now reads the distribution and says
+<code>sudo apt install android-tools-adb</code>, or the dnf, pacman or zypper equivalent
+— and the button beside the warning copies it, rather than leaving you to
+retype it out of a tooltip. Mint, Pop!_OS, Zorin and elementary get the apt
+answer through <code>ID_LIKE</code>; a distribution none of those cover gets the package
+name rather than a guessed command.</li>
 </ul>
-<h3>Recording the screen</h3>
+<h3>The menu bar is not see-through</h3>
 <ul>
 <li>
-<strong>The recorder is a new pipeline, not a port.</strong> The Mac records through its
-Apple-only media stack, so there was nothing to move: the daemon now feeds
-the scrcpy H.264 stream straight into ffmpeg and copies the video track
-without re-encoding. Pause and resume produce segments that the concat
-demuxer joins at the end, so a paused take is one file.</li>
+<strong>On Linux the desktop showed through File, Edit and View.</strong> The window was
+made transparent in the last beta so the Opacity slider could work, but Linux
+draws the app's own menu bar above the page, and that strip has nothing to
+paint itself on over a transparent window. The window is opaque there again.</li>
 <li>
-<strong>A recording said 30 seconds for a 12-second file.</strong> The clock had been
-running from the button press, and scrcpy takes a few seconds to produce its
-first frame. It is measured from the first frame to the last now — 13.820
-reported against 13.819 in the file.</li>
+<strong>Opacity now says it is unavailable on Linux, and why.</strong> Grain still works,
+and nothing changes on Windows.</li>
 <li>
-<strong>ffmpeg is downloaded rather than bundled.</strong> Digest-verified from a pinned
-release, <code>.tar.xz</code> on Linux and <code>.zip</code> on Windows, which is also what
-unblocked <strong>Settings ▸ Tools</strong> — the managed-tool store, with sizes, upgrades
-and removal.</li>
-</ul>
-<h3>More than one window</h3>
-<ul>
-<li>
-<strong>One window per device</strong>, each with its own tabs, its own arrangement and
-its own device selection, restored where you left them.</li>
-<li>
-<strong>The Focus / Take Over banner</strong> for the features that cannot run twice on
-one device — the mirror, the recorder, the JS console — instead of two
-windows racing each other for the same encoder.</li>
-<li>
-<strong>Every window after the first tints its device icon</strong>, so which window you
-are looking at is answerable without reading the tab strip.</li>
-</ul>
-<h3>Files dropped on the window</h3>
-<ul>
-<li>
-<strong>An APK or app bundle dropped anywhere installs it</strong>, whatever screen is in
-front; anything else dropped on the File Explorer is pushed to the directory
-it is showing. Anywhere else says which of the two to do rather than guessing
-a destination on someone else's device.</li>
-<li>
-<strong>The in-app drags were the constraint.</strong> Turning on the toolkit's own
-file-drop handler stops every drag inside the page working — the tab strip,
-the sidebar, the mirror wall — so instead of trading one for the other, a
-dropped file's <em>bytes</em> are staged on the way through. One copy, and nothing
-that already worked had to be rewritten.</li>
-</ul>
-<h3>Look and first launch</h3>
-<ul>
-<li>
-<strong>The window can be glass.</strong> Settings ▸ Appearance ▸ Window gains Opacity and
-Grain — the Mac's sliders, with the Mac's arithmetic, so a window set up on
-one machine looks the same on the other. At 100% nothing changes at all.</li>
-<li>
-<strong>Blur is a switch here, not a slider.</strong> No desktop platform lets an
-application ask for a blur <em>radius</em>: Windows has Acrylic, which is on or off,
-and on Linux the compositor decides entirely. A slider with two positions
-would be a worse lie than a switch, so the row says what the platform will
-actually do.</li>
-<li>
-<strong>First launch asks what you do.</strong> The role picker curates the sidebar to
-Android, React Native, iOS, QA, support or security work — with the tool
-counts following the "I work with React Native" switch live — and Settings ▸
-General names the role in effect and lets you change it. Escape leaves it.</li>
-</ul>
-<h3>Fixes</h3>
-<ul>
-<li>
-<strong>A form action with two devices connected was a Run button that did
-nothing.</strong> Only one screen can be in front of the Quick Actions panel, and it
-checked the form first, so the pick-a-device step opened behind the form that
-had just been submitted. Found while adding the step that asks <em>which app</em> an
-action that needs one should run against.</li>
-<li>
-<strong>The Linux smoke test was photographing the wrong thing.</strong> It drives the app
-on every pull request, and once the role picker appeared on first launch its
-keystrokes were going into that instead. It now dismisses the picker and
-proves it went away before driving anything, so the job checks three things
-where it had been checking one.</li>
+<strong>The check that should have caught it exists now.</strong> The Linux job that
+launches and photographs the app on every change was comparing the app
+against a black background, so a hole in it was invisible. It counts the
+pixels the app failed to paint, which for this bug would have been about
+twenty-six thousand of them.</li>
 </ul>
 ]]></description>
-      <pubDate>Mon, 31 Aug 2026 20:05:02 +0000</pubDate>
-      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.10.0-beta.4/Droidective-v3.10.0-beta.4.dmg" sparkle:edSignature="qej8n9oTVg5NA5RiAMW9S/fRGOHT8HNjqSoI/yOs0tinf5EFX7Hf/MFt8Eju2qJzLMdJnTssT4FQ4q6Ghfr1Cw==" length="145188178" type="application/octet-stream" />
+      <pubDate>Tue, 01 Sep 2026 20:31:34 +0000</pubDate>
+      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.10.0-beta.5/Droidective-v3.10.0-beta.5.dmg" sparkle:edSignature="kbdB1yLXuNFBDcycL7/ajAwu2Th8ac7pfGxVUNl3NEhNEKthh9Kdc1LeNvpNn3XR/qFvSckSf72mgsNTL0GbCw==" length="145142891" type="application/octet-stream" />
     </item>
     <item>
       <title>Droidective 3.9.2</title>
