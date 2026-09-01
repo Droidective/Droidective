@@ -1,3 +1,39 @@
+## Droidective v3.10.0-beta.5
+
+Two fixes from a real Linux install, one of which stopped the app installing at
+all.
+
+### It installs without adb now
+
+- **adb was a hard dependency of the `.deb`,** so apt refused to install
+  Droidective on a machine that did not already have it. That is backwards: the
+  app has a setup Doctor whose whole job is to tell you a tool is missing and
+  where to get it, and it never got the chance to run. adb is a recommendation
+  now — apt still installs it alongside the app by default, and a machine
+  without it still gets the app.
+- **The advice it gives afterwards fits the machine.** "Install it via Android
+  Studio" is the right sentence on a Mac and useless on Ubuntu, where the answer
+  is one command. Droidective now reads the distribution and says
+  `sudo apt install android-tools-adb`, or the dnf, pacman or zypper equivalent
+  — and the button beside the warning copies it, rather than leaving you to
+  retype it out of a tooltip. Mint, Pop!_OS, Zorin and elementary get the apt
+  answer through `ID_LIKE`; a distribution none of those cover gets the package
+  name rather than a guessed command.
+
+### The menu bar is not see-through
+
+- **On Linux the desktop showed through File, Edit and View.** The window was
+  made transparent in the last beta so the Opacity slider could work, but Linux
+  draws the app's own menu bar above the page, and that strip has nothing to
+  paint itself on over a transparent window. The window is opaque there again.
+- **Opacity now says it is unavailable on Linux, and why.** Grain still works,
+  and nothing changes on Windows.
+- **The check that should have caught it exists now.** The Linux job that
+  launches and photographs the app on every change was comparing the app
+  against a black background, so a hole in it was invisible. It counts the
+  pixels the app failed to paint, which for this bug would have been about
+  twenty-six thousand of them.
+
 ## Droidective v3.10.0-beta.4
 
 Five more of the Mac's features reach Windows and Linux, and two of them could
