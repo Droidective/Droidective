@@ -9,6 +9,8 @@ export interface Toolchain {
   detecting: boolean
   /** Null until adb has actually been looked for. */
   adbMissing: boolean | null
+  /** How to get adb *on this machine* — the daemon words it per platform. */
+  adbHint: string
   redetect: () => Promise<void>
 }
 
@@ -45,7 +47,14 @@ export function ToolchainProvider({ children }: { children: React.ReactNode }) {
   }, [redetect])
 
   const value = useMemo<Toolchain>(
-    () => ({ tools, error, detecting, adbMissing: adbMissing(tools), redetect }),
+    () => ({
+      tools,
+      error,
+      detecting,
+      adbMissing: adbMissing(tools),
+      adbHint: tools.find((tool) => tool.id === "adb")?.installHint ?? "",
+      redetect,
+    }),
     [tools, error, detecting, redetect],
   )
   return <ToolchainContext value={value}>{children}</ToolchainContext>

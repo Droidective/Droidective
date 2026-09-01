@@ -170,6 +170,7 @@ export function Slider({
   onChange,
   ariaLabel,
   format,
+  disabled = false,
 }: {
   value: number
   min: number
@@ -180,6 +181,7 @@ export function Slider({
   ariaLabel?: string | undefined
   /** How the readout beside it reads — raw, unless a caller says otherwise. */
   format?: ((value: number) => string) | undefined
+  disabled?: boolean
 }) {
   return (
     <div className="flex items-center gap-3">
@@ -190,12 +192,16 @@ export function Slider({
         max={max}
         step={step}
         aria-label={ariaLabel ?? "Slider"}
+        disabled={disabled}
         onChange={(event) => {
           onChange(Number(event.target.value))
         }}
-        className="h-1 flex-1 accent-[var(--color-accent)]"
+        className={cn(
+          "h-1 flex-1 accent-[var(--color-accent)]",
+          disabled && "cursor-not-allowed opacity-40",
+        )}
       />
-      <span className="w-10 text-right tabular-nums text-text-secondary">
+      <span className={cn("w-10 text-right tabular-nums text-text-secondary", disabled && "opacity-40")}>
         {format === undefined ? value : format(value)}
       </span>
     </div>

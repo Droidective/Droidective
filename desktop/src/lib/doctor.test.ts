@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest"
-import { adbMissing, blocking, CHECKS, checkedTools, verdict } from "@/lib/doctor"
+import {
+  adbMissing,
+  blocking,
+  CHECKS,
+  checkedTools,
+  installCommand,
+  verdict,
+} from "@/lib/doctor"
 import type { ToolReport } from "@/lib/wire"
 
 function tool(id: string, installed: boolean): ToolReport {
@@ -76,5 +83,33 @@ describe("adbMissing", () => {
   it("answers once it has", () => {
     expect(adbMissing([tool("adb", false)])).toBe(true)
     expect(adbMissing([tool("adb", true)])).toBe(false)
+  })
+})
+
+describe("installCommand", () => {
+  /**
+   * The daemon words each hint for the machine it runs on, and this is what
+   * lets the UI offer the useful half rather than making somebody retype it
+   * out of a tooltip.
+   */
+  it("pulls the command out of a hint that names one", () => {
+    expect(
+      installCommand("adb is missing. Install it with `sudo apt install android-tools-adb`, then re-check."),
+    ).toBe("sudo apt install android-tools-adb")
+    expect(installCommand("adb is missing. Install it with `winget install Google.PlatformTools`, or …")).toBe(
+      "winget install Google.PlatformTools",
+    )
+  })
+
+  /** A hint that only points at a web page has no command to copy. */
+  it("is null when the hint names no command", () => {
+    expect(installCommand("Install Android platform-tools — via Android Studio, or from …")).toBeNull()
+    expect(installCommand("")).toBeNull()
+  })
+
+  /** An empty pair of backticks is not a command. */
+  it("refuses an empty quote rather than copying nothing", () => {
+    expect(installCommand("install it with `` then re-check")).toBeNull()
+    expect(installCommand("install it with `   ` then re-check")).toBeNull()
   })
 })

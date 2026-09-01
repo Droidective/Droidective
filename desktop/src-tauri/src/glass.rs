@@ -15,6 +15,13 @@
 //! That is why the desktop's Blur is a switch where the Mac's is a slider. The
 //! divergence is forced by the platforms rather than chosen, and it is named
 //! here, in Settings, and in `docs/desktop-parity.md`.
+//!
+//! Linux gives up the *whole* effect, not just the blur, and for a reason that
+//! has nothing to do with compositors: the app draws its own GTK menu bar above
+//! the webview there, and that strip has nothing to paint itself on over a
+//! transparent window — the desktop shows through File, Edit and View.
+//! `tauri.linux.conf.json` turns the window's transparency off, and
+//! `lib/platform.ts` stops the page painting itself translucent to match.
 
 use tauri::utils::config::WindowEffectsConfig;
 use tauri::utils::WindowEffect;
@@ -99,6 +106,44 @@ mod tests {
             window_blur_supported(),
             cfg!(any(target_os = "windows", target_os = "macos"))
         );
+    }
+
+    /// The Linux config exists only to turn the window's transparency off, so
+    /// it has to be identical to the shared one in every other respect. Tauri
+    /// merges the platform config over the base, and whether it merges the
+    /// windows array element-wise or replaces it outright is not something to
+    /// find out from a user's screenshot — so the override carries the whole
+    /// window object, and this fails if the two ever drift.
+    #[test]
+    fn the_linux_window_matches_the_shared_one_apart_from_transparency() {
+        let read = |name: &str| -> serde_json::Value {
+            let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(name);
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap_or_default())
+                .unwrap_or(serde_json::Value::Null)
+        };
+        let window = |config: &serde_json::Value| -> serde_json::Map<String, serde_json::Value> {
+            config["app"]["windows"][0]
+                .as_object()
+                .cloned()
+                .unwrap_or_default()
+        };
+
+        let mut shared = window(&read("tauri.conf.json"));
+        let mut linux = window(&read("tauri.linux.conf.json"));
+        assert!(!shared.is_empty(), "the shared config declares no window");
+        assert!(!linux.is_empty(), "the linux config declares no window");
+
+        assert_eq!(
+            shared.remove("transparent"),
+            Some(serde_json::Value::Bool(true)),
+            "the shared window should be transparent — that is the whole feature"
+        );
+        assert_eq!(
+            linux.remove("transparent"),
+            Some(serde_json::Value::Bool(false)),
+            "the linux window must not be transparent — the menu bar cannot paint on it"
+        );
+        assert_eq!(shared, linux, "the two window declarations have drifted");
     }
 
     /// Acrylic on Windows, a vibrancy material elsewhere. Named because

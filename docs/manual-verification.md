@@ -135,7 +135,31 @@ WKWebView. This is a platform limit, not a missing tool — see the
   staging is covered by Rust tests, and which of install/push/refuse a drop
   means is `lib/file-drop.ts`, tested without a drag.
 
-## 5. Sound
+## 5. Installing it the way a stranger would
+
+**Why not automatable here:** the container installs the `.deb` with apt on a
+machine that is a blank slate every time. What it cannot tell you is what
+happens on a *real* desktop that already has opinions — a different package
+manager, an existing Android SDK, a distro whose adb package is named something
+else.
+
+The rule the app is built to: **adb is a `Recommends`, never a `Depends`.**
+Refusing to install because a tool is missing, when the app's own Doctor exists
+to tell you the tool is missing, is a worse first impression than any error
+message. beta.4 got this wrong.
+
+- [ ] **Install on a machine with no adb** and confirm the app installs,
+      launches, and says what to do rather than failing to install at all.
+- [ ] **The device bar's "Copy install command"** copies the command for *that*
+      distribution — apt on Debian and its derivatives, dnf on Fedora, pacman on
+      Arch, zypper on openSUSE — and the pasted command actually works.
+- [ ] **A distribution none of those cover** names the package instead of
+      inventing a command (`InstallHints.adbCommand` returns nil, and the hint
+      says "often called android-tools or android-tools-adb").
+- [ ] **The AppImage**, which declares no dependencies at all, on a machine
+      with no adb.
+
+## 6. Sound
 
 **Why not automatable here:** an agent cannot hear. Whether a file *contains*
 audio can be probed; whether it is the right audio, in sync, at a sane level,
@@ -150,7 +174,7 @@ cannot.
 - [ ] **The level meter** moves when you speak.
 - [ ] **Mute mid-take** leaves the timeline continuous, and unmuting is instant.
 
-## 6. macOS permission prompts
+## 7. macOS permission prompts
 
 **Why not automatable here:** the prompts are system-modal and an agent must
 not click through a security dialog on your behalf.
@@ -159,7 +183,7 @@ not click through a security dialog on your behalf.
       with sensible wording the first time each is needed.
 - [ ] Denying one is reported in the app rather than failing silently.
 
-## 7. How it feels
+## 8. How it feels
 
 **Why not automatable here:** these are perceptual judgements. A screenshot
 cannot tell you a mirror is stuttering or that input lags.
@@ -171,7 +195,7 @@ cannot tell you a mirror is stuttering or that input lags.
 - [ ] **Reduced motion** — with the system setting on, the marketing site's
       scroll reveals and hero demo still work.
 
-## 8. Release mechanics
+## 9. Release mechanics
 
 **Why not automatable here:** signing identities, notarisation, and updating
 *from* a previously installed build.
@@ -186,7 +210,7 @@ cannot tell you a mirror is stuttering or that input lags.
       (`scripts/test-release-channel.sh` asserts this, but confirm the actual
       release page).
 
-## 9. Things needing a real account or endpoint
+## 10. Things needing a real account or endpoint
 
 **Why not automatable here:** no credentials, and an agent should not be
 signing in to your services.

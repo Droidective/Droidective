@@ -2,6 +2,7 @@ import { Slider, Switch } from "@/components/Controls"
 import { Row } from "@/components/settings/SettingsKit"
 import { useAppearance } from "@/hooks/useAppearance"
 import { useWindowBlur } from "@/hooks/useWindowBlur"
+import { TRANSPARENCY_SUPPORTED } from "@/lib/platform"
 import {
   clampedAmount,
   clampedOpacity,
@@ -26,20 +27,19 @@ import {
 export function WindowEffectsSection() {
   const { opacity, blur, grain, setOpacity, setBlur, setGrain } = useAppearance()
   const { supported, failure } = useWindowBlur()
-  const translucent = isTranslucent(opacity)
+  // Both the page's alpha and the window behind it have to be able to do it.
+  const translucent = TRANSPARENCY_SUPPORTED && isTranslucent(opacity)
 
   return (
     <>
-      <Row
-        label="Opacity"
-        detail="Below 100% the window turns to glass — what's behind shows through every pane."
-      >
+      <Row label="Opacity" detail={opacityDetail()}>
         <Slider
-          value={clampedOpacity(opacity)}
+          value={TRANSPARENCY_SUPPORTED ? clampedOpacity(opacity) : 1}
           min={MINIMUM_OPACITY}
           max={1}
           step={0.01}
           onChange={setOpacity}
+          disabled={!TRANSPARENCY_SUPPORTED}
           ariaLabel="Window opacity"
           format={percentLabel}
         />
@@ -70,10 +70,18 @@ export function WindowEffectsSection() {
   )
 }
 
+/** What the slider will do here — or why it will not. */
+function opacityDetail(): string {
+  if (!TRANSPARENCY_SUPPORTED) {
+    return "Not on Linux. Droidective draws its own menu bar there, and that strip has nothing to paint itself on over a transparent window — the desktop would show through File, Edit and View. Grain still works."
+  }
+  return "Below 100% the window turns to glass — what's behind shows through every pane."
+}
+
 /** Why the switch is off, in the order the reasons actually matter. */
 function blurDetail(supported: boolean, translucent: boolean, failure: string | null): string {
   if (!supported) {
-    return "Your desktop compositor decides whether a transparent window is blurred — there is no setting an application can ask for on Linux. KDE's KWin and GNOME extensions can both be told to blur one."
+    return "Windows and macOS each have a window blur an application can ask for; Linux leaves it to the compositor, and Droidective's window is not transparent there anyway."
   }
   if (failure !== null) return failure
   if (!translucent) return "Nothing shows through a fully opaque window. Lower Opacity first."

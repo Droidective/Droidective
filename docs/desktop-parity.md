@@ -607,13 +607,20 @@ two disagree, so a relabelled item cannot leave a stale accelerator behind.
       the contrast step) and 100% hands the palette back untouched, so an
       untouched window renders exactly as before. Grain is an SVG
       `feTurbulence` film rather than a Metal shader, portalled outside the zoom
-      transform so zoom does not magnify the specks. **Divergence:** Blur is a
-      *switch*, not a slider — no platform exposes a radius (Windows has
-      Acrylic and Mica, both on-or-off; Linux leaves window blur to the
-      compositor entirely), and a slider with two positions would be a worse
-      lie than a switch. `src-tauri/src/glass.rs` picks Acrylic on Windows
-      (Mica is 11-only and tints rather than blurs) and disables the row with
-      the reason on Linux.
+      transform so zoom does not magnify the specks. **Two divergences.** Blur
+      is a *switch*, not a slider — no platform exposes a radius (Windows has
+      Acrylic and Mica, both on-or-off), and a slider with two positions would
+      be a worse lie than a switch; `src-tauri/src/glass.rs` picks Acrylic on
+      Windows, since Mica is 11-only and tints rather than blurs. And **Opacity
+      is unavailable on Linux entirely**: the app draws its own GTK menu bar
+      above the webview there, and that strip has nothing to paint itself on
+      over a transparent window — the desktop shows through File, Edit and
+      View, which is exactly what shipped in beta.4 before a user photographed
+      it. `tauri.linux.conf.json` turns the window transparency off,
+      `lib/platform.ts` stops the page painting itself translucent to match, a
+      Rust test fails if the two configs drift, and the Linux smoke job now
+      counts pure-black pixels inside the window so the next hole of this shape
+      fails CI instead of reaching somebody. Grain still works on Linux.
 - [x] **Light theme** — ported from the asset catalog's own colorset values,
       applied as CSS custom properties on `:root` so every existing token
       follows it.

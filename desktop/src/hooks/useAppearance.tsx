@@ -10,6 +10,7 @@ import {
 } from "@/lib/appearance"
 import { backgroundPalette, isLightHex, textPalette } from "@/lib/background"
 import { glassPalette } from "@/lib/glass"
+import { TRANSPARENCY_SUPPORTED } from "@/lib/platform"
 import { clampedAmount, clampedOpacity } from "@/lib/window-effects"
 
 /** A stored colour, or "" for "none chosen" — which a malformed one becomes. */
@@ -203,9 +204,11 @@ function useAppliedPalette(saved: Saved, resolved: "light" | "dark", custom: Pal
     const base = custom ?? palette(resolved)
     const text =
       saved.text === "" ? null : textPalette(saved.text, base["--color-bg-root"] ?? "#1a1a1a")
-    for (const [token, value] of Object.entries(
-      glassPalette({ ...base, ...text }, saved.opacity),
-    )) {
+    // Clamped where the window cannot be transparent: painting the page
+    // translucent there dims the app against its own opaque background instead
+    // of showing the desktop, which reads as a broken theme rather than glass.
+    const opacity = TRANSPARENCY_SUPPORTED ? saved.opacity : 1
+    for (const [token, value] of Object.entries(glassPalette({ ...base, ...text }, opacity))) {
       root.style.setProperty(token, value)
     }
     root.style.setProperty("--color-accent", accentFor(saved.accent, resolved))

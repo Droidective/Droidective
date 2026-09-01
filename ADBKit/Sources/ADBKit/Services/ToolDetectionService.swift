@@ -19,9 +19,10 @@ public struct ToolStatus: Sendable, Equatable {
 /// Detects whether the external tools are installed, with an install hint
 /// per missing one (shown by the Doctor and the device bar).
 public struct ToolDetectionService: Sendable {
+    /// adb's hint is per-machine (`InstallHints`), so it is not in this table —
+    /// the answer on Ubuntu is an apt command and on a Mac it is Android Studio,
+    /// and one sentence cannot be both.
     static let installHints: [Tool: String] = [
-        .adb: "Install Android platform-tools — via Android Studio, or from "
-            + "developer.android.com/tools/releases/platform-tools — then re-check.",
         .scrcpy: "Install scrcpy from github.com/Genymobile/scrcpy (optional — the app bundles its own mirror server).",
         .ffmpeg: "Install ffmpeg from ffmpeg.org (optional — the app bundles its own for video export).",
         .emulator: "Bundled with the Android SDK — install it via Android Studio → SDK Manager.",
@@ -66,7 +67,9 @@ public struct ToolDetectionService: Sendable {
     }
 
     func detectOne(_ tool: Tool, versionArgs: [String]) async -> ToolStatus {
-        let hint = Self.installHints[tool] ?? ""
+        let hint = tool == .adb
+            ? InstallHints.adb(osRelease: InstallHints.hostOSRelease())
+            : (Self.installHints[tool] ?? "")
         guard let path = await locator.resolve(tool) else {
             return ToolStatus(installed: false, path: nil, version: nil, installHint: hint)
         }
