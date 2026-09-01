@@ -46,11 +46,11 @@
     "linux": {
       "deb": {
         "depends": [
-          "android-tools-adb",
           "libcurl4",
           "libayatana-appindicator3-1"
         ],
         "recommends": [
+          "android-tools-adb",
           "gstreamer1.0-libav"
         ]
       }

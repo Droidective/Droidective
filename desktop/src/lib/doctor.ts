@@ -31,6 +31,22 @@ export function checkedTools(
   }))
 }
 
+/**
+ * The shell command inside an install hint, if it names one.
+ *
+ * The daemon words each hint for the machine it is running on, so on Ubuntu it
+ * carries `sudo apt install android-tools-adb` and on a Mac it carries a URL.
+ * Pulling the command out is what lets the UI offer to copy the useful half
+ * rather than making somebody retype it out of a tooltip — and reading it from
+ * the hint keeps one source of truth, rather than this app guessing the
+ * package manager a second time.
+ */
+export function installCommand(hint: string): string | null {
+  const quoted = /`([^`]+)`/u.exec(hint)
+  const command = quoted?.[1]?.trim()
+  return command === undefined || command === "" ? null : command
+}
+
 /** Checked tools that are missing — the ones that actually block something. */
 export function blocking(tools: readonly ToolReport[]): ToolReport[] {
   return checkedTools(tools)

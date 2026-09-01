@@ -86,6 +86,7 @@ for _ in $(seq 30); do xdpyinfo -display :99 >/dev/null 2>&1 && break; sleep 1; 
 xdpyinfo -display :99 >/dev/null || { echo "Xvfb never came up"; cat /tmp/xvfb.log; exit 1; }
 
 export DISPLAY=:99
+
 # WebKitGTK has no GPU here, and its sandbox needs kernel features a container
 # does not grant. Neither is a property of the app.
 export WEBKIT_DISABLE_COMPOSITING_MODE=1
@@ -147,6 +148,23 @@ WINDOW="$(xdotool search --name "^Droidective$" | head -1)"
 # a drawn UI is far from it.
 spread() { identify -format "%[fx:standard_deviation*255]" "$1"; }
 
+# How many pixels of pure black show inside the window rectangle.
+#
+# Pure black is the Xvfb root, and Droidective never paints it: the darkest
+# thing in the palette is BgRoot at 1a1a1a. So an exactly-black pixel inside
+# the window is somewhere the app did not paint and the screen behind it showed
+# through — which is what a transparent window did to the GTK menu bar, and it
+# reached a user because this job photographed black on black and called it
+# fine. Exact match, no fuzz: 1a1a1a must not count.
+#
+# Painting the root a louder colour would read better in the screenshots and
+# does not work — xsetroot -solid leaves a bare Xvfb root black, with or
+# without xrefresh, because nothing ever exposes it. Checked, twice.
+leaked() {
+  convert "$1" -crop "$2" +repage -fuzz 0% -fill white -opaque black \
+    -fill black +opaque white -colorspace Gray -format "%[fx:mean*w*h]" info:
+}
+
 # Counts differing pixels between two frames, or fails saying so.
 changed() {
   count="$(compare -metric AE "$1" "$2" null: 2>&1 || true)"
@@ -182,6 +200,20 @@ echo "pixels changed after leaving the role picker: $DISMISSED"
 LAUNCH_SPREAD="$(spread /dist/linux-launch.png)"
 echo "launch pixel spread: $LAUNCH_SPREAD"
 [ "${LAUNCH_SPREAD%%.*}" -ge 3 ] || fail "the app painted nothing (spread $LAUNCH_SPREAD)"
+
+# Everything inside the window rectangle is Droidective to paint. Anything the
+# root window shows through is a hole — the menu bar over a transparent window
+# was exactly that, and it reached a user because nothing here looked for it.
+eval "$(xdotool getwindowgeometry --shell "$WINDOW")"
+GEOMETRY="${WIDTH}x${HEIGHT}+${X}+${Y}"
+echo "window geometry: $GEOMETRY"
+LEAKED="$(leaked /dist/linux-launch.png "$GEOMETRY")"
+LEAKED="${LEAKED%%.*}"
+echo "unpainted pixels inside the window: $LEAKED"
+# A correct build measures exactly 0; the allowance is for antialiasing on a
+# future frame, not for a hole. The menu bar alone is ~26,000 pixels.
+[ "${LEAKED:-999999}" -le 500 ] \
+  || fail "the app is see-through in $LEAKED places — something is not painting its background"
 
 # Drive it far enough to open a screen. There is no window manager here, so
 # focus is set directly rather than by clicking. Ctrl+K is the command

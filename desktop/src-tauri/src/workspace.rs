@@ -193,7 +193,12 @@ pub fn open_workspace_window(app: AppHandle<Wry>, serial: Option<String>) -> tau
     // As the first window is, so the Appearance sliders reach every window
     // rather than only the one the config declared. At 100% opacity the page
     // paints its background solid, so a transparent surface changes nothing.
-    .transparent(true)
+    //
+    // Never on Linux: the app draws its own GTK menu bar there, and that strip
+    // has nothing to paint itself on when the window is transparent — the
+    // desktop shows through File, Edit and View. `tauri.linux.conf.json` says
+    // the same thing about the first window.
+    .transparent(cfg!(not(target_os = "linux")))
     .focused(true)
     .build()?;
     window.set_focus()?;
