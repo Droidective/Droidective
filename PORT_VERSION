@@ -9,4 +9,4 @@
 # Must be semver: Tauri rejects anything else, and the MSI installer version is
 # derived from it (WiX wants numeric major.minor.patch, so a pre-release suffix
 # is stripped for that one field). `0.0.1_beta` is NOT valid here.
-0.0.4-beta.1
+0.0.5-beta.1
