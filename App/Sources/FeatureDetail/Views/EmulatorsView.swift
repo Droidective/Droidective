@@ -14,6 +14,9 @@ struct EmulatorsView: View {
     @State private var reloadToken = 0
     @State private var wipeTarget: Avd?
     @State private var showAllSimulators = false
+    /// AVD name → the relaunch stage in flight, so the row can report it and
+    /// the button can't be pressed twice.
+    @State private var relaunching: [String: EmulatorRelaunchPhase] = [:]
 
     /// The role decides which platforms this screen shows at all: iOS
     /// Developer sees only the simulators section (titled "Simulators"),
@@ -26,6 +29,9 @@ struct EmulatorsView: View {
     private var showsSimulators: Bool { visiblePlatforms.contains(.iosSimulator) }
 
     private static let collapsedSimulatorCount = 5
+    /// How long a relaunch waits for the console port to free before giving
+    /// up. An emulator with a large snapshot takes several seconds to exit.
+    private static let shutdownWaitSeconds = 20
 
     var body: some View {
         Group {
@@ -156,7 +162,14 @@ struct EmulatorsView: View {
             }
             Spacer()
 
-            if let serial = avd.runningSerial {
+            if let phase = relaunching[avd.name] {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text(phase.label)
+                        .font(.app(.footnote))
+                        .foregroundStyle(.textMuted)
+                }
+            } else if let serial = avd.runningSerial {
                 Button("Relaunch") {
                     relaunch(avd, serial: serial)
                 }
@@ -318,17 +331,71 @@ struct EmulatorsView: View {
 
     /// Stop the running emulator, wait for its console port to free (so the
     /// relaunch can't come up as a second serial), then boot the same AVD.
+    ///
+    /// Every stage reports: the row carries a spinner and the phase's label,
+    /// because the shutdown wait alone runs to `shutdownWaitSeconds` and used
+    /// to show nothing at all. A failed stop and a shutdown that never
+    /// finishes both stop here with a reason instead of booting into a
+    /// conflict, and the button is unavailable while one is in flight — it
+    /// was re-clickable, and a second click meant two stops and two boots.
     private func relaunch(_ avd: Avd, serial: String) {
+        guard relaunching[avd.name] == nil else { return }
+        // Remembered before anything stops, so the post-boot focus targets the
+        // process we start rather than another emulator already up.
+        let existing = Set(emulatorApps().map(\.processIdentifier))
+        relaunching[avd.name] = .stopping
         Task {
-            await CommandLog.userInitiated {
-                _ = try? await state.env.engine.emulators.stop(serial: serial)
+            defer { relaunching[avd.name] = nil }
+
+            let stopped = await CommandLog.userInitiated {
+                (try? await state.env.engine.emulators.stop(serial: serial))
+                    ?? FeatureResult(ok: false, message: "adb not found")
             }
-            for _ in 0..<20 {
-                if await state.env.engine.emulators.consolePID(serial: serial) == nil { break }
+            guard stopped.ok else {
+                state.showToast(Toast(
+                    message: EmulatorRelaunchPhase.stopFailed(
+                        name: avd.displayName, reason: stopped.message),
+                    ok: false
+                ))
+                return
+            }
+
+            var freed = false
+            for second in 0..<Self.shutdownWaitSeconds {
+                relaunching[avd.name] = .waitingForShutdown(secondsElapsed: second)
+                if await state.env.engine.emulators.consolePID(serial: serial) == nil {
+                    freed = true
+                    break
+                }
                 try? await Task.sleep(for: .seconds(1))
             }
             state.refreshDevices()
-            launch(avd, options: EmulatorService.LaunchOptions())
+            guard freed else {
+                reloadToken += 1
+                state.showToast(Toast(
+                    message: EmulatorRelaunchPhase.shutdownTimedOut(
+                        name: avd.displayName, seconds: Self.shutdownWaitSeconds),
+                    ok: false
+                ))
+                return
+            }
+
+            relaunching[avd.name] = .booting
+            let ok = await CommandLog.userInitiated {
+                let result = await state.env.engine.emulators.launch(
+                    avd: avd.name, options: EmulatorService.LaunchOptions())
+                state.showToast(Toast(
+                    message: result.ok ? "Relaunching \(avd.displayName)…" : result.message,
+                    ok: result.ok
+                ))
+                return result.ok
+            }
+            reloadToken += 1
+            // Its own task so the row's spinner clears now rather than after
+            // the window-focus poll, which runs for as long as 25s.
+            if ok {
+                Task { await focusNewEmulator(excluding: existing) }
+            }
         }
     }
 

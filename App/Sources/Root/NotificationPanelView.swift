@@ -14,12 +14,26 @@ struct NotificationPanelView: View {
             if state.notifications.isEmpty {
                 emptyState
             } else {
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        ForEach(state.notifications) { note in
-                            NotificationRow(note: note)
-                            Divider().padding(.leading, 44)
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            ForEach(state.notifications) { note in
+                                NotificationRow(note: note, focused: state.focusedNotification == note.id)
+                                    .id(note.id)
+                                Divider().padding(.leading, 44)
+                            }
                         }
+                    }
+                    // A clicked macOS notification names its row; scroll to it
+                    // and let the row flash. Cleared once handled so it can't
+                    // re-flash on a later render, and so a reopened panel
+                    // doesn't jump to a row nobody asked about.
+                    .task(id: state.focusedNotification) {
+                        guard let focused = state.focusedNotification else { return }
+                        withAnimation { proxy.scrollTo(focused, anchor: .center) }
+                        try? await Task.sleep(for: .seconds(2))
+                        guard !Task.isCancelled, state.focusedNotification == focused else { return }
+                        state.focusedNotification = nil
                     }
                 }
             }
@@ -67,6 +81,9 @@ struct NotificationPanelView: View {
 private struct NotificationRow: View {
     @Environment(AppState.self) private var state
     let note: AppNotification
+    /// This is the row a macOS notification click asked for — tinted so the
+    /// eye lands on it after the panel scrolls.
+    let focused: Bool
     @State private var hovering = false
 
     var body: some View {
@@ -119,8 +136,18 @@ private struct NotificationRow: View {
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
-        .background(hovering ? AnyShapeStyle(.brandAccent.opacity(0.08)) : AnyShapeStyle(.clear))
+        .background(rowBackground)
+        .animation(.easeOut(duration: 0.25), value: focused)
         .onHover { hovering = $0 }
+    }
+
+    /// Focus outranks hover — the flash is a one-off answer to a click that
+    /// came from outside the app, and the cursor is usually sitting on the
+    /// row by then anyway.
+    private var rowBackground: AnyShapeStyle {
+        if focused { return AnyShapeStyle(.brandAccent.opacity(0.22)) }
+        if hovering { return AnyShapeStyle(.brandAccent.opacity(0.08)) }
+        return AnyShapeStyle(.clear)
     }
 }
 

@@ -105,6 +105,15 @@ struct VideoEditorPane: View {
     @State private var videoSize: CGSize?
     @State private var assetDuration: Double = 0
 
+    /// An MP4 stand-in for a source AVFoundation refuses, built by ffmpeg and
+    /// used for playback only — the export always reads `source.url`, so a
+    /// proxy costs the saved file nothing. Deleted when the editor closes.
+    @State private var proxyURL: URL?
+    @State private var preparingProxy = false
+    /// Neither a remux nor a transcode produced something playable: the file
+    /// can't be edited here, and saying so beats a black pane.
+    @State private var proxyFailed = false
+
     /// Identifies this view's leave guard so a stale clear can't wipe another's.
     @State private var exitGuardID = UUID()
     /// The edit state at the last successful export; edits matching it count as
@@ -153,6 +162,12 @@ struct VideoEditorPane: View {
         .onDisappear {
             player.pause()
             state.clearExitGuard(exitGuardID)
+            // The proxy is scratch: nothing refers to it once the editor is
+            // gone, and a transcoded recording is the size of the original.
+            if let proxyURL {
+                try? FileManager.default.removeItem(at: proxyURL)
+                self.proxyURL = nil
+            }
         }
     }
 
@@ -188,9 +203,58 @@ struct VideoEditorPane: View {
             }
             .frame(width: geo.size.width, height: geo.size.height)
             .clipped()
+            .overlay {
+                if preparingProxy {
+                    conversionOverlay
+                } else if proxyFailed {
+                    unreadableOverlay
+                }
+            }
         }
         .frame(maxWidth: .infinity, minHeight: 260, maxHeight: .infinity)
         .background(Color.black)
+    }
+
+    /// ffmpeg is building a playable copy. Over the (black) player rather than
+    /// replacing the pane, so the header and its Close button stay reachable
+    /// — a transcode of a long recording is minutes, not a moment.
+    private var conversionOverlay: some View {
+        VStack(spacing: 12) {
+            ProgressView()
+            Text("Preparing \(sourceFormatName) for playback…")
+                .font(.app(.callout))
+                .foregroundStyle(.white)
+            Text("macOS can't play this format directly, so it's being converted.\nYour export still comes from the original file.")
+                .font(.app(.footnote))
+                .foregroundStyle(.white.opacity(0.65))
+                .multilineTextAlignment(.center)
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.black.opacity(0.72))
+    }
+
+    private var unreadableOverlay: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.app(size: 30))
+                .foregroundStyle(.orange)
+            Text("Can't read this video")
+                .font(.app(.headline))
+                .foregroundStyle(.white)
+            Text("ffmpeg couldn't decode \(source.url.lastPathComponent). The file may be truncated or use a codec it wasn't built with.")
+                .font(.app(.footnote))
+                .foregroundStyle(.white.opacity(0.65))
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 420)
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.black.opacity(0.85))
+    }
+
+    private var sourceFormatName: String {
+        VideoInputFormat.detect(fileName: source.url.lastPathComponent)?.displayName ?? "this video"
     }
 
     /// Player frame: the full container normally — AVKit's floating controls
@@ -496,7 +560,9 @@ struct VideoEditorPane: View {
     // MARK: loading + export
 
     private func loadAsset() async {
-        let size = await Self.naturalVideoSize(at: source.url)
+        proxyFailed = false
+        guard let playable = await resolvePlayableURL() else { return }
+        let size = await Self.naturalVideoSize(at: playable)
         let loaded = try? await asset.load(.duration)
         // Both probes complete before anything is published, so a re-keyed task
         // (a different video) writes none of this one's metadata.
@@ -504,6 +570,57 @@ struct VideoEditorPane: View {
         if let size { videoSize = size }
         if let loaded { assetDuration = loaded.seconds }
         player.isMuted = edit.mute
+    }
+
+    /// The URL to *play*: the source itself when AVFoundation can open it,
+    /// otherwise an ffmpeg-built MP4 proxy.
+    ///
+    /// The editor accepts every container ffmpeg demuxes, but playback,
+    /// scrubbing and AVKit's trim UI are all AVFoundation, which reads a
+    /// fraction of that list — so an `.mkv` used to load as a black pane with
+    /// Trim permanently disabled. The file is asked rather than its extension,
+    /// because the extension doesn't predict the answer: an `.mp4` carrying
+    /// AV1 fails the same probe an `.mkv` does, and a `.mkv` carrying H.264
+    /// passes after nothing more than a remux.
+    ///
+    /// Returns nil when no proxy could be produced, leaving `proxyFailed` set.
+    private func resolvePlayableURL() async -> URL? {
+        if await Self.isPlayable(source.url) { return source.url }
+        if let proxyURL { return proxyURL }
+
+        preparingProxy = true
+        let built = await VideoEditService(
+            locator: state.env.client.locator, bundledPath: BundledTools.ffmpegPath()
+        ).playableProxy(for: source.url, isPlayable: Self.isPlayable)
+        guard !Task.isCancelled else {
+            // The view is going away; don't leave the temp file behind.
+            if let built { try? FileManager.default.removeItem(at: built) }
+            return nil
+        }
+        preparingProxy = false
+        guard let built else {
+            proxyFailed = true
+            return nil
+        }
+        proxyURL = built
+        // A fresh AVPlayer, not `replaceCurrentItem`: a player that already
+        // failed on the original is permanently `.failed` and can't be
+        // recovered by handing it a new item.
+        let swapped = AVURLAsset(url: built)
+        asset = swapped
+        player = AVPlayer(playerItem: AVPlayerItem(asset: swapped))
+        return built
+    }
+
+    /// Whether AVFoundation can actually play `url` — playable *and* carrying a
+    /// video track, since an audio-only or header-only file reports playable
+    /// and then renders nothing. Off the main actor so the non-Sendable asset
+    /// never crosses isolation.
+    private nonisolated static func isPlayable(_ url: URL) async -> Bool {
+        let asset = AVURLAsset(url: url)
+        guard let playable = try? await asset.load(.isPlayable), playable else { return false }
+        guard let tracks = try? await asset.loadTracks(withMediaType: .video) else { return false }
+        return !tracks.isEmpty
     }
 
     /// Resolve the video's oriented size off the main actor so the non-Sendable

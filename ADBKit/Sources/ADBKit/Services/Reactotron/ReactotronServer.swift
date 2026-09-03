@@ -115,7 +115,7 @@ public actor ReactotronServer {
     ///     (mirrors reactotron-core-server's 30s ping), so a half-dead socket
     ///     surfaces as a transport error instead of lingering "connected".
     public init(
-        port: UInt16 = 9090,
+        port: UInt16 = ReactotronService.defaultPort,
         loopbackOnly: Bool = true,
         pingInterval: Duration = .seconds(30)
     ) {

@@ -31,6 +31,22 @@ import Testing
         ])
     }
 
+    /// The playback-proxy fallback, for an input AVFoundation has no decoder
+    /// for (VP9, AV1, Theora) and a remux therefore can't rescue. Three parts
+    /// are load-bearing: H.264 in MP4, `yuv420p` — AVFoundation refuses
+    /// 10-bit and 4:4:4 H.264, which is exactly the kind of file that gets
+    /// here — and `veryfast`, since this is a proxy someone is waiting on and
+    /// it never reaches the exported file.
+    @Test func transcodeArgumentsProduceAnAVFoundationReadableMp4() {
+        #expect(VideoEditing.transcodeArguments(input: "/tmp/a.mkv", output: "/tmp/p.mp4") == [
+            "-i", "/tmp/a.mkv",
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+            "-pix_fmt", "yuv420p",
+            "-c:a", "aac", "-b:a", "128k",
+            "-movflags", "+faststart", "-y", "/tmp/p.mp4",
+        ])
+    }
+
     // MARK: defaults / identity
 
     @Test func defaultMp4ReencodesWithNoFilters() {

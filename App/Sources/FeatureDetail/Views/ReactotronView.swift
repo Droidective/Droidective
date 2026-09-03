@@ -83,6 +83,16 @@ final class ReactotronSession {
     /// The ready-Android serials last seen, so `deviceListChanged` reverses
     /// only serials that (re)appeared — not every device on every flicker.
     private var knownReadySerials: Set<String> = []
+    /// Per-serial count of the "the tunnel may have died under us" retries.
+    /// `deviceListChanged` only reverses serials that *appeared*, so a tunnel
+    /// lost while the device stayed listed (an `adb kill-server`, a USB
+    /// re-enumeration that kept the serial) would never reopen. With nothing
+    /// connected we therefore also re-reverse the serials already known — but
+    /// bounded, because that poll fires every 2s and an unbounded retry would
+    /// be one adb call per device per tick, forever. Reset when a client
+    /// connects, so a later disconnect re-arms the net.
+    @ObservationIgnored private var reverseRefreshAttempts: [String: Int] = [:]
+    @ObservationIgnored private let reverseRefreshLimit = 3
 
     /// True once the server is up — stays true after leaving the view when the
     /// user chose to keep the connection alive.
@@ -209,14 +219,38 @@ final class ReactotronSession {
     func deviceListChanged() {
         let current = Set(readyAndroidSerials)
         tunnelIssues = tunnelIssues.filter { current.contains($0.key) }
+        reverseRefreshAttempts = reverseRefreshAttempts.filter { current.contains($0.key) }
         guard isRunning else {
             knownReadySerials = current
             return
         }
         let added = current.subtracting(knownReadySerials)
         knownReadySerials = current
-        guard !added.isEmpty else { return }
-        Task { await applyReverse(serials: Array(added)) }
+        var serials = added
+        // Nothing connected — the tunnel may have died with the device still
+        // listed, so reopen the known ones too (bounded; see the field).
+        if clients.isEmpty {
+            for serial in current.subtracting(added)
+            where reverseRefreshAttempts[serial, default: 0] < reverseRefreshLimit {
+                reverseRefreshAttempts[serial, default: 0] += 1
+                serials.insert(serial)
+            }
+        }
+        guard !serials.isEmpty else { return }
+        Task { await applyReverse(serials: Array(serials)) }
+    }
+
+    /// Re-open every tunnel, ignoring the "only new serials" rule — what
+    /// restarting the app being debugged needs. The fresh process dials
+    /// localhost:9090 the moment it boots, so the tunnel has to be known-good
+    /// before it gets there, and the serial hasn't changed, so nothing in
+    /// `deviceListChanged` would have touched it.
+    func reapplyReverse() async {
+        guard isRunning else { return }
+        let serials = readyAndroidSerials
+        guard !serials.isEmpty else { return }
+        reverseRefreshAttempts.removeAll()
+        await applyReverse(serials: serials)
     }
 
     /// The Settings LAN toggle flipped: restart the socket layer with the new
@@ -508,6 +542,9 @@ final class ReactotronSession {
             }
             clients.removeAll { $0.id == connectionId }
             clients.append(ClientInfo(id: connectionId, name: name, platform: platform))
+            // An app got through, so the tunnels are good: re-arm the
+            // "reopen a silently dead tunnel" budget for the next disconnect.
+            reverseRefreshAttempts.removeAll()
             refreshConnectionState()
             // Straight to the new client, not the picker's current target —
             // otherwise an app (re)connecting while another is selected never
@@ -3619,6 +3656,11 @@ private struct RestartAppMenu: View {
                 cleared = false
             }
             _ = try? await service.control(serial: serial, packageId: package, action: .stop)
+            // Between the stop and the relaunch, because the fresh process
+            // dials localhost:9090 as it boots and a tunnel it finds missing
+            // is a client that never appears. Cheap and idempotent when the
+            // tunnel is already up, which is the common case.
+            await state.reactotronSession.reapplyReverse()
             let result = try? await service.control(serial: serial, packageId: package, action: .open)
             return (result?.ok == true, cleared)
         }

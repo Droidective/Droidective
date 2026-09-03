@@ -6,6 +6,11 @@ import Foundation
 /// localhost:9090 reaches the Mac, and tears both down on stop. The timeline
 /// view owns one of these, mirroring how `LogcatView` owns a `LogcatStreamer`.
 public actor ReactotronService {
+    /// The port upstream Reactotron's clients dial, and so the only one the
+    /// relay and its `adb reverse` tunnel may use. Named because the number is
+    /// a contract with `reactotron-react-native`, not a preference.
+    public static let defaultPort: UInt16 = 9090
+
     private let client: AdbClient
     private let port: UInt16
     private let server: ReactotronServer
@@ -14,7 +19,7 @@ public actor ReactotronService {
     /// Reactotron app's behavior) also accepts clients from the local network —
     /// required when the app's Metro bundle was served over Wi-Fi/LAN, because
     /// the client dials the bundle's host, not localhost.
-    public init(client: AdbClient, port: UInt16 = 9090, loopbackOnly: Bool = true) {
+    public init(client: AdbClient, port: UInt16 = ReactotronService.defaultPort, loopbackOnly: Bool = true) {
         self.client = client
         self.port = port
         self.server = ReactotronServer(port: port, loopbackOnly: loopbackOnly)

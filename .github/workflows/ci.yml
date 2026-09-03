@@ -11,6 +11,15 @@ on:
 permissions:
   contents: read
 
+# One run per branch. A PR is 12 jobs across four runners plus two container
+# builds and the Linux app smoke, so three pushes in a row otherwise leave
+# three full sets racing for the same answer. Cancelling is only ever right
+# for a PR: a push to main feeds the Pages deploy and a tag run signs and
+# notarizes, so those two must always finish even when another arrives.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   test:
     runs-on: macos-15
