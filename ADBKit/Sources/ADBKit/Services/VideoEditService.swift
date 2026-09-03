@@ -53,6 +53,62 @@ public actor VideoEditService {
         return try? Data(contentsOf: out)
     }
 
+    /// An MP4 of `source` that AVFoundation can open, written to a temp file —
+    /// nil when ffmpeg is missing or both conversions fail.
+    ///
+    /// Only for inputs the player has already refused. The editor accepts
+    /// every container ffmpeg demuxes (`VideoInputFormat`), but playback,
+    /// scrubbing and AVKit's trim UI are all AVFoundation, which opens a
+    /// fraction of that list — so an `.mkv` would otherwise load as a black
+    /// pane with the trim button permanently disabled.
+    ///
+    /// A remux is tried first and is nearly free (`-c copy`, a file copy's
+    /// worth of work) — it covers the common case of H.264 in a container
+    /// AVFoundation won't parse. Only if that still won't play does the codec
+    /// itself need converting.
+    ///
+    /// The proxy is for *playing*. Exports always run from the original, so
+    /// nothing here costs the saved file any quality — and trim points chosen
+    /// against the proxy carry over unchanged, since both share one timeline.
+    public func playableProxy(for source: URL, isPlayable: @Sendable (URL) async -> Bool) async -> URL? {
+        guard let ffmpeg = await ffmpegPath() else { return nil }
+        let remuxed = proxyURL(for: source)
+        if await run(ffmpeg, VideoEditing.remuxArguments(input: source.path, output: remuxed.path)),
+           await isPlayable(remuxed) {
+            return remuxed
+        }
+        try? FileManager.default.removeItem(at: remuxed)
+
+        let transcoded = proxyURL(for: source)
+        if await run(ffmpeg, VideoEditing.transcodeArguments(input: source.path, output: transcoded.path)),
+           await isPlayable(transcoded) {
+            return transcoded
+        }
+        try? FileManager.default.removeItem(at: transcoded)
+        return nil
+    }
+
+    /// Always `.mp4` whatever went in — the container AVFoundation is
+    /// certain to parse. The name keeps the source's for the rare case
+    /// someone finds one of these in the temp directory.
+    private func proxyURL(for source: URL) -> URL {
+        let base = source.deletingPathExtension().lastPathComponent
+        return FileManager.default.temporaryDirectory
+            .appendingPathComponent(
+                "droidective-proxy-\(base)-\(UInt32.random(in: 0 ... 0xffff_ffff))")
+            .appendingPathExtension("mp4")
+    }
+
+    /// A transcode of a long recording is minutes of work, so this shares the
+    /// export timeout rather than the thumbnail's.
+    private func run(_ ffmpeg: String, _ arguments: [String]) async -> Bool {
+        let output = await SystemProcessRunner().run(
+            executable: ffmpeg, arguments: arguments,
+            timeout: .seconds(600), maxOutputBytes: 4 * 1024 * 1024
+        )
+        return output.exitCode == 0
+    }
+
     /// Apply `options` to `source` and write `destination`. A no-edit export to
     /// the same container is a lossless file copy; everything else re-encodes.
     public func export(

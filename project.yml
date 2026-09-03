@@ -133,6 +133,48 @@ targets:
             UTTypeTagSpecification:
               public.filename-extension:
                 - apkm
+          # The video containers macOS has no type for. The rest of
+          # VideoInputFormat resolves to an Apple identifier (public.mpeg-4,
+          # com.apple.quicktime-movie, public.avi, public.mpeg,
+          # public.mpeg-2-transport-stream, public.avchd-mpeg-2-transport-stream,
+          # public.3gpp, com.microsoft.windows-media-wmv, com.compuserve.gif)
+          # and needs nothing here.
+          #
+          # These four are only ever declared by whichever media player happens
+          # to be installed — on a Mac with IINA, `.mkv` resolves to
+          # `io.iina.mkv` — so relying on the system's answer means the format
+          # silently vanishes from the open panel on a Mac without that app.
+          # Declared as *imported* (the formats are theirs, not ours) with the
+          # conventional identifiers, conforming to public.movie so they read as
+          # video everywhere rather than as opaque data.
+          - UTTypeIdentifier: org.matroska.mkv
+            UTTypeDescription: Matroska Video
+            UTTypeConformsTo:
+              - public.movie
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - mkv
+          - UTTypeIdentifier: org.webmproject.webm
+            UTTypeDescription: WebM Video
+            UTTypeConformsTo:
+              - public.movie
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - webm
+          - UTTypeIdentifier: com.adobe.flash.video
+            UTTypeDescription: Flash Video
+            UTTypeConformsTo:
+              - public.movie
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - flv
+          - UTTypeIdentifier: org.xiph.ogv
+            UTTypeDescription: Ogg Video
+            UTTypeConformsTo:
+              - public.movie
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - ogv
         # The app's private drag types (DragTypes.swift). macOS only writes a
         # custom UTI to the drag pasteboard when the app declares it, so an
         # undeclared type makes every .onDrag with it die silently — no drop
@@ -168,6 +210,62 @@ targets:
               - com.android.apks
               - com.apkpure.xapk
               - com.apkmirror.apkm
+          # Every container the Video Editor opens (VideoInputFormat), so a
+          # video can be sent here from Finder.
+          #
+          # Rank is **Alternate**, not Owner: Droidective joins the "Open With"
+          # menu without taking .mp4 and .mov away from QuickTime. Owner here
+          # would make a debugging tool the default video player on the machine.
+          #
+          - CFBundleTypeName: Video
+            CFBundleTypeRole: Editor
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - public.mpeg-4
+              - com.apple.quicktime-movie
+              - com.apple.m4v-video
+              - org.matroska.mkv
+              - org.webmproject.webm
+              - public.avi
+              - com.adobe.flash.video
+              - public.mpeg-2-transport-stream
+              - public.avchd-mpeg-2-transport-stream
+              - public.mpeg
+              - com.microsoft.windows-media-wmv
+              - public.3gpp
+              - org.xiph.ogv
+              - com.compuserve.gif
+          # The same containers again, matched by extension instead of by
+          # type — and it has to be a separate entry, because Launch Services
+          # ignores CFBundleTypeExtensions in an entry that also carries
+          # LSItemContentTypes.
+          #
+          # This is what covers a format whose extension another app owns.
+          # Verified, not assumed: with IINA installed, `.mkv` resolves to
+          # `io.iina.mkv`, so the `org.matroska.mkv` entry above never matches
+          # and Droidective was missing from Open With for the second most
+          # important format on the list. Check with
+          # LSCopyApplicationURLsForURL after `lsregister -f`, not by reading
+          # the plist.
+          - CFBundleTypeName: Video (by extension)
+            CFBundleTypeRole: Editor
+            LSHandlerRank: Alternate
+            CFBundleTypeExtensions:
+              - mp4
+              - mov
+              - m4v
+              - mkv
+              - webm
+              - avi
+              - flv
+              - ts
+              - m2ts
+              - mpg
+              - mpeg
+              - wmv
+              - 3gp
+              - ogv
+              - gif
     settings:
       base:
         PRODUCT_NAME: Droidective
@@ -215,6 +313,9 @@ targets:
       # The persisted recording-audio choice, incl. the pre-microphone
       # single-switch migration.
       - App/Sources/FeatureDetail/Views/Record/RecordAudioPreference.swift
+      # What an AVD's row says at each stage of a relaunch — the shutdown
+      # wait runs for up to 20s, so its wording is the whole feedback.
+      - App/Sources/FeatureDetail/Views/EmulatorRelaunchPhase.swift
       - App/Sources/FeatureDetail/Views/TourPaging.swift
       - App/Sources/FeatureDetail/Views/ConsoleLinkSpanMemo.swift
       - App/Sources/FeatureDetail/Views/ConsoleRateBucket.swift
