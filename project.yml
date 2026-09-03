@@ -215,6 +215,9 @@ targets:
       # The persisted recording-audio choice, incl. the pre-microphone
       # single-switch migration.
       - App/Sources/FeatureDetail/Views/Record/RecordAudioPreference.swift
+      # What an AVD's row says at each stage of a relaunch — the shutdown
+      # wait runs for up to 20s, so its wording is the whole feedback.
+      - App/Sources/FeatureDetail/Views/EmulatorRelaunchPhase.swift
       - App/Sources/FeatureDetail/Views/TourPaging.swift
       - App/Sources/FeatureDetail/Views/ConsoleLinkSpanMemo.swift
       - App/Sources/FeatureDetail/Views/ConsoleRateBucket.swift
