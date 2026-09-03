@@ -366,6 +366,30 @@ final class Telemetry {
             // hangs and crashes inherit the `active_feature` scope tag set in
             // `featureBecameActive`, so they group by the feature on screen.
             options.appHangTimeoutInterval = 2
+            // Sentry captures every 5xx a URLSession sees by default. That is
+            // wrong for this app twice over.
+            //
+            // It is noise: every HTTP client here talks either to a dev server
+            // on the user's own Mac — Metro on 8081, whose `/symbolicate`
+            // answers 500 for any frame it can't map, a routine outcome
+            // `MetroSymbolicator` already handles and circuit-breaks — or to a
+            // server the *user* chose in API Testing. Neither is a Droidective
+            // bug. Metro alone produced 40 events across 9 users
+            // (DROIDECTIVE-MAC-6D) reported as `-[SentryStacktraceBuilder
+            // buildStacktraceForCurrentThread]`, which names the reporter
+            // rather than anything in this app.
+            //
+            // And it leaks: a captured request carries its URL, so a user
+            // testing their own API against a 5xx would ship that URL here.
+            // Settings ▸ Privacy and the privacy policy both promise no URLs
+            // or paths are ever sent, and `sendDefaultPii = false` does not
+            // cover this.
+            //
+            // Nothing is lost by turning it off: the only remote HTTP the app
+            // makes on its own account is managed-tool downloads and the
+            // Sparkle appcast, and both already surface their failure to the
+            // user with the real error.
+            options.enableCaptureFailedRequests = false
             // Sampled continuous profiling tied to traced spans — function-level
             // "what burned the CPU" for the sampled sessions.
             options.configureProfiling = { profiling in
