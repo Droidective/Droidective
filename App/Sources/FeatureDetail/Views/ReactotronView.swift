@@ -42,6 +42,10 @@ final class ReactotronSession {
     private var peakItemsBytes = 0
     private var peakItemCount = 0
     private var evictedItemCount = 0
+    /// The last published feed shape, so an unchanged bucket doesn't re-cross
+    /// both telemetry SDKs from the ingest path. Never observed — publishing
+    /// diagnostics must not invalidate the timeline that produced them.
+    @ObservationIgnored private var publishedDiagnostics: FeedDiagnostics?
     fileprivate var commands: [RegisteredCommand] = []
     fileprivate var connection: RtConnection = .idle
     fileprivate var connectedApp: String?
@@ -734,6 +738,7 @@ final class ReactotronSession {
         for item in batch { itemsBytes += item.frameBytes }
         peakItemsBytes = max(peakItemsBytes, itemsBytes)
         peakItemCount = max(peakItemCount, items.count)
+        publishDiagnostics(lastBatch: batch.count)
         let drop = ReactotronTimeline.dropCount(
             sizes: items.lazy.map(\.frameBytes), count: items.count, totalBytes: itemsBytes
         )
@@ -744,6 +749,57 @@ final class ReactotronSession {
         itemsBytes -= dropped.reduce(0) { $0 + $1.frameBytes }
         Self.discardInBackground(dropped)
     }
+
+    /// What this feed is holding, attached to every subsequent crash, hang and
+    /// perf incident — the JS Console has published its equivalent since
+    /// v3.7.0 and this feed never did. That asymmetry is why the largest hang
+    /// issue (DROIDECTIVE-MAC-B) arrived with no indication of how much was
+    /// buffered, and why the two high-memory issues (MAC-A0 at 1.47 GB,
+    /// MAC-4B at 1.48 GB) name a feature and a byte count but not a row
+    /// count.
+    ///
+    /// Published from the flush rather than per event, and only when a bucket
+    /// actually changes: every call crosses both telemetry SDKs, and this sits
+    /// on the ingest path.
+    private func publishDiagnostics(lastBatch: Int) {
+        let snapshot = FeedDiagnostics(
+            items: ConsoleRateBucket.decade(Double(items.count)),
+            megabytes: itemsBytes / 1_048_576,
+            clients: clients.count,
+            evicted: ConsoleRateBucket.decade(Double(evictedItemCount))
+        )
+        guard snapshot != publishedDiagnostics else { return }
+        publishedDiagnostics = snapshot
+        Telemetry.shared.setDiagnosticContext("reactotron", [
+            "buffered_items": snapshot.items,
+            "buffer_mb": snapshot.megabytes,
+            "clients": snapshot.clients,
+            "evicted_items": snapshot.evicted,
+        ])
+        // A single flush this large means the feed is being drained in
+        // batches big enough to stall a layout pass, which is the shape of
+        // the hang the pacing change addresses — worth seeing from the field,
+        // not just from a developer's Console.
+        if lastBatch >= Self.largeBatchWarning {
+            AppLog.write(
+                .warn, .reactotron, "large timeline flush",
+                ["batch": lastBatch, "buffered": items.count, "mb": snapshot.megabytes],
+                toBackend: true
+            )
+        }
+    }
+
+    /// The bucketed shape of the feed, so an unchanged bucket costs nothing.
+    struct FeedDiagnostics: Equatable {
+        let items: Int
+        let megabytes: Int
+        let clients: Int
+        let evicted: Int
+    }
+
+    /// Rows in one flush past which the drain itself is the problem. Well
+    /// above a chatty client's per-interval batch at the paced cadence.
+    private static let largeBatchWarning = 500
 
     /// Replace the browsed store tree, releasing the old graph off the main actor.
     private func replaceStoreState(_ state: JSONValue) {

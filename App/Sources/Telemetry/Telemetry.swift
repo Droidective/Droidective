@@ -144,6 +144,24 @@ final class Telemetry {
         SentrySDK.addBreadcrumb(crumb)
     }
 
+    /// Ship one structured log line. Unlike a breadcrumb this stands on its
+    /// own — it arrives whether or not an event ever ships, which is what
+    /// makes a slow operation visible before it becomes a hang report.
+    ///
+    /// Called only by `AppLog`, which owns the rate limit and the local
+    /// `os_log` half. `attributes` carries numbers and feature ids, never
+    /// paths, URLs or content — same promise as every other sink here.
+    func log(_ level: AppLog.Level, _ message: String, _ attributes: [String: Any]) {
+        guard crashReportingEnabled, sentryRunning else { return }
+        let logger = SentrySDK.logger
+        switch level {
+        case .debug: logger.debug(message, attributes: attributes)
+        case .info: logger.info(message, attributes: attributes)
+        case .warn: logger.warn(message, attributes: attributes)
+        case .error: logger.error(message, attributes: attributes)
+        }
+    }
+
     func setCrashReporting(_ enabled: Bool) {
         UserDefaults.standard.set(enabled, forKey: Self.crashReportingKey)
         if enabled { startSentry() } else { stopSentry() }
@@ -202,11 +220,22 @@ final class Telemetry {
     /// pair is what attributes an incident correctly.
     func openFeaturesChanged(_ ids: [String]) {
         let joined = ids.isEmpty ? "none" : ids.sorted().joined(separator: ",")
+        // The count as its own tag, because it is the figure that explained
+        // the largest hang issue and the joined list cannot be aggregated on:
+        // grouping DROIDECTIVE-MAC-B by `open_features` produced one row per
+        // distinct tab *combination*, so the finding — that ~4000 of 5087
+        // events were a handful of users with 9 to 18 tabs mounted — had to be
+        // read off six unrelated rows. Every open tab stays mounted, so this
+        // is a direct measure of how much tree each layout pass walks.
+        let count = String(ids.count)
         if crashReportingEnabled, sentryRunning {
-            SentrySDK.configureScope { $0.setTag(value: joined, key: "open_features") }
+            SentrySDK.configureScope {
+                $0.setTag(value: joined, key: "open_features")
+                $0.setTag(value: count, key: "open_feature_count")
+            }
         }
         if analyticsEnabled, postHogReady {
-            PostHogSDK.shared.register(["open_features": joined])
+            PostHogSDK.shared.register(["open_features": joined, "open_feature_count": ids.count])
         }
     }
 
@@ -366,6 +395,14 @@ final class Telemetry {
             // hangs and crashes inherit the `active_feature` scope tag set in
             // `featureBecameActive`, so they group by the feature on screen.
             options.appHangTimeoutInterval = 2
+            // Structured logs. Before this the only diagnostics that left the
+            // machine were tags, breadcrumbs and a stack, so the Sentry logs
+            // view was empty and `PerfLog`'s slow-operation warnings — the
+            // ones that name what actually stalled — reached nobody but a
+            // developer with Console attached. Diagnosing the largest hang
+            // issue (DROIDECTIVE-MAC-B) took five aggregate queries against
+            // tags because of it. See `AppLog`, which is the only writer.
+            options.enableLogs = true
             // Sentry captures every 5xx a URLSession sees by default. That is
             // wrong for this app twice over.
             //
