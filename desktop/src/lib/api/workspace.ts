@@ -196,9 +196,20 @@ export function mergeImport(
  * Whether the open request differs from what is stored.
  *
  * Drives the confirmation on New Request, which used to throw away several
- * minutes of typing without a word. `modifiedAt` is zeroed on both sides
- * first: it moves on every save, so comparing it would call an untouched
- * request dirty the moment it was saved.
+ * minutes of typing without a word. Both timestamps are zeroed on either
+ * side first, because neither is part of what the user typed:
+ *
+ * - `modifiedAt` moves on every save, so comparing it would call an
+ *   untouched request dirty the moment it was saved.
+ * - `createdAt` is stable for one request, but not across two constructions
+ *   of the same content: `newRequest()` stamps both from `Date.now() / 1000`,
+ *   so a request rebuilt from defaults — an import, a round-trip through the
+ *   Postman format — differs from its stored copy by whichever millisecond
+ *   each was made in, and reports changes nobody made.
+ *
+ * Leaving `createdAt` in also made this rule's own test nondeterministic:
+ * `workspace.test.ts` builds two fixtures back to back and expects them to
+ * match, which held only while both landed in the same millisecond.
  */
 export function hasUnsavedChanges(
   data: ApiClientData,
@@ -210,7 +221,12 @@ export function hasUnsavedChanges(
   const stored = collection === undefined ? null : findRequest(current.id, collection.items)
   // Never saved: only worth protecting once there is something in it.
   if (stored === null) return current.url.trim() !== ""
-  return JSON.stringify({ ...stored, modifiedAt: 0 }) !== JSON.stringify({ ...current, modifiedAt: 0 })
+  return content(stored) !== content(current)
+}
+
+/** A request stripped of the timestamps, for comparing what it actually holds. */
+function content(request: SavedRequest): string {
+  return JSON.stringify({ ...request, createdAt: 0, modifiedAt: 0 })
 }
 
 /** The collection an open request belongs to, or null for a scratch one. */
