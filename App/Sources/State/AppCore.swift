@@ -642,6 +642,32 @@ final class AppCore {
         }
     }
 
+    /// A macOS notification was clicked: bring a window up and open its
+    /// notification bar on the row the notification came from.
+    ///
+    /// The panel can't be opened inline in every case — with no workspace at
+    /// all, `activateAnyWindow` has only just *asked* for a window, and the
+    /// accessory path inside `activateMainWindow` hops a runloop turn before
+    /// the window is front. So the common case (a window already exists)
+    /// runs straight through, and the cold case waits for a workspace to bind
+    /// rather than guessing a delay.
+    func revealNotifications(entry: UUID?) {
+        activateAnyWindow()
+        if let target = frontmost {
+            target.openNotifications(focusing: entry)
+            return
+        }
+        Task { @MainActor in
+            for _ in 0 ..< 20 {
+                try? await Task.sleep(for: .milliseconds(100))
+                if let target = frontmost {
+                    target.openNotifications(focusing: entry)
+                    return
+                }
+            }
+        }
+    }
+
     /// Mirror a window's device into the registry so the conflict rules see it.
     func noteSelection(_ serial: String?, in id: WorkspaceID) {
         registry.setDevice(serial: serial, for: id)

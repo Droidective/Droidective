@@ -12,7 +12,6 @@ import {
   deleteEnvironment,
   deleteItem,
   duplicateItem,
-  hasUnsavedChanges,
   inheritedAuth,
   mergeImport,
   moveItem,
@@ -239,36 +238,6 @@ describe("mergeImport", () => {
     })
     expect(merged.collections.map((one) => one.name)).toEqual(["Orders", "Imported"])
     expect(merged.environments).toHaveLength(1)
-  })
-})
-
-describe("hasUnsavedChanges", () => {
-  it("is false for an empty scratch request and true once a URL is typed", () => {
-    expect(hasUnsavedChanges(emptyWorkspace(), { ...newRequest(), url: "" }, null)).toBe(false)
-    expect(hasUnsavedChanges(emptyWorkspace(), request(), null)).toBe(true)
-  })
-
-  it("is false for a request that matches what is stored", () => {
-    const { data, id } = withCollection()
-    const saved = saveRequest(data, request(), id, null)
-    expect(hasUnsavedChanges(saved, request(), id)).toBe(false)
-  })
-
-  /**
-   * `modifiedAt` moves on every save, so comparing it would call a request
-   * dirty the instant it was saved — which is the confirmation firing on every
-   * New Request.
-   */
-  it("ignores the modified timestamp", () => {
-    const { data, id } = withCollection()
-    const saved = saveRequest(data, request({ modifiedAt: 1 }), id, null)
-    expect(hasUnsavedChanges(saved, request({ modifiedAt: 999 }), id)).toBe(false)
-  })
-
-  it("is true once a field actually changes", () => {
-    const { data, id } = withCollection()
-    const saved = saveRequest(data, request(), id, null)
-    expect(hasUnsavedChanges(saved, request({ method: "POST" }), id)).toBe(true)
   })
 })
 

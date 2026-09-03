@@ -69,6 +69,32 @@ extension AppState {
         requestFeature("aab-convert")
     }
 
+    /// Route a Finder-opened video to the Video Editor. Unlike `apk-open`,
+    /// this needs no tab of its own: `video-editor` is already a registry
+    /// feature with a route, so the file is staged and the feature requested —
+    /// which also means it inherits the route tests instead of the string
+    /// branch `apk-open` has to live with.
+    ///
+    /// One at a time, because the editor edits one video: extras say so
+    /// rather than being dropped silently, matching `openAABs`.
+    func openVideos(_ urls: [URL]) {
+        guard let first = urls.first else { return }
+        pendingVideo = first
+        for extra in urls.dropFirst() {
+            showToast(Toast(
+                message: "Editing one video at a time — reopen \(extra.lastPathComponent) after this one",
+                ok: false))
+        }
+        activateMainWindow()
+        requestFeature("video-editor")
+    }
+
+    /// Take the staged Finder-opened video, clearing it so it opens once.
+    func claimPendingVideo() -> URL? {
+        defer { pendingVideo = nil }
+        return pendingVideo
+    }
+
     /// Fire-and-forget install: the work runs in an unstructured task owned by
     /// the app — not the calling view or panel — so navigating away, closing
     /// the panel, or closing the main window never kills an `adb install`
@@ -200,11 +226,11 @@ extension AppState {
     private static func installToast(
         name: String, ok: Int, total: Int, failures: [(serial: String, result: FeatureResult)]
     ) -> Toast {
-        // notifiesWhenBackgrounded is off: the batch posts one summary
+        // postsSystemNotification is off: the batch posts one summary
         // notification instead of one per APK.
         if failures.isEmpty {
             let message = total == 1 ? "Installed \(name)" : "Installed \(name) on \(total) devices"
-            return Toast(message: message, ok: true, notifiesWhenBackgrounded: false)
+            return Toast(message: message, ok: true, postsSystemNotification: false)
         }
         let message = total == 1
             ? "Couldn't install \(name) — \(failures[0].result.message)"
@@ -217,6 +243,6 @@ extension AppState {
             .joined(separator: "\n\n")
         return Toast(
             message: message, ok: false, copyText: detail.isEmpty ? nil : detail,
-            notifiesWhenBackgrounded: false)
+            postsSystemNotification: false)
     }
 }

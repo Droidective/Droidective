@@ -136,6 +136,30 @@ public enum VideoEditing {
         ["-i", input, "-c", "copy", "-movflags", "+faststart", "-y", output]
     }
 
+    /// Re-encode to H.264/AAC in an MP4 — the fallback that makes any input
+    /// the editor accepts playable by AVFoundation.
+    ///
+    /// A remux is tried first and handles the common case (an `.mkv` or `.ts`
+    /// already carrying H.264: repackaging costs a file copy). This is for
+    /// what a remux can't fix — VP9, AV1, Theora, MPEG-4 Part 2, anything
+    /// AVFoundation has no decoder for — where the pixels themselves have to
+    /// be converted.
+    ///
+    /// `-preset veryfast` because this is a proxy the user is waiting on, not
+    /// the export: the exported file is always produced from the original, so
+    /// nothing here reaches the saved result. `-pix_fmt yuv420p` because
+    /// AVFoundation refuses 10-bit and 4:4:4 H.264, which is exactly the kind
+    /// of file that needed a transcode in the first place.
+    public static func transcodeArguments(input: String, output: String) -> [String] {
+        [
+            "-i", input,
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+            "-pix_fmt", "yuv420p",
+            "-c:a", "aac", "-b:a", "128k",
+            "-movflags", "+faststart", "-y", output,
+        ]
+    }
+
     /// Losslessly concatenate same-codec segments (the concat demuxer) — used to
     /// stitch a paused/resumed recording's segments back into one file. `listFile`
     /// is an ffmpeg concat list (`file '<path>'` per line); `-safe 0` allows the

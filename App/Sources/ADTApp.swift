@@ -112,15 +112,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         }
     }
 
-    /// Clicking an install notification reopens the main window — while
-    /// backgrounded the app is an accessory, so plain activation would land
-    /// on nothing.
+    /// Show notifications while Droidective itself is frontmost. Without
+    /// this the system swallows them silently whenever the app is active,
+    /// which is most of the time — the whole point is that a five-second
+    /// toast is not the only trace an event leaves.
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound])
+    }
+
+    /// Clicking a notification opens the in-app notification bar on the
+    /// matching row. While backgrounded the app is an accessory, so plain
+    /// activation would land on nothing — `revealNotifications` brings a
+    /// window up first, opening one if every window is closed.
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        Task { @MainActor in AppCore.shared.activateAnyWindow() }
+        // Read off the response here: it's a non-Sendable class, so only the
+        // extracted string may cross into the main-actor task.
+        let entry = response.notification.request.content.userInfo[SystemNotifier.entryKey] as? String
+        Task { @MainActor in
+            AppCore.shared.revealNotifications(entry: entry.flatMap(UUID.init(uuidString:)))
+        }
         completionHandler()
     }
 

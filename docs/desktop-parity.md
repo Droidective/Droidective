@@ -259,10 +259,23 @@ before adding to it.
    protocol as a level filter and had never been read by anything.
 5. ~~**Notifications** (backlog 18).~~ **Landed** — and smaller than it looked,
    because the Mac does not decide per event: `SystemNotifier` mirrors the
-   toasts already marked important whenever the window is not the one being
-   looked at, so an install finishing and a watched crash landing both arrive
-   without either screen knowing a tray exists. No Settings switch: the Mac has
-   none (see the Look section).
+   toasts already marked important, so an install finishing and a watched crash
+   landing both arrive without either screen knowing a tray exists. No Settings
+   switch: the Mac has none (see the Look section).
+
+   **The Mac has since dropped the backgrounded condition**, so this is a
+   difference to close. Every important toast now posts, foreground included: a
+   5s overlay in the corner of one window is missable whether or not that
+   window is frontmost, and Notification Center is the only record that
+   outlives it. Drop the `isFocused()` gate, and mirror the two things that
+   came with the change — a click opens the in-app notification bar on the row
+   the notification came from (`AppCore.revealNotifications`, keyed by the
+   `AppNotification.id` carried in `userInfo`), and that id doubles as the
+   request identifier so a re-post replaces its notification instead of
+   stacking a second copy. Note the trap the Mac hit: macOS suppresses a
+   notification while the posting app is frontmost unless the delegate's
+   `willPresent` says otherwise, so check whether the tray has an equivalent
+   before concluding the posts are not firing.
 6. ~~**Background mode and the tray** (20), then **Quick Actions** (19).~~
    **Landed**, in that order and for the stated reason. Closing the window hides
    the app, stops the work that was only running because a window was open, and
@@ -638,14 +651,13 @@ two disagree, so a relabelled item cannot leave a stale accelerator behind.
       the text size move on its own.
 - [x] **Empty states per feature** ("connect a device") — the Mac's
       `NoDeviceView` shape, with its per-feature copy table ported.
-- [x] **Native notifications** — an important result that lands while you are
-      in another app posts one, which is `SystemNotifier`'s rule rather than a
-      list of events: `postToastIfBackgrounded` mirrors the toasts already
-      marked important, so a crash caught while watching and a finished install
-      arrive without either screen knowing about the tray. The titles are its
-      titles ("Task finished" / "Task failed" / "Droidective"), a failure
-      carries the sound, and a batch can opt its members out and post one
-      summary — which the install does, with the Mac's own two titles.
+- [x] **Native notifications** — an important result posts one, which is
+      `SystemNotifier`'s rule rather than a list of events: `postToast`
+      mirrors the toasts already marked important, so a crash caught while
+      watching and a finished install arrive without either screen knowing
+      about the tray. The titles are its titles (all four now lead with the
+      app name), a failure carries the sound, and a batch can opt its members
+      out and post one summary — which the install does.
 
       **There is no Settings switch, because the Mac has none.** This entry
       used to promise one; reading `SettingsView.swift` rather than trusting
@@ -653,6 +665,12 @@ two disagree, so a relabelled item cannot leave a stale accelerator behind.
       per-app notification settings. Adding one here only would be a
       difference to relearn, and the rule says a better idea goes in the Mac
       app first.
+
+      **Open difference:** the Mac no longer waits for the window to be
+      unfocused, and a click on one opens the in-app notification bar on the
+      matching row. See item 5 of the landed list above for what closing this
+      involves — the gate, the click route, the request identifier, and the
+      `willPresent` trap that hides foreground posts.
 
       Two things it does not read from the DOM, both because the DOM answers a
       different question. Backgrounded is the window manager's `isFocused()`,
