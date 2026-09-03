@@ -241,13 +241,17 @@ struct RootView: View {
             guard let target = AppCore.shared.frontmost else { return }
             let packages = InstallablePackage.filter(urls)
             let aabs = urls.filter { $0.pathExtension.lowercased() == "aab" }
-            let handled = Set(AppPackageFormat.fileExtensions + ["aab"])
+            let videos = PlayableVideo.filter(urls)
+            let handled = Set(
+                AppPackageFormat.fileExtensions + ["aab"] + VideoInputFormat.fileExtensions
+            )
             for other in urls where !handled.contains(other.pathExtension.lowercased()) {
                 target.showToast(Toast(
-                    message: "Not an installable package: \(other.lastPathComponent)", ok: false))
+                    message: "Droidective can't open \(other.lastPathComponent)", ok: false))
             }
             if !packages.isEmpty { target.openPackages(packages) }
             if !aabs.isEmpty { target.openAABs(aabs) }
+            if !videos.isEmpty { target.openVideos(videos) }
         }
         #if !APPSTORE
         // Update toasts ("available" / "ready — relaunch" / "up to date")

@@ -357,6 +357,10 @@ final class AppState {
     /// An `.aab` opened from Finder (double-click / Open With), staged for the
     /// AAB to APK feature. The view consumes (clears) it once shown.
     var pendingConvertAAB: URL?
+    /// A video opened from Finder ("Open With ▸ Droidective"), staged for the
+    /// Video Editor. Consumed by `claimPendingVideo` once the editor has it,
+    /// so returning to the tab later doesn't reopen the same file.
+    var pendingVideo: URL?
     /// The real app delegate (the adaptor instance, wired in `ADTApp.body`) —
     /// `NSApp.delegate` is SwiftUI's wrapper on macOS, so casting it fails.
     weak var appDelegate: AppDelegate?
