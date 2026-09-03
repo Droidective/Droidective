@@ -658,11 +658,19 @@ final class ReactotronSession {
 
     /// Buffer a timeline event and schedule a coalesced flush, so a burst of
     /// events becomes one `items` mutation instead of one per event.
+    ///
+    /// Paced by `FeedFlushCadence`, which the JS Console and logcat already
+    /// use. This feed was left at 16 ms — up to 62 full re-diffs of the
+    /// timeline a second, whether or not anyone was looking at it, and paid
+    /// across every mounted tab because open tabs all stay in the keep-alive
+    /// ZStack. It is the largest of the three feeds and the one named in the
+    /// app's biggest hang issue (DROIDECTIVE-MAC-B).
     private func enqueue(_ item: RtItem) {
         pendingItems.append(item)
         guard flushTask == nil else { return }
+        let interval = FeedFlushCadence.interval(appActive: NSApp.isActive)
         flushTask = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(16))
+            try? await Task.sleep(for: interval)
             guard !Task.isCancelled else { return }
             self?.flushPending()
         }
