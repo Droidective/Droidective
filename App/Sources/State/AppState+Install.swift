@@ -200,11 +200,11 @@ extension AppState {
     private static func installToast(
         name: String, ok: Int, total: Int, failures: [(serial: String, result: FeatureResult)]
     ) -> Toast {
-        // notifiesWhenBackgrounded is off: the batch posts one summary
+        // postsSystemNotification is off: the batch posts one summary
         // notification instead of one per APK.
         if failures.isEmpty {
             let message = total == 1 ? "Installed \(name)" : "Installed \(name) on \(total) devices"
-            return Toast(message: message, ok: true, notifiesWhenBackgrounded: false)
+            return Toast(message: message, ok: true, postsSystemNotification: false)
         }
         let message = total == 1
             ? "Couldn't install \(name) — \(failures[0].result.message)"
@@ -217,6 +217,6 @@ extension AppState {
             .joined(separator: "\n\n")
         return Toast(
             message: message, ok: false, copyText: detail.isEmpty ? nil : detail,
-            notifiesWhenBackgrounded: false)
+            postsSystemNotification: false)
     }
 }

@@ -43,10 +43,12 @@ struct Toast: Identifiable, Equatable {
     /// always are; a success only when it produced an artifact (a reveal
     /// path) — routine confirmations like "Copied" are dropped.
     let important: Bool
-    /// Whether this mirrors to a macOS notification when the app is
-    /// backgrounded. Defaults to `important`; install per-APK toasts opt out
-    /// because the batch posts one summary instead.
-    let notifiesWhenBackgrounded: Bool
+    /// Whether this also becomes a macOS notification. Defaults to
+    /// `important`, so what the notification bar keeps, Notification Center
+    /// keeps too — foreground included, since a 5s overlay is missable and
+    /// nothing else outlives it. Install per-APK toasts opt out because the
+    /// batch posts one summary instead.
+    let postsSystemNotification: Bool
 
     init(
         message: String,
@@ -56,7 +58,7 @@ struct Toast: Identifiable, Equatable {
         revealPath: String? = nil,
         action: NotificationAction? = nil,
         important: Bool? = nil,
-        notifiesWhenBackgrounded: Bool? = nil
+        postsSystemNotification: Bool? = nil
     ) {
         self.message = message
         self.ok = ok
@@ -68,7 +70,7 @@ struct Toast: Identifiable, Equatable {
         let resolvedImportant = important
             ?? (resolved == .error || resolved == .warning || revealPath != nil)
         self.important = resolvedImportant
-        self.notifiesWhenBackgrounded = notifiesWhenBackgrounded ?? resolvedImportant
+        self.postsSystemNotification = postsSystemNotification ?? resolvedImportant
     }
 }
 
@@ -166,6 +168,10 @@ final class AppState {
     var showNotifications = false
     /// Important notifications arrived since the panel was last opened.
     var unreadNotifications = 0
+    /// The row a clicked macOS notification asked for: scrolled to and
+    /// flashed once, then cleared by the panel so it doesn't re-flash on
+    /// every later render.
+    var focusedNotification: UUID?
     var isRunningFeature = false
 
     // Layout toggle: ⌘B (sidebar).
@@ -1305,8 +1311,10 @@ final class AppState {
 
     func showToast(_ toast: Toast) {
         toasts.append(toast)
-        if toast.notifiesWhenBackgrounded {
-            SystemNotifier.postToastIfBackgrounded(toast)
+        if toast.postsSystemNotification {
+            // The bar entry reuses the toast's id, so the notification can
+            // carry it and a click can open the bar on that exact row.
+            SystemNotifier.postToast(toast, entry: toast.id)
         }
         if toast.important {
             notifications.insert(
@@ -1335,6 +1343,19 @@ final class AppState {
     func toggleNotifications() {
         showNotifications.toggle()
         if showNotifications { unreadNotifications = 0 }
+        if !showNotifications { focusedNotification = nil }
+    }
+
+    /// Open the panel — the route a clicked macOS notification takes, so it
+    /// must not close an already-open one the way `toggleNotifications` would.
+    /// `entry` is the row to scroll to and flash; it is dropped when this
+    /// window's history doesn't hold it, which happens when the notification
+    /// was posted by a different window (the history is per window, the
+    /// notification is per app).
+    func openNotifications(focusing entry: UUID? = nil) {
+        focusedNotification = notifications.contains { $0.id == entry } ? entry : nil
+        showNotifications = true
+        unreadNotifications = 0
     }
 
     func clearNotifications() {
