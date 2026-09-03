@@ -1034,11 +1034,13 @@ final class JSConsoleSession {
     /// under a chatty Metro stream — the sustained main-thread churn behind
     /// the js-console hang cluster (Sentry DROIDECTIVE-MAC-2N and the 3.7.0
     /// hang burst; logcat shipped the same 300 ms fix in v3.6.1). Entries
-    /// keep accumulating between flushes; only rendering is paced. While the
-    /// app is inactive nobody is reading in real time, so the feed coasts at
-    /// 1 s — streaming with the window unfocused used to burn CPU for hours.
+    /// keep accumulating between flushes; only rendering is paced.
+    ///
+    /// The intervals moved to `FeedFlushCadence` when the Reactotron timeline
+    /// turned out to have missed this fix entirely — the rule is shared so a
+    /// feed cannot be added without it.
     private var flushInterval: Duration {
-        NSApp.isActive ? .milliseconds(250) : .seconds(1)
+        FeedFlushCadence.interval(appActive: NSApp.isActive)
     }
 
     private func scheduleFlush() {
