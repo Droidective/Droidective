@@ -121,8 +121,8 @@ opening it — verify those by hand.
 ## Build / test / run
 
 ```
-make test          # ADBKit unit tests (cd ADBKit && swift test) — 1846 tests, keep green
-make test-app      # the AppTests logic bundle — 105 tests
+make test          # ADBKit unit tests (cd ADBKit && swift test) — 1899 tests, keep green
+make test-app      # the AppTests logic bundle — 111 tests
 make verify        # tiers 0-1: warnings-as-errors + both test bundles
 make test-linux    # the same suite on Linux (Apple `container` CLI; the port gate)
 make test-emulator # tier 3: the device-dependent suites against a real emulator
@@ -849,7 +849,39 @@ position in `RELEASE_NOTES.md`.
 ## Status
 
 Feature-complete across all planned milestones plus several UX rounds.
-(Latest release: **v3.9.2** — row selection across the two log feeds, plus a
+(Latest release: **v3.10.0** — the first stable tag of the 3.10 line, whose
+beta.1–beta.5 were almost entirely the Windows/Linux port; the only Mac-visible
+changes are the four below. **Feed pacing**: the Reactotron timeline flushed
+every 16 ms — up to 62 full re-diffs a second, paid across *every* mounted tab
+because the keep-alive ZStack mounts them all — and was the single largest
+contributor to DROIDECTIVE-MAC-B (4197 hangs / 49 users, whose top
+`open_features` rows are individual users with 9–18 tabs open). `FeedFlushCadence`
+(ADBKit) now holds 250 ms active / 1 s inactive for both App-layer feeds; logcat
+keeps its own flat 300 ms because `LogcatStreamer` is a portable actor with no
+access to app-activation state. Inactive is slower, never stopped — pausing
+grows the buffer unbounded and hands SwiftUI one enormous flush on reactivation,
+which is the same mass-mutation stall. **Telemetry**: `enableCaptureFailedRequests`
+is off (Sentry filed Metro's routine `/symbolicate` 500s as app errors, and
+would have shipped API Testing's user-authored URLs, against the no-URLs
+promise), and `enableLogs` is on with `AppLog` as the only writer — a fixed
+`Area` plus `[String: Int]`, so the privacy promise is a property of the type,
+rate-limited per area by `LogBudget` with the suppressed count riding out on the
+next admitted line. **Reactotron reverse**: `reapplyReverse()` runs between the
+stop and the relaunch of the app being debugged (the serial doesn't change, so
+`deviceListChanged` never reopened it), plus a bounded re-reverse while nothing
+is connected for a tunnel lost with the device still listed. **Video**:
+`VideoInputFormat` is the one input list (15 containers) behind the open panel,
+drop filter and Finder types; playback probes the *file* rather than its
+extension — an `.mp4` holding AV1 fails the same probe an `.mkv` does — and
+`VideoEditService.playableProxy` builds an MP4 to play (remux first, transcode
+if the codec needs it) while exports always read the original. Finder open is
+`LSHandlerRank: Alternate` plus a second extension-matched document type, which
+is what actually covers a format another app's UTI owns — with IINA installed a
+`.mkv` resolves to `io.iina.mkv`, so the type-based entry alone left the app out
+of Open With. Also: emulator relaunch reports its stages, and every in-app
+notification now mirrors to Notification Center foreground-included, which needs
+the delegate's `willPresent` or macOS silently suppresses it.)
+(Before that: **v3.9.2** — row selection across the two log feeds, plus a
 launch fix. `RowSelection` (ADBKit, pure) holds the ⌘-click / ⇧-click / drag
 rules for the Reactotron timeline and the JS Console: the part that goes subtly
 wrong is never the highlight but where the *anchor* sits after each gesture,
@@ -1107,7 +1139,7 @@ jadx/apktool, recompile, and sign — with keystore creation) plus Frida setup, 
 custom accent color, launching emulators from the device bar, per-feature
 connect-a-device empty states, a live-preview hotkey recorder, and a Settings
 split into Appearance/Privacy; managed tools download from GitHub releases into
-Application Support and are sized/removable in Settings); 1846 ADBKit + 105
+Application Support and are sized/removable in Settings); 1899 ADBKit + 111
 AppTests green (macOS — the suite also runs on Linux in CI, minus the
 Darwin-gated files);
 builds clean with zero warnings (enforced as errors in CI). Verified live against a
