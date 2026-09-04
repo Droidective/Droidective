@@ -308,38 +308,57 @@ import Testing
         })
     }
 
-    /// A port the OS will never hand out by itself.
+    /// Ports the OS will never hand out by itself, tried in turn.
     ///
     /// `port: 0` draws from the ephemeral range (49152–65535 on macOS), and the
     /// other *suites* — this one is `.serialized`, they are not — bind that way
     /// throughout. The test below is shaped "release a port, then take it
     /// again", so with an ephemeral port one of them can be handed it in the
-    /// gap between: it failed twice running on CI, on 49407 and then 49412,
-    /// with `SO_REUSEADDR` already set on the bind. Nothing is auto-assigned
-    /// down here, so the gap stops mattering.
+    /// gap between: it failed twice on CI, on 49407 and then 49412, with
+    /// `SO_REUSEADDR` already set on the bind. Nothing down here is
+    /// auto-assigned, which is why these numbers.
     ///
-    /// Exactly one start/stop pair either side, deliberately: an extra cycle to
-    /// pick the port turned this red every run, which says `stop()` can return
-    /// before the listener is really gone. That is worth chasing on its own,
-    /// and it is not what this test is about.
-    private static let reservedPort = 28_411
+    /// Reserving *one* number was still the fragility. 28411 came back
+    /// "already in use" twice more on 2026-09-04, on two unrelated commits —
+    /// one of them the appcast commit, which changes a single XML file — while
+    /// `test-linux` passed both times and a bare re-run went green. Nothing in
+    /// this target binds it, so the holder is outside the test process and
+    /// unidentified; the standing counter-argument, that 28411 sits below the
+    /// ephemeral range, rests on the *runner's* `net.inet.ip.portrange`, which
+    /// nobody has checked.
+    ///
+    /// So the test no longer depends on any single port being free. What it
+    /// must never tolerate is the *second* bind failing — see below.
+    private static let candidatePorts = [28_411, 29_617, 30_853]
 
     @Test func stoppingReleasesThePort() async throws {
-        let port = Self.reservedPort
-        let relay = ReactotronRelay(port: port)
-        try await relay.start()
-        #expect(await relay.boundPort == port)
-        await relay.stop()
-        #expect(await relay.isRunning == false)
+        for (index, port) in Self.candidatePorts.enumerated() {
+            let relay = ReactotronRelay(port: port)
+            do {
+                try await relay.start()
+            } catch ReactotronRelay.RelayError.portInUse {
+                // Somebody else's socket, which is not what this test is
+                // about. Try the next number instead of failing the suite.
+                if index == Self.candidatePorts.count - 1 {
+                    Issue.record("none of \(Self.candidatePorts) could be bound at all")
+                }
+                continue
+            }
+            #expect(await relay.boundPort == port)
+            await relay.stop()
+            #expect(await relay.isRunning == false)
 
-        // The failure this catches is a relay that closed its channel but kept
-        // its event-loop group, so the next start reports the port in use — and
-        // the feature simply refuses to come back. Still caught: a leak makes
-        // the port unavailable to *anyone*, so this start throws.
-        let second = ReactotronRelay(port: port)
-        try await second.start()
-        #expect(await second.boundPort == port)
-        await second.stop()
+            // The assertion, and the reason the test exists: a relay that
+            // closed its channel but kept its event-loop group reports the
+            // port in use here, and the feature simply refuses to come back.
+            // This bind is never allowed to fail — a foreign holder cannot
+            // explain it, because the bind moments earlier just succeeded.
+            let second = ReactotronRelay(port: port)
+            try await second.start()
+            #expect(await second.boundPort == port)
+            await second.stop()
+            return
+        }
     }
 
     @Test func aStartAndAStopThatRaceLeaveAConsistentRelay() async throws {
