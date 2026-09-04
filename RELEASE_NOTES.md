@@ -1,3 +1,63 @@
+## Droidective v3.10.0
+
+Four fixes to what the app does while you are not watching it, and a wider
+video editor. The Windows and Linux app that most of this cycle went into is on
+the beta channel; this release is macOS.
+
+### The app is quieter in the background
+
+- **The Reactotron timeline was redrawing 62 times a second**, whether or not
+  anyone was looking at it. Every open tab stays mounted, so that cost was paid
+  across every feed you had open, not just the one on screen — with nine or more
+  tabs open it was the app's largest source of multi-second stalls. It now
+  redraws four times a second while you are in the app and once a second while
+  you are in another one, which is what the JS Console and Logcat already did.
+- **Failed HTTP requests are no longer reported as app errors.** Metro answers
+  500 to any stack frame it cannot map, which is routine and already handled;
+  each one was being filed as a Droidective error. Requests you send yourself
+  from API Testing were being captured the same way, with their URLs — nothing
+  in the app should send those anywhere, and now nothing does.
+
+### Reactotron reconnects after a restart
+
+- **Restarting the app you are debugging re-opens its `adb reverse` tunnel.**
+  The tunnel is what lets the app on the device find Droidective, and the
+  restart button did not touch it — so a restarted app could come up unable to
+  connect, with nothing on screen saying why.
+- **A tunnel that dies with the device still connected now recovers.**
+  Replugging was already handled; an `adb kill-server` or a USB re-enumeration
+  that kept the same serial was not.
+
+### The video editor opens what ffmpeg reads
+
+- **Fifteen container formats** — mkv, webm, avi, flv, ts, m2ts, mpg, wmv, 3gp,
+  ogv and more, alongside mp4, mov and m4v. The editor exports through ffmpeg
+  and always could read these; only the open panel disagreed, so `.mkv` was
+  greyed out in a file picker for a file the app could edit.
+- **macOS cannot play most of them**, so anything it refuses is converted to a
+  playable copy in the background — the video appears, trimming works, and the
+  export still runs from your original file, so nothing loses quality.
+- **Videos open from Finder.** Right-click ▸ Open With ▸ Droidective, for every
+  format above. Your existing default player keeps every file type it had.
+
+### Notifications and progress
+
+- **Notifications now arrive while the app is in front.** Anything that reaches
+  the in-app notification bar — a caught crash, a finished install, a saved
+  recording, an available update — also appears in Notification Center, and
+  clicking one opens the bar on the matching entry. Previously they were posted
+  only when the app was hidden, so a five-second toast was the only trace an
+  event left.
+- **Relaunching an emulator says what it is doing.** It waits for the emulator's
+  console port to free before booting again, which takes up to twenty seconds,
+  and reported nothing for the whole wait. The row now shows the stage; a
+  failed stop says what adb said instead of booting a second copy on top.
+
+### Install
+
+Download the DMG, drag Droidective to Applications, and open it. Existing
+installs update themselves.
+
 ## Droidective v3.10.0-beta.5
 
 Two fixes from a real Linux install, one of which stopped the app installing at
