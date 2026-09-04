@@ -4,26 +4,31 @@ import SwiftUI
 /// Which tab the wireless sheet opens on — doubles as the `.sheet(item:)`
 /// payload for the device bar's "Pair new device…" / "Connect to device…"
 /// menu entries.
+///
+/// Titles are short because four of them share one segmented control, and the
+/// two pairing tabs borrow Android Studio's vocabulary ("QR code" / "Pairing
+/// code") so the same Android flow is named the same thing in both tools.
 enum WirelessSheetMode: String, CaseIterable, Identifiable {
-    case pair, connect, usb
+    case qr, pair, connect, usb
 
     var id: String { rawValue }
 
     var tabTitle: String {
         switch self {
-        case .pair: "Pair new device"
+        case .qr: "QR code"
+        case .pair: "Pairing code"
         case .connect: "Already paired"
-        case .usb: "Via USB cable"
+        case .usb: "USB cable"
         }
     }
 }
 
 /// A guided modal for getting a device onto wireless adb, opened from the
-/// device dropdown. Three paths, one per tab: first-time Android 11+ pairing
-/// (code + pairing port, then connect), plain connect for an already-paired
-/// device, and the one-click USB→Wi-Fi bootstrap. Endpoints are single
-/// paste-friendly "ip:port" fields (`ConnectionService.parseEndpoint`), exactly
-/// as the phone displays them.
+/// device dropdown. Four paths, one per tab: scan-a-QR-code pairing, first-time
+/// Android 11+ pairing by code (code + pairing port, then connect), plain
+/// connect for an already-paired device, and the one-click USB→Wi-Fi bootstrap.
+/// Endpoints are single paste-friendly "ip:port" fields
+/// (`ConnectionService.parseEndpoint`), exactly as the phone displays them.
 struct WirelessConnectSheet: View {
     @Environment(AppState.self) private var state
     @Environment(\.dismiss) private var dismiss
@@ -36,6 +41,11 @@ struct WirelessConnectSheet: View {
     @State private var connectEndpoint = ""
     @State private var busy = false
     @State private var status: Status?
+    /// One QR pairing session: the name and password on the code currently
+    /// shown. Replacing it re-keys the tab's `.task`, which is how "Show a new
+    /// code" restarts the whole flow.
+    @State private var qrRequest = QrPairingRequest.random()
+    @State private var qrPhase = QrPairingPhase.waitingForScan
 
     private struct Status: Equatable {
         let ok: Bool
@@ -61,6 +71,7 @@ struct WirelessConnectSheet: View {
             .onChange(of: mode) { status = nil }
 
             switch mode {
+            case .qr: qrTab
             case .pair: pairTab
             case .connect: connectTab
             case .usb: usbTab
@@ -76,7 +87,7 @@ struct WirelessConnectSheet: View {
             }
         }
         .padding(20)
-        .frame(width: 470)
+        .frame(width: 500)
     }
 
     private var header: some View {
@@ -93,6 +104,101 @@ struct WirelessConnectSheet: View {
                     .font(.app(.callout))
                     .foregroundStyle(.textMuted)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    // MARK: - Pair by QR code (Android 11+, first time)
+
+    /// The device does the typing: it scans a code carrying a one-off service
+    /// name and password, publishes that name over mDNS, and this tab pairs
+    /// with whoever answers to it. Nothing here needs the pairing port, which
+    /// is the field people get wrong on the tab beside it.
+    ///
+    /// The session runs for as long as the tab is on screen — `.task(id:)`
+    /// starts it, switching tabs or closing the sheet cancels it, and a new
+    /// `qrRequest` restarts it with a fresh code.
+    private var qrTab: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            StepRow(number: 1, title: "Open the scanner on the device") {
+                Text("Settings ▸ Developer options ▸ **Wireless debugging** ▸ **Pair device with QR code**.")
+                    .font(.app(.callout))
+                    .foregroundStyle(.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("The device's camera app won't do — it reads the code as a Wi-Fi network and rejects it.")
+                    .font(.app(.caption))
+                    .foregroundStyle(.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            StepRow(number: 2, title: "Point it at this code", done: qrPhase.isPaired) {
+                HStack(alignment: .top, spacing: 16) {
+                    QrCodeImage(payload: qrRequest.payload)
+                    VStack(alignment: .leading, spacing: 10) {
+                        qrPhaseLine
+                        qrPhaseAction
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+        .task(id: qrRequest) { await runQrPairing() }
+    }
+
+    @ViewBuilder
+    private var qrPhaseLine: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            switch qrPhase {
+            case .waitingForScan, .pairing, .connecting:
+                ProgressView()
+                    .controlSize(.small)
+            case .connected, .pairedWithoutConnecting:
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(Color.brandAccent)
+            case .failed:
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.red)
+            }
+            Text(qrPhase.sheetMessage)
+                .font(.app(.callout))
+                .foregroundStyle(qrPhase.isFailure ? Color.red : .textMain)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    @ViewBuilder
+    private var qrPhaseAction: some View {
+        switch qrPhase {
+        case .failed:
+            Button("Show a New Code") { qrRequest = .random() }
+                .buttonStyle(.borderedProminent)
+        case .pairedWithoutConnecting(let host):
+            // Pairing is the hard half and it succeeded; the connect tab only
+            // needs the port off the Wireless debugging screen.
+            Button("Finish on Already Paired") {
+                connectEndpoint = "\(host):"
+                mode = .connect
+            }
+            .buttonStyle(.borderedProminent)
+        default:
+            EmptyView()
+        }
+    }
+
+    /// Drive one pairing session, mirroring each phase into `qrPhase` and
+    /// closing the sheet when a device lands in `adb devices`.
+    private func runQrPairing() async {
+        qrPhase = .waitingForScan
+        let connection = state.env.engine.connection
+        let request = qrRequest
+        await CommandLog.userInitiated {
+            for await phase in connection.pairByQrCode(request) {
+                qrPhase = phase
+                guard case .connected(let address) = phase else { continue }
+                finishConnected(
+                    FeatureResult(
+                        ok: true, message: "Connected to \(address)", copyText: address),
+                    address: address)
             }
         }
     }
@@ -311,6 +417,41 @@ struct WirelessConnectSheet: View {
             }
             busy = false
         }
+    }
+}
+
+/// The words for each pairing phase. ADBKit owns the state machine; the copy
+/// the user reads lives here with the view that shows it.
+extension QrPairingPhase {
+    var sheetMessage: String {
+        switch self {
+        case .waitingForScan:
+            "Waiting for the device to scan…"
+        case .pairing:
+            "Scanned — pairing…"
+        case .connecting:
+            "Paired — connecting…"
+        case .connected(let address):
+            "Connected to \(address)"
+        case .pairedWithoutConnecting:
+            "Paired, but the device didn't advertise a connect port."
+        case .failed(let message):
+            message
+        }
+    }
+
+    /// Whether the device now trusts this Mac — true even when the connect
+    /// step didn't finish, because re-pairing would be the wrong next move.
+    var isPaired: Bool {
+        switch self {
+        case .connected, .pairedWithoutConnecting: true
+        case .waitingForScan, .pairing, .connecting, .failed: false
+        }
+    }
+
+    var isFailure: Bool {
+        if case .failed = self { return true }
+        return false
     }
 }
 

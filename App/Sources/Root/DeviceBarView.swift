@@ -235,10 +235,18 @@ struct DeviceBarView: View {
                 }
             }
             Section("Wireless debugging") {
+                // The QR tab first, and it is what "Pair new device…" opens:
+                // it asks the user for nothing, where the pairing-code tab
+                // needs a port and a code typed correctly on the first try.
+                Button {
+                    wirelessSheet = .qr
+                } label: {
+                    Label("Pair new device…", systemImage: "qrcode")
+                }
                 Button {
                     wirelessSheet = .pair
                 } label: {
-                    Label("Pair new device…", systemImage: "link.badge.plus")
+                    Label("Pair with a code…", systemImage: "link.badge.plus")
                 }
                 Button {
                     wirelessSheet = .connect

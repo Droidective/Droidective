@@ -11,6 +11,7 @@ struct WirelessAdbSection: View {
     @State private var pairingCode = ""
     @State private var connectionPort = "5555"
     @State private var busy = false
+    @State private var showQrSheet = false
 
     private var usbDevices: [Device] {
         state.devices.filter { $0.platform == .android && !$0.isWireless && $0.isReady }
@@ -37,7 +38,23 @@ struct WirelessAdbSection: View {
             }
         }
 
-        HubSection("Pair a device", subtitle: "Android 11+ — pair with a code, then connect.") {
+        HubSection("Pair a device", subtitle: "Android 11+ — scan a QR code, or pair with a code and connect.") {
+            HStack(spacing: 10) {
+                Button {
+                    showQrSheet = true
+                } label: {
+                    Label("Scan a QR Code…", systemImage: "qrcode")
+                }
+                .buttonStyle(.bordered)
+                .disabled(busy)
+                Text("No typing — the device scans the code and this Mac finds it.")
+                    .font(.app(.footnote))
+                    .foregroundStyle(.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Divider().padding(.vertical, 2)
+
             HubField("Host / IP", prompt: "192.168.1.42", text: $host)
             HStack(spacing: 12) {
                 HubField("Pairing port", prompt: "37123", text: $pairingPort)
@@ -58,6 +75,9 @@ struct WirelessAdbSection: View {
                 .font(.app(.footnote))
                 .foregroundStyle(.textMuted)
                 .fixedSize(horizontal: false, vertical: true)
+        }
+        .sheet(isPresented: $showQrSheet) {
+            WirelessConnectSheet(mode: .qr)
         }
 
         if !wirelessDevices.isEmpty {

@@ -48,6 +48,7 @@ public enum FeatureRegistry {
                 "forward", "tcp", "metro", "disconnect", "private dns", "dns", "dot",
                 "dns-over-tls", "doh", "hostname", "resolver", "wireless", "wifi",
                 "tcpip", "pair", "untethered", "adb connect", "connect",
+                "qr", "qr code", "scan",
             ],
             category: .connection, icon: "network", kind: .view, needsDevice: false
         ),
@@ -63,7 +64,10 @@ public enum FeatureRegistry {
         FeatureDef(
             id: "wireless-adb", title: "Wireless ADB",
             subtitle: "Connect over Wi-Fi (tcpip + Android 11 pairing)",
-            keywords: ["wireless", "wifi", "tcpip", "pair", "connect", "untethered"],
+            keywords: [
+                "wireless", "wifi", "tcpip", "pair", "connect", "untethered",
+                "qr", "qr code", "scan",
+            ],
             category: .connection, icon: "wifi", kind: .view, needsDevice: false
         ),
         FeatureDef(
