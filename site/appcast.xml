@@ -6,10 +6,9 @@
     <description>Most recent Droidective updates.</description>
     <language>en</language>
     <item>
-      <title>Droidective 3.10.0-beta.5</title>
-      <sparkle:channel>beta</sparkle:channel>
-      <sparkle:version>907</sparkle:version>
-      <sparkle:shortVersionString>3.10.0-beta.5</sparkle:shortVersionString>
+      <title>Droidective 3.10.0</title>
+      <sparkle:version>923</sparkle:version>
+      <sparkle:shortVersionString>3.10.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <description><![CDATA[
 <style>
@@ -25,118 +24,71 @@ pre { background: color-mix(in srgb, currentColor 8%, transparent); padding: .6e
 pre code { background: none; padding: 0; }
 a { color: #2f9e44; }
 </style>
-<p>Two fixes from a real Linux install, one of which stopped the app installing at
-all.</p>
-<h3>It installs without adb now</h3>
+<p>Four fixes to what the app does while you are not watching it, and a wider
+video editor. The Windows and Linux app that most of this cycle went into is on
+the beta channel; this release is macOS.</p>
+<h3>The app is quieter in the background</h3>
 <ul>
 <li>
-<strong>adb was a hard dependency of the <code>.deb</code>,</strong> so apt refused to install
-Droidective on a machine that did not already have it. That is backwards: the
-app has a setup Doctor whose whole job is to tell you a tool is missing and
-where to get it, and it never got the chance to run. adb is a recommendation
-now — apt still installs it alongside the app by default, and a machine
-without it still gets the app.</li>
+<strong>The Reactotron timeline was redrawing 62 times a second</strong>, whether or not
+anyone was looking at it. Every open tab stays mounted, so that cost was paid
+across every feed you had open, not just the one on screen — with nine or more
+tabs open it was the app's largest source of multi-second stalls. It now
+redraws four times a second while you are in the app and once a second while
+you are in another one, which is what the JS Console and Logcat already did.</li>
 <li>
-<strong>The advice it gives afterwards fits the machine.</strong> "Install it via Android
-Studio" is the right sentence on a Mac and useless on Ubuntu, where the answer
-is one command. Droidective now reads the distribution and says
-<code>sudo apt install android-tools-adb</code>, or the dnf, pacman or zypper equivalent
-— and the button beside the warning copies it, rather than leaving you to
-retype it out of a tooltip. Mint, Pop!_OS, Zorin and elementary get the apt
-answer through <code>ID_LIKE</code>; a distribution none of those cover gets the package
-name rather than a guessed command.</li>
+<strong>Failed HTTP requests are no longer reported as app errors.</strong> Metro answers
+500 to any stack frame it cannot map, which is routine and already handled;
+each one was being filed as a Droidective error. Requests you send yourself
+from API Testing were being captured the same way, with their URLs — nothing
+in the app should send those anywhere, and now nothing does.</li>
 </ul>
-<h3>The menu bar is not see-through</h3>
+<h3>Reactotron reconnects after a restart</h3>
 <ul>
 <li>
-<strong>On Linux the desktop showed through File, Edit and View.</strong> The window was
-made transparent in the last beta so the Opacity slider could work, but Linux
-draws the app's own menu bar above the page, and that strip has nothing to
-paint itself on over a transparent window. The window is opaque there again.</li>
+<strong>Restarting the app you are debugging re-opens its <code>adb reverse</code> tunnel.</strong>
+The tunnel is what lets the app on the device find Droidective, and the
+restart button did not touch it — so a restarted app could come up unable to
+connect, with nothing on screen saying why.</li>
 <li>
-<strong>Opacity now says it is unavailable on Linux, and why.</strong> Grain still works,
-and nothing changes on Windows.</li>
-<li>
-<strong>The check that should have caught it exists now.</strong> The Linux job that
-launches and photographs the app on every change was comparing the app
-against a black background, so a hole in it was invisible. It counts the
-pixels the app failed to paint, which for this bug would have been about
-twenty-six thousand of them.</li>
+<strong>A tunnel that dies with the device still connected now recovers.</strong>
+Replugging was already handled; an <code>adb kill-server</code> or a USB re-enumeration
+that kept the same serial was not.</li>
 </ul>
-]]></description>
-      <pubDate>Tue, 01 Sep 2026 20:31:34 +0000</pubDate>
-      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.10.0-beta.5/Droidective-v3.10.0-beta.5.dmg" sparkle:edSignature="kbdB1yLXuNFBDcycL7/ajAwu2Th8ac7pfGxVUNl3NEhNEKthh9Kdc1LeNvpNn3XR/qFvSckSf72mgsNTL0GbCw==" length="145142891" type="application/octet-stream" />
-    </item>
-    <item>
-      <title>Droidective 3.9.2</title>
-      <sparkle:version>830</sparkle:version>
-      <sparkle:shortVersionString>3.9.2</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[
-<style>
-:root { color-scheme: light dark; }
-body { font: 13px/1.55 -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; }
-h2 { font-size: 1.3em; margin: .2em 0 .4em; }
-h3 { font-size: 1.05em; margin: 1.1em 0 .3em; }
-p { margin: .5em 0; }
-ul { margin: .4em 0; padding-left: 1.4em; }
-li { margin: .3em 0; }
-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9em; background: color-mix(in srgb, currentColor 12%, transparent); padding: .1em .35em; border-radius: 4px; }
-pre { background: color-mix(in srgb, currentColor 8%, transparent); padding: .6em .8em; border-radius: 6px; overflow-x: auto; }
-pre code { background: none; padding: 0; }
-a { color: #2f9e44; }
-</style>
-<p>Pulling events out of a busy log. Rows in the Reactotron timeline and the JS
-Console can be selected — ⌘-click one, ⇧-click a range, drag across them — and
-copied whole, payload included. An API call's status code also reads off its
-collapsed row, and the empty "Screen Mirror" window that could appear at launch
-is gone.</p>
-<h3>Reactotron and JS Console</h3>
+<h3>The video editor opens what ffmpeg reads</h3>
 <ul>
 <li>
-<strong>Select rows and copy them whole.</strong> Pulling a few events out of a busy
-timeline meant right-clicking them one at a time. ⌘-click toggles a row,
-⇧-click takes the range from the last one picked, and dragging across rows
-sweeps a range; the toolbar shows how many are picked, with a copy menu, and
-⌘C copies them. A copy carries the whole event rather than the line already on
-screen — the row's summary followed by the complete payload: an API call's
-request body, headers and response, an action's or saga's arguments. Copy as
-JSON gives the same events in the export's wire form.</li>
+<strong>Fifteen container formats</strong> — mkv, webm, avi, flv, ts, m2ts, mpg, wmv, 3gp,
+ogv and more, alongside mp4, mov and m4v. The editor exports through ffmpeg
+and always could read these; only the open panel disagreed, so <code>.mkv</code> was
+greyed out in a file picker for a file the app could edit.</li>
 <li>
-<strong>A selection can't copy what the feed no longer has.</strong> Rows that were
-cleared, filtered out, or trimmed while the selection stood are dropped from
-it, so a copy never contains events nobody can see.</li>
+<strong>macOS cannot play most of them</strong>, so anything it refuses is converted to a
+playable copy in the background — the video appears, trimming works, and the
+export still runs from your original file, so nothing loses quality.</li>
 <li>
-<strong>The gestures stay out of each other's way.</strong> Only a row's header carries the
-drag, so dragging through an expanded payload still selects that text, and ⌘C
-is bound only while rows are picked — it never shadows copying text out of the
-search field or an open payload.</li>
+<strong>Videos open from Finder.</strong> Right-click ▸ Open With ▸ Droidective, for every
+format above. Your existing default player keeps every file type it had.</li>
 </ul>
-<h3>Reactotron</h3>
+<h3>Notifications and progress</h3>
 <ul>
 <li>
-<strong>An API event's status code sits on its collapsed row.</strong> Reading a timeline is
-mostly looking for the one call that didn't return 200, and that meant
-expanding rows one at a time. The code now sits between the API badge and the
-method — green for 2xx, orange for a client error, red for a server error,
-neutral for a redirect. Only the code is tinted, so the timeline's own badge
-colours still read. A request that never got a response reports status 0 on the
-wire, so it reads <code>ERR</code>.</li>
-</ul>
-<h3>Mirror</h3>
-<ul>
+<strong>Notifications now arrive while the app is in front.</strong> Anything that reaches
+the in-app notification bar — a caught crash, a finished install, a saved
+recording, an available update — also appears in Notification Center, and
+clicking one opens the bar on the matching entry. Previously they were posted
+only when the app was hidden, so a five-second toast was the only trace an
+event left.</li>
 <li>
-<strong>No empty "Screen Mirror" window at launch.</strong> A 420×850 window with a title
-bar and nothing in it could appear on its own at launch — and in the worst case
-it was the only window the app had. The pop-out mirror's window group persists
-the device it was presented with and re-presents it at the next launch, before
-any workspace exists for it to attach to, so it rendered nothing and no main
-window was created either. A pop-out now has to have been asked for in this
-session; anything else closes itself once a real window is up.</li>
+<strong>Relaunching an emulator says what it is doing.</strong> It waits for the emulator's
+console port to free before booting again, which takes up to twenty seconds,
+and reported nothing for the whole wait. The row now shows the stage; a
+failed stop says what adb said instead of booting a second copy on top.</li>
 </ul>
 ]]></description>
-      <pubDate>Tue, 25 Aug 2026 12:15:04 +0000</pubDate>
-      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.9.2/Droidective-v3.9.2.dmg" sparkle:edSignature="9J2wA5//XpPHq08jgJerK9+IaIjjFOWN3+WYCH2sjO9DDOtLfcAbjhNFbDU/K4VORPico+VsbjbVUI5Kj4uxAw==" length="145155632" type="application/octet-stream"/>
+      <pubDate>Fri, 04 Sep 2026 05:36:10 +0000</pubDate>
+      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.10.0/Droidective-v3.10.0.dmg" sparkle:edSignature="Ch5czlGKWF3+hFCzTc2wi03ZfXF87aH8AL28+IsXvmldjs0QXrrPffP/DMqtZi1vdpvRAvi7AMrwMXgLlen8BA==" length="145384627" type="application/octet-stream" />
     </item>
+    
   </channel>
 </rss>
