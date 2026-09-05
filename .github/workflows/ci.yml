@@ -610,7 +610,7 @@ jobs:
       # A hyphen in the tag (v3.3.0-beta.1) marks a beta: the GitHub release is
       # a prerelease and the appcast item rides the Sparkle beta channel.
       - name: Publish release with build
-        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228  # v3.0.2
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64  # v3.0.3
         with:
           files: dist/*
           body_path: release-body.md
