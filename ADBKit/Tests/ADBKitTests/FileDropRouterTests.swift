@@ -53,9 +53,12 @@ import Testing
         #expect(plan.installs.isEmpty)
     }
 
-    @Test func onlyAPackageDropOffersTheCopyAlternative() {
+    @Test func onlyAnInstallableDropOffersTheCopyAlternative() {
+        // The alternative is a button on the install prompt. A bundle opens
+        // the converter and raises no prompt, so offering it there would
+        // promise a choice nothing goes on to give.
         #expect(FileDropRouter.plan([file("/tmp/app.apk")]).hasAlternative)
-        #expect(FileDropRouter.plan([file("/tmp/app.aab")]).hasAlternative)
+        #expect(!FileDropRouter.plan([file("/tmp/app.aab")]).hasAlternative)
         #expect(!FileDropRouter.plan([file("/tmp/notes.pdf")]).hasAlternative)
     }
 
@@ -157,7 +160,7 @@ import Testing
         let said = FileDropRouter.announcement(for: plan, deviceName: "Pixel 7")
         #expect(said.verb == "Convert to APK")
         #expect(said.detail == "app.aab")
-        #expect(said.alternative == "…or copy to /sdcard/Download")
+        #expect(said.alternative == nil)
     }
 
     @Test func aBundleBesideAPackageStillNamesTheDevice() {

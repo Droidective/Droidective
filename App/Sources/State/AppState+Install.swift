@@ -40,6 +40,10 @@ struct InstallJob: Identifiable, Equatable {
     /// drop prompt reads it). It is what an "Uninstall & Install" recovery
     /// removes, so a failure without it can't offer that button.
     var packageID: String?
+    /// adb's own output for a failure, kept because `status` carries the
+    /// friendly one-liner and the recovery check needs the `INSTALL_FAILED_*`
+    /// code to tell a signature clash from a full disk.
+    var failureOutput: String?
 
     var packageName: String { packageURL.lastPathComponent }
     var isRunning: Bool { status == .running }
@@ -215,6 +219,7 @@ extension AppState {
     private func finishInstallJob(_ id: UUID, result: FeatureResult) {
         guard let index = installJobs.firstIndex(where: { $0.id == id }) else { return }
         installJobs[index].status = result.ok ? .succeeded : .failed(result.message)
+        installJobs[index].failureOutput = result.ok ? nil : (result.copyText ?? result.message)
         installJobs[index].stage = nil
         // A success row has said its piece after a few seconds — drop it so
         // the install screens don't carry a stale green check forever.

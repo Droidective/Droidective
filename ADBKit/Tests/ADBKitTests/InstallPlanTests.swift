@@ -131,6 +131,25 @@ import Testing
         #expect(InstallPlan.isResolvedByReplacing("signatures do not match previously installed version"))
     }
 
+    @Test func theFriendlyWordingOfARecoverableCodeIsAlsoRecognised() {
+        // The App layer shows `friendlyReason`'s prose, not adb's code, and a
+        // caller that reads a job's message rather than its raw output would
+        // silently never offer the recovery. That is exactly what happened:
+        // the codes matched, the sentence the user was looking at did not.
+        for code in ["INSTALL_FAILED_UPDATE_INCOMPATIBLE", "INSTALL_FAILED_VERSION_DOWNGRADE"] {
+            let friendly = AppInstallService.friendlyReason(code)
+            #expect(
+                InstallPlan.isResolvedByReplacing(friendly),
+                "friendly wording of \(code) is not recognised: \(friendly)")
+        }
+    }
+
+    @Test func theFriendlyWordingOfAnUnrecoverableCodeStaysUnrecoverable() {
+        for code in ["INSTALL_FAILED_INSUFFICIENT_STORAGE", "INSTALL_FAILED_NO_MATCHING_ABIS"] {
+            #expect(!InstallPlan.isResolvedByReplacing(AppInstallService.friendlyReason(code)))
+        }
+    }
+
     @Test func aFailureAnUninstallCannotFixDoesNotOfferIt() {
         // Wiping the app buys nothing here, and offering it would destroy data
         // for no reason.

@@ -69,9 +69,13 @@ public struct DeviceDropPlan: Sendable, Equatable {
     public var allPaths: [String] { installs + bundles + copies }
 
     /// True when the drop carries something that could plausibly be *stored*
-    /// rather than installed — which is the only genuine ambiguity a drop on a
-    /// mirror has, and so the only time the overlay offers a second zone.
-    public var hasAlternative: Bool { !installs.isEmpty || !bundles.isEmpty }
+    /// rather than installed — the only genuine ambiguity a drop on a mirror
+    /// has, and so the only time the overlay mentions a second option.
+    ///
+    /// Packages only, not bundles: the alternative is a button on the install
+    /// prompt, and a bundle never raises one (it opens the converter). Saying
+    /// "…or copy" for an `.aab` would promise a choice that isn't offered.
+    public var hasAlternative: Bool { !installs.isEmpty }
 
     /// The same drop, with every package treated as a file to copy. What the
     /// overlay's secondary zone commits to.

@@ -19,8 +19,7 @@ struct TransferChipsView: View {
     var showsHint: Bool = false
     var compact: Bool = false
 
-    @AppStorage(mirrorDropHintSeenKey) private var hintSeen = false
-    @State private var hintVisible = false
+    private var hintVisible: Bool { showsHint && state.mirrorDropHintVisible }
 
     private var transfers: [TransferJob] { state.transferJobs(onSerial: serial) }
     private var installs: [InstallJob] { state.installJobs(onSerial: serial) }
@@ -45,7 +44,9 @@ struct TransferChipsView: View {
         }
         .animation(.easeOut(duration: 0.18), value: transfers.map(\.id))
         .animation(.easeOut(duration: 0.18), value: installs.map(\.id))
-        .task(id: showsHint) { await revealHintOnce() }
+        .onChange(of: showsHint, initial: true) {
+            if showsHint { state.showMirrorDropHintOnce() }
+        }
     }
 
     // MARK: - Chips
@@ -55,7 +56,8 @@ struct TransferChipsView: View {
             symbol: symbol(for: job),
             tint: tint(for: job),
             text: job.stage,
-            fraction: job.fraction
+            fraction: job.fraction,
+            wraps: !job.isRunning && !isSucceeded(job)
         ) {
             if job.isRunning {
                 chipButton("xmark", help: "Stop copying") { state.cancelTransfer(job.id) }
@@ -68,7 +70,8 @@ struct TransferChipsView: View {
             symbol: job.isRunning ? "arrow.down.app" : installSymbol(job),
             tint: installTint(job),
             text: installText(job),
-            fraction: nil
+            fraction: nil,
+            wraps: isFailed(job)
         ) {
             // Only the failures an uninstall actually fixes offer it: wiping
             // an app buys nothing against a full disk or a wrong ABI.
@@ -92,17 +95,22 @@ struct TransferChipsView: View {
 
     private func chip(
         symbol: String, tint: Color, text: String, fraction: Double?,
+        // A failure names the reason, and the reason is the whole point of the
+        // chip — it wraps instead of being middle-truncated into "…smatch)".
+        wraps: Bool = false,
         @ViewBuilder trailing: () -> some View
     ) -> some View {
-        HStack(spacing: 9) {
+        HStack(alignment: wraps ? .top : .center, spacing: 9) {
             Image(systemName: symbol)
                 .font(.app(.caption).weight(.semibold))
                 .foregroundStyle(tint)
+                .padding(.top, wraps ? 1 : 0)
             Text(text)
                 .font(.app(.caption))
                 .foregroundStyle(.white)
-                .lineLimit(1)
-                .truncationMode(.middle)
+                .lineLimit(wraps ? 3 : 1)
+                .truncationMode(wraps ? .tail : .middle)
+                .fixedSize(horizontal: false, vertical: wraps)
             if let fraction {
                 Text(Self.percent(fraction))
                     .font(.app(.caption).monospacedDigit())
@@ -113,8 +121,12 @@ struct TransferChipsView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
-        .background(.black.opacity(0.72), in: Capsule())
-        .overlay(Capsule().strokeBorder(.white.opacity(0.14), lineWidth: 1))
+        .background(
+            .black.opacity(0.72),
+            in: RoundedRectangle(cornerRadius: wraps ? 12 : 999, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: wraps ? 12 : 999, style: .continuous)
+                .strokeBorder(.white.opacity(0.14), lineWidth: 1))
         .frame(maxWidth: compact ? 260 : 380, alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)
     }
@@ -183,17 +195,18 @@ struct TransferChipsView: View {
         }
     }
 
+    private func isSucceeded(_ job: TransferJob) -> Bool {
+        if case .succeeded = job.status { return true }
+        return false
+    }
+
+    private func isFailed(_ job: InstallJob) -> Bool {
+        if case .failed = job.status { return true }
+        return false
+    }
+
     private static func percent(_ fraction: Double) -> String {
         "\(Int((max(0, min(1, fraction)) * 100).rounded()))%"
     }
 
-    /// Show the hint once, briefly, the first time a mirror actually streams —
-    /// and never again on any device.
-    private func revealHintOnce() async {
-        guard showsHint, !hintSeen else { return }
-        hintSeen = true
-        withAnimation(.easeOut(duration: 0.2)) { hintVisible = true }
-        try? await Task.sleep(for: .seconds(6))
-        withAnimation(.easeIn(duration: 0.3)) { hintVisible = false }
-    }
 }

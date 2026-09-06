@@ -282,9 +282,36 @@ extension AppState {
     }
 
     /// Whether a finished install job should offer that recovery.
+    ///
+    /// Reads adb's own output, not the job's friendly one-liner: the codes are
+    /// what separates a signature clash (an uninstall fixes it) from a full
+    /// disk (it doesn't), and `friendlyReason` has already replaced them by
+    /// the time the message reaches `status`.
     static func offersReplaceRecovery(_ job: InstallJob) -> Bool {
-        guard job.packageID != nil, case let .failed(message) = job.status else { return false }
-        return InstallPlan.isResolvedByReplacing(message)
+        guard job.packageID != nil, case .failed = job.status else { return false }
+        return InstallPlan.isResolvedByReplacing(job.failureOutput ?? "")
+    }
+}
+
+// MARK: - The one-time drop hint
+
+extension AppState {
+    /// A mirror is streaming: show the "drop files here" hint, once ever.
+    ///
+    /// Nobody guesses a drop target, and nobody wants to be told twice — so it
+    /// appears the first time a mirror actually streams on this Mac and never
+    /// again. The `seen` flag is written the moment it is shown, so a quit in
+    /// the middle can't replay it.
+    func showMirrorDropHintOnce() {
+        guard !UserDefaults.standard.bool(forKey: mirrorDropHintSeenKey) else { return }
+        UserDefaults.standard.set(true, forKey: mirrorDropHintSeenKey)
+        mirrorDropHintVisible = true
+        mirrorDropHintTask?.cancel()
+        mirrorDropHintTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(6))
+            guard !Task.isCancelled else { return }
+            self?.mirrorDropHintVisible = false
+        }
     }
 }
 

@@ -128,18 +128,28 @@ public enum InstallPlan {
         }
     }
 
-    /// True when adb's failure text is the kind an uninstall-first retry
+    /// True when an install failure is the kind an uninstall-first retry
     /// actually fixes — the recovery the failure chip offers. Anything else
     /// (no storage, wrong ABI, a corrupt APK) is not helped by wiping the app,
     /// so it must not be offered.
-    public static func isResolvedByReplacing(_ adbOutput: String) -> Bool {
+    ///
+    /// Recognises adb's own `INSTALL_FAILED_*` codes *and* the wording
+    /// `AppInstallService.friendlyReason` replaces them with, because by the
+    /// time a failure reaches the UI it may be either: the raw output is kept
+    /// on the job, the friendly one-liner is what the chip shows, and a caller
+    /// reading the wrong one would silently never offer the recovery.
+    /// `theFriendlyWordingOfARecoverableCodeIsAlsoRecognised` pins the pair.
+    public static func isResolvedByReplacing(_ failure: String) -> Bool {
         let recoverable = [
             "INSTALL_FAILED_UPDATE_INCOMPATIBLE",
             "INSTALL_FAILED_VERSION_DOWNGRADE",
             "INSTALL_FAILED_DUPLICATE_PERMISSION",
             "INSTALL_FAILED_ALREADY_EXISTS",
             "signatures do not match",
+            // The friendly halves of the same four.
+            "uninstall it first",
+            "already installed",
         ]
-        return recoverable.contains { adbOutput.localizedCaseInsensitiveContains($0) }
+        return recoverable.contains { failure.localizedCaseInsensitiveContains($0) }
     }
 }
