@@ -683,7 +683,7 @@ private struct TerminalCloseConfirmation: ViewModifier {
         // Buttons resolve the prompt themselves; the binding's `set` only
         // fires for an outside dismissal (Esc), which counts as Cancel — the
         // resolve guard makes a post-button set(false) a no-op.
-        content.alert(title, isPresented: Binding(
+        content.alert("Close all terminals?", isPresented: Binding(
             get: { state.terminalClosePrompt != nil },
             set: { if !$0 { state.resolveTerminalPrompt(confirmed: false) } }
         )) {
@@ -696,32 +696,15 @@ private struct TerminalCloseConfirmation: ViewModifier {
         }
     }
 
-    private var isHandoff: Bool {
-        if case .handoff = state.terminalClosePrompt { return true }
-        return false
-    }
-
-    private var title: String {
-        isHandoff ? "Move Terminal to another window?" : "Close all terminals?"
-    }
-
     private var confirmLabel: String {
-        if isHandoff { return "Move Terminal" }
-        return state.terminalClosePrompt == .quit ? "Quit" : "Close Terminals"
+        state.terminalClosePrompt == .quit ? "Quit" : "Close Terminals"
     }
 
     private var message: String {
         let count = state.terminals.tabs.count
-        let sessions = count == 1
-            ? "your running shell session"
-            : "\(count) running shell sessions"
-        // A move is the one case with a silver lining worth stating: the tab
-        // comes back in the new window at the same directories.
-        return isHandoff
-            ? "This ends \(sessions) — anything still running will be killed. "
-                + "The new window reopens them in the same directories."
-            : "This ends \(sessions) — anything still running in "
-                + (count == 1 ? "it" : "them") + " will be killed."
+        return count == 1
+            ? "This ends your running shell session — anything still running in it will be killed."
+            : "This ends \(count) running shell sessions — anything still running in them will be killed."
     }
 }
 

@@ -249,11 +249,13 @@ final class AppState {
 
     /// The JS Console (Hermes CDP) session — owned here so its log buffer and
     /// connection survive leaving the feature, like the Reactotron session.
-    let jsConsoleSession: JSConsoleSession
+    /// `var`, not `let`, because it travels with its tab: see `MovedSessions`.
+    private(set) var jsConsoleSession: JSConsoleSession
 
     /// The Terminal feature's shells — owned here so every tab's PTY session
-    /// and scrollback survive leaving the feature.
-    let terminals = TerminalManager()
+    /// and scrollback survive leaving the feature, and replaceable so they
+    /// survive the tab moving to another window too (`MovedSessions`).
+    private(set) var terminals = TerminalManager()
 
     /// With auto-hide on (Settings ▸ Appearance), the sidebar rides over the
     /// content instead of sitting in the layout; this is that overlay's
@@ -587,6 +589,13 @@ final class AppState {
         let savedStep = UserDefaults.standard.object(forKey: "fontScaleStep") as? Int ?? Self.defaultScaleIndex
         fontScaleStep = min(max(savedStep, 0), Self.scales.count - 1)
         jsConsoleSession = JSConsoleSession(adb: core.env.client)
+        wireSessions()
+    }
+
+    /// Point the per-window sessions back at this window. Called at init and
+    /// again whenever one is replaced — either by a session arriving from
+    /// another window, or by the fresh one left behind when it leaves.
+    private func wireSessions() {
         jsConsoleSession.app = self
         // Typing `exit` (or a shell crash) closes that tab like the × does.
         // The contains-check drops late callbacks racing a killAll teardown.
@@ -594,6 +603,53 @@ final class AppState {
             guard let self, self.terminals.tabs.contains(where: { $0.id == id }) else { return }
             self.closeTerminalShell(id)
         }
+    }
+
+    /// The live per-window work a moving tab takes with it.
+    ///
+    /// A feature whose state lives in an object owned by the *window* — the
+    /// terminal's PTYs and scrollback, the JS console's CDP connection and
+    /// console history — would otherwise be torn down here and rebuilt there,
+    /// which is a restart wearing a move's clothes. The object crosses instead,
+    /// and the window it left gets a fresh one so it keeps working.
+    ///
+    /// Only features whose work outlives their view need an entry: everything
+    /// else either rebuilds cheaply or is already app-wide (the Reactotron
+    /// relay, which no window owns).
+    struct MovedSessions {
+        var terminals: TerminalManager?
+        var jsConsole: JSConsoleSession?
+
+        var isEmpty: Bool { terminals == nil && jsConsole == nil }
+    }
+
+    /// Hand `featureID`'s live session over, leaving a fresh one behind.
+    func takeMovableSessions(for featureID: String) -> MovedSessions {
+        var moved = MovedSessions()
+        switch featureID {
+        case TabHandoff.terminalFeatureID:
+            moved.terminals = terminals
+            terminals = TerminalManager()
+        case "js-console":
+            moved.jsConsole = jsConsoleSession
+            jsConsoleSession = JSConsoleSession(adb: core.env.client)
+        default:
+            break
+        }
+        if !moved.isEmpty { wireSessions() }
+        return moved
+    }
+
+    /// Sessions taken by `detachTab`, waiting for the receiving window. Held
+    /// for the length of one handoff only; `AppCore` collects it immediately.
+    var pendingMovedSessions = MovedSessions()
+
+    /// Take live sessions arriving with a tab from another window.
+    func adoptMovableSessions(_ moved: MovedSessions) {
+        guard !moved.isEmpty else { return }
+        if let terminals = moved.terminals { self.terminals = terminals }
+        if let jsConsole = moved.jsConsole { jsConsoleSession = jsConsole }
+        wireSessions()
     }
 
     /// Adopt this window's persisted state, or start fresh when `saved` is nil
@@ -890,12 +946,7 @@ final class AppState {
     /// Terminal feature tab, or quitting the app — both kill every live shell,
     /// so both are held until the user confirms losing them (RootView shows
     /// the alert).
-    enum TerminalClosePrompt: Equatable {
-        case closeTab, quit
-        /// Moving the Terminal tab to another window: the shells die here and
-        /// their directories travel with the tab, so it reopens where it was.
-        case handoff(HandoffDestination)
-    }
+    enum TerminalClosePrompt { case closeTab, quit }
 
     /// Set while the terminal close/quit confirmation is on screen.
     var terminalClosePrompt: TerminalClosePrompt?
@@ -929,11 +980,6 @@ final class AppState {
         switch prompt {
         case .closeTab:
             if confirmed { performClose("terminal") }
-        case .handoff(let destination):
-            // Deliberately not snapshotting here: `detachTab` does it as part
-            // of stopping the tab's work, and a second `rememberTerminalDirectories`
-            // on the by-then-empty rail would overwrite the snapshot with nothing.
-            if confirmed { core.completeHandoff("terminal", from: id, to: destination) }
         case .quit:
             if confirmed {
                 rememberTerminalDirectories()
@@ -1096,6 +1142,10 @@ final class AppState {
     /// snapshots its shells' directories.
     func detachTab(_ featureID: String) -> TabHandoff.Carry {
         guard workspace.detach(featureID) != nil else { return .none }
+        // Taken before anything is stopped: these keep running and cross to the
+        // receiving window, which is what makes a move a move rather than a
+        // restart. `stopBackgroundWork` skips exactly these on `.handoff`.
+        pendingMovedSessions = takeMovableSessions(for: featureID)
         stopBackgroundWork(for: featureID, reason: .handoff)
         let carry = TabHandoff.Carry(
             terminalResumeDirs: featureID == TabHandoff.terminalFeatureID
@@ -1145,11 +1195,16 @@ final class AppState {
            !core.featureIsOpenElsewhere("reactotron", excluding: self.id) {
             Task { await reactotronSession.stop() }
         }
-        if id == "js-console" {
+        // Both of these travel with a moving tab (`MovedSessions`), so on a
+        // handoff the session that is about to keep running in another window
+        // has already been handed over and this window holds a fresh one —
+        // stopping it here would tear down the wrong thing, and stopping the
+        // moved one would undo the move.
+        if id == "js-console", reason == .closing {
             jsConsoleSession.stop()
             Task { await jsConsoleSession.removeReverseTunnels() }
         }
-        if id == "terminal" {
+        if id == "terminal", reason == .closing {
             // Implicit teardown (feature tab closed, background window close,
             // role reset) — remember the shells' directories before killing
             // them, so the next Terminal open resumes where they were.

@@ -712,6 +712,10 @@ struct NativeTerminalView: NSViewRepresentable {
     /// registration so hidden keep-alive tabs can't capture drags (see
     /// `DroidTerminalView.setAcceptsFileDrops`).
     let isVisibleTab: Bool
+    /// Whether the window rendering this pane still owns the shell. False for
+    /// the final update pass of a window whose Terminal tab has moved away —
+    /// which must not reclaim the live view from the window that took it.
+    let isOwned: Bool
     @Environment(\.windowOpacity) private var windowOpacity
 
     /// Remembers the last activation state so focus is grabbed only on the
@@ -745,6 +749,11 @@ struct NativeTerminalView: NSViewRepresentable {
             session?.onFocus?()
         }
         if terminal.superview !== container {
+            // Only the owning window may take the live view. Both containers
+            // are in real windows during a Terminal move — the receiving one
+            // and the departing one's last update pass — so the window check
+            // that would seem to separate them does not; ownership does.
+            guard isOwned else { return }
             // Evict whatever an earlier session left mounted here.
             for stale in container.subviews where stale !== terminal {
                 stale.removeFromSuperview()
@@ -769,3 +778,4 @@ struct NativeTerminalView: NSViewRepresentable {
         coordinator.wasActive = isActive
     }
 }
+

@@ -52,7 +52,7 @@ struct TabDrag: Equatable {
 /// The handoff half is deliberately a `WindowState` — the same record a window
 /// persists — so the receiving window restores through the path a relaunch
 /// already uses, and the two can never drift apart.
-struct WindowSeed: Equatable {
+struct WindowSeed {
     /// The device a plain new window was opened for (⇧⌘N, "New Window for
     /// Device"). Unused when `state` is set, which carries its own.
     var serial: String?
@@ -66,6 +66,10 @@ struct WindowSeed: Equatable {
     var runOnAll = false
     /// A torn-off window opens focused on its one feature. Reversible with ⌘B.
     var sidebarHidden = false
+    /// Live sessions travelling with the moved tab, adopted when the window
+    /// binds. Reference-typed, which is the point — this is the running work
+    /// itself, not a description of it.
+    var sessions = AppState.MovedSessions()
     /// The tab this window is being opened to receive, if any — the marker that
     /// lets `AppCore` tell a handoff's window from any other new one.
     var handoffFeatureID: String?
@@ -82,10 +86,8 @@ extension AppState {
     func beginHandoff(_ featureID: String, to destination: HandoffDestination) {
         guard canDetach(featureID, to: destination) else { return }
         if case .window(let target, _) = destination, target == id { return }
-        if featureID == TabHandoff.terminalFeatureID, !terminals.tabs.isEmpty {
-            terminalClosePrompt = .handoff(destination)
-            return
-        }
+        // No terminal confirmation here, unlike `closeTab`: the shells are not
+        // killed by a move, they cross with the tab (`MovedSessions`).
         if exitGuards[featureID] != nil {
             holdBehindGuard(.handoff(featureID, destination))
             return
@@ -154,15 +156,23 @@ extension AppCore {
 
         let record = source.windowRecord
         let carry = source.detachTab(featureID)
+        // Collected straight after the detach that took them, so nothing else
+        // can observe the source holding sessions it has already given up.
+        let sessions = source.pendingMovedSessions
+        source.pendingMovedSessions = AppState.MovedSessions()
 
         switch destination {
         case .window(let target, let slot):
             guard let receiver = workspace(id: target) else {
                 // The window went away between the drop and here (⌘Q, a script).
-                // Put the tab back rather than dropping it on the floor.
+                // Put the tab back rather than dropping it on the floor — and
+                // its live sessions with it, or the move would have killed the
+                // very work it was meant to preserve.
+                source.adoptMovableSessions(sessions)
                 source.adoptHandoff(featureID, carrying: carry, at: nil)
                 return
             }
+            receiver.adoptMovableSessions(sessions)
             receiver.adoptHandoff(featureID, carrying: carry, at: slot)
             reconcileSharedSessions()
             focusWindow(target)
@@ -177,8 +187,12 @@ extension AppCore {
                 frame: frame,
                 runOnAll: source.runOnAll,
                 sidebarHidden: true,
+                sessions: sessions,
                 handoffFeatureID: featureID))
-            if !seeded { source.adoptHandoff(featureID, carrying: carry, at: nil) }
+            if !seeded {
+                source.adoptMovableSessions(sessions)
+                source.adoptHandoff(featureID, carrying: carry, at: nil)
+            }
         }
     }
 

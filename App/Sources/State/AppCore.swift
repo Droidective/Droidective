@@ -329,6 +329,10 @@ final class AppCore {
             pendingWindowSeeds[state.id] = seed
             freshWorkspaces.insert(state.id)
             state.adoptSeedPreferences(seed)
+            // Before the restore below opens the tab, so the view mounts onto
+            // the session that came with it rather than the empty one this
+            // workspace was born with.
+            state.adoptMovableSessions(seed.sessions)
         }
         if didLoadLayout {
             state.restore(from: wantsFresh ? seed?.state : claimPendingRestore())
