@@ -161,8 +161,12 @@ Two consequences fall out of a moved tab keeping its device:
 Moving a tab unmounts its view exactly as closing it does, so the same two
 confirmations apply, checked in the order `closeTab` checks them:
 
-- a live recording or unsaved edit → `PendingExit.handoff`, reworded ("Moving
-  Screen Record to a new window stops the recording.");
+- a live recording or unsaved edit → `PendingExit.handoff`, which reuses the
+  guard the feature registered ("Recording in progress — leaving will stop the
+  screen recording. Save it first, or discard it.") with its usual Stop & Save /
+  Discard / Keep Recording. The wording is the *guard's*, not the destination's,
+  and stays accurate because a move is a kind of leaving — the guard describes
+  the work at risk, which is the same whichever way the tab goes;
 - open terminal shells → `TerminalClosePrompt.handoff` ("…closes 3 shells. They
   reopen in the same directories."). Not silent, because killing someone's
   running `npm start` should not be — and the directories ride into the seed via
