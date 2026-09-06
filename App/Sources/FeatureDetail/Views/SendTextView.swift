@@ -9,24 +9,54 @@ import SwiftUI
 /// and whose result card landed below the snippet list.
 struct SendTextView: View {
     @Environment(AppState.self) private var state
+    @Environment(\.tabFeatureID) private var tabFeatureID
     let feature: FeatureDef
 
-    @State private var text = ""
     @State private var presets = Presets()
     /// The Mac's LAN IP — the `{ip}` placeholder value and, for the React
     /// Native role, a pinned quick insert (Metro's "Debug server host" is
     /// `<mac-ip>:8081`).
     @State private var macIP: String?
-    @State private var creatingSnippet = false
-    @State private var newSnippetName = ""
-    @State private var newSnippetText = ""
-    @State private var snippetSearch = ""
-    @State private var showAllSnippets = false
     @State private var snippetPendingRemoval: SendTextSnippet?
     @FocusState private var textFocused: Bool
     /// Wipe the field after a successful send, for firing a sequence of
     /// inputs without hand-clearing between them. Persisted choice.
     @AppStorage("sendTextClearAfterSend") private var clearAfterSend = false
+
+    /// What has been typed but not sent or saved, held by the window rather
+    /// than by this view. See `SendTextModel`.
+    private var draft: SendTextModel {
+        state.featureState(SendTextModel.self, for: tabFeatureID) { SendTextModel() }
+    }
+
+    private var text: String {
+        get { draft.text }
+        nonmutating set { draft.text = newValue }
+    }
+    private var creatingSnippet: Bool {
+        get { draft.creatingSnippet }
+        nonmutating set { draft.creatingSnippet = newValue }
+    }
+    private var newSnippetName: String {
+        get { draft.newSnippetName }
+        nonmutating set { draft.newSnippetName = newValue }
+    }
+    private var newSnippetText: String {
+        get { draft.newSnippetText }
+        nonmutating set { draft.newSnippetText = newValue }
+    }
+    private var snippetSearch: String {
+        get { draft.snippetSearch }
+        nonmutating set { draft.snippetSearch = newValue }
+    }
+    private var showAllSnippets: Bool {
+        get { draft.showAllSnippets }
+        nonmutating set { draft.showAllSnippets = newValue }
+    }
+
+    private func bind<T>(_ keyPath: ReferenceWritableKeyPath<SendTextModel, T>) -> Binding<T> {
+        Binding(get: { draft[keyPath: keyPath] }, set: { draft[keyPath: keyPath] = $0 })
+    }
 
     /// Library collapse: this many rows before "Show more". Search appears
     /// once the library outgrows a glance.
@@ -111,7 +141,7 @@ struct SendTextView: View {
 
     private var textField: some View {
         TextField(
-            "", text: $text,
+            "", text: bind(\.text),
             prompt: feature.fields.first { $0.name == "text" }?.placeholder.map(Text.init)
         )
         .brandField()
@@ -178,7 +208,7 @@ struct SendTextView: View {
                     newSnippetButton
                     Spacer(minLength: 12)
                     if presets.sendTextSnippets.count > Self.searchThreshold {
-                        SearchField(prompt: "Search snippets", text: $snippetSearch)
+                        SearchField(prompt: "Search snippets", text: bind(\.snippetSearch))
                             .frame(maxWidth: 240)
                             .help("Find a snippet by its name or its text")
                     }
@@ -281,7 +311,7 @@ struct SendTextView: View {
         .buttonStyle(.bordered)
         .controlSize(.small)
         .help("Save the text you send often as a reusable snippet")
-        .popover(isPresented: $creatingSnippet, arrowEdge: .bottom) {
+        .popover(isPresented: bind(\.creatingSnippet), arrowEdge: .bottom) {
             newSnippetPopover
         }
     }
@@ -291,14 +321,14 @@ struct SendTextView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("New snippet")
                 .font(.app(.headline))
-            TextField("Name", text: $newSnippetName, prompt: Text("Name — shown in the list"))
+            TextField("Name", text: bind(\.newSnippetName), prompt: Text("Name — shown in the list"))
                 .textFieldStyle(.roundedBorder)
                 .onChange(of: newSnippetName) { _, value in
                     if value.count > SendTextSnippet.nameLimit {
                         newSnippetName = String(value.prefix(SendTextSnippet.nameLimit))
                     }
                 }
-            TextField("Text", text: $newSnippetText, prompt: Text("Text to insert…"), axis: .vertical)
+            TextField("Text", text: bind(\.newSnippetText), prompt: Text("Text to insert…"), axis: .vertical)
                 .textFieldStyle(.roundedBorder)
                 .lineLimit(1...4)
                 .onSubmit { saveNewSnippet() }

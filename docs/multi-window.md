@@ -271,6 +271,28 @@ reached the device; and a recording started before the move and stopped after it
 came out as one continuous 67.66 s file. Closing the tab, closing the window and
 quitting each left the list empty.
 
+**The Apps list and every typed draft move with their tab.** Reading every
+installed app is a couple of seconds and a handful of `adb shell` round trips,
+and the view used to do it again on each mount, so a move dropped the list, the
+search, the scope and the selected app and made the user wait for something they
+were already looking at; `AppsExplorerModel.loadedSerial` records which device
+the list came from, so only a device switch re-reads. `SendTextModel`,
+`DeepLinkDraftModel` and `CustomCommandDraftModel` carry the app's three typing
+surfaces — a message not yet sent, a deep link half typed, a shell command being
+composed. Nothing in them is expensive to produce again except by hand, which is
+the kind that annoys most. The deep-link draft is keyed by tab because its
+section appears both on its own screen and inside the React Native hub, and a
+sheet left open (the command editor) re-presents itself in the receiving window
+with its fields intact.
+
+**Scroll position is not preserved, and that is a limitation rather than a
+decision.** The list, the tree and the buffer all cross, but a moved tab starts
+at the top of them. `scrollPosition(id:)` does not report a `List`'s position
+here — the binding is never written, so there is nothing to put back either —
+which is the same unreliability the JS-console feed ran into. Restoring it
+properly means tracking row frames the way `LogRowFrames` does, which is more
+machinery than the gain justifies for now.
+
 **Performance and Network Speed deliberately do not move.** Unlike the
 recorder, they are fed by a sampler the view owns, so a preserved buffer with
 the sampler stopped mid-move would have a silent gap in it — worse than being

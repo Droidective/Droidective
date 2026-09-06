@@ -7,22 +7,42 @@ import SwiftUI
 /// permission toggles.
 struct AppsExplorerView: View {
     @Environment(AppState.self) private var state
+    @Environment(\.tabFeatureID) private var tabFeatureID
     @Environment(\.colorScheme) private var colorScheme
-    @State private var apps: [AppListing]?
-    @State private var states: [String: AppLifecycle] = [:]
-    @State private var search = ""
-    @State private var scope = Scope.user
-    @State private var selectedPackage: String?
-    /// Packages an uninstall attempt proved can't actually be removed (it
-    /// reported success but the package stayed). Their Uninstall button is
-    /// dropped, leaving Disable.
-    @State private var notRemovable: Set<String> = []
 
-    enum Scope: String, CaseIterable {
-        case all = "All"
-        case user = "User"
-        case system = "System"
+    /// The list and what the user has done with it, held by the window rather
+    /// than by this view: re-reading every installed app because a tab moved is
+    /// a wait for something already on screen. See `AppsExplorerModel`.
+    private var model: AppsExplorerModel {
+        state.featureState(AppsExplorerModel.self, for: tabFeatureID) { AppsExplorerModel() }
     }
+
+    private var apps: [AppListing]? {
+        get { model.apps }
+        nonmutating set { model.apps = newValue }
+    }
+    private var states: [String: AppLifecycle] {
+        get { model.states }
+        nonmutating set { model.states = newValue }
+    }
+    private var search: String {
+        get { model.search }
+        nonmutating set { model.search = newValue }
+    }
+    private var scope: Scope {
+        get { model.scope }
+        nonmutating set { model.scope = newValue }
+    }
+    private var selectedPackage: String? {
+        get { model.selectedPackage }
+        nonmutating set { model.selectedPackage = newValue }
+    }
+    private var notRemovable: Set<String> {
+        get { model.notRemovable }
+        nonmutating set { model.notRemovable = newValue }
+    }
+
+    private typealias Scope = AppsScope
 
     private var serial: String { state.targetSerials.first ?? "" }
 
@@ -49,6 +69,9 @@ struct AppsExplorerView: View {
             }
         }
         .task(id: state.targetSerials.first ?? "") {
+            // A tab that moved brings the list with it. Only a device it hasn't
+            // read yet is worth the round trips.
+            guard model.apps == nil || model.loadedSerial != serial else { return }
             await loadApps()
         }
     }
@@ -121,12 +144,19 @@ struct AppsExplorerView: View {
     }
 
     private var searchField: some View {
-        TextField("Search name, version, or bundle…", text: $search)
+        TextField("Search name, version, or bundle…", text: searchBinding)
             .brandField()
     }
 
+    private var searchBinding: Binding<String> {
+        Binding(get: { search }, set: { search = $0 })
+    }
+    private var scopeBinding: Binding<Scope> {
+        Binding(get: { scope }, set: { scope = $0 })
+    }
+
     private var scopePicker: some View {
-        Picker("", selection: $scope) {
+        Picker("", selection: scopeBinding) {
             ForEach(Scope.allCases, id: \.self) { scope in
                 Text(scope.rawValue).tag(scope)
             }
@@ -242,6 +272,7 @@ struct AppsExplorerView: View {
             selectedPackage = nil
         }
         guard let serial = state.targetSerials.first else { return }
+        model.loadedSerial = serial
         let (listing, lifecycle) = await CommandLog.userInitiated {
             async let listing = try? state.env.engine.appsExplorer.listAll(serial: serial)
             async let lifecycle = state.env.engine.systemApps.states(serial: serial)
