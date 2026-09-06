@@ -548,6 +548,13 @@ table) is in `docs/reactotron-mcp-analysis.md`.
     screenshot editor's both key on `scrcpy`. The far side has to *re-arm* it
     from `.task`: the new window inherits none of the old one's guards, and
     `onChange` won't fire because nothing about the work changed.
+  - **A `.task(id:)` fires on every mount, so anything expensive behind one
+    needs a "same question?" key.** `.task(id: apkURL|mode)` re-ran jadx from
+    the top on a move, because the id had not changed — only the window had.
+    `DecompileModel.treeKey` and `VideoEditorModel.builtFor` record what the
+    kept result was produced for, and the task returns early when it matches.
+    The work *in flight* still dies with the view (SwiftUI cancels the task),
+    which is the honest read: nothing else owns it.
   - **A view that embeds in several tabs keys its state by `tabFeatureID`.**
     The screenshot editor opens inside the Screenshot tab, the mirror and the
     Mirror Wall, so `ScreenshotEditorModel` is resolved per tab id and its

@@ -32,9 +32,6 @@ final class MirrorViewModel {
     private(set) var videoSize: CGSize?
     /// Set when a screenshot is captured; the view shows the Discard/Save/Edit prompt.
     var pendingScreenshot: NSImage?
-    /// Set when the user picks "Edit" from the post-recording prompt; the view
-    /// opens the video editor on it.
-    var finishedRecording: URL?
     /// Set when a recording stops; the view shows the Discard/Save/Edit prompt.
     var pendingRecording: URL?
     /// Set when recording fails to start; the view surfaces it as a toast.

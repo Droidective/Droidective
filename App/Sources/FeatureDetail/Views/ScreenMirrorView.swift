@@ -42,9 +42,10 @@ struct ScreenMirrorView: View {
     @State private var exitGuardID = UUID()
     /// Delayed teardown for a hidden tab; cancelled if the tab returns in time.
     @State private var teardownTask: Task<Void, Never>?
-    /// The screenshot editor's state when this mirror is a *window* rather than
-    /// a tab — see `editor`.
+    /// The two editors' state when this mirror is a *window* rather than a tab
+    /// — see `editor`.
     @State private var windowEditor = ScreenshotEditorModel()
+    @State private var windowVideoEditor = VideoEditorModel()
 
     /// Where the screenshot editor keeps the capture and its markup.
     ///
@@ -59,6 +60,13 @@ struct ScreenMirrorView: View {
             : state.featureState(ScreenshotEditorModel.self, for: tabFeatureID) { ScreenshotEditorModel() }
     }
 
+    /// The video editor a finished recording opens in, kept the same way.
+    private var videoEditor: VideoEditorModel {
+        tabFeatureID == MirrorWindow.featureID
+            ? windowVideoEditor
+            : state.featureState(VideoEditorModel.self, for: tabFeatureID) { VideoEditorModel() }
+    }
+
     var body: some View {
         ZStack {
             // The editor takes the whole pane ahead of the mirror: an
@@ -66,22 +74,19 @@ struct ScreenMirrorView: View {
             // disconnects (which drops `model`) must not take it down with it.
             if editor.image != nil {
                 ScreenshotEditorView(model: editor)
-            } else if let model {
+            } else if let source = videoEditor.source {
                 // After Edit, take over the whole pane with the editor (full
-                // screen, not a sheet) so its tools are fully usable; closing it
-                // returns to the live mirror.
-                if let url = model.finishedRecording {
-                    VideoEditorPane(source: .recording(url)) {
-                        try? FileManager.default.removeItem(at: url)
-                        model.finishedRecording = nil
-                    }
-                    .id(url)
-                } else {
-                    MirrorStage(
-                        model: model,
-                        onReconnect: reconnectCurrent,
-                        onPopOut: popOutAction)
+                // screen, not a sheet) so its tools are fully usable; closing
+                // it returns to the live mirror.
+                VideoEditorPane(source: source) {
+                    try? FileManager.default.removeItem(at: source.url)
+                    videoEditor.close()
                 }
+            } else if let model {
+                MirrorStage(
+                    model: model,
+                    onReconnect: reconnectCurrent,
+                    onPopOut: popOutAction)
             } else {
                 ContentUnavailableView(
                     "Connect a device to mirror",
@@ -90,7 +95,7 @@ struct ScreenMirrorView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .recordingDecision(url: pendingRecording) { url in model?.finishedRecording = url }
+        .recordingDecision(url: pendingRecording) { videoEditor.open(.recording($0)) }
         .imageDecision(image: pendingScreenshot) { editor.open($0) }
         .task {
             // Connect if the mirror is the tab on screen when it's first
@@ -176,9 +181,10 @@ struct ScreenMirrorView: View {
             state.clearExitGuard(exitGuardID)
             if tabFeatureID == MirrorWindow.featureID {
                 // A pop-out window is not a tab, so this teardown is final:
-                // an unsaved annotation in it goes with the window, and its
-                // guard has to go with it or nothing would ever clear it.
+                // an unsaved annotation or edit in it goes with the window, and
+                // its guards have to go too or nothing would ever clear them.
                 state.clearExitGuard(editor.exitGuardID)
+                state.clearExitGuard(videoEditor.exitGuardID)
             } else {
                 state.noteMirrorClaims([], featureID: tabFeatureID)
             }

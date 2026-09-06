@@ -1269,6 +1269,14 @@ final class AppState {
             ScreenshotEditorModel.self, feature: id, in: self.id) {
             clearExitGuard(editor.exitGuardID)
         }
+        // The video editor's edits and its playback proxy cross with a moving
+        // tab the same way. A close gives up both, and the recording the editor
+        // was opened on: a temp file nobody chose to keep.
+        if let video = core.featureStates.existing(
+            VideoEditorModel.self, feature: id, in: self.id) {
+            clearExitGuard(video.exitGuardID)
+            if reason == .closing { video.closeAndDiscardRecording() }
+        }
         if id == "terminal", reason == .closing {
             // Implicit teardown (feature tab closed, background window close,
             // role reset) — remember the shells' directories before killing

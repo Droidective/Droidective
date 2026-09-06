@@ -89,43 +89,61 @@ struct VideoEditorPane: View {
     let source: VideoSource
     let onClose: () -> Void
 
-    @State private var player: AVPlayer
-    @State private var asset: AVURLAsset
-    @State private var trimmer = VideoTrimmer()
-    @State private var edit = EditState()
-    @State private var undoStack: [EditState] = []
-    @State private var redoStack: [EditState] = []
-
+    /// Work in flight, which a move genuinely interrupts: the proxy build
+    /// belongs to a `.task` SwiftUI cancels on unmount, the trim UI to a modal
+    /// the window it was opened in owns.
     @State private var playerReady = false
-    @State private var cropMode = false
-    @State private var cropBeforeEditing: CropRect?
     @State private var isTrimming = false
-    @State private var isExporting = false
-
-    @State private var videoSize: CGSize?
-    @State private var assetDuration: Double = 0
-
-    /// An MP4 stand-in for a source AVFoundation refuses, built by ffmpeg and
-    /// used for playback only — the export always reads `source.url`, so a
-    /// proxy costs the saved file nothing. Deleted when the editor closes.
-    @State private var proxyURL: URL?
     @State private var preparingProxy = false
-    /// Neither a remux nor a transcode produced something playable: the file
-    /// can't be edited here, and saying so beats a black pane.
-    @State private var proxyFailed = false
 
-    /// Identifies this view's leave guard so a stale clear can't wipe another's.
-    @State private var exitGuardID = UUID()
-    /// The edit state at the last successful export; edits matching it count as
-    /// saved, so the leave prompt doesn't fire after exporting.
-    @State private var lastExportedEdit: EditState?
+    /// The video, the player and every edit made to it, held by the window
+    /// rather than by this view. See `VideoEditorModel`.
+    private var model: VideoEditorModel {
+        state.featureState(VideoEditorModel.self, for: tabFeatureID) { VideoEditorModel() }
+    }
 
-    init(source: VideoSource, onClose: @escaping () -> Void) {
-        self.source = source
-        self.onClose = onClose
-        let asset = AVURLAsset(url: source.url)
-        _asset = State(initialValue: asset)
-        _player = State(initialValue: AVPlayer(playerItem: AVPlayerItem(asset: asset)))
+    private var player: AVPlayer { model.player }
+    private var trimmer: VideoTrimmer { model.trimmer }
+    private var edit: EditState {
+        get { model.edit }
+        nonmutating set { model.edit = newValue }
+    }
+    private var undoStack: [EditState] {
+        get { model.undoStack }
+        nonmutating set { model.undoStack = newValue }
+    }
+    private var redoStack: [EditState] {
+        get { model.redoStack }
+        nonmutating set { model.redoStack = newValue }
+    }
+    private var lastExportedEdit: EditState? {
+        get { model.lastExportedEdit }
+        nonmutating set { model.lastExportedEdit = newValue }
+    }
+    private var isExporting: Bool {
+        get { model.isExporting }
+        nonmutating set { model.isExporting = newValue }
+    }
+    private var cropMode: Bool {
+        get { model.cropMode }
+        nonmutating set { model.cropMode = newValue }
+    }
+    private var cropBeforeEditing: CropRect? {
+        get { model.cropBeforeEditing }
+        nonmutating set { model.cropBeforeEditing = newValue }
+    }
+    private var videoSize: CGSize? {
+        get { model.videoSize }
+        nonmutating set { model.videoSize = newValue }
+    }
+    private var assetDuration: Double {
+        get { model.assetDuration }
+        nonmutating set { model.assetDuration = newValue }
+    }
+    private var proxyURL: URL? { model.proxyURL }
+    private var proxyFailed: Bool {
+        get { model.proxyFailed }
+        nonmutating set { model.proxyFailed = newValue }
     }
 
     /// View transforms apply only while not trimming/cropping, so those UIs stay
@@ -134,7 +152,7 @@ struct VideoEditorPane: View {
 
     /// Edits exist when the state differs from the default and from the state
     /// last exported — these are lost on leave unless exported first.
-    private var hasUnsavedEdits: Bool { edit != EditState() && edit != lastExportedEdit }
+    private var hasUnsavedEdits: Bool { model.hasUnsavedEdits }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -149,26 +167,31 @@ struct VideoEditorPane: View {
         }
         .task(id: source.url) { await loadAsset() }
         .onReceive(player.publisher(for: \.status)) { playerReady = ($0 == .readyToPlay) }
-        .onChange(of: hasUnsavedEdits) { _, dirty in
-            if dirty {
-                state.setExitGuard(.init(
-                    id: exitGuardID, featureID: tabFeatureID, style: .edits,
-                    title: "Unsaved video edits",
-                    message: "Your trim, rotate, crop, and other edits haven’t been exported. Leaving discards them."))
-            } else {
-                state.clearExitGuard(exitGuardID)
-            }
+        // Also on appear, not only on change: the edits cross with a moving
+        // tab, and the window it lands in inherits none of the guards the
+        // window it left had registered.
+        .task { armGuard() }
+        .onChange(of: hasUnsavedEdits) { _, _ in armGuard() }
+        // Only the player is stopped here. The proxy and the edits are kept —
+        // this also runs when the tab is merely moving, and the guard is
+        // withdrawn by `stopBackgroundWork`, which can tell a close from a move.
+        .onDisappear { player.pause() }
+    }
+
+    /// Register (or withdraw) this tab's leave guard for the edits on screen.
+    ///
+    /// The guard survives a move (`survivesAMove`) because the edits do; the
+    /// prompt is for closing the tab, which really does discard them.
+    private func armGuard() {
+        guard hasUnsavedEdits else {
+            state.clearExitGuard(model.exitGuardID)
+            return
         }
-        .onDisappear {
-            player.pause()
-            state.clearExitGuard(exitGuardID)
-            // The proxy is scratch: nothing refers to it once the editor is
-            // gone, and a transcoded recording is the size of the original.
-            if let proxyURL {
-                try? FileManager.default.removeItem(at: proxyURL)
-                self.proxyURL = nil
-            }
-        }
+        state.setExitGuard(.init(
+            id: model.exitGuardID, featureID: tabFeatureID, style: .edits,
+            title: "Unsaved video edits",
+            message: "Your trim, rotate, crop, and other edits haven’t been exported. Leaving discards them.",
+            survivesAMove: true))
     }
 
     // MARK: player + crop overlay
@@ -560,10 +583,13 @@ struct VideoEditorPane: View {
     // MARK: loading + export
 
     private func loadAsset() async {
+        // A remount with the same video — the tab moved — keeps the player,
+        // the proxy and every edit; only a different source starts over.
+        model.open(source)
         proxyFailed = false
         guard let playable = await resolvePlayableURL() else { return }
         let size = await Self.naturalVideoSize(at: playable)
-        let loaded = try? await asset.load(.duration)
+        let loaded = try? await model.asset?.load(.duration)
         // Both probes complete before anything is published, so a re-keyed task
         // (a different video) writes none of this one's metadata.
         guard !Task.isCancelled else { return }
@@ -602,13 +628,7 @@ struct VideoEditorPane: View {
             proxyFailed = true
             return nil
         }
-        proxyURL = built
-        // A fresh AVPlayer, not `replaceCurrentItem`: a player that already
-        // failed on the original is permanently `.failed` and can't be
-        // recovered by handing it a new item.
-        let swapped = AVURLAsset(url: built)
-        asset = swapped
-        player = AVPlayer(playerItem: AVPlayerItem(asset: swapped))
+        model.playProxy(at: built)
         return built
     }
 

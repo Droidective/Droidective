@@ -218,6 +218,31 @@ survives a move, and is re-armed on the far side from `.task` rather than
 `onChange`, because `dirty` has not changed by the time the new window builds
 the view — only the window it is being read in has.
 
+**A decompiled APK moves with its tab.** jadx and apktool take *minutes* on a
+real APK and produce tens of thousands of files, and the browser used to re-run
+the decompiler from the top on every remount, because `.task(id:)` fires on
+mount and its id — the APK and the decompiler — had not changed. `DecompileModel`
+keeps the tree, the open file and the search, and records in `treeKey` which
+question produced the tree: a remount asking the same one keeps its answer, a
+different APK or decompiler still re-runs. The tools check is skipped the same
+way, so a move doesn't flash the setup gate on its way back to the browser. The
+decompile *in flight* does not survive — it belongs to the view's `.task`, which
+SwiftUI cancels on unmount — and neither does the file tree's expansion, which
+`OutlineGroup` keeps to itself.
+
+**A video and its edits move with their tab.** Two expensive things live in the
+video editor. The **edits** — trim, rotate, crop, speed, and the undo stack
+behind them — are unsaved work: nothing is written until Export. The **proxy**
+is an MP4 ffmpeg builds when AVFoundation can't play the source (an AV1 `.mp4`,
+most `.mkv`), which for a long recording is a transcode of the whole file.
+`VideoEditorModel` holds both, plus the `AVPlayer` itself, so a move doesn't
+reload, re-buffer or lose the playhead; `builtFor` records which source the
+player was built for, so `.task(id:)` can tell a remount from a new video.
+Verified against an AV1 `.mkv`: after the move the video played immediately and
+`droidective-proxy-*` in the temp directory was still the same single file, with
+its original timestamp — and closing the tab deleted it while leaving the
+user-opened source alone.
+
 **Performance and Network Speed deliberately do not move.** Unlike the
 recorder, they are fed by a sampler the view owns, so a preserved buffer with
 the sampler stopped mid-move would have a silent gap in it — worse than being

@@ -40,6 +40,12 @@ struct ScreenRecordView: View {
         get { model.pausedAt }
         nonmutating set { model.pausedAt = newValue }
     }
+    /// The editor's own state, resolved here only so closing it can hand back
+    /// the proxy and the edits along with the recording.
+    private var videoEditor: VideoEditorModel {
+        state.featureState(VideoEditorModel.self, for: tabFeatureID) { VideoEditorModel() }
+    }
+
     private var recordedURL: URL? {
         get { model.recordedURL }
         nonmutating set { model.recordedURL = newValue }
@@ -114,15 +120,18 @@ struct ScreenRecordView: View {
                 VideoEditorPane(source: .recording(url)) {
                     try? FileManager.default.removeItem(at: url)
                     recordedURL = nil
+                    videoEditor.close()
                 }
-                .id(url)
             } else {
                 recordControls
             }
         }
         .recordingDecision(url: Binding(
             get: { model.decisionURL }, set: { model.decisionURL = $0 }
-        )) { recordedURL = $0 }
+        )) { url in
+            recordedURL = url
+            videoEditor.open(.recording(url))
+        }
         .onAppear { RecordAudioPreference.migrate(.standard) }
         .onChange(of: state.devices) {
             guard isRecording, !isStopping, !deviceLost, let recordingSerial,
