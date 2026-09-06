@@ -104,11 +104,7 @@ struct ApkStudioView: View {
                     style: StrokeStyle(lineWidth: dropTargeted ? 2 : 1, dash: [7]))
                 .padding(20)
         }
-        .dropDestination(for: URL.self) { urls, _ in
-            guard let apk = urls.first(where: { $0.pathExtension.lowercased() == "apk" }) else { return false }
-            open(apk)
-            return true
-        } isTargeted: { dropTargeted = $0 }
+        .featureFileDrop(extension: "apk", perform: { open($0) }, isTargeted: { dropTargeted = $0 })
     }
 
     // MARK: - Actions

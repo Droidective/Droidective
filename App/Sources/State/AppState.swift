@@ -387,6 +387,23 @@ final class AppState {
     /// mirrors the running ones via `installOperation` (AppState+Install).
     var installJobs: [InstallJob] = []
 
+    /// Files being copied onto a device by a drop — one entry per batch per
+    /// device, so a Mirror Wall drop shows six independent chips rather than
+    /// one toast that can only describe the last one.
+    var transferJobs: [TransferJob] = []
+
+    /// The task behind each running transfer, so its chip's ✕ can cancel it.
+    /// Ignored by observation: nothing renders a Task, and the dictionary
+    /// churns on every batch.
+    @ObservationIgnored var transferTasks: [UUID: Task<Void, Never>] = [:]
+
+    /// Whether the one-time "drop files here" hint is on screen. Owned by the
+    /// workspace, not the mirror view: that view is rebuilt as its session
+    /// changes, and a hint held in its `@State` flashed for a second and was
+    /// missed rather than lasting its window.
+    var mirrorDropHintVisible = false
+    @ObservationIgnored var mirrorDropHintTask: Task<Void, Never>?
+
     /// Wrap a slow operation so the UI shows what's happening (spinner).
     func withOperation<T: Sendable>(_ label: String, _ work: () async throws -> T) async rethrows -> T {
         // A long task is starting — the in-context moment to ask for

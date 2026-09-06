@@ -85,3 +85,42 @@ private struct MirrorWindowRegistrar: View {
         }
     }
 }
+
+/// Window ▸ Open Mirror in New Window.
+///
+/// A pop-out mirror had exactly one entry point people could find: the last
+/// button on the mirror's control bar, which folds into the `⋯` overflow in a
+/// narrow pane. A menu item is the surface someone actually goes looking in —
+/// and, unlike a button inside the mirror, NSMenu sees its key equivalent
+/// before the mirror's view swallows the event.
+///
+/// A `View` rather than a plain closure because `openWindow` is an environment
+/// action, which only a view can read.
+struct MirrorWindowCommands: View {
+    let core: AppCore
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        // scrcpy can't mirror an iOS Simulator, so those never appear here.
+        let devices = core.readyDevices.filter { $0.platform == .android }
+        if devices.count > 1 {
+            Menu("Open Mirror in New Window") {
+                ForEach(devices) { device in
+                    Button(core.deviceTitle(device)) { open(device.serial) }
+                }
+            }
+        } else {
+            Button("Open Mirror in New Window") {
+                guard let only = devices.first else { return }
+                open(only.serial)
+            }
+            .keyboardShortcut("m", modifiers: [.command, .control])
+            .disabled(devices.isEmpty)
+        }
+    }
+
+    private func open(_ serial: String) {
+        core.frontmost?.prepareMirrorWindow(serial: serial)
+        openWindow(id: MirrorWindow.windowID, value: serial)
+    }
+}

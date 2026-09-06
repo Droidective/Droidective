@@ -60,12 +60,10 @@ struct InstallAppView: View {
                     style: StrokeStyle(lineWidth: dropTargeted ? 2 : 1, dash: [7])
                 )
         }
-        .dropDestination(for: URL.self) { urls, _ in
-            let packages = InstallablePackage.filter(urls)
-            guard !packages.isEmpty else { return false }
-            install(packages)
-            return true
-        } isTargeted: { dropTargeted = $0 }
+        .featureFileDrop(
+            claims: InstallablePackage.filter,
+            perform: { install($0) },
+            isTargeted: { dropTargeted = $0 })
     }
 
     @ViewBuilder private var targetSummary: some View {

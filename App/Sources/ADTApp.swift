@@ -508,6 +508,11 @@ struct ADTApp: App {
                 .keyboardShortcut("f", modifiers: [.command, .shift])
             }
 
+            CommandGroup(after: .windowArrangement) {
+                Divider()
+                MirrorWindowCommands(core: core)
+            }
+
             CommandGroup(after: .toolbar) {
                 Button("Increase Font Size") {
                     appState?.increaseFontSize()

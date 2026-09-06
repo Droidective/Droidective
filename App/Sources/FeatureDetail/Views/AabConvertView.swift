@@ -171,13 +171,14 @@ struct AabConvertView: View {
                 )
                 .padding(20)
         }
-        .dropDestination(for: URL.self) { urls, _ in
-            guard let aab = urls.first(where: { $0.pathExtension.lowercased() == "aab" }) else { return false }
-            converted = nil
-            convertError = nil
-            aabURL = aab
-            return true
-        } isTargeted: { dropTargeted = $0 }
+        .featureFileDrop(
+            extension: "aab",
+            perform: { aab in
+                converted = nil
+                convertError = nil
+                aabURL = aab
+            },
+            isTargeted: { dropTargeted = $0 })
     }
 
     private var stagedCard: some View {
