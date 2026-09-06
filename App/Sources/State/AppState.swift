@@ -632,14 +632,14 @@ final class AppState {
         var jsConsole: JSConsoleSession?
         /// The APK loaded into APK Studio, and which of its tabs was open.
         var apkStudio: ApkStudioSession?
-        /// The moving tab's `FeatureStateStore` model, if it keeps one — the
-        /// buffer or loaded work a rebuilt view would otherwise start without.
-        var featureState: AnyObject?
+        /// Whatever the moving tab kept in `FeatureStateStore` — the buffer or
+        /// loaded work a rebuilt view would otherwise start without.
+        var featureState: [ObjectIdentifier: AnyObject] = [:]
         /// Which feature `featureState` belongs to.
         var featureID: String?
 
         var isEmpty: Bool {
-            terminals == nil && jsConsole == nil && apkStudio == nil && featureState == nil
+            terminals == nil && jsConsole == nil && apkStudio == nil && featureState.isEmpty
         }
     }
 
@@ -888,6 +888,14 @@ final class AppState {
         var style: Style
         var title: String
         var message: String
+        /// Whether the work this guards travels with a moving tab. A guard says
+        /// "leaving destroys this" — true of closing the tab either way, but a
+        /// *move* destroys nothing for a recording that writes through a
+        /// headless session or markup held in the window's `FeatureStateStore`,
+        /// so those move without asking. Per guard rather than per feature: one
+        /// feature id can carry either kind (the mirror's recording guard and
+        /// its screenshot editor's both key on `scrcpy`).
+        var survivesAMove = false
     }
 
     /// A navigation held back until the user resolves the active `ExitGuard`.
@@ -1251,6 +1259,15 @@ final class AppState {
             setRecording(false, owner: "screen-record")
             clearExitGuard(recording.exitGuardID)
             if reason == .closing { recording.abortAndDiscard() }
+        }
+        // Unsaved screenshot markup crosses with a moving tab — its model
+        // travels in `MovedSessions` — so a move only hands back the leave
+        // guard this window registered, and the window it lands in re-arms the
+        // same one. A close gives up the markup with the tab, which is exactly
+        // what the guard just asked about.
+        if let editor = core.featureStates.existing(
+            ScreenshotEditorModel.self, feature: id, in: self.id) {
+            clearExitGuard(editor.exitGuardID)
         }
         if id == "terminal", reason == .closing {
             // Implicit teardown (feature tab closed, background window close,

@@ -8,67 +8,130 @@ import SwiftUI
 struct ScreenshotEditorView: View {
     @Environment(AppState.self) private var state
     @Environment(\.tabFeatureID) private var tabFeatureID
-    /// Discard the current capture and return to the capture controls.
-    let onClose: () -> Void
+    /// The capture and the markup on it, held by whoever outlives this view —
+    /// the window's `FeatureStateStore` for a tab, the pop-out mirror window
+    /// for its own. See `ScreenshotEditorModel`.
+    let model: ScreenshotEditorModel
 
-    @State private var image: NSImage
-    @State private var annotations: [Annotation] = []
-    /// Past / future states for ⌘Z / ⇧⌘Z — each snapshot is the full
-    /// (image, annotations) pair, so undo also reverses a clear or a crop.
-    @State private var undoStack: [EditorSnapshot] = []
-    @State private var redoStack: [EditorSnapshot] = []
+    /// The stroke or shape being drawn right now. View state, not the model's:
+    /// a drag ends with the mouse button, so there is nothing here for a move
+    /// to carry.
     @State private var draft: Annotation?
-    @State private var tool: MarkupTool = .pen
-    @State private var color: Color = .red
-    @State private var width: CGFloat = 6
-    @State private var redactStyle: RedactStyle = .blur
-    /// 1.0 == fit-to-view; the displayed scale is `fit * zoom`.
-    @State private var zoom: CGFloat = 1
-    @State private var pinchAnchor: CGFloat = 1
-    @State private var cropping = false
-    @State private var cropRect: CGRect?
-    /// Crop-box rotation in radians.
-    @State private var cropRotation: Double = 0
     /// What the current crop-mode drag is doing, and the box when it began.
     @State private var cropDrag: CropDragMode = .none
     @State private var cropDragOrigin: CGRect?
     @State private var cropDragStart: CGPoint = .zero
-    /// Normalized location of the text field currently being typed (nil = none).
-    @State private var textPoint: CGPoint?
-    @State private var editingText = ""
-    @State private var lastSavedURL: URL?
     @FocusState private var textFocused: Bool
-    /// Select-mode editing: tap an existing annotation to select it, drag its
-    /// body to move it, drag a handle to resize it.
-    @State private var selecting = false
-    @State private var selectedID: Annotation.ID?
+    /// Select-mode dragging: which handle was grabbed, and the annotation as it
+    /// was when the drag began, so each frame transforms from the original
+    /// rather than accumulating drift.
     @State private var selectDragActive = false
     @State private var selectDragMode: SelectDragMode = .none
-    /// The selected annotation as it was when the drag began, so each frame
-    /// transforms from the original rather than accumulating drift.
     @State private var selectDragOrigin: Annotation?
     @State private var selectDragStart: CGPoint = .zero
     @State private var selectDidEdit = false
-    /// Redact defaults for new regions (per-annotation values live on `Annotation`).
-    @State private var blurStrength: Double = 0.4
-    @State private var fillOpacity: Double = 1
-    /// The text annotation currently being re-edited (nil = placing new text).
-    @State private var editingTextID: Annotation.ID?
-    /// Identifies this view's leave guard so a stale clear can't wipe another's.
-    @State private var exitGuardID = UUID()
-    /// Unsaved markup/edits exist — drives the leave prompt. Reset on save/copy.
-    @State private var dirty = false
+
+    // The editor's own state, read and written through the model so that
+    // moving the tab it lives in doesn't restart the edit. Accessors rather
+    // than direct `model.` access: this view is a thousand lines of drawing
+    // code that predates the model, and the two must not drift.
+    /// The capture being edited. The hosts render this view exactly while the
+    /// model holds one, so the empty fallback is unreachable — it exists
+    /// because everything downstream of here draws into a real image.
+    private var image: NSImage {
+        get { model.image ?? NSImage() }
+        nonmutating set { model.image = newValue }
+    }
+    private var annotations: [Annotation] {
+        get { model.annotations }
+        nonmutating set { model.annotations = newValue }
+    }
+    private var undoStack: [EditorSnapshot] {
+        get { model.undoStack }
+        nonmutating set { model.undoStack = newValue }
+    }
+    private var redoStack: [EditorSnapshot] {
+        get { model.redoStack }
+        nonmutating set { model.redoStack = newValue }
+    }
+    private var tool: MarkupTool {
+        get { model.tool }
+        nonmutating set { model.tool = newValue }
+    }
+    private var color: Color {
+        get { model.color }
+        nonmutating set { model.color = newValue }
+    }
+    private var width: CGFloat {
+        get { model.width }
+        nonmutating set { model.width = newValue }
+    }
+    private var redactStyle: RedactStyle {
+        get { model.redactStyle }
+        nonmutating set { model.redactStyle = newValue }
+    }
+    private var blurStrength: Double {
+        get { model.blurStrength }
+        nonmutating set { model.blurStrength = newValue }
+    }
+    private var fillOpacity: Double {
+        get { model.fillOpacity }
+        nonmutating set { model.fillOpacity = newValue }
+    }
+    private var zoom: CGFloat {
+        get { model.zoom }
+        nonmutating set { model.zoom = newValue }
+    }
+    private var pinchAnchor: CGFloat {
+        get { model.pinchAnchor }
+        nonmutating set { model.pinchAnchor = newValue }
+    }
+    private var cropping: Bool {
+        get { model.cropping }
+        nonmutating set { model.cropping = newValue }
+    }
+    private var cropRect: CGRect? {
+        get { model.cropRect }
+        nonmutating set { model.cropRect = newValue }
+    }
+    private var cropRotation: Double {
+        get { model.cropRotation }
+        nonmutating set { model.cropRotation = newValue }
+    }
+    private var selecting: Bool {
+        get { model.selecting }
+        nonmutating set { model.selecting = newValue }
+    }
+    private var selectedID: Annotation.ID? {
+        get { model.selectedID }
+        nonmutating set { model.selectedID = newValue }
+    }
+    private var editingTextID: Annotation.ID? {
+        get { model.editingTextID }
+        nonmutating set { model.editingTextID = newValue }
+    }
+    private var textPoint: CGPoint? {
+        get { model.textPoint }
+        nonmutating set { model.textPoint = newValue }
+    }
+    private var editingText: String {
+        get { model.editingText }
+        nonmutating set { model.editingText = newValue }
+    }
+    private var lastSavedURL: URL? {
+        get { model.lastSavedURL }
+        nonmutating set { model.lastSavedURL = newValue }
+    }
+    private var dirty: Bool {
+        get { model.dirty }
+        nonmutating set { model.dirty = newValue }
+    }
 
     private static let palette: [Color] = [.red, .orange, .yellow, .green, .blue, .purple, .black, .white]
     private static let widths: [(String, CGFloat)] = [("Thin", 3), ("Medium", 6), ("Thick", 12)]
     /// Cap the undo history so a long session can't grow it without bound. A crop
     /// replaces the base image, so a snapshot can hold a full-resolution copy.
     private static let maxUndo = 50
-
-    init(image: NSImage, onClose: @escaping () -> Void) {
-        _image = State(initialValue: image)
-        self.onClose = onClose
-    }
 
     private var pixelSize: CGSize { ScreenshotMarkup.pixelSize(of: image) }
 
@@ -127,6 +190,19 @@ struct ScreenshotEditorView: View {
             }
         )
     }
+    // The controls the model backs directly. `Bindable` would do for one
+    // property; these read through the accessors above so every write to the
+    // model goes through the same door.
+    private var colorBinding: Binding<Color> {
+        Binding(get: { color }, set: { color = $0 })
+    }
+    private var widthBinding: Binding<CGFloat> {
+        Binding(get: { width }, set: { width = $0 })
+    }
+    private var editingTextBinding: Binding<String> {
+        Binding(get: { editingText }, set: { editingText = $0 })
+    }
+
     private func updateAnnotation(_ id: Annotation.ID, _ mutate: (inout Annotation) -> Void) {
         guard let index = annotations.firstIndex(where: { $0.id == id }) else { return }
         mutate(&annotations[index])
@@ -147,17 +223,38 @@ struct ScreenshotEditorView: View {
         // Delete / Backspace removes the selected annotation. Skipped while a text
         // label is being edited so the field's own deletion keeps working.
         .onDeleteCommand { if editingTextID == nil { deleteSelected() } }
-        .onChange(of: dirty) { _, isDirty in
-            if isDirty {
-                state.setExitGuard(.init(
-                    id: exitGuardID, featureID: tabFeatureID, style: .edits,
-                    title: "Unsaved screenshot",
-                    message: "Your annotations and edits haven’t been saved. Leaving discards them."))
-            } else {
-                state.clearExitGuard(exitGuardID)
-            }
+        // Also on appear, not only on change: unsaved markup crosses with a
+        // moving tab, and the window it lands in inherits none of the guards
+        // the window it left had registered. `dirty` hasn't changed, so
+        // `onChange` alone would leave the new window free to close the tab on
+        // work it never asked about.
+        .task { armGuard() }
+        .onChange(of: dirty) { _, _ in armGuard() }
+    }
+
+    /// Register (or withdraw) this tab's leave guard for the markup on screen.
+    ///
+    /// The guard survives a move (`survivesAMove`) because the markup does:
+    /// asking "leaving discards them" for a move that discards nothing is a
+    /// prompt the user has to read to find out it didn't matter. Closing the
+    /// tab still asks — that is the route which really does throw it away.
+    private func armGuard() {
+        guard dirty else {
+            state.clearExitGuard(model.exitGuardID)
+            return
         }
-        .onDisappear { state.clearExitGuard(exitGuardID) }
+        state.setExitGuard(.init(
+            id: model.exitGuardID, featureID: tabFeatureID, style: .edits,
+            title: "Unsaved screenshot",
+            message: "Your annotations and edits haven’t been saved. Leaving discards them.",
+            survivesAMove: true))
+    }
+
+    /// Discard the capture and return the host to whatever it shows without
+    /// one — the capture controls, the live mirror, the wall.
+    private func close() {
+        state.clearExitGuard(model.exitGuardID)
+        model.close()
     }
 
     /// Undo/redo are unavailable while a text label is being typed, so ⌘Z falls
@@ -177,7 +274,7 @@ struct ScreenshotEditorView: View {
 
     private var toolbar: some View {
         HStack(spacing: 12) {
-            Button { onClose() } label: {
+            Button { close() } label: {
                 Image(systemName: "chevron.backward").frame(width: 26, height: 24).contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -230,7 +327,7 @@ struct ScreenshotEditorView: View {
                 // Native color picker, masked behind a color-wheel "logo" so it
                 // reads as "pick any color" instead of a plain swatch. The wheel
                 // is non-interactive, so taps fall through to the picker.
-                ColorPicker("", selection: $color, supportsOpacity: false)
+                ColorPicker("", selection: colorBinding, supportsOpacity: false)
                     .labelsHidden()
                     .frame(width: 20, height: 20)
                     .clipShape(Circle())
@@ -249,7 +346,7 @@ struct ScreenshotEditorView: View {
 
             Divider().frame(height: 22)
 
-            Picker("", selection: $width) {
+            Picker("", selection: widthBinding) {
                 ForEach(Self.widths, id: \.1) { Text($0.0).tag($0.1) }
             }
             .labelsHidden()
@@ -582,7 +679,7 @@ struct ScreenshotEditorView: View {
             // position the moment it's committed.
             let fontSize = max(11, display.width * 0.03 * (activeTextWidth / 6))
             let fieldWidth = max(120, display.width - point.x - 8)
-            TextField("Type, then ⏎", text: $editingText)
+            TextField("Type, then ⏎", text: editingTextBinding)
                 .textFieldStyle(.plain)
                 .font(.system(size: fontSize, weight: .semibold))
                 .foregroundStyle(activeTextColor)
@@ -851,7 +948,7 @@ struct ScreenshotEditorView: View {
             } else {
                 zoomControls
                 Spacer()
-                Button { onClose() } label: { Label("New", systemImage: "camera") }
+                Button { close() } label: { Label("New", systemImage: "camera") }
                     .help("Discard and take another")
                 if let lastSavedURL {
                     Button { NSWorkspace.shared.activateFileViewerSelecting([lastSavedURL]) } label: {

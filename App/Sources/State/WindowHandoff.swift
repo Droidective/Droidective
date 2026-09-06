@@ -91,21 +91,12 @@ extension AppState {
         // A guard means "leaving destroys this work" — but for a feature whose
         // work crosses with the tab, a move destroys nothing, so asking would be
         // asking about a loss that is not going to happen.
-        if exitGuards[featureID] != nil, !Self.workSurvivesAMove.contains(featureID) {
+        if let guarded = exitGuards[featureID], !guarded.survivesAMove {
             holdBehindGuard(.handoff(featureID, destination))
             return
         }
         core.completeHandoff(featureID, from: id, to: destination)
     }
-
-    /// Features whose in-flight work travels with the tab, so moving one needs
-    /// no confirmation even though closing it would.
-    ///
-    /// Only the screen recorder qualifies today: it writes through a headless
-    /// session that owes nothing to its view. The performance and network
-    /// captures are fed by a sampler the view owns, so a move really does stop
-    /// them and they keep their prompt.
-    static let workSurvivesAMove: Set<String> = ["screen-record"]
 
     /// Whether this tab can go to that destination. A window of its own needs
     /// something to stay behind here; another *open* window does not, because

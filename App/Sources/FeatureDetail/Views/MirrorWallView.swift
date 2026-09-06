@@ -16,6 +16,7 @@ let mirrorWallColumnsKey = "mirrorWallColumns"
 /// out into its own window.
 struct MirrorWallView: View {
     @Environment(AppState.self) private var state
+    @Environment(\.tabFeatureID) private var tabFeatureID
     @Environment(\.tabIsActive) private var tabIsActive
     @Environment(\.openWindow) private var openWindow
     @AppStorage(mirrorWallColumnsKey) private var manualColumns = 0
@@ -25,7 +26,6 @@ struct MirrorWallView: View {
     @State private var dragging: String?
     @State private var dropSlot: DropSlot?
     @State private var pendingScreenshot: NSImage?
-    @State private var editingScreenshot: NSImage?
 
     /// Where a dragged tile would land: before a serial, or at the end.
     enum DropSlot: Equatable {
@@ -33,16 +33,23 @@ struct MirrorWallView: View {
         case end
     }
 
+    /// A tile's screenshot and the markup on it, held by the window rather
+    /// than by this view, so moving the wall's tab doesn't throw away an
+    /// annotation in progress.
+    private var editor: ScreenshotEditorModel {
+        state.featureState(ScreenshotEditorModel.self, for: tabFeatureID) { ScreenshotEditorModel() }
+    }
+
     var body: some View {
         ZStack {
-            if let editingScreenshot {
-                ScreenshotEditorView(image: editingScreenshot) { self.editingScreenshot = nil }
+            if editor.image != nil {
+                ScreenshotEditorView(model: editor)
             } else {
                 wallContent
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .imageDecision(image: $pendingScreenshot) { editingScreenshot = $0 }
+        .imageDecision(image: $pendingScreenshot) { editor.open($0) }
         .task {
             // A wall that has been shut down is inert for good (that's what
             // stops it resurrecting sessions during teardown), so a view whose

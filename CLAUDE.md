@@ -526,18 +526,36 @@ table) is in `docs/reactotron-mcp-analysis.md`.
     skips them on `.handoff`; per-window session objects (`TerminalManager`,
     `JSConsoleSession`, `ApkStudioSession`) cross in `MovedSessions`, leaving a
     fresh one behind; everything else keeps its state in a model held per
-    (window, feature) by **`FeatureStateStore`**, which is *not* `@Observable`
-    on purpose — views resolve their model from `body` and resolving creates
-    one, so an observed container would loop. A feed must also clear its buffer
+    (window, feature, model type) by **`FeatureStateStore`**, which is *not*
+    `@Observable` on purpose — views resolve their model from `body` and
+    resolving creates one, so an observed container would loop. The type is
+    part of the key because one tab can keep two unrelated things (the mirror's
+    session and, while a capture is open, the screenshot editor's markup); they
+    move and are discarded together. A feed must also clear its buffer
     only when the *question* changed (`bufferKey`), not on every `.task(id:)`
     restart, and must not replay into a buffer that already holds those lines
     (`-T 0` on a keeping restart). A *screen recording* moves too — it
     writes through a headless session and the view only polls it for a preview
     — so its abort and file deletion had to leave `onDisappear` (which also
-    runs on a move) for `stopBackgroundWork`, and `workSurvivesAMove` stops the
-    leave guard asking about a loss that will not happen. Performance and
+    runs on a move) for `stopBackgroundWork`. Performance and
     Network Speed do *not* move: their sampler dies with the view, so a
     preserved buffer would have a silent gap.
+  - **A leave guard whose work travels says so, per guard.**
+    `ExitGuard.survivesAMove` stops a move asking about a loss that will not
+    happen (the screen recorder's take, the screenshot editor's markup) while
+    closing the tab still asks. It is on the guard rather than the feature id
+    because one id can carry either kind — the mirror's recording guard and its
+    screenshot editor's both key on `scrcpy`. The far side has to *re-arm* it
+    from `.task`: the new window inherits none of the old one's guards, and
+    `onChange` won't fire because nothing about the work changed.
+  - **A view that embeds in several tabs keys its state by `tabFeatureID`.**
+    The screenshot editor opens inside the Screenshot tab, the mirror and the
+    Mirror Wall, so `ScreenshotEditorModel` is resolved per tab id and its
+    `image` doubles as "is an editor open here" — the hosts ask the model
+    instead of each keeping a flag that a move would lose. The pop-out mirror
+    window keeps its editor in the view instead: it is not a tab, cannot move,
+    and reads whichever workspace is frontmost, so a store entry would be
+    shared with the other pop-outs.
   - **A live NSView can only be mounted by the window that owns its session.**
     `NativeTerminalView` re-parents one cached terminal view into whatever
     container SwiftUI hands it. During a move the receiving pane *and* the

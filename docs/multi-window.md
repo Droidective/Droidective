@@ -194,7 +194,7 @@ Two details decide whether a preserved buffer actually *looks* right:
 headless scrcpy session that owes nothing to the view — the view only polls it
 for a preview frame — so a move re-arms the preview, the device lock and the
 leave guard in the receiving window and the take never stops. Moving therefore
-asks nothing (`workSurvivesAMove`), while *closing* still does: the abort and
+asks nothing (`ExitGuard.survivesAMove`), while *closing* still does: the abort and
 the file deletion moved out of `onDisappear`, which also runs on a move, into
 `stopBackgroundWork(for:reason:)` where close and move are told apart. A
 finished take awaiting Save/Discard/Edit travels too — it is a file the user has
@@ -202,6 +202,21 @@ not decided about yet. Verified end to end: recording started, tab moved
 mid-take, stopped in the new window, one continuous 48.02 s file whose duration
 matches wall-clock start to stop; and closing still prompts, discards, and
 leaves no scrcpy process behind.
+
+**An unsaved screenshot moves with its tab.** The annotation editor writes
+nothing to disk until Save or Copy, so everything in it — the capture, the
+markup, the undo history that can take any of it back — is work that exists
+only in the app. `ScreenshotEditorModel` holds all of it, including the capture
+itself: `image` doubles as "is an editor open in this tab", so the three hosts
+(the Screenshot tab, the mirror, the Mirror Wall) ask the model rather than each
+keeping a flag of their own, and none of them can lose the editor by losing
+their own state. The pop-out mirror window is the one exception and keeps its
+editor in the view: it is not a tab, so it cannot move, and it reads whichever
+workspace is frontmost — a `FeatureStateStore` entry would be shared with the
+other pop-outs and would follow the user between windows. Its leave guard also
+survives a move, and is re-armed on the far side from `.task` rather than
+`onChange`, because `dirty` has not changed by the time the new window builds
+the view — only the window it is being read in has.
 
 **Performance and Network Speed deliberately do not move.** Unlike the
 recorder, they are fed by a sampler the view owns, so a preserved buffer with
@@ -214,12 +229,17 @@ does.
 Moving a tab unmounts its view exactly as closing it does, so the same two
 confirmations apply, checked in the order `closeTab` checks them:
 
-- a live recording or unsaved edit → `PendingExit.handoff`, which reuses the
+- a live recording or unsaved edit *that a move would destroy* →
+  `PendingExit.handoff`, which reuses the
   guard the feature registered ("Recording in progress — leaving will stop the
   screen recording. Save it first, or discard it.") with its usual Stop & Save /
   Discard / Keep Recording. The wording is the *guard's*, not the destination's,
   and stays accurate because a move is a kind of leaving — the guard describes
-  the work at risk, which is the same whichever way the tab goes;
+  the work at risk, which is the same whichever way the tab goes. A guard whose
+  work travels (`survivesAMove` — the screen recorder's, the screenshot
+  editor's) skips this and moves silently; the flag is on the *guard* rather
+  than the feature because one feature id can carry either kind, the mirror's
+  recording guard and its screenshot editor's both keying on `scrcpy`;
 - open terminal shells → `TerminalClosePrompt.handoff` ("…closes 3 shells. They
   reopen in the same directories."). Not silent, because killing someone's
   running `npm start` should not be — and the directories ride into the seed via

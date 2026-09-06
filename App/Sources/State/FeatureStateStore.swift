@@ -11,7 +11,7 @@ import Foundation
 /// — it is a restart wearing a move's clothes.
 ///
 /// So those features keep their state in a model object held here instead,
-/// keyed by the window and the feature. The view resolves its model each time
+/// keyed by the window, the feature, and the model's type. The view resolves it each time
 /// it renders and gets the same one back; a tab moving between windows re-keys
 /// the entry rather than dropping it.
 ///
@@ -23,20 +23,22 @@ import Foundation
 /// reason `LogRowFrames` and `MainThreadLoad` are plain reference boxes.)
 @MainActor
 final class FeatureStateStore {
-    private var models: [WorkspaceID: [String: AnyObject]] = [:]
+    /// window → feature → model type → model. Keyed by type as well as
+    /// feature because one tab can keep two unrelated things: the mirror keeps
+    /// its live session *and*, when a capture is open, the screenshot editor's
+    /// markup. They move and are discarded together, which is what makes the
+    /// feature the middle key rather than the last one.
+    private var models: [WorkspaceID: [String: [ObjectIdentifier: AnyObject]]] = [:]
 
     /// This window's model for `feature`, created on first use.
     ///
-    /// `make` runs at most once per (window, feature). A stored object of a
-    /// different type is replaced rather than crashing the app: the only way
-    /// that happens is a feature changing its model type across a build, and a
-    /// lost buffer beats a trap.
+    /// `make` runs at most once per (window, feature, type).
     func model<T: AnyObject>(
         _ type: T.Type, feature: String, in workspace: WorkspaceID, make: () -> T
     ) -> T {
-        if let existing = models[workspace]?[feature] as? T { return existing }
+        if let existing = models[workspace]?[feature]?[ObjectIdentifier(type)] as? T { return existing }
         let created = make()
-        models[workspace, default: [:]][feature] = created
+        models[workspace, default: [:]][feature, default: [:]][ObjectIdentifier(type)] = created
         return created
     }
 
@@ -45,25 +47,25 @@ final class FeatureStateStore {
     /// outside the view — a tab closing, say — can ask about state without
     /// bringing it into existence.
     func existing<T: AnyObject>(_ type: T.Type, feature: String, in workspace: WorkspaceID) -> T? {
-        models[workspace]?[feature] as? T
+        models[workspace]?[feature]?[ObjectIdentifier(type)] as? T
     }
 
-    /// Take `feature`'s model out, for a tab moving to another window. Returns
-    /// nil when the feature never built one (it was never opened, or it keeps
-    /// nothing worth moving).
-    func take(feature: String, in workspace: WorkspaceID) -> AnyObject? {
-        let model = models[workspace]?[feature]
+    /// Take everything `feature` keeps out, for a tab moving to another window.
+    /// Empty when the feature never built anything (it was never opened, or it
+    /// keeps nothing worth moving).
+    func take(feature: String, in workspace: WorkspaceID) -> [ObjectIdentifier: AnyObject] {
+        let taken = models[workspace]?[feature] ?? [:]
         models[workspace]?[feature] = nil
-        return model
+        return taken
     }
 
-    /// Put a model taken from another window under this one.
-    func put(_ model: AnyObject?, feature: String, in workspace: WorkspaceID) {
-        guard let model else { return }
-        models[workspace, default: [:]][feature] = model
+    /// Put models taken from another window under this one.
+    func put(_ taken: [ObjectIdentifier: AnyObject], feature: String, in workspace: WorkspaceID) {
+        guard !taken.isEmpty else { return }
+        models[workspace, default: [:]][feature] = taken
     }
 
-    /// Forget `feature`'s model — its tab closed, so its buffer should not
+    /// Forget what `feature` kept — its tab closed, so its buffer should not
     /// outlive it and reappear when the feature is opened again.
     func discard(feature: String, in workspace: WorkspaceID) {
         models[workspace]?[feature] = nil

@@ -7,15 +7,20 @@ import SwiftUI
 /// global hotkey, or the menu bar instead save straight to the capture folder.
 struct ScreenshotView: View {
     @Environment(AppState.self) private var state
-    @State private var image: NSImage?
+    @Environment(\.tabFeatureID) private var tabFeatureID
     @State private var capturing = false
     @AppStorage("screenshotDelay") private var captureDelay = 0
 
+    /// The capture and its markup, held by the window rather than by this view,
+    /// so moving the tab doesn't throw away an annotation in progress.
+    private var editor: ScreenshotEditorModel {
+        state.featureState(ScreenshotEditorModel.self, for: tabFeatureID) { ScreenshotEditorModel() }
+    }
+
     var body: some View {
         Group {
-            if let image {
-                ScreenshotEditorView(image: image) { self.image = nil }
-                    .id(ObjectIdentifier(image))
+            if editor.image != nil {
+                ScreenshotEditorView(model: editor)
             } else {
                 captureControls
             }
@@ -72,7 +77,7 @@ struct ScreenshotView: View {
         capturing = true
         Task {
             if let shot = await state.captureForEditor(delaySeconds: captureDelay) {
-                image = shot
+                editor.open(shot)
             }
             capturing = false
         }

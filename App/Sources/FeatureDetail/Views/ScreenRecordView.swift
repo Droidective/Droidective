@@ -421,7 +421,8 @@ struct ScreenRecordView: View {
             state.setExitGuard(.init(
                 id: exitGuardID, featureID: tabFeatureID, style: .recording,
                 title: "Recording in progress",
-                message: "Leaving will stop the screen recording. Save it first, or discard it."))
+                message: "Leaving will stop the screen recording. Save it first, or discard it.",
+                survivesAMove: true))
             scheduleTimeLimit(remaining: TimeInterval(options.timeLimitSeconds))
         } catch {
             state.showToast(Toast(message: error.localizedDescription, ok: false))
@@ -536,7 +537,8 @@ struct ScreenRecordView: View {
         state.setExitGuard(.init(
             id: exitGuardID, featureID: tabFeatureID, style: .recording,
             title: "Recording in progress",
-            message: "Leaving will stop the screen recording. Save it first, or discard it."))
+            message: "Leaving will stop the screen recording. Save it first, or discard it.",
+            survivesAMove: true))
     }
 
     private func stopPreviewPolling() {
