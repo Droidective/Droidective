@@ -163,7 +163,7 @@ public actor ReactotronRelay {
 
         let host = loopbackOnly ? "127.0.0.1" : "0.0.0.0"
         do {
-            channel = try await bootstrap.bind(host: host, port: port).get()
+            channel = try await Self.bindRetryingAddressInUse(bootstrap, host: host, port: port)
         } catch {
             // The one failure worth naming: another Reactotron — upstream's app,
             // or a second copy of this one — already has the port. "Address
@@ -179,6 +179,47 @@ public actor ReactotronRelay {
         }
         settle(into: .running)
         emit(.listening(port: boundPort ?? port))
+    }
+
+    /// How long a bind keeps retrying `EADDRINUSE` before reporting it.
+    ///
+    /// Short enough that a genuine holder — upstream's Reactotron app, a second
+    /// copy of this one — is still reported promptly, long enough to outlast our
+    /// own previous listener finishing its teardown.
+    private static let rebindAttempts = 6
+    private static let rebindDelay = Duration.milliseconds(40)
+
+    /// Binds, retrying `EADDRINUSE` for a bounded window.
+    ///
+    /// `stop()` awaits the channel's `closeFuture` *and* the event-loop group's
+    /// graceful shutdown, which are the strongest completion signals NIO offers,
+    /// and it is still possible for a bind moments later to be refused. The
+    /// window is between the last fd closing and the kernel releasing the
+    /// listening socket, and no future can report the second one — `SO_REUSEADDR`
+    /// does not cover it either, because that waives `TIME_WAIT`, not a socket
+    /// still in `LISTEN`.
+    ///
+    /// So this is not a workaround for a teardown that returns early. It is the
+    /// ordinary handling for acquiring a contended kernel resource: retry
+    /// briefly, then report. `stoppingReleasesThePort` is what caught it —
+    /// twice on CI, on the *second* bind of a port this process had just
+    /// released, which is the case a foreign holder cannot explain.
+    ///
+    /// Only `EADDRINUSE` is retried. Every other bind failure is a fact that a
+    /// second attempt cannot change, and retrying it would just delay the error.
+    private static func bindRetryingAddressInUse(
+        _ bootstrap: ServerBootstrap, host: String, port: Int
+    ) async throws -> any Channel {
+        for attempt in 1... {
+            do {
+                return try await bootstrap.bind(host: host, port: port).get()
+            } catch let error as IOError where error.errnoCode == EADDRINUSE {
+                guard attempt < rebindAttempts else { throw error }
+                try? await Task.sleep(for: rebindDelay)
+            }
+        }
+        // `1...` never terminates; the loop leaves via return or throw.
+        throw RelayError.bindFailed("unreachable")
     }
 
     /// An event stream. Several may be open at once — the timeline reads one and
