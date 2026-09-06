@@ -1,3 +1,86 @@
+## Droidective v3.11.0
+
+Two new ways to get things onto a device — drop a file on the mirror, or pair
+by showing the phone a QR code — and streaming feeds that cost half as much
+while nobody is looking at them.
+
+### Drop files onto a mirror
+
+- **Drag an app package onto the mirror and it installs on that device.**
+  Anything else — a photo, a PDF, a folder — copies to `/sdcard/Download` and
+  is handed to the device's media library, so a dropped screenshot turns up in
+  the Gallery rather than only in Files.
+- **The mirror says what will happen before you let go.** "Install on Pixel 7",
+  "Copy 3 files to Pixel 7", with the destination named. A drop that replaces
+  an app or writes to storage should not be a surprise.
+- **Every mirror takes drops** — the Mirror Screen tab, a popped-out window,
+  and each Mirror Wall tile. A tile is a device, not a picture of one: a file
+  dropped on the third tile goes to the third device whatever the device bar
+  is pointed at, and six tiles take six independent transfers.
+- **Installing asks first, and says what it is replacing.** The prompt reads
+  the package and the device and shows the version it is moving from and to,
+  with the button named for what will actually happen — Install, Update,
+  Reinstall, or Downgrade & Replace. A downgrade says up front that app data
+  cannot be kept, because Android will not do one in place.
+- **A failed install offers the fix.** A package signed with a different key
+  cannot install over the copy already on the device; that failure now carries
+  an Uninstall & Install button instead of a message you have to act on
+  yourself. Failures an uninstall would not fix — a full disk, the wrong CPU —
+  do not offer it.
+- **Copies report a real percentage and can be stopped.** A large file shows
+  how far it has got rather than a spinner, and cancelling removes the
+  half-written file from the device.
+
+### Nothing dropped on the app is ignored
+
+- **A file dropped on a screen that has nothing to do with it now lands
+  somewhere useful.** An app package opens the package screen, a video opens
+  the Video Editor, anything else copies to the selected device — and the
+  window says which before you let go. An APK dropped on Reactotron used to do
+  nothing at all, with nothing on screen saying why.
+- **Files opened from Finder take the same route**, so double-clicking a file
+  and dragging one in can no longer disagree about where it belongs.
+
+### Pair over Wi-Fi by scanning a QR code
+
+- **Show a code, point the phone at it, done.** Settings ▸ Developer options ▸
+  Wireless debugging ▸ Pair device with QR code reads it, and the pairing
+  finishes with nothing typed on either side.
+- **It removes the two things that go wrong on the typed path**: the pairing
+  port, which is random per session and is *not* the port on the Wireless
+  debugging screen, and a six-digit code that expires while you are typing it.
+- **The device dropdown's "Pair new device…" now opens this.** The typed-code
+  path sits beside it as "Pair with a code…", unchanged.
+
+### Feeds cost less while you are not watching
+
+- **Logcat, the JS Console, the Reactotron timeline and iOS Logs pace
+  themselves** by whether anyone can see them and by how busy the app already
+  is: four times a second on screen and in front, once a second on screen
+  behind another app, and every five seconds while hidden behind another tab.
+- **Hidden is a pace, not a pause.** Nothing is dropped, and returning to a
+  feed flushes it at once, so the longer interval is never what you wait on.
+- **A feed left open while you work elsewhere costs about half what it did.**
+  With a device streaming 300 log lines a second, a hidden tab measured 17.7%
+  CPU in v3.10.0 and 8.7% here. Nearly every report of the app becoming
+  unresponsive came from that state — a feed running at full speed for a window
+  nobody was looking at.
+
+### Fixes
+
+- **The pairing code no longer appears in the Command Log.** It is a
+  credential for adb access to your device, and the log is what gets copied
+  out of Settings into a bug report. The endpoint is kept; the code is masked.
+- **The mirror's own window is easier to find.** It has existed since v2.9.2,
+  behind the last button on the mirror's control bar — which folds into an
+  overflow menu as soon as the pane is narrow. It is now Window ▸ Open Mirror
+  in New Window (⌃⌘M), and a row in the device dropdown.
+
+### Install
+
+Download the DMG, drag Droidective to Applications, and open it. Existing
+installs update themselves.
+
 ## Droidective v3.10.0
 
 Four fixes to what the app does while you are not watching it, and a wider
