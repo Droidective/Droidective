@@ -115,8 +115,14 @@ public enum LogcatLineParser {
 /// yields debounced batches. One session per streamer; restarting stops the
 /// previous process.
 public actor LogcatStreamer {
-    static let flushInterval: Duration = .milliseconds(300)
     static let maxBatch = 500
+
+    /// Flush pacing. The App layer sets this from `FeedFlushCadence` — this
+    /// actor is portable and can see neither app activation nor whether the
+    /// tab is on screen, and a mounted hidden tab lays out every row it is
+    /// handed. Defaults to the pace a visible feed in a frontmost app gets, so
+    /// a caller that never sets it behaves as before.
+    private var flushInterval = FeedFlushCadence.base(appActive: true, watched: true)
 
     private let client: AdbClient
     private var process: Process?
@@ -213,11 +219,25 @@ public actor LogcatStreamer {
         }
         flusherTask = Task {
             while !Task.isCancelled {
-                try? await Task.sleep(for: Self.flushInterval)
+                try? await Task.sleep(for: self.flushInterval)
                 self.flush(epoch: sessionEpoch)
             }
         }
         return stream
+    }
+
+    /// Re-pace the flusher. Takes effect on the flusher's next turn, so a
+    /// caller can call it as often as visibility or load changes.
+    public func setFlushInterval(_ interval: Duration) {
+        flushInterval = interval
+    }
+
+    /// Yield whatever is buffered right now. The App layer calls this when a
+    /// hidden feed becomes visible: the hidden pace is several seconds, and
+    /// waiting it out would show the user a feed that looks stalled at the
+    /// moment they switched to it.
+    public func flushNow() {
+        flush(epoch: epoch)
     }
 
     public func stop() {

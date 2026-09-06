@@ -490,6 +490,33 @@ table) is in `docs/reactotron-mcp-analysis.md`.
     releases its device, the still-mounted wall starts a session on it, and that
     session outlives the process — the leak this feature was caught doing once.
 
+- **A streaming feed is paced by who can see it and how busy the main thread
+  is** — never by a bare timer. All four feeds (Reactotron, JS Console, logcat,
+  iOS logs) go through `FeedFlushCadence`, and adding a fifth means passing all
+  three inputs: `appActive`, `watched`, `lateness`. Traps worth knowing:
+  - **Visibility is an audience, not a flag** (`FeedAudience`). One feed can be
+    on screen twice — an app-wide feed in two windows, a per-window feed in
+    both panes of a split — and SwiftUI lifecycle hooks are not reliably
+    balanced (a pane move fires the new pane's `onAppear` before the old one's
+    `onDisappear`), so membership is keyed by view identity. A count leaks; a
+    flag lets a hidden tab in one window pace the feed someone is reading in
+    another. `reportsFeedVisibility` is the one modifier that reports it.
+  - **`@Environment` read inside a long-running `.task` is frozen.** `.task`
+    captures the view value it started with, so `tabIsActive` read from the
+    stream loop keeps returning the value from when the loop started — the loop
+    re-paces itself back to the visible interval on the next batch and undoes
+    the tab switch. Mirror it into `@State` (reference-backed, reads current)
+    and read that; the two log views both do.
+  - **Load belongs to the thread, not the feed.** `MainThreadLoad` is one
+    app-wide sampler: a starved feed has nothing to measure (it isn't getting
+    turns), and the load it is waiting behind belongs to the other mounted
+    tabs. It is deliberately not `@Observable` — it changes twice a second, and
+    anything observing it would re-render on every sample.
+  - **Timing the flush measures the wrong thing.** The expensive part is the
+    SwiftUI layout the mutation *causes*, in a later runloop pass. Waiting for a
+    turn on the main thread prices that in; a stopwatch around the mutation
+    does not.
+
 - **Process runner must never block a cooperative thread.** `SystemProcessRunner`
   uses `terminationHandler` + `readabilityHandler`, not `waitUntilExit`. A
   blocking design starved the async pool and froze the whole app. There's a
@@ -856,11 +883,21 @@ every 16 ms — up to 62 full re-diffs a second, paid across *every* mounted tab
 because the keep-alive ZStack mounts them all — and was the single largest
 contributor to DROIDECTIVE-MAC-B (4197 hangs / 49 users, whose top
 `open_features` rows are individual users with 9–18 tabs open). `FeedFlushCadence`
-(ADBKit) now holds 250 ms active / 1 s inactive for both App-layer feeds; logcat
-keeps its own flat 300 ms because `LogcatStreamer` is a portable actor with no
-access to app-activation state. Inactive is slower, never stopped — pausing
-grows the buffer unbounded and hands SwiftUI one enormous flush on reactivation,
-which is the same mass-mutation stall. **Telemetry**: `enableCaptureFailedRequests`
+(ADBKit) now holds 300 ms active / 1 s inactive / 5 s hidden for all four feeds —
+the Reactotron timeline, the JS Console, logcat and iOS logs. Inactive is slower,
+never stopped — pausing grows the buffer unbounded and hands SwiftUI one enormous
+flush on reactivation, which is the same mass-mutation stall — but *hidden* is
+priced separately because a mounted hidden tab lays its rows out exactly like a
+visible one, and a feed becoming visible flushes eagerly so the long interval is
+never what the user waits on. The two log streamers are portable actors that can
+see neither app activation nor tab visibility, so the App layer sets their pace
+(`setFlushInterval`/`flushNow`) the way it already sets `DeviceMonitor`'s poll
+rate; they no longer keep a private flat 300 ms. Cost is in the loop too:
+`MainThreadLoad` (App) samples how late its own scheduled turn on the main
+thread arrives, and every feed widens its next interval by that much
+(`FeedFlushCadence.lateness`, capped at `maxInterval`) — a fixed interval asks
+for the thread just as often whether a flush costs 5 ms or 900 ms, which is how
+"slow" became the wedged-but-alive app behind the reopen reports. **Telemetry**: `enableCaptureFailedRequests`
 is off (Sentry filed Metro's routine `/symbolicate` 500s as app errors, and
 would have shipped API Testing's user-authored URLs, against the no-URLs
 promise), and `enableLogs` is on with `AppLog` as the only writer — a fixed

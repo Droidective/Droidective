@@ -1,4 +1,5 @@
 import ADBKit
+import AppKit
 import SwiftUI
 
 /// Live logcat stream with level/app/text filters, a ⌘F Find bar, pause, and
@@ -34,6 +35,20 @@ struct LogcatView: View {
     @State private var streamingPid: Int?
     /// pid → process name (a periodic `ps` snapshot) for the process column.
     @State private var processNames: [String: String] = [:]
+    /// The live streamer, held so visibility changes can re-pace its flushing
+    /// without restarting the stream (a restart would clear the feed).
+    @State private var streamer: LogcatStreamer?
+    /// Whether this tab is the one on screen. The stream keeps running while
+    /// it isn't — only the flushing slows down (`FeedFlushCadence`), because a
+    /// mounted hidden tab lays out every row it is handed.
+    @Environment(\.tabIsActive) private var tabIsActive
+    /// The same answer, in `@State` so the streaming loop can read it *live*.
+    /// `.task` captures the view value it started with, and an `@Environment`
+    /// read through that capture keeps returning the value from then — so the
+    /// loop would re-pace itself back to the visible interval on the next
+    /// batch and undo the tab switch. `@State` is reference-backed and reads
+    /// current.
+    @State private var feedVisible = true
     /// One-shot: the App filter is seeded from the device bar's chosen bundle
     /// the first time the view appears, then left to the user.
     @State private var seededPackageFilter = false
@@ -84,9 +99,21 @@ struct LogcatView: View {
             logList(visible: visible)
         }
         .task(id: taskKey) { await streamLoop() }
+        // Re-pace on a tab switch rather than re-keying the stream: a restart
+        // would clear the feed. Becoming visible also flushes at once, so the
+        // reveal doesn't wait out the hidden interval.
+        .onChange(of: tabIsActive) { _, visible in
+            feedVisible = visible
+            let interval = pacedFlushInterval
+            Task { @MainActor in
+                await streamer?.setFlushInterval(interval)
+                if visible { await streamer?.flushNow() }
+            }
+        }
         // Open pre-filtered to the bundle chosen in the device bar (changeable
         // from the App picker), and follow when that choice changes later.
         .onAppear {
+            feedVisible = tabIsActive
             guard !seededPackageFilter else { return }
             seededPackageFilter = true
             if let bundle = state.selectedBundle { packageFilter = bundle.packageId }
@@ -479,6 +506,18 @@ struct LogcatView: View {
 
     // MARK: - Streaming
 
+    /// How often the streamer should hand this view a batch: the shared feed
+    /// rule, given whether anyone can see the tab and how far behind the main
+    /// thread already is. Logcat used to run a flat 300 ms in every state —
+    /// the streamer is a portable actor that can see neither, so the App layer
+    /// has to tell it (`LogcatStreamer.setFlushInterval`).
+    private var pacedFlushInterval: Duration {
+        FeedFlushCadence.interval(
+            appActive: NSApp.isActive,
+            watched: feedVisible,
+            lateness: MainThreadLoad.shared.lateness)
+    }
+
     /// Owned by `.task(id:)`: cancelled and restarted whenever the device,
     /// level, or app filter changes. Outer loop survives app restarts (pid
     /// changes) and transient stream deaths.
@@ -489,6 +528,11 @@ struct LogcatView: View {
         guard let serial = state.targetSerials.first else { return }
 
         let streamer = LogcatStreamer(client: state.env.client)
+        self.streamer = streamer
+        // Every exit from this loop drops the reference, so a tab switch can't
+        // re-pace a streamer that has already stopped.
+        defer { self.streamer = nil }
+        await streamer.setFlushInterval(pacedFlushInterval)
         // The process-name column: a ps snapshot up front so the initial tail
         // is named, then refreshed on a slow cadence for processes that spawn
         // mid-stream. Background polling — deliberately not CommandLog-wrapped.
@@ -560,6 +604,11 @@ struct LogcatView: View {
             }
 
             for await batch in stream {
+                if Task.isCancelled { break }
+                // Re-paced per batch, which is the same cadence the other
+                // feeds re-evaluate at — visibility and main-thread load both
+                // move while a stream is running.
+                await streamer.setFlushInterval(pacedFlushInterval)
                 if Task.isCancelled { break }
                 if paused { continue }
                 // Stamp each line's process name at ingest — rendered rows are
