@@ -121,8 +121,8 @@ opening it — verify those by hand.
 ## Build / test / run
 
 ```
-make test          # ADBKit unit tests (cd ADBKit && swift test) — 1899 tests, keep green
-make test-app      # the AppTests logic bundle — 111 tests
+make test          # ADBKit unit tests (cd ADBKit && swift test) — 2014 tests, keep green
+make test-app      # the AppTests logic bundle — 118 tests
 make verify        # tiers 0-1: warnings-as-errors + both test bundles
 make test-linux    # the same suite on Linux (Apple `container` CLI; the port gate)
 make test-emulator # tier 3: the device-dependent suites against a real emulator
@@ -209,7 +209,12 @@ Node 22 in CI; scroll reveals and the hero palette demo must keep their
   ScreenRecorder (records through a headless `MirrorSession` on the bundled
   scrcpy server — no desktop scrcpy; it also owns the microphone's
   per-segment lifecycle — see the recording-audio convention),
-  Crash, BugReport, Connection (wireless),
+  Crash, BugReport, Connection (wireless — including `QrPairing`: the
+  `WIFI:T:ADB;S:<name>;P:<password>;;` payload the device's "Pair device with
+  QR code" scanner reads, and `pairByQrCode`, which waits on the requested
+  mDNS instance name appearing, pairs, then connects. The name is the
+  correlation key — the host cannot know the pairing port in advance — and is
+  matched by *prefix*, since adb's mDNS backend decorates instance names),
   CustomCommand (one free-typed line; a leading `adb` token infers the adb
   kind → tokenized argv, never a shell; anything else — multi-line included —
   runs through `zsh -lc`, deliberately not device-scoped — `{serial}` targets
@@ -917,28 +922,49 @@ position in `RELEASE_NOTES.md`.
 ## Status
 
 Feature-complete across all planned milestones plus several UX rounds.
-(Latest release: **v3.10.0** — the first stable tag of the 3.10 line, whose
+(Latest release: **v3.11.0** — two ways to get things onto a device, and feeds
+that pace themselves. **Drag and drop onto the mirror** (issue #321): a package
+drops onto the Mirror Screen tab, a pop-out window or any Mirror Wall tile and
+installs on *that* device — never the bar's run-on-all — and anything else
+copies to `/sdcard/Download` with a `MediaScan` so it reaches the Gallery. The
+model is `Services/Drop/` (`FileDropRouter`, `InstallPlan`, `MediaScan`,
+`DeviceTransferService`) and the drop is announced before release, because a
+drop that replaces an app should not be a surprise. Two rules came out of it
+and are written into the drop-routing convention above: the fallback rides the
+*visible tab*, since a hidden tab keeps its regions and the Mirror Wall's tile
+targets cover a whole pane; and a feature that declines a file must route it
+rather than return `false`, which is a dead drop even from a tab nobody can
+see. **QR pairing** (`QrPairing`) adds the wireless sheet's fourth tab. **Feed
+pacing** now keys off visibility and main-thread lateness, not activation alone:
+300 ms visible and frontmost, 1 s visible behind another app, 5 s hidden, each
+widened by however late the main thread already is and capped at 8 s. Hidden is
+a pace, not a pause, and becoming visible flushes at once. `FeedAudience`
+(ADBKit) keys visibility by *view identity*, because one feed can be on screen
+twice and SwiftUI fires a pane move’s `onAppear` before the old pane’s
+`onDisappear` — neither a flag nor a count holds up. `MainThreadLoad` (App) is
+one app-wide sampler measuring how late its own scheduled turn arrives, since a
+starved feed is precisely the one not getting turns. Logcat and iOS logs join
+through `setFlushInterval`/`flushNow` and drop their private flat 300 ms, and
+Reactotron bounds its pending buffer by bytes so the longer hidden interval
+cannot become a memory regression. A hidden feed taking 300 lines/s measured
+8.7% CPU against 17.7% in v3.10.0. And `AdbClient` masks
+`adb pair`'s code in the Command Log, the one credential this app puts in an
+argument vector.)
+(Before that: **v3.10.0** — the first stable tag of the 3.10 line, whose
 beta.1–beta.5 were almost entirely the Windows/Linux port; the only Mac-visible
 changes are the four below. **Feed pacing**: the Reactotron timeline flushed
 every 16 ms — up to 62 full re-diffs a second, paid across *every* mounted tab
 because the keep-alive ZStack mounts them all — and was the single largest
 contributor to DROIDECTIVE-MAC-B (4197 hangs / 49 users, whose top
 `open_features` rows are individual users with 9–18 tabs open). `FeedFlushCadence`
-(ADBKit) now holds 300 ms active / 1 s inactive / 5 s hidden for all four feeds —
-the Reactotron timeline, the JS Console, logcat and iOS logs. Inactive is slower,
-never stopped — pausing grows the buffer unbounded and hands SwiftUI one enormous
-flush on reactivation, which is the same mass-mutation stall — but *hidden* is
-priced separately because a mounted hidden tab lays its rows out exactly like a
-visible one, and a feed becoming visible flushes eagerly so the long interval is
-never what the user waits on. The two log streamers are portable actors that can
-see neither app activation nor tab visibility, so the App layer sets their pace
-(`setFlushInterval`/`flushNow`) the way it already sets `DeviceMonitor`'s poll
-rate; they no longer keep a private flat 300 ms. Cost is in the loop too:
-`MainThreadLoad` (App) samples how late its own scheduled turn on the main
-thread arrives, and every feed widens its next interval by that much
-(`FeedFlushCadence.lateness`, capped at `maxInterval`) — a fixed interval asks
-for the thread just as often whether a flush costs 5 ms or 900 ms, which is how
-"slow" became the wedged-but-alive app behind the reopen reports. **Telemetry**: `enableCaptureFailedRequests`
+(ADBKit) now holds 250 ms active / 1 s inactive for both App-layer feeds; logcat
+keeps its own flat 300 ms because `LogcatStreamer` is a portable actor with no
+access to app-activation state. Inactive is slower, never stopped — pausing
+grows the buffer unbounded and hands SwiftUI one enormous flush on reactivation,
+which is the same mass-mutation stall. (v3.11.0 replaced this with pacing by
+visibility and main-thread lateness — see above; #326 edited this paragraph
+rather than adding its own, so it briefly claimed that behaviour for 3.10.0.)
+**Telemetry**: `enableCaptureFailedRequests`
 is off (Sentry filed Metro's routine `/symbolicate` 500s as app errors, and
 would have shipped API Testing's user-authored URLs, against the no-URLs
 promise), and `enableLogs` is on with `AppLog` as the only writer — a fixed
@@ -1217,7 +1243,7 @@ jadx/apktool, recompile, and sign — with keystore creation) plus Frida setup, 
 custom accent color, launching emulators from the device bar, per-feature
 connect-a-device empty states, a live-preview hotkey recorder, and a Settings
 split into Appearance/Privacy; managed tools download from GitHub releases into
-Application Support and are sized/removable in Settings); 1899 ADBKit + 111
+Application Support and are sized/removable in Settings); 2014 ADBKit + 118
 AppTests green (macOS — the suite also runs on Linux in CI, minus the
 Darwin-gated files);
 builds clean with zero warnings (enforced as errors in CI). Verified live against a
