@@ -40,6 +40,14 @@ final class FeatureStateStore {
         return created
     }
 
+    /// This window's model for `feature`, or nil when it has never built one.
+    /// Unlike `model(_:feature:in:make:)` this creates nothing, so callers
+    /// outside the view — a tab closing, say — can ask about state without
+    /// bringing it into existence.
+    func existing<T: AnyObject>(_ type: T.Type, feature: String, in workspace: WorkspaceID) -> T? {
+        models[workspace]?[feature] as? T
+    }
+
     /// Take `feature`'s model out, for a tab moving to another window. Returns
     /// nil when the feature never built one (it was never opened, or it keeps
     /// nothing worth moving).

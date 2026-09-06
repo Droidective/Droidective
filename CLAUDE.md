@@ -531,9 +531,13 @@ table) is in `docs/reactotron-mcp-analysis.md`.
     one, so an observed container would loop. A feed must also clear its buffer
     only when the *question* changed (`bufferKey`), not on every `.task(id:)`
     restart, and must not replay into a buffer that already holds those lines
-    (`-T 0` on a keeping restart). Captures — Screen Record, Performance,
-    Network Speed — deliberately do *not* move: their sampler dies with the
-    view, so a preserved buffer would have a silent gap.
+    (`-T 0` on a keeping restart). A *screen recording* moves too — it
+    writes through a headless session and the view only polls it for a preview
+    — so its abort and file deletion had to leave `onDisappear` (which also
+    runs on a move) for `stopBackgroundWork`, and `workSurvivesAMove` stops the
+    leave guard asking about a loss that will not happen. Performance and
+    Network Speed do *not* move: their sampler dies with the view, so a
+    preserved buffer would have a silent gap.
   - **A live NSView can only be mounted by the window that owns its session.**
     `NativeTerminalView` re-parents one cached terminal view into whatever
     container SwiftUI hands it. During a move the receiving pane *and* the

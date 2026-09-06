@@ -1177,11 +1177,13 @@ final class AppState {
     /// snapshots its shells' directories.
     func detachTab(_ featureID: String) -> TabHandoff.Carry {
         guard workspace.detach(featureID) != nil else { return .none }
-        // Taken before anything is stopped: these keep running and cross to the
-        // receiving window, which is what makes a move a move rather than a
-        // restart. `stopBackgroundWork` skips exactly these on `.handoff`.
-        pendingMovedSessions = takeMovableSessions(for: featureID)
+        // Stopped first, then taken: on a `.handoff` the stop only releases what
+        // belongs to *this window* (the device lock, the leave guard) and leaves
+        // the work itself running, and it needs the feature's model still in
+        // place to do that. Taking first would hand it over before this window
+        // had let go of it.
         stopBackgroundWork(for: featureID, reason: .handoff)
+        pendingMovedSessions = takeMovableSessions(for: featureID)
         let carry = TabHandoff.Carry(
             terminalResumeDirs: featureID == TabHandoff.terminalFeatureID
                 ? terminalResumeDirs : nil,
@@ -1238,6 +1240,17 @@ final class AppState {
         if id == "js-console", reason == .closing {
             jsConsoleSession.stop()
             Task { await jsConsoleSession.removeReverseTunnels() }
+        }
+        // A screen recording outlives its view — the recorder writes through a
+        // headless scrcpy session — so a *move* keeps the take and only hands
+        // back this window's device lock and leave guard. A close is the one
+        // that gives up the recording and its file.
+        if id == "screen-record",
+           let recording = core.featureStates.existing(
+               ScreenRecordModel.self, feature: id, in: self.id) {
+            setRecording(false, owner: "screen-record")
+            clearExitGuard(recording.exitGuardID)
+            if reason == .closing { recording.abortAndDiscard() }
         }
         if id == "terminal", reason == .closing {
             // Implicit teardown (feature tab closed, background window close,

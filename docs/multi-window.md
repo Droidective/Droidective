@@ -190,10 +190,24 @@ Two details decide whether a preserved buffer actually *looks* right:
   live edge instead: measured over the same 5 s move, +342 lines before, +39
   after — the live rate.
 
-**Captures deliberately do not move.** Screen Record, Performance and Network
-Speed are fed by a sampler the view owns; a preserved buffer with the sampler
-stopped mid-move would have a silent gap in it, which is worse than being told.
-They keep their leave guard, and a move asks the same question a close does.
+**A screen recording moves with its tab.** The recorder writes through a
+headless scrcpy session that owes nothing to the view — the view only polls it
+for a preview frame — so a move re-arms the preview, the device lock and the
+leave guard in the receiving window and the take never stops. Moving therefore
+asks nothing (`workSurvivesAMove`), while *closing* still does: the abort and
+the file deletion moved out of `onDisappear`, which also runs on a move, into
+`stopBackgroundWork(for:reason:)` where close and move are told apart. A
+finished take awaiting Save/Discard/Edit travels too — it is a file the user has
+not decided about yet. Verified end to end: recording started, tab moved
+mid-take, stopped in the new window, one continuous 48.02 s file whose duration
+matches wall-clock start to stop; and closing still prompts, discards, and
+leaves no scrcpy process behind.
+
+**Performance and Network Speed deliberately do not move.** Unlike the
+recorder, they are fed by a sampler the view owns, so a preserved buffer with
+the sampler stopped mid-move would have a silent gap in it — worse than being
+told. They keep their leave guard, and a move asks the same question a close
+does.
 
 ### Guards
 
