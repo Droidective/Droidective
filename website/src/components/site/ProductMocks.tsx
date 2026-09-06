@@ -35,7 +35,7 @@ export function ApkMock() {
   ]
 
   return (
-    <Chrome title="APK Studio — app-release.apk">
+    <Chrome title="APK Studio · app-release.apk">
       <div className="flex gap-1 border-b border-white/[0.06] px-3 py-2">
         {tabs.map((t) => (
           <span
@@ -79,7 +79,7 @@ export function McpFlow() {
   ]
 
   return (
-    <Chrome title="Settings ▸ MCP — server running">
+    <Chrome title="Settings ▸ MCP · server running">
       <div className="p-5">
         <ul className="m-0 list-none p-0">
           {hops.map((hop, i) => (

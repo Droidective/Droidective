@@ -13,6 +13,7 @@ import { Hero } from "@/components/site/Hero"
 import { HowItWorks } from "@/components/site/HowItWorks"
 import { McpSpotlight } from "@/components/site/McpSpotlight"
 import { Nav } from "@/components/site/Nav"
+import { Platforms } from "@/components/site/Platforms"
 import { TrustStrip } from "@/components/site/TrustStrip"
 import { UseCaseMoments } from "@/components/site/UseCaseMoments"
 import { WorkflowTabs } from "@/components/site/WorkflowTabs"
@@ -36,6 +37,7 @@ export default function App() {
         <Hero />
         <TrustStrip />
         <WorkflowTabs />
+        <Platforms />
         <McpSpotlight />
         <DemoMoment />
         <Comparison />

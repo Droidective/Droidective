@@ -28,11 +28,31 @@ export function Nav() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
 
+  /* A scroll listener fires on every frame and re-renders this tree each time.
+     One IntersectionObserver on a sentinel at the top of the page reports the
+     same boolean, and only when it actually changes. */
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 24)
-    onScroll()
-    window.addEventListener("scroll", onScroll, { passive: true })
-    return () => window.removeEventListener("scroll", onScroll)
+    const sentinel = document.createElement("div")
+    sentinel.setAttribute("aria-hidden", "true")
+    Object.assign(sentinel.style, {
+      position: "absolute",
+      top: "0",
+      left: "0",
+      height: "24px",
+      width: "1px",
+      pointerEvents: "none",
+    })
+    document.body.prepend(sentinel)
+
+    const observer = new IntersectionObserver(
+      ([entry]) => setScrolled(!entry.isIntersecting),
+      { threshold: 0 },
+    )
+    observer.observe(sentinel)
+    return () => {
+      observer.disconnect()
+      sentinel.remove()
+    }
   }, [])
 
   useEffect(() => {

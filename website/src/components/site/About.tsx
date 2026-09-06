@@ -35,7 +35,7 @@ export function About() {
 
   return (
     <section id="about" className="mx-auto max-w-[1120px] px-6 pb-28 max-[620px]:pb-20">
-      <SectionHead center eyebrow="whoami" title="About me." />
+      <SectionHead center title="About me." />
       <div className="grid grid-cols-[1.1fr_0.9fr] gap-4 max-[940px]:grid-cols-1">
         <Reveal>
           <MagicCard className="h-full">
@@ -45,12 +45,12 @@ export function About() {
                 mobile engineer · React Native / Android / iOS / Swift
               </p>
               <p className="mb-4 text-[14.5px] leading-relaxed text-muted/90">
-                I build and ship production mobile apps for a living — taking them from first commit through app-store
+                I build and ship production mobile apps for a living, taking them from first commit through app-store
                 review, over-the-air updates, and the crash reports that follow. Along the way I developed a particular
                 interest in mobile security: hardening apps, and understanding how they break.
               </p>
               <p className="mb-4 text-[14.5px] leading-relaxed text-muted/90">
-                Droidective grew out of my own daily debugging loop — the adb incantations, the log tails, the device
+                Droidective grew out of my own daily debugging loop: the adb incantations, the log tails, the device
                 state I kept faking by hand. I wanted all of it one keystroke away, so I built it.
               </p>
               <p className="mb-6 text-[14.5px] leading-relaxed text-muted/90">

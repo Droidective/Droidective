@@ -19,7 +19,7 @@ export function WorkflowTabs() {
   return (
     <section id="workflows" className="mx-auto max-w-[1120px] px-6 pt-20 pb-32 max-[620px]:pt-14 max-[620px]:pb-20">
       <SectionHead eyebrow="workflows" title="Built for how you debug.">
-        Not a pile of features — six workflows that cover the whole loop between writing code and
+        Not a pile of features. Six workflows that cover the whole loop between writing code and
         understanding what your app actually did.
       </SectionHead>
 

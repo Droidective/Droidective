@@ -24,11 +24,7 @@ export function FinalCta() {
             className="pointer-events-none absolute -top-20 left-1/2 h-40 w-[70%] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(105,161,6,0.1),transparent_70%)] blur-2xl"
           />
 
-          <p className="mb-5 font-mono text-[12px] font-medium tracking-[0.06em] text-green/80 uppercase">
-            <span className="mr-2 text-green-dim/60">&gt;_</span>
-            ready to ship faster?
-          </p>
-          <h2 ref={headingRef} className="mb-4 text-[clamp(28px,4vw,44px)] font-extrabold tracking-[-0.035em]">
+          <h2 ref={headingRef} className="display mb-4 text-[clamp(28px,4vw,44px)]">
             {reducedMotion || !inView ? (
               "Debug Android without the terminal."
             ) : (

@@ -13,15 +13,11 @@ export function DemoMoment() {
 
       <div className="relative mx-auto max-w-[1120px] px-6">
         <Reveal className="mx-auto mb-12 max-w-[54ch] text-center">
-          <span className="font-mono text-[12px] font-medium tracking-[0.06em] text-green/80 uppercase">
-            <span className="mr-2 text-green-dim/60">&gt;_</span>
-            in action
-          </span>
-          <h2 className="mt-4 mb-4 text-[clamp(28px,4.2vw,46px)] leading-[1.04] font-extrabold tracking-[-0.035em]">
+          <h2 className="display mb-4 text-[clamp(28px,4.2vw,46px)] leading-[1.04]">
             Watch it work.
           </h2>
           <p className="text-lg leading-relaxed text-muted">
-            The real app on a live Android device — logcat, device info, files, and the React Native hub,
+            The real app on a live Android device: logcat, device info, files, and the React Native hub,
             all without leaving the window.
           </p>
         </Reveal>
@@ -33,7 +29,7 @@ export function DemoMoment() {
               poster="/assets/demo-poster.webp"
               width={1280}
               height={810}
-              label="Droidective in action — pressing ⌘T to jump between live Logcat, Device Info, the File Explorer, and the React Native hub on a connected Android emulator"
+              label="Droidective in action: pressing ⌘T to jump between live Logcat, Device Info, the File Explorer, and the React Native hub on a connected Android emulator"
             />
           </div>
         </Reveal>

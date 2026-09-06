@@ -6,7 +6,7 @@ import { faqs } from "@/lib/content"
 export function Faq() {
   return (
     <section id="faq" className="mx-auto max-w-[1120px] px-6 py-28 max-[620px]:py-20">
-      <SectionHead center eyebrow="faq" title="Questions, answered." />
+      <SectionHead center title="Questions, answered." />
       <Reveal className="mx-auto max-w-200">
         <Accordion type="single" collapsible>
           {faqs.map((faq) => (

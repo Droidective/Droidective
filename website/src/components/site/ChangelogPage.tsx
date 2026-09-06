@@ -24,8 +24,8 @@ export function ChangelogPage() {
         </div>
       </header>
       <main className="mx-auto max-w-[1120px] px-6 py-20 max-[620px]:py-12">
-        <SectionHead center eyebrow="changelog" title="Every release.">
-          {releases.length} releases since the first public build — automatic in-app updates since v2.1.0, and
+        <SectionHead center title="Every release.">
+          {releases.length} releases since the first public build. Automatic in-app updates since v2.1.0, and
           Apple-notarized builds since v2.4.0.
         </SectionHead>
         <ReleaseTimeline items={releases} />

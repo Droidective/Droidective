@@ -1,4 +1,4 @@
-import { ArrowRight, Download, Star } from "lucide-react"
+import { ArrowRight, Download } from "lucide-react"
 
 import BlurText from "@/components/BlurText"
 import DotGrid from "@/components/DotGrid"
@@ -7,7 +7,7 @@ import { Reveal } from "@/components/site/Reveal"
 import { Button } from "@/components/ui/button"
 import { useFinePointer } from "@/hooks/useFinePointer"
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion"
-import { APP_VERSION, DOWNLOAD_URL, GITHUB_URL } from "@/lib/content"
+import { DOWNLOAD_URL } from "@/lib/content"
 
 export function Hero() {
   const reducedMotion = usePrefersReducedMotion()
@@ -55,12 +55,12 @@ export function Hero() {
         {/* Eyebrow */}
         <Reveal>
           <p className="mb-7 font-mono text-[11.5px] font-medium tracking-[0.14em] text-green/70 uppercase max-[620px]:tracking-[0.1em]">
-            The macOS toolkit for Android &amp; React Native
+            Android &amp; React Native, without the terminal
           </p>
         </Reveal>
 
         {/* Headline */}
-        <h1 className="mb-7 max-w-[19ch] text-[clamp(38px,6vw,74px)] leading-[0.99] font-extrabold tracking-[-0.042em]">
+        <h1 className="display mb-7 max-w-[19ch] text-[clamp(38px,6vw,74px)] leading-[0.99] font-semibold tracking-[-0.045em]">
           {staticHeading ? (
             <>
               Everything between your code and your{" "}
@@ -83,31 +83,36 @@ export function Hero() {
 
         {/* Subheading */}
         <Reveal>
-          <p className="mb-9 max-w-[58ch] text-[clamp(15.5px,1.6vw,18.5px)] leading-[1.7] text-muted">
-            Device control, logs, React Native tooling, performance charts, APK workflows, and an MCP server
-            your AI can read — <strong className="font-semibold text-text">59 tools</strong> in one native
-            macOS workspace. No terminal required.
+          <p className="prose-balance mb-9 max-w-[54ch] text-[clamp(15.5px,1.6vw,18.5px)] leading-[1.7] text-muted">
+            Mirroring, logs, React Native tooling, performance and APK workflows.{" "}
+            <strong className="font-semibold text-text tnum">61 tools</strong> in one native
+            workspace, no terminal required.
           </p>
         </Reveal>
 
         {/* CTAs */}
         <Reveal>
-          <div className="mb-5 flex flex-wrap items-center justify-center gap-3.5">
+          <div className="mb-16 flex flex-wrap items-center justify-center gap-3.5">
             <Button
               asChild
               size="lg"
-              className="group/dl h-auto rounded-xl px-7 py-3.5 text-[15.5px] font-bold shadow-glow transition-all duration-200 hover:-translate-y-px hover:bg-green-bright hover:shadow-[0_0_0_1px_rgba(105,161,6,0.5),0_14px_40px_-8px_rgba(105,161,6,0.3)]"
+              className="group/dl h-auto rounded-full py-2.5 pr-2.5 pl-7 text-[15.5px] font-semibold shadow-glow transition-all duration-700 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-0.5 hover:bg-green-bright hover:shadow-[0_0_0_1px_rgba(105,161,6,0.5),0_14px_40px_-8px_rgba(105,161,6,0.3)] active:scale-[0.98]"
             >
               <a href={DOWNLOAD_URL} data-dl="hero">
-                <Download className="transition-transform duration-200 group-hover/dl:-translate-y-px" aria-hidden />
                 Download for macOS
+                <span
+                  aria-hidden
+                  className="ml-1 flex size-7 items-center justify-center rounded-full bg-ink-900/20 transition-all duration-700 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover/dl:scale-105 group-hover/dl:bg-ink-900/30"
+                >
+                  <Download className="size-3.5 transition-transform duration-700 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover/dl:translate-y-px" />
+                </span>
               </a>
             </Button>
             <Button
               asChild
               variant="outline"
               size="lg"
-              className="group/ex h-auto rounded-xl border-white/[0.08] bg-white/[0.03] px-7 py-3.5 text-[15.5px] font-semibold transition-all duration-200 hover:-translate-y-px hover:border-white/[0.14] hover:bg-white/[0.06]"
+              className="group/ex h-auto rounded-full border-white/[0.08] bg-white/[0.03] px-7 py-3.5 text-[15.5px] font-medium transition-all duration-700 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-0.5 hover:border-white/[0.14] hover:bg-white/[0.06] active:scale-[0.98]"
             >
               <a href="#workflows">
                 Explore features
@@ -119,28 +124,6 @@ export function Hero() {
             </Button>
           </div>
 
-          {/* Confidence line — version, license, requirements in one row */}
-          <div className="mb-16 flex flex-wrap items-center justify-center gap-x-3 gap-y-2 font-mono text-[11.5px] text-faint/75">
-            <a
-              href={`${GITHUB_URL}/releases/tag/${APP_VERSION}`}
-              className="inline-flex items-center gap-1.5 transition-colors duration-150 hover:text-green"
-            >
-              <span className="relative flex size-1.5">
-                <span className="cta-breathe absolute inline-flex size-full rounded-full bg-green" />
-                <span className="relative inline-flex size-1.5 rounded-full bg-green" />
-              </span>
-              {APP_VERSION}
-            </a>
-            <span className="text-white/10">·</span>
-            <span className="inline-flex items-center gap-1.5">
-              <Star className="size-3" aria-hidden />
-              Free &amp; Open Source
-            </span>
-            <span className="text-white/10">·</span>
-            <span>macOS 14+</span>
-            <span className="text-white/10">·</span>
-            <span>Signed &amp; notarized</span>
-          </div>
         </Reveal>
 
         {/* The one hero product visual */}

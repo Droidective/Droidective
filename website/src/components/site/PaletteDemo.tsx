@@ -140,7 +140,7 @@ export function PaletteDemo() {
           <b className="font-medium text-muted/70">esc</b> close
         </span>
         <span className="ml-auto">
-          <b className="font-medium text-muted/70">59</b> tools
+          <b className="font-medium text-muted/70 tnum">61</b> tools
         </span>
       </div>
     </div>

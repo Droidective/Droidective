@@ -11,7 +11,7 @@ export function BlogArticle({ blocks }: { blocks: Block[] }) {
             return (
               <h2
                 key={idx}
-                className="mt-14 mb-4 scroll-mt-24 text-[clamp(22px,3vw,29px)] leading-[1.15] font-extrabold tracking-[-0.025em] text-text first:mt-0"
+                className="display mt-14 mb-4 scroll-mt-24 text-[clamp(22px,3vw,29px)] leading-[1.15]  text-text first:mt-0"
               >
                 <Inline text={block.text} />
               </h2>

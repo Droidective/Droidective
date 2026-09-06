@@ -29,7 +29,7 @@ const steps = [
     n: "03",
     label: "go",
     title: "Press ⌘T and run",
-    body: "Search any of the 59 tools and run it. The Setup Doctor confirms your toolchain on first launch.",
+    body: "Search any of the 61 tools and run it. The Setup Doctor confirms your toolchain on first launch.",
     code: (
       <>
         <span className="text-green">⌘T</span> mirror screen   ↩
@@ -42,7 +42,7 @@ export function HowItWorks() {
   return (
     <section id="how" className="mx-auto max-w-[1120px] px-6 py-28 max-[620px]:py-20">
       <SectionHead center eyebrow="how it works" title="Connected in under a minute.">
-        Three steps. The app handles the rest — it even finds adb for you and offers a one-click install if it's
+        Three steps. The app handles the rest, and it even finds adb for you and offers a one-click install if it's
         missing.
       </SectionHead>
       <div className="grid grid-cols-3 gap-4 max-[620px]:grid-cols-1">

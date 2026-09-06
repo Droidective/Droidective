@@ -15,11 +15,11 @@ export function Comparison() {
           <span className="mr-2 text-green-dim/60">&gt;_</span>
           why droidective
         </span>
-        <h2 className="mt-4 mb-4 text-[clamp(28px,4.2vw,46px)] leading-[1.04] font-extrabold tracking-[-0.035em]">
+        <h2 className="display mt-4 mb-4 text-[clamp(28px,4.2vw,46px)] leading-[1.04]">
           The better alternative to tool-hopping.
         </h2>
         <p className="text-lg leading-relaxed text-muted">
-          Every one of these tools is good at its job. The cost isn't any single one — it's the seven
+          Every one of these tools is good at its job. The cost isn't any single one. It's the seven
           windows, the lost context, and the command you look up for the hundredth time.
         </p>
       </Reveal>
@@ -27,7 +27,7 @@ export function Comparison() {
       {/* The two stacks, side by side */}
       <Reveal className="mb-6">
         <div className="grid grid-cols-[1fr_auto_1fr] items-stretch gap-5 max-[940px]:grid-cols-1">
-          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.015] p-6">
+          <div className="shell h-full"><div className="core h-full p-6">
             <p className="mb-4 font-mono text-[11px] tracking-[0.08em] text-faint/70 uppercase">the old workflow</p>
             <div className="mb-5 flex flex-wrap gap-2">
               {oldStack.map((t) => (
@@ -40,7 +40,7 @@ export function Comparison() {
               ))}
             </div>
             <p className="font-mono text-[13px] text-muted/50">7 windows open.</p>
-          </div>
+          </div></div>
 
           <div aria-hidden className="grid place-items-center max-[940px]:py-1">
             <span className="grid size-9 place-items-center rounded-full border border-green/20 bg-green/[0.07] text-green max-[940px]:rotate-90">
@@ -48,21 +48,21 @@ export function Comparison() {
             </span>
           </div>
 
-          <div className="rounded-2xl border border-green/15 bg-green/[0.03] p-6">
+          <div className="shell h-full" style={{ borderColor: "rgba(105,161,6,0.16)" }}><div className="core h-full bg-green/[0.04] p-6">
             <p className="mb-4 font-mono text-[11px] tracking-[0.08em] text-green/70 uppercase">droidective</p>
             <div className="mb-5 flex flex-wrap gap-2">
               <span className="rounded-lg border border-green/20 bg-green/[0.08] px-2.5 py-1 font-mono text-[11.5px] text-green/90">
-                One native macOS workspace
+                One native workspace
               </span>
             </div>
             <p className="font-mono text-[13px] text-green/60">1 app open.</p>
-          </div>
+          </div></div>
         </div>
       </Reveal>
 
       {/* Row-by-row breakdown */}
       <Reveal>
-        <div className="overflow-hidden rounded-2xl border border-white/[0.06]">
+        <div className="shell"><div className="core overflow-hidden">
           <div className="grid grid-cols-[1fr_1.2fr_1.2fr] border-b border-white/[0.06] bg-white/[0.02] max-[620px]:hidden">
             {["Workflow", "Traditional setup", "Droidective"].map((h, i) => (
               <div
@@ -93,7 +93,7 @@ export function Comparison() {
               </div>
             </div>
           ))}
-        </div>
+        </div></div>
       </Reveal>
     </section>
   )

@@ -6,8 +6,8 @@ import { releases } from "@/lib/content"
 export function Changelog() {
   return (
     <section id="changelog" className="mx-auto max-w-[1120px] px-6 py-28 max-[620px]:py-20">
-      <SectionHead center eyebrow="changelog" title="Shipped, and still moving.">
-        The latest releases — automatic in-app updates since v2.1.0, and Apple-notarized builds since v2.4.0.
+      <SectionHead center title="Shipped, and still moving.">
+        The latest releases. Automatic in-app updates since v2.1.0, and Apple-notarized builds since v2.4.0.
       </SectionHead>
       <ReleaseTimeline items={releases.slice(0, 3)} />
       <div className="mt-12 text-center">
