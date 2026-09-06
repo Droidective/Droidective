@@ -136,9 +136,9 @@ opening it — verify those by hand.
 ## Build / test / run
 
 ```
-make test          # all three Swift packages — ADBKit 2014, droidectived 406,
+make test          # all three Swift packages — ADBKit 2068, droidectived 408,
                    #   ReactotronMCP 99. Keep green.
-make test-app      # the AppTests logic bundle — 118 tests
+make test-app      # the AppTests logic bundle — 128 tests
 make verify        # tiers 0-1: warnings-as-errors + all four Swift bundles
 make test-linux    # the same suite on Linux (Apple `container` CLI; the port gate)
 make test-emulator # tier 3: the device-dependent suites against a real emulator
@@ -1049,7 +1049,29 @@ position in `RELEASE_NOTES.md`.
 ## Status
 
 Feature-complete across all planned milestones plus several UX rounds.
-(Latest release: **v3.11.0** — two ways to get things onto a device, and feeds
+(Latest release: **v3.12.0** — any tab can have a window of its own, and its
+work goes with it. **Tab tear-off**: a feature tab leaves its window by drag,
+by "Open in New Window", by "Move to Window ▸", or by ⌃⌘N, and a torn-off
+window inherits its source's device rather than picking a free one. The pure
+parts are ADBKit (`Workspace.canDetach` vs `canDetachToNewWindow`,
+`TabHandoff.seed`, `TabDropRouter`, `TearOffFrame`); the drag is a real
+`NSDraggingSource` started from a `DragGesture`, because `.onDrag` reports
+neither whether a drop was accepted nor where it landed. **A moved tab keeps
+its state**, by one of three routes depending on where that state lives —
+app-wide sessions carry on, per-window session objects cross in
+`MovedSessions`, and everything else lives in a model held per (window,
+feature, type) by `FeatureStateStore`. The live cases are the interesting
+ones: the Terminal's shells keep running, a screen recording keeps writing
+(one continuous file across the move), and a mirror keeps streaming on the
+same session, encoder and tunnel — verified by `adb forward --list` showing
+the same port and socket name either side of a move, a cross-pane
+drop-to-split and a wall move. `ExitGuard.survivesAMove` replaced a
+feature-id list, because one id can carry either kind of guard: the mirror's
+recording guard and its screenshot editor's both key on `scrcpy`. Scroll
+position is the one thing that does not cross — `scrollPosition(id:)` never
+writes its binding for a `List` here, so there is nothing to restore, and
+doing it properly means row-frame tracking like `LogRowFrames`.)
+(Before that: **v3.11.0** — two ways to get things onto a device, and feeds
 that pace themselves. **Drag and drop onto the mirror** (issue #321): a package
 drops onto the Mirror Screen tab, a pop-out window or any Mirror Wall tile and
 installs on *that* device — never the bar's run-on-all — and anything else
@@ -1370,8 +1392,8 @@ jadx/apktool, recompile, and sign — with keystore creation) plus Frida setup, 
 custom accent color, launching emulators from the device bar, per-feature
 connect-a-device empty states, a live-preview hotkey recorder, and a Settings
 split into Appearance/Privacy; managed tools download from GitHub releases into
-Application Support and are sized/removable in Settings); 2014 ADBKit + 406
-droidectived + 99 ReactotronMCP + 118 AppTests green on macOS (ADBKit and the
+Application Support and are sized/removable in Settings); 2068 ADBKit + 408
+droidectived + 99 ReactotronMCP + 128 AppTests green on macOS (ADBKit and the
 daemon also run on Linux and Windows in CI, minus the Darwin-gated files), plus
 1223 vitest + 54 cargo on the desktop app;
 builds clean with zero warnings (enforced as errors in CI). Verified live against a

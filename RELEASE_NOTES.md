@@ -1,3 +1,72 @@
+## Droidective v3.12.0
+
+Any feature can now have a window of its own — drag its tab out, or pick it from
+a menu — and the work inside it carries on where it was instead of starting
+over.
+
+### Any tab can become its own window
+
+- **Drag a tab out of the app and it becomes a window.** Drop it on the desktop,
+  on another display, beside your editor. Drop it on another Droidective window
+  instead and it moves in there.
+- **Or use a menu**: right-click a tab for "Open in New Window" or "Move to
+  Window ▸", or Tab ▸ Move Tab to New Window (⌃⌘N) for the one you are on.
+- **A torn-off window keeps the device its tab was pointed at.** Every other way
+  of opening a window deliberately picks a device no other window holds; for a
+  tab you have just moved that would quietly swap the device out from under it.
+- **A window's last tab can join another window** — consolidating two windows
+  into one is a reasonable thing to want — but it cannot spawn a third and leave
+  its own window empty.
+- **Escape cancels a drag**, and a tab released on nothing snaps back.
+
+### A moved tab keeps working
+
+Moving a tab rebuilds its view, which used to mean starting the feature again.
+Now the work moves with it:
+
+- **The Terminal takes its shells.** Running processes keep running, scrollback
+  is intact, split panes and their directories come along.
+- **A screen recording keeps recording.** Start it in one window, move the tab,
+  stop it in another, and the take is one continuous file — no gap, no split.
+  The same for a recording made from the mirror.
+- **A live mirror keeps streaming.** No "Connecting…", no black second while the
+  device re-primes — the same session, the same encoder, the same tunnel. The
+  Mirror Wall moves all six at once.
+- **Unsaved screenshot markup survives**, undo history and all — nothing in that
+  editor is written to disk until you save or copy it, so a move used to be the
+  one loss you could not undo. Moving no longer asks about it; closing the tab
+  still does.
+- **A decompiled APK stays decompiled.** jadx and apktool take minutes on a real
+  app, and a move used to run them again from the top.
+- **The video editor keeps its edits and its player**, including the transcoded
+  copy it builds for formats AVFoundation cannot play, which for a long
+  recording is a transcode of the whole file.
+- Also carried across: Reactotron's timeline, the JS Console's session, APK
+  Studio's loaded APK, Logcat and iOS Logs buffers, collected crashes, API
+  Testing's request, the folder you had browsed to, the Apps list and what you
+  had selected in it, and anything half-typed in Send Text, Deep Links or Custom
+  Commands.
+- **Performance and Network Speed deliberately do not move.** Their sampler
+  stops with the view, so a preserved graph would have a silent gap in it —
+  worse than being told. They ask before you leave, as they did.
+
+### Fixes
+
+- **Dragging a tab to the empty part of its own tab strip works.** It used to do
+  nothing at all — the tab stayed exactly where it was.
+
+### Known gaps
+
+- A moved tab starts at the top of whatever it is showing: the list, tree or
+  buffer crosses, the scroll position does not.
+- A decompile or a video transcode still in progress restarts when its tab
+  moves. Once finished, it stays.
+
+### Install
+
+Download the DMG, drag Droidective to Applications, and open it. Existing
+installs update themselves.
+
 ## Droidective v3.11.0
 
 Two new ways to get things onto a device — drop a file on the mirror, or pair
