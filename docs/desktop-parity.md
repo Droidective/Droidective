@@ -463,15 +463,25 @@ the chrome and the device bar have not.
       leading status icon carries the colour and the tooltip, outside the menu,
       as the Mac splits them. **Absent:** the Windows section (multi-window,
       backlog 21) and the iOS Simulators section (`simctl`).
-- [x] **Wireless pair & connect sheet** — the Mac's three tabs, its numbered
-      steps and its wording: Android 11+ pairing with the code and the
-      *pairing* port, a plain connect that takes a bare host at adb's own 5555,
-      and the one-click USB→Wi-Fi bootstrap. Endpoints are parsed
+- [x] **Wireless pair & connect sheet** — the Mac's numbered steps and its
+      wording: Android 11+ pairing with the code and the *pairing* port, a
+      plain connect that takes a bare host at adb's own 5555, and the
+      one-click USB→Wi-Fi bootstrap. Endpoints are parsed
       **daemon-side** by `ConnectionService.parseEndpoint`, so the two apps
       cannot disagree about what adb accepts; this side only decides when a
       button lights up (`lib/endpoint.ts`, deliberately permissive). A
       successful pair carries the endpoint the device then advertised over mDNS,
       so it connects without asking for a port the phone never showed.
+      **Absent:** the Mac's fourth tab, **QR code** — so the tab strip here
+      still reads "Pair new device / Already paired / Via USB cable" against
+      the Mac's "QR code / Pairing code / Already paired / USB cable". The
+      flow itself is portable and already lives in ADBKit
+      (`QrPairing.swift`: `QrPairingRequest.payload`,
+      `discoverPairingEndpoint`, `pairByQrCode`). Two things are missing on
+      this side: a daemon verb for the session — the existing `pair` verb
+      cannot carry it, because waiting for a scan is a minutes-long stream of
+      phases rather than one request/response — and a QR renderer, since
+      `CIFilter.qrCodeGenerator` is the Mac's and has no counterpart here.
 - [x] **Run-on-all** across connected devices for `supportsRunAll` features —
       the switch appears only with more than one ready device *and* a focused
       feature the registry says fans out, and `effectiveRunOnAll` gates the
