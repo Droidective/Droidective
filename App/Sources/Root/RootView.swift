@@ -140,9 +140,30 @@ struct RootView: View {
                 // relaunch instead of being maximized. Each window position has
                 // its own slot, cascaded so a second window doesn't land
                 // exactly on top of the first.
+                //
+                // A window torn off by a drag brings its own frame and skips
+                // all of that: the autosave slot is keyed by window *position*,
+                // so restoring it here would yank the new window to wherever
+                // some earlier window happened to sit rather than to the point
+                // the tab was dropped at. Taking the seed is also what settles
+                // the handoff, so it happens exactly once, here, after `bind`
+                // has restored.
+                let seedFrame = state.core.takeWindowSeed(state.id)?.frame
                 let autosaveName = RootView.frameAutosaveName(
                     ordinal: state.core.registry.ordinal(of: state.id) ?? 1)
-                if !window.setFrameUsingName(autosaveName), let screen = window.screen ?? NSScreen.main {
+                if let seedFrame {
+                    window.setFrame(seedFrame, display: true)
+                    // …and again once this turn is over. `WindowGroup` keeps
+                    // its own frame autosave under one name for the whole
+                    // group (`main-AppWindow-1` — it re-stamps that over the
+                    // name set below, which is why no `droidective-main-N`
+                    // frame is ever written), and it restores that saved frame
+                    // *after* this accessor runs. Without the re-assert a torn
+                    // off window lands wherever the last window happened to
+                    // sit instead of where the tab was dropped.
+                    DispatchQueue.main.async { window.setFrame(seedFrame, display: true) }
+                } else if !window.setFrameUsingName(autosaveName),
+                          let screen = window.screen ?? NSScreen.main {
                     window.setFrame(screen.visibleFrame, display: true)
                     if let ordinal = state.core.registry.ordinal(of: state.id), ordinal > 1 {
                         window.setFrame(
@@ -362,9 +383,9 @@ struct RootView: View {
     /// (drops route to the deepest region by geometry, not type).
     private func installDragJanitor() {
         NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDown]) { event in
-            for state in AppCore.shared.allWorkspaces {
-                if state.draggingTabID != nil { state.draggingTabID = nil }
-                if state.terminals.railDragActive { state.terminals.clearRailDrag() }
+            if AppCore.shared.tabDrag != nil { AppCore.shared.tabDrag = nil }
+            for state in AppCore.shared.allWorkspaces where state.terminals.railDragActive {
+                state.terminals.clearRailDrag()
             }
             return event
         }
@@ -500,8 +521,8 @@ struct RootView: View {
         // clear it. Only a target while a tab drag is in flight; returns false so
         // it never swallows a real drop (inner targets are hit first).
         .onDrop(of: [.workspaceTab], delegate: TabDragCancelCatch(
-            isDragging: state.draggingTabID != nil,
-            clear: { state.draggingTabID = nil }
+            isDragging: state.anyTabDrag != nil,
+            clear: { state.core.tabDrag = nil }
         ))
         // Dock-style auto-hide: the sidebar leaves the layout and rides over
         // the content, revealed by pushing the mouse against the left edge
@@ -666,14 +687,17 @@ private struct TerminalCloseConfirmation: ViewModifier {
             get: { state.terminalClosePrompt != nil },
             set: { if !$0 { state.resolveTerminalPrompt(confirmed: false) } }
         )) {
-            Button(
-                state.terminalClosePrompt == .quit ? "Quit" : "Close Terminals",
-                role: .destructive
-            ) { state.resolveTerminalPrompt(confirmed: true) }
+            Button(confirmLabel, role: .destructive) {
+                state.resolveTerminalPrompt(confirmed: true)
+            }
             Button("Cancel", role: .cancel) { state.resolveTerminalPrompt(confirmed: false) }
         } message: {
             Text(message)
         }
+    }
+
+    private var confirmLabel: String {
+        state.terminalClosePrompt == .quit ? "Quit" : "Close Terminals"
     }
 
     private var message: String {
@@ -726,7 +750,7 @@ struct TabHostView: View {
                     // tab is deeper than the pane's own tab target and would
                     // otherwise swallow drop-to-split.
                     .modifier(WindowFileDropModifier(
-                        isActive: id == active && state.draggingTabID == nil))
+                        isActive: id == active && state.anyTabDrag == nil))
                     .environment(\.tabFeatureID, id)
                     .environment(\.tabIsActive, id == active)
                     .opacity(id == active ? 1 : 0)
@@ -769,18 +793,20 @@ private final class PaneMeasure {
 /// highlight.
 struct TabPaneDrop: DropDelegate {
     let state: AppState
-    let onDrop: (String) -> Void
+    let onDrop: (TabDrag) -> Void
     var onTargetedChange: ((Bool) -> Void)?
 
-    private var draggingID: String? { state.draggingTabID }
+    /// The app-wide drag, so a pane accepts a tab dragged out of another
+    /// window, not only its own.
+    private var drag: TabDrag? { state.anyTabDrag }
 
-    func validateDrop(info: DropInfo) -> Bool { draggingID != nil }
-    func dropEntered(info: DropInfo) { if draggingID != nil { onTargetedChange?(true) } }
+    func validateDrop(info: DropInfo) -> Bool { drag != nil }
+    func dropEntered(info: DropInfo) { if drag != nil { onTargetedChange?(true) } }
     func dropExited(info: DropInfo) { onTargetedChange?(false) }
     func performDrop(info: DropInfo) -> Bool {
         onTargetedChange?(false)
-        guard let id = draggingID else { return false }
-        onDrop(id)
+        guard let drag else { return false }
+        onDrop(drag)
         return true
     }
 }
@@ -810,18 +836,19 @@ private struct EditorPane: View {
                     // shield the content with a topmost workspaceTab target;
                     // it vanishes with the drag, so feature drops (APKs from
                     // Finder…) are untouched otherwise.
-                    if state.draggingTabID != nil {
+                    if state.anyTabDrag != nil {
                         Color.clear
                             .contentShape(Rectangle())
                             .onDrop(of: [.workspaceTab], delegate: paneDrop)
                     }
                 }
                 .overlay(alignment: .trailing) {
-                    // Only promise a split the model will honor: `split()`
-                    // requires >1 tab (something must stay behind), so a
-                    // single-tab drag shows no preview instead of a dead one.
-                    if !state.isSplit, contentTargeted,
-                       state.openTabIDs(inGroup: index).count > 1 { splitPreview }
+                    // Only promise a split the router will actually perform —
+                    // it refuses one for a tab arriving from another window,
+                    // and for a pane with nothing to leave behind.
+                    if contentTargeted, state.dropWouldSplit(state.anyTabDrag, inGroup: index) {
+                        splitPreview
+                    }
                 }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -830,13 +857,10 @@ private struct EditorPane: View {
     private var paneDrop: TabPaneDrop {
         TabPaneDrop(
             state: state,
-            onDrop: { id in
-                if state.isSplit {
-                    state.moveTab(id, toGroup: index)
-                } else {
-                    state.splitTab(id)
-                }
-                state.draggingTabID = nil
+            onDrop: { drag in
+                // Move into this pane, split off into a new one, or hand off
+                // from another window — `TabDropRouter` decides which.
+                state.acceptTabDrop(drag, on: .pane(group: index))
             },
             onTargetedChange: { contentTargeted = $0 }
         )

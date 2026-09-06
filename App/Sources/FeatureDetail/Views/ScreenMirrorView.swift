@@ -35,34 +35,74 @@ struct ScreenMirrorView: View {
     @Environment(\.openWindow) private var openWindow
     @AppStorage(mirrorIncludeAudioKey) private var includeAudio = false
     @AppStorage(mirrorShowTouchesKey) private var showTouches = false
-    @State private var model: MirrorViewModel?
-    /// The in-flight (re)connect, so a newer one can cancel and supersede it.
-    @State private var connectTask: Task<Void, Never>?
-    /// Identifies this view's leave guard so a stale clear can't wipe another's.
-    @State private var exitGuardID = UUID()
     /// Delayed teardown for a hidden tab; cancelled if the tab returns in time.
+    /// The one piece of this that really is the view's: it is about the tab
+    /// being hidden *here*, and a tab that moves is not hidden any more.
     @State private var teardownTask: Task<Void, Never>?
+    /// The session and the two editors' state when this mirror is a *window*
+    /// rather than a tab — see `editor`.
+    @State private var windowMirror = MirrorTabModel()
+    @State private var windowEditor = ScreenshotEditorModel()
+    @State private var windowVideoEditor = VideoEditorModel()
+
+    /// The live session, held by the window rather than by this view so a tab
+    /// moving keeps the stream it already has. See `MirrorTabModel`.
+    private var mirrorTab: MirrorTabModel {
+        tabFeatureID == MirrorWindow.featureID
+            ? windowMirror
+            : state.featureState(MirrorTabModel.self, for: tabFeatureID) { MirrorTabModel() }
+    }
+
+    private var model: MirrorViewModel? {
+        get { mirrorTab.session }
+        nonmutating set { mirrorTab.session = newValue }
+    }
+    private var connectTask: Task<Void, Never>? {
+        get { mirrorTab.connectTask }
+        nonmutating set { mirrorTab.connectTask = newValue }
+    }
+    private var exitGuardID: UUID { mirrorTab.exitGuardID }
+
+    /// Where the screenshot editor keeps the capture and its markup.
+    ///
+    /// A tab's editor lives in the window's `FeatureStateStore`, so annotations
+    /// survive the tab moving to another window. A pop-out mirror window is not
+    /// a tab: it cannot move, and it reads whichever workspace is frontmost, so
+    /// a store entry would be shared with the other pop-outs and would follow
+    /// the user between windows. It keeps its own instead.
+    private var editor: ScreenshotEditorModel {
+        tabFeatureID == MirrorWindow.featureID
+            ? windowEditor
+            : state.featureState(ScreenshotEditorModel.self, for: tabFeatureID) { ScreenshotEditorModel() }
+    }
+
+    /// The video editor a finished recording opens in, kept the same way.
+    private var videoEditor: VideoEditorModel {
+        tabFeatureID == MirrorWindow.featureID
+            ? windowVideoEditor
+            : state.featureState(VideoEditorModel.self, for: tabFeatureID) { VideoEditorModel() }
+    }
 
     var body: some View {
         ZStack {
-            if let model {
+            // The editor takes the whole pane ahead of the mirror: an
+            // annotation in progress is unsaved work, and a device that
+            // disconnects (which drops `model`) must not take it down with it.
+            if editor.image != nil {
+                ScreenshotEditorView(model: editor)
+            } else if let source = videoEditor.source {
                 // After Edit, take over the whole pane with the editor (full
-                // screen, not a sheet) so its tools are fully usable; closing it
-                // returns to the live mirror.
-                if let url = model.finishedRecording {
-                    VideoEditorPane(source: .recording(url)) {
-                        try? FileManager.default.removeItem(at: url)
-                        model.finishedRecording = nil
-                    }
-                    .id(url)
-                } else if let image = model.editingScreenshot {
-                    ScreenshotEditorView(image: image) { model.editingScreenshot = nil }
-                } else {
-                    MirrorStage(
-                        model: model,
-                        onReconnect: reconnectCurrent,
-                        onPopOut: popOutAction)
+                // screen, not a sheet) so its tools are fully usable; closing
+                // it returns to the live mirror.
+                VideoEditorPane(source: source) {
+                    try? FileManager.default.removeItem(at: source.url)
+                    videoEditor.close()
                 }
+            } else if let model {
+                MirrorStage(
+                    model: model,
+                    onReconnect: reconnectCurrent,
+                    onPopOut: popOutAction)
             } else {
                 ContentUnavailableView(
                     "Connect a device to mirror",
@@ -71,13 +111,21 @@ struct ScreenMirrorView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .recordingDecision(url: pendingRecording) { url in model?.finishedRecording = url }
-        .imageDecision(image: pendingScreenshot) { image in model?.editingScreenshot = image }
+        .recordingDecision(url: pendingRecording) { videoEditor.open(.recording($0)) }
+        .imageDecision(image: pendingScreenshot) { editor.open($0) }
         .task {
             // Connect if the mirror is the tab on screen when it's first
             // mounted; a hidden tab connects lazily once it becomes active
             // (below). A hidden mirror is heavy video encode for nothing.
+            // A tab that just moved here arrives with its session already
+            // streaming, and takes neither branch.
             if tabIsActive, model == nil { scheduleReconnect(to: targetSerial) }
+            // Re-publish what this window is mirroring, and re-arm a recording
+            // that crossed with the tab. Neither can ride `onChange`: the new
+            // window inherits nothing, and from its point of view nothing has
+            // changed — only which window is asking.
+            publishClaims(model?.serial)
+            armRecordingGuard(model?.isRecording == true)
         }
         .onChange(of: state.targetSerials.first) { _, serial in
             // Follow the selected device: switching it re-targets the live
@@ -124,14 +172,7 @@ struct ScreenMirrorView: View {
             Task { await CommandLog.userInitiated { await model.setShowTouches(show) } }
         }
         .onChange(of: model?.serial) { _, serial in
-            // Publish what this mirror is actually streaming, so the Mirror Wall
-            // doesn't put a second encoder on the same device (a split pane can
-            // show both at once). Claims come from *live* sessions, which is why
-            // a merely-open tab isn't enough. The pop-out windows are registered
-            // by `AppCore` instead — it holds all of them, and one write here
-            // would clobber its siblings.
-            guard tabFeatureID != MirrorWindow.featureID else { return }
-            state.noteMirrorClaims(serial.map { [$0] } ?? [], featureID: tabFeatureID)
+            publishClaims(serial)
         }
         .onChange(of: model?.recordingError) { _, message in
             guard let message else { return }
@@ -139,14 +180,7 @@ struct ScreenMirrorView: View {
             model?.recordingError = nil
         }
         .onChange(of: model?.isRecording) { _, recording in
-            if recording == true {
-                state.setExitGuard(.init(
-                    id: exitGuardID, featureID: tabFeatureID, style: .recording,
-                    title: "Recording in progress",
-                    message: "Leaving will stop the screen recording. Save it first, or discard it."))
-            } else {
-                state.clearExitGuard(exitGuardID)
-            }
+            armRecordingGuard(recording == true)
         }
         .onChange(of: state.pendingExit?.saving) { _, saving in
             if saving == true, model?.isRecording == true, state.pendingExitConcerns(tabFeatureID) {
@@ -154,16 +188,48 @@ struct ScreenMirrorView: View {
             }
         }
         .onDisappear {
-            state.clearExitGuard(exitGuardID)
-            if tabFeatureID != MirrorWindow.featureID {
-                state.noteMirrorClaims([], featureID: tabFeatureID)
-            }
+            // Only this window's grace timer is cancelled. The session itself
+            // stays: this also runs when the tab is merely moving, and
+            // `stopBackgroundWork` is where a close and a move are told apart.
             teardownTask?.cancel()
-            connectTask?.cancel()
-            let leaving = model
-            model = nil
-            Task { await leaving?.stop() }
+            if tabFeatureID == MirrorWindow.featureID {
+                // A pop-out window is not a tab, so this teardown is final: an
+                // unsaved annotation or edit in it goes with the window, its
+                // guards have to go too or nothing would ever clear them, and
+                // the session has nothing left to come back to.
+                state.clearExitGuard(editor.exitGuardID)
+                state.clearExitGuard(videoEditor.exitGuardID)
+                state.clearExitGuard(exitGuardID)
+                mirrorTab.shutDown()
+            }
         }
+    }
+
+    /// Publish what this mirror is actually streaming, so the Mirror Wall
+    /// doesn't put a second encoder on the same device (a split pane can show
+    /// both at once). Claims come from *live* sessions, which is why a merely
+    /// open tab isn't enough. The pop-out windows are registered by `AppCore`
+    /// instead — it holds all of them, and one write here would clobber its
+    /// siblings.
+    private func publishClaims(_ serial: String?) {
+        guard tabFeatureID != MirrorWindow.featureID else { return }
+        state.noteMirrorClaims(serial.map { [$0] } ?? [], featureID: tabFeatureID)
+    }
+
+    /// Register (or withdraw) the guard for a recording running through this
+    /// mirror. It survives a move because the recording does — the session
+    /// crosses with the tab and keeps writing — while closing the tab still
+    /// asks, because that really does stop it.
+    private func armRecordingGuard(_ recording: Bool) {
+        guard recording else {
+            state.clearExitGuard(exitGuardID)
+            return
+        }
+        state.setExitGuard(.init(
+            id: exitGuardID, featureID: tabFeatureID, style: .recording,
+            title: "Recording in progress",
+            message: "Leaving will stop the screen recording. Save it first, or discard it.",
+            survivesAMove: true))
     }
 
     /// Stop the hidden mirror after the grace window elapses, unless the tab

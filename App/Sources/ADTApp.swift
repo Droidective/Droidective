@@ -410,6 +410,12 @@ struct ADTApp: App {
 
                 Divider()
 
+                // ⌃⌘N: ⌘N is the Terminal's and ⇧⌘N opens a plain window, so
+                // moving a tab out sits beside them rather than on top of one.
+                TabHandoffCommands(core: core)
+
+                Divider()
+
                 // Control-based so they don't fight the form fields' Tab focus
                 // traversal or the palette's ⌘1–9 result jumps.
                 Button("Next Tab") { appState?.selectNextTab() }

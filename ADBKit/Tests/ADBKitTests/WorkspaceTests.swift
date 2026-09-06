@@ -109,6 +109,20 @@ import Testing
         #expect(ws.openTabs(inGroup: 0) == ["b", "a", "c"])
     }
 
+    /// The strip's dead space past the last chip drops to the end. It read as a
+    /// dead drop in the tab's own pane while working across panes.
+    @Test func dropWithNoTargetInTheSamePaneMovesToTheEnd() {
+        var ws = make([["a", "b", "c"]])
+        ws.drop("a", intoGroup: 0, before: nil)
+        #expect(ws.openTabs(inGroup: 0) == ["b", "c", "a"])
+    }
+
+    @Test func dropWithNoTargetIsStillANoOpForTheLastTab() {
+        var ws = make([["a", "b", "c"]])
+        ws.drop("c", intoGroup: 0, before: nil)
+        #expect(ws.openTabs(inGroup: 0) == ["a", "b", "c"])
+    }
+
     @Test func dropAcrossPanesMovesAndPositions() {
         var ws = make([["home", "logcat"], ["x", "y"]], focused: 0)
         ws.drop("logcat", intoGroup: 1, before: "y")
@@ -163,5 +177,111 @@ import Testing
         #expect(ws.groups.count == 1)
         #expect(ws.openTabs(inGroup: 0) == ["home"])
         #expect(ws.focusedGroup == 0)
+    }
+
+    // MARK: - detach (moving a tab to another window)
+
+    /// The two rules differ on exactly one case: a workspace's last tab may go
+    /// to another *open* window (consolidating two windows) but not to a window
+    /// of its own, which would just be this window moving.
+    @Test func theWorkspacesOnlyTabCanMoveToAnotherWindowButNotToANewOne() {
+        var ws = Workspace(fallback: "home")
+        #expect(ws.canDetach("home"))
+        #expect(ws.canDetachToNewWindow("home") == false)
+        #expect(ws.detach("home") == "home")
+        #expect(ws.openTabs(inGroup: 0) == ["home"]) // fallback reseeded
+    }
+
+    @Test func cannotDetachATabThatIsNotOpen() {
+        var ws = make([["home", "logcat"]])
+        #expect(ws.canDetach("performance") == false)
+        #expect(ws.canDetachToNewWindow("performance") == false)
+        #expect(ws.detach("performance") == nil)
+        #expect(ws.totalTabs == 2)
+    }
+
+    @Test func canDetachWhenAnotherTabRemainsInTheSamePane() {
+        var ws = make([["home", "logcat"]])
+        #expect(ws.canDetach("logcat"))
+        #expect(ws.canDetachToNewWindow("logcat"))
+        #expect(ws.detach("logcat") == "logcat")
+        #expect(ws.openTabs(inGroup: 0) == ["home"])
+    }
+
+    /// A tab that is the last one across *both* panes still cannot claim a new
+    /// window — the count is workspace-wide, not per pane.
+    @Test func aSplitWithOneTabEachStillAllowsANewWindow() {
+        var ws = make([["logcat"], ["wifi"]], focused: 0)
+        #expect(ws.canDetachToNewWindow("logcat"))
+        _ = ws.detach("logcat")
+        #expect(ws.isSplit == false)
+        #expect(ws.openTabs(inGroup: 0) == ["wifi"])
+        #expect(ws.canDetachToNewWindow("wifi") == false) // now the only one
+    }
+
+    /// "Something must stay behind" is counted across both panes, unlike
+    /// `split` — detaching a lone tab out of one pane collapses that pane and
+    /// leaves the other one holding the workspace.
+    @Test func canDetachAPanesLastTabWhenTheOtherPaneHasTabs() {
+        var ws = make([["home", "logcat"], ["performance"]], focused: 1)
+        #expect(ws.canDetach("performance"))
+        #expect(ws.detach("performance") == "performance")
+        #expect(ws.isSplit == false)
+        #expect(ws.openTabs(inGroup: 0) == ["home", "logcat"])
+        #expect(ws.focusedGroup == 0) // clamped back into range
+    }
+
+    /// A window that has given its last tab away should look like one whose
+    /// last tab was closed — showing Home — rather than a blank.
+    @Test func detachingTheLastTabLeavesTheFallbackBehind() {
+        var ws = make([["logcat", "performance"]])
+        _ = ws.detach("logcat")
+        #expect(ws.openTabs(inGroup: 0) == ["performance"])
+        _ = ws.detach("performance")
+        #expect(ws.openTabs(inGroup: 0) == ["home"])
+        #expect(ws.totalTabs == 1)
+    }
+
+    @Test func detachMovesFocusToASurvivingTabInTheSamePane() {
+        var ws = make([["home", "logcat", "performance"]])
+        ws.open("logcat") // make it active
+        #expect(ws.activeTab == "logcat")
+        _ = ws.detach("logcat")
+        #expect(ws.activeTab == "performance") // the tab that slid into the slot
+    }
+
+    @Test func detachingAnInactiveTabLeavesTheActiveOneAlone() {
+        var ws = make([["home", "logcat", "performance"]])
+        ws.open("performance")
+        _ = ws.detach("logcat")
+        #expect(ws.activeTab == "performance")
+        #expect(ws.openTabs(inGroup: 0) == ["home", "performance"])
+    }
+
+    @Test func detachFromTheFirstPanePromotesTheOther() {
+        var ws = make([["home"], ["logcat", "performance"]], focused: 0)
+        _ = ws.detach("home")
+        #expect(ws.isSplit == false)
+        #expect(ws.openTabs(inGroup: 0) == ["logcat", "performance"])
+        #expect(ws.focusedGroup == 0)
+    }
+
+    /// A detached id must be gone for good, so the receiving window can open it
+    /// without breaking the "a feature is open in at most one tab" invariant —
+    /// and so the source can open it again later.
+    @Test func aDetachedIdCanBeOpenedAgainInTheSameWorkspace() {
+        var ws = make([["home", "logcat"]])
+        _ = ws.detach("logcat")
+        #expect(ws.groupIndex(of: "logcat") == nil)
+        ws.open("logcat")
+        #expect(ws.openTabs(inGroup: 0) == ["home", "logcat"])
+        #expect(ws.totalTabs == 2) // not duplicated
+    }
+
+    @Test func detachDoesNotDisturbTheOtherPane() {
+        var ws = make([["home", "logcat"], ["performance", "wifi"]], focused: 0)
+        _ = ws.detach("logcat")
+        #expect(ws.openTabs(inGroup: 1) == ["performance", "wifi"])
+        #expect(ws.groups.count == 2)
     }
 }

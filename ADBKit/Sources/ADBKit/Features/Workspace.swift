@@ -109,6 +109,39 @@ public struct Workspace: Sendable, Equatable {
         focusedGroup = groupIndex(of: id) ?? focusedGroup
     }
 
+    /// Whether `id` can leave this workspace for *another window*.
+    ///
+    /// Only that it is open: moving a window's last tab into another window is
+    /// a legitimate way to consolidate two windows, and leaves this one showing
+    /// `fallback` exactly as closing that tab would.
+    public func canDetach(_ id: String) -> Bool {
+        groupIndex(of: id) != nil
+    }
+
+    /// Whether `id` can leave for a window *of its own*.
+    ///
+    /// Stricter, because something has to stay behind: a workspace whose only
+    /// tab left for a new window would not be a move, it would be the *window*
+    /// moving — and the window already moves. Same "something must stay"
+    /// precondition `split` carries, counted across both panes rather than
+    /// within one, because detaching collapses an emptied pane.
+    public func canDetachToNewWindow(_ id: String) -> Bool {
+        canDetach(id) && totalTabs > 1
+    }
+
+    /// Remove `id` from this workspace and return it, for a handoff to another
+    /// window.
+    ///
+    /// Deliberately the same removal `close` performs — collapse an emptied
+    /// second pane, keep `focusedGroup` in range, and never leave the workspace
+    /// empty — because a window that has just given its last tab away should
+    /// look exactly like one whose last tab was closed, rather than a blank.
+    public mutating func detach(_ id: String) -> String? {
+        guard canDetach(id) else { return nil }
+        close(id)
+        return id
+    }
+
     /// Split the workspace: move `id` into a new second pane. Requires its pane
     /// to hold more than one tab (something must stay behind) and no existing
     /// split.
@@ -132,7 +165,12 @@ public struct Workspace: Sendable, Equatable {
     public mutating func drop(_ id: String, intoGroup dest: Int, before targetID: String?) {
         guard let src = groupIndex(of: id) else { return }
         if src == dest {
-            if let targetID { reorder(id, before: targetID) }
+            // A nil target is the strip's dead space past the last chip, which
+            // means "put it at the end" — `reorder` already reads it that way.
+            // Skipping the call for nil made that a dead drop in the tab's own
+            // pane while working across panes, which is the asymmetry the strip
+            // documents itself as *not* having.
+            reorder(id, before: targetID)
         } else {
             move(id, toGroup: dest)
             if let targetID { reorder(id, before: targetID) }

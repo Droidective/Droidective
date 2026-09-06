@@ -7,13 +7,18 @@ import SwiftUI
 /// video opened from Finder arrives through `AppState.pendingVideo`.
 struct VideoEditorView: View {
     @Environment(AppState.self) private var state
-    @State private var openedURL: URL?
+    @Environment(\.tabFeatureID) private var tabFeatureID
+
+    /// The open video and every edit made to it, held by the window rather
+    /// than by this view, so moving the tab doesn't discard them.
+    private var editor: VideoEditorModel {
+        state.featureState(VideoEditorModel.self, for: tabFeatureID) { VideoEditorModel() }
+    }
 
     var body: some View {
         Group {
-            if let url = openedURL {
-                VideoEditorPane(source: .file(url)) { openedURL = nil }
-                    .id(url)
+            if let source = editor.source {
+                VideoEditorPane(source: source) { editor.close() }
             } else {
                 emptyState
             }
@@ -22,7 +27,7 @@ struct VideoEditorView: View {
         // routes the feature here and leaves the URL waiting. Claimed rather
         // than read, so returning to the tab later doesn't reopen it.
         .task(id: state.pendingVideo) {
-            if let url = state.claimPendingVideo() { openedURL = url }
+            if let url = state.claimPendingVideo() { editor.open(.file(url)) }
         }
     }
 
@@ -47,7 +52,7 @@ struct VideoEditorView: View {
         // saying no.
         .featureFileDrop(
             claims: { PlayableVideo.filter($0).first.map { [$0] } ?? [] },
-            perform: { openedURL = $0.first })
+            perform: { if let url = $0.first { editor.open(.file(url)) } })
     }
 
     private func openFile() {
@@ -55,6 +60,6 @@ struct VideoEditorView: View {
         panel.allowedContentTypes = PlayableVideo.contentTypes
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
-        if panel.runModal() == .OK, let url = panel.url { openedURL = url }
+        if panel.runModal() == .OK, let url = panel.url { editor.open(.file(url)) }
     }
 }

@@ -9,42 +9,91 @@ import UniformTypeIdentifiers
 /// CodeMirror editor (syntax highlighting, line numbers, ⌘F find).
 struct DecompileBrowserView: View {
     @Environment(AppState.self) private var state
+    @Environment(\.tabFeatureID) private var tabFeatureID
     @Environment(\.colorScheme) private var colorScheme
 
-    @State private var mode: DecompileService.Mode = .jadx
-    @State private var toolReady = false
-    @State private var checkingTool = true
-    @State private var download = DownloadState()
-
-    @State private var apkURL: URL?
+    /// Work in flight, which a move genuinely interrupts: the decompile and
+    /// the code search both belong to a `.task` SwiftUI cancels on unmount.
     @State private var busy = false
-    @State private var status: String?
+    @State private var searching = false
     @State private var dropTargeted = false
-
-    @State private var root: FileNode?
-    @State private var selection: String?
-    @State private var fileText: String?
-    @State private var fileLanguage = ""
-    @State private var targetLine = 0
     /// Bumped on every file open so a slow read can't overwrite a newer one.
     @State private var fileLoadID = 0
     @State private var findToken = 0
 
-    @State private var filter = ""
-    @State private var searchScope: SearchScope = .name
-    @State private var searchHits: [DecompileService.SearchHit] = []
-    @State private var searching = false
+    /// A non-nil injected APK embeds the browser in APK Studio: it decompiles
+    /// that APK directly (skipping the picker) and drops its "decompile
+    /// another" button — the workspace owns APK selection there, which is why
+    /// this one is passed in on every rebuild rather than kept.
+    private let injectedAPK: URL?
     private let embedded: Bool
 
-    /// A non-nil `apkURL` embeds the browser in APK Studio: it decompiles that
-    /// APK directly (skipping the picker) and drops its "decompile another"
-    /// button — the workspace owns APK selection.
     init(apkURL: URL? = nil) {
-        _apkURL = State(initialValue: apkURL)
+        injectedAPK = apkURL
         embedded = apkURL != nil
     }
 
-    private enum SearchScope: String, CaseIterable { case name = "File name", contents = "Code" }
+    /// The tree and the browsing of it, held by the window rather than by this
+    /// view: a decompile takes minutes. See `DecompileModel`.
+    private var model: DecompileModel {
+        state.featureState(DecompileModel.self, for: tabFeatureID) { DecompileModel() }
+    }
+
+    private var mode: DecompileService.Mode {
+        get { model.mode }
+        nonmutating set { model.mode = newValue }
+    }
+    private var toolReady: Bool {
+        get { model.toolReady }
+        nonmutating set { model.toolReady = newValue }
+    }
+    private var checkingTool: Bool {
+        get { model.checkingTool }
+        nonmutating set { model.checkingTool = newValue }
+    }
+    private var download: DownloadState { model.download }
+    private var apkURL: URL? {
+        get { embedded ? injectedAPK : model.apkURL }
+        nonmutating set { model.apkURL = newValue }
+    }
+    private var status: String? {
+        get { model.status }
+        nonmutating set { model.status = newValue }
+    }
+    private var root: FileNode? {
+        get { model.root }
+        nonmutating set { model.root = newValue }
+    }
+    private var selection: String? {
+        get { model.selection }
+        nonmutating set { model.selection = newValue }
+    }
+    private var fileText: String? {
+        get { model.fileText }
+        nonmutating set { model.fileText = newValue }
+    }
+    private var fileLanguage: String {
+        get { model.fileLanguage }
+        nonmutating set { model.fileLanguage = newValue }
+    }
+    private var targetLine: Int {
+        get { model.targetLine }
+        nonmutating set { model.targetLine = newValue }
+    }
+    private var filter: String {
+        get { model.filter }
+        nonmutating set { model.filter = newValue }
+    }
+    private var searchScope: SearchScope {
+        get { model.searchScope }
+        nonmutating set { model.searchScope = newValue }
+    }
+    private var searchHits: [DecompileService.SearchHit] {
+        get { model.searchHits }
+        nonmutating set { model.searchHits = newValue }
+    }
+
+    private typealias SearchScope = DecompileSearchScope
 
     private var toolName: String { mode == .jadx ? "jadx" : "apktool" }
 
@@ -150,7 +199,7 @@ struct DecompileBrowserView: View {
     }
 
     private var modePicker: some View {
-        Picker("Decompiler", selection: $mode) {
+        Picker("Decompiler", selection: modeBinding) {
             Text("Java (jadx)").tag(DecompileService.Mode.jadx)
             Text("Smali + resources (apktool)").tag(DecompileService.Mode.apktool)
         }
@@ -175,7 +224,11 @@ struct DecompileBrowserView: View {
                         .foregroundStyle(.textMuted).multilineTextAlignment(.center).frame(maxWidth: 480)
                     HStack {
                         Button("Try again") { Task { await runDecompile() } }
-                        Button("Choose another APK") { apkURL = nil }
+                        // Embedded in APK Studio the workspace owns which APK
+                        // is loaded, so there is nothing here to pick.
+                        if !embedded {
+                            Button("Choose another APK") { apkURL = nil }
+                        }
                     }
                 }
             }
@@ -224,12 +277,12 @@ struct DecompileBrowserView: View {
 
     private func sidebar(_ root: FileNode) -> some View {
         VStack(spacing: 6) {
-            Picker("", selection: $searchScope) {
+            Picker("", selection: searchScopeBinding) {
                 ForEach(SearchScope.allCases, id: \.self) { Text($0.rawValue).tag($0) }
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            TextField(searchScope == .name ? "Filter files…" : "Search code…", text: $filter)
+            TextField(searchScope == .name ? "Filter files…" : "Search code…", text: filterBinding)
                 .textFieldStyle(.roundedBorder)
                 .onSubmit { if searchScope == .contents { Task { await runSearch(in: root) } } }
                 .onChange(of: searchScope) { _, _ in searchHits = [] }
@@ -349,9 +402,23 @@ struct DecompileBrowserView: View {
     }
 
     private func prepare() async {
-        await checkTool()
+        // A tab that moved brings its answer with it, so don't re-ask: the
+        // tools were resolved once already, and re-running jadx because a
+        // window changed is the restart this whole mechanism exists to avoid.
+        if !toolReady { await checkTool() }
         guard toolReady, apkURL != nil else { return }
+        guard root == nil || model.treeKey != prepKey else { return }
         await runDecompile()
+    }
+
+    private var modeBinding: Binding<DecompileService.Mode> {
+        Binding(get: { mode }, set: { mode = $0 })
+    }
+    private var searchScopeBinding: Binding<SearchScope> {
+        Binding(get: { searchScope }, set: { searchScope = $0 })
+    }
+    private var filterBinding: Binding<String> {
+        Binding(get: { filter }, set: { filter = $0 })
     }
 
     private func runDecompile() async {
@@ -368,10 +435,12 @@ struct DecompileBrowserView: View {
             let tree = await Task.detached { DecompileService.tree(at: dir) }.value
             guard !Task.isCancelled else { return }
             root = tree
+            model.treeKey = prepKey
             status = nil
         } catch {
             status = error.localizedDescription
             root = nil
+            model.treeKey = nil
         }
     }
 

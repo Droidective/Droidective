@@ -5,12 +5,38 @@ import SwiftUI
 /// into both the standalone screen and the React Native hub.
 struct DeepLinksSection: View {
     @Environment(AppState.self) private var state
+    @Environment(\.tabFeatureID) private var tabFeatureID
     @State private var links: [DeepLink] = []
-    @State private var editingLink: DeepLink?
-    @State private var showEditor = false
-    @State private var draftLabel = ""
-    @State private var draftURL = ""
     @State private var pendingDelete: DeepLink?
+
+    /// The half-typed link, held by the window rather than by this view so a
+    /// tab moving doesn't empty the editor. See `DeepLinkDraftModel`. Keyed by
+    /// tab, because this section appears both on its own screen and inside the
+    /// React Native hub.
+    private var draft: DeepLinkDraftModel {
+        state.featureState(DeepLinkDraftModel.self, for: tabFeatureID) { DeepLinkDraftModel() }
+    }
+
+    private var editingLink: DeepLink? {
+        get { draft.editingLink }
+        nonmutating set { draft.editingLink = newValue }
+    }
+    private var showEditor: Bool {
+        get { draft.showEditor }
+        nonmutating set { draft.showEditor = newValue }
+    }
+    private var draftLabel: String {
+        get { draft.draftLabel }
+        nonmutating set { draft.draftLabel = newValue }
+    }
+    private var draftURL: String {
+        get { draft.draftURL }
+        nonmutating set { draft.draftURL = newValue }
+    }
+
+    private func bind<T>(_ keyPath: ReferenceWritableKeyPath<DeepLinkDraftModel, T>) -> Binding<T> {
+        Binding(get: { draft[keyPath: keyPath] }, set: { draft[keyPath: keyPath] = $0 })
+    }
 
     var body: some View {
         HubSection("Deep links", subtitle: "Saved per app — launch a URL on the device in one click.") {
@@ -41,7 +67,7 @@ struct DeepLinksSection: View {
             }
         }
         .task(id: state.selectedBundleId) { await loadLinks() }
-        .sheet(isPresented: $showEditor) { editor }
+        .sheet(isPresented: bind(\.showEditor)) { editor }
         .confirmationDialog(
             "Delete “\(pendingDelete?.label ?? "")”?",
             isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
@@ -95,9 +121,9 @@ struct DeepLinksSection: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(editingLink == nil ? "Add Deep Link" : "Edit Deep Link")
                 .font(.app(.headline))
-            TextField("URL (e.g. myapp://orders/123)", text: $draftURL)
+            TextField("URL (e.g. myapp://orders/123)", text: bind(\.draftURL))
                 .brandField()
-            TextField("Label (optional)", text: $draftLabel)
+            TextField("Label (optional)", text: bind(\.draftLabel))
                 .brandField()
             HStack {
                 Spacer()

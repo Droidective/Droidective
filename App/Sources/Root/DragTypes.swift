@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -32,4 +33,18 @@ func privateDragItem(_ type: UTType, _ payload: String) -> NSItemProvider {
     // Legacy item registration is process-global (equivalent to `.all`
     // visibility), so the drag still survives macOS's system-pasteboard bridge.
     NSItemProvider(item: Data(payload.utf8) as NSData, typeIdentifier: type.identifier)
+}
+
+/// The same marker as `privateDragItem`, written for an AppKit dragging
+/// session (`TabDragSource`) rather than for SwiftUI's `.onDrag`.
+///
+/// `NSItemProvider` is not an `NSPasteboardWriting`, so a session cannot carry
+/// one directly. A pasteboard item holding the identical UTI and payload is
+/// what SwiftUI's drop targets end up reading either way — they see the
+/// provider AppKit synthesises from the drag pasteboard, so the drop half is
+/// unchanged by which of the two started the drag.
+func privateDragPasteboardItem(_ type: UTType, _ payload: String) -> NSPasteboardItem {
+    let item = NSPasteboardItem()
+    item.setData(Data(payload.utf8), forType: NSPasteboard.PasteboardType(type.identifier))
+    return item
 }

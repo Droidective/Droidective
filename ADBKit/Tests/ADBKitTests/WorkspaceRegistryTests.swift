@@ -302,4 +302,54 @@ import Testing
         #expect(String(data: encoded, encoding: .utf8) == "\"abc-123\"")
         #expect(try JSONDecoder().decode(WorkspaceID.self, from: encoded) == WorkspaceID("abc-123"))
     }
+
+    // MARK: - Tear-off: two windows on one device
+
+    /// Tearing a tab out of a window makes "two windows on one device" the
+    /// normal case rather than the unusual one, because the moved tab inherits
+    /// its source's device. The rules have to stay stable under that.
+    @Test func twoWindowsOnOneDeviceResolveToTheFirst() {
+        let registry = registry([(w1, "PIXEL8", ["logcat"]), (w2, "PIXEL8", ["performance"])])
+        #expect(registry.owner(ofDevice: "PIXEL8") == w1)
+        #expect(registry.owner(ofDevice: "PIXEL8", excluding: w1) == w2)
+    }
+
+    @Test func aDoublyHeldDeviceIsStillTakenForANewWindow() {
+        let registry = registry([(w1, "PIXEL8", []), (w2, "PIXEL8", [])])
+        #expect(registry.unclaimed(from: ["PIXEL8", "GALAXY"]) == ["GALAXY"])
+    }
+
+    /// The ordering the handoff depends on: the source releases the exclusive
+    /// feature *before* the destination opens it, so the destination never sees
+    /// a conflict and never starts a second encoder on the device.
+    @Test func detachingAnExclusiveFeatureClearsTheConflictForTheDestination() {
+        var registry = registry([(w1, "PIXEL8", ["scrcpy"]), (w2, "PIXEL8", [])])
+        #expect(registry.conflict(opening: "scrcpy", in: w2) != nil)
+        registry.setOpenFeatures([], for: w1) // the source detached it
+        #expect(registry.conflict(opening: "scrcpy", in: w2) == nil)
+    }
+
+    /// The reverse ordering is what the handoff must never do: open first, then
+    /// close. This asserts the state that would produce — a real conflict — so
+    /// the ordering requirement is documented by a test rather than a comment.
+    @Test func openingBeforeTheSourceReleasesWouldConflict() {
+        let registry = registry([(w1, "PIXEL8", ["scrcpy"]), (w2, "PIXEL8", ["scrcpy"])])
+        #expect(registry.conflict(opening: "scrcpy", in: w2)
+            == .featureOwnedElsewhere(w1, featureID: "scrcpy"))
+    }
+
+    /// A non-exclusive feature moved to a second window on the same device is
+    /// never blocked — two logcats on one device is normal.
+    @Test func aDuplicableFeatureOnOneDeviceNeverConflicts() {
+        let registry = registry([(w1, "PIXEL8", ["logcat"]), (w2, "PIXEL8", ["logcat"])])
+        #expect(registry.conflict(opening: "logcat", in: w2) == nil)
+    }
+
+    /// Two windows on one device still get different tints: the tint tells
+    /// *windows* apart, not devices, and the title carries the device name.
+    @Test func twoWindowsOnOneDeviceStillTintDifferently() {
+        let first = WorkspaceRegistry.tintIndex(ofWindow: 2, paletteSize: 6)
+        let second = WorkspaceRegistry.tintIndex(ofWindow: 3, paletteSize: 6)
+        #expect(first != second)
+    }
 }

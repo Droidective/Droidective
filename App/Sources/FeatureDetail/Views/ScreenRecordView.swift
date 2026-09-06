@@ -10,30 +10,73 @@ import SwiftUI
 struct ScreenRecordView: View {
     @Environment(AppState.self) private var state
     @Environment(\.tabFeatureID) private var tabFeatureID
-    @State private var recorder: ScreenRecorder?
-    @State private var isRecording = false
-    @State private var isPaused = false
+    /// The recording itself, kept per window so a tab moving to another window
+    /// does not abort a take (see `ScreenRecordModel`). Only the preview — a
+    /// polled image — stays view-local, because it is rebuilt in a frame.
+    private var model: ScreenRecordModel {
+        state.featureState(ScreenRecordModel.self, for: "screen-record") { ScreenRecordModel() }
+    }
+    private var recorder: ScreenRecorder? {
+        get { model.recorder }
+        nonmutating set { model.recorder = newValue }
+    }
+    private var isRecording: Bool {
+        get { model.isRecording }
+        nonmutating set { model.isRecording = newValue }
+    }
+    private var isPaused: Bool {
+        get { model.isPaused }
+        nonmutating set { model.isPaused = newValue }
+    }
+    /// Reference date for the elapsed timer, shifted forward on each resume so
+    /// the displayed time counts only *active* recording (paused time excluded).
+    private var startedAt: Date? {
+        get { model.startedAt }
+        nonmutating set { model.startedAt = newValue }
+    }
+    /// When the current pause began; drives the frozen timer and the time-limit
+    /// reschedule. `nil` while actively recording.
+    private var pausedAt: Date? {
+        get { model.pausedAt }
+        nonmutating set { model.pausedAt = newValue }
+    }
+    /// The editor's own state, resolved here only so closing it can hand back
+    /// the proxy and the edits along with the recording.
+    private var videoEditor: VideoEditorModel {
+        state.featureState(VideoEditorModel.self, for: tabFeatureID) { VideoEditorModel() }
+    }
+
+    private var recordedURL: URL? {
+        get { model.recordedURL }
+        nonmutating set { model.recordedURL = newValue }
+    }
+    /// A finished recording awaiting the Discard/Save/Edit choice.
+    private var decisionURL: URL? {
+        get { model.decisionURL }
+        nonmutating set { model.decisionURL = newValue }
+    }
+    /// The serial the active recording targets, watched for disconnects.
+    private var recordingSerial: String? {
+        get { model.recordingSerial }
+        nonmutating set { model.recordingSerial = newValue }
+    }
+    /// The recording device vanished mid-capture: the captured segments are
+    /// kept and only Stop (save/edit/discard) remains.
+    private var deviceLost: Bool {
+        get { model.deviceLost }
+        nonmutating set { model.deviceLost = newValue }
+    }
+    private var limitTask: Task<Void, Never>? {
+        get { model.limitTask }
+        nonmutating set { model.limitTask = newValue }
+    }
+    /// Identifies this view's leave guard so a stale clear can't wipe another's.
+    private var exitGuardID: UUID { model.exitGuardID }
+
     @State private var isStarting = false
     @State private var isStopping = false
     @State private var isBusy = false
-    /// Reference date for the elapsed timer, shifted forward on each resume so
-    /// the displayed time counts only *active* recording (paused time excluded).
-    @State private var startedAt: Date?
-    /// When the current pause began; drives the frozen timer and the time-limit
-    /// reschedule. `nil` while actively recording.
-    @State private var pausedAt: Date?
-    @State private var recordedURL: URL?
-    /// A finished recording awaiting the Discard/Save/Edit choice.
-    @State private var decisionURL: URL?
-    /// The serial the active recording targets, watched for disconnects.
-    @State private var recordingSerial: String?
-    /// The recording device vanished mid-capture: the captured segments are
-    /// kept and only Stop (save/edit/discard) remains.
-    @State private var deviceLost = false
     @State private var showAdvanced = false
-    @State private var limitTask: Task<Void, Never>?
-    /// Identifies this view's leave guard so a stale clear can't wipe another's.
-    @State private var exitGuardID = UUID()
     /// Live preview of the frames being captured, polled from the recorder's
     /// session while recording so the user sees what's going into the file.
     @State private var previewImage: NSImage?
@@ -77,13 +120,18 @@ struct ScreenRecordView: View {
                 VideoEditorPane(source: .recording(url)) {
                     try? FileManager.default.removeItem(at: url)
                     recordedURL = nil
+                    videoEditor.close()
                 }
-                .id(url)
             } else {
                 recordControls
             }
         }
-        .recordingDecision(url: $decisionURL) { recordedURL = $0 }
+        .recordingDecision(url: Binding(
+            get: { model.decisionURL }, set: { model.decisionURL = $0 }
+        )) { url in
+            recordedURL = url
+            videoEditor.open(.recording(url))
+        }
         .onAppear { RecordAudioPreference.migrate(.standard) }
         .onChange(of: state.devices) {
             guard isRecording, !isStopping, !deviceLost, let recordingSerial,
@@ -96,13 +144,18 @@ struct ScreenRecordView: View {
                 Task { await saveRecordingForLeave() }
             }
         }
+        // Re-arm what a live recording needs from *this* window. The tab may
+        // have just arrived here carrying a recording that never stopped, in
+        // which case the preview, the device lock and the leave guard all have
+        // to be set up again — they belong to the window, not to the take.
+        .task { adoptRunningRecording() }
         .onDisappear {
-            limitTask?.cancel()
+            // View-local only. Aborting the take, clearing the guard and
+            // deleting the file belong to the tab *closing*, which
+            // `AppState.stopBackgroundWork` handles — this also runs when the
+            // tab is merely moving to another window, and a move must not
+            // destroy a recording.
             stopPreviewPolling()
-            state.setRecording(false, owner: "screen-record")
-            state.clearExitGuard(exitGuardID)
-            if isRecording, let recorder { Task { await recorder.abort() } }
-            if let url = recordedURL { try? FileManager.default.removeItem(at: url) }
         }
     }
 
@@ -377,7 +430,8 @@ struct ScreenRecordView: View {
             state.setExitGuard(.init(
                 id: exitGuardID, featureID: tabFeatureID, style: .recording,
                 title: "Recording in progress",
-                message: "Leaving will stop the screen recording. Save it first, or discard it."))
+                message: "Leaving will stop the screen recording. Save it first, or discard it.",
+                survivesAMove: true))
             scheduleTimeLimit(remaining: TimeInterval(options.timeLimitSeconds))
         } catch {
             state.showToast(Toast(message: error.localizedDescription, ok: false))
@@ -481,6 +535,19 @@ struct ScreenRecordView: View {
                 try? await Task.sleep(for: .milliseconds(90))
             }
         }
+    }
+
+    /// Take up a recording that is already running — either started in this
+    /// window, or carried in by a tab that moved here.
+    private func adoptRunningRecording() {
+        guard isRecording else { return }
+        if previewTask == nil { startPreviewPolling() }
+        state.setRecording(true, owner: "screen-record")
+        state.setExitGuard(.init(
+            id: exitGuardID, featureID: tabFeatureID, style: .recording,
+            title: "Recording in progress",
+            message: "Leaving will stop the screen recording. Save it first, or discard it.",
+            survivesAMove: true))
     }
 
     private func stopPreviewPolling() {

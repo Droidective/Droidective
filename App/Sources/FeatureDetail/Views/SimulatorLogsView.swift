@@ -16,22 +16,45 @@ struct SimulatorLogsView: View {
     @Environment(\.colorScheme) private var colorScheme
     /// The frozen, rendered buffer. Only mutated while following the tail —
     /// scrollback reads a stable list.
-    @State private var lines: [SimLogLine] = []
+    /// The buffer and its filters, kept per window so they survive this view
+    /// being rebuilt — see `SimulatorLogsModel`.
+    private var model: SimulatorLogsModel {
+        state.featureState(SimulatorLogsModel.self, for: "ios-logs") { SimulatorLogsModel() }
+    }
+    private var lines: [SimLogLine] {
+        get { model.lines }
+        nonmutating set { model.lines = newValue }
+    }
     /// Batches received while frozen (scrolled up) wait here.
     @State private var pending: [SimLogLine] = []
     /// True once `pending` overflowed and dropped its oldest lines.
     @State private var pendingOverflowed = false
-    @State private var paused = false
+    private var paused: Bool {
+        get { model.paused }
+        nonmutating set { model.paused = newValue }
+    }
     /// What the simulator emits: installed apps only, or the whole OS.
     @AppStorage("iosLogsScope") private var scopeRaw = SimulatorLogScope.apps.rawValue
     /// Which levels the feed *shows*; checking Info/Debug also widens what
     /// the simulator emits (a stream restart).
-    @State private var shownLevels: Set<SimLogLevel> = [.notice, .error, .fault]
+    private var shownLevels: Set<SimLogLevel> {
+        get { model.shownLevels }
+        nonmutating set { model.shownLevels = newValue }
+    }
     /// Right-click / Process-menu pick; narrows the feed to one process.
-    @State private var processFilter: String?
+    private var processFilter: String? {
+        get { model.processFilter }
+        nonmutating set { model.processFilter = newValue }
+    }
     /// Free-text filter, debounced from `searchInput` into `search`.
-    @State private var searchInput = ""
-    @State private var search = ""
+    private var searchInput: String {
+        get { model.searchInput }
+        nonmutating set { model.searchInput = newValue }
+    }
+    private var search: String {
+        get { model.search }
+        nonmutating set { model.search = newValue }
+    }
     /// Whether this tab is the one on screen. The stream keeps running while
     /// it isn't — only the flushing slows down (`FeedFlushCadence`), because a
     /// mounted hidden tab lays out every row it is handed.
@@ -175,7 +198,7 @@ struct SimulatorLogsView: View {
             levelsMenu
             processMenu
 
-            TextField("Filter…", text: $searchInput)
+            TextField("Filter…", text: Binding(get: { model.searchInput }, set: { model.searchInput = $0 }))
                 .brandField()
                 .frame(maxWidth: 200)
                 .help("Show only lines whose process, subsystem, category, or message contains this text")
@@ -571,7 +594,13 @@ struct SimulatorLogsView: View {
     }
 
     private func streamLoop() async {
-        lines.removeAll()
+        // Only when the *question* changed: `.task(id:)` also restarts this on
+        // a plain rebuild, which is what moving the tab does, and clearing
+        // there would make a move indistinguishable from a restart.
+        if model.bufferKey != taskKey {
+            lines.removeAll()
+            model.bufferKey = taskKey
+        }
         pending.removeAll()
         pendingOverflowed = false
         scrolledID = nil

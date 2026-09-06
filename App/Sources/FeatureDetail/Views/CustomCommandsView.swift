@@ -5,16 +5,54 @@ import SwiftUI
 /// adb argument vectors, plain terminal command lines, or script files.
 struct CustomCommandsView: View {
     @Environment(AppState.self) private var state
+    @Environment(\.tabFeatureID) private var tabFeatureID
     @State private var commands: [CustomCommand] = []
-    @State private var editing: CustomCommand?
-    @State private var showEditor = false
-    @State private var showPresets = false
-    @State private var draftName = ""
-    @State private var draftCommand = ""
-    @State private var draftNeedsBundle = false
-    @State private var draftRunsInTerminal = false
-    @State private var draftTerminal: CustomCommandTerminal = .droidective
     @State private var pendingDelete: CustomCommand?
+
+    /// The command being written, held by the window rather than by this view
+    /// so a tab moving doesn't empty the editor. See `CustomCommandDraftModel`.
+    private var draft: CustomCommandDraftModel {
+        state.featureState(CustomCommandDraftModel.self, for: tabFeatureID) {
+            CustomCommandDraftModel()
+        }
+    }
+
+    private var editing: CustomCommand? {
+        get { draft.editing }
+        nonmutating set { draft.editing = newValue }
+    }
+    private var showEditor: Bool {
+        get { draft.showEditor }
+        nonmutating set { draft.showEditor = newValue }
+    }
+    private var showPresets: Bool {
+        get { draft.showPresets }
+        nonmutating set { draft.showPresets = newValue }
+    }
+    private var draftName: String {
+        get { draft.draftName }
+        nonmutating set { draft.draftName = newValue }
+    }
+    private var draftCommand: String {
+        get { draft.draftCommand }
+        nonmutating set { draft.draftCommand = newValue }
+    }
+    private var draftNeedsBundle: Bool {
+        get { draft.draftNeedsBundle }
+        nonmutating set { draft.draftNeedsBundle = newValue }
+    }
+    private var draftRunsInTerminal: Bool {
+        get { draft.draftRunsInTerminal }
+        nonmutating set { draft.draftRunsInTerminal = newValue }
+    }
+    private var draftTerminal: CustomCommandTerminal {
+        get { draft.draftTerminal }
+        nonmutating set { draft.draftTerminal = newValue }
+    }
+
+    private func bind<T>(_ keyPath: ReferenceWritableKeyPath<CustomCommandDraftModel, T>) -> Binding<T> {
+        Binding(get: { draft[keyPath: keyPath] }, set: { draft[keyPath: keyPath] = $0 })
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -106,8 +144,8 @@ struct CustomCommandsView: View {
         .padding(16)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .task { commands = await state.env.stores.customCommands.load() }
-        .sheet(isPresented: $showEditor) { editor }
-        .sheet(isPresented: $showPresets) { presetLibrary }
+        .sheet(isPresented: bind(\.showEditor)) { editor }
+        .sheet(isPresented: bind(\.showPresets)) { presetLibrary }
         .confirmationDialog(
             "Delete “\(pendingDelete?.name ?? "")”?",
             isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
@@ -137,7 +175,7 @@ struct CustomCommandsView: View {
 
             VStack(alignment: .leading, spacing: 5) {
                 Text("Name").font(.app(.caption)).foregroundStyle(.textMuted)
-                TextField("What it does — e.g. Restart app", text: $draftName)
+                TextField("What it does — e.g. Restart app", text: bind(\.draftName))
                     .brandField()
             }
 
@@ -171,14 +209,14 @@ struct CustomCommandsView: View {
 
             VStack(alignment: .leading, spacing: 5) {
                 Text("Output").font(.app(.caption)).foregroundStyle(.textMuted)
-                Picker("Show output", selection: $draftRunsInTerminal) {
+                Picker("Show output", selection: bind(\.draftRunsInTerminal)) {
                     Text("Silently (toast)").tag(false)
                     Text("In a terminal").tag(true)
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 if draftRunsInTerminal {
-                    Picker("Terminal", selection: $draftTerminal) {
+                    Picker("Terminal", selection: bind(\.draftTerminal)) {
                         ForEach(CustomCommandTerminal.allCases, id: \.self) { terminal in
                             Text(terminal.displayName).tag(terminal)
                         }
@@ -192,7 +230,7 @@ struct CustomCommandsView: View {
                     .foregroundStyle(.textMuted)
             }
 
-            SwitchRow("Requires a saved bundle", isOn: $draftNeedsBundle)
+            SwitchRow("Requires a saved bundle", isOn: bind(\.draftNeedsBundle))
 
             HStack {
                 Spacer()
@@ -223,7 +261,7 @@ struct CustomCommandsView: View {
     /// Each line runs in order — multi-line always routes through the shell.
     private var commandEditor: some View {
         ZStack(alignment: .topLeading) {
-            TextEditor(text: $draftCommand)
+            TextEditor(text: bind(\.draftCommand))
                 .font(.app(.body, design: .monospaced))
                 .scrollContentBackground(.hidden)
                 .padding(.horizontal, 4)

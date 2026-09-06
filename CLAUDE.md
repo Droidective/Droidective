@@ -196,7 +196,15 @@ Node 22 in CI; scroll reveals and the hero palette demo must keep their
   `FeatureEngine` (runner dispatch +
   `implementedIDs` + every sub-service), `SidebarOrdering`
   (pure `reorder`/`move`/`moveToEnd` helpers for the sidebar, unit-tested
-  without UI), `WorkspaceRegistry` (the multi-window model: `WorkspaceID`,
+  without UI), `Workspace` (the tab/pane model — `canDetach` vs
+  `canDetachToNewWindow`: a window's *last* tab may move to another open window,
+  consolidating two windows, but not to one of its own), `TabHandoff` (what a
+  moved tab takes with it — its source's device and bundle, and the terminal
+  directories or wall devices only the feature that owns them),
+  `TabDropRouter` (the one table deciding what a dropped tab does — the
+  tab-drag twin of `FileDropRouter`) and `TearOffFrame` (where a dragged-out
+  window lands; screen coordinates are y-up and strip insets y-down, which is
+  the whole reason it is tested rather than inlined), `WorkspaceRegistry` (the multi-window model: `WorkspaceID`,
   which window owns which device, `exclusiveFeatureIDs` + the conflict
   queries behind the Focus / Take Over banner, and the window tint slot —
   nil for the first window, which keeps the app accent), `WindowEffects` (pure math for the translucent-window
@@ -498,6 +506,80 @@ table) is in `docs/reactotron-mcp-analysis.md`.
     controls stay — the wall keeps its header row, which is where the exit
     button lives. The menu key equivalent is the exit that always works: a
     mirror view swallows key events that reach it, but NSMenu sees them first.
+  - **A torn-off window inherits its source's device — it must never re-pick.**
+    Any tab can leave its window (right-click ▸ Open in New Window, ⌃⌘N, Move
+    to Window ▸, or dragging the chip out of the app), and it becomes an
+    *ordinary* workspace window rather than a bespoke host — the pop-out mirror
+    is what the alternative costs. Every other route to a new window
+    deliberately lands on a device no other window holds (`firstFreeSerial`);
+    for a moved tab that silently swaps the device out from under it. The seed
+    is a `WindowState` (`TabHandoff.seed`), so the receiver restores through the
+    path a relaunch already uses. Ordering is load-bearing: the source releases
+    the tab **before** the destination asks for it, on one main-actor turn, or
+    an exclusive feature comes up on its own collision banner. Two windows on
+    one device is now the normal case, not the unusual one. See
+    `docs/multi-window.md`.
+  - **A moved tab keeps its state, and where that state lives decides how.**
+    Moving a tab rebuilds its view, so `@State` is lost — true of a cross-pane
+    move too, not just tear-off. Three routes: app-wide sessions (the
+    Reactotron relay) just carry on, and `stopBackgroundWork(for:reason:)`
+    skips them on `.handoff`; per-window session objects (`TerminalManager`,
+    `JSConsoleSession`, `ApkStudioSession`) cross in `MovedSessions`, leaving a
+    fresh one behind; everything else keeps its state in a model held per
+    (window, feature, model type) by **`FeatureStateStore`**, which is *not*
+    `@Observable` on purpose — views resolve their model from `body` and
+    resolving creates one, so an observed container would loop. The type is
+    part of the key because one tab can keep two unrelated things (the mirror's
+    session and, while a capture is open, the screenshot editor's markup); they
+    move and are discarded together. A feed must also clear its buffer
+    only when the *question* changed (`bufferKey`), not on every `.task(id:)`
+    restart, and must not replay into a buffer that already holds those lines
+    (`-T 0` on a keeping restart). A *screen recording* moves too — it
+    writes through a headless session and the view only polls it for a preview
+    — so its abort and file deletion had to leave `onDisappear` (which also
+    runs on a move) for `stopBackgroundWork`. Performance and
+    Network Speed do *not* move: their sampler dies with the view, so a
+    preserved buffer would have a silent gap.
+  - **A leave guard whose work travels says so, per guard.**
+    `ExitGuard.survivesAMove` stops a move asking about a loss that will not
+    happen (the screen recorder's take, the screenshot editor's markup) while
+    closing the tab still asks. It is on the guard rather than the feature id
+    because one id can carry either kind — the mirror's recording guard and its
+    screenshot editor's both key on `scrcpy`. The far side has to *re-arm* it
+    from `.task`: the new window inherits none of the old one's guards, and
+    `onChange` won't fire because nothing about the work changed.
+  - **A `.task(id:)` fires on every mount, so anything expensive behind one
+    needs a "same question?" key.** `.task(id: apkURL|mode)` re-ran jadx from
+    the top on a move, because the id had not changed — only the window had.
+    `DecompileModel.treeKey` and `VideoEditorModel.builtFor` record what the
+    kept result was produced for, and the task returns early when it matches.
+    The work *in flight* still dies with the view (SwiftUI cancels the task),
+    which is the honest read: nothing else owns it.
+  - **A view that embeds in several tabs keys its state by `tabFeatureID`.**
+    The screenshot editor opens inside the Screenshot tab, the mirror and the
+    Mirror Wall, so `ScreenshotEditorModel` is resolved per tab id and its
+    `image` doubles as "is an editor open here" — the hosts ask the model
+    instead of each keeping a flag that a move would lose. The pop-out mirror
+    window keeps its editor in the view instead: it is not a tab, cannot move,
+    and reads whichever workspace is frontmost, so a store entry would be
+    shared with the other pop-outs.
+  - **A live mirror moves with its tab, layer and all.** `MirrorTabModel` /
+    `MirrorWallTabModel` keep the sessions in `FeatureStateStore`, and the
+    receiving view adopts the same display layer. Two rules fall out:
+    `MirrorLayerNSView.syncDisplayLayerFrame` sizes the layer only when
+    `displayLayer.superlayer === layer` (both views are alive for a moment
+    during a move, and the departing one still lays out), and the device claim
+    is released in `stopBackgroundWork` — for a handoff too — rather than in
+    `onDisappear`, because with the session preserved there is no reconnect
+    afterwards to re-publish it. The window it lands in publishes from `.task`.
+  - **A live NSView can only be mounted by the window that owns its session.**
+    `NativeTerminalView` re-parents one cached terminal view into whatever
+    container SwiftUI hands it. During a move the receiving pane *and* the
+    departing window's final update pass both run against real, live windows,
+    so `container.window != nil` cannot tell them apart — the departing one won
+    and re-parented the live terminal into an orphaned tree, leaving an empty
+    black pane over a healthy shell. The pane asks its own window whether it
+    still owns the shell (`TerminalManager.owns`) instead.
   - **Only the windows after the first tint their device icon**
     (`DeviceTint`); the app keeps one accent.
   - **A feature that can't run twice on one device** goes in
@@ -618,6 +700,34 @@ table) is in `docs/reactotron-mcp-analysis.md`.
     the subset a feature claims and hands the rest to `FileDropRouter`; every
     full-pane URL zone (APK Studio, Install App, the package screen, AAB, the
     video editor, inspector, signer, decompiler) goes through it.
+  - **A tab drag is app-wide, and every window has to know.** A tab can be
+    dragged into a window that did not start the drag, or out of the app
+    entirely, so the drag lives on `AppCore.tabDrag`;
+    `AppState.draggingTabID` narrows it to "a tab from *this* window", which is
+    what the existing callers ask. Three places must read the app-wide one or
+    a cross-window drag breaks silently: every window's drop targets, every
+    window's `EditorPane` shield overlay (without it, dragging into a window
+    whose active tab is APK Studio does nothing), and the hidden-tab
+    file-drop gate. Write it **twice per drag, never per move** — `AppCore` is
+    `@Observable` and `RootView.body` reads it, so a per-move write re-renders
+    every open window on every mouse move; the insertion guideline stays in the
+    strip's own `@State`, and the window frames the release decision needs are
+    captured once per session.
+  - **Only an `NSDraggingSource` can answer "was it accepted, and where?"**
+    SwiftUI's `.onDrag` reports neither, which is why the tab chip's drag is an
+    AppKit session started from a `DragGesture` (the pasteboard item is
+    unchanged, so every `.onDrop(of: [.workspaceTab])` target still accepts it).
+    Consequences worth knowing: SwiftUI's gesture is cancelled the moment the
+    drag loop takes the mouse, so **its `onEnded` cannot re-arm anything** — a
+    local "already started" flag latches on and the just-dragged chip becomes
+    undraggable; guard on the live drag instead. The chip's view is gone by the
+    time an *accepted* drop reports back, so the geometry it needs is captured
+    at drag start. Escape reads exactly like a refused drop, at wherever the
+    cursor sits. And `WindowGroup` keeps one frame autosave for the whole group
+    (`main-AppWindow-1`, re-stamped over the `droidective-main-N` name RootView
+    sets — which is why no such frame is ever written) and restores it *after*
+    the window accessor runs, so an explicitly placed window re-asserts its
+    frame a runloop turn later.
   - **`isTargeted` says *that* something is over the view, never *what*.** The
     hover announcement reads the in-flight drag pasteboard
     (`DragPasteboard.droppedPaths()`), which AppKit keeps populated for the

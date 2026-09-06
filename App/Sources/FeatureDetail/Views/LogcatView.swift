@@ -11,16 +11,52 @@ struct LogcatView: View {
     static let maxLines = 5000
 
     @Environment(AppState.self) private var state
-    @State private var lines: [LogLine] = []
-    @State private var paused = false
-    @State private var level = "All"
-    @State private var packageFilter: String?
-    @State private var tagFilter: String?
+
+    /// The buffer and its filters, held per window by `FeatureStateStore` so
+    /// they survive this view being rebuilt — which is what a tab moving to the
+    /// other pane, or to another window, does. Resolved per render rather than
+    /// stored: the store is a plain dictionary, not observable, so resolving
+    /// from `body` writes nothing that could invalidate the read (see
+    /// `FeatureStateStore`); the *model* is observable, so reading through it
+    /// tracks changes normally.
+    private var model: LogcatModel {
+        state.featureState(LogcatModel.self, for: "logcat") { LogcatModel() }
+    }
+
+    // Accessors, so the buffer's many use sites read exactly as they did when
+    // these were `@State`. `nonmutating set` because the storage is the model,
+    // not the view.
+    private var lines: [LogLine] {
+        get { model.lines }
+        nonmutating set { model.lines = newValue }
+    }
+    private var paused: Bool {
+        get { model.paused }
+        nonmutating set { model.paused = newValue }
+    }
+    private var level: String {
+        get { model.level }
+        nonmutating set { model.level = newValue }
+    }
+    private var packageFilter: String? {
+        get { model.packageFilter }
+        nonmutating set { model.packageFilter = newValue }
+    }
+    private var tagFilter: String? {
+        get { model.tagFilter }
+        nonmutating set { model.tagFilter = newValue }
+    }
     /// What the user is typing; debounced into `search` (which triggers a full
     /// re-filter and NSTextView rebuild) so a fast typist over a full buffer
     /// pays for one rebuild per pause, not one per keystroke.
-    @State private var searchInput = ""
-    @State private var search = ""
+    private var searchInput: String {
+        get { model.searchInput }
+        nonmutating set { model.searchInput = newValue }
+    }
+    private var search: String {
+        get { model.search }
+        nonmutating set { model.search = newValue }
+    }
     /// Measured toolbar width — below ~560pt (a narrow split pane) the
     /// toolbar reflows to two rows instead of clipping.
     @State private var toolbarWidth: CGFloat = 0
@@ -34,7 +70,10 @@ struct LogcatView: View {
     @State private var waitingForPackage: String?
     @State private var streamingPid: Int?
     /// pid → process name (a periodic `ps` snapshot) for the process column.
-    @State private var processNames: [String: String] = [:]
+    private var processNames: [String: String] {
+        get { model.processNames }
+        nonmutating set { model.processNames = newValue }
+    }
     /// The live streamer, held so visibility changes can re-pace its flushing
     /// without restarting the stream (a restart would clear the feed).
     @State private var streamer: LogcatStreamer?
@@ -51,7 +90,10 @@ struct LogcatView: View {
     @State private var feedVisible = true
     /// One-shot: the App filter is seeded from the device bar's chosen bundle
     /// the first time the view appears, then left to the user.
-    @State private var seededPackageFilter = false
+    private var seededPackageFilter: Bool {
+        get { model.seededPackageFilter }
+        nonmutating set { model.seededPackageFilter = newValue }
+    }
     /// Mirrors the log pane's edge/scrollability state; drives the jump buttons.
     @State private var edges = LogScrollEdges()
     /// Set by the jump buttons to ask the pane to snap to an edge.
@@ -171,7 +213,8 @@ struct LogcatView: View {
     private var levelPicker: some View {
         HStack(spacing: 6) {
             Text("Level")
-            Picker("Level", selection: $level) {
+            Picker("Level", selection: Binding(
+                get: { model.level }, set: { model.level = $0 })) {
                 ForEach(Self.levels, id: \.value) { item in
                     Text(item.label).tag(item.value)
                 }
@@ -193,7 +236,8 @@ struct LogcatView: View {
     }
 
     private var filterField: some View {
-        TextField("Filter lines…", text: $searchInput)
+        TextField("Filter lines…", text: Binding(
+            get: { model.searchInput }, set: { model.searchInput = $0 }))
             .brandField()
             .frame(maxWidth: 220)
             .help("Show only the lines containing this text")
@@ -522,7 +566,19 @@ struct LogcatView: View {
     /// level, or app filter changes. Outer loop survives app restarts (pid
     /// changes) and transient stream deaths.
     private func streamLoop() async {
-        lines.removeAll()
+        // Clear only when the *question* changed. `.task(id:)` also restarts
+        // this loop when the view is simply rebuilt — which is what moving the
+        // tab to another window or pane does — and dropping the buffer there
+        // would make a move indistinguishable from a restart.
+        // `.task(id:)` also restarts this loop when the view is merely rebuilt —
+        // which is what moving the tab to another window or pane does. Clearing
+        // there would make a move indistinguishable from a restart, so the
+        // buffer is only dropped when the *question* changed.
+        let keepingBuffer = model.bufferKey == taskKey && !lines.isEmpty
+        if !keepingBuffer {
+            lines.removeAll()
+            model.bufferKey = taskKey
+        }
         waitingForPackage = nil
         streamingPid = nil
         guard let serial = state.targetSerials.first else { return }
@@ -573,7 +629,15 @@ struct LogcatView: View {
                 streamingPid = pid
             }
 
-            let filters = LogcatFilters(level: level == "All" ? nil : level, pid: pid)
+            // No replay when the buffer is being kept: `adb logcat -T n` opens
+            // by reprinting the device's last n lines, which are already held,
+            // so a moved tab would show its recent history twice. Starting at
+            // the live edge instead costs only the lines emitted during the
+            // restart itself — milliseconds, and the trade "buffers, not stream
+            // continuity" already accepts.
+            let filters = LogcatFilters(
+                tail: keepingBuffer ? 0 : LogcatFilters().tail,
+                level: level == "All" ? nil : level, pid: pid)
             guard let stream = try? await streamer.start(serial: serial, filters: filters) else { return }
 
             if !recordedCommand {

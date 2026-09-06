@@ -106,7 +106,9 @@ final class AppState {
     /// APK Studio's loaded-APK session. In-memory, so it resumes across
     /// navigation within a run and is cleared when the app quits (the decompiled
     /// cache is wiped alongside it — see `AppDelegate.applicationWillTerminate`).
-    let apkStudio = ApkStudioSession()
+    /// APK Studio's loaded APK and its tab. `var` so it travels with the tab
+    /// rather than being rebuilt empty in the receiving window (`MovedSessions`).
+    private(set) var apkStudio = ApkStudioSession()
 
     /// The Finder-opened-APK screen's files (the `apk-open` workspace tab —
     /// deliberately not a registry feature; it exists only when a file
@@ -134,9 +136,20 @@ final class AppState {
     /// (or quitting), not on switching.
     private(set) var workspace = Workspace(fallback: "home")
 
-    /// The tab id being dragged in a strip, or nil when no drag is in flight —
-    /// shared so a pane can offer a drop target for moving/splitting tabs.
-    var draggingTabID: String?
+    /// The tab *this* window is dragging, or nil — which is the question every
+    /// existing caller asks (fade the original chip, suppress its own
+    /// guideline). The drag itself lives on `AppCore` because it can end in
+    /// another window; `anyTabDrag` is the app-wide view of it.
+    var draggingTabID: String? {
+        get { core.tabDrag.flatMap { $0.source == id ? $0.featureID : nil } }
+        set {
+            if let newValue {
+                core.tabDrag = TabDrag(featureID: newValue, source: id)
+            } else if core.tabDrag?.source == id {
+                core.tabDrag = nil
+            }
+        }
+    }
 
     /// The focused pane's active tab: drives the device bar, sidebar highlight,
     /// and window title.
@@ -238,11 +251,13 @@ final class AppState {
 
     /// The JS Console (Hermes CDP) session — owned here so its log buffer and
     /// connection survive leaving the feature, like the Reactotron session.
-    let jsConsoleSession: JSConsoleSession
+    /// `var`, not `let`, because it travels with its tab: see `MovedSessions`.
+    private(set) var jsConsoleSession: JSConsoleSession
 
     /// The Terminal feature's shells — owned here so every tab's PTY session
-    /// and scrollback survive leaving the feature.
-    let terminals = TerminalManager()
+    /// and scrollback survive leaving the feature, and replaceable so they
+    /// survive the tab moving to another window too (`MovedSessions`).
+    private(set) var terminals = TerminalManager()
 
     /// With auto-hide on (Settings ▸ Appearance), the sidebar rides over the
     /// content instead of sitting in the layout; this is that overlay's
@@ -576,6 +591,13 @@ final class AppState {
         let savedStep = UserDefaults.standard.object(forKey: "fontScaleStep") as? Int ?? Self.defaultScaleIndex
         fontScaleStep = min(max(savedStep, 0), Self.scales.count - 1)
         jsConsoleSession = JSConsoleSession(adb: core.env.client)
+        wireSessions()
+    }
+
+    /// Point the per-window sessions back at this window. Called at init and
+    /// again whenever one is replaced — either by a session arriving from
+    /// another window, or by the fresh one left behind when it leaves.
+    private func wireSessions() {
         jsConsoleSession.app = self
         // Typing `exit` (or a shell crash) closes that tab like the × does.
         // The contains-check drops late callbacks racing a killAll teardown.
@@ -583,6 +605,83 @@ final class AppState {
             guard let self, self.terminals.tabs.contains(where: { $0.id == id }) else { return }
             self.closeTerminalShell(id)
         }
+    }
+
+    /// This window's model for `feature`, built on first use and kept until
+    /// the tab closes — the state a feature wants to survive its view being
+    /// rebuilt (a log buffer, a fetched list). See `FeatureStateStore`.
+    func featureState<T: AnyObject>(
+        _ type: T.Type, for feature: String, make: () -> T
+    ) -> T {
+        core.featureStates.model(type, feature: feature, in: id, make: make)
+    }
+
+    /// The live per-window work a moving tab takes with it.
+    ///
+    /// A feature whose state lives in an object owned by the *window* — the
+    /// terminal's PTYs and scrollback, the JS console's CDP connection and
+    /// console history — would otherwise be torn down here and rebuilt there,
+    /// which is a restart wearing a move's clothes. The object crosses instead,
+    /// and the window it left gets a fresh one so it keeps working.
+    ///
+    /// Only features whose work outlives their view need an entry: everything
+    /// else either rebuilds cheaply or is already app-wide (the Reactotron
+    /// relay, which no window owns).
+    struct MovedSessions {
+        var terminals: TerminalManager?
+        var jsConsole: JSConsoleSession?
+        /// The APK loaded into APK Studio, and which of its tabs was open.
+        var apkStudio: ApkStudioSession?
+        /// Whatever the moving tab kept in `FeatureStateStore` — the buffer or
+        /// loaded work a rebuilt view would otherwise start without.
+        var featureState: [ObjectIdentifier: AnyObject] = [:]
+        /// Which feature `featureState` belongs to.
+        var featureID: String?
+
+        var isEmpty: Bool {
+            terminals == nil && jsConsole == nil && apkStudio == nil && featureState.isEmpty
+        }
+    }
+
+    /// Hand `featureID`'s live session over, leaving a fresh one behind.
+    func takeMovableSessions(for featureID: String) -> MovedSessions {
+        var moved = MovedSessions()
+        switch featureID {
+        case TabHandoff.terminalFeatureID:
+            moved.terminals = terminals
+            terminals = TerminalManager()
+        case "js-console":
+            moved.jsConsole = jsConsoleSession
+            jsConsoleSession = JSConsoleSession(adb: core.env.client)
+        case "apk-studio":
+            moved.apkStudio = apkStudio
+            apkStudio = ApkStudioSession()
+        default:
+            break
+        }
+        // Every feature may have one, so this is not part of the switch: the
+        // store answers nil for the ones that keep nothing.
+        moved.featureID = featureID
+        moved.featureState = core.featureStates.take(feature: featureID, in: id)
+        if moved.terminals != nil || moved.jsConsole != nil { wireSessions() }
+        return moved
+    }
+
+    /// Sessions taken by `detachTab`, waiting for the receiving window. Held
+    /// for the length of one handoff only; `AppCore` collects it immediately.
+    var pendingMovedSessions = MovedSessions()
+
+    /// Take live sessions arriving with a tab from another window.
+    func adoptMovableSessions(_ moved: MovedSessions) {
+        guard !moved.isEmpty else { return }
+        if let featureID = moved.featureID {
+            core.featureStates.put(moved.featureState, feature: featureID, in: id)
+        }
+        if let apkStudio = moved.apkStudio { self.apkStudio = apkStudio }
+        guard moved.terminals != nil || moved.jsConsole != nil else { return }
+        if let terminals = moved.terminals { self.terminals = terminals }
+        if let jsConsole = moved.jsConsole { jsConsoleSession = jsConsole }
+        wireSessions()
     }
 
     /// Adopt this window's persisted state, or start fresh when `saved` is nil
@@ -609,7 +708,7 @@ final class AppState {
             // A new window: target the device it was opened for (or the first
             // one no other window is showing) and inherit the last app bundle.
             selectedBundleId = core.lastSelectedBundleId
-            selectedSerial = core.takeWindowTarget(id) ?? firstFreeSerial()
+            selectedSerial = core.windowSeedTarget(id) ?? firstFreeSerial()
         }
         // Replay feature opens that raced the load (e.g. openAPKs from Finder).
         for pending in pendingFeatureOpens {
@@ -789,11 +888,24 @@ final class AppState {
         var style: Style
         var title: String
         var message: String
+        /// Whether the work this guards travels with a moving tab. A guard says
+        /// "leaving destroys this" — true of closing the tab either way, but a
+        /// *move* destroys nothing for a recording that writes through a
+        /// headless session or markup held in the window's `FeatureStateStore`,
+        /// so those move without asking. Per guard rather than per feature: one
+        /// feature id can carry either kind (the mirror's recording guard and
+        /// its screenshot editor's both key on `scrcpy`).
+        var survivesAMove = false
     }
 
     /// A navigation held back until the user resolves the active `ExitGuard`.
     struct PendingExit: Equatable {
-        enum Target: Equatable { case closeTab(String), device(String), quit }
+        /// `handoff` moves a tab to another window, which unmounts its view
+        /// exactly as closing it does — so it is held behind the same guard.
+        enum Target: Equatable {
+            case closeTab(String), device(String), quit
+            case handoff(String, HandoffDestination)
+        }
         var target: Target
         /// Flips true when the user chooses "Stop & save": the active view runs
         /// its own save, then calls `finishExitSave()`. The dialog hides while
@@ -805,6 +917,12 @@ final class AppState {
     /// this when losable work begins, and `clearExitGuard` when it ends.
     func setExitGuard(_ value: ExitGuard) { exitGuards[value.featureID] = value }
 
+    /// Hold a navigation behind the active leave confirmation. `pendingExit` is
+    /// `private(set)` so only the paths that know how to resolve it can arm it.
+    func holdBehindGuard(_ target: PendingExit.Target) {
+        pendingExit = PendingExit(target: target)
+    }
+
     /// Clear the guard identified by `id`, wherever it's keyed — so a torn-down
     /// view can't wipe a guard a newer view just registered (ids are unique).
     func clearExitGuard(_ id: UUID) {
@@ -815,7 +933,7 @@ final class AppState {
     /// guard, or any active guard when switching device / quitting.
     var pendingGuard: ExitGuard? {
         switch pendingExit?.target {
-        case .closeTab(let id): return exitGuards[id]
+        case .closeTab(let id), .handoff(let id, _): return exitGuards[id]
         case .device, .quit: return exitGuards.values.first
         case nil: return nil
         }
@@ -827,7 +945,7 @@ final class AppState {
     /// can't make a different tab save.
     func pendingExitConcerns(_ featureID: String) -> Bool {
         switch pendingExit?.target {
-        case .closeTab(let id): return id == featureID
+        case .closeTab(let id), .handoff(let id, _): return id == featureID
         case .device, .quit: return true
         case nil: return false
         }
@@ -980,6 +1098,58 @@ final class AppState {
         persistTabs()
     }
 
+    /// Resolve a tab drop into *this* window, wherever the tab came from.
+    ///
+    /// One funnel for every strip and pane target, so the cross-window case
+    /// can't be handled in one place and forgotten in another; `TabDropRouter`
+    /// (pure, in ADBKit) makes the actual decision. A tab from another window
+    /// is a handoff routed through `beginHandoff` on its *source*, so a live
+    /// recording or open shells still get their confirmation rather than being
+    /// dropped silently — and the slot rides along, so a move held behind that
+    /// confirmation still lands where it was dropped.
+    func acceptTabDrop(_ drag: TabDrag, on target: TabDropRouter.Target) {
+        core.tabDrag = nil
+        let outcome = TabDropRouter.outcome(
+            drag: TabDropRouter.Drag(featureID: drag.featureID, source: drag.source),
+            window: id,
+            target: target,
+            shape: dropShape(for: target))
+        switch outcome {
+        case .ignore:
+            break
+        case .place(let group, let before):
+            dropTab(drag.featureID, intoGroup: group, before: before)
+        case .split:
+            splitTab(drag.featureID)
+        case .handoff(let source, let group, let before):
+            core.workspace(id: source)?.beginHandoff(
+                drag.featureID,
+                to: .window(id, slot: HandoffSlot(group: group, before: before)))
+        }
+    }
+
+    /// This window's panes as the drop router sees them.
+    private func dropShape(for target: TabDropRouter.Target) -> TabDropRouter.Shape {
+        let group = switch target {
+        case .strip(let group, _): group
+        case .pane(let group): group
+        }
+        return TabDropRouter.Shape(
+            isSplit: isSplit, paneTabCount: openTabIDs(inGroup: group).count)
+    }
+
+    /// Whether dropping the tab in flight on `group`'s content would split this
+    /// window — what the pane's "Drop to split" preview asks before promising.
+    func dropWouldSplit(_ drag: TabDrag?, inGroup group: Int) -> Bool {
+        guard let drag else { return false }
+        let target = TabDropRouter.Target.pane(group: group)
+        return TabDropRouter.outcome(
+            drag: TabDropRouter.Drag(featureID: drag.featureID, source: drag.source),
+            window: id,
+            target: target,
+            shape: dropShape(for: target)) == .split
+    }
+
     /// Split the workspace: move `id` into a new second pane.
     func splitTab(_ id: String) {
         workspace.split(id)
@@ -988,30 +1158,147 @@ final class AppState {
 
     private func performClose(_ id: String) {
         workspace.close(id)
-        stopBackgroundWork(for: id)
+        stopBackgroundWork(for: id, reason: .closing)
+        // Closing a tab means done with it: its buffer goes too, rather than
+        // reappearing the next time the feature is opened.
+        core.featureStates.discard(feature: id, in: self.id)
         persistTabs()
     }
+
+    /// Whether `featureID`'s tab can leave this window for another *open* one.
+    func canDetachTab(_ featureID: String) -> Bool { workspace.canDetach(featureID) }
+
+    /// Whether it can leave for a window of its own — stricter, because
+    /// something has to stay behind (see `Workspace.canDetachToNewWindow`).
+    func canDetachTabToNewWindow(_ featureID: String) -> Bool {
+        workspace.canDetachToNewWindow(featureID)
+    }
+
+    /// Remove `featureID`'s tab and stop the work this window was doing on its
+    /// behalf, returning the state that has to travel with it.
+    ///
+    /// The order matters twice over. The tab leaves the workspace *before* the
+    /// registry is told, so an exclusive feature (scrcpy, the JS console) is
+    /// released here before the receiving window asks for it — otherwise it
+    /// comes up on the collision banner instead of running. And the carry is
+    /// read *after* the work is stopped, because stopping the Terminal is what
+    /// snapshots its shells' directories.
+    func detachTab(_ featureID: String) -> TabHandoff.Carry {
+        guard workspace.detach(featureID) != nil else { return .none }
+        // Stopped first, then taken: on a `.handoff` the stop only releases what
+        // belongs to *this window* (the device lock, the leave guard) and leaves
+        // the work itself running, and it needs the feature's model still in
+        // place to do that. Taking first would hand it over before this window
+        // had let go of it.
+        stopBackgroundWork(for: featureID, reason: .handoff)
+        pendingMovedSessions = takeMovableSessions(for: featureID)
+        let carry = TabHandoff.Carry(
+            terminalResumeDirs: featureID == TabHandoff.terminalFeatureID
+                ? terminalResumeDirs : nil,
+            mirrorWallSerials: featureID == TabHandoff.mirrorWallFeatureID
+                ? mirrorWallSerials : nil)
+        persistTabs()
+        return carry
+    }
+
+    /// Take a tab moved in from another window, with the state it carried and
+    /// (for a drag) the slot it was dropped on.
+    ///
+    /// A feature is open in at most one tab per window, so arriving at a window
+    /// that already shows it *merges*: `requestFeature` refocuses the existing
+    /// tab and the moved one's view state is discarded. That is the honest read
+    /// of the invariant — there is nowhere for a second copy to go.
+    func adoptHandoff(_ featureID: String, carrying carry: TabHandoff.Carry, at slot: HandoffSlot?) {
+        if let dirs = carry.terminalResumeDirs { terminalResumeDirs = dirs }
+        if let serials = carry.mirrorWallSerials { mirrorWallSerials = serials }
+        requestFeature(featureID)
+        if let slot { dropTab(featureID, intoGroup: slot.group, before: slot.before) }
+    }
+
+    /// Why a tab's work is being stopped. A tab that is *moving* keeps the
+    /// app-wide sessions it shares with other windows alive across the move.
+    enum StopReason { case closing, handoff }
 
     /// Closing a tab fully stops that feature's background work. Most features
     /// stop when their view unmounts (their `.task` is cancelled on close), but a
     /// few sessions are owned here and kept alive across tab *switches* — so
     /// closing their tab has to tear them down explicitly. A feature is open in at
     /// most one tab, so once it's closed no other tab still needs it.
-    private func stopBackgroundWork(for id: String) {
+    private func stopBackgroundWork(for id: String, reason: StopReason) {
         // With MCP on, the relay must survive tab/window close — agents keep
         // querying while the user isn't looking (Settings ▸ MCP turns it off).
         // The relay is app-wide, so another window still showing it keeps it
         // up too: this window's close must not pull the timeline out from
         // under the other one.
-        if id == "reactotron", reactotronSession.isRunning, !mcp.keepsRelayAlive,
+        // A *moving* tab is about to reopen in another window, so the relay it
+        // shares with every window must survive the gap — stopping it would
+        // drop every connected RN client for the sake of a tab that never
+        // really closed. `AppCore.reconcileSharedSessions` catches the case
+        // where the move somehow didn't land.
+        if id == "reactotron", reason == .closing, reactotronSession.isRunning,
+           !mcp.keepsRelayAlive,
            !core.featureIsOpenElsewhere("reactotron", excluding: self.id) {
             Task { await reactotronSession.stop() }
         }
-        if id == "js-console" {
+        // Both of these travel with a moving tab (`MovedSessions`), so on a
+        // handoff the session that is about to keep running in another window
+        // has already been handed over and this window holds a fresh one —
+        // stopping it here would tear down the wrong thing, and stopping the
+        // moved one would undo the move.
+        if id == "js-console", reason == .closing {
             jsConsoleSession.stop()
             Task { await jsConsoleSession.removeReverseTunnels() }
         }
-        if id == "terminal" {
+        // A screen recording outlives its view — the recorder writes through a
+        // headless scrcpy session — so a *move* keeps the take and only hands
+        // back this window's device lock and leave guard. A close is the one
+        // that gives up the recording and its file.
+        if id == "screen-record",
+           let recording = core.featureStates.existing(
+               ScreenRecordModel.self, feature: id, in: self.id) {
+            setRecording(false, owner: "screen-record")
+            clearExitGuard(recording.exitGuardID)
+            if reason == .closing { recording.abortAndDiscard() }
+        }
+        // Unsaved screenshot markup crosses with a moving tab — its model
+        // travels in `MovedSessions` — so a move only hands back the leave
+        // guard this window registered, and the window it lands in re-arms the
+        // same one. A close gives up the markup with the tab, which is exactly
+        // what the guard just asked about.
+        if let editor = core.featureStates.existing(
+            ScreenshotEditorModel.self, feature: id, in: self.id) {
+            clearExitGuard(editor.exitGuardID)
+        }
+        // The video editor's edits and its playback proxy cross with a moving
+        // tab the same way. A close gives up both, and the recording the editor
+        // was opened on: a temp file nobody chose to keep.
+        if let video = core.featureStates.existing(
+            VideoEditorModel.self, feature: id, in: self.id) {
+            clearExitGuard(video.exitGuardID)
+            if reason == .closing { video.closeAndDiscardRecording() }
+        }
+        // A live mirror crosses with a moving tab: the scrcpy server, the
+        // encoder, the adb tunnel and the decoder all keep running, and the
+        // window it lands in adopts the same display layer. Only a real close —
+        // or the window going away, which comes through here too — gives the
+        // device back and tears the session down. The same for the wall, which
+        // is up to six of them at once.
+        if let mirror = core.featureStates.existing(
+            MirrorTabModel.self, feature: id, in: self.id) {
+            clearExitGuard(mirror.exitGuardID)
+            // The tab is leaving *this* window either way, so this window stops
+            // claiming the device — before the window it lands in asks for it,
+            // which is the ordering a handoff already promises. A cross-pane
+            // move never reaches here, and shouldn't: the claim stays put.
+            noteMirrorClaims([], featureID: id)
+            if reason == .closing { mirror.shutDown() }
+        }
+        if let wall = core.featureStates.existing(
+            MirrorWallTabModel.self, feature: id, in: self.id) {
+            noteMirrorClaims([], featureID: id)
+            if reason == .closing { wall.shutDown() }
+        }
+        if id == "terminal", reason == .closing {
             // Implicit teardown (feature tab closed, background window close,
             // role reset) — remember the shells' directories before killing
             // them, so the next Terminal open resumes where they were.
@@ -1031,7 +1318,15 @@ final class AppState {
     /// window has restored, so an empty default can't clobber the saved file.
     func persistWindowState() {
         guard didRestore, didBind else { return }
-        core.layout.upsertWindow(WindowState(
+        core.layout.upsertWindow(windowRecord)
+        core.persistLayout()
+    }
+
+    /// This window as a persisted record. Also what a tab moved out of here
+    /// inherits its device and app bundle from (`TabHandoff.seed`), so the two
+    /// can't describe a window differently.
+    var windowRecord: WindowState {
+        WindowState(
             id: id,
             serial: selectedSerial,
             bundleId: selectedBundleId,
@@ -1041,8 +1336,7 @@ final class AppState {
             focusedGroup: workspace.focusedGroup,
             terminalResumeDirs: terminalResumeDirs,
             mirrorWallSerials: mirrorWallSerials
-        ))
-        core.persistLayout()
+        )
     }
 
     /// Working directories of this window's terminal tabs at the last implicit
@@ -1081,7 +1375,7 @@ final class AppState {
     /// idle.
     func enterBackground() {
         for featureID in openFeatureIDs {
-            stopBackgroundWork(for: featureID)
+            stopBackgroundWork(for: featureID, reason: .closing)
         }
     }
 
@@ -1098,7 +1392,7 @@ final class AppState {
     /// Reactotron server) leak with no UI left to reach them.
     func resetForRoleChange() {
         for featureID in workspace.groups.flatMap(\.openTabs) {
-            stopBackgroundWork(for: featureID)
+            stopBackgroundWork(for: featureID, reason: .closing)
         }
         workspace.reset()
         persistTabs()
@@ -1155,7 +1449,7 @@ final class AppState {
     /// tab, so clear them all and let each view abort.
     func discardAndExit() {
         switch pendingExit?.target {
-        case .closeTab(let id): exitGuards[id] = nil
+        case .closeTab(let id), .handoff(let id, _): exitGuards[id] = nil
         case .device, .quit: exitGuards.removeAll()
         case nil: break
         }
@@ -1181,6 +1475,8 @@ final class AppState {
         pendingExit = nil
         switch pending.target {
         case .closeTab(let id): performClose(id)
+        case .handoff(let id, let destination):
+            core.completeHandoff(id, from: self.id, to: destination)
         case .device(let serial): applySelection(serial)
         // This window is clear; the next one with work at stake gets its turn.
         case .quit: core.resumeQuit()

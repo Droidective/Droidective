@@ -60,6 +60,18 @@ final class TerminalManager {
     var onShellExited: ((UUID) -> Void)?
 
     /// Every open tab in display order (groups top to bottom).
+    /// Whether `session` is still one of this manager's shells.
+    ///
+    /// The question a terminal pane asks before it mounts the live view: when a
+    /// Terminal tab moves to another window the manager crosses with it, and
+    /// the window it left runs one more update pass over a view tree that is on
+    /// its way out. That pass must not re-parent a terminal the receiving
+    /// window has already taken, and "am I still its owner?" is the only thing
+    /// that tells the two apart — both panes are in real, live windows.
+    func owns(_ session: TerminalSession) -> Bool {
+        tabsByID.values.contains { $0.sessions.values.contains { $0 === session } }
+    }
+
     var tabs: [Tab] {
         layout.allTabIDs.compactMap { tabsByID[$0] }
     }
@@ -982,6 +994,9 @@ private struct TerminalSplitNodeView: View {
     let isActiveTab: Bool
     let onClosePane: (UUID) -> Void
     @Environment(\.windowOpacity) private var windowOpacity
+    /// Resolved live, not captured: this is what distinguishes the window that
+    /// owns the shells from one whose Terminal tab has just left for another.
+    @Environment(AppState.self) private var state
 
     var body: some View {
         switch node {
@@ -994,7 +1009,8 @@ private struct TerminalSplitNodeView: View {
                     session: session,
                     serial: serial,
                     isActive: isActiveTab && paneID == tab.activePaneID,
-                    isVisibleTab: isActiveTab
+                    isVisibleTab: isActiveTab,
+                    isOwned: state.terminals.owns(session)
                 )
                 // In a split, the shell sits inside a small gutter so the
                 // focus ring never draws over the first/last row of text.
