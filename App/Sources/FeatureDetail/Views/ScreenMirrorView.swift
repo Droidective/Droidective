@@ -225,8 +225,7 @@ struct ScreenMirrorView: View {
         guard let serial = targetSerial else { return }
         // The windows read their adb client and toasts from whichever workspace
         // popped one out; the device rides in the window's own presented value.
-        state.core.mirrorWindowOwner = state.id
-        state.core.noteMirrorWindowRequested(serial)
+        state.prepareMirrorWindow(serial: serial)
         openWindow(id: MirrorWindow.windowID, value: serial)
         state.closeTab(tabFeatureID)
     }
@@ -271,6 +270,11 @@ struct ScreenMirrorView: View {
 
 private struct MirrorStage: View {
     @Bindable var model: MirrorViewModel
+    @Environment(AppState.self) private var state
+    /// A hidden keep-alive tab keeps its drop regions, and a region deeper
+    /// than the window-level router wins over it — so the mirror only offers
+    /// one while it is the tab on screen. See `DeviceDropTarget`.
+    @Environment(\.tabIsActive) private var tabIsActive
     @AppStorage(mirrorIncludeAudioKey) private var includeAudio = false
     @AppStorage(mirrorShowTouchesKey) private var showTouches = false
     /// The recording-audio sheet: pick the combination, hear the mic, start.
@@ -306,6 +310,11 @@ private struct MirrorStage: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .deviceDropTarget(
+                serial: model.serial, deviceName: deviceName, isActive: tabIsActive)
+            .overlay(alignment: .topLeading) {
+                TransferChipsView(serial: model.serial, showsHint: model.status == .streaming)
+            }
 
             controlBar
         }
@@ -314,6 +323,13 @@ private struct MirrorStage: View {
                 start: { Task { await model.startRecording() } },
                 blockedReason: recordingBlockedReason)
         }
+    }
+
+    /// The device this stage is streaming, named the way the rest of the app
+    /// names it — the drop overlay says it out loud before anything lands.
+    private var deviceName: String {
+        state.devices.first { $0.serial == model.serial }
+            .map(state.deviceDisplayName) ?? model.serial
     }
 
     /// Controls below the mirror: device nav keys, then screenshot + record.

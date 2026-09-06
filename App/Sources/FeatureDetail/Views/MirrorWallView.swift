@@ -251,13 +251,31 @@ struct MirrorWallView: View {
             onPopOut: { popOut(device.serial) },
             onBringBack: { bringBack(device.serial) },
             onOpenFullMirror: { openFullMirror(device.serial) })
-            .onDrop(of: [.mirrorWallTile], delegate: MirrorWallDrop(
-                target: device.serial,
-                dragging: dragging,
-                isLast: selection.last == device.serial,
-                tileWidth: width,
-                setSlot: { dropSlot = $0 },
-                perform: moveTile))
+            .onDrop(of: [.mirrorWallTile], delegate: tileDrop(device: device, width: width))
+            .overlay {
+                // A drop goes to the deepest region under the cursor and never
+                // falls through, so the tile's own file-drop region (on the
+                // video, inside this view) would swallow a *tile* drag and
+                // silently kill reordering. While a tile drag is live, shield
+                // the tile with a topmost target of the drag's own type — the
+                // same move `EditorPane` makes to keep drop-to-split alive over
+                // a feature's full-pane drop zone.
+                if dragging != nil {
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .onDrop(of: [.mirrorWallTile], delegate: tileDrop(device: device, width: width))
+                }
+            }
+    }
+
+    private func tileDrop(device: Device, width: Double) -> MirrorWallDrop {
+        MirrorWallDrop(
+            target: device.serial,
+            dragging: dragging,
+            isLast: selection.last == device.serial,
+            tileWidth: width,
+            setSlot: { dropSlot = $0 },
+            perform: moveTile)
     }
 
     /// Take a device back into the wall by closing whatever holds it: its

@@ -317,6 +317,10 @@ targets:
       # wait runs for up to 20s, so its wording is the whole feedback.
       - App/Sources/FeatureDetail/Views/EmulatorRelaunchPhase.swift
       - App/Sources/FeatureDetail/Views/TourPaging.swift
+      # Classifying what a drag actually carried. A folder named
+      # "Something.apk" is a folder, and installing it would fail a long way
+      # from the drop.
+      - App/Sources/FeatureDetail/Views/Drop/DragPasteboard.swift
       - App/Sources/FeatureDetail/Views/ConsoleLinkSpanMemo.swift
       - App/Sources/FeatureDetail/Views/ConsoleRateBucket.swift
       # Which log row a click's y lands on — the rule behind ⌘-click and

@@ -36,6 +36,10 @@ struct InstallJob: Identifiable, Equatable {
     /// What a split-bundle install is doing right now (unpacking, copying an
     /// expansion file…). Nil for a plain APK, which has only one step.
     var stage: String?
+    /// The package this APK installs, when it was read before the install (the
+    /// drop prompt reads it). It is what an "Uninstall & Install" recovery
+    /// removes, so a failure without it can't offer that button.
+    var packageID: String?
 
     var packageName: String { packageURL.lastPathComponent }
     var isRunning: Bool { status == .running }
@@ -100,8 +104,8 @@ extension AppState {
     /// the panel, or closing the main window never kills an `adb install`
     /// mid-flight. Feedback arrives via `installJobs`, toasts, and a macOS
     /// notification when the batch finishes in the background.
-    func startInstall(_ urls: [URL], onSerials serials: [String]) {
-        Task { await self.installAPKs(urls, onSerials: serials) }
+    func startInstall(_ urls: [URL], onSerials serials: [String], packageID: String? = nil) {
+        Task { await self.installAPKs(urls, onSerials: serials, packageID: packageID) }
     }
 
     /// Install one or more packages on the given device serials, one toast per
@@ -113,7 +117,9 @@ extension AppState {
     /// unpacked and narrowed to this device's splits first — see
     /// `AppBundleInstallService`.
     @discardableResult
-    func installAPKs(_ urls: [URL], onSerials serials: [String]) async -> (report: String, ok: Bool) {
+    func installAPKs(
+        _ urls: [URL], onSerials serials: [String], packageID: String? = nil
+    ) async -> (report: String, ok: Bool) {
         guard !urls.isEmpty, !serials.isEmpty else { return ("", false) }
         SystemNotifier.requestAuthorizationOnce()
         var report: [String] = []
@@ -124,7 +130,7 @@ extension AppState {
                 var ok = 0
                 var failures: [(serial: String, result: FeatureResult)] = []
                 for serial in serials {
-                    let jobID = beginInstallJob(url: url, serial: serial)
+                    let jobID = beginInstallJob(url: url, serial: serial, packageID: packageID)
                     let result = await install(url, on: serial, jobID: jobID)
                     if result.ok { ok += 1 } else { failures.append((serial, result)) }
                     finishInstallJob(jobID, result: result)
@@ -188,10 +194,11 @@ extension AppState {
         return OperationStatus(label: label)
     }
 
-    private func beginInstallJob(url: URL, serial: String) -> UUID {
-        let job = InstallJob(
+    private func beginInstallJob(url: URL, serial: String, packageID: String? = nil) -> UUID {
+        var job = InstallJob(
             packageURL: url, serial: serial,
             deviceLabel: devices.first { $0.serial == serial }?.label ?? serial)
+        job.packageID = packageID
         installJobs.append(job)
         // Bounded history: drop the oldest finished entries, never a live one.
         while installJobs.count > 60, let oldest = installJobs.firstIndex(where: { !$0.isRunning }) {

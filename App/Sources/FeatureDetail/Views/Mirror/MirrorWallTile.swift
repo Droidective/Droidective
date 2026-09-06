@@ -29,6 +29,11 @@ struct MirrorWallTile: View {
     }
 
     @Environment(AppState.self) private var state
+    /// A hidden keep-alive tab keeps its drop regions, and a region deeper
+    /// than the window-level router wins over it — so a wall left open behind
+    /// another tab would swallow every file dropped anywhere in the pane and
+    /// quietly copy it to one of its devices. Verified the hard way.
+    @Environment(\.tabIsActive) private var tabIsActive
     let device: Device
     let wall: MirrorWallModel
     let blocked: Blocked?
@@ -64,6 +69,15 @@ struct MirrorWallTile: View {
                 statusOverlay
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // A tile is a device identity, not just a video: a drop lands on
+            // *this* device even when something else is mirroring it, and six
+            // tiles take six independent drops.
+            .deviceDropTarget(
+                serial: device.serial, deviceName: state.deviceDisplayName(device),
+                isActive: tabIsActive, inset: 8)
+            .overlay(alignment: .topLeading) {
+                TransferChipsView(serial: device.serial, compact: true)
+            }
 
             caption
         }
