@@ -40,7 +40,7 @@ const steps = [
 
 export function HowItWorks() {
   return (
-    <section id="how" className="mx-auto max-w-[1120px] px-6 py-28 max-[620px]:py-20">
+    <section id="how" className="section-contained mx-auto max-w-[1120px] px-6 py-28 max-[620px]:py-20">
       <SectionHead center eyebrow="how it works" title="Connected in under a minute.">
         Three steps. The app handles the rest, and it even finds adb for you and offers a one-click install if it's
         missing.

@@ -14,7 +14,7 @@ function GithubMark() {
 
 export function Contribute() {
   return (
-    <section id="contribute" className="mx-auto max-w-[1120px] px-6 py-28 max-[620px]:py-20">
+    <section id="contribute" className="section-contained mx-auto max-w-[1120px] px-6 py-28 max-[620px]:py-20">
       <SectionHead center title="Built in the open. Yours to shape." />
       <div className="grid grid-cols-[1.1fr_0.9fr] gap-4 max-[940px]:grid-cols-1">
         <Reveal>

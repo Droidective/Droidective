@@ -34,7 +34,7 @@ export function About() {
   const reducedMotion = usePrefersReducedMotion()
 
   return (
-    <section id="about" className="mx-auto max-w-[1120px] px-6 pb-28 max-[620px]:pb-20">
+    <section id="about" className="section-contained mx-auto max-w-[1120px] px-6 pb-28 max-[620px]:pb-20">
       <SectionHead center title="About me." />
       <div className="grid grid-cols-[1.1fr_0.9fr] gap-4 max-[940px]:grid-cols-1">
         <Reveal>

@@ -5,7 +5,7 @@ import { releases } from "@/lib/content"
 
 export function Changelog() {
   return (
-    <section id="changelog" className="mx-auto max-w-[1120px] px-6 py-28 max-[620px]:py-20">
+    <section id="changelog" className="section-contained-tall mx-auto max-w-[1120px] px-6 py-28 max-[620px]:py-20">
       <SectionHead center title="Shipped, and still moving.">
         The latest releases. Automatic in-app updates since v2.1.0, and Apple-notarized builds since v2.4.0.
       </SectionHead>
