@@ -563,6 +563,15 @@ table) is in `docs/reactotron-mcp-analysis.md`.
     window keeps its editor in the view instead: it is not a tab, cannot move,
     and reads whichever workspace is frontmost, so a store entry would be
     shared with the other pop-outs.
+  - **A live mirror moves with its tab, layer and all.** `MirrorTabModel` /
+    `MirrorWallTabModel` keep the sessions in `FeatureStateStore`, and the
+    receiving view adopts the same display layer. Two rules fall out:
+    `MirrorLayerNSView.syncDisplayLayerFrame` sizes the layer only when
+    `displayLayer.superlayer === layer` (both views are alive for a moment
+    during a move, and the departing one still lays out), and the device claim
+    is released in `stopBackgroundWork` — for a handoff too — rather than in
+    `onDisappear`, because with the session preserved there is no reconnect
+    afterwards to re-publish it. The window it lands in publishes from `.task`.
   - **A live NSView can only be mounted by the window that owns its session.**
     `NativeTerminalView` re-parents one cached terminal view into whatever
     container SwiftUI hands it. During a move the receiving pane *and* the

@@ -20,8 +20,9 @@ struct MirrorWallView: View {
     @Environment(\.tabIsActive) private var tabIsActive
     @Environment(\.openWindow) private var openWindow
     @AppStorage(mirrorWallColumnsKey) private var manualColumns = 0
-    @State private var wall: MirrorWallModel?
-    /// Delayed teardown for a hidden wall; cancelled if the tab returns in time.
+    /// Delayed teardown for a hidden wall; cancelled if the tab returns in
+    /// time. The one piece of this that really is the view's: it is about the
+    /// tab being hidden *here*, and a tab that moves is not hidden any more.
     @State private var teardownTask: Task<Void, Never>?
     @State private var dragging: String?
     @State private var dropSlot: DropSlot?
@@ -40,6 +41,17 @@ struct MirrorWallView: View {
         state.featureState(ScreenshotEditorModel.self, for: tabFeatureID) { ScreenshotEditorModel() }
     }
 
+    /// The wall's live sessions, held by the window rather than by this view so
+    /// a tab moving keeps its six streams. See `MirrorWallTabModel`.
+    private var wallTab: MirrorWallTabModel {
+        state.featureState(MirrorWallTabModel.self, for: tabFeatureID) { MirrorWallTabModel() }
+    }
+
+    private var wall: MirrorWallModel? {
+        get { wallTab.wall }
+        nonmutating set { wallTab.wall = newValue }
+    }
+
     var body: some View {
         ZStack {
             if editor.image != nil {
@@ -52,15 +64,19 @@ struct MirrorWallView: View {
         .imageDecision(image: $pendingScreenshot) { editor.open($0) }
         .task {
             // A wall that has been shut down is inert for good (that's what
-            // stops it resurrecting sessions during teardown), so a view whose
-            // `@State` outlived its own `onDisappear` — a tab moved between
-            // panes — must build a fresh one instead of showing black tiles
-            // nothing can revive.
+            // stops it resurrecting sessions during teardown), so a tab that
+            // finds one has to build a fresh one instead of showing black tiles
+            // nothing can revive. A tab that merely *moved* brings a live wall
+            // with it and keeps every tile streaming.
             if wall == nil || wall?.isShutDown == true {
                 wall = MirrorWallModel(
                     adb: state.env.engine.client, locator: state.env.engine.locator)
             }
             sync()
+            // Re-publish what this window is mirroring: the window a tab moves
+            // to inherits no claims, and `onChange` won't fire for it because
+            // from its point of view nothing changed.
+            state.noteMirrorClaims(wall?.liveSerials ?? [], featureID: tabFeatureID)
         }
         .onChange(of: selection) { syncSelection() }
         .onChange(of: connectedSerials) { syncSelection() }
@@ -75,7 +91,7 @@ struct MirrorWallView: View {
             }
         }
         .onChange(of: wall?.liveSerials) { _, live in
-            state.noteMirrorClaims(live ?? [], featureID: "mirror-wall")
+            state.noteMirrorClaims(live ?? [], featureID: tabFeatureID)
         }
         .onReceive(NotificationCenter.default.publisher(
             for: NSWindow.didChangeOcclusionStateNotification)
@@ -94,11 +110,10 @@ struct MirrorWallView: View {
                 scheduleHiddenTeardown()
             }
         }
-        .onDisappear {
-            teardownTask?.cancel()
-            wall?.shutDown()
-            state.noteMirrorClaims([], featureID: "mirror-wall")
-        }
+        // Only this window's grace timer is cancelled. The wall itself stays:
+        // this also runs when the tab is merely moving, and `stopBackgroundWork`
+        // is where a close and a move are told apart.
+        .onDisappear { teardownTask?.cancel() }
     }
 
     @ViewBuilder private var wallContent: some View {

@@ -243,6 +243,34 @@ Verified against an AV1 `.mkv`: after the move the video played immediately and
 its original timestamp — and closing the tab deleted it while leaving the
 user-opened source alone.
 
+**A live mirror moves with its tab.** A mirror is the most expensive thing a
+tab can hold — a scrcpy server on the device, a video encoder, an `adb forward`
+tunnel and a decoder on this side — and the Mirror Wall holds up to six at once.
+Moving used to stop all of it and start again: a "Connecting…" flash, a second
+of black while the device re-primed, and a recording lost. `MirrorTabModel` and
+`MirrorWallTabModel` keep the sessions, and the receiving window's view adopts
+the same `AVSampleBufferDisplayLayer` (`MirrorLayerNSView.adopt(displayLayer:)`,
+which existed for the reconnect case and now earns its keep twice). Two rules
+came out of it:
+
+- **Only the view the layer currently belongs to may size it.** During a move
+  both views are alive for a moment and the one being torn down still lays out;
+  `syncDisplayLayerFrame` checks `displayLayer.superlayer === layer` first. This
+  is the mirror's version of the terminal's `owns` rule.
+- **A window stops claiming the device when the tab leaves it, whichever way it
+  leaves.** The claim used to be released in `onDisappear`, which also runs on a
+  move — and with the session preserved there was no later reconnect to
+  re-publish it. It is released in `stopBackgroundWork` for both reasons now,
+  and the receiving window publishes from `.task`; a cross-pane move reaches
+  neither, which is right, because the claim never changed windows.
+
+Verified against a live emulator: `adb forward --list` showed the *same* port
+and abstract socket name before and after a move to a new window, after a
+cross-pane drop-to-split, and after moving the wall; touch and keyboard still
+reached the device; and a recording started before the move and stopped after it
+came out as one continuous 67.66 s file. Closing the tab, closing the window and
+quitting each left the list empty.
+
 **Performance and Network Speed deliberately do not move.** Unlike the
 recorder, they are fed by a sampler the view owns, so a preserved buffer with
 the sampler stopped mid-move would have a silent gap in it — worse than being

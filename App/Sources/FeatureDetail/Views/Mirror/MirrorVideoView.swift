@@ -101,6 +101,12 @@ final class MirrorLayerNSView: NSView {
     }
 
     private func syncDisplayLayerFrame() {
+        // Only the view the layer currently belongs to may size it. A tab
+        // moving between windows leaves two of these alive for a moment — the
+        // one being torn down still lays out — and a stale one resizing a layer
+        // that has already been adopted elsewhere letterboxes the video against
+        // a pane it is no longer in. Same rule as the terminal's `owns`.
+        guard displayLayer.superlayer === layer else { return }
         guard displayLayer.frame != bounds, bounds.width > 0, bounds.height > 0 else { return }
         // Sublayer frame changes are implicitly animated — a 0.25s lag per
         // divider tick reads as the video chasing the drag. Snap instead.

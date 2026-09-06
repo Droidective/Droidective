@@ -1277,6 +1277,27 @@ final class AppState {
             clearExitGuard(video.exitGuardID)
             if reason == .closing { video.closeAndDiscardRecording() }
         }
+        // A live mirror crosses with a moving tab: the scrcpy server, the
+        // encoder, the adb tunnel and the decoder all keep running, and the
+        // window it lands in adopts the same display layer. Only a real close —
+        // or the window going away, which comes through here too — gives the
+        // device back and tears the session down. The same for the wall, which
+        // is up to six of them at once.
+        if let mirror = core.featureStates.existing(
+            MirrorTabModel.self, feature: id, in: self.id) {
+            clearExitGuard(mirror.exitGuardID)
+            // The tab is leaving *this* window either way, so this window stops
+            // claiming the device — before the window it lands in asks for it,
+            // which is the ordering a handoff already promises. A cross-pane
+            // move never reaches here, and shouldn't: the claim stays put.
+            noteMirrorClaims([], featureID: id)
+            if reason == .closing { mirror.shutDown() }
+        }
+        if let wall = core.featureStates.existing(
+            MirrorWallTabModel.self, feature: id, in: self.id) {
+            noteMirrorClaims([], featureID: id)
+            if reason == .closing { wall.shutDown() }
+        }
         if id == "terminal", reason == .closing {
             // Implicit teardown (feature tab closed, background window close,
             // role reset) — remember the shells' directories before killing
