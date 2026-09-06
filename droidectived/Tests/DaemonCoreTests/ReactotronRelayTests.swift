@@ -361,6 +361,54 @@ import Testing
         }
     }
 
+    /// A port that is busy *right now* but free a moment later must not be
+    /// reported as taken.
+    ///
+    /// This is the window `stoppingReleasesThePort` kept failing in: a bind
+    /// refused on a port this process itself had just released, after `stop()`
+    /// had already awaited the channel's `closeFuture` and the event-loop
+    /// group's shutdown. A foreign holder cannot explain that, and no NIO future
+    /// reports the kernel releasing the listening socket, so the bind retries
+    /// briefly instead of trusting the first answer.
+    ///
+    /// A real listener stands in for the closing one: same errno, same shape,
+    /// and it is released on a timer rather than by chance, so the test proves
+    /// the retry rather than waiting on a race to go the right way.
+    @Test func aPortFreedDuringTheRetryWindowIsStillBound() async throws {
+        let port = 31_477
+        let squatter = ReactotronRelay(port: port)
+        try await squatter.start()
+
+        // Released after one retry interval and well inside the window, so the
+        // first attempt is guaranteed to fail and a later one to succeed.
+        let release = Task {
+            try? await Task.sleep(for: .milliseconds(60))
+            await squatter.stop()
+        }
+
+        let relay = ReactotronRelay(port: port)
+        try await relay.start()
+        #expect(await relay.boundPort == port)
+        await relay.stop()
+        _ = await release.value
+    }
+
+    /// The other half: a holder that never goes away is still reported, and with
+    /// the message that names the likely cause rather than the errno. Without
+    /// this, a retry window could quietly become an infinite one.
+    @Test func aPortHeldThroughoutIsReportedAsInUse() async throws {
+        let port = 31_483
+        let squatter = ReactotronRelay(port: port)
+        try await squatter.start()
+        defer { Task { await squatter.stop() } }
+
+        let relay = ReactotronRelay(port: port)
+        await #expect(throws: ReactotronRelay.RelayError.self) {
+            try await relay.start()
+        }
+        #expect(await relay.isRunning == false)
+    }
+
     @Test func aStartAndAStopThatRaceLeaveAConsistentRelay() async throws {
         // The sequence a timeline tab makes every time it is closed and
         // reopened, and the one React's double-mount makes on the very first
