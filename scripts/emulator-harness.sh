@@ -142,7 +142,7 @@ if ((${#FILTERS[@]} == 0)); then
   if ((RECORD == 1)); then
     FILTERS=(FixtureRecordingTests)
   else
-    FILTERS=(DeviceLiveTests AppBundleInstallLiveTests)
+    FILTERS=(DeviceLiveTests AppBundleInstallLiveTests DeviceTransferLiveTests)
   fi
 fi
 
