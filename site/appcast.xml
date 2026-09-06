@@ -6,9 +6,9 @@
     <description>Most recent Droidective updates.</description>
     <language>en</language>
     <item>
-      <title>Droidective 3.11.0</title>
-      <sparkle:version>941</sparkle:version>
-      <sparkle:shortVersionString>3.11.0</sparkle:shortVersionString>
+      <title>Droidective 3.12.0</title>
+      <sparkle:version>956</sparkle:version>
+      <sparkle:shortVersionString>3.12.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <description><![CDATA[
 <style>
@@ -24,100 +24,82 @@ pre { background: color-mix(in srgb, currentColor 8%, transparent); padding: .6e
 pre code { background: none; padding: 0; }
 a { color: #2f9e44; }
 </style>
-<p>Two new ways to get things onto a device — drop a file on the mirror, or pair
-by showing the phone a QR code — and streaming feeds that cost half as much
-while nobody is looking at them.</p>
-<h3>Drop files onto a mirror</h3>
+<p>Any feature can now have a window of its own — drag its tab out, or pick it from
+a menu — and the work inside it carries on where it was instead of starting
+over.</p>
+<h3>Any tab can become its own window</h3>
 <ul>
 <li>
-<strong>Drag an app package onto the mirror and it installs on that device.</strong>
-Anything else — a photo, a PDF, a folder — copies to <code>/sdcard/Download</code> and
-is handed to the device's media library, so a dropped screenshot turns up in
-the Gallery rather than only in Files.</li>
+<strong>Drag a tab out of the app and it becomes a window.</strong> Drop it on the desktop,
+on another display, beside your editor. Drop it on another Droidective window
+instead and it moves in there.</li>
 <li>
-<strong>The mirror says what will happen before you let go.</strong> "Install on Pixel 7",
-"Copy 3 files to Pixel 7", with the destination named. A drop that replaces
-an app or writes to storage should not be a surprise.</li>
+<strong>Or use a menu</strong>: right-click a tab for "Open in New Window" or "Move to
+Window ▸", or Tab ▸ Move Tab to New Window (⌃⌘N) for the one you are on.</li>
 <li>
-<strong>Every mirror takes drops</strong> — the Mirror Screen tab, a popped-out window,
-and each Mirror Wall tile. A tile is a device, not a picture of one: a file
-dropped on the third tile goes to the third device whatever the device bar
-is pointed at, and six tiles take six independent transfers.</li>
+<strong>A torn-off window keeps the device its tab was pointed at.</strong> Every other way
+of opening a window deliberately picks a device no other window holds; for a
+tab you have just moved that would quietly swap the device out from under it.</li>
 <li>
-<strong>Installing asks first, and says what it is replacing.</strong> The prompt reads
-the package and the device and shows the version it is moving from and to,
-with the button named for what will actually happen — Install, Update,
-Reinstall, or Downgrade &amp; Replace. A downgrade says up front that app data
-cannot be kept, because Android will not do one in place.</li>
+<strong>A window's last tab can join another window</strong> — consolidating two windows
+into one is a reasonable thing to want — but it cannot spawn a third and leave
+its own window empty.</li>
 <li>
-<strong>A failed install offers the fix.</strong> A package signed with a different key
-cannot install over the copy already on the device; that failure now carries
-an Uninstall &amp; Install button instead of a message you have to act on
-yourself. Failures an uninstall would not fix — a full disk, the wrong CPU —
-do not offer it.</li>
-<li>
-<strong>Copies report a real percentage and can be stopped.</strong> A large file shows
-how far it has got rather than a spinner, and cancelling removes the
-half-written file from the device.</li>
+<strong>Escape cancels a drag</strong>, and a tab released on nothing snaps back.</li>
 </ul>
-<h3>Nothing dropped on the app is ignored</h3>
+<h3>A moved tab keeps working</h3>
+<p>Moving a tab rebuilds its view, which used to mean starting the feature again.
+Now the work moves with it:</p>
 <ul>
 <li>
-<strong>A file dropped on a screen that has nothing to do with it now lands
-somewhere useful.</strong> An app package opens the package screen, a video opens
-the Video Editor, anything else copies to the selected device — and the
-window says which before you let go. An APK dropped on Reactotron used to do
-nothing at all, with nothing on screen saying why.</li>
+<strong>The Terminal takes its shells.</strong> Running processes keep running, scrollback
+is intact, split panes and their directories come along.</li>
 <li>
-<strong>Files opened from Finder take the same route</strong>, so double-clicking a file
-and dragging one in can no longer disagree about where it belongs.</li>
-</ul>
-<h3>Pair over Wi-Fi by scanning a QR code</h3>
-<ul>
+<strong>A screen recording keeps recording.</strong> Start it in one window, move the tab,
+stop it in another, and the take is one continuous file — no gap, no split.
+The same for a recording made from the mirror.</li>
 <li>
-<strong>Show a code, point the phone at it, done.</strong> Settings ▸ Developer options ▸
-Wireless debugging ▸ Pair device with QR code reads it, and the pairing
-finishes with nothing typed on either side.</li>
+<strong>A live mirror keeps streaming.</strong> No "Connecting…", no black second while the
+device re-primes — the same session, the same encoder, the same tunnel. The
+Mirror Wall moves all six at once.</li>
 <li>
-<strong>It removes the two things that go wrong on the typed path</strong>: the pairing
-port, which is random per session and is <em>not</em> the port on the Wireless
-debugging screen, and a six-digit code that expires while you are typing it.</li>
+<strong>Unsaved screenshot markup survives</strong>, undo history and all — nothing in that
+editor is written to disk until you save or copy it, so a move used to be the
+one loss you could not undo. Moving no longer asks about it; closing the tab
+still does.</li>
 <li>
-<strong>The device dropdown's "Pair new device…" now opens this.</strong> The typed-code
-path sits beside it as "Pair with a code…", unchanged.</li>
-</ul>
-<h3>Feeds cost less while you are not watching</h3>
-<ul>
+<strong>A decompiled APK stays decompiled.</strong> jadx and apktool take minutes on a real
+app, and a move used to run them again from the top.</li>
 <li>
-<strong>Logcat, the JS Console, the Reactotron timeline and iOS Logs pace
-themselves</strong> by whether anyone can see them and by how busy the app already
-is: four times a second on screen and in front, once a second on screen
-behind another app, and every five seconds while hidden behind another tab.</li>
+<strong>The video editor keeps its edits and its player</strong>, including the transcoded
+copy it builds for formats AVFoundation cannot play, which for a long
+recording is a transcode of the whole file.</li>
+<li>Also carried across: Reactotron's timeline, the JS Console's session, APK
+Studio's loaded APK, Logcat and iOS Logs buffers, collected crashes, API
+Testing's request, the folder you had browsed to, the Apps list and what you
+had selected in it, and anything half-typed in Send Text, Deep Links or Custom
+Commands.</li>
 <li>
-<strong>Hidden is a pace, not a pause.</strong> Nothing is dropped, and returning to a
-feed flushes it at once, so the longer interval is never what you wait on.</li>
-<li>
-<strong>A feed left open while you work elsewhere costs about half what it did.</strong>
-With a device streaming 300 log lines a second, a hidden tab measured 17.7%
-CPU in v3.10.0 and 8.7% here. Nearly every report of the app becoming
-unresponsive came from that state — a feed running at full speed for a window
-nobody was looking at.</li>
+<strong>Performance and Network Speed deliberately do not move.</strong> Their sampler
+stops with the view, so a preserved graph would have a silent gap in it —
+worse than being told. They ask before you leave, as they did.</li>
 </ul>
 <h3>Fixes</h3>
 <ul>
 <li>
-<strong>The pairing code no longer appears in the Command Log.</strong> It is a
-credential for adb access to your device, and the log is what gets copied
-out of Settings into a bug report. The endpoint is kept; the code is masked.</li>
-<li>
-<strong>The mirror's own window is easier to find.</strong> It has existed since v2.9.2,
-behind the last button on the mirror's control bar — which folds into an
-overflow menu as soon as the pane is narrow. It is now Window ▸ Open Mirror
-in New Window (⌃⌘M), and a row in the device dropdown.</li>
+<strong>Dragging a tab to the empty part of its own tab strip works.</strong> It used to do
+nothing at all — the tab stayed exactly where it was.</li>
+</ul>
+<h3>Known gaps</h3>
+<ul>
+<li>A moved tab starts at the top of whatever it is showing: the list, tree or
+buffer crosses, the scroll position does not.</li>
+<li>A decompile or a video transcode still in progress restarts when its tab
+moves. Once finished, it stays.</li>
 </ul>
 ]]></description>
-      <pubDate>Sun, 06 Sep 2026 10:45:27 +0000</pubDate>
-      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.11.0/Droidective-v3.11.0.dmg" sparkle:edSignature="lILfGsEtuBEVhOyDoIbcQ35847L7QYEaPc7jLwBuoT+7t9tSY5j+isjK51PDYv1Egx46EYf2SFd1JNbsQWDGBw==" length="145869781" type="application/octet-stream" />
+      <pubDate>Sun, 06 Sep 2026 19:05:44 +0000</pubDate>
+      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.12.0/Droidective-v3.12.0.dmg" sparkle:edSignature="a/8tB+0Fv+MAVLPEd+S8+x+p3WV1bRUqMhqWU86qQ83G3lfL84pLaS1xnNTdDws/081KV0zUG0m6j0kMadc8Cw==" length="146242418" type="application/octet-stream" />
     </item>
     
   </channel>
