@@ -113,7 +113,7 @@ public struct AdbClient: Sendable {
             maxOutputBytes: maxOutputBytes
         )
         await log.record(
-            command: "adb \(args.joined(separator: " "))",
+            command: Self.loggedCommand(args),
             exitCode: output.exitCode,
             duration: clock.now - started,
             stdout: binary ? "<binary, \(output.stdout.count) bytes>" : output.stdoutText,
@@ -126,6 +126,35 @@ public struct AdbClient: Sendable {
 /// Single-quote a value for the *device-side* shell. `adb shell` joins its
 /// arguments with spaces and runs them through `sh` on the device, so any
 /// user-supplied path/URL must be quoted to survive spaces and metacharacters.
+extension AdbClient {
+    /// How a command reads in the Command Log — with `adb pair`'s code masked.
+    ///
+    /// The pairing code is a bearer credential for adb access to a device, and
+    /// it is the *only* secret this app puts in an argument vector: the signing
+    /// paths deliberately route a keystore password through a 0600 file
+    /// instead. The log keeps 200 entries and Settings ▸ Command Log copies
+    /// them out, which is exactly what gets pasted into a bug report.
+    ///
+    /// Masked rather than dropped: "a pair ran here, against this endpoint" is
+    /// the useful half, and a missing argument would read as a malformed
+    /// command to whoever is debugging one.
+    static func loggedCommand(_ args: [String]) -> String {
+        "adb " + redactCredentials(args).joined(separator: " ")
+    }
+
+    /// Pure so the rule is tested rather than eyeballed.
+    static func redactCredentials(_ args: [String]) -> [String] {
+        var masked = args
+        // `-s <serial>` is the only prefix adb takes before the subcommand.
+        let subcommand = (masked.first == "-s" && masked.count > 1) ? 2 : 0
+        guard subcommand < masked.count, masked[subcommand] == "pair",
+              masked.count > subcommand + 2
+        else { return masked }
+        masked[subcommand + 2] = "<pairing code redacted>"
+        return masked
+    }
+}
+
 public func shellQuote(_ value: String) -> String {
     "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
 }

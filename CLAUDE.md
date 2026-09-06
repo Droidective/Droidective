@@ -614,7 +614,17 @@ table) is in `docs/reactotron-mcp-analysis.md`.
 - **The Command Log records only wrapped calls.** A view-feature that runs adb
   directly (logcat, device-info, file-explorer…) must wrap its user-initiated
   calls in `CommandLog.userInitiated {}` or they never reach the Settings ▸
-  Command Log sheet. Keep background polling OUT (don't wrap it).
+  Command Log sheet. Keep background polling OUT (don't wrap it) — and keep
+  *long* polling out even when the user did start it: the QR pairing scan waits
+  on a human picking up their phone at one poll a second, and left in it evicts
+  all 200 entries.
+  - **A credential must never reach the log.** It holds 200 entries and
+    Settings copies them out, which is what gets pasted into a bug report.
+    `adb pair`'s code is the only secret this app puts in an argument vector —
+    the signing paths route a keystore password through a 0600 file instead —
+    and `AdbClient.loggedCommand` masks it (pure, tested in
+    `CommandLogRedactionTests`). A new command that takes a secret in argv
+    extends `redactCredentials`; one that can take a file instead should.
 - **Window translucency is token-driven — never paint an opaque full-pane
   fill.** Settings ▸ Appearance ▸ Window has Opacity (10–100%) / Blur / Grain
   sliders. `.bgRoot` / `.bgSurface` are *environment-resolving ShapeStyles*
