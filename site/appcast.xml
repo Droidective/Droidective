@@ -6,9 +6,9 @@
     <description>Most recent Droidective updates.</description>
     <language>en</language>
     <item>
-      <title>Droidective 3.10.0</title>
-      <sparkle:version>923</sparkle:version>
-      <sparkle:shortVersionString>3.10.0</sparkle:shortVersionString>
+      <title>Droidective 3.11.0</title>
+      <sparkle:version>941</sparkle:version>
+      <sparkle:shortVersionString>3.11.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <description><![CDATA[
 <style>
@@ -24,70 +24,100 @@ pre { background: color-mix(in srgb, currentColor 8%, transparent); padding: .6e
 pre code { background: none; padding: 0; }
 a { color: #2f9e44; }
 </style>
-<p>Four fixes to what the app does while you are not watching it, and a wider
-video editor. The Windows and Linux app that most of this cycle went into is on
-the beta channel; this release is macOS.</p>
-<h3>The app is quieter in the background</h3>
+<p>Two new ways to get things onto a device — drop a file on the mirror, or pair
+by showing the phone a QR code — and streaming feeds that cost half as much
+while nobody is looking at them.</p>
+<h3>Drop files onto a mirror</h3>
 <ul>
 <li>
-<strong>The Reactotron timeline was redrawing 62 times a second</strong>, whether or not
-anyone was looking at it. Every open tab stays mounted, so that cost was paid
-across every feed you had open, not just the one on screen — with nine or more
-tabs open it was the app's largest source of multi-second stalls. It now
-redraws four times a second while you are in the app and once a second while
-you are in another one, which is what the JS Console and Logcat already did.</li>
+<strong>Drag an app package onto the mirror and it installs on that device.</strong>
+Anything else — a photo, a PDF, a folder — copies to <code>/sdcard/Download</code> and
+is handed to the device's media library, so a dropped screenshot turns up in
+the Gallery rather than only in Files.</li>
 <li>
-<strong>Failed HTTP requests are no longer reported as app errors.</strong> Metro answers
-500 to any stack frame it cannot map, which is routine and already handled;
-each one was being filed as a Droidective error. Requests you send yourself
-from API Testing were being captured the same way, with their URLs — nothing
-in the app should send those anywhere, and now nothing does.</li>
+<strong>The mirror says what will happen before you let go.</strong> "Install on Pixel 7",
+"Copy 3 files to Pixel 7", with the destination named. A drop that replaces
+an app or writes to storage should not be a surprise.</li>
+<li>
+<strong>Every mirror takes drops</strong> — the Mirror Screen tab, a popped-out window,
+and each Mirror Wall tile. A tile is a device, not a picture of one: a file
+dropped on the third tile goes to the third device whatever the device bar
+is pointed at, and six tiles take six independent transfers.</li>
+<li>
+<strong>Installing asks first, and says what it is replacing.</strong> The prompt reads
+the package and the device and shows the version it is moving from and to,
+with the button named for what will actually happen — Install, Update,
+Reinstall, or Downgrade &amp; Replace. A downgrade says up front that app data
+cannot be kept, because Android will not do one in place.</li>
+<li>
+<strong>A failed install offers the fix.</strong> A package signed with a different key
+cannot install over the copy already on the device; that failure now carries
+an Uninstall &amp; Install button instead of a message you have to act on
+yourself. Failures an uninstall would not fix — a full disk, the wrong CPU —
+do not offer it.</li>
+<li>
+<strong>Copies report a real percentage and can be stopped.</strong> A large file shows
+how far it has got rather than a spinner, and cancelling removes the
+half-written file from the device.</li>
 </ul>
-<h3>Reactotron reconnects after a restart</h3>
+<h3>Nothing dropped on the app is ignored</h3>
 <ul>
 <li>
-<strong>Restarting the app you are debugging re-opens its <code>adb reverse</code> tunnel.</strong>
-The tunnel is what lets the app on the device find Droidective, and the
-restart button did not touch it — so a restarted app could come up unable to
-connect, with nothing on screen saying why.</li>
+<strong>A file dropped on a screen that has nothing to do with it now lands
+somewhere useful.</strong> An app package opens the package screen, a video opens
+the Video Editor, anything else copies to the selected device — and the
+window says which before you let go. An APK dropped on Reactotron used to do
+nothing at all, with nothing on screen saying why.</li>
 <li>
-<strong>A tunnel that dies with the device still connected now recovers.</strong>
-Replugging was already handled; an <code>adb kill-server</code> or a USB re-enumeration
-that kept the same serial was not.</li>
+<strong>Files opened from Finder take the same route</strong>, so double-clicking a file
+and dragging one in can no longer disagree about where it belongs.</li>
 </ul>
-<h3>The video editor opens what ffmpeg reads</h3>
+<h3>Pair over Wi-Fi by scanning a QR code</h3>
 <ul>
 <li>
-<strong>Fifteen container formats</strong> — mkv, webm, avi, flv, ts, m2ts, mpg, wmv, 3gp,
-ogv and more, alongside mp4, mov and m4v. The editor exports through ffmpeg
-and always could read these; only the open panel disagreed, so <code>.mkv</code> was
-greyed out in a file picker for a file the app could edit.</li>
+<strong>Show a code, point the phone at it, done.</strong> Settings ▸ Developer options ▸
+Wireless debugging ▸ Pair device with QR code reads it, and the pairing
+finishes with nothing typed on either side.</li>
 <li>
-<strong>macOS cannot play most of them</strong>, so anything it refuses is converted to a
-playable copy in the background — the video appears, trimming works, and the
-export still runs from your original file, so nothing loses quality.</li>
+<strong>It removes the two things that go wrong on the typed path</strong>: the pairing
+port, which is random per session and is <em>not</em> the port on the Wireless
+debugging screen, and a six-digit code that expires while you are typing it.</li>
 <li>
-<strong>Videos open from Finder.</strong> Right-click ▸ Open With ▸ Droidective, for every
-format above. Your existing default player keeps every file type it had.</li>
+<strong>The device dropdown's "Pair new device…" now opens this.</strong> The typed-code
+path sits beside it as "Pair with a code…", unchanged.</li>
 </ul>
-<h3>Notifications and progress</h3>
+<h3>Feeds cost less while you are not watching</h3>
 <ul>
 <li>
-<strong>Notifications now arrive while the app is in front.</strong> Anything that reaches
-the in-app notification bar — a caught crash, a finished install, a saved
-recording, an available update — also appears in Notification Center, and
-clicking one opens the bar on the matching entry. Previously they were posted
-only when the app was hidden, so a five-second toast was the only trace an
-event left.</li>
+<strong>Logcat, the JS Console, the Reactotron timeline and iOS Logs pace
+themselves</strong> by whether anyone can see them and by how busy the app already
+is: four times a second on screen and in front, once a second on screen
+behind another app, and every five seconds while hidden behind another tab.</li>
 <li>
-<strong>Relaunching an emulator says what it is doing.</strong> It waits for the emulator's
-console port to free before booting again, which takes up to twenty seconds,
-and reported nothing for the whole wait. The row now shows the stage; a
-failed stop says what adb said instead of booting a second copy on top.</li>
+<strong>Hidden is a pace, not a pause.</strong> Nothing is dropped, and returning to a
+feed flushes it at once, so the longer interval is never what you wait on.</li>
+<li>
+<strong>A feed left open while you work elsewhere costs about half what it did.</strong>
+With a device streaming 300 log lines a second, a hidden tab measured 17.7%
+CPU in v3.10.0 and 8.7% here. Nearly every report of the app becoming
+unresponsive came from that state — a feed running at full speed for a window
+nobody was looking at.</li>
+</ul>
+<h3>Fixes</h3>
+<ul>
+<li>
+<strong>The pairing code no longer appears in the Command Log.</strong> It is a
+credential for adb access to your device, and the log is what gets copied
+out of Settings into a bug report. The endpoint is kept; the code is masked.</li>
+<li>
+<strong>The mirror's own window is easier to find.</strong> It has existed since v2.9.2,
+behind the last button on the mirror's control bar — which folds into an
+overflow menu as soon as the pane is narrow. It is now Window ▸ Open Mirror
+in New Window (⌃⌘M), and a row in the device dropdown.</li>
 </ul>
 ]]></description>
-      <pubDate>Fri, 04 Sep 2026 05:36:10 +0000</pubDate>
-      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.10.0/Droidective-v3.10.0.dmg" sparkle:edSignature="Ch5czlGKWF3+hFCzTc2wi03ZfXF87aH8AL28+IsXvmldjs0QXrrPffP/DMqtZi1vdpvRAvi7AMrwMXgLlen8BA==" length="145384627" type="application/octet-stream" />
+      <pubDate>Sun, 06 Sep 2026 10:45:27 +0000</pubDate>
+      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.11.0/Droidective-v3.11.0.dmg" sparkle:edSignature="lILfGsEtuBEVhOyDoIbcQ35847L7QYEaPc7jLwBuoT+7t9tSY5j+isjK51PDYv1Egx46EYf2SFd1JNbsQWDGBw==" length="145869781" type="application/octet-stream" />
     </item>
     
   </channel>
