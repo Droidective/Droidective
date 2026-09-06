@@ -36,7 +36,13 @@ final class ReactotronSession {
     /// thus one SwiftUI invalidation — per frame, not one per event. Never
     /// observed, so appending to it doesn't re-render.
     @ObservationIgnored private var pendingItems: [RtItem] = []
+    /// Wire bytes waiting in `pendingItems`, for the early-flush bound.
+    @ObservationIgnored private var pendingBytes = 0
     @ObservationIgnored private var flushTask: Task<Void, Never>?
+    /// Which mounted views can see the timeline. App-wide feed, so this spans
+    /// windows as well as panes — see `FeedAudience`. Never observed: pacing
+    /// state must not invalidate the feed it paces.
+    @ObservationIgnored private var audience = FeedAudience()
     // Anonymous usage stats (numbers only, no payload contents) reported per
     // session so the timeline caps can be sized against real workloads.
     private var peakItemsBytes = 0
@@ -310,6 +316,7 @@ final class ReactotronSession {
         flushTask?.cancel()
         flushTask = nil
         pendingItems.removeAll()
+        pendingBytes = 0
         // The timeline/store graphs can be huge (gigabytes of nested JSON
         // payloads); hand them to a background task instead of freeing them
         // inline, which hangs the main thread for the whole release cascade.
@@ -484,6 +491,7 @@ final class ReactotronSession {
         flushTask?.cancel()
         flushTask = nil
         pendingItems.removeAll()
+        pendingBytes = 0
         let cleared = items
         items = []
         itemsBytes = 0
@@ -708,13 +716,39 @@ final class ReactotronSession {
     /// app's biggest hang issue (DROIDECTIVE-MAC-B).
     private func enqueue(_ item: RtItem) {
         pendingItems.append(item)
+        pendingBytes += item.frameBytes
+        // Pending memory has to be bounded by bytes, not by the cadence: a
+        // hidden feed waits seconds between flushes, and a client streaming
+        // huge payloads would otherwise hold all of them unflushed. The JS
+        // Console bounds its own buffer at a quarter of its byte budget for
+        // exactly this reason; the ring trims to the full budget on append
+        // either way.
+        if pendingBytes >= ReactotronTimeline.maxTotalBytes / 4 {
+            flushPending()
+            return
+        }
         guard flushTask == nil else { return }
-        let interval = FeedFlushCadence.interval(appActive: NSApp.isActive)
+        // Hidden tabs stay mounted and lay their rows out like visible ones,
+        // and a main thread that is already behind must not be asked for a
+        // turn as often — `MainThreadLoad` is the app-wide reading of that.
+        let interval = FeedFlushCadence.interval(
+            appActive: NSApp.isActive,
+            watched: audience.isWatched,
+            lateness: MainThreadLoad.shared.lateness)
         flushTask = Task { [weak self] in
             try? await Task.sleep(for: interval)
             guard !Task.isCancelled else { return }
             self?.flushPending()
         }
+    }
+
+    /// One view reported whether it can see the timeline. Becoming visible
+    /// flushes at once: the hidden pace is several seconds, and waiting it out
+    /// would show the user a feed that looks stalled at the moment they
+    /// switched to it.
+    func noteVisibility(view id: UUID, visible: Bool) {
+        guard audience.update(view: id, visible: visible), visible else { return }
+        flushPending()
     }
 
     /// Drain the pending buffer into the timeline in a single append. Called by
@@ -726,6 +760,7 @@ final class ReactotronSession {
         guard !pendingItems.isEmpty else { return }
         let batch = pendingItems
         pendingItems.removeAll(keepingCapacity: true)
+        pendingBytes = 0
         appendBatch(batch)
     }
 
@@ -907,6 +942,11 @@ struct ReactotronView: View {
         // Devices appearing later are handled by AppState → deviceListChanged,
         // which also covers the view being closed (kept-alive sessions).
         .task { await session.start(serials: readySerials) }
+        // The timeline keeps streaming while this tab is hidden — it just
+        // flushes into the view far less often, because a mounted hidden tab
+        // lays its rows out exactly like a visible one and this is the largest
+        // of the three feeds (DROIDECTIVE-MAC-B).
+        .reportsFeedVisibility { session.noteVisibility(view: $0, visible: $1) }
         // Closing the split resets the right pane's clear — that pane is
         // gone, so reopening the split repopulates it with every buffered
         // event (an accidental clear is recoverable). The left pane lives on

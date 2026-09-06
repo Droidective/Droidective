@@ -227,6 +227,12 @@ final class JSConsoleSession {
     /// observed `buffer`), so a replay burst doesn't render.
     @ObservationIgnored private var pendingEntries: [JSEntry] = []
     @ObservationIgnored private var flushTask: Task<Void, Never>?
+    /// Which mounted views can see the feed — per window, but a split shows it
+    /// in both panes, so this is an audience rather than a flag
+    /// (`FeedAudience`). Distinct from `attachedViews`, which is about keeping
+    /// the *connection* alive: a hidden tab stays attached and streaming, it
+    /// just stops paying for layout nobody is reading.
+    @ObservationIgnored private var audience = FeedAudience()
     @ObservationIgnored private var welcomeTask: Task<Void, Never>?
     /// The discovery/connection loop, owned by the session so tab close and
     /// window close can stop it without going through a view update.
@@ -339,6 +345,11 @@ final class JSConsoleSession {
     func stop() {
         discoveryTask?.cancel()
         discoveryTask = nil
+        // The session outlives its views (AppState parks the workspace on a
+        // background-mode close), so forget the audience with it — a viewer
+        // left behind here would price the feed as watched for the rest of the
+        // session. Views re-report on their next appearance.
+        audience.removeAll()
     }
 
     // MARK: View attach/detach
@@ -1040,7 +1051,13 @@ final class JSConsoleSession {
     /// turned out to have missed this fix entirely — the rule is shared so a
     /// feed cannot be added without it.
     private var flushInterval: Duration {
-        FeedFlushCadence.interval(appActive: NSApp.isActive)
+        // Visibility and main-thread load both feed the pace: a hidden tab
+        // still lays out every row it flushes, and a thread already behind
+        // must not be asked for a turn as often (`MainThreadLoad`).
+        FeedFlushCadence.interval(
+            appActive: NSApp.isActive,
+            watched: audience.isWatched,
+            lateness: MainThreadLoad.shared.lateness)
     }
 
     private func scheduleFlush() {
@@ -1051,6 +1068,14 @@ final class JSConsoleSession {
             guard let self, !Task.isCancelled else { return }
             self.flushPending()
         }
+    }
+
+    /// One view reported whether it can see the feed. Becoming visible flushes
+    /// at once — the hidden pace is several seconds, and waiting it out would
+    /// show a feed that looks stalled at the moment the user switched to it.
+    func noteVisibility(view id: UUID, visible: Bool) {
+        guard audience.update(view: id, visible: visible), visible else { return }
+        flushPending()
     }
 
     private func flushPending() {
@@ -1206,6 +1231,10 @@ struct JSConsoleView: View {
         // the session keep the connection alive through that). AppState also
         // stops the session on tab/window close; every path is idempotent.
         .onDisappear { session.viewDisappeared() }
+        // Separate from the attach count above: that keeps the *connection*
+        // alive across a pane move, this only says whether anyone can see the
+        // feed. A hidden tab keeps streaming and stops paying for layout.
+        .reportsFeedVisibility { session.noteVisibility(view: $0, visible: $1) }
         .onChange(of: state.targetSerials) { _, serials in session.updateSerials(serials) }
         .onAppear { portText = String(session.port) }
         .onChange(of: session.port) { _, newPort in portText = String(newPort) }

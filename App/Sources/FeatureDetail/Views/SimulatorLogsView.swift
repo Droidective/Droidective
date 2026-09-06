@@ -1,4 +1,5 @@
 import ADBKit
+import AppKit
 import SwiftUI
 
 /// Live unified-log stream for the booted iOS Simulator, built around how
@@ -31,6 +32,17 @@ struct SimulatorLogsView: View {
     /// Free-text filter, debounced from `searchInput` into `search`.
     @State private var searchInput = ""
     @State private var search = ""
+    /// Whether this tab is the one on screen. The stream keeps running while
+    /// it isn't — only the flushing slows down (`FeedFlushCadence`), because a
+    /// mounted hidden tab lays out every row it is handed.
+    @Environment(\.tabIsActive) private var tabIsActive
+    /// The same answer, in `@State` so the streaming loop can read it *live*:
+    /// `.task` captures the view value it started with, and an `@Environment`
+    /// read through that capture is frozen at that moment (see `LogcatView`).
+    @State private var feedVisible = true
+    /// The live streamer, held so visibility changes can re-pace its flushing
+    /// without restarting the stream (a restart would clear the feed).
+    @State private var streamer: SimulatorLogStreamer?
     /// Xcode's console Metadata toggle: the time · process · subsystem line
     /// under each message.
     @AppStorage("iosLogsShowMetadata") private var showMetadata = true
@@ -97,6 +109,18 @@ struct SimulatorLogsView: View {
             }
         }
         .task(id: taskKey) { await streamLoop() }
+        // Re-pace on a tab switch rather than re-keying the stream: a restart
+        // would clear the feed. Becoming visible also flushes at once, so the
+        // reveal doesn't wait out the hidden interval.
+        .onChange(of: tabIsActive) { _, visible in
+            feedVisible = visible
+            let interval = pacedFlushInterval
+            Task { @MainActor in
+                await streamer?.setFlushInterval(interval)
+                if visible { await streamer?.flushNow() }
+            }
+        }
+        .onAppear { feedVisible = tabIsActive }
         // A changed filter re-tails the feed — the frozen position loses its
         // meaning when the row set changes.
         .onChange(of: "\(shownLevels.hashValue)|\(processFilter ?? "")|\(search)") { _, _ in
@@ -536,6 +560,16 @@ struct SimulatorLogsView: View {
     /// Owned by `.task(id:)`: cancelled and restarted whenever the simulator,
     /// scope, or emission level changes. The outer loop survives transient
     /// stream deaths.
+    /// How often the streamer should hand this view a batch: the shared feed
+    /// rule, given whether anyone can see the tab and how far behind the main
+    /// thread already is (`SimulatorLogStreamer.setFlushInterval`).
+    private var pacedFlushInterval: Duration {
+        FeedFlushCadence.interval(
+            appActive: NSApp.isActive,
+            watched: feedVisible,
+            lateness: MainThreadLoad.shared.lateness)
+    }
+
     private func streamLoop() async {
         lines.removeAll()
         pending.removeAll()
@@ -544,7 +578,12 @@ struct SimulatorLogsView: View {
         guard let udid = simulatorUdid else { return }
 
         let streamer = SimulatorLogStreamer()
-        defer { Task { await streamer.stop() } }
+        self.streamer = streamer
+        await streamer.setFlushInterval(pacedFlushInterval)
+        defer {
+            self.streamer = nil
+            Task { await streamer.stop() }
+        }
 
         let scope = scope
         let emit = emitLevel
@@ -569,6 +608,11 @@ struct SimulatorLogsView: View {
             }
 
             for await batch in stream {
+                if Task.isCancelled { break }
+                // Re-paced per batch, which is the same cadence the other
+                // feeds re-evaluate at — visibility and main-thread load both
+                // move while a stream is running.
+                await streamer.setFlushInterval(pacedFlushInterval)
                 if Task.isCancelled { break }
                 if paused { continue }
                 absorb(batch)
