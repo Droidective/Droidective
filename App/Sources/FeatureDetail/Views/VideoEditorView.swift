@@ -41,21 +41,13 @@ struct VideoEditorView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(20)
-        .dropDestination(for: URL.self) { urls, _ in
-            // Filtered, where this used to take whatever was dropped and hand
-            // an .apk or a .txt to AVFoundation as if it were a video.
-            guard let url = PlayableVideo.filter(urls).first else {
-                if let rejected = urls.first {
-                    state.showToast(Toast(
-                        message: "Not a video Droidective can open: \(rejected.lastPathComponent)",
-                        ok: false
-                    ))
-                }
-                return false
-            }
-            openedURL = url
-            return true
-        }
+        // Filtered, where this used to take whatever was dropped and hand an
+        // .apk or a .txt to AVFoundation as if it were a video. What isn't a
+        // video now goes to the feature that can use it instead of a toast
+        // saying no.
+        .featureFileDrop(
+            claims: { PlayableVideo.filter($0).first.map { [$0] } ?? [] },
+            perform: { openedURL = $0.first })
     }
 
     private func openFile() {

@@ -58,11 +58,7 @@ struct ApkSignView: View {
                 )
                 .padding(24)
         }
-        .dropDestination(for: URL.self) { urls, _ in
-            guard let apk = urls.first(where: { $0.pathExtension.lowercased() == "apk" }) else { return false }
-            stage(apk)
-            return true
-        } isTargeted: { dropTargeted = $0 }
+        .featureFileDrop(extension: "apk", perform: { stage($0) }, isTargeted: { dropTargeted = $0 })
     }
 
     // MARK: - Form

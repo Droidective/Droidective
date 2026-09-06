@@ -193,6 +193,17 @@ Node 22 in CI; scroll reveals and the hero palette demo must keep their
   and `SidebarDrop` draws the insertion guideline between rows for features and
   only at group boundaries for groups. Persisted as
   `LayoutState.sidebarOrder`/`categoryOrder`/`collapsedCategories`.
+- `Drop/` (Services): the drag-and-drop model — `FileDropRouter` (the one table
+  deciding what a dropped file does: packages install, `.aab` converts, videos
+  open in the editor, everything else copies to `/sdcard/Download`, plus the
+  sentence the overlay says before the button comes up), `InstallPlan` (version
+  relation → the primary button's label, and whether "keep app data" is even
+  possible — a downgrade can only be done by uninstalling), `MediaScan` (the
+  SDK-branching command that gets a pushed file into MediaStore, or a dropped
+  screenshot never shows up in the Gallery), and `DeviceTransferService`
+  (`mkdir -p` → push → scan, with `remoteSize` polling behind the progress
+  readout). Finder opens and drags go through the same router, so a
+  double-click and a drag can't drift apart.
 - `Services/`: one per domain — TextInput, AppControl, AppInspection (perms/
   info/meminfo/sandbox), AppsExplorer, FileExplorer, Overrides, ScreenCapture,
   ScreenRecorder (records through a headless `MirrorSession` on the bundled
@@ -543,6 +554,26 @@ table) is in `docs/reactotron-mcp-analysis.md`.
   In-app drags ride private UTIs (`DragTypes.swift`) that must be declared in
   `UTExportedTypeDeclarations` (project.yml) — macOS won't put an undeclared
   UTI on the drag pasteboard, which kills the drag *silently*.
+  - **"Deepest" means the view tree, and a *mounted* tab counts.** A fallback
+    drop region on the pane never gets a turn: the Mirror Wall's per-tile
+    reorder targets cover a whole pane and keep working from a hidden tab, so
+    they eat every file dropped anywhere in it. The file-drop fallback
+    therefore rides the **active tab** (`TabHostView`'s `ForEach`, gated on
+    `id == active`) rather than the pane — and is gated off while
+    `draggingTabID != nil`, because a region on the tab is deeper than the
+    pane's own tab target and would otherwise swallow drop-to-split. Every
+    step of that was found by instrumenting a real drag, not by reading the
+    layering; when a drop "does nothing", log `isTargeted` before theorising.
+  - **A feature that declines a file must route it, not return `false`.**
+    Returning false is a dead drop, and (per the rule above) it is a dead drop
+    even when that feature is not the tab on screen. `featureFileDrop` takes
+    the subset a feature claims and hands the rest to `FileDropRouter`; every
+    full-pane URL zone (APK Studio, Install App, the package screen, AAB, the
+    video editor, inspector, signer, decompiler) goes through it.
+  - **`isTargeted` says *that* something is over the view, never *what*.** The
+    hover announcement reads the in-flight drag pasteboard
+    (`DragPasteboard.droppedPaths()`), which AppKit keeps populated for the
+    life of the session; the drop itself still uses the URLs SwiftUI delivers.
 - **Empty states under a toolbar must `.frame(maxWidth/maxHeight: .infinity)`** —
   otherwise the whole VStack centers and the toolbar floats mid-window.
 - **`scrollPosition(id:)` read-back can't drive a follow/freeze decision under

@@ -146,11 +146,7 @@ struct DecompileBrowserView: View {
                     style: StrokeStyle(lineWidth: dropTargeted ? 2 : 1, dash: [7]))
                 .padding(20)
         }
-        .dropDestination(for: URL.self) { urls, _ in
-            guard let apk = urls.first(where: { $0.pathExtension.lowercased() == "apk" }) else { return false }
-            apkURL = apk
-            return true
-        } isTargeted: { dropTargeted = $0 }
+        .featureFileDrop(extension: "apk", perform: { apkURL = $0 }, isTargeted: { dropTargeted = $0 })
     }
 
     private var modePicker: some View {

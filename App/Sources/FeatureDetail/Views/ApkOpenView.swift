@@ -135,12 +135,10 @@ struct ApkOpenView: View {
                 )
                 .padding(20)
         }
-        .dropDestination(for: URL.self) { dropped, _ in
-            let packages = InstallablePackage.filter(dropped)
-            guard !packages.isEmpty else { return false }
-            state.apkOpen.urls = packages
-            return true
-        } isTargeted: { dropTargeted = $0 }
+        .featureFileDrop(
+            claims: InstallablePackage.filter,
+            perform: { state.apkOpen.urls = $0 },
+            isTargeted: { dropTargeted = $0 })
     }
 
     // MARK: - Actions

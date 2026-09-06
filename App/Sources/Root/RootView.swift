@@ -237,21 +237,11 @@ struct RootView: View {
         // so the AAB converter works offline with no first-use download.
         Task { await BundledTools.seed(into: state.env.engine.managedTools) }
         InstallInbox.shared.onReceive = { urls in
-            // Finder opens land in whichever window is in front.
+            // Finder opens land in whichever window is in front, and go
+            // through the same `FileDropRouter` table a drag does — one
+            // decision, tested once, instead of two filters that drift.
             guard let target = AppCore.shared.frontmost else { return }
-            let packages = InstallablePackage.filter(urls)
-            let aabs = urls.filter { $0.pathExtension.lowercased() == "aab" }
-            let videos = PlayableVideo.filter(urls)
-            let handled = Set(
-                AppPackageFormat.fileExtensions + ["aab"] + VideoInputFormat.fileExtensions
-            )
-            for other in urls where !handled.contains(other.pathExtension.lowercased()) {
-                target.showToast(Toast(
-                    message: "Droidective can't open \(other.lastPathComponent)", ok: false))
-            }
-            if !packages.isEmpty { target.openPackages(packages) }
-            if !aabs.isEmpty { target.openAABs(aabs) }
-            if !videos.isEmpty { target.openVideos(videos) }
+            target.routeDrop(DragPasteboard.paths(from: urls))
         }
         #if !APPSTORE
         // Update toasts ("available" / "ready — relaunch" / "up to date")
@@ -721,6 +711,18 @@ struct TabHostView: View {
                 FeatureDetailView(featureID: id)
                     .frame(width: pinned?.width, height: pinned?.height)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    // Files this feature didn't claim, routed to one that can
+                    // use them. It rides the *visible* tab rather than the pane
+                    // because a hidden tab keeps its own drop regions (the
+                    // Mirror Wall's tile targets cover a whole pane), and a
+                    // region in a deeper view beats one on an ancestor — so a
+                    // fallback on the pane never gets a turn. Gated on being
+                    // the active tab, or every mounted tab would carry one —
+                    // and gated off during a tab drag, since a region on the
+                    // tab is deeper than the pane's own tab target and would
+                    // otherwise swallow drop-to-split.
+                    .modifier(WindowFileDropModifier(
+                        isActive: id == active && state.draggingTabID == nil))
                     .environment(\.tabFeatureID, id)
                     .environment(\.tabIsActive, id == active)
                     .opacity(id == active ? 1 : 0)
