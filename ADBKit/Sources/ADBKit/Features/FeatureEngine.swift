@@ -57,6 +57,7 @@ public struct FeatureEngine: Sendable {
     public let customCommands: CustomCommandService
     public let adbKeyboard: AdbKeyboardInstaller
     public let fileExplorer: FileExplorerService
+    public let transfer: DeviceTransferService
     public let appsExplorer: AppsExplorerService
     public let appIcons: AppIconService
     public let emulators: EmulatorService
@@ -105,6 +106,7 @@ public struct FeatureEngine: Sendable {
         self.customCommands = CustomCommandService(client: client)
         self.adbKeyboard = AdbKeyboardInstaller(client: client)
         self.fileExplorer = FileExplorerService(client: client)
+        self.transfer = DeviceTransferService(client: client)
         self.appsExplorer = AppsExplorerService(client: client)
         self.appIcons = AppIconService(client: client)
         self.emulators = EmulatorService(client: client, locator: locator)
