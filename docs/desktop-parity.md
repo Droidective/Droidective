@@ -11,38 +11,44 @@ rewriting one when something turns out to be more work than it looked.
 
 | | Count |
 | --- | --- |
-| ⬜ Not started | 4 |
-| 🟡 Partial | 55 |
+| ⬜ Not started | 2 |
+| 🟡 Partial | 57 |
 | ⛔ Not applicable off-Apple | 2 |
 | **Total registry features** | **61** |
 
-"Partial" is doing a lot of work in that table: 19 of the 52 are actions that
-run from the palette but have no screen of their own, and the 33 that do have
+"Partial" is doing a lot of work in that table: 19 of the 57 are actions that
+run from the palette but have no screen of their own, and the 38 that do have
 screens are each missing something the Mac version offers. Read it as *nothing
 is finished*, not as *most of it is done*.
 
-The four not started are `frida-console`, `api-client`, and the two that are
-**blocked rather than unscheduled**: `screen-record` and `video-editor` both
-need ffmpeg provisioned for Windows and Linux, and this repo only commits a
-macOS universal binary.
+**The two not started are `video-editor` and `frida-console`.** The video
+editor is the ffmpeg filter graph and a preview scrubber — the toolchain
+underneath it is no longer the blocker, since ffmpeg became a managed download
+when screen record landed. Frida needs a rooted device to verify, which makes
+it the hardest to be sure of and the least used.
 
-**Screens with a real pane today** (23): Terminal, Apps, Logcat, Device Info, File
-Explorer, Crash Catcher, Bug Report, Performance, Root Status, Developer
+**Screens with a real pane today** (38): Terminal, Apps, Logcat, Device Info,
+File Explorer, Crash Catcher, Bug Report, Performance, Root Status, Developer
 Settings, System Restrictions, Wi-Fi, Private DNS, Network Speed, Emulators,
 Install App, App Info, Permissions, Memory Usage, Sandbox Browser, Manage App,
-Deep Links, Reactotron — plus the two app-chrome screens, the catalog and
-About. That list is not written here twice:
-`scripts/generate-parity-tracker.py` reads it out of the desktop app's pane
-router, so a screen that lands is partial in the checklist below without anyone
-remembering to say so.
+Deep Links, Reactotron, Mirror Screen, Mirror Wall, Screen Record, JS Console,
+API Testing, APK Studio, APK Inspector, Sign APK, Decompile APK, AAB to APK,
+Custom Commands, Wireless ADB, and the three hubs (Connection, React Native,
+Simulate) — plus the two app-chrome screens, the catalog and About. That
+covers **29 of the 32 full-screen views** in the catalog; the other seven
+catalog features are actions that render from their registry fields.
+
+That list is not written here twice: `scripts/generate-parity-tracker.py` reads
+it out of the desktop app's pane router, so a screen that lands is partial in
+the checklist below without anyone remembering to say so.
 
 **Only two features are out of scope**, and only because they drive an Apple
 toolchain rather than a device: `ios-logs` and `push-notification` are `xcrun
-simctl` against an iOS Simulator. Everything else — the mirror, screen record,
-the video editor, Reactotron, multi-window, Quick Actions, the tour, the
-updater, notifications, every drag-and-drop path — is a porting job with an
-entry in the backlog. Hard is not the same as impossible, and a ⛔ that means
-"hard" is a decision nobody goes back to revisit.
+simctl` against an iOS Simulator. Everything the port lacks now is *inside* a
+screen that exists, or one of the two above, or a piece of chrome — the
+Command Log sheet, the welcome tour, the updater, and Settings ▸ MCP — each
+with an entry in the backlog. Hard is not the same as impossible, and a ⛔ that
+means "hard" is a decision nobody goes back to revisit.
 
 **The UI is the Mac's UI.** Where a control exists on both, it looks and
 behaves the way `App/Sources/FeatureDetail/Views/` makes it behave — same
@@ -81,17 +87,21 @@ not regenerated — paste the generated half back under it.
 ## Order of work
 
 The shell came first, and it has landed: sidebar, tab strip, split panes,
-palette, per-feature hotkeys, UI zoom, device bar, menu bar, toasts. A screen
-ported now opens in a tab, splits, takes a shortcut and reports through the
-toasts without being reworked for any of it. Thirty-three screens exist.
+palette, per-feature hotkeys, UI zoom, device bar, menu bar, toasts — and since
+then multi-window, the tray with background mode, Quick Actions, notifications,
+drag and drop, window translucency and the role picker. A screen ported now
+opens in a tab, splits, takes a shortcut and reports through the toasts without
+being reworked for any of it. Thirty-eight screens exist.
 
 ### What is next, in order
 
-The ordering principle is **risk before features**. Thirty-three screens have
-been built for two operating systems that **nobody has ever launched the app
-on** — CI compiles both and runs the unit suites, and that is all. Every screen
-in this document is theoretical until that is not true, so validating it comes
-before adding to it.
+The ordering principle is **risk before features**, and it was set when
+thirty-three screens had been built for two operating systems **nobody had ever
+launched the app on** — CI compiled both and ran the unit suites, and that was
+all. Item 1 closed that: the Linux app is now installed from its `.deb` and
+driven under Xvfb on every PR, and Windows gets a narrower version on beta
+tags. Read items 1 and 2 for what the first real launch found, because it is
+the reason every check in those scripts is fatal.
 
 1. ~~**Run the app on Linux, and keep it running.**~~ **Landed — and it did not
    come up.** `scripts/smoke-desktop-linux.sh` now runs on every PR
@@ -339,15 +349,23 @@ before adding to it.
     copy against rewriting every in-app drag onto pointer events. The gesture
     itself is in `docs/manual-verification.md`, because no synthetic event on
     this platform can produce a drag.
-11. **The polish.** Window translucency (15) and the role picker (9) have
-    landed; the welcome tour (22) has not, and the updater (23) is blocked on a
-    signing keypair rather than on effort — `tauri-plugin-updater` needs one
-    whose private half lives in a GitHub secret, which is the maintainer's to
-    create. Settings ▸ MCP is the remaining tab, and it is a port task of its
-    own size rather than a checkbox: `ReactotronMCP` is `#if
-    canImport(Network)`-gated end to end and taps ADBKit's Apple-only
-    `ReactotronServer`, so serving it off Apple means feeding
-    `McpCommandStore` from the daemon's NIO relay instead.
+11. **The polish**, and it is what is left. Window translucency (15) and the
+    role picker (9) have landed. Still open, in the order they are worth doing:
+    the **Command Log** (7) — the Privacy tab already names it as missing, and
+    it is the one piece of chrome a bug report needs; the **welcome tour** (22);
+    and the **updater** (23), which is blocked on a signing keypair rather than
+    on effort — `tauri-plugin-updater` needs one whose private half lives in a
+    GitHub secret, which is the maintainer's to create, so the ports are
+    installed and updated by hand until then. Settings ▸ MCP is the remaining
+    tab, and it is a port task of its own size rather than a checkbox:
+    `ReactotronMCP` is `#if canImport(Network)`-gated end to end and taps
+    ADBKit's Apple-only `ReactotronServer`, so serving it off Apple means
+    feeding `McpCommandStore` from the daemon's NIO relay instead.
+
+    Also open, and smaller: the **screenshot annotation editor**. The capture
+    itself works — `screenshot` is an instant action and runs from the palette —
+    but the Mac's pen/shape/redact/crop editor has no counterpart, so a capture
+    here is a file rather than something to mark up before sending.
 12. **`frida-console`**, last of the real features: it needs a rooted device to
     verify, which makes it the hardest to be sure of and the least used.
 
@@ -1064,14 +1082,18 @@ have to relearn anything, and "this one is missing a whole subsystem" fails that
 just as badly as a missing button. Each is a release of its own, so they come
 after the screens rather than instead of them.
 
-17. **Drag and drop, everywhere the Mac has it.** The shell's tab and sidebar
-    drags already work. Still missing: dropping a file from the file manager
-    onto the File Explorer to `adb push` it, and dropping an APK/AAB on the
-    window to install it. Both need `dragDropEnabled: true`-style handling the
-    webview can use — the current `false` is what makes the *tab* drags work,
-    so this needs Tauri's native drop **and** HTML5 drag to coexist rather than
-    one being turned off for the other. That is the actual engineering problem;
-    it is not a reason to skip the feature.
+17. ~~**Drag and drop, everywhere the Mac has it.**~~ **Landed.** An APK or app
+    bundle dropped anywhere installs; anything else dropped on the File Explorer
+    is pushed to the directory it is showing. The engineering problem this entry
+    named turned out to have one answer rather than the coexistence it hoped
+    for: turning Tauri's native drop handler on stops **every** HTML5 drag in
+    the page working — the tab strip, the sidebar, the mirror wall — which was
+    checked rather than assumed. So the handler stays off and the dropped
+    *bytes* are staged through a Rust command (`src-tauri/src/dropped.rs`)
+    instead of the path being read from the native drop. One file copy against
+    rewriting every in-app drag onto pointer events. The gesture itself is on
+    `docs/manual-verification.md`, because no synthetic event on this platform
+    can produce a drag.
 18. ~~**Notifications and their settings.**~~ **Landed.** `post_notification`
     over `tauri-plugin-notification`, registered for its Rust API only like the
     clipboard and the opener, so the webview's capability file stays at
@@ -1091,9 +1113,13 @@ after the screens rather than instead of them.
     plus a tray icon, and the close handler that hides rather than quits —
     guarded on the tray having actually been created, since a Linux session can
     decline to give one and a window hidden with no way back is not a mode.
-21. **Multi-window** (`docs/multi-window.md`) — one window per device, the
-    per-window workspace split, the Focus / Take Over banner for the exclusive
-    features, and the window tint.
+21. ~~**Multi-window** (`docs/multi-window.md`)~~ — **landed.** One window per
+    device, each with its own tabs and its own `localStorage` key, the Focus /
+    Take Over banner for the exclusive features, and a tinted device icon on
+    every window after the first. Two traps worth keeping: the window's label
+    must be in the URL it is opened with, or both windows read as `main` and
+    share one layout; and Tauri 2's `Emitter::emit` reaches *every* listener
+    whatever object it is called on, so a targeted event needs `emit_to`.
 22. **The welcome tour** on first run.
 23. **The updater** — Sparkle is macOS-only, so this is `tauri-plugin-updater`
     behind the same "Relaunch to update" pill and What's New sheet.
@@ -1261,19 +1287,32 @@ after the screens rather than instead of them.
     while the daemon took IPv4 loopback and neither failed — so the device's
     traffic goes to whichever owns IPv4 loopback. The Mac has the same property
     against upstream's Electron app, so it is parity, not a regression.
-25. **Mirror, screen record, and the video editor.** Smaller than it looks.
-    The instinct is "a decode/render stack to write from scratch", but counting
-    the files says otherwise: of the seventeen in `ADBKit/Services/Mirror`,
-    **ten are already portable** — `ScrcpyStreamDecoder`,
-    `ScrcpyAudioStreamDecoder`, `ScrcpyControlMessage`, `ScrcpyDeviceMessage`,
-    `ScrcpyServerParams`, `ScrcpyServerLocator`, `H264NAL`, `PCMMixdown`,
-    `MirrorAudioFallback`, `ShowTouches`, plus `MirrorWall`'s layout maths, which
-    lives under `Features/`. scrcpy's own server speaks the same protocol to any
-    host.
-    ffmpeg builds for Windows and Linux, but nothing in this repo provisions it
-    for either yet: `App/Resources/ffmpeg` is a committed macOS universal binary
-    and `scripts/unpack-ffmpeg.sh` verifies it with `lipo`. Screen record and the
-    video editor need that gap closed first — the mirror itself does not.
+25. ~~**Mirror, screen record**~~ **— landed; the video editor has not.** The
+    mirror, the Mirror Wall and Screen Record all ship. The rest of this entry
+    is the analysis that turned out to be right, kept because it is what the
+    video editor and any future decode work will be read against.
+
+    It was smaller than it looked. The instinct is "a decode/render stack to
+    write from scratch", but counting the files said otherwise: of the seventeen
+    in `ADBKit/Services/Mirror`, **ten were already portable** —
+    `ScrcpyStreamDecoder`, `ScrcpyAudioStreamDecoder`, `ScrcpyControlMessage`,
+    `ScrcpyDeviceMessage`, `ScrcpyServerParams`, `ScrcpyServerLocator`,
+    `H264NAL`, `PCMMixdown`, `MirrorAudioFallback`, `ShowTouches`, plus
+    `MirrorWall`'s layout maths, which lives under `Features/`. scrcpy's own
+    server speaks the same protocol to any host.
+
+    **ffmpeg is provisioned now**, which is what closed the screen-record half:
+    it is a managed download (BtbN's builds, digest verified, `.tar.xz` on Linux
+    and `.zip` on Windows) rather than a committed binary the way
+    `App/Resources/ffmpeg` is on the Mac, and that is also what unblocked
+    Settings ▸ Tools. The daemon records with `FfmpegPipe` feeding the scrcpy
+    H.264 stream to `ffmpeg -f h264 -i pipe:0 -c:v copy`, with segmented
+    pause/resume through the concat demuxer — the Mac's own recorder rides the
+    Apple-gated mirror media stack and could not be reused. Two things the Mac's
+    screen has and this does not, both said on the screen rather than quietly
+    missing: **audio**, because scrcpy carries it as a second stream that has to
+    be interleaved against the video's clock, and the **live preview**, which
+    would mean decoding the stream twice on the way to a file.
 
     **Seven files are gated, and they are the whole job.** (The entry said five;
     the two it missed are the ones whose `#if` is not on the first line, and
@@ -1560,6 +1599,7 @@ job, and the checklist now says which.
   - [ ] button: Pair
   - [ ] button: Connect
   - [ ] button: Disconnect
+  - [ ] label: Scan a QR Code…
 
 
 ### React Native

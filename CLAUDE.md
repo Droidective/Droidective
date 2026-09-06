@@ -21,6 +21,21 @@ UI over it for Windows/Linux (`desktop/README.md`; the feature-by-feature
 parity tracker is `docs/desktop-parity.md`). **macOS never talks to the
 daemon** — the Mac app keeps linking ADBKit directly, by decision, so no daemon
 or desktop work can reach the shipping Mac flow.
+**Where the port stands:** the shell is done (multi-window, tabs, split panes,
+palette, hotkeys, tray + background mode, Quick Actions, notifications, toasts,
+drag and drop, translucency, the role picker, a native menu bar), and 29 of the
+32 full-screen views have a pane — the mirror, the Mirror Wall, screen record,
+Reactotron, the JS console, API Testing and APK Studio included. Only
+`video-editor` and `frida-console` have no screen at all; the seven remaining
+catalog features are actions that render from their registry fields. Still
+Mac-only: the Command Log sheet, the welcome tour, the updater, Settings ▸ MCP,
+the screenshot annotation editor — and the Terminal on *Windows* (ConPTY is a
+different API, and the pane says so). The practical consequence: a new Mac
+feature now usually has a port counterpart worth adding in the same breath, and
+`docs/desktop-parity.md` is where it gets tracked. Regenerate that file's
+per-feature half from the sources rather than editing it —
+`scripts/generate-parity-tracker.py` reads the registry (as the daemon serves
+it) and the desktop pane router, so the counts cannot drift.
 **The Linux app is launched on every PR**, not merely compiled:
 `desktop-linux-smoke` installs the `.deb` in a bare `ubuntu:24.04`, starts it
 under Xvfb, drives the palette to open a screen and photographs both frames
@@ -121,9 +136,10 @@ opening it — verify those by hand.
 ## Build / test / run
 
 ```
-make test          # ADBKit unit tests (cd ADBKit && swift test) — 2014 tests, keep green
+make test          # all three Swift packages — ADBKit 2014, droidectived 406,
+                   #   ReactotronMCP 99. Keep green.
 make test-app      # the AppTests logic bundle — 118 tests
-make verify        # tiers 0-1: warnings-as-errors + both test bundles
+make verify        # tiers 0-1: warnings-as-errors + all four Swift bundles
 make test-linux    # the same suite on Linux (Apple `container` CLI; the port gate)
 make test-emulator # tier 3: the device-dependent suites against a real emulator
 make test-smoke    # tier 4a: launch the built app and confirm it comes up
@@ -908,9 +924,10 @@ resolver and `scripts/test-release-channel.sh` (in `make verify-self` and CI)
 keeps it honest — notably that a stable release can never attach a Windows or
 Linux artifact. **Two version lines:** the tag carries the Mac's version, and
 the root `PORT_VERSION` file (semver, hand-bumped like `MARKETING_VERSION`)
-carries the ports' — so one beta tag is `3.10.0-beta.1` on macOS and
-`0.0.1-beta.1` on Windows and Linux. Every cross-platform artifact name must
-come from `release-channel.sh port-version`, never from `${GITHUB_REF_NAME#v}`:
+carries the ports' — so one beta tag is `3.11.0-beta.1` on macOS and
+`0.0.5-beta.1` (the value today) on Windows and Linux. Every cross-platform
+artifact name must come from `release-channel.sh port-version`, never from
+`${GITHUB_REF_NAME#v}`:
 that expression is right for the DMG and wrong for everything else, and two
 tests exist to catch the crossing. A beta tag builds the Tauri app for Windows
 (NSIS + MSI) and Linux (.deb + .AppImage) in the `desktop-artifacts` job via
@@ -1243,9 +1260,10 @@ jadx/apktool, recompile, and sign — with keystore creation) plus Frida setup, 
 custom accent color, launching emulators from the device bar, per-feature
 connect-a-device empty states, a live-preview hotkey recorder, and a Settings
 split into Appearance/Privacy; managed tools download from GitHub releases into
-Application Support and are sized/removable in Settings); 2014 ADBKit + 118
-AppTests green (macOS — the suite also runs on Linux in CI, minus the
-Darwin-gated files);
+Application Support and are sized/removable in Settings); 2014 ADBKit + 406
+droidectived + 99 ReactotronMCP + 118 AppTests green on macOS (ADBKit and the
+daemon also run on Linux and Windows in CI, minus the Darwin-gated files), plus
+1223 vitest + 54 cargo on the desktop app;
 builds clean with zero warnings (enforced as errors in CI). Verified live against a
 physical device and an Android emulator. Release builds are Developer ID-signed +
 notarized and bundle scrcpy/ffmpeg (see `RELEASING.md`). Open gaps: the Apps
