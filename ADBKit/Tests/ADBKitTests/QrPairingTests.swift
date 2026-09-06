@@ -156,6 +156,24 @@ import Testing
         #expect(!runner.invocations.contains { $0.arguments.first == "pair" })
     }
 
+    @Test func aFailingMdnsQueryKeepsPollingRatherThanEndingTheWait() async {
+        // `adb mdns services` exiting non-zero — an adb server restarting
+        // under a five-minute wait — must not read as "nobody scanned". It
+        // doesn't, because `AdbClient.run` only *throws* for a missing adb and
+        // hands back a failed result for everything else; this pins that,
+        // because the loop's `else { return nil }` reads at a glance like it
+        // aborts on any hiccup and it is a long way from where it would show.
+        let runner = MockProcessRunner()
+        runner.script(
+            argsPrefix: ["mdns"], stderr: "adb: failed to check server version", exitCode: 1)
+        let service = await makeService(runner: runner)
+
+        let found = await service.discoverPairingEndpoint(
+            serviceName: "droidective-aB3xY9zQ1p", attempts: 3, delay: .milliseconds(1))
+        #expect(found == nil)
+        #expect(runner.invocations.filter { $0.arguments == ["mdns", "services"] }.count == 3)
+    }
+
     @Test func surfacesAdbsOwnPairingFailure() async {
         let runner = MockProcessRunner()
         runner.script(argsPrefix: ["mdns"], stdout:
