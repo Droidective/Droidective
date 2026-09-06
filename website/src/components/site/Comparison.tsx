@@ -9,7 +9,7 @@ const oldStack = ["Terminal", "adb", "logcat", "scrcpy", "Reactotron", "Android 
  *  named competitor being called worse. */
 export function Comparison() {
   return (
-    <section id="why" className="mx-auto max-w-[1120px] px-6 py-32 max-[620px]:py-20">
+    <section id="why" className="mx-auto max-w-[1120px] px-6 py-24 max-[620px]:py-14">
       <Reveal className="mb-14 max-w-[62ch]">
         <span className="font-mono text-[12px] font-medium tracking-[0.06em] text-green/80 uppercase">
           <span className="mr-2 text-green-dim/60">&gt;_</span>

@@ -47,7 +47,7 @@ export function MagicCard({ children, className, innerClassName, glowSize = 500 
           }}
         />
       )}
-      <div className={cn("relative z-0", innerClassName)}>{children}</div>
+      <div className={cn("relative z-0 h-full", innerClassName)}>{children}</div>
     </div>
   )
 }

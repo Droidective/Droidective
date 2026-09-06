@@ -1,7 +1,7 @@
 import { Apple, ArrowUpRight, Monitor } from "lucide-react"
 
 import { Reveal } from "@/components/site/Reveal"
-import { platforms } from "@/lib/content"
+import { BETA_RELEASES_URL, platforms } from "@/lib/content"
 import { cn } from "@/lib/utils"
 
 const marks = { macos: Apple, "windows-linux": Monitor } as const
@@ -15,7 +15,7 @@ const marks = { macos: Apple, "windows-linux": Monitor } as const
  *  app files a bug that is really a copy problem. */
 export function Platforms() {
   return (
-    <section id="platforms" className="relative px-6 py-24">
+    <section id="platforms" className="relative px-6 py-20 max-[620px]:py-14">
       <div className="mx-auto max-w-[1140px]">
         <Reveal className="mb-12 max-w-[62ch]">
           <h2 className="display text-[clamp(28px,4.2vw,46px)] leading-[1.04]">
@@ -113,6 +113,18 @@ export function Platforms() {
                         />
                       </span>
                     </a>
+
+                    {/* The panel CTA names a specific tag, which goes stale the
+                        day a newer beta ships. This is the always-current way
+                        through, so a pinned version can never be a dead end. */}
+                    {!primary && (
+                      <a
+                        href={BETA_RELEASES_URL}
+                        className="mt-3 w-fit text-[12.5px] text-faint underline decoration-white/15 underline-offset-4 transition-colors duration-700 ease-[cubic-bezier(0.32,0.72,0,1)] hover:text-muted hover:decoration-white/30"
+                      >
+                        All beta releases
+                      </a>
+                    )}
                   </div>
                 </div>
               </Reveal>

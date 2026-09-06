@@ -272,32 +272,13 @@ svg.lucide {
   stroke-width: 1.75;
 }
 
-/* ---------------------------------------------------------------------------
- * Off-screen sections do no render work.
- *
- * The page is ~15,000px tall. Without this the browser lays out and paints
- * every section on load and re-does that work whenever anything invalidates,
- * even for the ten sections nobody has scrolled to. `content-visibility: auto`
- * lets it skip a section entirely until it approaches the viewport.
- *
- * `contain-intrinsic-size: auto <estimate>` is the part that keeps the
- * scrollbar honest: the browser uses the estimate before a section has ever
- * rendered, then *remembers the real height* and uses that from then on, so
- * the page does not resize under the thumb on the way back up.
- *
- * Applied only to sections with no decoration escaping their own box, because
- * this establishes containment and would clip anything that does. The hero and
- * the MCP section are excluded for exactly that reason.
- * ------------------------------------------------------------------------- */
-.section-contained {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 720px;
-}
 
-/* The changelog runs to ~1,600px, so the shared estimate would misreport the
-   scrollbar by nearly a thousand pixels until it first renders. Every other
-   contained section measures between 515px and 982px, which 720 covers. */
-.section-contained-tall {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 1650px;
+/* Anchor targets clear the floating nav.
+ *
+ * The nav is fixed and ~76px tall, so a section scrolled to by an anchor lands
+ * with its heading a few pixels under it — technically visible, and visibly
+ * cramped. This gives every anchored target a landing offset instead of
+ * relying on each section's own top padding to happen to be enough. */
+:where(section, header)[id] {
+  scroll-margin-top: 24px;
 }

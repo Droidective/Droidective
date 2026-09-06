@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils"
 const links = [
   { label: "Features", href: "#features" },
   { label: "Workflows", href: "#workflows" },
+  { label: "Platforms", href: "#platforms" },
   { label: "Why Droidective", href: "#why" },
   { label: "Changelog", href: "/changelog/" },
   { label: "Blog", href: "/blog/" },

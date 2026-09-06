@@ -13,7 +13,7 @@ export function FeatureExplorer() {
   const [open, setOpen] = useState<string | null>(featureGroups[0]!.name)
 
   return (
-    <section id="features" className="mx-auto max-w-[1120px] px-6 py-32 max-[620px]:py-20">
+    <section id="features" className="mx-auto max-w-[1120px] px-6 py-24 max-[620px]:py-14">
       <SectionHead center eyebrow="every tool" title="Everything you need to debug faster.">
         All 61 tools, grouped by what they're for. Open a group to see what's inside.
       </SectionHead>
