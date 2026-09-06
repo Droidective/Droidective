@@ -29,11 +29,11 @@ export function BlogIndexPage() {
               <span className="mr-2 text-green-dim">&gt;_</span>
               blog
             </span>
-            <h1 className="mt-3.5 mb-4 text-[clamp(32px,5vw,52px)] leading-[1.03] font-extrabold tracking-[-0.035em]">
+            <h1 className="display mt-3.5 mb-4 text-[clamp(32px,5vw,52px)] leading-[1.03]">
               The Droidective blog
             </h1>
             <p className="text-[clamp(17px,2vw,20px)] text-muted">
-              Guides, deep dives, and role-by-role workflows for debugging Android &amp; React Native on a Mac — no
+              Guides, deep dives, and role-by-role workflows for debugging Android &amp; React Native on a Mac. No
               terminal required.
             </p>
           </Reveal>
@@ -79,7 +79,7 @@ export function BlogIndexPage() {
                       {featured.readMinutes} min read
                     </span>
                   </div>
-                  <h2 className="mb-3 text-[clamp(23px,3vw,32px)] leading-[1.1] font-extrabold tracking-[-0.025em] transition-colors duration-150 group-hover:text-green-bright">
+                  <h2 className="display mb-3 text-[clamp(23px,3vw,32px)] leading-[1.1]  transition-colors duration-150 group-hover:text-green-bright">
                     {featured.title}
                   </h2>
                   <p className="mb-5 text-[16px] leading-[1.6] text-muted">{featured.subtitle}</p>

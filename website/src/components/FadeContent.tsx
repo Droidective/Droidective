@@ -9,6 +9,8 @@ interface FadeContentProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode;
   container?: Element | string | null;
   blur?: boolean;
+  /** Vertical offset the reveal travels, in px. Composited, unlike `blur`. */
+  y?: number;
   duration?: number;
   ease?: string;
   delay?: number;
@@ -25,6 +27,7 @@ const FadeContent: React.FC<FadeContentProps> = ({
   children,
   container,
   blur = false,
+  y = 0,
   duration = 1000,
   ease = 'power2.out',
   delay = 0,
@@ -53,10 +56,15 @@ const FadeContent: React.FC<FadeContentProps> = ({
     const startPct = (1 - threshold) * 100;
     const getSeconds = (val: number) => (val > 10 ? val / 1000 : val);
 
+    // `filter` is only ever set when a caller actually asks for blur. Listing it
+    // in `will-change` unconditionally promotes a filter layer for every
+    // revealed section, which costs GPU memory for an effect most of them do
+    // not use.
     gsap.set(el, {
       autoAlpha: initialOpacity,
-      filter: blur ? 'blur(10px)' : 'blur(0px)',
-      willChange: 'opacity, filter, transform'
+      y,
+      ...(blur ? { filter: 'blur(10px)' } : {}),
+      willChange: blur ? 'opacity, filter, transform' : 'opacity, transform'
     });
 
     const tl = gsap.timeline({
@@ -67,7 +75,8 @@ const FadeContent: React.FC<FadeContentProps> = ({
         if (disappearAfter > 0) {
           gsap.to(el, {
             autoAlpha: initialOpacity,
-            filter: blur ? 'blur(10px)' : 'blur(0px)',
+            y,
+            ...(blur ? { filter: 'blur(10px)' } : {}),
             delay: getSeconds(disappearAfter),
             duration: getSeconds(disappearDuration),
             ease: disappearEase,
@@ -79,12 +88,13 @@ const FadeContent: React.FC<FadeContentProps> = ({
 
     tl.to(el, {
       autoAlpha: 1,
-      filter: 'blur(0px)',
+      y: 0,
+      ...(blur ? { filter: 'blur(0px)' } : {}),
       duration: getSeconds(duration),
       ease: ease,
       // Release the compositor layer once revealed — a permanent will-change
       // on every section adds up to real GPU memory on mobile.
-      clearProps: disappearAfter > 0 ? '' : 'willChange,filter'
+      clearProps: disappearAfter > 0 ? '' : 'willChange,filter,transform'
     });
 
     const st = ScrollTrigger.create({

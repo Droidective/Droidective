@@ -1,11 +1,11 @@
 import { Reveal } from "@/components/site/Reveal"
 import { GITHUB_URL } from "@/lib/content"
 
-/** Every figure here is checked against the repo: MIT LICENSE, 59 FeatureDefs
+/** Every figure here is checked against the repo: MIT LICENSE, 61 FeatureDefs
  *  in FeatureRegistry, and no paid tier or paywalled path anywhere in the app.
  *  No download CTA on purpose — the nav, hero, and closing CTA already carry it. */
 const lineItems = [
-  ["59 developer tools", "0.00"],
+  ["61 developer tools", "0.00"],
   ["Screen mirroring & recording", "0.00"],
   ["Reactotron + MCP server", "0.00"],
   ["APK Studio & Frida setup", "0.00"],
@@ -24,12 +24,8 @@ export function FreeValue() {
 
           <div className="relative grid grid-cols-[1fr_auto] items-center gap-14 max-[940px]:grid-cols-1 max-[940px]:gap-10">
             <div className="min-w-0">
-              <p className="mb-5 font-mono text-[12px] font-medium tracking-[0.06em] text-green/80 uppercase">
-                <span className="mr-2 text-green-dim/60">&gt;_</span>
-                the pricing page
-              </p>
-              <h2 className="mb-6 text-[clamp(34px,5vw,56px)] leading-[0.98] font-extrabold tracking-[-0.04em]">
-                59 tools.
+              <h2 className="display mb-6 text-[clamp(34px,5vw,56px)] leading-[0.98]">
+                61 tools.
                 <br />
                 <span className="text-green">$0.</span>
               </h2>

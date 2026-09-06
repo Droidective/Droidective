@@ -14,8 +14,8 @@ function GithubMark() {
 
 export function Contribute() {
   return (
-    <section id="contribute" className="mx-auto max-w-[1120px] px-6 py-28 max-[620px]:py-20">
-      <SectionHead center eyebrow="open source" title="Built in the open. Yours to shape." />
+    <section id="contribute" className="section-contained mx-auto max-w-[1120px] px-6 py-28 max-[620px]:py-20">
+      <SectionHead center title="Built in the open. Yours to shape." />
       <div className="grid grid-cols-[1.1fr_0.9fr] gap-4 max-[940px]:grid-cols-1">
         <Reveal>
           <MagicCard className="h-full">
@@ -28,7 +28,7 @@ export function Contribute() {
               </p>
               <pre className="m-0 max-w-full rounded-[10px] border border-white/[0.06] bg-ink-900/60 px-3.5 py-3 font-mono text-[12px] break-words whitespace-pre-wrap text-[#cdd5cb]">
                 <span className="text-green">$</span> brew install xcodegen{"\n"}
-                <span className="text-green">$</span> make test    <span className="text-faint/60"># ADBKit unit tests — no device needed</span>
+                <span className="text-green">$</span> make test    <span className="text-faint/60"># ADBKit unit tests, no device needed</span>
                 {"\n"}
                 <span className="text-green">$</span> make run     <span className="text-faint/60"># build &amp; launch</span>
               </pre>
@@ -59,14 +59,14 @@ export function Contribute() {
                 <li className="flex items-start gap-3 py-3 text-[14px] text-muted/90">
                   <span className="mt-0.5 size-4 shrink-0 rounded-[5px] border border-white/[0.08]" />
                   <span>
-                    <b className="font-semibold text-text">Resizable Apps divider</b> — drag the list / detail split in
+                    <b className="font-semibold text-text">Resizable Apps divider</b>: drag the list / detail split in
                     the Apps explorer.
                   </span>
                 </li>
                 <li className="flex items-start gap-3 border-t border-white/[0.04] py-3 text-[14px] text-muted/90">
                   <span className="mt-0.5 size-4 shrink-0 rounded-[5px] border border-white/[0.08]" />
                   <span>
-                    <b className="font-semibold text-text">Your idea here</b> — open an issue and let's talk.
+                    <b className="font-semibold text-text">Your idea here</b>: open an issue and let's talk.
                   </span>
                 </li>
               </ul>

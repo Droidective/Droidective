@@ -4,15 +4,15 @@ import { Reveal } from "@/components/site/Reveal"
 const points = [
   {
     lead: "10 tools, 8 resources",
-    rest: " — the same contract as Reactotron's own MCP server, so any client that speaks it already works.",
+    rest: ", the same contract as Reactotron's own MCP server, so any client that speaks it already works.",
   },
   {
     lead: "Redacted by default",
-    rest: " — the MCP boundary strips sensitive values before your agent ever sees them. The in-app timeline is never touched.",
+    rest: ". The MCP boundary strips sensitive values before your agent ever sees them. The in-app timeline is never touched.",
   },
   {
     lead: "Loopback only",
-    rest: " — bound to 127.0.0.1 with Origin validation and an optional bearer token. Off until you turn it on.",
+    rest: ", bound to 127.0.0.1 with Origin validation and an optional bearer token. Off until you turn it on.",
   },
 ]
 
@@ -30,17 +30,13 @@ export function McpSpotlight() {
 
       <div className="relative mx-auto grid max-w-[1120px] grid-cols-2 items-center gap-14 px-6 max-[940px]:grid-cols-1 max-[940px]:gap-10">
         <div className="min-w-0">
-          <span className="font-mono text-[12px] font-medium tracking-[0.06em] text-green/80 uppercase">
-            <span className="mr-2 text-green-dim/60">&gt;_</span>
-            ai · mcp
-          </span>
-          <h2 className="mt-4 mb-5 text-[clamp(28px,4vw,42px)] leading-[1.06] font-extrabold tracking-[-0.035em]">
+          <h2 className="display mb-5 text-[clamp(28px,4vw,42px)] leading-[1.06]">
             Your AI can finally{" "}
             <span className="text-green">see your app.</span>
           </h2>
           <p className="mb-7 text-[16.5px] leading-relaxed text-muted">
             Stop pasting logs into a chat window. Droidective runs an opt-in MCP server that hands your
-            agent the live runtime — the Reactotron timeline, store state, and every network request from
+            agent the live runtime: the Reactotron timeline, store state, and every network request from
             the app that's running right now.
           </p>
 

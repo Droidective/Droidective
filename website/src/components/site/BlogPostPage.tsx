@@ -50,7 +50,7 @@ export function BlogPostPage({ slug }: { slug: string }) {
       <>
         <BlogHeader />
         <main className="mx-auto max-w-[720px] px-6 py-32 text-center">
-          <h1 className="mb-4 text-3xl font-extrabold tracking-[-0.02em]">Post not found</h1>
+          <h1 className="display mb-4 text-3xl">Post not found</h1>
           <p className="mb-8 text-muted">That article doesn’t exist (or moved).</p>
           <a href="/blog/" className="font-mono text-sm text-green hover:text-green-bright">
             ← all posts
@@ -86,7 +86,7 @@ export function BlogPostPage({ slug }: { slug: string }) {
                 {post.readMinutes} min read
               </span>
             </div>
-            <h1 className="mb-5 text-[clamp(30px,5vw,46px)] leading-[1.06] font-extrabold tracking-[-0.035em]">
+            <h1 className="display mb-5 text-[clamp(30px,5vw,46px)] leading-[1.06]">
               {post.title}
             </h1>
             <p className="mb-2 text-[clamp(18px,2.2vw,21px)] leading-[1.5] text-muted">{post.subtitle}</p>
@@ -103,7 +103,7 @@ export function BlogPostPage({ slug }: { slug: string }) {
             ref={endRef}
             className="mx-auto max-w-[720px] rounded-2xl border border-border bg-linear-to-b from-green/6 to-white/0 p-8 text-center max-[620px]:p-6"
           >
-            <h2 className="mb-2.5 text-2xl font-extrabold tracking-[-0.02em]">Try Droidective</h2>
+            <h2 className="display mb-2.5 text-2xl">Try Droidective</h2>
             <p className="mx-auto mb-6 max-w-[46ch] text-[15.5px] text-muted">
               Free, open source, and native to macOS. 56 Android &amp; React Native debugging tools, one keystroke
               away.

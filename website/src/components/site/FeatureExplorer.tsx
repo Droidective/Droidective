@@ -15,11 +15,11 @@ export function FeatureExplorer() {
   return (
     <section id="features" className="mx-auto max-w-[1120px] px-6 py-32 max-[620px]:py-20">
       <SectionHead center eyebrow="every tool" title="Everything you need to debug faster.">
-        All 59 tools, grouped by what they're for. Open a group to see what's inside.
+        All 61 tools, grouped by what they're for. Open a group to see what's inside.
       </SectionHead>
 
       <Reveal className="mx-auto max-w-[840px]">
-        <div className="overflow-hidden rounded-2xl border border-white/[0.06]">
+        <div className="shell"><div className="core overflow-hidden">
           {featureGroups.map((group) => {
             const isOpen = open === group.name
             return (
@@ -67,7 +67,7 @@ export function FeatureExplorer() {
               </div>
             )
           })}
-        </div>
+        </div></div>
       </Reveal>
     </section>
   )

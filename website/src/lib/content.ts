@@ -17,7 +17,7 @@ export const LINKEDIN_URL = "https://www.linkedin.com/in/rohindh"
 export const RELEASES_URL = `${GITHUB_URL}/releases`
 // GitHub's permanent latest-release asset URL: every release uploads a
 // stable-named Droidective.dmg (see ci.yml), so this always serves the
-// newest version — no appcast fetch, nothing cached to go stale.
+// newest version. No appcast fetch, nothing cached to go stale.
 export const DOWNLOAD_URL = `${GITHUB_URL}/releases/latest/download/Droidective.dmg`
 export const APP_VERSION = "v3.11.0"
 
@@ -67,7 +67,7 @@ export const workflows: Workflow[] = [
     icon: Atom,
     title: "Understand what your app does while it runs",
     blurb:
-      "Reactotron is built in — no desktop app to install. Point your client at Droidective and a live timeline of logs, actions, state, and network requests streams in beside a Hermes JS console.",
+      "Reactotron is built in, so there is no desktop app to install. Point your client at Droidective and a live timeline of logs, actions, state, and network requests streams in beside a Hermes JS console.",
     features: ["Reactotron timeline", "Hermes JS console", "Redux & state browser", "Network inspector", "Reload JS & dev menu", "Metro port forwarding"],
     image: "/assets/screenshot-react.webp",
     alt: "Droidective's React Native hub with quick-action cards for reload JS, dev menu and process death, plus a Metro bundler section",
@@ -79,7 +79,7 @@ export const workflows: Workflow[] = [
     icon: Cast,
     title: "Drive the device without touching a terminal",
     blurb:
-      "Mirror and control the screen, browse the filesystem, manage every installed app, and pair over Wi-Fi — in tabs that keep running while you work elsewhere, or split side by side.",
+      "Mirror and control the screen, browse the filesystem, manage every installed app, and pair over Wi-Fi. All of it in tabs that keep running while you work elsewhere, or split side by side.",
     features: ["Screen mirror & control", "Screen recording", "File explorer", "App management", "Wireless ADB pairing", "Tabs & split panes"],
     video: "/assets/tour-tabs.mp4",
     image: "/assets/poster-tabs.webp",
@@ -92,7 +92,7 @@ export const workflows: Workflow[] = [
     icon: Activity,
     title: "Watch the numbers move in real time",
     blurb:
-      "Per-core CPU, system RAM, app FPS and jank, and network throughput — charted as they happen with a hover crosshair. Record a session and export it to JSON or CSV.",
+      "Per-core CPU, system RAM, app FPS and jank, and network throughput, charted as they happen with a hover crosshair. Record a session and export it to JSON or CSV.",
     features: ["Per-core CPU", "System & per-process RAM", "FPS & jank", "Network throughput", "Session recording", "JSON & CSV export"],
     image: "/assets/screenshot-performance.webp",
     alt: "Droidective performance monitor charting per-core CPU, system RAM and network throughput live during a recording",
@@ -104,7 +104,7 @@ export const workflows: Workflow[] = [
     icon: Boxes,
     title: "Open an APK and see everything inside it",
     blurb:
-      "One workspace over a single loaded APK — inspect the manifest and signing certs, decompile with jadx or apktool, recompile, and re-sign. AAB bundles convert to installable APKs too.",
+      "One workspace over a single loaded APK: inspect the manifest and signing certs, decompile with jadx or apktool, recompile, and re-sign. AAB bundles convert to installable APKs too.",
     features: ["Manifest & cert inspection", "jadx + apktool decompile", "Recompile & re-sign", "AAB → APK conversion", "Keystore creation", "Frida server setup"],
     mock: "apk",
   },
@@ -115,7 +115,7 @@ export const workflows: Workflow[] = [
     icon: Sparkles,
     title: "Let your AI agent read the running app",
     blurb:
-      "An opt-in MCP server exposes Reactotron's timeline, state, and network data to Claude Code, Cursor, and any MCP client — 10 tools and 8 resources over loopback HTTP, redacted by default.",
+      "An opt-in MCP server exposes Reactotron's timeline, state, and network data to Claude Code, Cursor, and any MCP client. Ten tools and eight resources over loopback HTTP, redacted by default.",
     features: ["10 MCP tools", "8 MCP resources", "Live timeline access", "State & network context", "Redaction on by default", "127.0.0.1 only"],
     mock: "mcp",
   },
@@ -146,43 +146,95 @@ export const comparisonRows: { workflow: string; old: string; nu: string }[] = [
   { workflow: "Price", old: "Varies per tool", nu: "Free · MIT · no tiers" },
 ]
 
-/** Grouped feature explorer — collapsed by default so the page stays calm. */
+/** Grouped feature explorer, collapsed by default so the page stays calm.
+ *  The six group counts sum to the registry's 61. When a feature lands in the
+ *  app, its group count moves here too; a total that does not add up is the
+ *  one thing a reader can check against the app itself. */
 export const featureGroups: { name: string; icon: LucideIcon; count: string; items: string[] }[] = [
   {
     name: "React Native",
     icon: Atom,
-    count: "6 tools",
-    items: ["Reactotron (built in)", "Hermes JS console", "Reactotron MCP server", "Reload JS & dev menu", "Metro port forwarding", "Dev-server host override"],
+    count: "8 tools",
+    items: ["Reactotron (built in)", "Hermes JS console", "Reactotron MCP server", "Dev menu", "Reload JS", "Deep links", "Simulate process death", "Dev-server host"],
   },
   {
-    name: "Device control",
+    name: "Screen, mirror & capture",
     icon: Cast,
-    count: "12 tools",
-    items: ["Screen mirror & control", "Screen recording", "Screenshot editor", "File explorer", "Apps explorer", "Install APK", "Deep links", "Send text", "Wireless ADB & pairing", "Private DNS", "Root status", "Emulator manager"],
-  },
-  {
-    name: "Logs & diagnostics",
-    icon: ScrollText,
-    count: "7 tools",
-    items: ["Live logcat", "iOS unified logs", "Crash catcher", "Bug report", "Device info & getprop", "Terminal (split panes)", "Custom commands"],
-  },
-  {
-    name: "Performance",
-    icon: Activity,
-    count: "4 tools",
-    items: ["Per-core CPU & RAM", "FPS & jank monitor", "Per-process stats", "Network throughput"],
-  },
-  {
-    name: "APK & security",
-    icon: Boxes,
     count: "6 tools",
-    items: ["APK Studio", "APK inspector", "Decompile (jadx / apktool)", "Sign & zipalign", "AAB → APK converter", "Frida server setup"],
+    items: ["Mirror screen & control", "Mirror Wall (6 devices)", "Screenshot editor", "Screen recording", "Video editor", "Demo mode"],
   },
   {
-    name: "State simulation",
+    name: "Device & connection",
+    icon: Wifi,
+    count: "9 tools",
+    items: ["Wireless ADB & QR pairing", "Emulators & simulators", "Network speed monitor", "Wi-Fi", "Private DNS", "Reverse port", "Copy device IP", "Connection hub", "Send text"],
+  },
+  {
+    name: "Device state",
     icon: SlidersHorizontal,
-    count: "10 tools",
-    items: ["Fake battery", "Dark mode", "Demo mode", "Locale override", "Font & density scale", "Proxy override", "Developer settings", "Push notifications (iOS)", "Sandbox browser", "System restrictions"],
+    count: "13 tools",
+    items: ["File explorer", "Device info & getprop", "Developer settings", "System restrictions", "Fake battery", "Dark mode", "Font & density", "Animation scale", "Locale override", "Network toggles", "HTTP proxy", "Push notifications (iOS)", "Simulate hub"],
+  },
+  {
+    name: "Apps & APK",
+    icon: Boxes,
+    count: "16 tools",
+    items: ["Apps explorer", "Install APK / XAPK / APKM", "APK Studio", "APK inspector", "Decompile (jadx / apktool)", "Sign & zipalign", "AAB to APK", "Frida server setup", "Manage app", "Permissions", "App info", "Memory usage", "Sandbox browser", "Current activity", "Foreground bundle id", "Monkey test"],
+  },
+  {
+    name: "Logs, diagnostics & tools",
+    icon: ScrollText,
+    count: "9 tools",
+    items: ["Columnar logcat", "iOS unified logs", "Crash catcher", "Bug report", "Performance monitor", "Root status", "API testing", "Terminal (split panes)", "Custom commands"],
+  },
+]
+
+/** Where the app runs today. The site said "macOS" and nothing else for three
+ *  releases after the Windows and Linux builds started shipping on the beta
+ *  channel, which made the ports invisible to everyone who was not already
+ *  reading release notes. Stated plainly, including what the ports do not have
+ *  yet, because a beta oversold is a support ticket. */
+export interface Platform {
+  id: string
+  name: string
+  channel: string
+  status: "stable" | "beta"
+  headline: string
+  detail: string
+  points: string[]
+  href: string
+  cta: string
+}
+
+export const platforms: Platform[] = [
+  {
+    id: "macos",
+    name: "macOS",
+    channel: "Stable",
+    status: "stable",
+    headline: "The full app",
+    detail:
+      "All 61 tools, Developer ID signed and notarized, universal for Apple silicon and Intel. Updates install themselves in the background.",
+    points: ["macOS 14 Sonoma or later", "Signed, notarized, no Gatekeeper prompt", "Universal binary", "Self-updating"],
+    href: DOWNLOAD_URL,
+    cta: "Download the DMG",
+  },
+  {
+    id: "windows-linux",
+    name: "Windows and Linux",
+    channel: "Beta",
+    status: "beta",
+    headline: "29 of the 32 screens",
+    detail:
+      "The same engine behind a Tauri interface, shipping on beta releases. The mirror, the Mirror Wall, screen record, Reactotron, the JS console and APK Studio are all there.",
+    points: [
+      "NSIS installer and MSI for Windows",
+      ".deb and AppImage for Linux",
+      "Not signed, and updated by hand",
+      "No video editor, Frida, or Command Log yet",
+    ],
+    href: `${GITHUB_URL}/releases`,
+    cta: "Find a beta release",
   },
 ]
 
@@ -190,7 +242,7 @@ export const featureGroups: { name: string; icon: LucideIcon; count: string; ite
 export const useCaseMoments: { quote: string; answer: string; href: string }[] = [
   { quote: "“The app is crashing.”", answer: "Open the crash catcher, read the split-out trace, and copy it Slack-ready.", href: "/for-qa-and-testers.html" },
   { quote: "“The app feels slow.”", answer: "Chart CPU, RAM, FPS and jank live, then record the session and export it.", href: "/for-android-developers.html" },
-  { quote: "“I need to inspect this APK.”", answer: "Drop it into APK Studio — manifest, certs, decompiled source, re-sign.", href: "/for-security-testers.html" },
+  { quote: "“I need to inspect this APK.”", answer: "Drop it into APK Studio for the manifest, certs, decompiled source and a re-sign.", href: "/for-security-testers.html" },
   { quote: "“What is my RN app doing?”", answer: "Reactotron streams the timeline; MCP hands the same context to your AI.", href: "/react-native-debugger.html" },
 ]
 
@@ -239,12 +291,12 @@ export const releases: { version: string; date: string; latest?: boolean; html: 
 ]
 
 export const faqs: { q: string; html: string }[] = [
-  { q: "Is it really free?", html: "Yes. Droidective is MIT-licensed and fully open source — no account, no paywall, no pro tier. Star it, fork it, ship it." },
-  { q: "Is it signed and safe to open?", html: "Yes. Release builds are signed with an Apple Developer ID and notarized by Apple, so they open with a normal double-click — no Gatekeeper workaround needed. Everything is open source, and you can build from source if you prefer." },
-  { q: "Do I need a rooted device?", html: "No. Everything works on a normal device. A few extras — full-filesystem browsing, saved Wi-Fi passwords, SELinux mode and read-write remount — unlock automatically when root is available." },
-  { q: "What do I need installed?", html: "Just Android <code>adb</code>. Droidective finds it via <code>ANDROID_HOME</code>, the default SDK path, or Homebrew, and offers a one-click install if it's missing. <code>scrcpy</code> and <code>ffmpeg</code> ship inside the app, so mirroring, recording, and video export work out of the box — only the Android <code>emulator</code> is optional, for AVD management." },
-  { q: "Does it send my data anywhere?", html: 'Anonymous crash reports and usage analytics are on by default (opt-out) — both disclosed on first launch and controlled in Settings → Privacy. Device serials, file paths, and command contents are never sent. See the <a href="/privacy.html">privacy page</a> for details.' },
-  { q: "Does it work with React Native?", html: "Yes — there's a dedicated React Native hub: open the dev menu, reload the JS bundle, reverse the Metro port, save deep links per app, and set the dev-server host." },
+  { q: "Is it really free?", html: "Yes. Droidective is MIT-licensed and fully open source. No account, no paywall, no pro tier. Star it, fork it, ship it." },
+  { q: "Is it signed and safe to open?", html: "Yes. Release builds are signed with an Apple Developer ID and notarized by Apple, so they open with a normal double-click, with no Gatekeeper workaround needed. Everything is open source, and you can build from source if you prefer." },
+  { q: "Do I need a rooted device?", html: "No. Everything works on a normal device. A few extras (full-filesystem browsing, saved Wi-Fi passwords, SELinux mode and read-write remount) unlock automatically when root is available." },
+  { q: "What do I need installed?", html: "Just Android <code>adb</code>. Droidective finds it via <code>ANDROID_HOME</code>, the standard SDK paths, or your login shell, and Settings ▸ Doctor links to the download when it is missing. The <code>scrcpy</code> server, <code>ffmpeg</code>, bundletool and uber-apk-signer all ship inside the app, so mirroring, recording, video export and APK signing work out of the box. Only the Android <code>emulator</code> is optional, for AVD management." },
+  { q: "Does it send my data anywhere?", html: 'Anonymous crash reports and usage analytics are on by default and can be turned off. Both are disclosed on first launch and controlled in Settings → Privacy. Device serials, file paths, and command contents are never sent. See the <a href="/privacy.html">privacy page</a> for details.' },
+  { q: "Does it work with React Native?", html: "Yes. There is a dedicated React Native hub: open the dev menu, reload the JS bundle, reverse the Metro port, save deep links per app, and set the dev-server host." },
   { q: "Apple Silicon or Intel?", html: "Both. Droidective runs on any Mac with macOS 14 Sonoma or later." },
 ]
 

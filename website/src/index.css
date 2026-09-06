@@ -1,3 +1,8 @@
+/* Self-hosted variable fonts. Replaces the render-blocking Google Fonts
+   stylesheet: two fewer preconnects, no FOUT from a third-party round trip,
+   and the mono actually ships with the bundle. */
+@import "@fontsource-variable/geist/index.css";
+@import "@fontsource-variable/geist-mono/index.css";
 @import "tailwindcss";
 
 @theme {
@@ -39,9 +44,15 @@
   /* A single warm wink to the detective hat — used almost never */
   --color-amber: #f5b544;
 
-  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
-  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI",
-    system-ui, sans-serif;
+  /* Geist carries the product's register: a grotesk with real character at
+     display sizes that stays neutral at 15px. The system stack stays as the
+     fallback so a failed font load still renders SF Pro on the Mac this app
+     ships for. */
+  --font-sans: "Geist Variable", -apple-system, BlinkMacSystemFont,
+    "SF Pro Display", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-display: "Geist Variable", -apple-system, BlinkMacSystemFont,
+    "SF Pro Display", system-ui, sans-serif;
 
   /* shadcn semantic tokens, mapped onto the brand */
   --color-background: #0d0f0e;
@@ -63,12 +74,23 @@
   --color-input: rgba(231, 234, 229, 0.14);
   --color-ring: #69a106;
 
+  /* ONE radius system, concentric by construction. A shell at --radius-shell
+     with --shell-pad of padding holds a core at --radius-core, so the curves
+     stay parallel instead of fighting. Nothing on this site invents a radius
+     outside this scale. */
+  --radius-shell: 24px;
+  --radius-core: 18px;
   --radius-lg: 16px;
   --radius-md: 12px;
   --radius-sm: 8px;
+  --radius-pill: 999px;
 
   --shadow-glow: 0 0 0 1px rgba(105, 161, 6, 0.45),
     0 10px 30px -8px rgba(105, 161, 6, 0.25);
+  /* Ambient depth, tinted to the ink ramp rather than pure black. A neutral
+     black shadow on a green-tinted graphite reads as a hole, not a lift. */
+  --shadow-lift: 0 1px 1px rgba(4, 6, 5, 0.5), 0 8px 24px -12px rgba(4, 8, 5, 0.7);
+  --shadow-lift-lg: 0 1px 1px rgba(4, 6, 5, 0.5), 0 24px 60px -24px rgba(4, 8, 5, 0.8);
 
   /* Glass surfaces */
   --color-glass: rgba(18, 21, 20, 0.72);
@@ -167,4 +189,115 @@ body {
   .cta-breathe {
     animation: none;
   }
+}
+
+/* ---------------------------------------------------------------------------
+ * Nested enclosures (shell + core)
+ *
+ * A premium surface is never a flat rectangle on the page. It is a machined
+ * tray holding a plate: an outer shell with its own hairline and padding, and
+ * an inner core with its own fill and a top highlight, at a radius calculated
+ * so the two curves stay concentric.
+ *
+ * Usage:  <div class="shell"><div class="core"> ... </div></div>
+ * ------------------------------------------------------------------------- */
+.shell {
+  --shell-pad: 6px;
+  padding: var(--shell-pad);
+  border-radius: var(--radius-shell);
+  border: 1px solid rgba(231, 234, 229, 0.06);
+  background: rgba(231, 234, 229, 0.022);
+  box-shadow: var(--shadow-lift);
+}
+
+.core {
+  border-radius: calc(var(--radius-shell) - var(--shell-pad));
+  background: var(--color-ink-800);
+  /* The single light source for the whole page sits above: every core catches
+     it on its top edge only. */
+  box-shadow: inset 0 1px 0 rgba(231, 234, 229, 0.055);
+}
+
+/* A shell that lights up when the pointer is over it. The highlight is a
+   border-colour shift, not a glow — glows are the AI tell this palette avoids. */
+.shell-hover {
+  transition:
+    border-color 700ms cubic-bezier(0.32, 0.72, 0, 1),
+    background-color 700ms cubic-bezier(0.32, 0.72, 0, 1),
+    transform 700ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.shell-hover:hover {
+  border-color: rgba(105, 161, 6, 0.28);
+  background: rgba(105, 161, 6, 0.035);
+  transform: translateY(-2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell-hover,
+  .shell-hover:hover {
+    transition: none;
+    transform: none;
+  }
+}
+
+/* Tabular figures everywhere a number carries meaning, so columns of counts
+   and versions do not jitter between values. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* Display type: Geist tightens well, and the optical size wants a touch less
+   tracking as it grows. */
+.display {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+}
+
+/* Body copy that should never orphan its last word. */
+.prose-balance {
+  text-wrap: pretty;
+}
+
+/* Icon weight is a single decision, not a per-call-site one.
+ *
+ * lucide ships at stroke-width 2, which reads heavy beside Geist at these
+ * sizes. 1.75 keeps the glyphs precise without turning them into hairlines
+ * that disappear on the graphite. Set once here so no icon can drift; a call
+ * site that genuinely needs another weight still overrides with the prop. */
+svg.lucide {
+  stroke-width: 1.75;
+}
+
+/* ---------------------------------------------------------------------------
+ * Off-screen sections do no render work.
+ *
+ * The page is ~15,000px tall. Without this the browser lays out and paints
+ * every section on load and re-does that work whenever anything invalidates,
+ * even for the ten sections nobody has scrolled to. `content-visibility: auto`
+ * lets it skip a section entirely until it approaches the viewport.
+ *
+ * `contain-intrinsic-size: auto <estimate>` is the part that keeps the
+ * scrollbar honest: the browser uses the estimate before a section has ever
+ * rendered, then *remembers the real height* and uses that from then on, so
+ * the page does not resize under the thumb on the way back up.
+ *
+ * Applied only to sections with no decoration escaping their own box, because
+ * this establishes containment and would clip anything that does. The hero and
+ * the MCP section are excluded for exactly that reason.
+ * ------------------------------------------------------------------------- */
+.section-contained {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 720px;
+}
+
+/* The changelog runs to ~1,600px, so the shared estimate would misreport the
+   scrollbar by nearly a thousand pixels until it first renders. Every other
+   contained section measures between 515px and 982px, which 720 covers. */
+.section-contained-tall {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 1650px;
 }

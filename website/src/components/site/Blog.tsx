@@ -7,9 +7,9 @@ import { posts } from "@/lib/blogPosts"
 export function Blog() {
   const latest = posts.slice(0, 3)
   return (
-    <section id="blog" className="mx-auto max-w-[1120px] px-6 py-28 max-[620px]:py-20">
-      <SectionHead center eyebrow="blog" title="Guides &amp; deep dives.">
-        Role-by-role workflows for debugging Android &amp; React Native on a Mac — written in-house, no terminal
+    <section id="blog" className="section-contained mx-auto max-w-[1120px] px-6 py-28 max-[620px]:py-20">
+      <SectionHead center title="Guides &amp; deep dives.">
+        Role-by-role workflows for debugging Android &amp; React Native on a Mac, written in-house. No terminal
         required.
       </SectionHead>
       <div className="grid grid-cols-3 gap-5 max-[940px]:grid-cols-2 max-[620px]:grid-cols-1">

@@ -5,13 +5,9 @@ import { useCaseMoments } from "@/lib/content"
  *  then the answer. Deliberately compact: no images, no big cards. */
 export function UseCaseMoments() {
   return (
-    <section className="mx-auto max-w-[1120px] px-6 py-24 max-[620px]:py-16">
+    <section className="section-contained mx-auto max-w-[1120px] px-6 py-24 max-[620px]:py-16">
       <Reveal className="mb-12 max-w-[52ch]">
-        <span className="font-mono text-[12px] font-medium tracking-[0.06em] text-green/80 uppercase">
-          <span className="mr-2 text-green-dim/60">&gt;_</span>
-          moments
-        </span>
-        <h2 className="mt-4 text-[clamp(26px,3.6vw,38px)] leading-[1.08] font-extrabold tracking-[-0.03em]">
+        <h2 className="display text-[clamp(26px,3.6vw,38px)] leading-[1.08]">
           Built for the moments that slow you down.
         </h2>
       </Reveal>
