@@ -519,6 +519,29 @@ table) is in `docs/reactotron-mcp-analysis.md`.
     an exclusive feature comes up on its own collision banner. Two windows on
     one device is now the normal case, not the unusual one. See
     `docs/multi-window.md`.
+  - **A moved tab keeps its state, and where that state lives decides how.**
+    Moving a tab rebuilds its view, so `@State` is lost — true of a cross-pane
+    move too, not just tear-off. Three routes: app-wide sessions (the
+    Reactotron relay) just carry on, and `stopBackgroundWork(for:reason:)`
+    skips them on `.handoff`; per-window session objects (`TerminalManager`,
+    `JSConsoleSession`, `ApkStudioSession`) cross in `MovedSessions`, leaving a
+    fresh one behind; everything else keeps its state in a model held per
+    (window, feature) by **`FeatureStateStore`**, which is *not* `@Observable`
+    on purpose — views resolve their model from `body` and resolving creates
+    one, so an observed container would loop. A feed must also clear its buffer
+    only when the *question* changed (`bufferKey`), not on every `.task(id:)`
+    restart, and must not replay into a buffer that already holds those lines
+    (`-T 0` on a keeping restart). Captures — Screen Record, Performance,
+    Network Speed — deliberately do *not* move: their sampler dies with the
+    view, so a preserved buffer would have a silent gap.
+  - **A live NSView can only be mounted by the window that owns its session.**
+    `NativeTerminalView` re-parents one cached terminal view into whatever
+    container SwiftUI hands it. During a move the receiving pane *and* the
+    departing window's final update pass both run against real, live windows,
+    so `container.window != nil` cannot tell them apart — the departing one won
+    and re-parented the live terminal into an orphaned tree, leaving an empty
+    black pane over a healthy shell. The pane asks its own window whether it
+    still owns the shell (`TerminalManager.owns`) instead.
   - **Only the windows after the first tint their device icon**
     (`DeviceTint`); the app keeps one accent.
   - **A feature that can't run twice on one device** goes in

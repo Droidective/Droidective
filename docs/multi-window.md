@@ -156,6 +156,45 @@ Two consequences fall out of a moved tab keeping its device:
   `tintIndex(ofWindow:paletteSize:)` guarantees no two collide. The title
   carries the device name.
 
+### A moved tab keeps its state
+
+Moving a tab destroys and recreates its view, so anything in `@State` goes with
+it. That was already true of moving a tab across a split; tear-off just made it
+something you would actually do. A move that throws away a log buffer is a
+restart wearing a move's clothes, so state worth keeping lives outside the view.
+
+Three mechanisms, by where the state already lived:
+
+| | How it travels |
+| --- | --- |
+| **Reactotron** | Nothing to do — its relay is app-wide, owned by `AppCore`, and `stopBackgroundWork` skips it on a handoff so clients are not dropped for a tab that is about to reopen. |
+| **Terminal, JS Console, APK Studio** | Their state is an object owned by the *window* (`TerminalManager`, `JSConsoleSession`, `ApkStudioSession`). The object crosses in `MovedSessions` and the window it left gets a fresh one. Live shells keep running: verified with a background loop still printing in the new window, and an unchanged shell pid list across the move. |
+| **Logcat, iOS Logs, Crash Catcher, API Testing, File Explorer** | Their state was view `@State`. It moved into a model object held per (window, feature) by **`FeatureStateStore`**, which re-keys the entry on a handoff and drops it when the tab closes. |
+
+`FeatureStateStore` is **deliberately not `@Observable`.** Views resolve their
+model from `body`, and resolving creates one on first use — a write. An observed
+container would invalidate the view that just read it, whose re-render would
+write again: the endless update loop, not a wasted pass. The models are
+observable; the container holding them must not be. (Same reason `LogRowFrames`
+and `MainThreadLoad` are plain reference boxes.)
+
+Two details decide whether a preserved buffer actually *looks* right:
+
+- **Clear on a changed question, not on every restart.** A feed's `.task(id:)`
+  restarts when the view is merely rebuilt, so the buffer is dropped only when
+  the device, level or app filter changed — `bufferKey` records what the buffer
+  was collected under.
+- **Don't replay into a buffer that already holds it.** `adb logcat -T n` opens
+  by reprinting the device's last n lines, so a restart over a kept buffer
+  showed its recent history twice. A restart that keeps its buffer starts at the
+  live edge instead: measured over the same 5 s move, +342 lines before, +39
+  after — the live rate.
+
+**Captures deliberately do not move.** Screen Record, Performance and Network
+Speed are fed by a sampler the view owns; a preserved buffer with the sampler
+stopped mid-move would have a silent gap in it, which is worse than being told.
+They keep their leave guard, and a move asks the same question a close does.
+
 ### Guards
 
 Moving a tab unmounts its view exactly as closing it does, so the same two
