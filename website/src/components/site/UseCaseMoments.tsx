@@ -5,7 +5,7 @@ import { useCaseMoments } from "@/lib/content"
  *  then the answer. Deliberately compact: no images, no big cards. */
 export function UseCaseMoments() {
   return (
-    <section className="section-contained mx-auto max-w-[1120px] px-6 py-24 max-[620px]:py-16">
+    <section className="mx-auto max-w-[1120px] px-6 py-20 max-[620px]:py-14">
       <Reveal className="mb-12 max-w-[52ch]">
         <h2 className="display text-[clamp(26px,3.6vw,38px)] leading-[1.08]">
           Built for the moments that slow you down.

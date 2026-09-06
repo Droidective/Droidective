@@ -15,7 +15,7 @@ export function FinalCta() {
   const inView = useInView(headingRef)
 
   return (
-    <section className="mx-auto max-w-[1120px] px-6 pb-28 max-[620px]:pb-20">
+    <section className="mx-auto max-w-[1120px] px-6 pt-4 pb-20 max-[620px]:pt-0 max-[620px]:pb-14">
       <Reveal>
         <div className="relative overflow-hidden rounded-3xl border border-white/[0.06] bg-gradient-to-b from-ink-700/60 to-ink-800/60 px-8 py-22 text-center shadow-[0_40px_100px_-30px_rgba(0,0,0,0.5)]">
           {/* Atmospheric green glow */}

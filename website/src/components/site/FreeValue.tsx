@@ -14,7 +14,7 @@ const lineItems = [
 
 export function FreeValue() {
   return (
-    <section className="mx-auto max-w-[1120px] px-6 py-24 max-[620px]:py-16">
+    <section className="mx-auto max-w-[1120px] px-6 py-20 max-[620px]:py-14">
       <Reveal>
         <div className="relative overflow-hidden rounded-3xl border border-white/[0.06] bg-gradient-to-b from-white/[0.03] to-white/[0.01] px-10 py-14 max-[620px]:px-6 max-[620px]:py-11">
           <div

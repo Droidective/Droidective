@@ -1,7 +1,7 @@
 import CountUp from "@/components/CountUp"
 import { Reveal } from "@/components/site/Reveal"
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion"
-import { APP_VERSION, GITHUB_URL } from "@/lib/content"
+import { APP_VERSION, BETA_RELEASE_URL, GITHUB_URL } from "@/lib/content"
 
 /** The confidence signal, directly under the hero rather than inside it: the
  *  hero carries the value proposition and the CTA, this carries the facts that
@@ -14,7 +14,7 @@ const facts: { value: string; label: string; href?: string }[] = [
   { value: APP_VERSION, label: "Latest release", href: `${GITHUB_URL}/releases/tag/${APP_VERSION}` },
   { value: "MIT", label: "Free and open source", href: `${GITHUB_URL}/blob/main/LICENSE` },
   { value: "macOS 14+", label: "Signed and notarized" },
-  { value: "Windows · Linux", label: "On the beta channel", href: `${GITHUB_URL}/releases` },
+  { value: "Windows · Linux", label: "On the beta channel", href: BETA_RELEASE_URL },
 ]
 
 export function TrustStrip() {

@@ -5,7 +5,7 @@ import { faqs } from "@/lib/content"
 
 export function Faq() {
   return (
-    <section id="faq" className="section-contained mx-auto max-w-[1120px] px-6 py-28 max-[620px]:py-20">
+    <section id="faq" className="mx-auto max-w-[1120px] px-6 py-20 max-[620px]:py-14">
       <SectionHead center title="Questions, answered." />
       <Reveal className="mx-auto max-w-200">
         <Accordion type="single" collapsible>

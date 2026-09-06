@@ -21,6 +21,15 @@ export const RELEASES_URL = `${GITHUB_URL}/releases`
 export const DOWNLOAD_URL = `${GITHUB_URL}/releases/latest/download/Droidective.dmg`
 export const APP_VERSION = "v3.11.0"
 
+/** The newest pre-release tag, which is where the Windows and Linux builds
+ *  live. Pointing the beta links at `/releases` sent people to a list headed by
+ *  the *stable* macOS release, which is the one page that does not carry the
+ *  artifacts they came for. Bumped with the tag, like APP_VERSION. */
+export const BETA_VERSION = "v3.10.0-beta.5"
+export const BETA_RELEASE_URL = `${GITHUB_URL}/releases/tag/${BETA_VERSION}`
+/** Every pre-release, newest first, for "is there anything newer than that". */
+export const BETA_RELEASES_URL = `${GITHUB_URL}/releases?q=prerelease%3Atrue&expanded=true`
+
 export interface PaletteCommand {
   icon: LucideIcon
   name: string
@@ -233,8 +242,8 @@ export const platforms: Platform[] = [
       "Not signed, and updated by hand",
       "No video editor, Frida, or Command Log yet",
     ],
-    href: `${GITHUB_URL}/releases`,
-    cta: "Find a beta release",
+    href: BETA_RELEASE_URL,
+    cta: `Download ${BETA_VERSION}`,
   },
 ]
 

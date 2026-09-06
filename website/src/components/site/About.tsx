@@ -34,7 +34,7 @@ export function About() {
   const reducedMotion = usePrefersReducedMotion()
 
   return (
-    <section id="about" className="section-contained mx-auto max-w-[1120px] px-6 pb-28 max-[620px]:pb-20">
+    <section id="about" className="mx-auto max-w-[1120px] px-6 py-20 max-[620px]:py-14">
       <SectionHead center title="About me." />
       <div className="grid grid-cols-[1.1fr_0.9fr] gap-4 max-[940px]:grid-cols-1">
         <Reveal>
@@ -85,7 +85,7 @@ export function About() {
         <Reveal delay={60}>
           <MagicCard className="h-full">
             <div className="flex h-full min-w-0 flex-col p-7">
-              <ul className="m-0 list-none p-0">
+              <ul className="m-0 flex flex-1 list-none flex-col justify-between p-0">
                 {highlights.map((h) => (
                   <li key={h.label} className="flex items-baseline gap-3.5 border-b border-white/[0.04] py-3.5 first:pt-0">
                     <span className="font-mono text-[26px] font-bold tracking-[-0.02em] text-green">

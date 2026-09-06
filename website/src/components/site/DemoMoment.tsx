@@ -5,7 +5,7 @@ import { Reveal } from "@/components/site/Reveal"
  *  here: the point is how fast ⌘T moves between tools, which a still can't show. */
 export function DemoMoment() {
   return (
-    <section id="in-action" className="relative overflow-hidden py-32 max-[620px]:py-20">
+    <section id="in-action" className="relative overflow-hidden py-24 max-[620px]:py-14">
       <div
         aria-hidden
         className="pointer-events-none absolute top-1/4 left-1/2 h-[400px] w-[1000px] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(105,161,6,0.05),transparent_70%)] blur-3xl"

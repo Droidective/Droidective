@@ -20,7 +20,7 @@ const points = [
  *  spotlight rather than a cell in a feature grid. */
 export function McpSpotlight() {
   return (
-    <section id="mcp" className="relative overflow-hidden py-32 max-[620px]:py-20">
+    <section id="mcp" className="relative overflow-hidden py-24 max-[620px]:py-14">
       {/* Ambient wash — marks this as a distinct moment in the page rhythm. */}
       <div
         aria-hidden
