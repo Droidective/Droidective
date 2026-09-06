@@ -83,9 +83,8 @@ struct TabStripView: View {
         // so precise before/after placement still wins over this catch-all.
         .onDrop(of: [.workspaceTab], delegate: TabPaneDrop(
             state: state,
-            onDrop: { id in
-                state.dropTab(id, intoGroup: group, before: nil)
-                state.draggingTabID = nil
+            onDrop: { drag in
+                state.acceptTabDrop(drag, on: .strip(group: group, before: nil))
             }
         ))
         // A drop that lands outside this strip's chips (the pane content, dead
@@ -93,8 +92,8 @@ struct TabStripView: View {
         // so their `setSlot(nil)` cleanup can't run and the insertion guideline
         // stayed painted. The drag's single source of truth is `draggingTabID` —
         // clear the slot whenever it resets, wherever the drop landed.
-        .onChange(of: state.draggingTabID) { _, id in
-            if id == nil { dropSlot = nil }
+        .onChange(of: state.anyTabDrag) { _, drag in
+            if drag == nil { dropSlot = nil }
         }
     }
 
@@ -155,20 +154,17 @@ struct TabStripView: View {
         // While this chip rides the cursor as the drag image, fade the
         // stationary original so the tab doesn't read as duplicated.
         .opacity(state.draggingTabID == id ? 0.3 : 1)
-        .onDrag {
-            state.draggingTabID = id
-            // A private type, not an NSString: a plain-text drag is captured at
-            // the AppKit level by any mounted text view (SwiftTerm, logcat)
-            // before SwiftUI's drop targets see it — see `DragTypes.swift`.
-            return privateDragItem(.workspaceTab, id)
-        }
+        .modifier(TabChipDrag(
+            id: id, title: Self.title(id, role: state.selectedRole), icon: Self.icon(id)))
         .onDrop(of: [.workspaceTab], delegate: TabReorderDrop(
             targetID: id,
             width: chipWidths[id] ?? 0,
             order: tabIDs,
             state: state,
             setSlot: { dropSlot = $0 },
-            move: { dragged, before in state.dropTab(dragged, intoGroup: group, before: before) }
+            move: { drag, before in
+                state.acceptTabDrop(drag, on: .strip(group: group, before: before))
+            }
         ))
         .contextMenu { tabMenu(for: id) }
     }
@@ -190,10 +186,26 @@ struct TabStripView: View {
         }
     }
 
-    /// Right-click menu for a tab: move it across the split, or close it (or
-    /// everything else in this pane).
+    /// Right-click menu for a tab: move it to a window of its own or to another
+    /// open one, move it across the split, or close it (or everything else in
+    /// this pane).
     @ViewBuilder
     private func tabMenu(for id: String) -> some View {
+        Button("Open in New Window") { state.beginHandoff(id, to: .newWindow(frame: nil)) }
+            // A workspace whose only tab left would not be a move, it would be
+            // the window moving — and the window already moves. Moving it into
+            // an *existing* window is still allowed, so only this item is off.
+            .disabled(!state.canDetachTabToNewWindow(id))
+        let targets = state.handoffTargets
+        if !targets.isEmpty {
+            Menu("Move to Window") {
+                ForEach(targets, id: \.id) { target in
+                    Button(target.label) { state.beginHandoff(id, to: .window(target.id, slot: nil)) }
+                }
+            }
+            .disabled(!state.canDetachTab(id))
+        }
+        Divider()
         if state.isSplit {
             Button("Move to Other Pane") { state.moveTab(id, toGroup: group == 0 ? 1 : 0) }
         } else {
@@ -365,11 +377,13 @@ private struct TabReorderDrop: DropDelegate {
     let order: [String]
     let state: AppState
     let setSlot: (TabDropSlot?) -> Void
-    let move: (_ dragged: String, _ beforeTargetID: String?) -> Void
+    let move: (_ drag: TabDrag, _ beforeTargetID: String?) -> Void
 
-    private var draggingID: String? { state.draggingTabID }
+    /// The app-wide drag, so a tab dragged from *another* window is accepted
+    /// here too — not just this window's own reorders.
+    private var drag: TabDrag? { state.anyTabDrag }
 
-    func validateDrop(info: DropInfo) -> Bool { draggingID != nil }
+    func validateDrop(info: DropInfo) -> Bool { drag != nil }
     func dropEntered(info: DropInfo) { setSlot(slot(info)) }
     func dropUpdated(info: DropInfo) -> DropProposal? {
         setSlot(slot(info))
@@ -379,15 +393,20 @@ private struct TabReorderDrop: DropDelegate {
 
     func performDrop(info: DropInfo) -> Bool {
         setSlot(nil)
-        let dragged = draggingID
-        state.draggingTabID = nil
-        guard let dragged, dragged != targetID else { return false }
+        guard let drag else { return false }
+        // Dropping a tab on itself is a no-op — but only when it really is the
+        // same tab in the same window. Two windows can each have a tab with
+        // this id; moving one onto the other is a merge, not a no-op.
+        guard drag.featureID != targetID || drag.source != state.id else {
+            state.core.tabDrag = nil
+            return false
+        }
         let dropAfter = width > 0 && info.location.x > width / 2
         if dropAfter, let index = order.firstIndex(of: targetID) {
             // After the target = before the tab that follows it (or to the end).
-            move(dragged, order.indices.contains(index + 1) ? order[index + 1] : nil)
+            move(drag, order.indices.contains(index + 1) ? order[index + 1] : nil)
         } else {
-            move(dragged, targetID)
+            move(drag, targetID)
         }
         return true
     }
@@ -395,7 +414,152 @@ private struct TabReorderDrop: DropDelegate {
     /// The slot under the cursor — nil while over the dragged chip itself,
     /// and nil once the drag has ended (a trailing enter/update after the drop).
     private func slot(_ info: DropInfo) -> TabDropSlot? {
-        guard let dragging = draggingID, dragging != targetID else { return nil }
+        guard let drag else { return nil }
+        guard drag.featureID != targetID || drag.source != state.id else { return nil }
         return TabDropSlot(targetID: targetID, after: width > 0 && info.location.x > width / 2)
     }
 }
+
+/// Starts a chip's drag as an AppKit session (see `TabDragSource`) and, when it
+/// is released away from every Droidective window, tears the tab off into a new
+/// one at that point.
+///
+/// A `DragGesture` rather than `.onDrag`, because only an `NSDraggingSource`
+/// reports whether a drop was accepted and where it landed. The item on the
+/// pasteboard is unchanged, so every drop target still works exactly as before.
+private struct TabChipDrag: ViewModifier {
+    @Environment(AppState.self) private var state
+    @Environment(\.displayScale) private var displayScale
+    let id: String
+    let title: String
+    let icon: String
+    @State private var starter = TabDragStarter()
+
+    func body(content: Content) -> some View {
+        content
+            .background(TabDragSource(starter: starter))
+            .gesture(
+                DragGesture(minimumDistance: 6, coordinateSpace: .local)
+                    // `onChanged` fires continuously, so only the first one may
+                    // start a session. The guard is the live drag itself rather
+                    // than a local "already started" flag: SwiftUI's gesture is
+                    // cancelled the moment AppKit's drag loop takes the mouse,
+                    // so its `onEnded` cannot be relied on to re-arm anything —
+                    // a flag latched on and the just-dragged chip became
+                    // undraggable until its view was rebuilt. `tabDrag` is
+                    // cleared by whichever drop took the tab, by the session
+                    // reporting back, and failing both by `installDragJanitor`
+                    // on the next mouse event, so it always re-arms.
+                    .onChanged { value in
+                        guard state.anyTabDrag == nil else { return }
+                        begin(grabbedAt: value.startLocation)
+                    }
+            )
+    }
+
+    private func begin(grabbedAt point: CGPoint) {
+        state.draggingTabID = id
+        starter.begin(
+            featureID: id,
+            image: dragImage(),
+            grabOffset: CGSize(width: point.x, height: point.y),
+            canTearOff: state.canDetachTabToNewWindow(id),
+            onEnded: { outcome in
+                // Whatever happened, the drag is over: a drop target that took
+                // it has already cleared this, and one that did not never will.
+                state.core.tabDrag = nil
+                guard state.canDetachTabToNewWindow(id),
+                      TabDetachPolicy.shouldTearOff(
+                          accepted: outcome.accepted,
+                          cancelled: outcome.cancelled,
+                          point: outcome.screenPoint,
+                          windowFrames: outcome.windowFrames)
+                else { return }
+                state.beginHandoff(id, to: .newWindow(frame: tornOffFrame(outcome)))
+            })
+    }
+
+    /// The chip itself, rendered once at drag start, so what rides the cursor
+    /// is the tab rather than a system placeholder.
+    private func dragImage() -> NSImage? {
+        let renderer = ImageRenderer(content:
+            TabChipGhost(title: title, icon: icon)
+                .environment(\.colorScheme, state.nsWindow?.effectiveAppearance
+                    .bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? .dark : .light))
+        renderer.scale = displayScale
+        return renderer.nsImage
+    }
+
+    /// Where the new window goes: the same size as the one the tab came from,
+    /// positioned so the chip lands back under the cursor, clamped onto the
+    /// screen the drop happened on.
+    private func tornOffFrame(_ outcome: TabDragOutcome) -> NSRect {
+        let screen = NSScreen.screens.first { $0.frame.contains(outcome.screenPoint) }
+            ?? NSScreen.main
+        let visible = screen?.visibleFrame ?? .zero
+        let rect = TearOffFrame.frame(
+            dropPoint: TearOffFrame.Point(
+                x: outcome.screenPoint.x, y: outcome.screenPoint.y),
+            grabOffset: TearOffFrame.Size(
+                width: outcome.grabOffset.width, height: outcome.grabOffset.height),
+            // The moved tab is the only one in the new window, so it lands in
+            // the strip's *first* slot — not wherever this chip happened to
+            // sit. The vertical inset is measured (the strip is at the same
+            // height in both windows); the horizontal one is the fixed layout
+            // offset of the first chip, and being a few points out is
+            // imperceptible next to the clamp that keeps the window on screen.
+            stripOrigin: TearOffFrame.Point(
+                x: TabStripMetrics.firstChipInset, y: outcome.chipOriginInWindow.y),
+            sourceSize: TearOffFrame.Size(
+                width: outcome.sourceWindowFrame.width,
+                height: outcome.sourceWindowFrame.height),
+            screen: TearOffFrame.Rect(
+                x: visible.minX, y: visible.minY,
+                width: visible.width, height: visible.height),
+            minimum: TearOffFrame.Size(
+                width: TabStripMetrics.minimumWindowWidth,
+                height: TabStripMetrics.minimumWindowHeight))
+        return NSRect(x: rect.x, y: rect.y, width: rect.width, height: rect.height)
+    }
+}
+
+/// Layout constants the tear-off geometry needs, named rather than inlined so
+/// the numbers can be traced back to the views that produce them.
+enum TabStripMetrics {
+    /// Where the first chip's leading edge sits inside the window: the Home
+    /// button (28 pt) with its 6 pt padding either side, the divider, and the
+    /// scroll content's 8 pt leading padding.
+    static let firstChipInset: Double = 6 + 28 + 6 + 1 + 8
+    /// `WorkspaceHost.minWindowWidth`'s floor, and `RootView`'s minimum height.
+    static let minimumWindowWidth: Double = 760
+    static let minimumWindowHeight: Double = 480
+}
+
+/// A chip drawn purely to be rasterised as the drag image — the real one is a
+/// `TabChip`, which is bound to live state a renderer has no business touching.
+private struct TabChipGhost: View {
+    let title: String
+    let icon: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.app(.caption))
+                .foregroundStyle(.brandAccent)
+            Text(title)
+                .font(.app(.callout))
+                .lineLimit(1)
+                .foregroundStyle(.textMain)
+        }
+        .padding(.leading, 10)
+        .padding(.trailing, 15)
+        .frame(height: 28)
+        .background(
+            RoundedRectangle(cornerRadius: 7)
+                .fill(.bgSurface)
+                .shadow(color: .black.opacity(0.25), radius: 6, y: 2)
+        )
+        .padding(8)
+    }
+}
+

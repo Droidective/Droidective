@@ -95,6 +95,10 @@ final class AppCore {
     private(set) var frontmostID: WorkspaceID?
     /// Set by `RootView`: opens another window of the main `WindowGroup`.
     var openWorkspaceWindow: (() -> Void)?
+    /// The tab drag in flight, or nil. App-wide because a tab can be dragged
+    /// into a window that did not start the drag, or out of the app entirely —
+    /// see `TabDrag` for why it is written twice per drag and never per move.
+    var tabDrag: TabDrag?
     /// Persisted windows waiting to be claimed by a workspace as its windows
     /// come up. Claimed in order, so window 2 restores window 2's tabs.
     private var pendingRestores: [WindowState] = []
@@ -142,7 +146,8 @@ final class AppCore {
         // Restore the windows that already came up while this was loading
         // (always at least the first one), then ask for the rest.
         for id in awaitingRestore {
-            let saved = freshWorkspaces.contains(id) ? nil : claimPendingRestore()
+            let saved = freshWorkspaces.contains(id)
+                ? pendingWindowSeeds[id]?.state : claimPendingRestore()
             workspaces[id]?.restore(from: saved)
         }
         freshWorkspaces.removeAll()
@@ -248,13 +253,14 @@ final class AppCore {
     /// Workspaces handed to a view but not yet backed by a window. They own
     /// nothing — no registry entry, no persisted record — until they bind.
     private var provisional: Set<WorkspaceID> = []
-    /// Windows the user explicitly asked for (⇧⌘N, "New Window for Device"),
-    /// oldest first: each starts a *new* workspace instead of adopting a
-    /// windowless one, and carries the device it was opened for. A queue
-    /// rather than a keyed lookup because the window has no identity until it
-    /// exists — `openWindow` creates one synchronously per call, and binds are
-    /// serialised on the main actor, so first-asked is first-bound.
-    private var pendingFreshWindows: [String?] = []
+    /// Windows the user explicitly asked for (⇧⌘N, "New Window for Device", a
+    /// tab moved out of another window), oldest first: each starts a *new*
+    /// workspace instead of adopting a windowless one, and carries what it
+    /// should open as. A queue rather than a keyed lookup because the window
+    /// has no identity until it exists — `openWindow` creates one synchronously
+    /// per call, and binds are serialised on the main actor, so first-asked is
+    /// first-bound.
+    private var pendingFreshWindows: [WindowSeed] = []
     /// Workspaces opened by an explicit request while the layout was still
     /// loading. `bootstrap`'s restore must not hand them a persisted window —
     /// the user asked for a *new* one, on a device they may have named.
@@ -295,12 +301,11 @@ final class AppCore {
             return
         }
         provisional.remove(state.id)
-        var requestedSerial: String?
-        var wantsFresh = false
+        var seed: WindowSeed?
         if !pendingFreshWindows.isEmpty {
-            wantsFresh = true
-            requestedSerial = pendingFreshWindows.removeFirst()
+            seed = pendingFreshWindows.removeFirst()
         }
+        let wantsFresh = seed != nil
         let hostToken = claims.first { $0.value == state.id }?.key
         // Adoption has to be able to repoint the host, or it would keep
         // resolving to the workspace just dropped and mint a new provisional
@@ -315,12 +320,18 @@ final class AppCore {
             return
         }
         registry.register(state.id)
-        if let requestedSerial {
-            pendingWindowTargets[state.id] = requestedSerial
+        if var seed {
+            // The seed was built before this workspace existed, so re-key the
+            // record it restores from: `persistWindowState` writes under the
+            // workspace's own id, and a stale one here would leave the layout
+            // holding a window entry nothing owns.
+            seed.state?.id = state.id
+            pendingWindowSeeds[state.id] = seed
+            freshWorkspaces.insert(state.id)
+            state.adoptSeedPreferences(seed)
         }
-        if wantsFresh { freshWorkspaces.insert(state.id) }
         if didLoadLayout {
-            state.restore(from: wantsFresh ? nil : claimPendingRestore())
+            state.restore(from: wantsFresh ? seed?.state : claimPendingRestore())
         } else {
             // The layout is still loading; `bootstrap` restores this workspace
             // once the persisted entries are known.
@@ -477,16 +488,33 @@ final class AppCore {
     /// explicitly fresh, so it starts a new workspace rather than adopting a
     /// parked one; the new workspace picks the device up in `restore`.
     func openNewWindow(targeting serial: String? = nil) {
-        pendingFreshWindows.append(serial)
-        guard let openWorkspaceWindow else {
-            pendingFreshWindows.removeLast()
-            return
-        }
-        openWorkspaceWindow()
+        openSeededWindow(WindowSeed(serial: serial))
     }
 
-    /// Device a not-yet-created window should open on (see `openNewWindow`).
-    private var pendingWindowTargets: [WorkspaceID: String] = [:]
+    /// Open a window that comes up as `seed` describes. Rolls the seed back if
+    /// SwiftUI has not handed us an opener yet, so a caller that already gave
+    /// something up for this window (a handoff, which detaches the tab first)
+    /// can check `canOpenWindow` and never lose it.
+    @discardableResult
+    func openSeededWindow(_ seed: WindowSeed) -> Bool {
+        pendingFreshWindows.append(seed)
+        guard let openWorkspaceWindow else {
+            pendingFreshWindows.removeLast()
+            return false
+        }
+        openWorkspaceWindow()
+        return true
+    }
+
+    /// Whether another window can be opened at all. False only very early in
+    /// launch, before `RootView` has published its opener.
+    var canOpenWindow: Bool { openWorkspaceWindow != nil }
+
+    /// What a just-bound window should open as, until it has taken it (see
+    /// `openNewWindow`). Consumed in two steps because two different callers
+    /// need it: `AppState.restore` reads the device and tabs, then `RootView`
+    /// takes the whole seed for the frame — which is also what drops it.
+    private var pendingWindowSeeds: [WorkspaceID: WindowSeed] = [:]
 
     /// The workspace the pop-out mirror windows belong to — set when one is
     /// popped out, so they read that window's adb client and toasts. The device
@@ -614,8 +642,23 @@ final class AppCore {
         noteMirrorClaims(serials, featureID: MirrorWindow.featureID, in: owner)
     }
 
-    func takeWindowTarget(_ id: WorkspaceID) -> String? {
-        pendingWindowTargets.removeValue(forKey: id)
+    /// The device a just-bound window was opened for, without consuming the
+    /// seed — `RootView` still needs its frame, and it takes the seed itself.
+    func windowSeedTarget(_ id: WorkspaceID) -> String? {
+        pendingWindowSeeds[id]?.serial
+    }
+
+    /// Take (and drop) a just-bound window's seed. Called once, by `RootView`,
+    /// after `bind` has restored — so this is where the seed's life ends, and
+    /// where a handoff is finally settled.
+    func takeWindowSeed(_ id: WorkspaceID) -> WindowSeed? {
+        let seed = pendingWindowSeeds.removeValue(forKey: id)
+        // Only once the window has actually restored — while the layout is
+        // still loading `bind` defers that to `bootstrap`, so the registry does
+        // not yet know the moved tab is open here and the reconcile would read
+        // it as "nobody has it" and stop the relay it was protecting.
+        if seed?.handoffFeatureID != nil, didLoadLayout { reconcileSharedSessions() }
+        return seed
     }
 
     /// Bring `id`'s window forward — the device picker's "it's open over there"

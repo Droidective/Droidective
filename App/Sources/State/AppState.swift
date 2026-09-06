@@ -134,9 +134,20 @@ final class AppState {
     /// (or quitting), not on switching.
     private(set) var workspace = Workspace(fallback: "home")
 
-    /// The tab id being dragged in a strip, or nil when no drag is in flight —
-    /// shared so a pane can offer a drop target for moving/splitting tabs.
-    var draggingTabID: String?
+    /// The tab *this* window is dragging, or nil — which is the question every
+    /// existing caller asks (fade the original chip, suppress its own
+    /// guideline). The drag itself lives on `AppCore` because it can end in
+    /// another window; `anyTabDrag` is the app-wide view of it.
+    var draggingTabID: String? {
+        get { core.tabDrag.flatMap { $0.source == id ? $0.featureID : nil } }
+        set {
+            if let newValue {
+                core.tabDrag = TabDrag(featureID: newValue, source: id)
+            } else if core.tabDrag?.source == id {
+                core.tabDrag = nil
+            }
+        }
+    }
 
     /// The focused pane's active tab: drives the device bar, sidebar highlight,
     /// and window title.
@@ -609,7 +620,7 @@ final class AppState {
             // A new window: target the device it was opened for (or the first
             // one no other window is showing) and inherit the last app bundle.
             selectedBundleId = core.lastSelectedBundleId
-            selectedSerial = core.takeWindowTarget(id) ?? firstFreeSerial()
+            selectedSerial = core.windowSeedTarget(id) ?? firstFreeSerial()
         }
         // Replay feature opens that raced the load (e.g. openAPKs from Finder).
         for pending in pendingFeatureOpens {
@@ -793,7 +804,12 @@ final class AppState {
 
     /// A navigation held back until the user resolves the active `ExitGuard`.
     struct PendingExit: Equatable {
-        enum Target: Equatable { case closeTab(String), device(String), quit }
+        /// `handoff` moves a tab to another window, which unmounts its view
+        /// exactly as closing it does — so it is held behind the same guard.
+        enum Target: Equatable {
+            case closeTab(String), device(String), quit
+            case handoff(String, HandoffDestination)
+        }
         var target: Target
         /// Flips true when the user chooses "Stop & save": the active view runs
         /// its own save, then calls `finishExitSave()`. The dialog hides while
@@ -805,6 +821,12 @@ final class AppState {
     /// this when losable work begins, and `clearExitGuard` when it ends.
     func setExitGuard(_ value: ExitGuard) { exitGuards[value.featureID] = value }
 
+    /// Hold a navigation behind the active leave confirmation. `pendingExit` is
+    /// `private(set)` so only the paths that know how to resolve it can arm it.
+    func holdBehindGuard(_ target: PendingExit.Target) {
+        pendingExit = PendingExit(target: target)
+    }
+
     /// Clear the guard identified by `id`, wherever it's keyed — so a torn-down
     /// view can't wipe a guard a newer view just registered (ids are unique).
     func clearExitGuard(_ id: UUID) {
@@ -815,7 +837,7 @@ final class AppState {
     /// guard, or any active guard when switching device / quitting.
     var pendingGuard: ExitGuard? {
         switch pendingExit?.target {
-        case .closeTab(let id): return exitGuards[id]
+        case .closeTab(let id), .handoff(let id, _): return exitGuards[id]
         case .device, .quit: return exitGuards.values.first
         case nil: return nil
         }
@@ -827,7 +849,7 @@ final class AppState {
     /// can't make a different tab save.
     func pendingExitConcerns(_ featureID: String) -> Bool {
         switch pendingExit?.target {
-        case .closeTab(let id): return id == featureID
+        case .closeTab(let id), .handoff(let id, _): return id == featureID
         case .device, .quit: return true
         case nil: return false
         }
@@ -868,7 +890,12 @@ final class AppState {
     /// Terminal feature tab, or quitting the app — both kill every live shell,
     /// so both are held until the user confirms losing them (RootView shows
     /// the alert).
-    enum TerminalClosePrompt { case closeTab, quit }
+    enum TerminalClosePrompt: Equatable {
+        case closeTab, quit
+        /// Moving the Terminal tab to another window: the shells die here and
+        /// their directories travel with the tab, so it reopens where it was.
+        case handoff(HandoffDestination)
+    }
 
     /// Set while the terminal close/quit confirmation is on screen.
     var terminalClosePrompt: TerminalClosePrompt?
@@ -902,6 +929,11 @@ final class AppState {
         switch prompt {
         case .closeTab:
             if confirmed { performClose("terminal") }
+        case .handoff(let destination):
+            // Deliberately not snapshotting here: `detachTab` does it as part
+            // of stopping the tab's work, and a second `rememberTerminalDirectories`
+            // on the by-then-empty rail would overwrite the snapshot with nothing.
+            if confirmed { core.completeHandoff("terminal", from: id, to: destination) }
         case .quit:
             if confirmed {
                 rememberTerminalDirectories()
@@ -980,6 +1012,58 @@ final class AppState {
         persistTabs()
     }
 
+    /// Resolve a tab drop into *this* window, wherever the tab came from.
+    ///
+    /// One funnel for every strip and pane target, so the cross-window case
+    /// can't be handled in one place and forgotten in another; `TabDropRouter`
+    /// (pure, in ADBKit) makes the actual decision. A tab from another window
+    /// is a handoff routed through `beginHandoff` on its *source*, so a live
+    /// recording or open shells still get their confirmation rather than being
+    /// dropped silently — and the slot rides along, so a move held behind that
+    /// confirmation still lands where it was dropped.
+    func acceptTabDrop(_ drag: TabDrag, on target: TabDropRouter.Target) {
+        core.tabDrag = nil
+        let outcome = TabDropRouter.outcome(
+            drag: TabDropRouter.Drag(featureID: drag.featureID, source: drag.source),
+            window: id,
+            target: target,
+            shape: dropShape(for: target))
+        switch outcome {
+        case .ignore:
+            break
+        case .place(let group, let before):
+            dropTab(drag.featureID, intoGroup: group, before: before)
+        case .split:
+            splitTab(drag.featureID)
+        case .handoff(let source, let group, let before):
+            core.workspace(id: source)?.beginHandoff(
+                drag.featureID,
+                to: .window(id, slot: HandoffSlot(group: group, before: before)))
+        }
+    }
+
+    /// This window's panes as the drop router sees them.
+    private func dropShape(for target: TabDropRouter.Target) -> TabDropRouter.Shape {
+        let group = switch target {
+        case .strip(let group, _): group
+        case .pane(let group): group
+        }
+        return TabDropRouter.Shape(
+            isSplit: isSplit, paneTabCount: openTabIDs(inGroup: group).count)
+    }
+
+    /// Whether dropping the tab in flight on `group`'s content would split this
+    /// window — what the pane's "Drop to split" preview asks before promising.
+    func dropWouldSplit(_ drag: TabDrag?, inGroup group: Int) -> Bool {
+        guard let drag else { return false }
+        let target = TabDropRouter.Target.pane(group: group)
+        return TabDropRouter.outcome(
+            drag: TabDropRouter.Drag(featureID: drag.featureID, source: drag.source),
+            window: id,
+            target: target,
+            shape: dropShape(for: target)) == .split
+    }
+
     /// Split the workspace: move `id` into a new second pane.
     func splitTab(_ id: String) {
         workspace.split(id)
@@ -988,22 +1072,76 @@ final class AppState {
 
     private func performClose(_ id: String) {
         workspace.close(id)
-        stopBackgroundWork(for: id)
+        stopBackgroundWork(for: id, reason: .closing)
         persistTabs()
     }
+
+    /// Whether `featureID`'s tab can leave this window for another *open* one.
+    func canDetachTab(_ featureID: String) -> Bool { workspace.canDetach(featureID) }
+
+    /// Whether it can leave for a window of its own — stricter, because
+    /// something has to stay behind (see `Workspace.canDetachToNewWindow`).
+    func canDetachTabToNewWindow(_ featureID: String) -> Bool {
+        workspace.canDetachToNewWindow(featureID)
+    }
+
+    /// Remove `featureID`'s tab and stop the work this window was doing on its
+    /// behalf, returning the state that has to travel with it.
+    ///
+    /// The order matters twice over. The tab leaves the workspace *before* the
+    /// registry is told, so an exclusive feature (scrcpy, the JS console) is
+    /// released here before the receiving window asks for it — otherwise it
+    /// comes up on the collision banner instead of running. And the carry is
+    /// read *after* the work is stopped, because stopping the Terminal is what
+    /// snapshots its shells' directories.
+    func detachTab(_ featureID: String) -> TabHandoff.Carry {
+        guard workspace.detach(featureID) != nil else { return .none }
+        stopBackgroundWork(for: featureID, reason: .handoff)
+        let carry = TabHandoff.Carry(
+            terminalResumeDirs: featureID == TabHandoff.terminalFeatureID
+                ? terminalResumeDirs : nil,
+            mirrorWallSerials: featureID == TabHandoff.mirrorWallFeatureID
+                ? mirrorWallSerials : nil)
+        persistTabs()
+        return carry
+    }
+
+    /// Take a tab moved in from another window, with the state it carried and
+    /// (for a drag) the slot it was dropped on.
+    ///
+    /// A feature is open in at most one tab per window, so arriving at a window
+    /// that already shows it *merges*: `requestFeature` refocuses the existing
+    /// tab and the moved one's view state is discarded. That is the honest read
+    /// of the invariant — there is nowhere for a second copy to go.
+    func adoptHandoff(_ featureID: String, carrying carry: TabHandoff.Carry, at slot: HandoffSlot?) {
+        if let dirs = carry.terminalResumeDirs { terminalResumeDirs = dirs }
+        if let serials = carry.mirrorWallSerials { mirrorWallSerials = serials }
+        requestFeature(featureID)
+        if let slot { dropTab(featureID, intoGroup: slot.group, before: slot.before) }
+    }
+
+    /// Why a tab's work is being stopped. A tab that is *moving* keeps the
+    /// app-wide sessions it shares with other windows alive across the move.
+    enum StopReason { case closing, handoff }
 
     /// Closing a tab fully stops that feature's background work. Most features
     /// stop when their view unmounts (their `.task` is cancelled on close), but a
     /// few sessions are owned here and kept alive across tab *switches* — so
     /// closing their tab has to tear them down explicitly. A feature is open in at
     /// most one tab, so once it's closed no other tab still needs it.
-    private func stopBackgroundWork(for id: String) {
+    private func stopBackgroundWork(for id: String, reason: StopReason) {
         // With MCP on, the relay must survive tab/window close — agents keep
         // querying while the user isn't looking (Settings ▸ MCP turns it off).
         // The relay is app-wide, so another window still showing it keeps it
         // up too: this window's close must not pull the timeline out from
         // under the other one.
-        if id == "reactotron", reactotronSession.isRunning, !mcp.keepsRelayAlive,
+        // A *moving* tab is about to reopen in another window, so the relay it
+        // shares with every window must survive the gap — stopping it would
+        // drop every connected RN client for the sake of a tab that never
+        // really closed. `AppCore.reconcileSharedSessions` catches the case
+        // where the move somehow didn't land.
+        if id == "reactotron", reason == .closing, reactotronSession.isRunning,
+           !mcp.keepsRelayAlive,
            !core.featureIsOpenElsewhere("reactotron", excluding: self.id) {
             Task { await reactotronSession.stop() }
         }
@@ -1031,7 +1169,15 @@ final class AppState {
     /// window has restored, so an empty default can't clobber the saved file.
     func persistWindowState() {
         guard didRestore, didBind else { return }
-        core.layout.upsertWindow(WindowState(
+        core.layout.upsertWindow(windowRecord)
+        core.persistLayout()
+    }
+
+    /// This window as a persisted record. Also what a tab moved out of here
+    /// inherits its device and app bundle from (`TabHandoff.seed`), so the two
+    /// can't describe a window differently.
+    var windowRecord: WindowState {
+        WindowState(
             id: id,
             serial: selectedSerial,
             bundleId: selectedBundleId,
@@ -1041,8 +1187,7 @@ final class AppState {
             focusedGroup: workspace.focusedGroup,
             terminalResumeDirs: terminalResumeDirs,
             mirrorWallSerials: mirrorWallSerials
-        ))
-        core.persistLayout()
+        )
     }
 
     /// Working directories of this window's terminal tabs at the last implicit
@@ -1081,7 +1226,7 @@ final class AppState {
     /// idle.
     func enterBackground() {
         for featureID in openFeatureIDs {
-            stopBackgroundWork(for: featureID)
+            stopBackgroundWork(for: featureID, reason: .closing)
         }
     }
 
@@ -1098,7 +1243,7 @@ final class AppState {
     /// Reactotron server) leak with no UI left to reach them.
     func resetForRoleChange() {
         for featureID in workspace.groups.flatMap(\.openTabs) {
-            stopBackgroundWork(for: featureID)
+            stopBackgroundWork(for: featureID, reason: .closing)
         }
         workspace.reset()
         persistTabs()
@@ -1155,7 +1300,7 @@ final class AppState {
     /// tab, so clear them all and let each view abort.
     func discardAndExit() {
         switch pendingExit?.target {
-        case .closeTab(let id): exitGuards[id] = nil
+        case .closeTab(let id), .handoff(let id, _): exitGuards[id] = nil
         case .device, .quit: exitGuards.removeAll()
         case nil: break
         }
@@ -1181,6 +1326,8 @@ final class AppState {
         pendingExit = nil
         switch pending.target {
         case .closeTab(let id): performClose(id)
+        case .handoff(let id, let destination):
+            core.completeHandoff(id, from: self.id, to: destination)
         case .device(let serial): applySelection(serial)
         // This window is clear; the next one with work at stake gets its turn.
         case .quit: core.resumeQuit()

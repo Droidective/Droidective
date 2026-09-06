@@ -304,6 +304,10 @@ targets:
       - App/Sources/Theme.swift
       - App/Sources/LogScrollGeometry.swift
       - App/Sources/Root/PaneFreezePolicy.swift
+      # Whether a released tab drag becomes a new window: the three inputs
+      # (accepted / cancelled / over one of our own windows) can't be exercised
+      # through a real drag, so the decision is pulled out and tested here.
+      - App/Sources/Root/TabDetachPolicy.swift
       # FontCatalog.derive — the picker's filter/collation/curated split.
       - App/Sources/AppFont.swift
       # The id → detail-pane table FeatureDetailView switches over, so the
