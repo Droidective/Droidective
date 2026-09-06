@@ -81,6 +81,11 @@ final class AppCore {
     /// Settings ▸ MCP: serves the relay's data to AI agents over localhost.
     let mcp = McpCoordinator()
 
+    /// Per-window feature state that outlives its view — log buffers and the
+    /// like, so a tab moving between windows keeps what it had accumulated.
+    /// Not `@Observable`, on purpose: see `FeatureStateStore`.
+    let featureStates = FeatureStateStore()
+
     // MARK: - Windows
 
     /// Who owns which device and which exclusive feature is live where — the
@@ -471,6 +476,7 @@ final class AppCore {
             return
         }
         workspaces[id] = nil
+        featureStates.discardAll(in: id)
         registry.remove(id)
         layout.removeWindow(id)
         persistLayout()

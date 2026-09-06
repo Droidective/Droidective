@@ -605,6 +605,15 @@ final class AppState {
         }
     }
 
+    /// This window's model for `feature`, built on first use and kept until
+    /// the tab closes — the state a feature wants to survive its view being
+    /// rebuilt (a log buffer, a fetched list). See `FeatureStateStore`.
+    func featureState<T: AnyObject>(
+        _ type: T.Type, for feature: String, make: () -> T
+    ) -> T {
+        core.featureStates.model(type, feature: feature, in: id, make: make)
+    }
+
     /// The live per-window work a moving tab takes with it.
     ///
     /// A feature whose state lives in an object owned by the *window* — the
@@ -619,8 +628,13 @@ final class AppState {
     struct MovedSessions {
         var terminals: TerminalManager?
         var jsConsole: JSConsoleSession?
+        /// The moving tab's `FeatureStateStore` model, if it keeps one — the
+        /// buffer or loaded work a rebuilt view would otherwise start without.
+        var featureState: AnyObject?
+        /// Which feature `featureState` belongs to.
+        var featureID: String?
 
-        var isEmpty: Bool { terminals == nil && jsConsole == nil }
+        var isEmpty: Bool { terminals == nil && jsConsole == nil && featureState == nil }
     }
 
     /// Hand `featureID`'s live session over, leaving a fresh one behind.
@@ -636,7 +650,11 @@ final class AppState {
         default:
             break
         }
-        if !moved.isEmpty { wireSessions() }
+        // Every feature may have one, so this is not part of the switch: the
+        // store answers nil for the ones that keep nothing.
+        moved.featureID = featureID
+        moved.featureState = core.featureStates.take(feature: featureID, in: id)
+        if moved.terminals != nil || moved.jsConsole != nil { wireSessions() }
         return moved
     }
 
@@ -647,6 +665,10 @@ final class AppState {
     /// Take live sessions arriving with a tab from another window.
     func adoptMovableSessions(_ moved: MovedSessions) {
         guard !moved.isEmpty else { return }
+        if let featureID = moved.featureID {
+            core.featureStates.put(moved.featureState, feature: featureID, in: id)
+        }
+        guard moved.terminals != nil || moved.jsConsole != nil else { return }
         if let terminals = moved.terminals { self.terminals = terminals }
         if let jsConsole = moved.jsConsole { jsConsoleSession = jsConsole }
         wireSessions()
@@ -1119,6 +1141,9 @@ final class AppState {
     private func performClose(_ id: String) {
         workspace.close(id)
         stopBackgroundWork(for: id, reason: .closing)
+        // Closing a tab means done with it: its buffer goes too, rather than
+        // reappearing the next time the feature is opened.
+        core.featureStates.discard(feature: id, in: self.id)
         persistTabs()
     }
 
