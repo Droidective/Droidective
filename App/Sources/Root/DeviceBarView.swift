@@ -7,6 +7,7 @@ import SwiftUI
 /// trailing actions. The device and app are shown as prominent pills (status
 /// dot + bold name) so the active target is unmistakable.
 struct DeviceBarView: View {
+    @Environment(\.openWindow) private var openWindow
     @Environment(AppState.self) private var state
     @Environment(\.colorScheme) private var colorScheme
     @AppStorage(sidebarAutoHideDefaultsKey) private var sidebarAutoHide = false
@@ -208,6 +209,19 @@ struct DeviceBarView: View {
                         Label(
                             "New Window for \(state.deviceDisplayName(device))",
                             systemImage: "macwindow.on.rectangle")
+                    }
+                }
+                // The pop-out mirror's other entry points are inside the
+                // mirror itself, which is no help to someone who hasn't opened
+                // one — this is where people look for what a device can do.
+                if let device = selectedDevice, device.platform == .android {
+                    Button {
+                        state.prepareMirrorWindow(serial: device.serial)
+                        openWindow(id: MirrorWindow.windowID, value: device.serial)
+                    } label: {
+                        Label(
+                            "Mirror \(state.deviceDisplayName(device)) in a New Window",
+                            systemImage: "display")
                     }
                 }
             }
