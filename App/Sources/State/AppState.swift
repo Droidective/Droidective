@@ -106,7 +106,9 @@ final class AppState {
     /// APK Studio's loaded-APK session. In-memory, so it resumes across
     /// navigation within a run and is cleared when the app quits (the decompiled
     /// cache is wiped alongside it — see `AppDelegate.applicationWillTerminate`).
-    let apkStudio = ApkStudioSession()
+    /// APK Studio's loaded APK and its tab. `var` so it travels with the tab
+    /// rather than being rebuilt empty in the receiving window (`MovedSessions`).
+    private(set) var apkStudio = ApkStudioSession()
 
     /// The Finder-opened-APK screen's files (the `apk-open` workspace tab —
     /// deliberately not a registry feature; it exists only when a file
@@ -628,13 +630,17 @@ final class AppState {
     struct MovedSessions {
         var terminals: TerminalManager?
         var jsConsole: JSConsoleSession?
+        /// The APK loaded into APK Studio, and which of its tabs was open.
+        var apkStudio: ApkStudioSession?
         /// The moving tab's `FeatureStateStore` model, if it keeps one — the
         /// buffer or loaded work a rebuilt view would otherwise start without.
         var featureState: AnyObject?
         /// Which feature `featureState` belongs to.
         var featureID: String?
 
-        var isEmpty: Bool { terminals == nil && jsConsole == nil && featureState == nil }
+        var isEmpty: Bool {
+            terminals == nil && jsConsole == nil && apkStudio == nil && featureState == nil
+        }
     }
 
     /// Hand `featureID`'s live session over, leaving a fresh one behind.
@@ -647,6 +653,9 @@ final class AppState {
         case "js-console":
             moved.jsConsole = jsConsoleSession
             jsConsoleSession = JSConsoleSession(adb: core.env.client)
+        case "apk-studio":
+            moved.apkStudio = apkStudio
+            apkStudio = ApkStudioSession()
         default:
             break
         }
@@ -668,6 +677,7 @@ final class AppState {
         if let featureID = moved.featureID {
             core.featureStates.put(moved.featureState, feature: featureID, in: id)
         }
+        if let apkStudio = moved.apkStudio { self.apkStudio = apkStudio }
         guard moved.terminals != nil || moved.jsConsole != nil else { return }
         if let terminals = moved.terminals { self.terminals = terminals }
         if let jsConsole = moved.jsConsole { jsConsoleSession = jsConsole }

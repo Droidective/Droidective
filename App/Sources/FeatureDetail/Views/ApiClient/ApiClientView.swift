@@ -28,7 +28,15 @@ enum ApiSidebarSection: String, CaseIterable, Identifiable {
 
 struct ApiClientView: View {
     @Environment(AppState.self) private var state
-    @State private var model = ApiClientModel()
+    /// Held per window by `FeatureStateStore`, not as `@State`, so the request
+    /// being edited, its response and the loaded collections survive the view
+    /// being rebuilt — which is what moving this tab to another window does.
+    private var model: ApiClientModel {
+        state.featureState(ApiClientModel.self, for: "api-client") { ApiClientModel() }
+    }
+    /// A bindable handle for the few controls that need write access; the
+    /// projection `@State` gave for free is not available on a computed one.
+    private var bindable: Bindable<ApiClientModel> { Bindable(model) }
 
     @AppStorage("apiSidebarSection") private var sidebarSection: ApiSidebarSection = .collections
     @AppStorage("apiRequestTab") private var requestTab: ApiRequestTab = .params
@@ -195,7 +203,7 @@ struct ApiClientView: View {
                 .buttonStyle(.borderless)
                 .help(showSidebar ? "Hide sidebar" : "Show sidebar")
 
-                Picker("", selection: $model.current.method) {
+                Picker("", selection: bindable.current.method) {
                     ForEach(HttpMethod.allCases) { method in
                         Text(method.rawValue).tag(method)
                     }
@@ -233,7 +241,7 @@ struct ApiClientView: View {
     }
 
     private var urlField: some View {
-        TextField("Enter a URL or paste a cURL command", text: $model.current.url)
+        TextField("Enter a URL or paste a cURL command", text: bindable.current.url)
             .textFieldStyle(.roundedBorder)
             .font(.app(.body, design: .monospaced))
             .onSubmit { model.send() }
@@ -334,7 +342,7 @@ struct ApiClientView: View {
     }
 
     private var environmentPicker: some View {
-        Picker("", selection: $model.data.activeEnvironmentId) {
+        Picker("", selection: bindable.data.activeEnvironmentId) {
             Text("No environment").tag(String?.none)
             ForEach(model.data.environments) { environment in
                 Text(environment.name).tag(Optional(environment.id))

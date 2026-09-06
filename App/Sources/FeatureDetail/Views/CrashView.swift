@@ -8,28 +8,57 @@ import SwiftUI
 struct CrashView: View {
     @Environment(AppState.self) private var state
     @Environment(ResizeActivity.self) private var resizeActivity: ResizeActivity?
-    @State private var reports: [CrashReport] = []
-    @State private var selectedID: CrashReport.ID?
+    /// The collected crashes and the filters over them, kept per window so a
+    /// tab moving to another window doesn't throw away a 16 MB fetch. Live
+    /// work (the fetch in flight, the watch) stays view-local.
+    private var model: CrashModel {
+        state.featureState(CrashModel.self, for: "crash-catcher") { CrashModel() }
+    }
+    private var bindable: Bindable<CrashModel> { Bindable(model) }
+    private var reports: [CrashReport] {
+        get { model.reports }
+        nonmutating set { model.reports = newValue }
+    }
+    private var selectedID: CrashReport.ID? {
+        get { model.selectedID }
+        nonmutating set { model.selectedID = newValue }
+    }
+    private var fetched: Bool {
+        get { model.fetched }
+        nonmutating set { model.fetched = newValue }
+    }
+    private var fetchFailed: Bool {
+        get { model.fetchFailed }
+        nonmutating set { model.fetchFailed = newValue }
+    }
+    private var kindFilter: CrashReport.Kind? {
+        get { model.kindFilter }
+        nonmutating set { model.kindFilter = newValue }
+    }
+    private var processFilter: String? {
+        get { model.processFilter }
+        nonmutating set { model.processFilter = newValue }
+    }
+    private var searchInput: String {
+        get { model.searchInput }
+        nonmutating set { model.searchInput = newValue }
+    }
+    private var search: String {
+        get { model.search }
+        nonmutating set { model.search = newValue }
+    }
+    private var showRaw: Bool {
+        get { model.showRaw }
+        nonmutating set { model.showRaw = newValue }
+    }
     @State private var loading = false
-    @State private var fetched = false
-    /// The last fetch errored (adb missing, device dropped mid-read). Cleared
-    /// by the next successful fetch; drives the error empty state so a failed
-    /// read never masquerades as "still checking" or "no crashes".
-    @State private var fetchFailed = false
     @State private var watching = false
-    @State private var kindFilter: CrashReport.Kind?
-    @State private var processFilter: String?
-    @State private var searchInput = ""
-    @State private var search = ""
-    @State private var showRaw = false
     @State private var confirmClear = false
-    /// Hide crashes at or before this timestamp on this serial — set by Clear
-    /// buffer, which empties the crash buffer but can't touch the main-buffer
-    /// fallback the same crashes would resurface from. Scoped to the serial it
-    /// was set on so a device switch never hides another device's crashes.
-    /// Logcat timestamps carry no year, so the lexicographic compare mis-hides
-    /// only across a Dec→Jan rollover, and only until the view reopens.
-    @State private var clearedBefore: (serial: String, mark: String)?
+    /// See `CrashModel.clearedBefore`.
+    private var clearedBefore: (serial: String, mark: String)? {
+        get { model.clearedBefore }
+        nonmutating set { model.clearedBefore = newValue }
+    }
     @State private var refreshToken = 0
     /// Measured pane width — below ~700pt (a narrow split pane) the toolbar
     /// reflows to two rows and the crash list narrows proportionally.
@@ -152,7 +181,7 @@ struct CrashView: View {
     private var kindPicker: some View {
         HStack(spacing: 6) {
             Text("Kind")
-            Picker("Kind", selection: $kindFilter) {
+            Picker("Kind", selection: bindable.kindFilter) {
                 Text("All").tag(CrashReport.Kind?.none)
                 ForEach(presentKinds, id: \.self) { kind in
                     Text(kind.label).tag(CrashReport.Kind?.some(kind))
@@ -170,7 +199,7 @@ struct CrashView: View {
         if processes.count > 1 {
             HStack(spacing: 6) {
                 Text("Process")
-                Picker("Process", selection: $processFilter) {
+                Picker("Process", selection: bindable.processFilter) {
                     Text("All").tag(String?.none)
                     ForEach(processes, id: \.self) { process in
                         Text(process).tag(String?.some(process))
@@ -184,7 +213,7 @@ struct CrashView: View {
     }
 
     private var filterField: some View {
-        TextField("Filter crashes…", text: $searchInput)
+        TextField("Filter crashes…", text: bindable.searchInput)
             .brandField()
             .frame(maxWidth: 180)
             .help("Show only crashes containing this text")
@@ -240,7 +269,7 @@ struct CrashView: View {
     }
 
     private var crashList: some View {
-        List(selection: $selectedID) {
+        List(selection: bindable.selectedID) {
             ForEach(filteredReports) { report in
                 CrashRow(report: report)
                     .tag(report.id)
@@ -331,7 +360,7 @@ struct CrashView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Toggle("Raw log", isOn: $showRaw)
+            Toggle("Raw log", isOn: bindable.showRaw)
                 .toggleStyle(.checkbox)
                 .font(.app(.caption))
                 .help("Show the original logcat lines instead of just the messages")

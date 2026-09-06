@@ -6,22 +6,42 @@ import SwiftUI
 /// surface in the progress strip.
 struct FileExplorerView: View {
     @Environment(AppState.self) private var state
-    @State private var pathComponents: [String] = []
+    /// Where you had browsed to, kept per window so it survives this view being
+    /// rebuilt — which is what moving the tab to another window does. The
+    /// listing itself stays view-local and reloads from the path.
+    private var model: FileExplorerModel {
+        state.featureState(FileExplorerModel.self, for: "file-explorer") { FileExplorerModel() }
+    }
+    private var pathComponents: [String] {
+        get { model.pathComponents }
+        nonmutating set { model.pathComponents = newValue }
+    }
+    private var selection: Set<String> {
+        get { model.selection }
+        nonmutating set { model.selection = newValue }
+    }
+    /// Device-side clipboard: source paths plus whether to move (cut).
+    private var clipboard: (paths: [String], isCut: Bool)? {
+        get { model.clipboard }
+        nonmutating set { model.clipboard = newValue }
+    }
     @State private var entries: [FsEntry]?
     @State private var reloadToken = 0
-    @State private var selection: Set<String> = []
-
-    /// Device-side clipboard: source paths plus whether to move (cut).
-    @State private var clipboard: (paths: [String], isCut: Bool)?
     @State private var confirmingDelete: [FsEntry] = []
     @State private var newFolderName = ""
     @State private var showNewFolder = false
     @State private var infoTarget: FsEntry?
     @State private var infoDetails: FileExplorerService.FileInfo?
     @FocusState private var listFocused: Bool
-    @State private var isRooted = false
+    private var isRooted: Bool {
+        get { model.isRooted }
+        nonmutating set { model.isRooted = newValue }
+    }
     /// When on (rooted devices only), browse the whole filesystem from "/" via su.
-    @State private var rootMode = false
+    private var rootMode: Bool {
+        get { model.rootMode }
+        nonmutating set { model.rootMode = newValue }
+    }
 
     private var currentPath: String {
         if rootMode {
@@ -170,7 +190,7 @@ struct FileExplorerView: View {
             .controlSize(.small)
 
             if isRooted {
-                Toggle("Root", isOn: $rootMode)
+                Toggle("Root", isOn: Binding(get: { model.rootMode }, set: { model.rootMode = $0 }))
                     .toggleStyle(.button)
                     .controlSize(.small)
                     .help("Browse the whole filesystem as root")
