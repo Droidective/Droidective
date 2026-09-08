@@ -30,6 +30,12 @@ export const CHROME_TABS: readonly string[] = [HOME_TAB, CATALOG_TAB, ABOUT_TAB]
 export interface SavedPane {
   tabs: string[]
   activeTab: string | null
+  /**
+   * The pinned tabs, as ids rather than a count of leading tabs: a restore
+   * drops tabs whose feature is gone, which would leave a count pointing at
+   * whatever slid into their place. Absent on layouts written before pinning.
+   */
+  pinned?: string[]
 }
 
 export interface LayoutState {
@@ -226,7 +232,12 @@ function savedPanes(value: unknown): SavedPane[] {
     const pane = entry as Partial<Record<keyof SavedPane, unknown>>
     const tabs = stringArray(pane.tabs)
     if (tabs.length === 0) continue
-    panes.push({ tabs, activeTab: typeof pane.activeTab === "string" ? pane.activeTab : null })
+    const pinned = stringArray(pane.pinned).filter((id) => tabs.includes(id))
+    panes.push({
+      tabs,
+      activeTab: typeof pane.activeTab === "string" ? pane.activeTab : null,
+      ...(pinned.length > 0 ? { pinned } : {}),
+    })
   }
   return panes
 }
@@ -259,6 +270,7 @@ export function restoreWorkspaceFrom(
   const panes = layout.panes.map((pane, index) => ({
     tabs: index === 0 ? [HOME_TAB, ...pane.tabs.filter((id) => id !== HOME_TAB)] : pane.tabs,
     activeTab: pane.activeTab,
+    pinned: pane.pinned ?? [],
   }))
   return restoreWorkspace(panes, layout.focusedPane, HOME_TAB, (id) =>
     CHROME_TABS.includes(id) || isKnownTab(id))

@@ -221,6 +221,7 @@ function WorkspacePanes({
       onSelectPackage={onSelectPackage}
       onOpen={workspace.open}
       onClose={workspace.close}
+      onTogglePin={workspace.toggleTabPin}
       onDrop={workspace.drop}
       onSplit={workspace.split}
       onFocusPane={workspace.focusPane}

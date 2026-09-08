@@ -408,6 +408,16 @@ the chrome and the device bar have not.
       hidden rather than unmounted, so a background tab keeps its log stream and
       its loaded lists. Ported from ADBKit's `TabState`, close-focus rules
       included.
+- [x] **Pinned tabs** — a tab's right-click menu (and Tab ▸ Pin Tab) pins it to
+      the front of its pane, where it shows a pin where its × would be and is
+      spared by Close Other Tabs. Not a lock: Ctrl/⌘W and Close Tab still close
+      a pinned tab, the way Chrome and VS Code behave. The prefix rule is
+      ported from ADBKit's `TabPinning` — pinned tabs are the *first N* of the
+      pane, so a drag across the boundary lands at it and the strip's insertion
+      marker is drawn at that clamped slot rather than under the cursor. One
+      difference the platform forces: the Mac's menu item reads its own state,
+      while here the label is flipped by pushing the front tab's pinned-ness
+      into the native menu (`set_tab_pin_state`).
 - [x] **Split panes** — two panes, clamped 30–70% with the same absolute
       per-pane floor (`PaneSplit`, ported to `lib/panes.ts`), a draggable
       divider that persists, and the pane rules ported from ADBKit's

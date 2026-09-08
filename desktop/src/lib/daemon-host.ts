@@ -44,6 +44,18 @@ export function setTrayMenu(entries: TrayEntry[]): Promise<void> {
   return invoke("set_tray_menu", { entries })
 }
 
+/**
+ * Tells the window menu whether the front tab is pinned, so Tab ▸ Pin Tab reads
+ * `Unpin Tab` when it would unpin, and greys out for a tab that cannot be
+ * pinned at all (Home, which rides the strip's own button).
+ *
+ * The Mac's item reads `AppState` directly; here the label lives in the native
+ * menu and the state lives in the webview, so it has to be pushed down.
+ */
+export function setTabPinState(pinned: boolean, enabled: boolean): Promise<void> {
+  return invoke("set_tab_pin_state", { pinned, enabled })
+}
+
 /** Mirrors Settings ▸ General ▸ Keep running in the background into Rust,
  * which is where the close button's meaning is decided. */
 export function setBackgroundMode(enabled: boolean): Promise<void> {

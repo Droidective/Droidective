@@ -24,10 +24,14 @@ import {
   cycleForward,
   drop,
   focus,
+  isPinned,
   move,
   newWorkspace,
   open,
+  pin,
+  pinnedTabs,
   split,
+  unpin,
   type Workspace,
 } from "@/lib/workspace"
 
@@ -37,6 +41,8 @@ export interface WorkspaceController {
   open: (id: string) => void
   close: (id: string) => void
   closeOthers: (id: string) => void
+  /** Pin the tab to the front of its pane, or unpin it. */
+  toggleTabPin: (id: string) => void
   drop: (id: string, pane: number, before: string | null) => void
   split: (id: string) => void
   moveToOtherPane: (id: string) => void
@@ -122,9 +128,10 @@ export function useWorkspace(features: FeatureSummary[]): WorkspaceController {
     const own = loadWindowLayout(globalThis.localStorage, windowLabel, layout)
     saveWindowLayout(globalThis.localStorage, windowLabel, {
       ...own,
-      panes: workspace.groups.map((group) => ({
+      panes: workspace.groups.map((group, pane) => ({
         tabs: [...group.openTabs],
         activeTab: group.activeTab,
+        pinned: pinnedTabs(workspace, pane),
       })),
       focusedPane: workspace.focusedGroup,
     })
@@ -159,6 +166,9 @@ export function useWorkspace(features: FeatureSummary[]): WorkspaceController {
     }, [edit]),
     closeOthers: useCallback((id: string) => {
       edit((current) => closeOthers(current, id, HOME_TAB))
+    }, [edit]),
+    toggleTabPin: useCallback((id: string) => {
+      edit((current) => (isPinned(current, id) ? unpin(current, id) : pin(current, id, HOME_TAB)))
     }, [edit]),
     drop: useCallback((id: string, pane: number, before: string | null) => {
       edit((current) => drop(current, id, pane, before))

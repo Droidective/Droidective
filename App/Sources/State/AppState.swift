@@ -165,6 +165,10 @@ final class AppState {
     var openFeatureIDs: [String] { workspace.groups.flatMap(\.openTabs) }
     /// The active tab of pane `index`.
     func activeTab(inGroup index: Int) -> String? { workspace.activeTab(inGroup: index) }
+    /// The pinned tabs of pane `index`, in strip order.
+    func pinnedTabIDs(inGroup index: Int) -> [String] { workspace.pinnedTabs(inGroup: index) }
+    /// Whether `id`'s tab is pinned in this window.
+    func isTabPinned(_ id: String) -> Bool { workspace.isPinned(id) }
     var toasts: [Toast] = []
     /// History of important notifications (errors, warnings, key wins), newest
     /// first. Routine success toasts are not kept.
@@ -1032,14 +1036,31 @@ final class AppState {
     }
 
     /// Close every tab in pane `group` except `id` (the strip's context menu).
-    /// Home is spared — it rides the strip's permanent house button, not a
-    /// chip. Each close routes through `closeTab`, so a guarded tab (a live
+    /// Home and the pinned tabs are spared — see `Workspace.closableTabs`.
+    /// Each close routes through `closeTab`, so a guarded tab (a live
     /// recording, open shells) still gets its confirmation instead of being
     /// dropped silently — it stays open if the user cancels.
     func closeOtherTabs(than id: String, inGroup group: Int) {
-        for other in openTabIDs(inGroup: group) where other != id && other != "home" {
+        for other in workspace.closableTabs(inGroup: group, sparing: id) {
             closeTab(other)
         }
+    }
+
+    /// The tabs "Close Other Tabs" would act on — what the menu item enables
+    /// itself on, so it is never a click that does nothing.
+    func closableTabIDs(inGroup group: Int, sparing id: String) -> [String] {
+        workspace.closableTabs(inGroup: group, sparing: id)
+    }
+
+    /// Pin or unpin a tab (the strip's context menu, Tab ▸ Pin Tab). Pinned
+    /// tabs lead their pane and are spared by "Close Other Tabs".
+    func toggleTabPin(_ id: String) {
+        if workspace.isPinned(id) {
+            workspace.unpin(id)
+        } else {
+            workspace.pin(id)
+        }
+        persistTabs()
     }
 
     /// Close the focused pane's active tab (⌘W).
@@ -1208,11 +1229,22 @@ final class AppState {
     /// that already shows it *merges*: `requestFeature` refocuses the existing
     /// tab and the moved one's view state is discarded. That is the honest read
     /// of the invariant — there is nowhere for a second copy to go.
-    func adoptHandoff(_ featureID: String, carrying carry: TabHandoff.Carry, at slot: HandoffSlot?) {
+    func adoptHandoff(
+        _ featureID: String, carrying carry: TabHandoff.Carry, at slot: HandoffSlot?,
+        pinned: Bool = false
+    ) {
         if let dirs = carry.terminalResumeDirs { terminalResumeDirs = dirs }
         if let serials = carry.mirrorWallSerials { mirrorWallSerials = serials }
         requestFeature(featureID)
-        if let slot { dropTab(featureID, intoGroup: slot.group, before: slot.before) }
+        // Pinned before the slot, so the drop is clamped into the pinned
+        // prefix rather than landing the tab wherever it was dropped and
+        // leaving the prefix broken.
+        if pinned { workspace.pin(featureID) }
+        if let slot {
+            dropTab(featureID, intoGroup: slot.group, before: slot.before) // persists
+        } else if pinned {
+            persistTabs()
+        }
     }
 
     /// Why a tab's work is being stopped. A tab that is *moving* keeps the
@@ -1331,7 +1363,9 @@ final class AppState {
             serial: selectedSerial,
             bundleId: selectedBundleId,
             tabGroups: workspace.groups.map {
-                TabGroupState(tabs: $0.openTabs, activeTab: $0.activeTab)
+                TabGroupState(
+                    tabs: $0.openTabs, activeTab: $0.activeTab,
+                    pinned: $0.pinnedTabs.isEmpty ? nil : $0.pinnedTabs)
             },
             focusedGroup: workspace.focusedGroup,
             terminalResumeDirs: terminalResumeDirs,

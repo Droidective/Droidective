@@ -840,6 +840,18 @@ pub fn set_terminal_commands_enabled(app: AppHandle, enabled: bool) {
     crate::menu::set_terminal_commands_enabled(&app, enabled);
 }
 
+/// Tells the menu whether the active tab is pinned, so Tab ▸ Pin Tab reads
+/// `Unpin Tab` when it would unpin — the Mac's item flips its own label off
+/// `AppState`, and here the state lives in the webview.
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "tauri's command macro hands AppHandle in by value"
+)]
+pub fn set_tab_pin_state(app: AppHandle, pinned: bool, enabled: bool) {
+    crate::menu::set_tab_pin_state(&app, pinned, enabled);
+}
+
 /// Opens a shell on a pseudo-terminal. Returns the id to pass to
 /// `write_terminal`, `resize_terminal` and `stop_watching`.
 ///

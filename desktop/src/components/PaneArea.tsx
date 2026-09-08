@@ -18,6 +18,8 @@ export interface PaneAreaProps {
   onSelectPackage: (packageId: string | null) => void
   onOpen: (id: string) => void
   onClose: (id: string) => void
+  /** Pin the tab to the front of its pane, or unpin it. */
+  onTogglePin: (id: string) => void
   onDrop: (id: string, pane: number, target: string | null) => void
   onSplit: (id: string) => void
   onFocusPane: (pane: number) => void
@@ -105,6 +107,7 @@ export function PaneArea(props: PaneAreaProps) {
             featureByID={props.featureByID}
             onSelect={props.onOpen}
             onClose={props.onClose}
+            onUnpin={props.onTogglePin}
             onDrop={props.onDrop}
             onContextMenu={props.onContextMenu}
             onNewTab={props.onNewTab}

@@ -3,7 +3,7 @@ import { useEffect, useRef } from "react"
 import type { TerminalCommands } from "@/hooks/useTerminalCommands"
 import type { SidebarModeController } from "@/hooks/useSidebarMode"
 import type { WorkspaceController } from "@/hooks/useWorkspace"
-import { ABOUT_TAB, CATALOG_TAB } from "@/lib/layout"
+import { ABOUT_TAB, CATALOG_TAB, HOME_TAB } from "@/lib/layout"
 import { LINKS, bugReportUrl, featureRequestUrl } from "@/lib/links"
 import { openUrl } from "@/lib/daemon"
 import { sidebarSections, visibleFeatures } from "@/lib/sidebar"
@@ -107,6 +107,12 @@ const TABLE: Record<string, (handlers: MenuHandlers) => void> = {
   "tab.close": (handlers) => {
     const active = activeOf(handlers.workspace)
     if (active !== null) handlers.workspace.close(active)
+  },
+  "tab.pin": (handlers) => {
+    const active = activeOf(handlers.workspace)
+    // Home has no chip to mark, so the row is greyed out for it and this can
+    // only be reached by an accelerator it does not have — but guard anyway.
+    if (active !== null && active !== HOME_TAB) handlers.workspace.toggleTabPin(active)
   },
   "tab.next": (handlers) => handlers.workspace.cycleTab(1),
   "tab.previous": (handlers) => handlers.workspace.cycleTab(-1),

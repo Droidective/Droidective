@@ -226,6 +226,7 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         commands::write_terminal,
         commands::resize_terminal,
         commands::set_terminal_commands_enabled,
+        commands::set_tab_pin_state,
         commands::emulators,
         commands::emulator_action,
         commands::pair_wireless,

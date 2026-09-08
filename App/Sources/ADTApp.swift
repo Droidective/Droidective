@@ -410,6 +410,10 @@ struct ADTApp: App {
 
                 Divider()
 
+                TabPinCommand(core: core)
+
+                Divider()
+
                 // ⌃⌘N: ⌘N is the Terminal's and ⇧⌘N opens a plain window, so
                 // moving a tab out sits beside them rather than on top of one.
                 TabHandoffCommands(core: core)

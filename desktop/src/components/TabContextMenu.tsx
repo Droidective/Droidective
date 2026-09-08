@@ -5,7 +5,8 @@ import { TabMenu, type TabMenuTarget } from "@/components/TabMenu"
 // for it is two imports for one idea.
 export type { TabMenuTarget }
 import type { WorkspaceController } from "@/hooks/useWorkspace"
-import { isSplit } from "@/lib/workspace"
+import { HOME_TAB } from "@/lib/layout"
+import { closable, isPinned, isSplit } from "@/lib/workspace"
 
 /**
  * The tab menu, wired to the workspace.
@@ -26,12 +27,16 @@ export function TabContextMenu({
     run(target.id)
     onDismiss()
   }
-  const pane = workspace.workspace.groups.find((group) => group.openTabs.includes(target.id))
   return (
     <TabMenu
       target={target}
       isSplit={isSplit(workspace.workspace)}
-      canCloseOthers={(pane?.openTabs.length ?? 0) > 1}
+      // Pinned tabs and Home are spared, so count what would actually close
+      // rather than the chips on screen — otherwise the row is enabled beside
+      // a strip of pinned tabs and does nothing.
+      canCloseOthers={closable(workspace.workspace, target.id, HOME_TAB).length > 0}
+      isPinned={isPinned(workspace.workspace, target.id)}
+      onTogglePin={act(workspace.toggleTabPin)}
       onSplit={act(workspace.split)}
       onMoveToOtherPane={act(workspace.moveToOtherPane)}
       onClose={act(workspace.close)}

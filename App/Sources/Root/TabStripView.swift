@@ -28,6 +28,14 @@ struct TabStripView: View {
     /// tab overflow.
     private var tabIDs: [String] { state.openTabIDs(inGroup: group).filter { $0 != "home" } }
     private var activeID: String? { state.activeTab(inGroup: group) }
+    /// How many of the chips lead as pinned — the prefix length of `tabIDs`.
+    ///
+    /// The drop clamp runs over `tabIDs`, not the pane's own list, because Home
+    /// is in the pane and is never a chip: clamped against the pane, the
+    /// boundary can come back as Home, and a guideline on a chip that isn't
+    /// drawn is no guideline at all. Home is never pinned, so dropping it from
+    /// the list leaves the pinned tabs still leading and this count exact.
+    private var pinnedCount: Int { state.pinnedTabIDs(inGroup: group).count }
     /// The tabs are wider than the visible strip — show the ‹ › scroll arrows.
     private var overflowing: Bool { contentWidth > viewportWidth + 1 }
 
@@ -144,8 +152,10 @@ struct TabStripView: View {
             icon: Self.icon(id),
             isActive: id == activeID,
             isRecording: state.tabIsRecording(id),
+            isPinned: state.isTabPinned(id),
             onSelect: { state.requestFeature(id) },
-            onClose: { state.closeTab(id) }
+            onClose: { state.closeTab(id) },
+            onUnpin: { state.toggleTabPin(id) }
         )
         .id(id)
         .background(widthReader { chipWidths[id] = $0 })
@@ -161,6 +171,17 @@ struct TabStripView: View {
             width: chipWidths[id] ?? 0,
             order: tabIDs,
             state: state,
+            clamp: { dragged, before in
+                // Draw the guideline where the drop will really land: a tab
+                // aimed across the pinned boundary stops at it, and a
+                // guideline promising otherwise would be a lie the drop then
+                // corrects. The same clamp `Workspace.drop` applies, over the
+                // chips rather than the pane (see `pinnedCount`). A tab from
+                // another window has no pinned region here yet, so its target
+                // passes through.
+                TabPinning.clampedTarget(
+                    dragged, before: before, in: tabIDs, pinnedCount: pinnedCount)
+            },
             setSlot: { dropSlot = $0 },
             move: { drag, before in
                 state.acceptTabDrop(drag, on: .strip(group: group, before: before))
@@ -191,6 +212,8 @@ struct TabStripView: View {
     /// this pane).
     @ViewBuilder
     private func tabMenu(for id: String) -> some View {
+        Button(state.isTabPinned(id) ? "Unpin Tab" : "Pin Tab") { state.toggleTabPin(id) }
+        Divider()
         Button("Open in New Window") { state.beginHandoff(id, to: .newWindow(frame: nil)) }
             // A workspace whose only tab left would not be a move, it would be
             // the window moving — and the window already moves. Moving it into
@@ -214,7 +237,10 @@ struct TabStripView: View {
         Divider()
         Button("Close Tab") { state.closeTab(id) }
         Button("Close Other Tabs") { state.closeOtherTabs(than: id, inGroup: group) }
-            .disabled(tabIDs.count < 2)
+            // Pinned tabs and Home are spared, so count what would actually
+            // close rather than the chips on screen — otherwise the item is
+            // enabled beside a strip of pinned tabs and does nothing.
+            .disabled(state.closableTabIDs(inGroup: group, sparing: id).isEmpty)
     }
 
     /// The fixed Home entry leading the strip — an icon-only chip that opens
@@ -290,8 +316,10 @@ private struct TabChip: View {
     let icon: String
     let isActive: Bool
     let isRecording: Bool
+    let isPinned: Bool
     let onSelect: () -> Void
     let onClose: () -> Void
+    let onUnpin: () -> Void
     @State private var hovering = false
 
     var body: some View {
@@ -336,7 +364,22 @@ private struct TabChip: View {
     }
 
     @ViewBuilder private var closeButton: some View {
-        if hovering || isActive {
+        if isPinned {
+            // A pin sits where the × would: out of accidental-click range is
+            // half of what pinning is for. It is not a lock — ⌘W and the
+            // menu's Close Tab still close a pinned tab.
+            Button(action: onUnpin) {
+                Image(systemName: "pin.fill")
+                    .font(.app(size: 9, weight: .bold))
+                    .foregroundStyle(isActive
+                        ? AnyShapeStyle(.brandAccent) : AnyShapeStyle(.textMuted))
+                    .frame(width: 16, height: 16)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Unpin this tab")
+            .accessibilityLabel("Unpin \(title)")
+        } else if hovering || isActive {
             Button(action: onClose) {
                 Image(systemName: "xmark")
                     .font(.app(size: 9, weight: .bold))
@@ -376,6 +419,9 @@ private struct TabReorderDrop: DropDelegate {
     let width: CGFloat
     let order: [String]
     let state: AppState
+    /// Where a drop aimed before an id would really land — a pinned boundary
+    /// pulls it back (see `TabPinning.clampedTarget`).
+    let clamp: (_ draggedID: String, _ before: String?) -> String?
     let setSlot: (TabDropSlot?) -> Void
     let move: (_ drag: TabDrag, _ beforeTargetID: String?) -> Void
 
@@ -401,22 +447,39 @@ private struct TabReorderDrop: DropDelegate {
             state.core.tabDrag = nil
             return false
         }
-        let dropAfter = width > 0 && info.location.x > width / 2
-        if dropAfter, let index = order.firstIndex(of: targetID) {
-            // After the target = before the tab that follows it (or to the end).
-            move(drag, order.indices.contains(index + 1) ? order[index + 1] : nil)
-        } else {
-            move(drag, targetID)
-        }
+        move(drag, landing(info, dragged: drag.featureID))
         return true
     }
 
-    /// The slot under the cursor — nil while over the dragged chip itself,
-    /// and nil once the drag has ended (a trailing enter/update after the drop).
+    /// The id the dropped tab should sit before (nil = the end of the pane),
+    /// clamped to the region it may actually land in.
+    ///
+    /// The guideline and the drop both read this, so the strip cannot promise
+    /// a slot the drop then corrects.
+    private func landing(_ info: DropInfo, dragged: String) -> String? {
+        let dropAfter = width > 0 && info.location.x > width / 2
+        let raw: String?
+        if dropAfter, let index = order.firstIndex(of: targetID) {
+            // After the target = before the tab that follows it (or to the end).
+            raw = order.indices.contains(index + 1) ? order[index + 1] : nil
+        } else {
+            raw = targetID
+        }
+        return clamp(dragged, raw)
+    }
+
+    /// The slot under the cursor — nil while over the dragged chip itself, nil
+    /// when the clamped landing means the tab wouldn't move at all, and nil
+    /// once the drag has ended (a trailing enter/update after the drop).
     private func slot(_ info: DropInfo) -> TabDropSlot? {
         guard let drag else { return nil }
         guard drag.featureID != targetID || drag.source != state.id else { return nil }
-        return TabDropSlot(targetID: targetID, after: width > 0 && info.location.x > width / 2)
+        guard let before = landing(info, dragged: drag.featureID) else {
+            // The end of the pane: the trailing edge of the last chip.
+            return order.last.map { TabDropSlot(targetID: $0, after: true) }
+        }
+        guard before != drag.featureID else { return nil }
+        return TabDropSlot(targetID: before, after: false)
     }
 }
 

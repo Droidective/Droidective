@@ -18,6 +18,8 @@ export function TabMenu({
   target,
   isSplit,
   canCloseOthers,
+  isPinned,
+  onTogglePin,
   onSplit,
   onMoveToOtherPane,
   onClose,
@@ -27,6 +29,8 @@ export function TabMenu({
   target: TabMenuTarget
   isSplit: boolean
   canCloseOthers: boolean
+  isPinned: boolean
+  onTogglePin: () => void
   onSplit: () => void
   onMoveToOtherPane: () => void
   onClose: () => void
@@ -60,6 +64,8 @@ export function TabMenu({
         style={{ left: target.x, top: target.y }}
         className="fixed z-50 min-w-[190px] rounded-lg border border-border-subtle bg-bg-raised py-1 shadow-xl"
       >
+        <Item onSelect={onTogglePin}>{isPinned ? "Unpin Tab" : "Pin Tab"}</Item>
+        <div className="my-1 h-px bg-border-subtle" />
         {isSplit ? (
           <Item onSelect={onMoveToOtherPane}>Move to Other Pane</Item>
         ) : (
