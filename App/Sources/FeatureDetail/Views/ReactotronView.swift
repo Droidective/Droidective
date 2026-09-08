@@ -323,6 +323,8 @@ final class ReactotronSession {
         Self.discardInBackground((items, snapshots, storeState, subscriptionValues))
         items.removeAll()
         itemsBytes = 0
+        FeedHealth.shared.report("reactotron", FeedHealth.Snapshot(
+            rows: 0, wireBytes: 0, watched: audience.isWatched))
         paneClearSeqs.removeAll()
         commands.removeAll()
         subscriptionPaths.removeAll()
@@ -731,10 +733,15 @@ final class ReactotronSession {
         // Hidden tabs stay mounted and lay their rows out like visible ones,
         // and a main thread that is already behind must not be asked for a
         // turn as often — `MainThreadLoad` is the app-wide reading of that.
-        let interval = FeedFlushCadence.interval(
+        // A nil interval means nobody can see the timeline: publishing would
+        // buy a SwiftUI diff no one reads, so nothing is scheduled and the
+        // rows wait in `pendingItems` (byte-bounded above) until either the
+        // early flush or someone looking at it drains them.
+        guard let interval = FeedFlushCadence.interval(
             appActive: NSApp.isActive,
             watched: audience.isWatched,
             lateness: MainThreadLoad.shared.lateness)
+        else { return }
         flushTask = Task { [weak self] in
             try? await Task.sleep(for: interval)
             guard !Task.isCancelled else { return }
@@ -761,7 +768,13 @@ final class ReactotronSession {
         let batch = pendingItems
         pendingItems.removeAll(keepingCapacity: true)
         pendingBytes = 0
-        appendBatch(batch)
+        // The JS Console has measured its drain since v3.7.0 and this feed —
+        // the larger of the two, and the one named in the hang issue — never
+        // did. A breach past `backendThresholdMs` reaches the backend from
+        // inside `PerfLog`, so this is the local half of the same signal.
+        PerfLog.measure(PerfLog.feed, "reactotron flush \(batch.count) rows into \(items.count)") {
+            appendBatch(batch)
+        }
     }
 
     /// Ring-buffer append bounded by count *and* cumulative frame bytes
@@ -803,6 +816,11 @@ final class ReactotronSession {
             clients: clients.count,
             evicted: ConsoleRateBucket.decade(Double(evictedItemCount))
         )
+        // Reported every flush, not only when the bucket changes: the shared
+        // snapshot is read by the hang and health reports, and a bucketed
+        // value is too coarse for "how much is the app holding right now".
+        FeedHealth.shared.report("reactotron", FeedHealth.Snapshot(
+            rows: items.count, wireBytes: itemsBytes, watched: audience.isWatched))
         guard snapshot != publishedDiagnostics else { return }
         publishedDiagnostics = snapshot
         Telemetry.shared.setDiagnosticContext("reactotron", [

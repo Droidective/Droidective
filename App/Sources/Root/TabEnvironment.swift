@@ -17,8 +17,9 @@ extension EnvironmentValues {
     /// tabs stay mounted, so device-heavy *live* views (network/CPU polling, the
     /// screen mirror) read this to pause while hidden. Recordings and log streams
     /// deliberately ignore it and keep *running* — but they pace their flushing
-    /// by it (`reportsFeedVisibility`, `FeedFlushCadence.hidden`), because a
-    /// mounted hidden tab lays its rows out exactly like a visible one.
+    /// by it (`reportsFeedVisibility`), because a mounted hidden tab lays its
+    /// rows out exactly like a visible one — and stop publishing entirely when
+    /// nobody can see them at all.
     /// Defaults to true for views shown outside the tab host (Settings,
     /// sheets), which must never pause.
     var tabIsActive: Bool {
@@ -54,13 +55,20 @@ private struct FeedVisibilityReporter: ViewModifier {
     @State private var viewID = UUID()
     let report: (UUID, Bool) -> Void
 
+    /// Being the front tab is only half of it: the window that tab sits in has
+    /// to be on screen too. `AppVisibility` asks the window server, because
+    /// neither `tabIsActive` nor `NSApp.isActive` answers it — an app behind
+    /// another window can still be perfectly readable, and a front tab in a
+    /// fully covered window cannot.
+    private var canBeSeen: Bool { tabIsActive && AppVisibility.shared.hasVisibleWindow }
+
     func body(content: Content) -> some View {
         content
             // Reported from lifecycle hooks, never from `body`: these writes
             // land on state a feed view reads, and writing observable state
             // during an update is an endless update loop, not a wasted pass.
-            .onAppear { report(viewID, tabIsActive) }
-            .onChange(of: tabIsActive) { _, visible in report(viewID, visible) }
+            .onAppear { report(viewID, canBeSeen) }
+            .onChange(of: canBeSeen) { _, visible in report(viewID, visible) }
             .onDisappear { report(viewID, false) }
     }
 }

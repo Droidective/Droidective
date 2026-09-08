@@ -253,6 +253,7 @@ struct RootView: View {
         // once, because main-thread load belongs to the thread rather than to
         // any one feed.
         MainThreadLoad.shared.start()
+        AppVisibility.shared.start()
         // A double-clicked APK — or a split bundle (.apks/.xapk/.apkm) — opens
         // the in-window opened-package screen (install with live status / APK
         // Studio); a double-clicked AAB opens the AAB to APK converter with the

@@ -40,9 +40,16 @@ final class PerformanceMonitor {
         return context.openFeatures.contains { cpuIntensiveFeatures.contains($0) }
     }
 
+    /// Ticks between health reports. The poller runs every 5 s and this is a
+    /// windowed summary, not a sample, so a five-minute window is both enough
+    /// resolution to see a footprint climbing over an hour and little enough
+    /// event volume to sit inside a free plan.
+    private static let healthReportTicks = 60
+
     private var poller: Task<Void, Never>?
     private var watchdog = ResourceWatchdog()
     private var perFeature = FeaturePerfAggregator()
+    private var ticksUntilHealthReport = healthReportTicks
 
     /// Begin sampling every `interval`. `context` is read on the main actor each
     /// tick, so it can reach into AppState safely. Each sample feeds two things:
@@ -63,6 +70,14 @@ final class PerformanceMonitor {
                 if let record = self.perFeature.ingest(sample, feature: context.activeFeature ?? "none") {
                     Telemetry.shared.reportFeaturePerf(record)
                 }
+                self.ticksUntilHealthReport -= 1
+                guard self.ticksUntilHealthReport <= 0 else { continue }
+                self.ticksUntilHealthReport = Self.healthReportTicks
+                // Drains the stall window, so nothing else may: two callers
+                // would each get half the samples.
+                Telemetry.shared.reportHealth(
+                    footprintBytes: sample.footprintBytes,
+                    stall: MainThreadLoad.shared.takeStallWindow())
             }
         }
     }

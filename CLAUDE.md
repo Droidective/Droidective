@@ -136,7 +136,7 @@ opening it — verify those by hand.
 ## Build / test / run
 
 ```
-make test          # all three Swift packages — ADBKit 2099, droidectived 408,
+make test          # all three Swift packages — ADBKit 2122, droidectived 408,
                    #   ReactotronMCP 99. Keep green.
 make test-app      # the AppTests logic bundle — 128 tests
 make verify        # tiers 0-1: warnings-as-errors + all four Swift bundles
@@ -617,7 +617,38 @@ table) is in `docs/reactotron-mcp-analysis.md`.
 - **A streaming feed is paced by who can see it and how busy the main thread
   is** — never by a bare timer. All four feeds (Reactotron, JS Console, logcat,
   iOS logs) go through `FeedFlushCadence`, and adding a fifth means passing all
-  three inputs: `appActive`, `watched`, `lateness`. Traps worth knowing:
+  three inputs: `appActive`, `watched`, `lateness`. `interval` returns
+  **nil** — schedule nothing — when nobody can see the feed; a feed that cannot
+  pause because its flush yields into an `AsyncStream` rather than publishing
+  observable state (the two log streams) calls `drainingInterval` and backs off
+  to the 8 s ceiling instead. Traps worth knowing:
+  - **Visible means the window server says so, not that the app is frontmost.**
+    `NSApp.isActive` answers a different question — an app behind another
+    window can still be perfectly readable, and a front tab in a fully covered
+    window cannot be. `AppVisibility` (App) folds `NSWindow.occlusionState`
+    into what `reportsFeedVisibility` reports, with frontmost short-circuiting
+    to visible so a wrong occlusion answer can never stall a feed someone is
+    reading.
+  - **A feed's byte budget is a *resident* budget, and what it caps is *wire*
+    bytes.** `FeedMemoryBudget` (ADBKit) holds the conversion: a decoded frame
+    costs about 8x its wire size, so the old flat 128 MB wire cap was a
+    gigabyte resident, *per feed* — two streaming feeds put the ceiling near
+    2 GB. It is now a fraction of the machine (1/32 of RAM, floor 48 MB,
+    ceiling 192 MB decoded). The measurement that settled it is one install's
+    `feature_perf` curve with three tabs open (home, js-console, reactotron):
+    363 MB at 08:00, 1096 MB by 10:00, 1578 MB by 11:00, then a *day* spent
+    sawtoothing between 0.8 and 1.5 GB as the rings filled and evicted, with
+    CPU peaks of 56–102% while the app was not even frontmost. The band was
+    the buffers' own working range, which is why no leak was ever found: the
+    cap *was* the bug.
+  - **A hang report cannot tell you how long the hang was.** Sentry fills the
+    duration in from the configured threshold (`durationMs =
+    appHangTimeoutInterval * 1000`), so every event reads "at least 2000 ms".
+    `MainThreadStall` (ADBKit) keeps the lateness samples `MainThreadLoad`
+    already takes and was discarding, and `FeedHealth` (App) is the one
+    snapshot of what every feed retains — per-feed Sentry contexts could never
+    answer "how much across all of them". Both ride the `app_hang` event and a
+    five-minute `app_health` line.
   - **Visibility is an audience, not a flag** (`FeedAudience`). One feed can be
     on screen twice — an app-wide feed in two windows, a per-window feed in
     both panes of a split — and SwiftUI lifecycle hooks are not reliably
@@ -1066,7 +1097,36 @@ position in `RELEASE_NOTES.md`.
 ## Status
 
 Feature-complete across all planned milestones plus several UX rounds.
-(Latest release: **v3.12.0** — any tab can have a window of its own, and its
+(Latest release: **v3.12.1** — a bug-fix release for the thing that made a long
+Reactotron or JS Console session turn into an unresponsive app. **Two feeds were
+each entitled to about a gigabyte of decoded rows**: both capped 128 MB of
+*wire* bytes, and a decoded frame costs about eight times that, which
+`ReactotronTimeline`'s own comment conceded without following through to the
+number. `FeedMemoryBudget` holds the conversion and sizes the budget against the
+machine — 1/32 of RAM, floor 48 MB, ceiling 192 MB decoded — and both feeds read
+it, so the figure cannot be hand-copied and drift again. The measurement that
+settled it: one 16 GB M5 with three tabs open climbed 363 MB → 1578 MB over
+three hours, then spent a day sawtoothing between 0.8 and 1.5 GB with CPU peaks
+of 56–102% while the app was not frontmost. The sawtooth is why no leak was ever
+found — the rings *did* evict, and that band was their own working range. The
+cap was the bug. **And a feed nobody could see kept publishing**: `watched` came
+from `tabIsActive`, `appActive` from `NSApp.isActive`, and neither answers
+whether the window is on screen, so a user with the app behind another window and
+a Reactotron tab in front got a re-diff every second for twenty-four minutes.
+`AppVisibility` asks `NSWindow.occlusionState`, with frontmost short-circuiting
+to visible so a wrong occlusion answer can never stall a feed someone is
+reading, and `FeedFlushCadence.interval` now returns **nil** for an unwatched
+feed — reversing v3.11.0's pace-don't-pause decision, which is only safe because
+both feeds bound pending by bytes. The two log streams cannot pause at all
+(their flush yields into an `AsyncStream`), so they call `drainingInterval`.
+**Hangs are measurable at last**: Sentry fills a hang's duration in from the
+configured threshold, so every report read "at least 2000 ms" — `MainThreadStall`
+keeps the lateness samples `MainThreadLoad` was already taking and discarding,
+and `FeedHealth` is the one snapshot of what every feed retains, since per-feed
+Sentry contexts could never answer "how much across all of them". Both ride
+`app_hang`, which carried no properties at all, and a five-minute `app_health`
+line.)
+(Before that: **v3.12.0** — any tab can have a window of its own, and its
 work goes with it. **Tab tear-off**: a feature tab leaves its window by drag,
 by "Open in New Window", by "Move to Window ▸", or by ⌃⌘N, and a torn-off
 window inherits its source's device rather than picking a free one. The pure
@@ -1409,7 +1469,7 @@ jadx/apktool, recompile, and sign — with keystore creation) plus Frida setup, 
 custom accent color, launching emulators from the device bar, per-feature
 connect-a-device empty states, a live-preview hotkey recorder, and a Settings
 split into Appearance/Privacy; managed tools download from GitHub releases into
-Application Support and are sized/removable in Settings); 2099 ADBKit + 408
+Application Support and are sized/removable in Settings); 2122 ADBKit + 408
 droidectived + 99 ReactotronMCP + 128 AppTests green on macOS (ADBKit and the
 daemon also run on Linux and Windows in CI, minus the Darwin-gated files), plus
 1259 vitest + 55 cargo on the desktop app;

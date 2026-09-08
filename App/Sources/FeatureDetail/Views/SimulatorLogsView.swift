@@ -587,7 +587,10 @@ struct SimulatorLogsView: View {
     /// rule, given whether anyone can see the tab and how far behind the main
     /// thread already is (`SimulatorLogStreamer.setFlushInterval`).
     private var pacedFlushInterval: Duration {
-        FeedFlushCadence.interval(
+        // `drainingInterval`, not `interval`: this feed's flush yields into an
+        // `AsyncStream` rather than publishing observable state, so pausing it
+        // would stall the stream itself. It backs off to the ceiling instead.
+        FeedFlushCadence.drainingInterval(
             appActive: NSApp.isActive,
             watched: feedVisible,
             lateness: MainThreadLoad.shared.lateness)

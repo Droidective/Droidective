@@ -11,9 +11,15 @@ import Foundation
 public enum ReactotronTimeline {
     /// Most items the timeline retains.
     public static let maxItems = 2000
-    /// Most cumulative wire bytes the timeline retains. The decoded Swift
-    /// graph is proportional to the wire size (typically a small multiple).
-    public static let maxTotalBytes = 128 * 1024 * 1024
+    /// Most cumulative wire bytes the timeline retains.
+    ///
+    /// Was a flat 128 MB, on the reasoning that the decoded Swift graph is
+    /// "a small multiple" of the wire size. It is — about eight times — and
+    /// that made this a one-gigabyte *resident* cap, which is what put 8 GB
+    /// machines into swap and turned a slow feed into an unresponsive Mac.
+    /// `FeedMemoryBudget` sizes it against the machine instead; see there for
+    /// the incidents and the arithmetic.
+    public static var maxTotalBytes: Int { FeedMemoryBudget.wireBudget }
 
     /// How many items to drop from the front so the buffer fits its caps.
     ///

@@ -1,3 +1,46 @@
+## Droidective v3.12.1
+
+A bug-fix release. Two streaming feeds could each hold about a gigabyte of
+decoded log rows, and kept re-rendering to a window nobody could see — so a
+long Reactotron or JS Console session slowly turned into an app that stopped
+responding for seconds at a time.
+
+### Feeds no longer hold a gigabyte each
+
+- **The Reactotron timeline and the JS Console now size their buffers to your
+  Mac** instead of to a fixed number. Both capped 128 MB of received data, but a
+  decoded log row costs several times what it did on the wire, so the real cost
+  was closer to a gigabyte — each. One session was measured climbing from 363 MB
+  to 1.58 GB over three hours and then staying there for a day.
+- Nothing was leaking. The buffers were evicting correctly; the limit itself was
+  simply far too generous. On a 16 GB Mac each feed now holds up to 192 MB.
+
+### A feed you cannot see stops rendering
+
+- **A feed in a covered window no longer re-renders every second.** Whether the
+  app was "visible" was inferred from which tab was in front and whether
+  Droidective was the active app, and neither answers the actual question. With
+  the app behind another window and a Reactotron tab in front, the timeline kept
+  redrawing for as long as it was left there.
+- It now asks the window server directly. Events keep arriving the whole time —
+  only the drawing waits — and bringing the window back shows everything at
+  once.
+
+### Hangs can now be measured
+
+- **A hang report says how long the hang was.** It never could before: the
+  duration came from the detection threshold, so every report read "at least
+  2 seconds" whether the app was gone for two seconds or forty.
+- Droidective now also records what each feed was holding when the app
+  struggled, which is what makes this kind of problem findable instead of
+  guessable. Numbers only — no log contents, no URLs, no device identifiers, and
+  it respects the Settings ▸ Privacy toggles like everything else.
+
+### Install
+
+Download the DMG from the release below, or use Droidective ▸ Check for
+Updates.
+
 ## Droidective v3.12.0
 
 Any feature can now have a window of its own — drag its tab out, or pick it from
