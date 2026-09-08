@@ -313,6 +313,88 @@ final class Telemetry {
         ])
     }
 
+    // MARK: - Health
+
+    /// Footprint at the first sample of the session — the denominator for
+    /// growth. A number on its own says little: 1.5 GB is alarming for a
+    /// session that started at 363 MB and unremarkable for one that opened a
+    /// 1 GB APK.
+    private var baselineFootprintBytes: UInt64?
+
+    /// One app-hang report, with the facts the bare event never carried.
+    ///
+    /// The hang itself supplies no duration — Sentry fills that in from the
+    /// configured threshold, so every report reads "at least 2000 ms" — so the
+    /// measured stall comes from the app's own sampler (`MainThreadStall`).
+    /// Memory, growth since launch, and what the feeds were holding ride along
+    /// because reconstructing them afterwards meant joining three event types
+    /// by hour, and only after knowing to look.
+    func reportHang() {
+        var properties: [String: Any] = [:]
+        // Peeked, never drained: the health report owns the window.
+        if let window = MainThreadLoad.shared.stallSummary() {
+            properties["stall_worst_ms"] = window.worstMilliseconds
+            properties["stall_median_ms"] = window.medianStallMilliseconds
+            properties["stall_percent"] = window.stalledPercent
+            properties["stall_samples"] = window.samples
+        }
+        if let sample = ProcessStats.sample() {
+            let megabytes = Int(sample.footprintBytes / 1_048_576)
+            properties["memory_mb"] = megabytes
+            if let growth = growthPercent(sample.footprintBytes) { properties["memory_growth_pct"] = growth }
+        }
+        for (key, value) in FeedHealth.shared.properties { properties[key] = value }
+        track("app_hang", properties)
+    }
+
+    /// A periodic picture of the things that go wrong together: how late the
+    /// main thread has been running, how much memory the process holds against
+    /// where it started, and what each streaming feed is retaining.
+    ///
+    /// One event rather than three, because the incident that prompted it was
+    /// only visible as a *shape* — a footprint climbing 363 MB → 1.58 GB over
+    /// three hours while two feeds streamed to a window nobody was looking at.
+    /// No single existing event carried two of those three facts, so seeing the
+    /// shape meant already suspecting it.
+    ///
+    /// Skipped entirely when there is nothing to say: a healthy thread and no
+    /// retained feed rows sends no event, so an idle app costs no quota.
+    func reportHealth(footprintBytes: UInt64, stall: MainThreadStall.Window?) {
+        let feeds = FeedHealth.shared.properties
+        let quiet = stall?.isQuiet ?? true
+        guard !quiet || (feeds["feed_rows"] ?? 0) > 0 else { return }
+        var properties: [String: Any] = [
+            "memory_mb": Int(footprintBytes / 1_048_576),
+        ]
+        if let growth = growthPercent(footprintBytes) { properties["memory_growth_pct"] = growth }
+        if let stall {
+            properties["stall_worst_ms"] = stall.worstMilliseconds
+            properties["stall_median_ms"] = stall.medianStallMilliseconds
+            properties["stall_percent"] = stall.stalledPercent
+            properties["stall_samples"] = stall.samples
+        }
+        for (key, value) in feeds { properties[key] = value }
+        track("app_health", properties)
+        // The same numbers locally, so an incident someone shows you in person
+        // is readable without waiting for the backend:
+        //   log stream --predicate 'subsystem BEGINSWITH "com.rohindh.droidective"'
+        AppLog.write(
+            quiet ? .info : .warn, .feed, "health",
+            properties.compactMapValues { $0 as? Int })
+    }
+
+    /// Footprint against the session's first sample, as a percentage. nil until
+    /// a baseline exists — the first sample *is* the baseline, and reporting it
+    /// as 100% growth would be noise.
+    private func growthPercent(_ footprintBytes: UInt64) -> Int? {
+        guard let baseline = baselineFootprintBytes else {
+            baselineFootprintBytes = footprintBytes
+            return nil
+        }
+        guard baseline > 0 else { return nil }
+        return Int((Double(footprintBytes) / Double(baseline) * 100).rounded())
+    }
+
     // MARK: - Performance incidents
 
     /// Report sustained app resource overuse (or its recovery) from the
@@ -437,7 +519,7 @@ final class Telemetry {
             // (the `active_feature` super-property rides along automatically).
             options.beforeSend = { event in
                 if Self.isAppHang(event) {
-                    Task { @MainActor in Telemetry.shared.track("app_hang") }
+                    Task { @MainActor in Telemetry.shared.reportHang() }
                 }
                 return event
             }

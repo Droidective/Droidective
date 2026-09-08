@@ -34,9 +34,33 @@ final class MainThreadLoad {
     /// sample after it clears reports zero again, so no decay is needed.
     private(set) var lateness: Duration = .zero
 
+    /// The same samples, kept rather than overwritten (`MainThreadStall`).
+    ///
+    /// Pacing only ever needs the latest reading, so that is all this used to
+    /// keep — and the app therefore measured its own stalls twice a second for
+    /// the life of the process and remembered none of them. The hang reports it
+    /// sends cannot supply a duration (Sentry fills that in from the
+    /// configured threshold), so these samples are the only record of how long
+    /// the thread actually went away for.
+    private var stall = MainThreadStall()
+
     private var sampler: Task<Void, Never>?
 
     private init() {}
+
+    /// The stalls in the current window, left in place. What a hang report
+    /// reads — it fires on its own schedule and must not consume the window
+    /// the health report is accumulating.
+    func stallSummary() -> MainThreadStall.Window? {
+        stall.summary()
+    }
+
+    /// Summarise the stalls since the last call and start a fresh window. The
+    /// health report is the only caller; a second drainer would leave each of
+    /// them an arbitrary half of the samples.
+    func takeStallWindow() -> MainThreadStall.Window? {
+        stall.takeWindow()
+    }
 
     /// Begin sampling. Idempotent — every window's launch setup may call it.
     func start() {
@@ -52,6 +76,7 @@ final class MainThreadLoad {
                 // instead would need a "was the Mac asleep?" guess.
                 self.lateness = FeedFlushCadence.lateness(
                     elapsed: ContinuousClock.now - started, requested: Self.period)
+                self.stall.ingest(self.lateness)
             }
         }
     }
