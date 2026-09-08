@@ -769,6 +769,19 @@ Found by driving the app against a live emulator, not by reading it.
 
 ## Backlog
 
+### Send Text snippets
+
+The Mac keeps a saved, recency-ranked snippet library for Send Text, with
+`{clipboard}` and `{ip}` expanded at the moment one is inserted
+(`SendTextView` plus `Presets.sendTextSnippets`), and since v3.12 the Quick
+Actions panel's Send Text screen carries the same list under its field
+(`QuickSnippetList` — ↓/↑ walk it, ⏎ inserts, ⌘⏎ still runs). This app has no
+snippet concept at all, so the panel is the *second* half of that job rather
+than the first: it needs the presets store served over the daemon, and a Send
+Text screen to curate snippets from, before the panel list has anything to
+show. Until then the panel's Send Text screen is the plain form, which is what
+it has always been — nothing regressed, the Mac simply grew a thing.
+
 ### A finding that applies to more than one item
 
 `URLSessionWebSocketTask` **compiles off-Darwin and does not work**. A probe in

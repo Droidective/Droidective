@@ -920,7 +920,14 @@ table) is in `docs/reactotron-mcp-analysis.md`.
   shared with the app's favorites; `PaletteSearch.quickActions`, tested),
   Manage Apps / Emulators / Install APK — with an "Open in Droidective" list
   below for the enabled full-app view screens. Form actions render their
-  registry `FieldDef`s in-panel (`QuickActionFormView`); app verbs come from
+  registry `FieldDef`s in-panel (`QuickActionFormView`) — and Send Text's
+  screen carries its snippet library under the field (`QuickSnippetList`:
+  recency-ranked, the top five with the rest behind "Show N more", ↓/↑ to walk
+  them and ⏎ to insert the highlighted one while ⌘⏎ still runs, placeholders
+  expanded and the use count bumped exactly as the main window's list does, so
+  the ranking is shared. No search field: the one text field holds the text
+  being *sent*, and filtering by it would hide the snippet you were reaching
+  for); app verbs come from
   `AppControlService.AppAction` (destructive ones need a second ⏎). With >1
   device connected, every device-scoped action pushes a pick-device
   interstitial; ⌘⏎ there runs on all devices (offered and applied only for
@@ -1405,7 +1412,7 @@ split into Appearance/Privacy; managed tools download from GitHub releases into
 Application Support and are sized/removable in Settings); 2099 ADBKit + 408
 droidectived + 99 ReactotronMCP + 128 AppTests green on macOS (ADBKit and the
 daemon also run on Linux and Windows in CI, minus the Darwin-gated files), plus
-1256 vitest + 55 cargo on the desktop app;
+1259 vitest + 55 cargo on the desktop app;
 builds clean with zero warnings (enforced as errors in CI). Verified live against a
 physical device and an Android emulator. Release builds are Developer ID-signed +
 notarized and bundle scrcpy/ffmpeg (see `RELEASING.md`). Open gaps: the Apps
