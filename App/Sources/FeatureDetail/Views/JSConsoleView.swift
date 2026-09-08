@@ -169,7 +169,7 @@ final class JSConsoleSession {
     // count cap: 2000 entries each holding a multi-megabyte logged string
     // would otherwise retain gigabytes. Shared with the pending early-flush
     // bound so the two can't drift apart when retuned.
-    private static let bufferByteBudget = 128 << 20
+    private static var bufferByteBudget: Int { FeedMemoryBudget.wireBudget }
     private var buffer = FilteredLogBuffer<JSEntry>(
         capacity: JSConsoleSession.maxEntries,
         byteBudget: JSConsoleSession.bufferByteBudget,
@@ -446,6 +446,7 @@ final class JSConsoleSession {
         phase = .searching
         // Session over — a later hang must not read as "the console did it".
         Telemetry.shared.setDiagnosticContext("js_console", nil)
+        FeedHealth.shared.forget("js-console")
         Telemetry.shared.breadcrumb(category: "js-console", "session stopped")
         publishedDiagnostics = nil
     }
@@ -485,6 +486,13 @@ final class JSConsoleSession {
             bufferedEntries: (buffer.entries.count / 100) * 100,
             ingestPerMinute: ConsoleRateBucket.decade(perMinute)
         )
+        // Unbucketed, into the shared snapshot the hang and health reports
+        // read — this feed and Reactotron were each visible alone and never
+        // together, which is what hid a combined 1.5 GB.
+        FeedHealth.shared.report("js-console", FeedHealth.Snapshot(
+            rows: buffer.entries.count,
+            wireBytes: buffer.totalCost,
+            watched: audience.isWatched))
         guard snapshot != publishedDiagnostics else { return }
         if ConsoleRateBucket.isBurst(
             from: publishedDiagnostics?.ingestPerMinute, to: snapshot.ingestPerMinute
@@ -1050,7 +1058,8 @@ final class JSConsoleSession {
     /// The intervals moved to `FeedFlushCadence` when the Reactotron timeline
     /// turned out to have missed this fix entirely — the rule is shared so a
     /// feed cannot be added without it.
-    private var flushInterval: Duration {
+    /// nil when nobody can see the feed — see `FeedFlushCadence.interval`.
+    private var flushInterval: Duration? {
         // Visibility and main-thread load both feed the pace: a hidden tab
         // still lays out every row it flushes, and a thread already behind
         // must not be asked for a turn as often (`MainThreadLoad`).
@@ -1062,7 +1071,10 @@ final class JSConsoleSession {
 
     private func scheduleFlush() {
         guard flushTask == nil else { return }
-        let interval = flushInterval
+        // Nothing scheduled while unseen: entries keep arriving into
+        // `pendingEntries`, which is bounded by bytes, and the early flush
+        // above still drains it on volume.
+        guard let interval = flushInterval else { return }
         flushTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: interval)
             guard let self, !Task.isCancelled else { return }

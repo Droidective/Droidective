@@ -17,11 +17,25 @@ import Foundation
 /// (DROIDECTIVE-MAC-B: 5087 hangs, and its top `open_features` rows are
 /// single users with 9 to 18 tabs mounted at once).
 ///
-/// **Inactive is slower, never stopped.** Nobody is reading in real time and a
-/// feed streaming behind an unfocused window used to burn CPU for hours — but
-/// pausing outright is worse than pacing: the buffer grows unbounded, and
-/// reactivation hands SwiftUI one enormous flush, which is the same
-/// mass-mutation stall the pacing exists to avoid.
+/// **Inactive is slower, never stopped — but unwatched *is* stopped now.**
+/// A feed streaming behind an unfocused window used to burn CPU for hours, and
+/// the first fix paced it rather than pausing it, for a good reason: pausing
+/// let the buffer grow unbounded, and reactivation then handed SwiftUI one
+/// enormous flush — the same mass-mutation stall the pacing exists to avoid.
+///
+/// That objection no longer holds, which is why `interval` may now answer
+/// *nil*. Both feeds bound their pending buffer by **bytes** as well as by the
+/// cadence (a quarter of the retained byte budget), so a paused feed cannot
+/// grow without limit and the flush it eventually hands over is capped at that
+/// quarter rather than at the whole buffer. What the pace could not fix is
+/// that a feed nobody can see still published: one user sat with the app
+/// behind another window and a Reactotron tab in front, so `watched` was true,
+/// `appActive` was false, and the feed re-diffed every second for
+/// twenty-four minutes while they were not looking at it — twelve hangs, three
+/// tabs open (DROIDECTIVE-MAC-B). Occlusion is now part of what `watched`
+/// means, so a covered window reports false and the feed stops publishing
+/// until someone can actually see it. It keeps *receiving* throughout; only
+/// the SwiftUI mutation waits.
 ///
 /// Two things the fixed active/inactive pair could not express, both of which
 /// the hang data asked for (5261 hangs in 30 days, 75:1 of them with the app
@@ -58,21 +72,16 @@ public enum FeedFlushCadence {
     /// one.
     public static let inactive: Duration = .seconds(1)
 
-    /// Mounted but not on screen — a tab behind another tab, in either pane of
-    /// any window. Nothing is being read, so this only has to keep the buffer
-    /// draining into the feed's own ring; the eager flush on becoming visible
-    /// is what the user actually sees.
-    public static let hidden: Duration = .seconds(5)
-
     /// Ceiling for the `lateness` widening. Past this the feed has backed off
     /// as far as it usefully can, and a longer wait only delays recovery —
     /// including after a system sleep, where lateness is the length of the
     /// sleep and means nothing about load.
     public static let maxInterval: Duration = .seconds(8)
 
-    /// The unloaded interval for a feed in this state, before any widening.
-    public static func base(appActive: Bool, watched: Bool) -> Duration {
-        guard watched else { return hidden }
+    /// The unloaded interval for a feed in this state, before any widening —
+    /// nil when no timed flush should be scheduled at all.
+    public static func base(appActive: Bool, watched: Bool) -> Duration? {
+        guard watched else { return nil }
         return appActive ? active : inactive
     }
 
@@ -91,18 +100,37 @@ public enum FeedFlushCadence {
         max(.zero, elapsed - requested)
     }
 
+    /// The interval for a feed that must keep draining on a timer even when
+    /// nobody is watching.
+    ///
+    /// The log streams are that kind: they yield buffered lines through an
+    /// `AsyncStream` rather than publishing into observable state, so a paused
+    /// flusher would stall the stream itself rather than merely skip a SwiftUI
+    /// diff. They back all the way off instead — `maxInterval`, the same
+    /// ceiling load widening reaches.
+    public static func drainingInterval(
+        appActive: Bool, watched: Bool, lateness: Duration
+    ) -> Duration {
+        interval(appActive: appActive, watched: watched, lateness: lateness) ?? maxInterval
+    }
+
     /// How long to wait before the next flush.
     ///
     /// - Parameters:
     ///   - appActive: whether this app is frontmost.
     ///   - watched: whether any mounted view can currently see this feed
     ///     (`FeedAudience`), which is not the same as the feed having a view —
-    ///     a hidden tab keeps its view mounted.
+    ///     a hidden tab keeps its view mounted, and neither does a window the
+    ///     window server reports as occluded.
     ///   - lateness: how far past its requested interval the last scheduled
     ///     flush actually ran. Zero when the main thread kept up; negative
     ///     values (a clock reading early) are treated as zero.
-    public static func interval(appActive: Bool, watched: Bool, lateness: Duration) -> Duration {
-        let base = base(appActive: appActive, watched: watched)
+    /// - Returns: how long to wait, or nil to schedule nothing — nobody can see
+    ///   this feed, so publishing would buy a SwiftUI diff no one reads. Rows
+    ///   keep accumulating in the feed's byte-bounded pending buffer, an
+    ///   overflow there still flushes, and becoming visible flushes at once.
+    public static func interval(appActive: Bool, watched: Bool, lateness: Duration) -> Duration? {
+        guard let base = base(appActive: appActive, watched: watched) else { return nil }
         guard lateness > .zero else { return base }
         return min(maxInterval, max(base, base + lateness))
     }

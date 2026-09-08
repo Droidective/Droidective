@@ -5,10 +5,12 @@ import Testing
 /// visible feed and every open tab stays mounted, so this interval is a direct
 /// multiplier on main-thread layout across all of them.
 @Suite struct FeedFlushCadenceTests {
-    @Test func inactiveIsSlowerThanActive() {
-        #expect(
-            FeedFlushCadence.interval(appActive: false, watched: true, lateness: .zero)
-                > FeedFlushCadence.interval(appActive: true, watched: true, lateness: .zero))
+    @Test func inactiveIsSlowerThanActive() throws {
+        let inactive = try #require(
+            FeedFlushCadence.interval(appActive: false, watched: true, lateness: .zero))
+        let active = try #require(
+            FeedFlushCadence.interval(appActive: true, watched: true, lateness: .zero))
+        #expect(inactive > active)
     }
 
     @Test func picksTheIntervalForEachState() {
@@ -28,45 +30,60 @@ import Testing
         #expect(FeedFlushCadence.active >= .milliseconds(100))
     }
 
-    /// Never zero and never stopped: pausing a feed outright grows the buffer
-    /// unbounded and hands SwiftUI one enormous flush on reactivation, which
-    /// is the same mass-mutation stall the pacing avoids.
-    @Test func neitherStateStopsTheFeed() {
+    /// A feed someone can see is never stopped, whether or not the app is
+    /// frontmost: it is being read, and a feed that only flushes every few
+    /// seconds reads as broken when the user looks back at it.
+    @Test func aWatchedFeedIsNeverStopped() {
         #expect(FeedFlushCadence.active > .zero)
         #expect(FeedFlushCadence.inactive > .zero)
-        #expect(FeedFlushCadence.hidden > .zero)
-        // A cap, so "slower while inactive" can't drift into "effectively off"
-        // — a feed that only flushes every few seconds reads as broken when
-        // the user comes back to it.
+        #expect(FeedFlushCadence.interval(appActive: true, watched: true, lateness: .zero) != nil)
+        #expect(FeedFlushCadence.interval(appActive: false, watched: true, lateness: .zero) != nil)
+        // A cap, so "slower while inactive" can't drift into "effectively off".
         #expect(FeedFlushCadence.inactive <= .seconds(2))
     }
 
     // MARK: Visibility
 
-    /// A mounted-but-hidden tab lays its rows out exactly like a visible one,
-    /// so the feed nobody can see must be the cheapest of the three states —
-    /// including when the app itself is frontmost, which says nothing about
-    /// whether *this* tab is the one on screen.
-    @Test func hiddenIsTheSlowestState() {
-        let hidden = FeedFlushCadence.interval(appActive: true, watched: false, lateness: .zero)
-        #expect(hidden == FeedFlushCadence.hidden)
-        #expect(hidden > FeedFlushCadence.inactive)
-        #expect(hidden > FeedFlushCadence.active)
+    /// A feed nobody can see schedules nothing at all. A mounted hidden tab
+    /// lays its rows out exactly like a visible one, so publishing to it buys
+    /// a SwiftUI diff no one reads — the twenty-four minutes of once-a-second
+    /// re-diffing behind DROIDECTIVE-MAC-B. Rows keep arriving into the feed's
+    /// byte-bounded pending buffer, which is what makes stopping safe.
+    @Test func anUnwatchedFeedSchedulesNothing() {
+        #expect(FeedFlushCadence.interval(appActive: true, watched: false, lateness: .zero) == nil)
+        #expect(FeedFlushCadence.interval(appActive: false, watched: false, lateness: .zero) == nil)
     }
 
     /// App activation is irrelevant while nothing can see the feed: the cost
-    /// being paced away is this tab's layout, and a hidden tab is hidden
-    /// whether or not the window is frontmost.
-    @Test func activationDoesNotChangeAHiddenFeed() {
+    /// being skipped is this tab's layout, and a hidden tab is hidden whether
+    /// or not the window is frontmost.
+    @Test func activationDoesNotChangeAnUnwatchedFeed() {
         #expect(
             FeedFlushCadence.interval(appActive: true, watched: false, lateness: .zero)
                 == FeedFlushCadence.interval(appActive: false, watched: false, lateness: .zero))
     }
 
-    /// Hidden is a pace, not a pause — but it must stay short enough that the
-    /// buffer keeps draining into the feed's own ring between reveals.
-    @Test func hiddenStaysBounded() {
-        #expect(FeedFlushCadence.hidden <= .seconds(10))
+    /// No amount of lateness turns an unwatched feed back on: the widening is
+    /// a pace, and there is no pace to widen.
+    @Test func latenessCannotReviveAnUnwatchedFeed() {
+        for seconds in [0, 1, 10, 600] {
+            #expect(
+                FeedFlushCadence.interval(
+                    appActive: true, watched: false, lateness: .seconds(seconds)) == nil)
+        }
+    }
+
+    /// A feed that cannot pause — one whose flush yields into an
+    /// `AsyncStream` rather than publishing observable state, so pausing would
+    /// stall the stream — backs off to the ceiling instead of stopping.
+    @Test func aDrainingFeedBacksOffInsteadOfStopping() {
+        let unwatched = FeedFlushCadence.drainingInterval(
+            appActive: true, watched: false, lateness: .zero)
+        #expect(unwatched == FeedFlushCadence.maxInterval)
+        // Watched, it paces exactly like every other feed.
+        #expect(
+            FeedFlushCadence.drainingInterval(appActive: true, watched: true, lateness: .zero)
+                == FeedFlushCadence.active)
     }
 
     // MARK: Backpressure
@@ -81,18 +98,19 @@ import Testing
     /// often when a flush costs 900 ms as when it costs 5 ms, so a big enough
     /// feed saturates the thread and never catches up. Lateness has to widen
     /// the next wait by at least what the thread was already behind.
-    @Test func latenessWidensTheNextInterval() {
-        let late = FeedFlushCadence.interval(
-            appActive: true, watched: true, lateness: .milliseconds(900))
+    @Test func latenessWidensTheNextInterval() throws {
+        let late = try #require(FeedFlushCadence.interval(
+            appActive: true, watched: true, lateness: .milliseconds(900)))
         #expect(late >= FeedFlushCadence.active + .milliseconds(900))
         #expect(late > FeedFlushCadence.active)
     }
 
-    @Test func wideningIsMonotonicInLateness() {
-        var previous = FeedFlushCadence.interval(appActive: true, watched: true, lateness: .zero)
+    @Test func wideningIsMonotonicInLateness() throws {
+        var previous = try #require(
+            FeedFlushCadence.interval(appActive: true, watched: true, lateness: .zero))
         for milliseconds in [50, 200, 800, 1500, 3000] {
-            let next = FeedFlushCadence.interval(
-                appActive: true, watched: true, lateness: .milliseconds(milliseconds))
+            let next = try #require(FeedFlushCadence.interval(
+                appActive: true, watched: true, lateness: .milliseconds(milliseconds)))
             #expect(next >= previous)
             previous = next
         }
@@ -108,16 +126,20 @@ import Testing
         #expect(slept == FeedFlushCadence.maxInterval)
     }
 
-    /// Backing off must never overtake the ceiling from any starting state,
-    /// hidden included — the ceiling is the promise that a feed always comes
-    /// back.
+    /// Backing off must never overtake the ceiling from any starting state —
+    /// the ceiling is the promise that a feed someone is watching always comes
+    /// back. The draining form is included, since it is the one that answers
+    /// with the ceiling itself.
     @Test func noStateExceedsTheCeiling() {
         for appActive in [true, false] {
             for watched in [true, false] {
                 for seconds in [0, 1, 10, 600] {
                     let interval = FeedFlushCadence.interval(
                         appActive: appActive, watched: watched, lateness: .seconds(seconds))
-                    #expect(interval <= FeedFlushCadence.maxInterval)
+                    #expect(interval ?? .zero <= FeedFlushCadence.maxInterval)
+                    #expect(FeedFlushCadence.drainingInterval(
+                        appActive: appActive, watched: watched,
+                        lateness: .seconds(seconds)) <= FeedFlushCadence.maxInterval)
                 }
             }
         }
@@ -132,15 +154,16 @@ import Testing
     }
 
     /// The ceiling has to leave room above the slowest base, or the widening
-    /// it bounds could never happen for a hidden feed.
+    /// it bounds could never happen at all.
     @Test func theCeilingLeavesRoomAboveEveryBase() {
-        #expect(FeedFlushCadence.maxInterval > FeedFlushCadence.hidden)
+        #expect(FeedFlushCadence.maxInterval > FeedFlushCadence.inactive)
+        #expect(FeedFlushCadence.maxInterval > FeedFlushCadence.active)
     }
 
     @Test func baseIgnoresLatenessEntirely() {
         #expect(FeedFlushCadence.base(appActive: true, watched: true) == FeedFlushCadence.active)
         #expect(FeedFlushCadence.base(appActive: false, watched: true) == FeedFlushCadence.inactive)
-        #expect(FeedFlushCadence.base(appActive: false, watched: false) == FeedFlushCadence.hidden)
+        #expect(FeedFlushCadence.base(appActive: false, watched: false) == nil)
     }
 
     // MARK: Lateness readings

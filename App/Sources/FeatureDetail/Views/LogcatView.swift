@@ -556,7 +556,10 @@ struct LogcatView: View {
     /// the streamer is a portable actor that can see neither, so the App layer
     /// has to tell it (`LogcatStreamer.setFlushInterval`).
     private var pacedFlushInterval: Duration {
-        FeedFlushCadence.interval(
+        // `drainingInterval`, not `interval`: this feed's flush yields into an
+        // `AsyncStream` rather than publishing observable state, so pausing it
+        // would stall the stream itself. It backs off to the ceiling instead.
+        FeedFlushCadence.drainingInterval(
             appActive: NSApp.isActive,
             watched: feedVisible,
             lateness: MainThreadLoad.shared.lateness)
