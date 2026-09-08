@@ -40,7 +40,12 @@ public struct FilteredLogBuffer<Entry: Identifiable> where Entry.ID: Comparable 
     private let cost: (Entry) -> Int
     /// Per-entry costs aligned with `entries`, so eviction never re-measures.
     private var costs: [Int] = []
-    private var totalCost = 0
+    /// Summed `cost` of everything retained — the buffer's wire size.
+    ///
+    /// Readable because the app reports it: a feed's retained bytes are half of
+    /// "why is this process holding a gigabyte", and it was previously visible
+    /// only to the eviction arithmetic inside this type.
+    public private(set) var totalCost = 0
 
     public init(capacity: Int, byteBudget: Int = .max, cost: @escaping (Entry) -> Int = { _ in 0 }) {
         self.capacity = max(1, capacity)

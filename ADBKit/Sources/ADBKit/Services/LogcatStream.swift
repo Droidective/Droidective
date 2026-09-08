@@ -122,7 +122,7 @@ public actor LogcatStreamer {
     /// tab is on screen, and a mounted hidden tab lays out every row it is
     /// handed. Defaults to the pace a visible feed in a frontmost app gets, so
     /// a caller that never sets it behaves as before.
-    private var flushInterval = FeedFlushCadence.base(appActive: true, watched: true)
+    private var flushInterval = FeedFlushCadence.active
 
     private let client: AdbClient
     private var process: Process?
