@@ -157,6 +157,10 @@ extension AppCore {
         // Checked before anything is given up, never after.
         if case .newWindow = destination, !canOpenWindow { return }
 
+        // Read before the detach takes the tab out of the source's workspace —
+        // pinning belongs to the tab and travels with it, so a move can never
+        // quietly unpin it.
+        let wasPinned = source.isTabPinned(featureID)
         let record = source.windowRecord
         let carry = source.detachTab(featureID)
         // Collected straight after the detach that took them, so nothing else
@@ -172,11 +176,11 @@ extension AppCore {
                 // its live sessions with it, or the move would have killed the
                 // very work it was meant to preserve.
                 source.adoptMovableSessions(sessions)
-                source.adoptHandoff(featureID, carrying: carry, at: nil)
+                source.adoptHandoff(featureID, carrying: carry, at: nil, pinned: wasPinned)
                 return
             }
             receiver.adoptMovableSessions(sessions)
-            receiver.adoptHandoff(featureID, carrying: carry, at: slot)
+            receiver.adoptHandoff(featureID, carrying: carry, at: slot, pinned: wasPinned)
             reconcileSharedSessions()
             focusWindow(target)
 
@@ -186,7 +190,8 @@ extension AppCore {
                     featureID: featureID,
                     from: record,
                     newID: .generate(),
-                    carrying: carry),
+                    carrying: carry,
+                    pinned: wasPinned),
                 frame: frame,
                 runOnAll: source.runOnAll,
                 sidebarHidden: true,
@@ -194,7 +199,7 @@ extension AppCore {
                 handoffFeatureID: featureID))
             if !seeded {
                 source.adoptMovableSessions(sessions)
-                source.adoptHandoff(featureID, carrying: carry, at: nil)
+                source.adoptHandoff(featureID, carrying: carry, at: nil, pinned: wasPinned)
             }
         }
     }
@@ -256,5 +261,31 @@ struct TabHandoffCommands: View {
             }
             .disabled(!canMoveToWindow)
         }
+    }
+}
+
+/// Tab ▸ Pin Tab / Unpin Tab.
+///
+/// Deliberately unbound: ⌘P already pins a *feature* in the palette and the
+/// Quick Actions panel, and a menu key equivalent would take that key from
+/// both (NSMenu sees keys before the views do). Its own `View` for the reason
+/// `TabHandoffCommands` is.
+struct TabPinCommand: View {
+    let core: AppCore
+
+    private var state: AppState? { core.frontmost }
+    /// Home rides the strip's house button rather than a chip, so it has
+    /// nothing to pin.
+    private var target: String? {
+        state?.activeTabID.flatMap { $0 == "home" ? nil : $0 }
+    }
+
+    var body: some View {
+        let pinned = target.map { state?.isTabPinned($0) == true } ?? false
+        Button(pinned ? "Unpin Tab" : "Pin Tab") {
+            guard let state, let target else { return }
+            state.toggleTabPin(target)
+        }
+        .disabled(target == nil)
     }
 }

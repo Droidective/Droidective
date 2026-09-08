@@ -116,10 +116,15 @@ public struct CustomCommand: Codable, Sendable, Equatable, Identifiable {
 public struct TabGroupState: Codable, Sendable, Equatable {
     public var tabs: [String]
     public var activeTab: String?
+    /// The pinned tabs, as ids rather than a count of leading tabs: a restore
+    /// drops tabs whose feature is gone, which would leave a count pointing at
+    /// whatever slid into their place. nil on files written before pinning.
+    public var pinned: [String]?
 
-    public init(tabs: [String], activeTab: String?) {
+    public init(tabs: [String], activeTab: String?, pinned: [String]? = nil) {
         self.tabs = tabs
         self.activeTab = activeTab
+        self.pinned = pinned
     }
 }
 

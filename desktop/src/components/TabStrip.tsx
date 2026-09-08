@@ -1,12 +1,12 @@
 import { useState } from "react"
-import { House, Plus, X } from "lucide-react"
+import { House, Plus } from "lucide-react"
 import { pastMidpointX, startDrag } from "@/components/dnd"
+import { TabChip } from "@/components/TabChip"
 import { cn } from "@/lib/cn"
-import { iconForFeature } from "@/lib/icons"
 import { HOME_TAB } from "@/lib/layout"
-import { dropTarget } from "@/lib/ordering"
+import { dropLanding, markerSlot } from "@/lib/pinning"
 import { IS_MAC, shortcutLabel } from "@/lib/platform"
-import type { TabState } from "@/lib/tabs"
+import { pinnedTabs, type TabState } from "@/lib/tabs"
 import type { FeatureSummary } from "@/lib/wire"
 
 export interface TabStripProps {
@@ -19,6 +19,8 @@ export interface TabStripProps {
   featureByID: (id: string) => FeatureSummary | null
   onSelect: (id: string) => void
   onClose: (id: string) => void
+  /** Unpin a pinned tab — the pin glyph sitting where its × would. */
+  onUnpin: (id: string) => void
   /** A drop landing in this pane, before `target` (null = the end). */
   onDrop: (id: string, pane: number, target: string | null) => void
   onContextMenu: (id: string, x: number, y: number) => void
@@ -40,10 +42,17 @@ export function TabStrip(props: TabStripProps) {
   const [slot, setSlot] = useState<{ id: string; after: boolean } | null>(null)
 
   const chips = props.tabs.openTabs.filter((id) => id !== HOME_TAB)
+  // The prefix length of `chips`. The drop clamp runs over the chips, not the
+  // pane's own list, because Home is in the pane and is never a chip: clamped
+  // against the pane, the boundary can come back as Home, and a marker on a
+  // chip that is not drawn is no marker at all. Home is never pinned, so
+  // dropping it from the list leaves the pinned tabs leading and this exact.
+  const pinnedCount = pinnedTabs(props.tabs).length
   const endDrag = () => {
     props.onDragState(null)
     setSlot(null)
   }
+  const strip = { chips, pinnedCount, props, setSlot }
 
   return (
     <div
@@ -76,13 +85,14 @@ export function TabStrip(props: TabStripProps) {
       ) : null}
 
       <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
-        {chips.map((id) => (
-          <Chip
+        {chips.map((id, index) => (
+          <TabChip
             key={id}
             id={id}
             feature={props.featureByID(id)}
             active={id === props.tabs.activeTab}
             faded={props.dragging === id}
+            pinned={index < pinnedCount}
             slot={slot?.id === id ? slot.after : null}
             onSelect={() => {
               props.onSelect(id)
@@ -90,44 +100,80 @@ export function TabStrip(props: TabStripProps) {
             onClose={() => {
               props.onClose(id)
             }}
+            onUnpin={() => {
+              props.onUnpin(id)
+            }}
             onContextMenu={(event) => {
               event.preventDefault()
               props.onContextMenu(id, event.clientX, event.clientY)
             }}
-            onDragStart={(event) => {
-              startDrag(event)
-              props.onDragState(id)
-            }}
-            onDragOver={(event) => {
-              if (props.dragging === null) return
-              event.preventDefault()
-              setSlot({ id, after: pastMidpointX(event) })
-            }}
-            onDrop={(event) => {
-              if (props.dragging === null) return
-              event.preventDefault()
-              event.stopPropagation()
-              const after = pastMidpointX(event)
-              const dragged = props.dragging
-              endDrag()
-              if (dragged === id && !after) return
-              props.onDrop(dragged, props.pane, dropTarget(id, after, chips))
-            }}
+            {...chipDragProps(id, strip)}
           />
         ))}
-        <button
-          type="button"
-          onClick={() => {
+        <NewTabButton
+          onSelect={() => {
             props.onNewTab(props.pane)
           }}
-          title={`New tab (${shortcutLabel("t", IS_MAC)})`}
-          aria-label="New tab"
-          className="flex size-7 shrink-0 items-center justify-center rounded-md text-text-tertiary transition-colors hover:bg-white/[0.05] hover:text-text-primary"
-        >
-          <Plus size={14} />
-        </button>
+        />
       </div>
     </div>
+  )
+}
+
+/**
+ * A chip's drag wiring — the only logic in what is otherwise a layout, and the
+ * one place the marker and the drop are made to agree: both read the same
+ * `dropLanding`, so the strip cannot promise a slot the drop then corrects.
+ */
+function chipDragProps(
+  id: string,
+  strip: {
+    chips: readonly string[]
+    pinnedCount: number
+    props: TabStripProps
+    setSlot: (slot: { id: string; after: boolean } | null) => void
+  },
+) {
+  const { chips, pinnedCount, props, setSlot } = strip
+  const landingAt = (event: React.DragEvent<HTMLElement>, dragged: string) =>
+    dropLanding(dragged, id, pastMidpointX(event), chips, pinnedCount)
+  return {
+    onDragStart: (event: React.DragEvent<HTMLElement>) => {
+      startDrag(event)
+      props.onDragState(id)
+    },
+    onDragOver: (event: React.DragEvent<HTMLElement>) => {
+      if (props.dragging === null) return
+      event.preventDefault()
+      setSlot(markerSlot(props.dragging, landingAt(event, props.dragging), chips))
+    },
+    onDrop: (event: React.DragEvent<HTMLElement>) => {
+      if (props.dragging === null) return
+      event.preventDefault()
+      event.stopPropagation()
+      const dragged = props.dragging
+      const landing = landingAt(event, dragged)
+      props.onDragState(null)
+      setSlot(null)
+      // A drop that resolves to the tab itself would not move it.
+      if (landing === dragged) return
+      props.onDrop(dragged, props.pane, landing)
+    },
+  }
+}
+
+/** The trailing +, which opens the palette with this pane focused. */
+function NewTabButton({ onSelect }: { onSelect: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      title={`New tab (${shortcutLabel("t", IS_MAC)})`}
+      aria-label="New tab"
+      className="flex size-7 shrink-0 items-center justify-center rounded-md text-text-tertiary transition-colors hover:bg-white/[0.05] hover:text-text-primary"
+    >
+      <Plus size={14} />
+    </button>
   )
 }
 
@@ -153,83 +199,5 @@ function HomeButton({ active, onSelect }: { active: boolean; onSelect: () => voi
       </button>
       <span className="mx-1.5 h-5 w-px shrink-0 bg-border-subtle" />
     </>
-  )
-}
-
-function Chip({
-  id,
-  feature,
-  active,
-  faded,
-  slot,
-  onSelect,
-  onClose,
-  onContextMenu,
-  onDragStart,
-  onDragOver,
-  onDrop,
-}: {
-  id: string
-  feature: FeatureSummary | null
-  active: boolean
-  faded: boolean
-  slot: boolean | null
-  onSelect: () => void
-  onClose: () => void
-  onContextMenu: (event: React.MouseEvent<HTMLElement>) => void
-  onDragStart: (event: React.DragEvent<HTMLElement>) => void
-  onDragOver: (event: React.DragEvent<HTMLElement>) => void
-  onDrop: (event: React.DragEvent<HTMLElement>) => void
-}) {
-  // A tab whose feature has gone is still closable: showing its id beats
-  // rendering a blank chip nobody can get rid of.
-  const Icon = iconForFeature(id, feature?.category ?? "")
-  return (
-    <div
-      draggable
-      onDragStart={onDragStart}
-      onDragOver={onDragOver}
-      onDrop={onDrop}
-      onContextMenu={onContextMenu}
-      className={cn(
-        "relative flex h-7 max-w-[190px] shrink-0 items-center gap-1.5 rounded-md pl-2.5 pr-1",
-        active ? "bg-accent/15" : "hover:bg-white/[0.05]",
-        faded ? "opacity-30" : "",
-      )}
-    >
-      <button
-        type="button"
-        onClick={onSelect}
-        aria-current={active}
-        className="flex min-w-0 items-center gap-1.5"
-      >
-        <Icon size={13} className={cn("shrink-0", active ? "text-accent" : "text-text-secondary")} />
-        <span
-          className={cn(
-            "truncate text-[12.5px]",
-            active ? "text-text-primary" : "text-text-secondary",
-          )}
-        >
-          {feature?.title ?? id}
-        </span>
-      </button>
-      <button
-        type="button"
-        onClick={onClose}
-        title={`Close tab (${shortcutLabel("w", IS_MAC)})`}
-        aria-label={`Close ${feature?.title ?? id}`}
-        className="flex size-4 shrink-0 items-center justify-center rounded text-text-tertiary hover:bg-white/10 hover:text-text-primary"
-      >
-        <X size={10} strokeWidth={3} />
-      </button>
-      {slot === null ? null : (
-        <span
-          className={cn(
-            "pointer-events-none absolute inset-y-1 w-0.5 rounded-full bg-accent",
-            slot ? "right-0" : "left-0",
-          )}
-        />
-      )}
-    </div>
   )
 }

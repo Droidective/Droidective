@@ -1,12 +1,18 @@
-import { moveBefore, moveToEnd } from "@/lib/ordering"
+import { normalizePinned } from "@/lib/pinning"
 import {
   activateIndex,
   activateNext,
   activatePrevious,
+  closableTabs,
   closeOtherTabs,
   closeTab,
+  isPinned as isTabPinned,
   openTab,
+  pinTab,
+  pinnedTabs as panePinnedTabs,
+  reorderTabs,
   tabState,
+  unpinTab,
   type TabState,
 } from "@/lib/tabs"
 
@@ -39,7 +45,11 @@ export function newWorkspace(fallback: string): Workspace {
  * ids valid and globally unique, a non-empty result, and an in-range focus.
  */
 export function restoreWorkspace(
-  persisted: readonly { tabs: readonly string[]; activeTab: string | null }[],
+  persisted: readonly {
+    tabs: readonly string[]
+    activeTab: string | null
+    pinned?: readonly string[]
+  }[],
   focusedGroup: number,
   fallback: string,
   isKnownTab: (id: string) => boolean,
@@ -52,7 +62,13 @@ export function restoreWorkspace(
       seen.add(id)
       return true
     })
-    if (valid.length > 0) groups.push(tabState(valid, group.activeTab))
+    if (valid.length === 0) continue
+    // Pinned ids are persisted rather than a count, so tabs dropped just above
+    // cannot leave the count pointing at whatever slid into their place.
+    // `fallback` is never pinnable (see `pin`).
+    const pinned = new Set((group.pinned ?? []).filter((id) => id !== fallback))
+    const ordered = normalizePinned(valid, pinned)
+    groups.push(tabState(ordered.tabs, group.activeTab, ordered.pinnedCount))
   }
   if (groups.length === 0) return newWorkspace(fallback)
   return { groups, focusedGroup: Math.min(Math.max(focusedGroup, 0), groups.length - 1) }
@@ -76,6 +92,28 @@ export function isSplit(workspace: Workspace): boolean {
 
 export function groupIndexOf(workspace: Workspace, id: string): number {
   return workspace.groups.findIndex((group) => group.openTabs.includes(id))
+}
+
+/** The pinned tabs of one pane, in strip order. */
+export function pinnedTabs(workspace: Workspace, pane: number): string[] {
+  const group = workspace.groups[pane]
+  return group === undefined ? [] : panePinnedTabs(group)
+}
+
+export function isPinned(workspace: Workspace, id: string): boolean {
+  const at = groupIndexOf(workspace, id)
+  const group = workspace.groups[at]
+  return group === undefined ? false : isTabPinned(group, id)
+}
+
+/**
+ * The tabs "Close Other Tabs" would act on — what the menu item enables itself
+ * on, so it is never a click that does nothing.
+ */
+export function closable(workspace: Workspace, id: string, keep: string): string[] {
+  const at = groupIndexOf(workspace, id)
+  const group = workspace.groups[at]
+  return group === undefined ? [] : closableTabs(group, id, keep)
 }
 
 /** Every open tab, in pane order — what the keep-alive body renders. */
@@ -114,6 +152,23 @@ export function close(workspace: Workspace, id: string, fallback: string): Works
   return { groups: [tabState([fallback], fallback)], focusedGroup: 0 }
 }
 
+/**
+ * Pin `id` to the front of its pane. `fallback` is refused: Home has no chip to
+ * mark, and moving it into the prefix would reorder tabs around a tab nobody
+ * can see.
+ */
+export function pin(workspace: Workspace, id: string, fallback: string): Workspace {
+  const at = groupIndexOf(workspace, id)
+  if (at === -1 || id === fallback) return workspace
+  return { groups: replace(workspace.groups, at, (group) => pinTab(group, id)), focusedGroup: workspace.focusedGroup }
+}
+
+export function unpin(workspace: Workspace, id: string): Workspace {
+  const at = groupIndexOf(workspace, id)
+  if (at === -1) return workspace
+  return { groups: replace(workspace.groups, at, (group) => unpinTab(group, id)), focusedGroup: workspace.focusedGroup }
+}
+
 /** Close every tab in `id`'s pane except it and the permanent `keep`. */
 export function closeOthers(workspace: Workspace, id: string, keep: string): Workspace {
   const at = groupIndexOf(workspace, id)
@@ -131,9 +186,15 @@ export function closeOthers(workspace: Workspace, id: string, keep: string): Wor
 export function move(workspace: Workspace, id: string, dest: number): Workspace {
   const src = groupIndexOf(workspace, id)
   if (src === -1 || src === dest || !(dest >= 0 && dest < workspace.groups.length)) return workspace
+  // Pinning belongs to the tab, not to the pane it happens to sit in, so it
+  // crosses with the tab.
+  const wasPinned = isPinned(workspace, id)
   const groups = workspace.groups.map((group, index) => {
     if (index === src) return closeTab(group, id)
-    if (index === dest) return openTab(group, id)
+    if (index === dest) {
+      const opened = openTab(group, id)
+      return wasPinned ? pinTab(opened, id) : opened
+    }
     return group
   })
   const collapsed = groups.filter((group, index) => index !== src || group.openTabs.length > 0)
@@ -149,22 +210,25 @@ export function split(workspace: Workspace, id: string): Workspace {
   const src = groupIndexOf(workspace, id)
   if (workspace.groups.length !== 1 || src === -1) return workspace
   if ((workspace.groups[src]?.openTabs.length ?? 0) < 2) return workspace
+  const wasPinned = isPinned(workspace, id)
   return {
-    groups: [closeTab(workspace.groups[src] ?? tabState([]), id), tabState([id], id)],
+    groups: [
+      closeTab(workspace.groups[src] ?? tabState([]), id),
+      tabState([id], id, wasPinned ? 1 : 0),
+    ],
     focusedGroup: 1,
   }
 }
 
-/** Reorder `id` within its own pane so it sits before `target` (null = end). */
+/**
+ * Reorder `id` within its own pane so it sits before `target` (null = end),
+ * clamped to its pinned/unpinned region (see `lib/pinning`).
+ */
 export function reorder(workspace: Workspace, id: string, target: string | null): Workspace {
   const at = groupIndexOf(workspace, id)
   if (at === -1) return workspace
   return {
-    groups: replace(workspace.groups, at, (group) => {
-      const openTabs =
-        target === null ? moveToEnd(id, group.openTabs) : moveBefore(id, target, group.openTabs)
-      return { openTabs, activeTab: group.activeTab }
-    }),
+    groups: replace(workspace.groups, at, (group) => reorderTabs(group, id, target)),
     focusedGroup: workspace.focusedGroup,
   }
 }

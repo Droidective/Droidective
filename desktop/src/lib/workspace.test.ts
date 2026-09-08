@@ -12,13 +12,15 @@ import {
   move,
   newWorkspace,
   open,
+  pinnedTabs,
   restoreWorkspace,
   split,
   type Workspace,
 } from "@/lib/workspace"
 
 // Mirrors ADBKit's WorkspaceTests: this is a port, and the point of porting is
-// that a pane collapses in the same place on both apps.
+// that a pane collapses in the same place on both apps. The pinning rules live
+// in `pinning.test.ts`, beside the clamp they are built on.
 
 const HOME = "home"
 
@@ -223,5 +225,39 @@ describe("restoreWorkspace", () => {
   it("clamps a focus index that is out of range", () => {
     const workspace = restoreWorkspace([{ tabs: [HOME], activeTab: HOME }], 7, HOME, known)
     expect(workspace.focusedGroup).toBe(0)
+  })
+
+  it("reads pinned ids and puts them first", () => {
+    const workspace = restoreWorkspace(
+      [{ tabs: [HOME, "logcat", "performance"], activeTab: "logcat", pinned: ["performance"] }],
+      0,
+      HOME,
+      known,
+    )
+    expect(panes(workspace)).toEqual([["performance", HOME, "logcat"]])
+    expect(pinnedTabs(workspace, 0)).toEqual(["performance"])
+    expect(activeTab(workspace)).toBe("logcat")
+  })
+
+  it("drops a pin for a tab that is gone", () => {
+    const workspace = restoreWorkspace(
+      [{ tabs: [HOME, "gone"], activeTab: HOME, pinned: ["gone"] }],
+      0,
+      HOME,
+      known,
+    )
+    expect(panes(workspace)).toEqual([[HOME]])
+    expect(pinnedTabs(workspace, 0)).toEqual([])
+  })
+
+  it("ignores a pin on the fallback tab", () => {
+    const workspace = restoreWorkspace(
+      [{ tabs: ["logcat", HOME], activeTab: HOME, pinned: [HOME] }],
+      0,
+      HOME,
+      known,
+    )
+    expect(panes(workspace)).toEqual([["logcat", HOME]])
+    expect(pinnedTabs(workspace, 0)).toEqual([])
   })
 })

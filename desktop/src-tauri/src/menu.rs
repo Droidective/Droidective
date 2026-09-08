@@ -11,7 +11,9 @@
 //! accelerator bound twice, every id handled on the other side of the IPC — are
 //! then tests over data instead of things to remember.
 
-use tauri::menu::{Menu, MenuEvent, MenuItemBuilder, MenuItemKind, PredefinedMenuItem, Submenu};
+use tauri::menu::{
+    Menu, MenuEvent, MenuItem, MenuItemBuilder, MenuItemKind, PredefinedMenuItem, Submenu,
+};
 use tauri::{AppHandle, Emitter, Manager, Runtime, Wry};
 
 /// The event the webview listens on. One event carrying the command id, not an
@@ -174,6 +176,15 @@ const SECTIONS: &[Section] = &[
                 accelerator: Some("CmdOrCtrl+W"),
             },
             SEPARATOR,
+            // Deliberately unbound, as on the Mac: Ctrl/⌘P already pins a
+            // *feature* in the palette and the Quick Actions panel, and a menu
+            // accelerator would take that key from both.
+            Item {
+                id: "tab.pin",
+                label: "Pin Tab",
+                accelerator: None,
+            },
+            SEPARATOR,
             Item {
                 id: "tab.next",
                 label: "Next Tab",
@@ -235,12 +246,39 @@ const TERMINAL_DEPENDENT: &[&str] = &[
     "terminal.previous",
 ];
 
+/// The pin row, whose label the webview flips (see `set_tab_pin_state`).
+const TAB_PIN_ID: &str = "tab.pin";
+
 /// Greys the terminal commands in or out.
+pub fn set_terminal_commands_enabled(app: &AppHandle<Wry>, enabled: bool) {
+    for_each_item(app, |entry| {
+        if TERMINAL_DEPENDENT.contains(&entry.id().0.as_str()) {
+            let _ = entry.set_enabled(enabled);
+        }
+    });
+}
+
+/// Renames the pin row to match the active tab, and greys it out for a tab
+/// that cannot be pinned (Home, which rides its own button rather than a chip).
+///
+/// The Mac's item reads its state straight off `AppState`; here the label lives
+/// in the native menu and the state lives in the webview, so the webview has to
+/// tell the menu.
+pub fn set_tab_pin_state(app: &AppHandle<Wry>, pinned: bool, enabled: bool) {
+    for_each_item(app, |entry| {
+        if entry.id().0 == TAB_PIN_ID {
+            let _ = entry.set_text(if pinned { "Unpin Tab" } else { "Pin Tab" });
+            let _ = entry.set_enabled(enabled);
+        }
+    });
+}
+
+/// Visits every leaf item in the menu.
 ///
 /// Walks the submenus rather than holding item handles in state: `Menu::get`
 /// only looks at the top level, and a handle cache would be a second place the
 /// ids live — which is the drift the table exists to prevent.
-pub fn set_terminal_commands_enabled(app: &AppHandle<Wry>, enabled: bool) {
+fn for_each_item(app: &AppHandle<Wry>, mut visit: impl FnMut(&MenuItem<Wry>)) {
     let Some(menu) = app.menu() else { return };
     let Ok(sections) = menu.items() else { return };
     for section in sections {
@@ -252,9 +290,7 @@ pub fn set_terminal_commands_enabled(app: &AppHandle<Wry>, enabled: bool) {
             let MenuItemKind::MenuItem(entry) = item else {
                 continue;
             };
-            if TERMINAL_DEPENDENT.contains(&entry.id().0.as_str()) {
-                let _ = entry.set_enabled(enabled);
-            }
+            visit(&entry);
         }
     }
 }
@@ -356,6 +392,19 @@ mod tests {
         for id in super::TERMINAL_DEPENDENT {
             assert!(ids.contains(*id), "{id} is not a menu item");
         }
+    }
+
+    #[test]
+    fn the_pin_row_is_a_real_menu_item() {
+        // The id is written twice — once in the table the menu is built from,
+        // once where its label is flipped — so a typo would silently leave the
+        // row reading "Pin Tab" while it unpins.
+        let ids: HashSet<String> = entries().into_iter().map(|(id, _)| id).collect();
+        assert!(
+            ids.contains(super::TAB_PIN_ID),
+            "{} is not a menu item",
+            super::TAB_PIN_ID
+        );
     }
 
     #[test]

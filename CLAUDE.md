@@ -136,7 +136,7 @@ opening it — verify those by hand.
 ## Build / test / run
 
 ```
-make test          # all three Swift packages — ADBKit 2091, droidectived 408,
+make test          # all three Swift packages — ADBKit 2122, droidectived 408,
                    #   ReactotronMCP 99. Keep green.
 make test-app      # the AppTests logic bundle — 128 tests
 make verify        # tiers 0-1: warnings-as-errors + all four Swift bundles
@@ -198,9 +198,19 @@ Node 22 in CI; scroll reveals and the hero palette demo must keep their
   (pure `reorder`/`move`/`moveToEnd` helpers for the sidebar, unit-tested
   without UI), `Workspace` (the tab/pane model — `canDetach` vs
   `canDetachToNewWindow`: a window's *last* tab may move to another open window,
-  consolidating two windows, but not to one of its own), `TabHandoff` (what a
-  moved tab takes with it — its source's device and bundle, and the terminal
-  directories or wall devices only the feature that owns them),
+  consolidating two windows, but not to one of its own), `TabPinning`
+  (**a pane's pinned tabs are the first `TabState.pinnedCount` of its open
+  tabs** — a position, not a parallel set, so the two can never disagree; every
+  rearrangement keeps that prefix, `clampedTarget` pulling a drag aimed across
+  the boundary back *to* it, and the strip draws its insertion guideline at that
+  clamped slot rather than under the cursor. Persisted as ids in
+  `TabGroupState.pinned`, never a count — a restore drops tabs whose feature is
+  gone and a count would then point at whatever slid into their place. Pinning
+  travels with the tab across panes and windows, spares it from Close Other
+  Tabs, and is not a lock: ⌘W and Close Tab still close a pinned tab),
+  `TabHandoff` (what a
+  moved tab takes with it — its source's device and bundle, its pinned-ness, and
+  the terminal directories or wall devices only the feature that owns them),
   `TabDropRouter` (the one table deciding what a dropped tab does — the
   tab-drag twin of `FileDropRouter`) and `TearOffFrame` (where a dragged-out
   window lands; screen coordinates are y-up and strip insets y-down, which is
@@ -941,7 +951,14 @@ table) is in `docs/reactotron-mcp-analysis.md`.
   shared with the app's favorites; `PaletteSearch.quickActions`, tested),
   Manage Apps / Emulators / Install APK — with an "Open in Droidective" list
   below for the enabled full-app view screens. Form actions render their
-  registry `FieldDef`s in-panel (`QuickActionFormView`); app verbs come from
+  registry `FieldDef`s in-panel (`QuickActionFormView`) — and Send Text's
+  screen carries its snippet library under the field (`QuickSnippetList`:
+  recency-ranked, the top five with the rest behind "Show N more", ↓/↑ to walk
+  them and ⏎ to insert the highlighted one while ⌘⏎ still runs, placeholders
+  expanded and the use count bumped exactly as the main window's list does, so
+  the ranking is shared. No search field: the one text field holds the text
+  being *sent*, and filtering by it would hide the snippet you were reaching
+  for); app verbs come from
   `AppControlService.AppAction` (destructive ones need a second ⏎). With >1
   device connected, every device-scoped action pushes a pick-device
   interstitial; ⌘⏎ there runs on all devices (offered and applied only for
@@ -1452,10 +1469,10 @@ jadx/apktool, recompile, and sign — with keystore creation) plus Frida setup, 
 custom accent color, launching emulators from the device bar, per-feature
 connect-a-device empty states, a live-preview hotkey recorder, and a Settings
 split into Appearance/Privacy; managed tools download from GitHub releases into
-Application Support and are sized/removable in Settings); 2091 ADBKit + 408
+Application Support and are sized/removable in Settings); 2122 ADBKit + 408
 droidectived + 99 ReactotronMCP + 128 AppTests green on macOS (ADBKit and the
 daemon also run on Linux and Windows in CI, minus the Darwin-gated files), plus
-1223 vitest + 54 cargo on the desktop app;
+1259 vitest + 55 cargo on the desktop app;
 builds clean with zero warnings (enforced as errors in CI). Verified live against a
 physical device and an Android emulator. Release builds are Developer ID-signed +
 notarized and bundle scrcpy/ffmpeg (see `RELEASING.md`). Open gaps: the Apps

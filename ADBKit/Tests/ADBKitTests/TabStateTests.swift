@@ -77,19 +77,91 @@ import Testing
         #expect(tabs.activeTab == nil)
     }
 
-    @Test func reorderAdoptsAPermutationAndKeepsActive() {
+    @Test func reorderMovesATabBeforeItsTargetAndKeepsActive() {
         var tabs = TabState(openTabs: ["a", "b", "c"], activeTab: "b")
-        tabs.reorder(["c", "a", "b"])
+        tabs.reorder("c", before: "a")
         #expect(tabs.openTabs == ["c", "a", "b"])
         #expect(tabs.activeTab == "b") // active unchanged by reordering
     }
 
-    @Test func reorderIgnoresNonPermutations() {
+    @Test func reorderWithNoTargetMovesToTheEnd() {
         var tabs = TabState(openTabs: ["a", "b", "c"], activeTab: "a")
-        tabs.reorder(["a", "b"])            // missing c
-        tabs.reorder(["a", "b", "c", "d"])  // extra d
-        tabs.reorder(["a", "b", "x"])       // swapped id
+        tabs.reorder("a", before: nil)
+        #expect(tabs.openTabs == ["b", "c", "a"])
+        #expect(tabs.activeTab == "a")
+    }
+
+    @Test func reorderIgnoresATabThatIsNotOpen() {
+        var tabs = TabState(openTabs: ["a", "b", "c"], activeTab: "a")
+        tabs.reorder("x", before: "a")
         #expect(tabs.openTabs == ["a", "b", "c"]) // unchanged
+    }
+
+    // MARK: - Pinning
+
+    @Test func pinMovesATabToTheEndOfThePinnedPrefix() {
+        var tabs = TabState(openTabs: ["a", "b", "c"], activeTab: "a")
+        tabs.pin("c")
+        #expect(tabs.openTabs == ["c", "a", "b"])
+        #expect(tabs.pinnedTabs == ["c"])
+        tabs.pin("b")
+        #expect(tabs.openTabs == ["c", "b", "a"])
+        #expect(tabs.pinnedTabs == ["c", "b"])
+        #expect(tabs.activeTab == "a") // pinning never changes focus
+    }
+
+    @Test func pinningAnAlreadyPinnedOrAbsentTabIsANoOp() {
+        var tabs = TabState(openTabs: ["a", "b"], activeTab: "a", pinnedCount: 1)
+        tabs.pin("a")
+        tabs.pin("gone")
+        #expect(tabs.openTabs == ["a", "b"])
+        #expect(tabs.pinnedCount == 1)
+    }
+
+    @Test func unpinDropsToTheFrontOfTheUnpinnedTabs() {
+        var tabs = TabState(openTabs: ["a", "b", "c"], activeTab: "c", pinnedCount: 2)
+        tabs.unpin("a")
+        // Back where pinning took it from, not off to the end of the strip.
+        #expect(tabs.openTabs == ["b", "a", "c"])
+        #expect(tabs.pinnedTabs == ["b"])
+    }
+
+    @Test func unpinLandsAtTheFrontOfTheUnpinnedTabsNotBackWhereItStarted() {
+        // Pinning doesn't record where the tab came from, so unpinning can't
+        // put it back there — it lands at the boundary, which is where the eye
+        // last saw it.
+        var tabs = TabState(openTabs: ["a", "b", "c", "d"], activeTab: "b")
+        tabs.pin("c")
+        #expect(tabs.openTabs == ["c", "a", "b", "d"])
+        tabs.unpin("c")
+        #expect(tabs.openTabs == ["c", "a", "b", "d"])
+        #expect(tabs.pinnedCount == 0)
+    }
+
+    @Test func closingAPinnedTabShrinksThePrefix() {
+        var tabs = TabState(openTabs: ["a", "b", "c"], activeTab: "c", pinnedCount: 2)
+        tabs.close("a")
+        #expect(tabs.openTabs == ["b", "c"])
+        #expect(tabs.pinnedTabs == ["b"]) // not ["b", "c"] — c was never pinned
+    }
+
+    @Test func closingAnUnpinnedTabLeavesThePrefixAlone() {
+        var tabs = TabState(openTabs: ["a", "b", "c"], activeTab: "c", pinnedCount: 2)
+        tabs.close("c")
+        #expect(tabs.pinnedTabs == ["a", "b"])
+    }
+
+    @Test func openingANewTabLandsItUnpinned() {
+        var tabs = TabState(openTabs: ["a"], activeTab: "a", pinnedCount: 1)
+        tabs.open("b")
+        #expect(tabs.openTabs == ["a", "b"])
+        #expect(tabs.pinnedTabs == ["a"])
+    }
+
+    @Test func initClampsAPinnedCountLargerThanTheStrip() {
+        // A persisted count can't outlive the tabs it counted.
+        let tabs = TabState(openTabs: ["a"], activeTab: "a", pinnedCount: 4)
+        #expect(tabs.pinnedCount == 1)
     }
 
     @Test func activateByIndexJumpsToThatTab() {

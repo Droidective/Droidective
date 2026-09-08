@@ -408,6 +408,16 @@ the chrome and the device bar have not.
       hidden rather than unmounted, so a background tab keeps its log stream and
       its loaded lists. Ported from ADBKit's `TabState`, close-focus rules
       included.
+- [x] **Pinned tabs** — a tab's right-click menu (and Tab ▸ Pin Tab) pins it to
+      the front of its pane, where it shows a pin where its × would be and is
+      spared by Close Other Tabs. Not a lock: Ctrl/⌘W and Close Tab still close
+      a pinned tab, the way Chrome and VS Code behave. The prefix rule is
+      ported from ADBKit's `TabPinning` — pinned tabs are the *first N* of the
+      pane, so a drag across the boundary lands at it and the strip's insertion
+      marker is drawn at that clamped slot rather than under the cursor. One
+      difference the platform forces: the Mac's menu item reads its own state,
+      while here the label is flipped by pushing the front tab's pinned-ness
+      into the native menu (`set_tab_pin_state`).
 - [x] **Split panes** — two panes, clamped 30–70% with the same absolute
       per-pane floor (`PaneSplit`, ported to `lib/panes.ts`), a draggable
       divider that persists, and the pane rules ported from ADBKit's
@@ -758,6 +768,19 @@ Found by driving the app against a live emulator, not by reading it.
 ---
 
 ## Backlog
+
+### Send Text snippets
+
+The Mac keeps a saved, recency-ranked snippet library for Send Text, with
+`{clipboard}` and `{ip}` expanded at the moment one is inserted
+(`SendTextView` plus `Presets.sendTextSnippets`), and since v3.12 the Quick
+Actions panel's Send Text screen carries the same list under its field
+(`QuickSnippetList` — ↓/↑ walk it, ⏎ inserts, ⌘⏎ still runs). This app has no
+snippet concept at all, so the panel is the *second* half of that job rather
+than the first: it needs the presets store served over the daemon, and a Send
+Text screen to curate snippets from, before the panel list has anything to
+show. Until then the panel's Send Text screen is the plain form, which is what
+it has always been — nothing regressed, the Mac simply grew a thing.
 
 ### A finding that applies to more than one item
 

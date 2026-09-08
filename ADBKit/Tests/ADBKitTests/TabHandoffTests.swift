@@ -111,6 +111,22 @@ import Testing
         #expect(decoded == seed)
     }
 
+    @Test func aPinnedTabArrivesPinnedInItsNewWindow() {
+        let seed = TabHandoff.seed(
+            featureID: "logcat", from: source(), newID: newID, pinned: true)
+        #expect(seed.tabGroups?.first?.pinned == ["logcat"])
+        // And the restore reads it back as the pane's pinned prefix.
+        let ws = Workspace(
+            restoring: seed.tabGroups ?? [], focusedGroup: seed.focusedGroup,
+            fallback: "home", isValidID: { _ in true })
+        #expect(ws.pinnedTabs(inGroup: 0) == ["logcat"])
+    }
+
+    @Test func anUnpinnedTabCarriesNoPinAtAll() {
+        let seed = TabHandoff.seed(featureID: "logcat", from: source(), newID: newID)
+        #expect(seed.tabGroups?.first?.pinned == nil)
+    }
+
     @Test func aTornOffWindowRoundTripsThroughTheLayout() throws {
         var layout = LayoutState()
         let seed = TabHandoff.seed(featureID: "logcat", from: source(), newID: newID)

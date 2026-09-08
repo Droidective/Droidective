@@ -42,7 +42,14 @@ public struct Workspace: Sendable, Equatable {
         for group in persisted.prefix(2) {
             let valid = group.tabs.filter { isValidID($0) && seen.insert($0).inserted }
             guard !valid.isEmpty else { continue }
-            restored.append(TabState(openTabs: valid, activeTab: group.activeTab))
+            // Pinned ids are persisted rather than a count, so tabs dropped
+            // just above can't leave the count pointing at whatever slid into
+            // their place. `fallback` is never pinnable (see `pin`).
+            let pinned = Set(group.pinned ?? []).subtracting([fallback])
+            let ordered = TabPinning.normalized(valid, pinned: pinned)
+            restored.append(TabState(
+                openTabs: ordered.tabs, activeTab: group.activeTab,
+                pinnedCount: ordered.pinnedCount))
         }
         groups = restored.isEmpty ? [TabState(openTabs: [fallback], activeTab: fallback)] : restored
         self.focusedGroup = min(max(focusedGroup ?? 0, 0), groups.count - 1)
@@ -72,6 +79,23 @@ public struct Workspace: Sendable, Equatable {
         groups.firstIndex { $0.openTabs.contains(id) }
     }
 
+    /// The pinned tabs in a pane, in strip order — what a window persists and
+    /// what the strip marks.
+    public func pinnedTabs(inGroup index: Int) -> [String] {
+        groups.indices.contains(index) ? groups[index].pinnedTabs : []
+    }
+    public func isPinned(_ id: String) -> Bool {
+        groupIndex(of: id).map { groups[$0].isPinned(id) } ?? false
+    }
+
+    /// The tabs "Close Other Tabs" acts on: everything in the pane except `id`,
+    /// the pinned ones — being spared a bulk close is half of what pinning is
+    /// for — and `fallback`, which rides the strip's permanent house button
+    /// rather than a chip.
+    public func closableTabs(inGroup index: Int, sparing id: String) -> [String] {
+        openTabs(inGroup: index).filter { $0 != id && $0 != fallback && !isPinned($0) }
+    }
+
     // MARK: - Mutations
 
     /// Open `id`, or refocus it wherever it's already open. A not-yet-open id
@@ -83,6 +107,19 @@ public struct Workspace: Sendable, Equatable {
         } else {
             groups[focusedGroup].open(id)
         }
+    }
+
+    /// Pin `id` to the front of its pane. `fallback` is refused: Home has no
+    /// chip to mark, and moving it into the prefix would reorder tabs around a
+    /// tab nobody can see.
+    public mutating func pin(_ id: String) {
+        guard id != fallback, let group = groupIndex(of: id) else { return }
+        groups[group].pin(id)
+    }
+
+    public mutating func unpin(_ id: String) {
+        guard let group = groupIndex(of: id) else { return }
+        groups[group].unpin(id)
     }
 
     /// Close `id` (in whichever pane holds it). Collapses an emptied second pane;
@@ -103,8 +140,13 @@ public struct Workspace: Sendable, Equatable {
     /// if it empties. No-op for the same pane or an invalid `dest`.
     public mutating func move(_ id: String, toGroup dest: Int) {
         guard let src = groupIndex(of: id), src != dest, groups.indices.contains(dest) else { return }
+        // Pinning belongs to the tab, not to the pane it happens to sit in, so
+        // it crosses with the tab — the same reason a tab moved to another
+        // *window* stays pinned there (`TabHandoff.seed`).
+        let wasPinned = groups[src].isPinned(id)
         groups[src].close(id)
         groups[dest].open(id)
+        if wasPinned { groups[dest].pin(id) }
         if groups[src].openTabs.isEmpty { groups.remove(at: src) }
         focusedGroup = groupIndex(of: id) ?? focusedGroup
     }
@@ -147,17 +189,17 @@ public struct Workspace: Sendable, Equatable {
     /// split.
     public mutating func split(_ id: String) {
         guard groups.count == 1, let src = groupIndex(of: id), groups[src].openTabs.count > 1 else { return }
+        let wasPinned = groups[src].isPinned(id)
         groups[src].close(id)
-        groups.append(TabState(openTabs: [id], activeTab: id))
+        groups.append(TabState(openTabs: [id], activeTab: id, pinnedCount: wasPinned ? 1 : 0))
         focusedGroup = 1
     }
 
-    /// Reorder `id` within its own pane so it sits before `targetID` (nil = end).
+    /// Reorder `id` within its own pane so it sits before `targetID` (nil = end),
+    /// clamped to its pinned/unpinned region (see `TabPinning.clampedTarget`).
     public mutating func reorder(_ id: String, before targetID: String?) {
         guard let group = groupIndex(of: id) else { return }
-        let order = targetID.map { SidebarOrdering.move(id, before: $0, in: groups[group].openTabs) }
-            ?? SidebarOrdering.moveToEnd(id, in: groups[group].openTabs)
-        groups[group].reorder(order)
+        groups[group].reorder(id, before: targetID)
     }
 
     /// Resolve a strip/pane drop: reorder within the same pane, or move to `dest`

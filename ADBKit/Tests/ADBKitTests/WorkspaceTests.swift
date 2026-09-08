@@ -284,4 +284,86 @@ import Testing
         #expect(ws.openTabs(inGroup: 1) == ["performance", "wifi"])
         #expect(ws.groups.count == 2)
     }
+
+    // MARK: - Pinning
+
+    @Test func pinMovesATabToTheFrontOfItsPane() {
+        var ws = make([["home", "logcat", "performance"]])
+        ws.pin("performance")
+        #expect(ws.openTabs(inGroup: 0) == ["performance", "home", "logcat"])
+        #expect(ws.pinnedTabs(inGroup: 0) == ["performance"])
+        #expect(ws.isPinned("performance"))
+    }
+
+    @Test func homeCannotBePinned() {
+        // Home has no chip to mark, so pinning it would only reorder the pane
+        // around a tab nobody can see.
+        var ws = make([["logcat", "home"]])
+        ws.pin("home")
+        #expect(ws.pinnedTabs(inGroup: 0).isEmpty)
+        #expect(ws.openTabs(inGroup: 0) == ["logcat", "home"])
+    }
+
+    @Test func aPinnedTabMovedToTheOtherPaneStaysPinned() {
+        var ws = make([["home", "logcat"], ["performance"]], focused: 0)
+        ws.pin("logcat")
+        ws.move("logcat", toGroup: 1)
+        #expect(ws.pinnedTabs(inGroup: 1) == ["logcat"])
+        #expect(ws.openTabs(inGroup: 1) == ["logcat", "performance"])
+        #expect(ws.pinnedTabs(inGroup: 0).isEmpty)
+    }
+
+    @Test func aPinnedTabSplitIntoANewPaneStaysPinned() {
+        var ws = make([["home", "logcat"]])
+        ws.pin("logcat")
+        ws.split("logcat")
+        #expect(ws.pinnedTabs(inGroup: 1) == ["logcat"])
+    }
+
+    @Test func closeOtherTabsSparesPinnedTabsAndHome() {
+        var ws = make([["home", "logcat", "performance", "wifi"]])
+        ws.pin("performance")
+        #expect(ws.closableTabs(inGroup: 0, sparing: "logcat") == ["wifi"])
+        // From a pinned tab's own menu, the other pinned tabs are spared too.
+        ws.pin("wifi")
+        #expect(ws.closableTabs(inGroup: 0, sparing: "performance") == ["logcat"])
+    }
+
+    @Test func aDropAcrossThePinnedBoundaryLandsAtIt() {
+        var ws = make([["logcat", "performance", "wifi"]])
+        ws.pin("logcat")
+        ws.drop("wifi", intoGroup: 0, before: "logcat")
+        // Not ["wifi", "logcat", ...] — the pinned tab keeps the front.
+        #expect(ws.openTabs(inGroup: 0) == ["logcat", "wifi", "performance"])
+        #expect(ws.pinnedTabs(inGroup: 0) == ["logcat"])
+    }
+
+    @Test func restoreReadsPinnedIdsAndPutsThemFirst() {
+        let ws = Workspace(
+            restoring: [TabGroupState(
+                tabs: ["home", "logcat", "performance"], activeTab: "logcat",
+                pinned: ["performance"])],
+            focusedGroup: 0, fallback: "home", isValidID: { _ in true })
+        #expect(ws.openTabs(inGroup: 0) == ["performance", "home", "logcat"])
+        #expect(ws.pinnedTabs(inGroup: 0) == ["performance"])
+        #expect(ws.activeTab == "logcat")
+    }
+
+    @Test func restoreDropsAPinForATabThatIsGone() {
+        let ws = Workspace(
+            restoring: [TabGroupState(
+                tabs: ["home", "retired"], activeTab: "home", pinned: ["retired"])],
+            focusedGroup: 0, fallback: "home", isValidID: { $0 != "retired" })
+        #expect(ws.openTabs(inGroup: 0) == ["home"])
+        #expect(ws.pinnedTabs(inGroup: 0).isEmpty)
+    }
+
+    @Test func restoreIgnoresAPinOnTheFallbackTab() {
+        let ws = Workspace(
+            restoring: [TabGroupState(
+                tabs: ["logcat", "home"], activeTab: "home", pinned: ["home"])],
+            focusedGroup: 0, fallback: "home", isValidID: { _ in true })
+        #expect(ws.openTabs(inGroup: 0) == ["logcat", "home"])
+        #expect(ws.pinnedTabs(inGroup: 0).isEmpty)
+    }
 }

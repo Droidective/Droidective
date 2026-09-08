@@ -49,18 +49,24 @@ public enum TabHandoff {
     /// - Exactly one tab, in one pane. Home is not seeded: the strip's
     ///   permanent house button is always one click away, and a moved tab
     ///   arriving beside a Home tab it didn't ask for reads as clutter.
+    /// - A pinned tab arrives pinned. Pinning belongs to the tab rather than to
+    ///   the window it sat in, so a move that quietly unpinned it would be the
+    ///   move changing the tab.
     /// - Carried state is filtered to the feature that owns it (see `Carry`).
     public static func seed(
         featureID: String,
         from source: WindowState,
         newID: WorkspaceID,
-        carrying carry: Carry = .none
+        carrying carry: Carry = .none,
+        pinned: Bool = false
     ) -> WindowState {
         WindowState(
             id: newID,
             serial: source.serial,
             bundleId: source.bundleId,
-            tabGroups: [TabGroupState(tabs: [featureID], activeTab: featureID)],
+            tabGroups: [TabGroupState(
+                tabs: [featureID], activeTab: featureID,
+                pinned: pinned ? [featureID] : nil)],
             focusedGroup: 0,
             terminalResumeDirs: featureID == terminalFeatureID ? carry.terminalResumeDirs : nil,
             mirrorWallSerials: featureID == mirrorWallFeatureID ? carry.mirrorWallSerials : nil

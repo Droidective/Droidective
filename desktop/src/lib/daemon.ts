@@ -191,6 +191,7 @@ export {
   revealPath,
   setBackgroundMode,
   setGlobalShortcuts,
+  setTabPinState,
   setTrayMenu,
   showMainWindow,
   toggleQuickPanel,
