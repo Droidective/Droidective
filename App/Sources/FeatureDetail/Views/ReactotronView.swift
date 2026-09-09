@@ -112,6 +112,14 @@ final class ReactotronSession {
     /// worth asking about on the way out.
     var hasLiveConnection: Bool { isRunning && !clients.isEmpty }
 
+    /// Why the server is down, when it failed rather than never having been
+    /// started — the same sentence this screen's banner shows. Settings ▸ MCP
+    /// repeats it instead of telling the user to start a server that is
+    /// already failing to bind.
+    var startFailure: String? {
+        connection.isError ? connection.text(app: nil) : nil
+    }
+
     init(client: AdbClient) {
         self.client = client
     }
@@ -654,6 +662,10 @@ final class ReactotronSession {
             selectedClient = nil
             commands.removeAll()
             connection = portInUse ? .portInUse : .failed(reason)
+            // A listener that dies leaves MCP serving the clients it had —
+            // agents would see ghosts instead of `no_apps_connected`. The
+            // relay is down now, so this is the same news `stop()` reports.
+            core?.mcp.reactotronServerChanged()
         }
     }
 
