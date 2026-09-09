@@ -274,10 +274,16 @@ public actor PerformanceService {
 
     /// Forget the delta baselines so a fresh recording doesn't show a spike
     /// computed against a stale, long-ago reading.
-    public func reset() {
-        previousCpu.removeAll()
-        previousGfx.removeAll()
-        previousNet.removeAll()
+    ///
+    /// One serial at a time. The whole-table version this replaces was called
+    /// once per subscription, so a second window starting a recording wiped
+    /// the first window's baselines too — punching a one-interval hole in a
+    /// chart nobody had touched. Per-device state should only ever be reset
+    /// per device.
+    public func reset(serial: String) {
+        previousCpu[serial] = nil
+        previousGfx[serial] = nil
+        previousNet[serial] = nil
     }
 
     private func consumeNet(serial: String, output: String) -> (down: Double, up: Double)? {

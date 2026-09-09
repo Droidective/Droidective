@@ -159,6 +159,36 @@ public actor StreamSession {
         subscriptions.mapValues(\.topic)
     }
 
+    /// Hand a subscription its pump, or cancel the pump if the subscription is
+    /// already gone.
+    ///
+    /// `subscribe` suspends at least twice before it gets here — sending
+    /// `subscribed`, and building the stream — and this is a reentrant actor
+    /// whose frames each arrive as their own unstructured `Task`. So another
+    /// message runs in that window, and two of them are ordinary: the client
+    /// closing the socket (the desktop app quitting with the Performance
+    /// screen open), and an `unsubscribe` for the same id (a fast tab switch).
+    /// Either removes the entry, and `subscriptions[id]?.pump = …` then
+    /// silently discarded the handle.
+    ///
+    /// For `logcat` and `devices` that dropped an iterator over a stream
+    /// somebody else owns. For `performance` and `netspeed` it stranded a
+    /// live one: those streams build their poll `Task` inside the `AsyncStream`
+    /// builder, which runs synchronously at construction, so the loop is
+    /// already running by the time this line is reached. Nothing stops it but
+    /// `onTermination`, and the poll task retains the continuation that owns
+    /// `onTermination` — so a never-iterated stream never deinits and never
+    /// cancels. The result is an immortal 1 Hz loop spawning up to seven adb
+    /// children a second, for the life of the daemon, cumulative per
+    /// occurrence.
+    private func attach(to id: Int, _ pump: Task<Void, Never>) {
+        guard !closed, subscriptions[id] != nil else {
+            pump.cancel()
+            return
+        }
+        subscriptions[id]?.pump = pump
+    }
+
     /// Tears every subscription down. Idempotent, so a close racing an error
     /// path cannot double-cancel.
     public func shutdown(reason: StreamProtocol.EndReason = .serverStopping) async {
@@ -226,24 +256,24 @@ public actor StreamSession {
         switch topic {
         case .devices:
             let stream = await source.devices()
-            subscriptions[id]?.pump = Task { [weak self] in
+            attach(to: id, Task { [weak self] in
                 for await devices in stream {
                     await self?.enqueue(id: id, items: devices.compactMap { try? DaemonProtocol.encode($0) })
                 }
                 await self?.end(id, reason: .deviceDisconnected)
-            }
+            })
         case .logcat:
             guard let serial = command.params?.serial else { return }
             do {
                 let stream = try await source.logcat(serial: serial, pid: command.params?.pid)
-                subscriptions[id]?.pump = Task { [weak self] in
+                attach(to: id, Task { [weak self] in
                     for await lines in stream {
                         await self?.enqueue(
                             id: id,
                             items: lines.compactMap { try? DaemonProtocol.encode(LogLinePayload($0)) })
                     }
                     await self?.end(id, reason: .deviceDisconnected)
-                }
+                })
             } catch {
                 // adb refused (device gone, unauthorised). Report it and drop
                 // the subscription rather than leaving a dead id registered.
@@ -256,7 +286,7 @@ public actor StreamSession {
         case .netspeed:
             guard let serial = command.params?.serial else { return }
             let stream = await source.netspeed(serial: serial)
-            subscriptions[id]?.pump = Task { [weak self] in
+            attach(to: id, Task { [weak self] in
                 for await sample in stream {
                     await self?.enqueue(
                         id: id,
@@ -264,14 +294,14 @@ public actor StreamSession {
                             .compactMap { $0 })
                 }
                 await self?.end(id, reason: .deviceDisconnected)
-            }
+            })
 
         case .performance:
             guard let serial = command.params?.serial else { return }
             let stream = await source.performance(
                 serial: serial, packageId: command.params?.packageId,
                 includeProcesses: command.params?.wantsProcesses ?? false)
-            subscriptions[id]?.pump = Task { [weak self] in
+            attach(to: id, Task { [weak self] in
                 for await poll in stream {
                     await self?.enqueue(
                         id: id,
@@ -279,12 +309,12 @@ public actor StreamSession {
                             .compactMap { $0 })
                 }
                 await self?.end(id, reason: .deviceDisconnected)
-            }
+            })
 
         case .reactotron:
             do {
                 let stream = try await source.reactotron()
-                subscriptions[id]?.pump = Task { [weak self] in
+                attach(to: id, Task { [weak self] in
                     for await event in stream {
                         await self?.enqueue(
                             id: id,
@@ -292,7 +322,7 @@ public actor StreamSession {
                                 .compactMap { $0 })
                     }
                     await self?.end(id, reason: .serverStopping)
-                }
+                })
             } catch {
                 // The port being taken is the common one, and it is actionable:
                 // another Reactotron is running. Reported rather than left as a
@@ -307,7 +337,7 @@ public actor StreamSession {
         case .pty:
             guard let channel else { return }
             let stream = channel.output()
-            subscriptions[id]?.pump = Task { [weak self] in
+            attach(to: id, Task { [weak self] in
                 for await chunk in stream {
                     await self?.enqueue(
                         id: id,
@@ -318,11 +348,11 @@ public actor StreamSession {
                 // case where it never started, because a failed `exec` reaches
                 // the parent as the terminal hanging up rather than as a throw.
                 await self?.end(id, reason: .processExited)
-            }
+            })
 
         case .mirror:
             guard let mirror else { return }
-            subscriptions[id]?.pump = Task { [weak self] in
+            attach(to: id, Task { [weak self] in
                 do {
                     for try await frame in try await mirror.start() {
                         await self?.enqueue(
@@ -341,7 +371,7 @@ public actor StreamSession {
                     // way the reason is the whole value of the event.
                     await self?.fail(id, message: "\(error)")
                 }
-            }
+            })
         }
     }
 
@@ -502,8 +532,9 @@ public struct LiveStreamSource: StreamSource {
             let task = Task {
                 // Forget any baseline from a previous subscription: a delta
                 // against a reading from ten minutes ago is not a spike, it is
-                // an artefact.
-                await service.reset()
+                // an artefact. This device only — resetting the whole table
+                // punched a one-interval hole in every other window's chart.
+                await service.reset(serial: serial)
                 while !Task.isCancelled {
                     let poll = await service.poll(
                         serial: serial, packageId: packageId,
@@ -528,7 +559,7 @@ public struct LiveStreamSource: StreamSource {
         let service = networkService
         return AsyncStream { continuation in
             let task = Task {
-                await service.reset()
+                await service.reset(serial: serial)
                 while !Task.isCancelled {
                     if let sample = await service.poll(serial: serial) {
                         guard !Task.isCancelled else { break }

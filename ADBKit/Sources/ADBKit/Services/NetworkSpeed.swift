@@ -32,8 +32,11 @@ public actor NetworkSpeedService {
         self.client = client
     }
 
-    public func reset() {
-        previous.removeAll()
+    /// Forget one device's baseline. Per serial, not the whole table: the
+    /// previous whole-table reset meant a second subscriber starting punched a
+    /// gap in every other device's throughput reading.
+    public func reset(serial: String) {
+        previous[serial] = nil
     }
 
     public func poll(serial: String) async -> NetSample? {
