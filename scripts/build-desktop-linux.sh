@@ -3,9 +3,11 @@
 #
 # Tauri does not cross-compile — a Linux bundle has to be built on Linux — so
 # without this the only place a Linux app could be produced was CI, and a CI
-# job nobody can run locally is a job that is debugged one push at a time. The
-# same recipe is what the release workflow runs, so a failure here is a failure
-# there.
+# job nobody can run locally is a job that is debugged one push at a time.
+#
+# Nothing in CI runs this yet — `ci.yml` builds no Linux bundle at all — so it
+# is a local tool until the release workflow that `docs/release-channels.md`
+# describes exists. `make desktop-linux` is the front door.
 #
 # The container is `swift:6.2-noble` because the daemon is the awkward
 # dependency: it needs a Swift toolchain, and the Tauri side only needs Rust
@@ -82,14 +84,21 @@ apt-get install -y -qq --no-install-recommends \
   librsvg2-dev libssl-dev libxdo-dev patchelf desktop-file-utils \
   xdg-utils fakeroot
 
-curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
+# Both of the next two pipe a remote script into a root shell inside the
+# container that produces the shipped .deb and .AppImage. They pin the
+# protocol to https and TLS 1.2 and do not follow redirects; without that a
+# redirect down to plain http is followed and its body executed as root.
+# Neither source can be digest-pinned, so protocol pinning is the whole of the
+# available mitigation, and it is what the CI workflow already uses.
+
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
 . \"\$HOME/.cargo/env\"
 # Crate sources are the other slow download; keep them beside the target dir.
 mkdir -p /root/.cargo-registry/registry /root/.cargo-registry/git
 ln -sfn /root/.cargo-registry/registry /root/.cargo/registry
 ln -sfn /root/.cargo-registry/git /root/.cargo/git
 
-curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+curl --proto '=https' --tlsv1.2 -sSf https://deb.nodesource.com/setup_22.x | bash -
 apt-get install -y -qq nodejs
 
 # Copy out of the read-only mount, leaving behind everything host-built.

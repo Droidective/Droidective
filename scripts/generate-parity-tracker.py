@@ -105,6 +105,24 @@ BLOCKED = {
                     "so this is the editor itself rather than the toolchain.",
 }
 
+# A pane exists but something named is still missing.
+#
+# The classifier used to call *every* feature with a pane "partial" and there
+# was no branch that could ever emit "done" — `counts["done"]` was initialised
+# and never incremented, so the generated half read `{'done': 0, …}` while
+# twenty-nine screens were shipping. A tracker that cannot record finished work
+# gets the next session to re-plan it.
+#
+# So having a pane is now the evidence for done, and the exceptions are listed
+# here by name. A named gap is a plan; a blanket "partial" on everything is a
+# shrug that ages into a lie.
+INCOMPLETE = {
+    "scrcpy": "The pane mirrors and takes input; the screenshot annotation editor "
+              "the Mac opens from it is Mac-only so far.",
+    "terminal": "Works on Linux. Windows has no pty — ConPTY is a different API — "
+                "and the pane says so rather than failing at a prompt.",
+}
+
 by_category = {}
 for feature in FEATURES:
     by_category.setdefault(feature["category"], []).append(feature)
@@ -135,12 +153,26 @@ for category, features in by_category.items():
         elif fid in BLOCKED:
             status, note = "⬜ todo", BLOCKED[fid]
             counts["todo"] += 1
+        elif fid in ported_ids and fid in INCOMPLETE:
+            status, note = "🟡 partial", INCOMPLETE[fid]
+            counts["partial"] += 1
         elif fid in ported_ids:
-            status, note = "🟡 partial", "A pane exists; the checklist below is what it is missing."
-            counts["partial"] += 1
+            # "ported", not "done": a routed pane is evidence the screen
+            # exists, not that it matches. The checklist below is the audit
+            # still owed, which is why this doc says every feature needs a
+            # look at its view before anyone calls it finished.
+            status, note = "✅ ported", ("A pane is routed for it. The checklist below is the "
+                                         "Mac's affordances, to audit against — not a list of "
+                                         "known gaps.")
+            counts["done"] += 1
         elif kind in ("instantAction", "formAction", "toggleAction") and f["implemented"]:
-            status, note = "🟡 partial", "Runs from the palette; no dedicated screen."
-            counts["partial"] += 1
+            # An action has no screen to build: `ActionForm` renders it from
+            # the registry's own fields and the daemon runs the same ADBKit
+            # runner the Mac does. Calling that permanently "partial" left
+            # seven finished features with no path to done.
+            status, note = "✅ ported", ("Runs from the palette and the action form, rendered "
+                                         "from the registry — which is the whole feature.")
+            counts["done"] += 1
         elif not f["implemented"]:
             status, note = "⬜ todo", "Not implemented on macOS either."
             counts["todo"] += 1

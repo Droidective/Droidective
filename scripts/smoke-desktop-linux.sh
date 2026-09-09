@@ -34,7 +34,25 @@ DIST="$ROOT/desktop/dist-linux"
 
 DEB="${1:-}"
 if [ -z "$DEB" ]; then
-  DEB="$(find "$DIST" -maxdepth 1 -name '*.deb' | head -1)"
+  # `find … | head -1` was two bugs in one line. It picked an arbitrary .deb
+  # from a directory the build script never cleans, so once a version bump
+  # left two artifacts this could green-light the *previous* build; and under
+  # `set -o pipefail` a find killed by head's SIGPIPE exits 141, so `set -e`
+  # aborted before the "no .deb found" message could print. Refusing to guess
+  # is the whole fix — a smoke test that tests the wrong artifact is worse
+  # than one that does not run.
+  debs=()
+  while IFS= read -r found; do debs+=("$found"); done \
+    < <(find "$DIST" -maxdepth 1 -name '*.deb' | sort)
+  case "${#debs[@]}" in
+  0) ;;
+  1) DEB="${debs[0]}" ;;
+  *)
+    echo "several .deb files in $DIST — pass the one to smoke:" >&2
+    printf '  %s\n' "${debs[@]}" >&2
+    exit 1
+    ;;
+  esac
 fi
 [ -n "$DEB" ] && [ -f "$DEB" ] || {
   echo "no .deb found — run scripts/build-desktop-linux.sh first" >&2
