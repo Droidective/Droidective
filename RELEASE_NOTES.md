@@ -1,9 +1,27 @@
 ## Droidective v3.12.1
 
-A bug-fix release. Two streaming feeds could each hold about a gigabyte of
-decoded log rows, and kept re-rendering to a window nobody could see — so a
-long Reactotron or JS Console session slowly turned into an app that stopped
-responding for seconds at a time.
+Pinned tabs, Send Text's snippets in the Quick Actions panel, and the fix for
+the thing that made a long Reactotron or JS Console session turn into an app
+that stopped responding for seconds at a time.
+
+### Pin a tab
+
+- **Right-click a tab ▸ Pin Tab** (or Tab ▸ Pin Tab). Pinned tabs sit at the
+  front of their pane and stay there, and they survive "Close Other Tabs".
+- The × is replaced by a pin you can click to unpin, so the tabs you keep open
+  all day are out of reach of a stray click. It is not a lock: ⌘W and Close Tab
+  still close a pinned tab, the way they do in Chrome and VS Code.
+- A pinned tab stays pinned when you move it to the other pane or drag it out
+  into a window of its own.
+
+### Snippets in the Quick Actions panel
+
+- **Send Text's saved snippets now appear in the panel**, under the text field —
+  the same recency-ranked list the full Send Text screen shows, with the top few
+  and the rest behind "Show more".
+- ↓/↑ walk them and ⏎ inserts the highlighted one; ⌘⏎ still runs. `{clipboard}`
+  and `{ip}` fill in as they do everywhere else, and using one from the panel
+  bumps it up the list in the main window too.
 
 ### Feeds no longer hold a gigabyte each
 
