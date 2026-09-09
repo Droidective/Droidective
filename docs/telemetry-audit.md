@@ -193,10 +193,12 @@ sent nothing at all.
 
 Be honest about these rather than reading a low `mem_known_pct` as a mystery.
 
-**Retainers with no reporter yet.** The ledger has owner slots for `logcat`,
-`ioslog`, `crashes` and `decompile` but nothing reports into them. Wired today:
-Reactotron, JS Console, the screenshot editor. So `mem_unknown_mb` currently
-includes those four plus everything below.
+**Retainers with no reporter yet.** Wired today: Reactotron, JS Console, the
+screenshot editor. Not yet measured, and therefore inside `mem_unknown_mb`: the
+logcat ring (5000 lines), the iOS unified-log ring, the Crash Catcher's parsed
+reports (16 MB cap), and a decompiled APK's source tree. Each is a
+`MemoryLedger.Owner` case plus a reporter — the enum deliberately has no case
+until the reporter exists, so a column is never present-but-always-absent.
 
 **Mirror sessions.** A scrcpy session's decoded frames live in an
 `AVSampleBufferDisplayLayer` the app never owns a buffer for, so it cannot size

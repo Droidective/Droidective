@@ -48,7 +48,7 @@ import Testing
     }
 
     @Test func aZeroFootprintCannotDivideByZero() {
-        #expect(ledger([(.logcat, 5)]).attributedPercent(footprintBytes: 0) == 0)
+        #expect(ledger([(.jsConsole, 5)]).attributedPercent(footprintBytes: 0) == 0)
     }
 
     // MARK: - Bookkeeping
@@ -74,8 +74,8 @@ import Testing
     }
 
     @Test func forgettingSomethingNeverReportedIsHarmless() {
-        var subject = ledger([(.logcat, 12)])
-        subject.forget(.decompile)
+        var subject = ledger([(.jsConsole, 12)])
+        subject.forget(.screenshot)
         #expect(subject.attributedBytes == 12 * mb)
     }
 
@@ -83,7 +83,7 @@ import Testing
         var subject = MemoryLedger()
         subject.report(.reactotron, MemoryLedger.Entry(residentBytes: mb, watched: true))
         subject.report(.jsConsole, MemoryLedger.Entry(residentBytes: mb, watched: false))
-        subject.report(.logcat, MemoryLedger.Entry(residentBytes: mb, watched: false))
+        subject.report(.screenshot, MemoryLedger.Entry(residentBytes: mb, watched: false))
         #expect(subject.retainerCount == 3)
         #expect(subject.watchedCount == 1, "two of the three are held for nobody")
     }
