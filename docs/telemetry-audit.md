@@ -194,11 +194,19 @@ sent nothing at all.
 Be honest about these rather than reading a low `mem_known_pct` as a mystery.
 
 **Retainers with no reporter yet.** Wired today: Reactotron, JS Console, the
-screenshot editor. Not yet measured, and therefore inside `mem_unknown_mb`: the
-logcat ring (5000 lines), the iOS unified-log ring, the Crash Catcher's parsed
-reports (16 MB cap), and a decompiled APK's source tree. Each is a
-`MemoryLedger.Owner` case plus a reporter — the enum deliberately has no case
-until the reporter exists, so a column is never present-but-always-absent.
+screenshot editor, the logcat ring, the iOS unified-log ring and the Crash
+Catcher's parsed reports. Still unmeasured, and therefore inside
+`mem_unknown_mb`: a decompiled APK's `FileNode` tree. The enum deliberately has
+no case until the reporter exists, so a column is never
+present-but-always-absent.
+
+The two log rings and the crash buffer are **measured on demand** rather than
+tracked as data arrives (`AppMemory.measure`). The two streaming feeds can
+report for free — they already count wire bytes per frame — but a logcat ring
+would have to walk five thousand strings, and doing that on the flush path
+would put a cost on the code these numbers exist to make cheaper. A measured
+retainer is walked only when a report is built: every five minutes, or on a
+hang or an alert.
 
 **Mirror sessions.** A scrcpy session's decoded frames live in an
 `AVSampleBufferDisplayLayer` the app never owns a buffer for, so it cannot size

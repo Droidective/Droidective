@@ -44,6 +44,13 @@ final class AppMemory {
     /// no wire equivalent — a decoded capture is not frames off a socket, and
     /// counting it in `feed_mb` would quietly change what that key has always
     /// meant.
+    /// What a retainer holds right now.
+    struct Measurement {
+        var residentBytes: Int
+        var items: Int = 0
+        var watched: Bool = false
+    }
+
     private struct Holding {
         weak var reporter: AnyObject?
         var owner: MemoryLedger.Owner
@@ -51,6 +58,13 @@ final class AppMemory {
         var wireBytes: Int?
         var items: Int
         var watched: Bool
+        /// The pull half. A ring of log lines cannot report its size for free
+        /// the way the two feeds can — they track bytes as frames arrive,
+        /// while a logcat buffer would have to walk five thousand strings, and
+        /// doing that on the flush path puts a cost on the very thing these
+        /// numbers exist to reduce. A measured retainer is walked only when a
+        /// report is built: every five minutes, or on a hang or an alert.
+        var measure: ((AnyObject) -> Measurement)?
     }
 
     private var holdings: [ObjectIdentifier: Holding] = [:]
@@ -87,6 +101,29 @@ final class AppMemory {
             wireBytes: nil,
             items: items,
             watched: watched)
+    }
+
+    /// Register a retainer that is walked when a report is built, rather than
+    /// pushing a figure it would have to compute on its own hot path.
+    ///
+    /// The block takes the reporter rather than capturing it, so registering
+    /// never keeps a closed tab's buffer alive: the reference here stays weak
+    /// and a dead one is pruned on the next read.
+    func measure<Reporter: AnyObject>(
+        _ owner: MemoryLedger.Owner, from reporter: Reporter,
+        _ measure: @escaping (Reporter) -> Measurement
+    ) {
+        holdings[ObjectIdentifier(reporter)] = Holding(
+            reporter: reporter,
+            owner: owner,
+            residentBytes: 0,
+            wireBytes: nil,
+            items: 0,
+            watched: false,
+            measure: { object in
+                guard let typed = object as? Reporter else { return Measurement(residentBytes: 0) }
+                return measure(typed)
+            })
     }
 
     /// A reporter that has gone away — its tab closed, its session torn down.
@@ -150,6 +187,16 @@ final class AppMemory {
     /// nothing has to sweep the table separately.
     private func live() -> [Holding] {
         holdings = holdings.filter { $0.value.reporter != nil }
-        return Array(holdings.values)
+        return holdings.values.map { holding in
+            guard let measure = holding.measure, let reporter = holding.reporter else {
+                return holding
+            }
+            var resolved = holding
+            let measurement = measure(reporter)
+            resolved.residentBytes = measurement.residentBytes
+            resolved.items = measurement.items
+            resolved.watched = measurement.watched
+            return resolved
+        }
     }
 }

@@ -141,6 +141,15 @@ struct LogcatView: View {
             logList(visible: visible)
         }
         .task(id: taskKey) { await streamLoop() }
+        .task {
+            // Registered per mount, not per line: the ledger walks this only
+            // when a report is built. Re-arms after a tab move, which rebuilds
+            // the view around the same model.
+            AppMemory.shared.measure(.logcat, from: model) { model in
+                AppMemory.Measurement(
+                    residentBytes: model.retainedBytes, items: model.lines.count, watched: true)
+            }
+        }
         // Re-pace on a tab switch rather than re-keying the stream: a restart
         // would clear the feed. Becoming visible also flushes at once, so the
         // reveal doesn't wait out the hidden interval.

@@ -37,14 +37,17 @@ public struct MemoryLedger: Sendable, Equatable {
         case jsConsole = "js"
         /// A capture open in the screenshot editor, plus its undo history.
         case screenshot = "shot"
+        /// The logcat ring buffer.
+        case logcat
+        /// The iOS unified-log ring buffer.
+        case iosLogs = "ioslog"
+        /// Parsed crash reports held by the Crash Catcher.
+        case crashes
 
         // Every case here has a reporter. Adding one without wiring it would
         // ship a column that is always absent, which reads as "this retainer
         // held nothing" rather than "nobody measured it" — the same trap
-        // `WorkloadCensus` avoids by omitting its two uncounted fields. The
-        // retainers still unmeasured (the logcat and iOS-log rings, the crash
-        // buffer, a decompiled tree) are listed in docs/telemetry-audit.md and
-        // land here one at a time, each with its reporter.
+        // `WorkloadCensus` avoids by omitting its two uncounted fields.
 
         public static func < (lhs: Owner, rhs: Owner) -> Bool {
             lhs.rawValue < rhs.rawValue
