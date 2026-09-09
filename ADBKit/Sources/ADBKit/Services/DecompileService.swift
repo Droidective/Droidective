@@ -69,7 +69,11 @@ public struct DecompileService: Sendable {
             return outDir
         }
         guard let java = await toolchain.java() else { throw DecompileError.toolMissing("Java") }
-        try? FileManager.default.removeItem(at: outDir)
+        // Retried, not swallowed: the previous run's tree is exactly what a
+        // Windows handle still holds open — `b.txt` and `AndroidManifest.xml`
+        // are the two that failed on CI — and leaving it in place would mix a
+        // stale decompile into the new one.
+        try await FileRetry.remove(outDir)
         try FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
 
         let arguments: [String]

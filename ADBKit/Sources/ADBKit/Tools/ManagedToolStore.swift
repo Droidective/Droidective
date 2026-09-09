@@ -235,13 +235,13 @@ public actor ManagedToolStore {
         guard let assetURL = URL(string: asset.downloadURL) else { throw StoreError.noReleaseURL }
 
         let stagingDir = toolRoot(tool).appendingPathComponent(".staging", isDirectory: true)
-        try recreateDirectory(stagingDir)
+        try await recreateDirectory(stagingDir)
         let downloaded = stagingDir.appendingPathComponent(asset.name)
         try await http.download(from: assetURL, to: downloaded, onProgress: onProgress)
         try verifyDigest(downloaded, expected: asset.digest)
 
         let versionDir = toolRoot(tool).appendingPathComponent(sanitize(release.tagName), isDirectory: true)
-        try recreateDirectory(versionDir)
+        try await recreateDirectory(versionDir)
         try await place(asset: downloaded, spec: spec, into: versionDir)
         try? fileManager.removeItem(at: stagingDir)
 
@@ -261,7 +261,7 @@ public actor ManagedToolStore {
            !ManagedToolReleases.isNewer(version, than: installed) { return }
         guard let spec = ManagedToolSpec.hostCatalog[tool] else { throw StoreError.unsupported(tool) }
         let versionDir = toolRoot(tool).appendingPathComponent(sanitize(version), isDirectory: true)
-        try recreateDirectory(versionDir)
+        try await recreateDirectory(versionDir)
         try fileManager.copyItem(at: source, to: versionDir.appendingPathComponent(source.lastPathComponent))
         guard runnable(in: versionDir, spec: spec) != nil else { throw StoreError.runnableNotFound(tool) }
         try await markCurrent(tool, tag: version)
@@ -371,8 +371,16 @@ public actor ManagedToolStore {
         tag.replacingOccurrences(of: "/", with: "_")
     }
 
-    private func recreateDirectory(_ url: URL) throws {
-        try? fileManager.removeItem(at: url)
+    /// An empty directory at `url`, whatever was there before.
+    ///
+    /// The removal retries because this is where Windows CI failed:
+    /// `.staging` holds the jar that was just downloaded and read, and a
+    /// scanner's handle on it makes the tree undeletable for a few
+    /// milliseconds. Swallowing the failure — which `try?` did — leaves the
+    /// previous download's files inside a directory the caller was promised
+    /// is empty.
+    private func recreateDirectory(_ url: URL) async throws {
+        try await FileRetry.remove(url, fileManager: fileManager)
         try fileManager.createDirectory(at: url, withIntermediateDirectories: true)
     }
 

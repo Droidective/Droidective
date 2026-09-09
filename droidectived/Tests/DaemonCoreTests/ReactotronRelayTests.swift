@@ -31,23 +31,60 @@ import Testing
 
     /// Collects events off the stream, so a test can wait for the one it wants
     /// without assuming how many arrive first.
+    ///
+    /// A waiter is *woken by the arrival*, not by a poll. The version this
+    /// replaces re-checked every 20 ms against a 10-second deadline, which
+    /// spends the whole budget on getting scheduled — and on a loaded
+    /// `macos-15` runner that is what
+    /// `reportsAClientThatDisconnects` intermittently ran out of, while the
+    /// same test takes 0.3 s locally. The timeout is now only a backstop
+    /// against hanging the suite, so it can be generous without costing
+    /// anything when things work.
     private actor Collected {
         private(set) var events: [ReactotronRelay.Event] = []
 
-        func add(_ event: ReactotronRelay.Event) { events.append(event) }
+        private struct Waiter {
+            let matches: @Sendable ([ReactotronRelay.Event]) -> Bool
+            let continuation: CheckedContinuation<Bool, Never>
+        }
 
-        /// Waits until `matching` finds something, or gives up. Generous,
-        /// because it is a socket round trip that normally takes milliseconds.
-        func wait(
-            timeout: Duration = .seconds(10),
-            _ matching: @Sendable ([ReactotronRelay.Event]) -> Bool
-        ) async -> Bool {
-            let deadline = ContinuousClock.now.advanced(by: timeout)
-            while ContinuousClock.now < deadline {
-                if matching(events) { return true }
-                try? await Task.sleep(for: .milliseconds(20))
+        private var waiters: [UUID: Waiter] = [:]
+
+        func add(_ event: ReactotronRelay.Event) {
+            events.append(event)
+            for (id, waiter) in waiters where waiter.matches(events) {
+                waiters[id] = nil
+                waiter.continuation.resume(returning: true)
             }
-            return matching(events)
+        }
+
+        /// Waits until `matching` holds. The backstop returns false rather
+        /// than hanging, so a genuine failure still reports as one.
+        func wait(
+            timeout: Duration = .seconds(30),
+            _ matching: @escaping @Sendable ([ReactotronRelay.Event]) -> Bool
+        ) async -> Bool {
+            let id = UUID()
+            return await withCheckedContinuation { continuation in
+                if matching(events) {
+                    continuation.resume(returning: true)
+                    return
+                }
+                waiters[id] = Waiter(matches: matching, continuation: continuation)
+                // Started *after* registering, inside the continuation body:
+                // a timeout that fired before the waiter existed would find
+                // nothing to give up on, and the waiter registered a moment
+                // later would then never be resumed at all.
+                Task { [weak self] in
+                    try? await Task.sleep(for: timeout)
+                    await self?.giveUp(id)
+                }
+            }
+        }
+
+        private func giveUp(_ id: UUID) {
+            guard let waiter = waiters.removeValue(forKey: id) else { return }
+            waiter.continuation.resume(returning: false)
         }
     }
 
