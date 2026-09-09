@@ -224,3 +224,77 @@ import Testing
                 == .idle)
     }
 }
+
+/// The "Check for Updates…" affordance. All three surfaces — the menu command,
+/// Settings ▸ Updates, and About — render this, and all three used to show a
+/// fixed title greyed out for the whole length of an update session.
+@Suite struct UpdateCheckActionTests {
+    private func action(_ activity: UpdatePolicy.Activity, canCheck: Bool = false)
+        -> UpdatePolicy.CheckAction
+    {
+        UpdatePolicy.checkAction(for: activity, canCheck: canCheck)
+    }
+
+    /// The reported bug: a download makes Sparkle's gate go false, so the
+    /// control died with no explanation.
+    @Test func aDownloadSaysSoInsteadOfGoingSilentlyDead() {
+        let subject = action(.downloading)
+        #expect(subject.title == "Downloading Update…")
+        #expect(!subject.isEnabled)
+        #expect(subject.isBusy)
+    }
+
+    @Test func everyBusyStateNamesWhatItIsDoing() {
+        #expect(action(.checking).title == "Checking for Updates…")
+        #expect(action(.downloading).title == "Downloading Update…")
+        #expect(action(.installing).title == "Installing Update…")
+    }
+
+    /// A staged update is the one waiting state with something to do, so it
+    /// stays clickable and points at the relaunch rather than at a re-check.
+    @Test func aStagedUpdateOffersTheRelaunchRatherThanACheck() {
+        let subject = action(.readyToRelaunch, canCheck: false)
+        #expect(subject.title == "Relaunch to Update")
+        #expect(subject.isEnabled, "enabled even though Sparkle's own gate is shut")
+        #expect(!subject.isBusy)
+    }
+
+    @Test func anIdleUpdaterOffersAPlainCheck() {
+        let subject = action(.idle, canCheck: true)
+        #expect(subject.title == "Check for Updates…")
+        #expect(subject.isEnabled)
+        #expect(!subject.isBusy)
+    }
+
+    /// "You're up to date" is a result, not a state to sit in — the control
+    /// goes straight back to offering another check.
+    @Test func upToDateReadsTheSameAsIdle() {
+        #expect(action(.upToDate, canCheck: true) == action(.idle, canCheck: true))
+    }
+
+    @Test func aFoundUpdateOffersToInstallIt() {
+        let subject = action(.available, canCheck: true)
+        #expect(subject.title == "Update Now")
+        #expect(subject.isEnabled)
+    }
+
+    /// Sparkle's gate still has the final say wherever nothing visible is in
+    /// flight — the updater can be busy for reasons this enum does not model.
+    @Test func sparklesOwnGateStillDisablesTheQuietStates() {
+        #expect(!action(.idle, canCheck: false).isEnabled)
+        #expect(!action(.upToDate, canCheck: false).isEnabled)
+        #expect(!action(.available, canCheck: false).isEnabled)
+    }
+
+    /// A busy control is never clickable and a clickable one never spins;
+    /// every state has a non-empty title.
+    @Test func noStateIsBothBusyAndClickable() {
+        for activity in UpdatePolicy.Activity.allCases {
+            for canCheck in [true, false] {
+                let subject = action(activity, canCheck: canCheck)
+                #expect(!(subject.isBusy && subject.isEnabled), "\(activity)")
+                #expect(!subject.title.isEmpty, "\(activity)")
+            }
+        }
+    }
+}

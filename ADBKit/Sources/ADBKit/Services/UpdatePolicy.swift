@@ -146,4 +146,64 @@ public enum UpdatePolicy {
         guard updateKnown else { return .idle }
         return canRelaunch ? .readyToRelaunch : .available
     }
+
+    // MARK: - The "Check for Updates…" affordance
+
+    /// Where the updater is, as far as the *button* is concerned. A pure
+    /// mirror of the App layer's `UpdatePhase`, which carries Sparkle types
+    /// and cannot come down here.
+    public enum Activity: Equatable, Sendable, CaseIterable {
+        case idle
+        case checking
+        case upToDate
+        case available
+        case downloading
+        case readyToRelaunch
+        case installing
+    }
+
+    /// What a "Check for Updates…" control should say and whether it acts.
+    public struct CheckAction: Equatable, Sendable {
+        /// The button or menu item's title.
+        public let title: String
+        /// Whether clicking does anything. False while the updater is busy
+        /// with work the user cannot influence.
+        public let isEnabled: Bool
+        /// Whether the control should show a spinner beside its title.
+        public let isBusy: Bool
+    }
+
+    /// The label and enabled state for every "Check for Updates…" control —
+    /// the menu command, Settings ▸ Updates, and About.
+    ///
+    /// All three used to render a fixed "Check for Updates…" and disable it
+    /// on Sparkle's `canCheckForUpdates`, which goes false for the whole
+    /// length of an update session. So the single most common reason the
+    /// button is dead — an update is downloading right now — looked
+    /// identical to the app being broken: a greyed-out control with no
+    /// explanation, and in About no status text anywhere near it. Saying what
+    /// is happening costs nothing and is the entire fix.
+    ///
+    /// `canCheck` is Sparkle's own gate, and it still has the final say for
+    /// the states where nothing is visibly in flight — the updater can be
+    /// busy for reasons this enum does not model.
+    public static func checkAction(for activity: Activity, canCheck: Bool) -> CheckAction {
+        switch activity {
+        case .checking:
+            return CheckAction(title: "Checking for Updates…", isEnabled: false, isBusy: true)
+        case .downloading:
+            return CheckAction(title: "Downloading Update…", isEnabled: false, isBusy: true)
+        case .installing:
+            return CheckAction(title: "Installing Update…", isEnabled: false, isBusy: true)
+        case .readyToRelaunch:
+            // Enabled on purpose, and the one busy-ish state that is: the
+            // update is staged and waiting on the user, so the control has
+            // something to do — its click points at the relaunch.
+            return CheckAction(title: "Relaunch to Update", isEnabled: true, isBusy: false)
+        case .available:
+            return CheckAction(title: "Update Now", isEnabled: canCheck, isBusy: false)
+        case .idle, .upToDate:
+            return CheckAction(title: "Check for Updates…", isEnabled: canCheck, isBusy: false)
+        }
+    }
 }

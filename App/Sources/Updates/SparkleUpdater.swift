@@ -570,6 +570,44 @@ extension UpdaterViewModel: SPUUpdaterDelegate {
     }
 }
 
+// MARK: - The "Check for Updates…" affordance
+
+extension UpdaterViewModel {
+    /// This phase as the pure enum `UpdatePolicy` reasons about. `UpdatePhase`
+    /// carries Sparkle's `SUAppcastItem` and cannot go down to ADBKit; only
+    /// the shape of the state matters to the decision.
+    var activity: UpdatePolicy.Activity {
+        switch phase {
+        case .idle: .idle
+        case .checking: .checking
+        case .upToDate: .upToDate
+        case .available: .available
+        case .downloading: .downloading
+        case .readyToRelaunch: .readyToRelaunch
+        case .installing: .installing
+        }
+    }
+
+    /// What every "Check for Updates…" control should say and whether it acts.
+    /// One source for the menu command, Settings ▸ Updates and About, so the
+    /// three cannot drift — they previously agreed only by each hard-coding
+    /// the same string.
+    var checkAction: UpdatePolicy.CheckAction {
+        UpdatePolicy.checkAction(for: activity, canCheck: canCheckForUpdates)
+    }
+
+    /// The click behind that control. The title promises a specific thing in
+    /// each state, so the action has to match it: "Relaunch to Update"
+    /// relaunches rather than starting a fresh check.
+    func performCheckAction() {
+        switch phase {
+        case .readyToRelaunch: relaunchNow()
+        case .available: installAvailableUpdate()
+        case .idle, .checking, .upToDate, .downloading, .installing: checkForUpdates()
+        }
+    }
+}
+
 /// App-wide updater. A single Sparkle updater must own update scheduling, so
 /// the menu, About view, Settings, and the sidebar pill all share this one
 /// instance.
@@ -577,14 +615,16 @@ enum SparkleUpdater {
     @MainActor static let shared = UpdaterViewModel()
 }
 
-/// The "Check for Updates…" menu command, greyed out while a check or an
-/// update session is in flight.
+/// The "Check for Updates…" menu command. Its title tracks the updater rather
+/// than staying fixed: an item greyed out under an unchanged label is how a
+/// download in progress used to look identical to a broken app.
 struct CheckForUpdatesCommand: View {
     @ObservedObject var updater: UpdaterViewModel
 
     var body: some View {
-        Button("Check for Updates…") { updater.checkForUpdates() }
-            .disabled(!updater.canCheckForUpdates)
+        let action = updater.checkAction
+        Button(action.title) { updater.performCheckAction() }
+            .disabled(!action.isEnabled)
     }
 }
 #endif
