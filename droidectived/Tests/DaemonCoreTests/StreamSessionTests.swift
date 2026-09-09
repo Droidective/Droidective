@@ -7,6 +7,8 @@ import Testing
 /// The subscription lifecycle, driven through the sink protocol rather than a
 /// socket. The socket is proven separately; what matters here is the ordering
 /// and the drop behaviour under a slow client.
+private enum StreamSessionTestError: Error { case unsupported }
+
 @Suite struct StreamSessionTests {
     /// Records frames, and can be made deliberately slow so the producer
     /// outruns it — which is the only way to observe the drop policy.
@@ -271,6 +273,133 @@ import Testing
             try? await Task.sleep(for: .milliseconds(5))
         }
         return await condition()
+    }
+
+    // MARK: - A pump that arrives after its subscription is gone
+
+    /// Opens once and lets everyone waiting through. Lets a test park
+    /// `subscribe` mid-flight and act while it is suspended.
+    private actor Gate {
+        private var waiters: [CheckedContinuation<Void, Never>] = []
+        private var open = false
+        private var arrived = false
+
+        /// True once someone has waited here — how the test knows `subscribe`
+        /// has reached the suspension point rather than guessing with a sleep.
+        var reached: Bool { arrived }
+
+        func wait() async {
+            arrived = true
+            if open { return }
+            await withCheckedContinuation { waiters.append($0) }
+        }
+
+        func release() {
+            open = true
+            for waiter in waiters { waiter.resume() }
+            waiters = []
+        }
+    }
+
+    /// A `performance` stream shaped like the real one: its poll `Task` is
+    /// built inside the `AsyncStream` closure, so it is already running by the
+    /// time the stream is returned, and only `onTermination` stops it.
+    private actor PollWatch {
+        private(set) var polls = 0
+        private(set) var cancelled = false
+        func count() { polls += 1 }
+        func noteCancelled() { cancelled = true }
+    }
+
+    private struct StallingSource: StreamSource {
+        let gate: Gate
+        let watch: PollWatch
+
+        func devices() async -> AsyncStream<[Device]> { .init { $0.finish() } }
+        func logcat(serial: String, pid: Int?) async throws -> AsyncStream<[LogLine]> {
+            .init { $0.finish() }
+        }
+        func logcatPid(serial: String, packageId: String) async throws -> Int? { nil }
+        func stopLogcat(serial: String) async {}
+        func netspeed(serial: String) async -> AsyncStream<NetSample> { .init { $0.finish() } }
+        func reactotron() async throws -> AsyncStream<ReactotronRelay.Event> { .init { $0.finish() } }
+        func stopReactotron() async {}
+        func openPty(serial: String?, size: PtySize) throws -> any PtyChannel {
+            throw StreamSessionTestError.unsupported
+        }
+        func openMirror(serial: String, quality: MirrorQuality) async throws -> ScrcpySession {
+            throw StreamSessionTestError.unsupported
+        }
+
+        func performance(
+            serial: String, packageId: String?, includeProcesses: Bool
+        ) async -> AsyncStream<PerformanceService.PerfPoll> {
+            // Park here so the test can close the socket while `subscribe` is
+            // suspended — the window the real bug lives in.
+            await gate.wait()
+            let watch = self.watch
+            return AsyncStream { continuation in
+                let task = Task {
+                    while !Task.isCancelled {
+                        await watch.count()
+                        try? await Task.sleep(for: .milliseconds(5))
+                    }
+                    continuation.finish()
+                }
+                continuation.onTermination = { _ in
+                    task.cancel()
+                    Task { await watch.noteCancelled() }
+                }
+            }
+        }
+    }
+
+    /// The bug: `subscribe` suspends twice before it stores the pump, and the
+    /// socket closing in that window removed the entry — so
+    /// `subscriptions[id]?.pump = …` discarded the only handle that could stop
+    /// a poll loop which was already running. An immortal 1 Hz loop spawning
+    /// adb children for the life of the daemon, one per occurrence.
+    @Test func aPollStartedAfterTheSocketClosedIsStopped() async {
+        let sink = RecordingSink()
+        let gate = Gate()
+        let watch = PollWatch()
+        let session = StreamSession(sink: sink, source: StallingSource(gate: gate, watch: watch))
+
+        let subscribing = Task {
+            await session.handle(
+                text: #"{"op":"subscribe","id":7,"topic":"performance","params":{"serial":"R58M"}}"#)
+        }
+        #expect(await eventually { await gate.reached }, "subscribe never reached the source")
+
+        // The desktop app quitting with the Performance screen open.
+        await session.shutdown()
+        await gate.release()
+        await subscribing.value
+
+        #expect(
+            await eventually { await watch.cancelled },
+            "the poll loop outlived the socket that asked for it")
+    }
+
+    /// The same window, reached the other way: a fast tab switch sends
+    /// `unsubscribe` for an id whose `subscribe` is still in flight.
+    @Test func aPollStartedAfterUnsubscribeIsStopped() async {
+        let sink = RecordingSink()
+        let gate = Gate()
+        let watch = PollWatch()
+        let session = StreamSession(sink: sink, source: StallingSource(gate: gate, watch: watch))
+
+        let subscribing = Task {
+            await session.handle(
+                text: #"{"op":"subscribe","id":8,"topic":"performance","params":{"serial":"R58M"}}"#)
+        }
+        #expect(await eventually { await gate.reached })
+
+        await session.handle(text: #"{"op":"unsubscribe","id":8}"#)
+        await gate.release()
+        await subscribing.value
+
+        #expect(await eventually { await watch.cancelled })
     }
 
     @Test func subscribingAcknowledgesThenStreamsThenEnds() async {

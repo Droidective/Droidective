@@ -558,7 +558,7 @@ struct PerformanceView: View {
         sampler = Task { @MainActor in
             // Drop stale deltas so the first post-(re)start sample isn't a
             // spike measured against a long-ago reading.
-            await state.env.engine.performance.reset()
+            await state.env.engine.performance.reset(serial: serial)
             var tick = 0
             while !Task.isCancelled {
                 let includeProcesses = tick % 2 == 0

@@ -348,7 +348,7 @@ struct NetworkView: View {
         guard let serial else { return }
         sampler?.cancel()
         sampler = Task { @MainActor in
-            await state.env.engine.networkSpeed.reset()
+            await state.env.engine.networkSpeed.reset(serial: serial)
             while !Task.isCancelled {
                 let sample = await state.env.engine.networkSpeed.poll(serial: serial)
                 if Task.isCancelled { break }

@@ -57,7 +57,21 @@ import Testing
         script(runner, rx: 1000, tx: 500)
         let service = await makeService(runner)
         _ = await service.poll(serial: "S1")
-        await service.reset()
+        await service.reset(serial: "S1")
         #expect(await service.poll(serial: "S1") == nil)
+    }
+
+    /// Two windows watching two devices. Starting a recording on one used to
+    /// wipe every baseline, so the other's next sample was dropped for want of
+    /// a delta — a gap in a chart nobody had touched.
+    @Test func resettingOneDeviceLeavesAnotherDevicesBaselineAlone() async {
+        let runner = MockProcessRunner()
+        script(runner, rx: 1000, tx: 500)
+        let service = await makeService(runner)
+        _ = await service.poll(serial: "S1")
+        _ = await service.poll(serial: "S2")
+        await service.reset(serial: "S1")
+        #expect(await service.poll(serial: "S1") == nil, "the reset device needs a fresh baseline")
+        #expect(await service.poll(serial: "S2") != nil, "the untouched device keeps its own")
     }
 }
