@@ -21,6 +21,28 @@ public enum ReactotronTimeline {
     /// the incidents and the arithmetic.
     public static var maxTotalBytes: Int { FeedMemoryBudget.wireBudget }
 
+    /// How many *unflushed* rows to drop so the pending buffer can't outgrow
+    /// what the ring is going to keep anyway.
+    ///
+    /// A feed nobody can see schedules no flush (`FeedFlushCadence.interval`
+    /// answers nil), so rows pile up until the byte bound trips. Bytes are not
+    /// what a flush costs: at a few hundred bytes a row that bound is tens of
+    /// thousands of rows, and `dropCount` evicts all but `maxItems` of them the
+    /// moment they land — after the whole batch has already been appended and
+    /// walked. Trimming while they wait makes the flush cost what the buffer is
+    /// allowed to keep, and drops nothing the append wouldn't have.
+    ///
+    /// Hysteresis matches `dropCount`: once over the cap, trim to 7/8 of it, so
+    /// a full pending buffer doesn't shift its whole array on every append.
+    ///
+    /// - Parameters:
+    ///   - count: rows waiting to be flushed.
+    ///   - maxCount: the ring's count cap (defaults to `maxItems`).
+    public static func pendingDropCount(count: Int, maxCount: Int = maxItems) -> Int {
+        guard count > maxCount else { return 0 }
+        return count - (maxCount - maxCount / 8)
+    }
+
     /// How many items to drop from the front so the buffer fits its caps.
     ///
     /// Trims with hysteresis — once a cap is exceeded it trims down to 7/8 of

@@ -741,6 +741,7 @@ final class ReactotronSession {
             flushPending()
             return
         }
+        trimPending()
         guard flushTask == nil else { return }
         // Hidden tabs stay mounted and lay their rows out like visible ones,
         // and a main thread that is already behind must not be asked for a
@@ -759,6 +760,28 @@ final class ReactotronSession {
             guard !Task.isCancelled else { return }
             self?.flushPending()
         }
+    }
+
+    /// Drop rows the ring would evict on arrival anyway.
+    ///
+    /// The byte bound above caps how much memory the pending buffer holds; it
+    /// does not cap how many *rows* one flush hands SwiftUI, and rows are what
+    /// a layout pass costs. Small events (a plain `log` is a few hundred bytes)
+    /// reach tens of thousands of rows inside that byte budget while nobody is
+    /// watching the feed, and `appendBatch` then appends every one of them and
+    /// evicts all but `ReactotronTimeline.maxItems` in the same turn — at the
+    /// moment the user switches to the tab. Trimming here is the same eviction,
+    /// paid per append instead of all at once.
+    private func trimPending() {
+        let drop = ReactotronTimeline.pendingDropCount(count: pendingItems.count)
+        guard drop > 0 else { return }
+        let dropped = Array(pendingItems[..<drop])
+        pendingItems.removeFirst(drop)
+        pendingBytes -= dropped.reduce(0) { $0 + $1.frameBytes }
+        // Counted as evictions, because that is what they are — the usage
+        // stats that size the caps must not read as if nothing was dropped.
+        evictedItemCount += drop
+        Self.discardInBackground(dropped)
     }
 
     /// One view reported whether it can see the timeline. Becoming visible
