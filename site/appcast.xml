@@ -6,9 +6,9 @@
     <description>Most recent Droidective updates.</description>
     <language>en</language>
     <item>
-      <title>Droidective 3.12.0</title>
-      <sparkle:version>956</sparkle:version>
-      <sparkle:shortVersionString>3.12.0</sparkle:shortVersionString>
+      <title>Droidective 3.12.1</title>
+      <sparkle:version>970</sparkle:version>
+      <sparkle:shortVersionString>3.12.1</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <description><![CDATA[
 <style>
@@ -24,82 +24,67 @@ pre { background: color-mix(in srgb, currentColor 8%, transparent); padding: .6e
 pre code { background: none; padding: 0; }
 a { color: #2f9e44; }
 </style>
-<p>Any feature can now have a window of its own — drag its tab out, or pick it from
-a menu — and the work inside it carries on where it was instead of starting
-over.</p>
-<h3>Any tab can become its own window</h3>
+<p>Pinned tabs, Send Text's snippets in the Quick Actions panel, and the fix for
+the thing that made a long Reactotron or JS Console session turn into an app
+that stopped responding for seconds at a time.</p>
+<h3>Pin a tab</h3>
 <ul>
 <li>
-<strong>Drag a tab out of the app and it becomes a window.</strong> Drop it on the desktop,
-on another display, beside your editor. Drop it on another Droidective window
-instead and it moves in there.</li>
-<li>
-<strong>Or use a menu</strong>: right-click a tab for "Open in New Window" or "Move to
-Window ▸", or Tab ▸ Move Tab to New Window (⌃⌘N) for the one you are on.</li>
-<li>
-<strong>A torn-off window keeps the device its tab was pointed at.</strong> Every other way
-of opening a window deliberately picks a device no other window holds; for a
-tab you have just moved that would quietly swap the device out from under it.</li>
-<li>
-<strong>A window's last tab can join another window</strong> — consolidating two windows
-into one is a reasonable thing to want — but it cannot spawn a third and leave
-its own window empty.</li>
-<li>
-<strong>Escape cancels a drag</strong>, and a tab released on nothing snaps back.</li>
+<strong>Right-click a tab ▸ Pin Tab</strong> (or Tab ▸ Pin Tab). Pinned tabs sit at the
+front of their pane and stay there, and they survive "Close Other Tabs".</li>
+<li>The × is replaced by a pin you can click to unpin, so the tabs you keep open
+all day are out of reach of a stray click. It is not a lock: ⌘W and Close Tab
+still close a pinned tab, the way they do in Chrome and VS Code.</li>
+<li>A pinned tab stays pinned when you move it to the other pane or drag it out
+into a window of its own.</li>
 </ul>
-<h3>A moved tab keeps working</h3>
-<p>Moving a tab rebuilds its view, which used to mean starting the feature again.
-Now the work moves with it:</p>
+<h3>Snippets in the Quick Actions panel</h3>
 <ul>
 <li>
-<strong>The Terminal takes its shells.</strong> Running processes keep running, scrollback
-is intact, split panes and their directories come along.</li>
-<li>
-<strong>A screen recording keeps recording.</strong> Start it in one window, move the tab,
-stop it in another, and the take is one continuous file — no gap, no split.
-The same for a recording made from the mirror.</li>
-<li>
-<strong>A live mirror keeps streaming.</strong> No "Connecting…", no black second while the
-device re-primes — the same session, the same encoder, the same tunnel. The
-Mirror Wall moves all six at once.</li>
-<li>
-<strong>Unsaved screenshot markup survives</strong>, undo history and all — nothing in that
-editor is written to disk until you save or copy it, so a move used to be the
-one loss you could not undo. Moving no longer asks about it; closing the tab
-still does.</li>
-<li>
-<strong>A decompiled APK stays decompiled.</strong> jadx and apktool take minutes on a real
-app, and a move used to run them again from the top.</li>
-<li>
-<strong>The video editor keeps its edits and its player</strong>, including the transcoded
-copy it builds for formats AVFoundation cannot play, which for a long
-recording is a transcode of the whole file.</li>
-<li>Also carried across: Reactotron's timeline, the JS Console's session, APK
-Studio's loaded APK, Logcat and iOS Logs buffers, collected crashes, API
-Testing's request, the folder you had browsed to, the Apps list and what you
-had selected in it, and anything half-typed in Send Text, Deep Links or Custom
-Commands.</li>
-<li>
-<strong>Performance and Network Speed deliberately do not move.</strong> Their sampler
-stops with the view, so a preserved graph would have a silent gap in it —
-worse than being told. They ask before you leave, as they did.</li>
+<strong>Send Text's saved snippets now appear in the panel</strong>, under the text field —
+the same recency-ranked list the full Send Text screen shows, with the top few
+and the rest behind "Show more".</li>
+<li>↓/↑ walk them and ⏎ inserts the highlighted one; ⌘⏎ still runs. <code>{clipboard}</code>
+and <code>{ip}</code> fill in as they do everywhere else, and using one from the panel
+bumps it up the list in the main window too.</li>
 </ul>
-<h3>Fixes</h3>
+<h3>Feeds no longer hold a gigabyte each</h3>
 <ul>
 <li>
-<strong>Dragging a tab to the empty part of its own tab strip works.</strong> It used to do
-nothing at all — the tab stayed exactly where it was.</li>
+<strong>The Reactotron timeline and the JS Console now size their buffers to your
+Mac</strong> instead of to a fixed number. Both capped 128 MB of received data, but a
+decoded log row costs several times what it did on the wire, so the real cost
+was closer to a gigabyte — each. One session was measured climbing from 363 MB
+to 1.58 GB over three hours and then staying there for a day.</li>
+<li>Nothing was leaking. The buffers were evicting correctly; the limit itself was
+simply far too generous. On a 16 GB Mac each feed now holds up to 192 MB.</li>
 </ul>
-<h3>Known gaps</h3>
+<h3>A feed you cannot see stops rendering</h3>
 <ul>
-<li>A moved tab starts at the top of whatever it is showing: the list, tree or
-buffer crosses, the scroll position does not.</li>
-<li>A decompile or a video transcode still in progress restarts when its tab
-moves. Once finished, it stays.</li>
+<li>
+<strong>A feed in a covered window no longer re-renders every second.</strong> Whether the
+app was "visible" was inferred from which tab was in front and whether
+Droidective was the active app, and neither answers the actual question. With
+the app behind another window and a Reactotron tab in front, the timeline kept
+redrawing for as long as it was left there.</li>
+<li>It now asks the window server directly. Events keep arriving the whole time —
+only the drawing waits — and bringing the window back shows everything at
+once.</li>
+</ul>
+<h3>Hangs can now be measured</h3>
+<ul>
+<li>
+<strong>A hang report says how long the hang was.</strong> It never could before: the
+duration came from the detection threshold, so every report read "at least
+2 seconds" whether the app was gone for two seconds or forty.</li>
+<li>Droidective now also records what each feed was holding when the app
+struggled, which is what makes this kind of problem findable instead of
+guessable. Numbers only — no log contents, no URLs, no device identifiers, and
+it respects the Settings ▸ Privacy toggles like everything else.</li>
 </ul>
 ]]></description>
-      <pubDate>Sun, 06 Sep 2026 19:05:44 +0000</pubDate>
-      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.12.0/Droidective-v3.12.0.dmg" sparkle:edSignature="a/8tB+0Fv+MAVLPEd+S8+x+p3WV1bRUqMhqWU86qQ83G3lfL84pLaS1xnNTdDws/081KV0zUG0m6j0kMadc8Cw==" length="146242418" type="application/octet-stream" />
+      <pubDate>Wed, 09 Sep 2026 06:33:21 +0000</pubDate>
+      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.12.1/Droidective-v3.12.1.dmg" sparkle:edSignature="1OTC3FClak6uCwCqNnoAC8w7RCj+VAyTTczpIxgfgkwgEg97frTyZXOM9KTn6fyhqiLzSQyK5+BiSbXumJeGAw==" length="146225754" type="application/octet-stream" />
     </item>
     
   </channel>
