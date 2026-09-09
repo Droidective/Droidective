@@ -28,6 +28,32 @@ enum McpRelayPolicy {
         case relayChanged
     }
 
+    /// What a reconcile does when the relay has no tap to offer.
+    enum RelaylessOutcome {
+        /// Leave the MCP server listening and drop its stale client records —
+        /// agents get `no_apps_connected` guidance and reconnect to the relay
+        /// on its next start.
+        case keepServing
+        /// Nothing is serving yet, so say why instead of pretending.
+        case reportFailure
+    }
+
+    /// Whether a reconcile that found no relay should tear the MCP server down.
+    ///
+    /// Observed at a launch where the previous instance still held port 9090:
+    /// the relay's first start failed, MCP had already bound its own listener
+    /// moments earlier, and the reconcile that arrived next stopped it. The
+    /// relay recovered a second later; the MCP server never did, and stayed
+    /// down until the app was relaunched.
+    ///
+    /// A live MCP server therefore outlives a relay outage, which is the
+    /// contract `noteRelayStopped` already implements for a relay the user
+    /// stops. Only a server that never came up reports the failure — it has no
+    /// tap to serve from and nothing to keep alive.
+    static func withoutRelay(mcpListening: Bool) -> RelaylessOutcome {
+        mcpListening ? .keepServing : .reportFailure
+    }
+
     /// Whether this reconcile should start the Reactotron relay.
     ///
     /// - Parameters:

@@ -218,6 +218,30 @@ import Testing
         continuation.finish()
     }
 
+    /// Stopping and immediately re-binding the same port is what a relay
+    /// restart makes the coordinator do — the relay's fresh server needs a new
+    /// tap and a new sender, and the listener is rebuilt around them. Observed
+    /// failing on a real launch: bound, stopped 480 ms later, then never came
+    /// back, leaving MCP down until the app was relaunched.
+    @Test func stoppingReleasesThePort() async throws {
+        let (listener, _, port) = try await makeListener()
+        await listener.stop()
+        for round in 1 ... 20 {
+            let store = McpCommandStore()
+            let factory = McpServerFactory(
+                store: store, sender: FakeSender(store: store), version: "t")
+            let next = McpHTTPListener(
+                configuration: McpHTTPListener.Configuration(port: port), factory: factory)
+            do {
+                try await next.start()
+            } catch {
+                Issue.record("round \(round): re-bind on \(port) failed: \(error)")
+                return
+            }
+            await next.stop()
+        }
+    }
+
     @Test func portConflictSurfacesAsPortInUse() async throws {
         let (listener, _, port) = try await makeListener()
         defer { Task { await listener.stop() } }

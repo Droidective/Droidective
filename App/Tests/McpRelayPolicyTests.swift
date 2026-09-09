@@ -27,4 +27,17 @@ import Testing
     @Test func retryAfterAFailedStartMayStartTheRelayAgain() {
         #expect(McpRelayPolicy.startsRelay(trigger: .settings, relayRunning: false))
     }
+
+    // MARK: - Reconciling without a relay
+
+    /// The observed outage: MCP had bound its listener, the relay's start then
+    /// failed on a port the previous instance still held, and the reconcile
+    /// that followed stopped the server. The relay recovered; MCP did not.
+    @Test func aServingMcpOutlivesARelayOutage() {
+        #expect(McpRelayPolicy.withoutRelay(mcpListening: true) == .keepServing)
+    }
+
+    @Test func aServerThatNeverCameUpReportsTheFailure() {
+        #expect(McpRelayPolicy.withoutRelay(mcpListening: false) == .reportFailure)
+    }
 }

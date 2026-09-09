@@ -77,6 +77,12 @@ final class ReactotronSession {
     /// with the session (`reset`), like the buffer they scope.
     fileprivate var paneClearSeqs: [Int: Int] = [:]
 
+    /// The relay's lifecycle in the unified log, next to the server's own
+    /// connection lines: `log show --predicate 'subsystem ==
+    /// "com.rohindh.droidective"'`.
+    fileprivate static let log = Logger(
+        subsystem: "com.rohindh.droidective", category: "reactotron-session")
+
     private let client: AdbClient
     /// Back-reference for toasts and save dialogs; set right after init.
     /// The window the relay reports through (toasts, save panels) — the
@@ -196,6 +202,7 @@ final class ReactotronSession {
             return
         }
         connection = .listening
+        Self.log.notice("relay start requested on :\(ReactotronService.defaultPort)")
         await applyReverse(serials: serials)
         consumeTask = Task { [weak self] in
             for await event in stream {
@@ -221,8 +228,7 @@ final class ReactotronSession {
         guard let service else { return }
         // In the unified log next to the server's connection-drop lines, for
         // field diagnosis of tunnel/connection interactions.
-        Logger(subsystem: "com.rohindh.droidective", category: "reactotron-session")
-            .notice("applying adb reverse for \(serials.count) device(s)")
+        Self.log.notice("applying adb reverse for \(serials.count) device(s)")
         reversedSerials.formUnion(serials)
         knownReadySerials.formUnion(serials)
         recordTunnelResults(await service.reverse(serials: serials))
@@ -562,7 +568,8 @@ final class ReactotronSession {
 
     private func handle(_ event: ReactotronServer.Event) {
         switch event {
-        case .listening:
+        case let .listening(port):
+            Self.log.notice("relay listening on :\(port)")
             if clients.isEmpty { connection = .listening }
         case let .connected(connectionId, _, intro, frameBytes):
             let parsed = ReactotronEvent(command: intro)
@@ -662,6 +669,10 @@ final class ReactotronSession {
             if clients.isEmpty { commands.removeAll() }
             refreshConnectionState()
         case let .failed(reason, portInUse):
+            // Why the relay died, next to the tunnel lines — without it, "MCP
+            // went down at launch" is a sequence nobody can reconstruct.
+            Self.log.error(
+                "relay failed (portInUse: \(portInUse)): \(reason, privacy: .public)")
             // The server tears itself down on failure, so drop our handle to it —
             // otherwise `isRunning` stays true and re-entering the view (or the
             // Retry button) would skip the restart and the error could never clear.

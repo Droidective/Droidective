@@ -188,13 +188,29 @@ final class McpCoordinator {
             if core.reactotronSession.isRunning { startedRelay = true }
         }
         guard let (events, sender) = await core.reactotronSession.mcpAttachment() else {
-            await controller.stop()
-            // The relay's own words when it has some — "open the Reactotron
-            // feature and start it" is wrong advice when the feature is showing
-            // a bind error of its own.
-            status = .failed(core.reactotronSession.startFailure
-                ?? "The Reactotron server isn't running — open the Reactotron "
-                + "feature and start it, then retry.")
+            startedRelay = false
+            let listeningPort: UInt16? = if case let .listening(port) = await controller.status {
+                port
+            } else {
+                nil
+            }
+            switch McpRelayPolicy.withoutRelay(mcpListening: listeningPort != nil) {
+            case .keepServing:
+                // The relay blipped under a server that is already up. Drop the
+                // ghost clients and wait for its next start to re-attach —
+                // tearing the listener down here is what turned a one-second
+                // relay outage into an MCP server that never came back.
+                await controller.noteRelayStopped()
+                if let listeningPort { status = .listeningWithoutRelay(port: listeningPort) }
+            case .reportFailure:
+                await controller.stop()
+                // The relay's own words when it has some — "open the Reactotron
+                // feature and start it" is wrong advice when the feature is
+                // showing a bind error of its own.
+                status = .failed(core.reactotronSession.startFailure
+                    ?? "The Reactotron server isn't running — open the Reactotron "
+                    + "feature and start it, then retry.")
+            }
             return
         }
 
