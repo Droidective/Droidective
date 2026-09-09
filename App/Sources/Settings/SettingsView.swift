@@ -93,15 +93,18 @@ struct GeneralSettingsView: View {
     /// Inline status beside the update button — the only place "you're up to
     /// date" appears, and it's manual-check-only by construction (background
     /// checks never enter `.checking`/`.upToDate`).
+    ///
+    /// Silent wherever the button's own title already says it. The button now
+    /// reads "Downloading Update…" rather than a greyed-out "Check for
+    /// Updates…", so a "Downloading…" label beside it would be the same
+    /// sentence twice; what is left is the version, which the button has no
+    /// room for.
     private var updateStatus: String? {
         switch updater.phase {
-        case .idle: return nil
-        case .checking: return "Checking…"
+        case .idle, .checking, .downloading, .installing: return nil
         case .upToDate: return "You're up to date."
         case .available(let info): return "Version \(info.version) is available."
-        case .downloading: return "Downloading…"
         case .readyToRelaunch(let info): return "Version \(info.version) is ready."
-        case .installing: return "Installing…"
         }
     }
     #endif
@@ -235,17 +238,15 @@ struct GeneralSettingsView: View {
                                 .font(.app(.footnote))
                                 .foregroundStyle(.textMuted)
                         }
-                        switch updater.phase {
-                        case .readyToRelaunch:
-                            Button("Relaunch to Update") { updater.relaunchNow() }
-                        case .available:
-                            Button("Update Now") { updater.installAvailableUpdate() }
-                        case .idle, .checking, .upToDate, .downloading, .installing:
-                            Button("Check for Updates…") { updater.checkForUpdates() }
-                                // Greyed out while a check or download is in
-                                // flight — same gate as the menu command.
-                                .disabled(!updater.canCheckForUpdates)
-                        }
+                        // One button whose title and enabled state come from
+                        // `UpdatePolicy`, shared with the menu command and
+                        // About — the three used to agree only by each
+                        // hard-coding the same strings, and two of them said
+                        // nothing at all while an update downloaded.
+                        let action = updater.checkAction
+                        if action.isBusy { ProgressView().controlSize(.small) }
+                        Button(action.title) { updater.performCheckAction() }
+                            .disabled(!action.isEnabled)
                     }
                 }
                 Text("Updates are delivered via Sparkle from GitHub Releases. Beta builds arrive ahead of stable releases and may be rougher; switching beta off keeps the installed build until the next stable release.")

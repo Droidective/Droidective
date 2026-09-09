@@ -91,15 +91,20 @@ struct AboutView: View {
         VStack(alignment: .leading, spacing: 12) {
             sectionTitle("Updates")
             #if !APPSTORE
+            // Title and enabled state from `UpdatePolicy`, shared with the
+            // menu command and Settings. This surface was the worst of the
+            // three: a dead "Check Now" with no status text anywhere near it,
+            // so a download in progress was indistinguishable from a bug.
+            let action = updater.checkAction
             linkRow(
                 icon: "arrow.triangle.2.circlepath",
                 title: "Check for updates",
-                detail: "Droidective checks on launch and hourly, and installs when you relaunch — you can also check right now.",
-                button: "Check Now"
-            ) { updater.checkForUpdates() }
-                // Same gate as the menu command and Settings — greyed out
-                // while a check or an update session is in flight.
-                .disabled(!updater.canCheckForUpdates)
+                detail: action.isBusy
+                    ? "An update is in progress — it installs when you relaunch."
+                    : "Droidective checks on launch and hourly, and installs when you relaunch — you can also check right now.",
+                button: action.title
+            ) { updater.performCheckAction() }
+                .disabled(!action.isEnabled)
             #endif
             linkRow(
                 icon: "shippingbox",
