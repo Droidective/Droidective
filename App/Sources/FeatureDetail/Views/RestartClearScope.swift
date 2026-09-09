@@ -15,29 +15,12 @@ extension AppControlService {
     /// caller's restart proceeds either way — a failed clear is reported in
     /// the toast, not fatal.
     func clear(_ scope: RestartClearScope, serial: String, package: String) async -> Bool {
-        switch scope {
-        case .cache:
-            return await clearCacheBounded(serial: serial, package: package)
-        case .data:
-            return (try? await control(serial: serial, packageId: package, action: .clearData))?.ok
-                == true
-        }
-    }
-
-    /// `pm clear --cache-only` never returns on some images (observed live on
-    /// the API 36 emulator), so the cache clear gets a bounded window —
-    /// cancelling the task kills the adb child. A full data clear doesn't need
-    /// this: `pm clear` returns reliably.
-    private func clearCacheBounded(serial: String, package: String) async -> Bool {
-        let clear = Task {
-            (try? await control(serial: serial, packageId: package, action: .clearCache))?.ok == true
-        }
-        let watchdog = Task {
-            try? await Task.sleep(for: .seconds(10))
-            clear.cancel()
-        }
-        let ok = await clear.value
-        watchdog.cancel()
-        return ok
+        // No watchdog here any more: `pm clear --cache-only` never returns on
+        // some images, and the bound for that now lives on the command itself
+        // (`AppControlService.cacheClearTimeout`) — so the Apps hub and the
+        // Quick Actions panel get it too, instead of only the two debug
+        // consoles that had each wrapped their own.
+        let action: AppControlService.AppAction = scope == .cache ? .clearCache : .clearData
+        return (try? await control(serial: serial, packageId: package, action: action))?.ok == true
     }
 }

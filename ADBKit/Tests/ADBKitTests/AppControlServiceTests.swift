@@ -161,6 +161,23 @@ import Testing
         ])
     }
 
+    /// The one verb here that must not wait out the default timeout: on some
+    /// images `pm clear --cache-only` never returns at all (seen live on the
+    /// API 36 emulator, app running or stopped), so the Apps hub's button sat
+    /// spinning for the full 30 s and then said it had failed.
+    @Test func clearCacheIsBoundedWhileTheOtherVerbsAreNot() async throws {
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["-s"], stdout: "Success")
+        let service = await makeService(runner)
+
+        _ = try await service.control(serial: "S1", packageId: "com.x", action: .clearCache)
+        #expect(runner.timeout(forArgumentsContaining: ["--cache-only"]) == .seconds(10))
+
+        _ = try await service.control(serial: "S1", packageId: "com.x", action: .clearData)
+        let dataClear = runner.timeouts.last
+        #expect(dataClear == AdbClient.defaultTimeout, "pm clear returns reliably; do not bound it")
+    }
+
     @Test func clearCacheReportsFailureWhenNoSuccessText() async throws {
         // Older devices print nothing (no --cache-only support) and exit 0.
         let runner = MockProcessRunner()
