@@ -145,4 +145,71 @@ import Testing
 
         await #expect(throws: (any Error).self) { try await task.value }
     }
+
+    // MARK: - remove
+
+    /// The Windows CI failure this was added for: a delete that cannot happen
+    /// yet because something still holds the file open. Modelled with a
+    /// FileManager that refuses the first two attempts, since a real sharing
+    /// violation cannot be produced on this platform — POSIX unlinks an open
+    /// file happily, which is the whole reason the bug is Windows-only.
+    @Test func removeRetriesASharingViolation() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("retry-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let locking = LockedUntil(attempts: 2)
+        var pauses = 0
+        try await FileRetry.remove(directory, fileManager: locking, pause: { _ in pauses += 1 })
+
+        #expect(locking.removeCalls == 3, "two refusals then the one that lands")
+        #expect(pauses == 2)
+    }
+
+    /// Nothing there is the outcome every caller wants, not an error — and it
+    /// must not burn the retry budget waiting for a file that will never exist.
+    @Test func removingSomethingAbsentSucceedsImmediately() async throws {
+        let missing = FileManager.default.temporaryDirectory
+            .appendingPathComponent("absent-\(UUID().uuidString)")
+        var pauses = 0
+        try await FileRetry.remove(missing, pause: { _ in pauses += 1 })
+        #expect(pauses == 0)
+    }
+
+    @Test func removeGivesUpAndReportsTheRealError() async {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("stuck-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let locking = LockedUntil(attempts: .max)
+        await #expect(throws: StillOpen.self) {
+            try await FileRetry.remove(
+                directory, fileManager: locking, attempts: 3, pause: { _ in })
+        }
+        #expect(locking.removeCalls == 3, "the budget, then the error")
+    }
+}
+
+/// A sharing violation, as this platform cannot produce a real one.
+private struct StillOpen: Error {}
+
+/// Refuses to delete anything until it has been asked `attempts` times — a
+/// stand-in for a Windows handle that is about to close.
+private final class LockedUntil: FileManager, @unchecked Sendable {
+    private let attempts: Int
+    private(set) var removeCalls = 0
+
+    init(attempts: Int) {
+        self.attempts = attempts
+        super.init()
+    }
+
+    override func fileExists(atPath path: String) -> Bool { true }
+
+    override func removeItem(at URL: URL) throws {
+        removeCalls += 1
+        if removeCalls <= attempts { throw StillOpen() }
+    }
 }
