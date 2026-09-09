@@ -236,7 +236,12 @@ final class ReactotronSession {
     /// tunnels of already-connected devices.
     func deviceListChanged() {
         let current = Set(readyAndroidSerials)
-        tunnelIssues = tunnelIssues.filter { current.contains($0.key) }
+        // Only when it actually changes: `@Observable` fires on an equal value
+        // too, and this map is read by every open Reactotron view — an
+        // unconditional write re-runs both panes' whole filter pass for a
+        // device list that has nothing to do with the tunnels.
+        let keptIssues = tunnelIssues.filter { current.contains($0.key) }
+        if keptIssues != tunnelIssues { tunnelIssues = keptIssues }
         reverseRefreshAttempts = reverseRefreshAttempts.filter { current.contains($0.key) }
         guard isRunning else {
             knownReadySerials = current
