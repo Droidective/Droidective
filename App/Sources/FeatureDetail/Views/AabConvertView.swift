@@ -290,9 +290,9 @@ struct AabConvertView: View {
 
     private func resultCard(_ result: AabConvertService.ConvertedApk) -> some View {
         VStack(spacing: 14) {
-            Image(systemName: "checkmark.circle.fill")
+            Image(systemName: result.isSigned ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
                 .font(.app(size: 46))
-                .foregroundStyle(.green)
+                .foregroundStyle(result.isSigned ? AnyShapeStyle(.green) : AnyShapeStyle(.orange))
             VStack(spacing: 2) {
                 Text(result.url.lastPathComponent)
                     .font(.app(.title3).weight(.medium))
@@ -302,12 +302,29 @@ struct AabConvertView: View {
                     .font(.app(.caption))
                     .foregroundStyle(.textMuted)
             }
+            // Nothing signed it, so `adb install` will refuse it with
+            // `INSTALL_PARSE_FAILED_NO_CERTIFICATES`. Said here rather than
+            // discovered at install time, which is minutes later and reads as
+            // a broken bundle rather than a missing key.
+            if !result.isSigned {
+                VStack(spacing: 4) {
+                    Label("Unsigned — this will not install", systemImage: "exclamationmark.triangle.fill")
+                        .font(.app(.callout).weight(.medium))
+                        .foregroundStyle(.orange)
+                    Text("No keystore was chosen and this Mac has no debug keystore for bundletool "
+                        + "to fall back on. Sign it in APK Studio, or convert again with a keystore.")
+                        .font(.app(.caption))
+                        .foregroundStyle(.textMuted)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: 380)
+            }
             InstallJobRows(urls: [result.url])
                 .frame(maxWidth: 380)
             HStack(spacing: 10) {
                 Button("Install on device") { install(result) }
                     .buttonStyle(.borderedProminent)
-                    .disabled(targets.isEmpty || installRunning(result))
+                    .disabled(targets.isEmpty || installRunning(result) || !result.isSigned)
                 Button("Save a Copy…") { saveCopy(result) }
                 Button("Reveal in Finder") {
                     NSWorkspace.shared.activateFileViewerSelecting([result.url])

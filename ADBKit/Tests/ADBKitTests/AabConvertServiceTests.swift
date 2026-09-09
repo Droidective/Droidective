@@ -269,3 +269,52 @@ private final class FileProducingRunner: ProcessRunning, @unchecked Sendable {
         Issue.record("the fixture could not write \(path)")
     }
 }
+
+/// Whether the converted APK comes out signed — the difference between an APK
+/// that installs and one that fails with `INSTALL_PARSE_FAILED_NO_CERTIFICATES`
+/// minutes later, somewhere else.
+@Suite struct AabSigningDeterminationTests {
+    private func home(withDebugKeystore: Bool) throws -> URL {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("home-\(UUID().uuidString)", isDirectory: true)
+        let android = root.appendingPathComponent(".android", isDirectory: true)
+        try FileManager.default.createDirectory(at: android, withIntermediateDirectories: true)
+        if withDebugKeystore {
+            FileManager.default.createFile(
+                atPath: android.appendingPathComponent("debug.keystore").path,
+                contents: Data("keystore".utf8))
+        }
+        return root
+    }
+
+    private var credentials: KeystoreCredentials {
+        KeystoreCredentials(
+            keystorePath: "/tmp/release.jks", storePassword: "pw", keyAlias: "key", keyPassword: "pw")
+    }
+
+    @Test func aChosenKeystoreAlwaysSigns() throws {
+        let bare = try home(withDebugKeystore: false)
+        defer { try? FileManager.default.removeItem(at: bare) }
+        #expect(AabConvertService.willBeSigned(credentials: credentials, home: bare))
+    }
+
+    /// bundletool's silent fallback, and the reason this is worth reporting:
+    /// the same conversion signs or does not depending on a file the user has
+    /// never heard of.
+    @Test func noKeystoreSignsOnlyWhenTheDebugOneExists() throws {
+        let withKey = try home(withDebugKeystore: true)
+        defer { try? FileManager.default.removeItem(at: withKey) }
+        #expect(AabConvertService.willBeSigned(credentials: nil, home: withKey))
+
+        let bare = try home(withDebugKeystore: false)
+        defer { try? FileManager.default.removeItem(at: bare) }
+        #expect(!AabConvertService.willBeSigned(credentials: nil, home: bare))
+    }
+
+    @Test func theDebugKeystoreIsWhereAndroidStudioPutsIt() {
+        let home = URL(fileURLWithPath: "/Users/someone")
+        #expect(
+            AabConvertService.debugKeystoreURL(home: home).path
+                == "/Users/someone/.android/debug.keystore")
+    }
+}

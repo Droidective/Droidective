@@ -34,11 +34,46 @@ public struct AabConvertService: Sendable {
     public struct ConvertedApk: Sendable, Equatable {
         public let url: URL
         public let sizeBytes: Int64
+        /// Whether anything signed it.
+        ///
+        /// False is a usable APK for inspection and an *uninstallable* one for
+        /// a device: `adb install` refuses it with
+        /// `INSTALL_PARSE_FAILED_NO_CERTIFICATES`. It happens whenever no
+        /// keystore was chosen and the machine has no
+        /// `~/.android/debug.keystore` — the file Android Studio and Gradle
+        /// create, which someone who has never run either simply does not
+        /// have. Reported rather than left to be discovered at install time,
+        /// which is minutes later and somewhere else entirely.
+        public let isSigned: Bool
 
-        public init(url: URL, sizeBytes: Int64) {
+        public init(url: URL, sizeBytes: Int64, isSigned: Bool = true) {
             self.url = url
             self.sizeBytes = sizeBytes
+            self.isSigned = isSigned
         }
+    }
+
+    /// Where bundletool looks for the key it signs with when nobody supplies
+    /// one. Android Studio and Gradle create it on first use; a machine that
+    /// has run neither does not have it.
+    static func debugKeystoreURL(home: URL) -> URL {
+        home.appendingPathComponent(".android/debug.keystore")
+    }
+
+    /// Whether the universal APK will come out signed.
+    ///
+    /// A chosen keystore always signs. Without one it depends entirely on
+    /// whether the debug keystore exists — bundletool falls back to it
+    /// silently, and produces an unsigned APK just as silently when it is
+    /// missing. Pure so the branch is testable without a bundle or a
+    /// toolchain.
+    static func willBeSigned(
+        credentials: KeystoreCredentials?,
+        home: URL = FileManager.default.homeDirectoryForCurrentUser,
+        fileManager: FileManager = .default
+    ) -> Bool {
+        if credentials != nil { return true }
+        return fileManager.fileExists(atPath: debugKeystoreURL(home: home).path)
     }
 
     let toolchain: ApkToolchain
@@ -118,7 +153,9 @@ public struct AabConvertService: Sendable {
         // conversion the user already waited on.
         try await FileRetry.run { try fm.moveItem(at: universal, to: destination) }
         let size = ((try? fm.attributesOfItem(atPath: destination.path))?[.size] as? NSNumber)?.int64Value ?? 0
-        return ConvertedApk(url: destination, sizeBytes: size)
+        return ConvertedApk(
+            url: destination, sizeBytes: size,
+            isSigned: Self.willBeSigned(credentials: credentials))
     }
 
     // MARK: - Pure argument builders
