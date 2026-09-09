@@ -1097,8 +1097,23 @@ position in `RELEASE_NOTES.md`.
 ## Status
 
 Feature-complete across all planned milestones plus several UX rounds.
-(Latest release: **v3.12.1** — a bug-fix release for the thing that made a long
-Reactotron or JS Console session turn into an unresponsive app. **Two feeds were
+(Latest release: **v3.12.1** — pinned tabs, Send Text's snippets in the Quick
+Actions panel, and the fix for the thing that made a long Reactotron or JS
+Console session turn into an unresponsive app. **Pinned tabs**: `TabPinning`
+(see Key types) holds the prefix rule, the strip draws its insertion guideline
+at the *clamped* slot so a drop never lands where the guideline did not promise,
+and the clamp runs over the rendered chips rather than the pane's tab list —
+Home is in the pane and is never a chip, so clamping against the pane could name
+it as the boundary and leave the guideline on a chip nobody drew. The
+Windows/Linux app has it too (`lib/pinning.ts`), with the one platform
+difference named where it occurs: the Mac's menu item reads `AppState`, while
+there the label lives in the native menu and the webview pushes the front tab's
+pinned-ness down (`set_tab_pin_state`). **Panel snippets**: `QuickSnippetList`
+under the form's field, ↓/↑ to walk and ⏎ to insert while ⌘⏎ still runs, sharing
+the main window's `Presets` ranking; no search field, because the panel's one
+text field holds the text being *sent* and filtering by it would hide the
+snippet you were reaching for. Mac-only — the desktop has no snippet store yet
+(`docs/desktop-parity.md`). **And the fix**: **Two feeds were
 each entitled to about a gigabyte of decoded rows**: both capped 128 MB of
 *wire* bytes, and a decoded frame costs about eight times that, which
 `ReactotronTimeline`'s own comment conceded without following through to the
