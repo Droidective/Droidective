@@ -79,7 +79,11 @@ import Testing
         runner.script(
             argsPrefix: ["-s", "S1", "pull", "/data/app/~~a==/com.x-1/split_config.en.apk"],
             stderr: "adb: error: failed to copy", exitCode: 1)
-        FileManager.default.createFile(atPath: dest.path, contents: Data("apk".utf8))
+        // `Data.write`, not `FileManager.createFile`: the latter returns a Bool
+        // that is `@discardableResult` on Darwin and *not* in swift-corelibs,
+        // so ignoring it compiles here and fails the Linux and Windows jobs
+        // under warnings-as-errors.
+        try Data("apk".utf8).write(to: dest)
         let service = AppInspectionService(client: await makeTestClient(runner: runner))
 
         await #expect(throws: AppInspectionService.PullError.self) {
