@@ -477,7 +477,12 @@ final class ReactotronSession {
             guard let service else { return }
             reversedSerials.formUnion(serials)
             knownReadySerials.formUnion(serials)
-            let results = await service.reverse(serials: serials)
+            // A button press, so it belongs in Settings ▸ Command Log — unlike
+            // `applyReverse`, which runs from the device poll and would evict
+            // the log's 200 entries.
+            let results = await CommandLog.userInitiated {
+                await service.reverse(serials: serials)
+            }
             recordTunnelResults(results)
             let okCount = results.count(where: \.ok)
             if let failure = results.first(where: { !$0.ok }) {
