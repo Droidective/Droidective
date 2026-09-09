@@ -17,6 +17,51 @@ import type { DaemonError, Device, Permission } from "@/lib/wire"
  * exactly as the Mac does — a `pm grant` takes long enough that a second click
  * elsewhere would otherwise race the reload.
  */
+/**
+ * The device's runtime permissions, re-read after every grant.
+ *
+ * Lifted out of the pane because it is the part with lifecycle rules: a read
+ * answered after the device changed must not land on the pane now showing a
+ * different one. `reload` bumps a counter rather than calling a shared loader,
+ * so there is exactly one read path and exactly one place the guard has to be
+ * right.
+ */
+function usePermissionList(serial: string | null, packageId: string | null) {
+  const [entries, setEntries] = useState<Permission[] | null>(null)
+  const [error, setError] = useState<DaemonError | null>(null)
+  const [mutating, setMutating] = useState<string | null>(null)
+  const [reloads, setReloads] = useState(0)
+
+  useEffect(() => {
+    setEntries(null)
+  }, [packageId, serial])
+
+  useEffect(() => {
+    setError(null)
+    if (serial === null || packageId === null) return
+    let live = true
+    void (async () => {
+      try {
+        const next = (await readPermissions(serial, packageId)).permissions
+        if (live) setEntries(next)
+      } catch (thrown) {
+        if (live) setError(asDaemonError(thrown))
+      } finally {
+        if (live) setMutating(null)
+      }
+    })()
+    return () => {
+      live = false
+    }
+  }, [packageId, reloads, serial])
+
+  const reload = useCallback(() => {
+    setReloads((count) => count + 1)
+  }, [])
+
+  return { entries, error, mutating, setMutating, reload }
+}
+
 export function PermissionsPane({
   device,
   packageId,
@@ -25,26 +70,9 @@ export function PermissionsPane({
   packageId: string | null
 }) {
   const { show } = useNotifications()
-  const [entries, setEntries] = useState<Permission[] | null>(null)
-  const [error, setError] = useState<DaemonError | null>(null)
-  const [mutating, setMutating] = useState<string | null>(null)
   const [query, setQuery] = useState("")
-
   const serial = device?.serial ?? null
-  const load = useCallback(async () => {
-    if (serial === null || packageId === null) return
-    setError(null)
-    try {
-      setEntries((await readPermissions(serial, packageId)).permissions)
-    } catch (thrown) {
-      setError(asDaemonError(thrown))
-    }
-  }, [packageId, serial])
-
-  useEffect(() => {
-    setEntries(null)
-    void load()
-  }, [load])
+  const { entries, error, mutating, setMutating, reload } = usePermissionList(serial, packageId)
 
   if (!device) return <NoDevice feature="permissions" title="Permissions" />
   if (packageId === null) return <NoBundle what="inspect its permissions" />
@@ -75,9 +103,9 @@ export function PermissionsPane({
         show({ ok: false, message: asDaemonError(thrown).message })
       } finally {
         // Always re-read: `pm grant` refuses an install-time permission with a
-        // message, and the switch must go back to what the device says.
-        await load()
-        setMutating(null)
+        // message, and the switch must go back to what the device says. The
+        // re-read clears `mutating` when it lands.
+        reload()
       }
     })()
   }

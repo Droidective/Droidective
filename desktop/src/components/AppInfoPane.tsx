@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useEffect, useState } from "react"
 import { Download } from "lucide-react"
 import { Banner, Button } from "@/components/Controls"
 import { HubColumn, HubRowList, HubSection } from "@/components/Hub"
@@ -23,20 +23,25 @@ export function AppInfoPane({ device, packageId }: { device: Device | null; pack
   const [pulling, setPulling] = useState(false)
 
   const serial = device?.serial ?? null
-  const load = useCallback(async () => {
-    if (serial === null || packageId === null) return
-    setError(null)
-    try {
-      setInfo(await appInfo(serial, packageId))
-    } catch (thrown) {
-      setError(asDaemonError(thrown))
-    }
-  }, [packageId, serial])
-
   useEffect(() => {
     setInfo(null)
-    void load()
-  }, [load])
+    setError(null)
+    if (serial === null || packageId === null) return
+    // An answer for the device we have left must not land on the one we are
+    // looking at now — the same guard `MeminfoPane` uses.
+    let live = true
+    void (async () => {
+      try {
+        const next = await appInfo(serial, packageId)
+        if (live) setInfo(next)
+      } catch (thrown) {
+        if (live) setError(asDaemonError(thrown))
+      }
+    })()
+    return () => {
+      live = false
+    }
+  }, [packageId, serial])
 
   if (!device) return <NoDevice feature="app-info" title="App Info" />
   if (packageId === null) return <NoBundle what="see its app info" />

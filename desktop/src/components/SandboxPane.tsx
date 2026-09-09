@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useEffect, useState } from "react"
 import { CornerLeftUp, Download, File, Folder, Lock } from "lucide-react"
 import { Banner } from "@/components/Controls"
 import { IconButton } from "@/components/Hub"
@@ -41,24 +41,29 @@ export function SandboxPane({
     setComponents([])
   }, [packageId, serial])
 
-  const load = useCallback(async () => {
-    if (serial === null || packageId === null) return
+  useEffect(() => {
     setEntries(null)
     setError(null)
-    try {
-      const listing = await sandboxList({ serial, packageId, path })
-      setDebuggable(listing.debuggable)
-      setEntries(listing.entries)
-    } catch (thrown) {
-      // Not `setEntries([])`: that renders "Empty directory", which beside the
-      // error banner claims the listing succeeded and found nothing.
-      setError(asDaemonError(thrown))
+    if (serial === null || packageId === null) return
+    // A listing for the device or directory we have left must not land on the
+    // one on screen — the same guard `MeminfoPane` uses.
+    let live = true
+    void (async () => {
+      try {
+        const listing = await sandboxList({ serial, packageId, path })
+        if (!live) return
+        setDebuggable(listing.debuggable)
+        setEntries(listing.entries)
+      } catch (thrown) {
+        // Not `setEntries([])`: that renders "Empty directory", which beside
+        // the error banner claims the listing succeeded and found nothing.
+        if (live) setError(asDaemonError(thrown))
+      }
+    })()
+    return () => {
+      live = false
     }
   }, [packageId, path, serial])
-
-  useEffect(() => {
-    void load()
-  }, [load])
 
   if (!device) return <NoDevice feature="sandbox-browser" title="Sandbox Browser" />
   if (packageId === null) return <NoBundle what="browse its sandbox" />

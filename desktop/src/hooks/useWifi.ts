@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
+
+import { useLatestRequest } from "@/hooks/useLatestRequest"
 import { useNotifications } from "@/hooks/useNotifications"
 import { asDaemonError, connectWifi, copyText, setWifiEnabled, wifi } from "@/lib/daemon"
 import type { DaemonError, WifiResponse } from "@/lib/wire"
@@ -13,6 +15,7 @@ import type { DaemonError, WifiResponse } from "@/lib/wire"
  */
 export function useWifi(serial: string | null) {
   const { show } = useNotifications()
+  const request = useLatestRequest()
   const [data, setData] = useState<WifiResponse | null>(null)
   const [error, setError] = useState<DaemonError | null>(null)
   const [loaded, setLoaded] = useState(false)
@@ -20,20 +23,25 @@ export function useWifi(serial: string | null) {
 
   const load = useCallback(async () => {
     if (serial === null) return
+    const current = request.begin()
     setError(null)
     try {
-      setData(await wifi(serial))
+      const next = await wifi(serial)
+      if (!current()) return
+      setData(next)
       setLoaded(true)
     } catch (thrown) {
+      if (!current()) return
       setError(asDaemonError(thrown))
     }
-  }, [serial])
+  }, [request, serial])
 
   useEffect(() => {
+    request.restart()
     setData(null)
     setLoaded(false)
     void load()
-  }, [load])
+  }, [load, request])
 
   const run = useCallback(
     (command: (serial: string) => Promise<{ ok: boolean; message: string }>) => {
