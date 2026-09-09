@@ -57,6 +57,39 @@ import Testing
         ])
     }
 
+    /// A split app whose second pull fails used to leave a lone `base.apk` at
+    /// the path the user chose. It looks like the app and installs with
+    /// `INSTALL_FAILED_MISSING_SPLIT` days later, long after the error message
+    /// has been dismissed — so the partial set is taken back with the throw.
+    @Test func aFailedSplitPullLeavesNothingBehind() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("pull-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let dest = directory.appendingPathComponent("com.x.apk")
+
+        let runner = MockProcessRunner()
+        runner.script(argsPrefix: ["-s", "S1", "shell", "pm", "path"], stdout: """
+        package:/data/app/~~a==/com.x-1/base.apk
+        package:/data/app/~~a==/com.x-1/split_config.en.apk
+        """)
+        // The base lands; the split does not. adb writes the file itself, so
+        // the base is created here to stand in for that.
+        runner.script(argsPrefix: ["-s", "S1", "pull"], stdout: "1 file pulled")
+        runner.script(
+            argsPrefix: ["-s", "S1", "pull", "/data/app/~~a==/com.x-1/split_config.en.apk"],
+            stderr: "adb: error: failed to copy", exitCode: 1)
+        FileManager.default.createFile(atPath: dest.path, contents: Data("apk".utf8))
+        let service = AppInspectionService(client: await makeTestClient(runner: runner))
+
+        await #expect(throws: AppInspectionService.PullError.self) {
+            _ = try await service.pullApk(serial: "S1", packageId: "com.x", to: dest)
+        }
+        #expect(
+            !FileManager.default.fileExists(atPath: dest.path),
+            "the base APK must not survive a failed split pull")
+    }
+
     @Test func pullApkSingleApkLandsExactlyAtTheChosenDestination() async throws {
         let runner = MockProcessRunner()
         runner.script(

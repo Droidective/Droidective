@@ -458,10 +458,9 @@ final class AppState {
                     return
                 }
                 guard !Task.isCancelled else { return }
-                let written = (try? FileManager.default.attributesOfItem(atPath: destination.path))?[.size] as? Int ?? 0
                 self?.runningOperation = OperationStatus(
                     label: label,
-                    fraction: min(1, Double(written) / Double(expectedBytes))
+                    fraction: min(1, Double(Self.bytesWritten(for: destination)) / Double(expectedBytes))
                 )
             }
         }
@@ -470,6 +469,30 @@ final class AppState {
             runningOperation = nil
         }
         return try await work()
+    }
+
+    /// How much of a pull has landed: the chosen file plus any splits written
+    /// beside it.
+    ///
+    /// A split app is pulled as several files and `expectedBytes` is the sum
+    /// of all of them, so polling only the chosen one made the bar climb to
+    /// base/total, sit there for the rest of the pull, and jump to done — most
+    /// of the wait spent looking stuck on a bundle whose splits outweigh its
+    /// base. Which names count is `PullProgress` in ADBKit, tested there; this
+    /// is the directory read.
+    private static func bytesWritten(for destination: URL) -> Int {
+        let manager = FileManager.default
+        let directory = destination.deletingLastPathComponent()
+        guard let names = try? manager.contentsOfDirectory(atPath: directory.path) else {
+            return (try? manager.attributesOfItem(atPath: destination.path))?[.size] as? Int ?? 0
+        }
+        return names.reduce(0) { total, name in
+            guard PullProgress.belongsToPull(
+                fileName: name, destinationName: destination.lastPathComponent)
+            else { return total }
+            let path = directory.appendingPathComponent(name).path
+            return total + ((try? manager.attributesOfItem(atPath: path))?[.size] as? Int ?? 0)
+        }
     }
 
     // MARK: - Save destinations

@@ -3,6 +3,13 @@ import Foundation
 /// App-scoped operations keyed by package id: lifecycle control and the
 /// installed-package list (used by the "pick from device" bundle flow).
 public struct AppControlService: Sendable {
+    /// How long to wait for `pm clear --cache-only` before giving up on it.
+    ///
+    /// Long enough for a real clear on a slow device, short enough that the
+    /// hang some images have is a brief failure rather than half a minute of
+    /// a spinning button.
+    static let cacheClearTimeout: Duration = .seconds(10)
+
     public enum AppAction: String, Sendable, CaseIterable {
         case open
         case restart
@@ -43,7 +50,17 @@ public struct AppControlService: Sendable {
             return fromResult(result, success: "Sent to background", fallback: "Failed to minimize")
 
         case .clearCache:
-            let result = try await client.run(on: serial, ["shell", "pm", "clear", "--cache-only", shellQuote(packageId)])
+            // Bounded, unlike every other verb here. `pm clear --cache-only`
+            // never returns on some images (observed live on the API 36
+            // emulator, app running or stopped), so the default 30 s timeout
+            // meant the Apps hub's Clear Cache stalled for half a minute and
+            // then reported failure. The JS Console and Reactotron had each
+            // wrapped their own watchdog around this; the bound belongs on the
+            // command, so the hub and the panel get it too.
+            let result = try await client.run(
+                on: serial,
+                ["shell", "pm", "clear", "--cache-only", shellQuote(packageId)],
+                timeout: Self.cacheClearTimeout)
             // `pm clear` prints "Success"/"Failed" and exits 0 either way, so the
             // stdout text — not the exit code — is authoritative.
             return Self.pmClearSucceeded(result)

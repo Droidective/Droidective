@@ -12,11 +12,34 @@ final class MockProcessRunner: ProcessRunning, @unchecked Sendable {
     private let lock = NSLock()
     private var scripts: [(argsPrefix: [String], output: ProcessOutput)] = []
     private var recorded: [Invocation] = []
+    private var recordedTimeouts: [Duration] = []
 
     var invocations: [Invocation] {
         lock.lock()
         defer { lock.unlock() }
         return recorded
+    }
+
+    /// The timeout each call was given, in the same order as `invocations`.
+    ///
+    /// Kept beside them rather than on `Invocation`: a command that must be
+    /// *bounded* — `pm clear --cache-only` never returns on some images — has
+    /// no other observable difference, and widening `Invocation` would rewrite
+    /// every arg-vector assertion in the suite to say nothing new.
+    var timeouts: [Duration] {
+        lock.lock()
+        defer { lock.unlock() }
+        return recordedTimeouts
+    }
+
+    /// The timeout given to the first call whose arguments contain `needle`.
+    func timeout(forArgumentsContaining needle: [String]) -> Duration? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let index = recorded.firstIndex(where: { invocation in
+            needle.allSatisfy(invocation.arguments.contains)
+        }) else { return nil }
+        return recordedTimeouts[index]
     }
 
     /// Respond to any invocation whose arguments start with `argsPrefix`.
@@ -32,14 +55,17 @@ final class MockProcessRunner: ProcessRunning, @unchecked Sendable {
     }
 
     func run(executable: String, arguments: [String], timeout: Duration, maxOutputBytes: Int) async -> ProcessOutput {
-        recordAndMatch(executable: executable, arguments: arguments)
+        recordAndMatch(executable: executable, arguments: arguments, timeout: timeout)
             ?? ProcessOutput(stdout: Data(), stderr: Data("unscripted invocation".utf8), exitCode: 1, timedOut: false)
     }
 
-    private func recordAndMatch(executable: String, arguments: [String]) -> ProcessOutput? {
+    private func recordAndMatch(
+        executable: String, arguments: [String], timeout: Duration
+    ) -> ProcessOutput? {
         lock.lock()
         defer { lock.unlock() }
         recorded.append(Invocation(executable: executable, arguments: arguments))
+        recordedTimeouts.append(timeout)
         return scripts.last { arguments.starts(with: $0.argsPrefix) }?.output
     }
 }

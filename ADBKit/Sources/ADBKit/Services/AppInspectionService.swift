@@ -206,6 +206,14 @@ public struct AppInspectionService: Sendable {
             let dest = saved.isEmpty ? base : Self.splitDestination(base: base, splitPath: path)
             let result = try await client.run(on: serial, ["pull", path, dest.path], timeout: .seconds(120))
             guard result.succeeded else {
+                // Take back what landed before rethrowing. A split app whose
+                // second pull fails would otherwise leave a lone `base.apk`
+                // at the path the user chose — which looks like the app and
+                // installs with `INSTALL_FAILED_MISSING_SPLIT` days later,
+                // long after the error message has gone. Half a bundle is
+                // worse than none.
+                for written in saved { try? FileManager.default.removeItem(at: written) }
+                try? FileManager.default.removeItem(at: dest)
                 throw PullError.failed(friendlyAdbError(result, fallback: "Failed to pull APK"))
             }
             saved.append(dest)
