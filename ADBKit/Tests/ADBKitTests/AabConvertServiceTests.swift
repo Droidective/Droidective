@@ -280,9 +280,11 @@ private final class FileProducingRunner: ProcessRunning, @unchecked Sendable {
         let android = root.appendingPathComponent(".android", isDirectory: true)
         try FileManager.default.createDirectory(at: android, withIntermediateDirectories: true)
         if withDebugKeystore {
-            FileManager.default.createFile(
-                atPath: android.appendingPathComponent("debug.keystore").path,
-                contents: Data("keystore".utf8))
+            // `Data.write`, not `FileManager.createFile`: the latter returns a
+            // Bool that is `@discardableResult` on Darwin and *not* in
+            // swift-corelibs, so ignoring it compiles here and fails the Linux
+            // and Windows jobs under warnings-as-errors.
+            try Data("keystore".utf8).write(to: android.appendingPathComponent("debug.keystore"))
         }
         return root
     }
