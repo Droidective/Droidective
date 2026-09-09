@@ -1,7 +1,7 @@
 .PHONY: generate build test test-app test-linux run dmg clean site-dev site-build \
 	verify verify-fast verify-self \
 	test-emulator test-emulator-rooted test-emulator-mirror test-mutation test-smoke \
-	desktop-dev desktop-test desktop-build
+	desktop-dev desktop-test desktop-build desktop-linux desktop-linux-smoke
 
 # Optional telemetry keys for local builds. Create .env.telemetry (gitignored)
 # with SENTRY_DSN=... and POSTHOG_KEY=... to enable crash/analytics locally.
@@ -124,6 +124,18 @@ desktop-test:
 desktop-build:
 	./scripts/build-daemon-sidecar.sh release
 	cd desktop && npm ci && npm run tauri build
+
+# The Linux app, built in a container from a macOS or Linux host — Tauri does
+# not cross-compile. Then the same .deb installed in a bare ubuntu:24.04 and
+# driven under Xvfb, which is what catches a runtime dependency the build
+# container happened to have. Both had no front door here, so the only way to
+# find them was to already know their paths.
+CONFIGURATION ?= release
+desktop-linux:
+	./scripts/build-desktop-linux.sh $(CONFIGURATION)
+
+desktop-linux-smoke:
+	./scripts/smoke-desktop-linux.sh $(DEB)
 
 # Marketing site (website/ — React + Vite; site/ is the static passthrough
 # copied into the build via Vite's publicDir)

@@ -11,15 +11,22 @@ rewriting one when something turns out to be more work than it looked.
 
 | | Count |
 | --- | --- |
+| ✅ Ported | 55 |
+| 🟡 Partial | 2 |
 | ⬜ Not started | 2 |
-| 🟡 Partial | 57 |
 | ⛔ Not applicable off-Apple | 2 |
 | **Total registry features** | **61** |
 
-"Partial" is doing a lot of work in that table: 19 of the 57 are actions that
-run from the palette but have no screen of their own, and the 38 that do have
-screens are each missing something the Mac version offers. Read it as *nothing
-is finished*, not as *most of it is done*.
+These are the generated classifier's own numbers, not a second count kept by
+hand — the two used to disagree (this table said 19 not started and 40 partial
+while the generated half said 35 and 24, because they meant different things by
+"partial"), and a tracker with two answers is a tracker nobody trusts.
+
+**"Ported" means a pane is routed, or the feature is an action with nothing to
+build** — not that the screen has been audited against the Mac's. The
+per-feature checklists below are that audit, and they are still unticked. The
+two **partial** entries are the ones with a gap named in the classifier: the
+mirror's screenshot annotation editor, and the Terminal on Windows.
 
 **The two not started are `video-editor` and `frida-console`.** The video
 editor is the ffmpeg filter graph and a preview scrubber — the toolchain
@@ -39,8 +46,8 @@ covers **29 of the 32 full-screen views** in the catalog; the other seven
 catalog features are actions that render from their registry fields.
 
 That list is not written here twice: `scripts/generate-parity-tracker.py` reads
-it out of the desktop app's pane router, so a screen that lands is partial in
-the checklist below without anyone remembering to say so.
+it out of the desktop app's pane router, so a screen that lands is marked
+ported in the checklist below without anyone remembering to say so.
 
 **Only two features are out of scope**, and only because they drive an Apple
 toolchain rather than a device: `ios-logs` and `push-notification` are `xcrun
@@ -1533,28 +1540,28 @@ job, and the checklist now says which.
 
 ## Per-feature checklists
 ### Input & Clipboard
-#### `send-text` — Send Text  ·  🟡 partial
+#### `send-text` — Send Text  ·  ✅ ported
 > Type text, URLs, or symbols on the device
 - **Kind** `formAction`
-- **Note** Runs from the palette; no dedicated screen.
+- **Note** Runs from the palette and the action form, rendered from the registry — which is the whole feature.
 - **Parameters** `text` (text)
 
 
 ### Connection
-#### `connection` — Connection  ·  🟡 partial
+#### `connection` — Connection  ·  ✅ ported
 > Copy IP, reverse port, disconnect, DNS & wireless setup
 - **Kind** `view`
-- **Note** A pane exists; the checklist below is what it is missing.
+- **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `NetworkConnectionView` — `App/Sources/FeatureDetail/Views/NetworkConnectionView.swift`
 - **Must replicate**
   - [ ] button: Forward
   - [ ] label: Copy IP
   - [ ] tooltip: Refresh
 
-#### `emulators` — Emulators & Simulators  ·  🟡 partial
+#### `emulators` — Emulators & Simulators  ·  ✅ ported
 > Launch and stop Android emulators & iOS Simulators
 - **Kind** `view`
-- **Note** A pane exists; the checklist below is what it is missing.
+- **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `EmulatorsView` — `App/Sources/FeatureDetail/Views/EmulatorsView.swift`
 - **Must replicate**
   - [ ] button: Wipe Data
@@ -1569,41 +1576,41 @@ job, and the checklist now says which.
   - [ ] label: Refresh
   - [ ] tooltip: Stop the emulator and boot it again
 
-#### `get-ip` — Copy Device IP  ·  🟡 partial
+#### `get-ip` — Copy Device IP  ·  ✅ ported
 > Get the Wi-Fi IP address and copy it
 - **Kind** `instantAction`
-- **Note** Runs from the palette; no dedicated screen.
+- **Note** Runs from the palette and the action form, rendered from the registry — which is the whole feature.
 
-#### `network-speed` — Network Speed  ·  🟡 partial
+#### `network-speed` — Network Speed  ·  ✅ ported
 > Live download & upload throughput with recording
 - **Kind** `view`
-- **Note** A pane exists; the checklist below is what it is missing.
+- **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `NetworkView` — `App/Sources/FeatureDetail/Views/NetworkView.swift`
 - **Must replicate**
   - [ ] label: Export
   - [ ] label: seconds
   - [ ] tooltip: Export the recording as JSON + CSV
 
-#### `private-dns` — Private DNS  ·  🟡 partial
+#### `private-dns` — Private DNS  ·  ✅ ported
 > Off, automatic, or a DNS-over-TLS provider
 - **Kind** `view` · **hub member**
-- **Note** A pane exists; the checklist below is what it is missing.
+- **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `PrivateDnsView` — `App/Sources/FeatureDetail/Views/PrivateDnsView.swift`
 - **Must replicate**
   - [ ] button: Apply
   - [ ] picker: Mode
   - [ ] tooltip: Refresh
 
-#### `reverse-port` — Reverse Port  ·  🟡 partial
+#### `reverse-port` — Reverse Port  ·  ✅ ported
 > Forward a device port to your machine (Metro 8081)
 - **Kind** `formAction` · **hub member**
-- **Note** Runs from the palette; no dedicated screen.
+- **Note** Runs from the palette and the action form, rendered from the registry — which is the whole feature.
 - **Parameters** `port` (preset)
 
-#### `wifi` — Wi-Fi  ·  🟡 partial
+#### `wifi` — Wi-Fi  ·  ✅ ported
 > Connection details, toggle, saved networks & passwords
 - **Kind** `view`
-- **Note** A pane exists; the checklist below is what it is missing.
+- **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `WiFiView` — `App/Sources/FeatureDetail/Views/WiFiView.swift`
 - **Must replicate**
   - [ ] button: Connect
@@ -1612,10 +1619,10 @@ job, and the checklist now says which.
   - [ ] tooltip: Refresh
   - [ ] tooltip: Copy password
 
-#### `wireless-adb` — Wireless ADB  ·  🟡 partial
+#### `wireless-adb` — Wireless ADB  ·  ✅ ported
 > Connect over Wi-Fi (tcpip + Android 11 pairing)
 - **Kind** `view` · **hub member**
-- **Note** A pane exists; the checklist below is what it is missing.
+- **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `WirelessAdbView` — `App/Sources/FeatureDetail/Views/WirelessAdbView.swift`
 - **Must replicate**
   - [ ] button: Enable Wi-Fi & Connect
@@ -1626,10 +1633,10 @@ job, and the checklist now says which.
 
 
 ### React Native
-#### `deep-link` — Deep Links  ·  🟡 partial
+#### `deep-link` — Deep Links  ·  ✅ ported
 > Launch and save deep links per app
 - **Kind** `view` · **hub member** · **needs an app**
-- **Note** A pane exists; the checklist below is what it is missing.
+- **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `DeepLinksView` — `App/Sources/FeatureDetail/Views/DeepLinksView.swift`
 - **Must replicate**
   - [ ] button: Delete
@@ -1641,10 +1648,10 @@ job, and the checklist now says which.
   - [ ] label: Delete \(link.label)
   - [ ] tooltip: Launch on device
 
-#### `js-console` — JS Console  ·  🟡 partial
+#### `js-console` — JS Console  ·  ✅ ported
 > Hermes REPL + live console over the Metro debugger
 - **Kind** `view`
-- **Note** A pane exists; the checklist below is what it is missing.
+- **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `JSConsoleView` — `App/Sources/FeatureDetail/Views/JSConsoleView.swift`
 - **Must replicate**
   - [ ] button: Clear Data & Restart
@@ -1675,29 +1682,29 @@ job, and the checklist now says which.
   - [ ] shortcut: "c", modifiers: .command
   - [ ] export: save/export to a file
 
-#### `open-dev-menu` — Open Dev Menu  ·  🟡 partial
+#### `open-dev-menu` — Open Dev Menu  ·  ✅ ported
 > Open the React Native developer menu
 - **Kind** `instantAction` · **hub member**
-- **Note** Runs from the palette; no dedicated screen.
+- **Note** Runs from the palette and the action form, rendered from the registry — which is the whole feature.
 
-#### `process-death` — Simulate Process Death  ·  🟡 partial
+#### `process-death` — Simulate Process Death  ·  ✅ ported
 > Background then kill the app to test restoration
 - **Kind** `instantAction` · **hub member**
-- **Note** Runs from the palette; no dedicated screen.
+- **Note** Runs from the palette and the action form, rendered from the registry — which is the whole feature.
 
-#### `react-native` — React Native  ·  🟡 partial
+#### `react-native` — React Native  ·  ✅ ported
 > Dev menu, reload, deep links, dev server, process death
 - **Kind** `view`
-- **Note** A pane exists; the checklist below is what it is missing.
+- **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `ReactNativeView` — `App/Sources/FeatureDetail/Views/ReactNativeView.swift`
 - **Must replicate**
   - [ ] button: Forward
   - [ ] button: Set
 
-#### `reactotron` — Reactotron  ·  🟡 partial
+#### `reactotron` — Reactotron  ·  ✅ ported
 > Live React Native inspector — logs, network, state, custom display
 - **Kind** `view`
-- **Note** A pane exists; the checklist below is what it is missing.
+- **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `ReactotronView` — `App/Sources/FeatureDetail/Views/ReactotronView.swift`
 - **Must replicate**
   - [ ] button: OK
@@ -1756,28 +1763,28 @@ job, and the checklist now says which.
   - [ ] shortcut: "c", modifiers: .command
   - [ ] export: save/export to a file
 
-#### `reload-js` — Reload JS  ·  🟡 partial
+#### `reload-js` — Reload JS  ·  ✅ ported
 > Reload the JS bundle (double-tap R)
 - **Kind** `instantAction` · **hub member**
-- **Note** Runs from the palette; no dedicated screen.
+- **Note** Runs from the palette and the action form, rendered from the registry — which is the whole feature.
 
-#### `rn-dev-host` — Set Dev Server Host  ·  🟡 partial
+#### `rn-dev-host` — Set Dev Server Host  ·  ✅ ported
 > Point the app at a different Metro host
 - **Kind** `formAction` · **hub member**
-- **Note** Runs from the palette; no dedicated screen.
+- **Note** Runs from the palette and the action form, rendered from the registry — which is the whole feature.
 - **Parameters** `host` (text)
 
 
 ### Screen & Capture
-#### `demo-mode` — Demo Mode  ·  🟡 partial
+#### `demo-mode` — Demo Mode  ·  ✅ ported
 > Clean status bar for store screenshots
 - **Kind** `toggleAction`
-- **Note** Runs from the palette; no dedicated screen.
+- **Note** Runs from the palette and the action form, rendered from the registry — which is the whole feature.
 
-#### `mirror-wall` — Mirror Wall  ·  🟡 partial
+#### `mirror-wall` — Mirror Wall  ·  ✅ ported
 > Mirror up to six devices side by side
 - **Kind** `view`
-- **Note** A pane exists; the checklist below is what it is missing.
+- **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `MirrorWallView` — `App/Sources/FeatureDetail/Views/MirrorWallView.swift`
 - **Must replicate**
   - [ ] button: Open Each in Its Own Window
@@ -1792,7 +1799,7 @@ job, and the checklist now says which.
 #### `scrcpy` — Mirror Screen  ·  🟡 partial
 > Mirror and control the device with scrcpy
 - **Kind** `view`
-- **Note** A pane exists; the checklist below is what it is missing.
+- **Note** The pane mirrors and takes input; the screenshot annotation editor the Mac opens from it is Mac-only so far.
 - **macOS view** `ScreenMirrorView` — `App/Sources/FeatureDetail/Views/ScreenMirrorView.swift`
 - **Must replicate**
   - [ ] button: Volume down
@@ -1811,19 +1818,19 @@ job, and the checklist now says which.
   - [ ] tooltip: Recording audio — device playback or mic, plus the Mac's mic
   - [ ] tooltip: Mute or unmute what's being recorded
 
-#### `screen-record` — Screen Record  ·  🟡 partial
+#### `screen-record` — Screen Record  ·  ✅ ported
 > Record via scrcpy — no time limit, with audio
 - **Kind** `view`
-- **Note** A pane exists; the checklist below is what it is missing.
+- **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `ScreenRecordView` — `App/Sources/FeatureDetail/Views/ScreenRecordView.swift`
 - **Must replicate**
   - [ ] label: Stop & Save
   - [ ] label: Stop
 
-#### `screenshot` — Screenshot  ·  🟡 partial
+#### `screenshot` — Screenshot  ·  ✅ ported
 > Capture the screen and save it to your Mac
 - **Kind** `instantAction`
-- **Note** Runs from the palette; no dedicated screen.
+- **Note** Runs from the palette and the action form, rendered from the registry — which is the whole feature.
 
 #### `video-editor` — Video Editor  ·  ⬜ todo
 > Trim, rotate, crop, convert & compress video
@@ -1835,42 +1842,42 @@ job, and the checklist now says which.
 
 
 ### Device State
-#### `animation-scale` — Animation Scale  ·  🟡 partial
+#### `animation-scale` — Animation Scale  ·  ✅ ported
 > Set animation scales to 0× or 1×
 - **Kind** `toggleAction` · **hub member**
-- **Note** Runs from the palette; no dedicated screen.
+- **Note** Runs from the palette and the action form, rendered from the registry — which is the whole feature.
 
-#### `dark-mode` — Dark Mode  ·  🟡 partial
+#### `dark-mode` — Dark Mode  ·  ✅ ported
 > Toggle system dark mode
 - **Kind** `toggleAction` · **hub member**
-- **Note** Runs from the palette; no dedicated screen.
+- **Note** Runs from the palette and the action form, rendered from the registry — which is the whole feature.
 
-#### `dev-settings` — Developer Settings  ·  🟡 partial
+#### `dev-settings` — Developer Settings  ·  ✅ ported
 > Layout bounds, overdraw, taps, animation scales & more
 - **Kind** `view`
-- **Note** A pane exists; the checklist below is what it is missing.
+- **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `DeveloperSettingsView` — `App/Sources/FeatureDetail/Views/DeveloperSettingsView.swift`
 - **Must replicate**
   - [ ] tooltip: Refresh from the device
 
-#### `device-info` — Device Info  ·  🟡 partial
+#### `device-info` — Device Info  ·  ✅ ported
 > Browse and search every device property
 - **Kind** `view`
-- **Note** A pane exists; the checklist below is what it is missing.
+- **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `DeviceInfoView` — `App/Sources/FeatureDetail/Views/DeviceInfoView.swift`
 - **Must replicate**
   - [ ] field: Filter properties…
 
-#### `fake-battery` — Fake Battery  ·  🟡 partial
+#### `fake-battery` — Fake Battery  ·  ✅ ported
 > Set a fake battery level and unplugged state
 - **Kind** `formAction` · **hub member**
-- **Note** Runs from the palette; no dedicated screen.
+- **Note** Runs from the palette and the action form, rendered from the registry — which is the whole feature.
 - **Parameters** `level` (slider), `unplugged` (switch)
 
-#### `file-explorer` — File Explorer  ·  🟡 partial
+#### `file-explorer` — File Explorer  ·  ✅ ported
 > Browse device storage — copy, move, delete, pull
 - **Kind** `view`
-- **Note** A pane exists; the checklist below is what it is missing.
+- **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `FileExplorerView` — `App/Sources/FeatureDetail/Views/FileExplorerView.swift`
 - **Must replicate**
   - [ ] button: Create
@@ -1892,28 +1899,28 @@ job, and the checklist now says which.
   - [ ] menu: right-click context menu
   - [ ] export: save/export to a file
 
-#### `http-proxy` — HTTP Proxy  ·  🟡 partial
+#### `http-proxy` — HTTP Proxy  ·  ✅ ported
 > Set or clear the global proxy (Charles, Proxyman)
 - **Kind** `formAction` · **hub member**
-- **Note** Runs from the palette; no dedicated screen.
+- **Note** Runs from the palette and the action form, rendered from the registry — which is the whole feature.
 - **Parameters** `proxy` (preset)
 
-#### `layout-overrides` — Font & Density  ·  🟡 partial
+#### `layout-overrides` — Font & Density  ·  ✅ ported
 > Override font scale and display density
 - **Kind** `formAction` · **hub member**
-- **Note** Runs from the palette; no dedicated screen.
+- **Note** Runs from the palette and the action form, rendered from the registry — which is the whole feature.
 - **Parameters** `fontScale` (slider), `density` (number, optional)
 
-#### `locale` — Change Locale  ·  🟡 partial
+#### `locale` — Change Locale  ·  ✅ ported
 > Switch device language for i18n testing
 - **Kind** `formAction` · **hub member**
-- **Note** Runs from the palette; no dedicated screen.
+- **Note** Runs from the palette and the action form, rendered from the registry — which is the whole feature.
 - **Parameters** `locale` (select)
 
-#### `network-toggles` — Network Toggles  ·  🟡 partial
+#### `network-toggles` — Network Toggles  ·  ✅ ported
 > Toggle Wi-Fi, mobile data, and airplane mode
 - **Kind** `formAction` · **hub member**
-- **Note** Runs from the palette; no dedicated screen.
+- **Note** Runs from the palette and the action form, rendered from the registry — which is the whole feature.
 - **Parameters** `wifi` (switch), `data` (switch), `airplane` (switch)
 
 #### `push-notification` — Push Notification  ·  ⛔ n/a
@@ -1922,10 +1929,10 @@ job, and the checklist now says which.
 - **Note** iOS Simulator only (simctl push).
 - **Parameters** `bundleId` (text), `title` (text), `body` (text), `badge` (number, optional)
 
-#### `simulate` — Simulate  ·  🟡 partial
+#### `simulate` — Simulate  ·  ✅ ported
 > Fake battery, appearance, locale, network & proxy
 - **Kind** `view`
-- **Note** A pane exists; the checklist below is what it is missing.
+- **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `SimulateView` — `App/Sources/FeatureDetail/Views/SimulateView.swift`
 - **Must replicate**
   - [ ] button: Reset all overrides
@@ -1934,10 +1941,10 @@ job, and the checklist now says which.
   - [ ] button: Set
   - [ ] button: Clear
 
-#### `system-restrictions` — System Restrictions  ·  🟡 partial
+#### `system-restrictions` — System Restrictions  ·  ✅ ported
 > Dev toggles — verifier, hidden APIs, SELinux (root)
 - **Kind** `view`
-- **Note** A pane exists; the checklist below is what it is missing.
+- **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `SystemRestrictionsView` — `App/Sources/FeatureDetail/Views/SystemRestrictionsView.swift`
 - **Must replicate**
   - [ ] button: Remount /system read-write
@@ -1945,19 +1952,19 @@ job, and the checklist now says which.
 
 
 ### Logs & Diagnostics
-#### `bug-report` — Bug Report  ·  🟡 partial
+#### `bug-report` — Bug Report  ·  ✅ ported
 > Zip screenshot + logs + device info + version
 - **Kind** `view`
-- **Note** A pane exists; the checklist below is what it is missing.
+- **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `BugReportView` — `App/Sources/FeatureDetail/Views/BugReportView.swift`
 - **Must replicate**
   - [ ] button: Open in Finder
   - [ ] label: Generate bug report
 
-#### `crash-catcher` — Crash Catcher  ·  🟡 partial
+#### `crash-catcher` — Crash Catcher  ·  ✅ ported
 > Browse device crashes — watch, filter, copy for Slack/Jira
 - **Kind** `view`
-- **Note** A pane exists; the checklist below is what it is missing.
+- **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `CrashView` — `App/Sources/FeatureDetail/Views/CrashView.swift`
 - **Must replicate**
   - [ ] button: Clear Buffer
@@ -1983,10 +1990,10 @@ job, and the checklist now says which.
 - **Kind** `view`
 - **Note** iOS Simulator only, via simctl — a macOS toolchain, not a device.
 
-#### `logcat` — Logcat  ·  🟡 partial
+#### `logcat` — Logcat  ·  ✅ ported
 > Live log stream with search and filters
 - **Kind** `view`
-- **Note** A pane exists; the checklist below is what it is missing.
+- **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `LogcatView` — `App/Sources/FeatureDetail/Views/LogcatView.swift`
 - **Must replicate**
   - [ ] picker: Level
@@ -2003,10 +2010,10 @@ job, and the checklist now says which.
   - [ ] tooltip: Remove tag filter
   - [ ] export: save/export to a file
 
-#### `performance` — Performance Monitor  ·  🟡 partial
+#### `performance` — Performance Monitor  ·  ✅ ported
 > Live CPU, RAM & FPS with recording and export
 - **Kind** `view`
-- **Note** A pane exists; the checklist below is what it is missing.
+- **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `PerformanceView` — `App/Sources/FeatureDetail/Views/PerformanceView.swift`
 - **Must replicate**
   - [ ] button: Export…
@@ -2020,20 +2027,20 @@ job, and the checklist now says which.
   - [ ] tooltip: Stop recording
   - [ ] tooltip: Export the recording as JSON + CSV
 
-#### `root-status` — Root Status  ·  🟡 partial
+#### `root-status` — Root Status  ·  ✅ ported
 > Check whether the device is rooted, and how
 - **Kind** `view`
-- **Note** A pane exists; the checklist below is what it is missing.
+- **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `RootStatusView` — `App/Sources/FeatureDetail/Views/RootStatusView.swift`
 - **Must replicate**
   - [ ] label: Re-check
 
 
 ### App Management
-#### `aab-convert` — AAB to APK  ·  🟡 partial
+#### `aab-convert` — AAB to APK  ·  ✅ ported
 > Convert an Android App Bundle into an installable APK
 - **Kind** `view`
-- **Note** A pane exists; the checklist below is what it is missing.
+- **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `AabConvertView` — `App/Sources/FeatureDetail/Views/AabConvertView.swift`
 - **Must replicate**
   - [ ] button: Choose AAB…
@@ -2047,10 +2054,10 @@ job, and the checklist now says which.
   - [ ] label: Connect a device to install onto
   - [ ] export: save/export to a file
 
-#### `apk-decompile` — Decompile APK  ·  🟡 partial
+#### `apk-decompile` — Decompile APK  ·  ✅ ported
 > Browse Java (jadx) or smali + resources (apktool)
 - **Kind** `view` · **hub member**
-- **Note** A pane exists; the checklist below is what it is missing.
+- **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `DecompileBrowserView` — `App/Sources/FeatureDetail/Views/DecompileBrowserView.swift`
 - **Must replicate**
   - [ ] button: Choose APK…
@@ -2064,10 +2071,10 @@ job, and the checklist now says which.
   - [ ] label: Open externally
   - [ ] tooltip: Find in file (⌘F)
 
-#### `apk-inspector` — APK Inspector  ·  🟡 partial
+#### `apk-inspector` — APK Inspector  ·  ✅ ported
 > Inspect an APK — manifest, permissions, SDK, signing
 - **Kind** `view` · **hub member**
-- **Note** A pane exists; the checklist below is what it is missing.
+- **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `ApkInspectorView` — `App/Sources/FeatureDetail/Views/ApkInspectorView.swift`
 - **Must replicate**
   - [ ] button: Choose APK…
@@ -2075,20 +2082,20 @@ job, and the checklist now says which.
   - [ ] label: \(title) (\(items.count))
   - [ ] label: Signing
 
-#### `apk-sign` — Sign APK  ·  🟡 partial
+#### `apk-sign` — Sign APK  ·  ✅ ported
 > Zipalign and sign an APK — debug key or your keystore
 - **Kind** `view` · **hub member**
-- **Note** A pane exists; the checklist below is what it is missing.
+- **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `ApkSignView` — `App/Sources/FeatureDetail/Views/ApkSignView.swift`
 - **Must replicate**
   - [ ] button: Choose APK…
   - [ ] button: Choose a different APK…
   - [ ] button: Open in Finder
 
-#### `apk-studio` — APK Studio  ·  🟡 partial
+#### `apk-studio` — APK Studio  ·  ✅ ported
 > Inspect, decompile, recompile, and sign APKs in one place
 - **Kind** `view`
-- **Note** A pane exists; the checklist below is what it is missing.
+- **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `ApkStudioView` — `App/Sources/FeatureDetail/Views/ApkStudioView.swift`
 - **Must replicate**
   - [ ] button: Open another APK
@@ -2097,26 +2104,26 @@ job, and the checklist now says which.
   - [ ] button: Sign the rebuilt APK
   - [ ] button: Open in Finder
 
-#### `app-info` — App Info  ·  🟡 partial
+#### `app-info` — App Info  ·  ✅ ported
 > Version, target SDK, size — and pull the APK
 - **Kind** `view` · **hub member** · **needs an app**
-- **Note** A pane exists; the checklist below is what it is missing.
+- **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `AppInfoView` — `App/Sources/FeatureDetail/Views/AppInfoView.swift`
 - **Must replicate**
   - [ ] export: save/export to a file
 
-#### `app-management` — Manage App  ·  🟡 partial
+#### `app-management` — Manage App  ·  ✅ ported
 > Open, stop, clear, or uninstall an app
 - **Kind** `view` · **hub member** · **needs an app**
-- **Note** A pane exists; the checklist below is what it is missing.
+- **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `AppManagementView` — `App/Sources/FeatureDetail/Views/AppManagementView.swift`
 - **Must replicate**
   - [ ] button: Cancel
 
-#### `apps` — Apps  ·  🟡 partial
+#### `apps` — Apps  ·  ✅ ported
 > All installed & system apps — manage, permissions, info
 - **Kind** `view`
-- **Note** A pane exists; the checklist below is what it is missing.
+- **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `AppsExplorerView` — `App/Sources/FeatureDetail/Views/AppsExplorerView.swift`
 - **Must replicate**
   - [ ] button: Clear Data
@@ -2135,15 +2142,15 @@ job, and the checklist now says which.
   - [ ] tooltip: Refresh
   - [ ] export: save/export to a file
 
-#### `current-activity` — Copy Current Activity  ·  🟡 partial
+#### `current-activity` — Copy Current Activity  ·  ✅ ported
 > Show the foreground Activity right now
 - **Kind** `instantAction`
-- **Note** Runs from the palette; no dedicated screen.
+- **Note** Runs from the palette and the action form, rendered from the registry — which is the whole feature.
 
-#### `foreground-package` — Copy Foreground Bundle ID  ·  🟡 partial
+#### `foreground-package` — Copy Foreground Bundle ID  ·  ✅ ported
 > Get the package id of the app on screen now
 - **Kind** `instantAction`
-- **Note** Runs from the palette; no dedicated screen.
+- **Note** Runs from the palette and the action form, rendered from the registry — which is the whole feature.
 
 #### `frida-console` — Frida  ·  ⬜ todo
 > Set up frida-server or frida-gadget for instrumentation
@@ -2153,40 +2160,40 @@ job, and the checklist now says which.
 - **Must replicate**
   - [ ] button: Stop frida-server
 
-#### `install-app` — Install App  ·  🟡 partial
+#### `install-app` — Install App  ·  ✅ ported
 > Install an APK, APKS, XAPK, or APKM — drag and drop or pick a file
 - **Kind** `view`
-- **Note** A pane exists; the checklist below is what it is missing.
+- **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `InstallAppView` — `App/Sources/FeatureDetail/Views/InstallAppView.swift`
 - **Must replicate**
   - [ ] button: Choose File…
   - [ ] label: Connect a device to install onto
 
-#### `meminfo` — Memory Usage  ·  🟡 partial
+#### `meminfo` — Memory Usage  ·  ✅ ported
 > Live memory usage for an app
 - **Kind** `view` · **needs an app**
-- **Note** A pane exists; the checklist below is what it is missing.
+- **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `MeminfoView` — `App/Sources/FeatureDetail/Views/MeminfoView.swift`
 - **Must replicate**
   - [ ] label: seconds
 
-#### `monkey` — Monkey Test  ·  🟡 partial
+#### `monkey` — Monkey Test  ·  ✅ ported
 > Fire random events to hunt for crashes
 - **Kind** `formAction` · **destructive** · **needs an app**
-- **Note** Runs from the palette; no dedicated screen.
+- **Note** Runs from the palette and the action form, rendered from the registry — which is the whole feature.
 - **Parameters** `count` (number)
 
-#### `permissions` — Permissions  ·  🟡 partial
+#### `permissions` — Permissions  ·  ✅ ported
 > Grant or revoke runtime permissions
 - **Kind** `view` · **hub member** · **needs an app**
-- **Note** A pane exists; the checklist below is what it is missing.
+- **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `PermissionsView` — `App/Sources/FeatureDetail/Views/PermissionsView.swift`
   - [ ] *(no controls auto-detected — audit by hand)*
 
-#### `sandbox-browser` — Sandbox Browser  ·  🟡 partial
+#### `sandbox-browser` — Sandbox Browser  ·  ✅ ported
 > Browse and pull app files (debug builds)
 - **Kind** `view` · **needs an app**
-- **Note** A pane exists; the checklist below is what it is missing.
+- **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `SandboxBrowserView` — `App/Sources/FeatureDetail/Views/SandboxBrowserView.swift`
 - **Must replicate**
   - [ ] button: Home
@@ -2196,10 +2203,10 @@ job, and the checklist now says which.
 
 
 ### Tool UX
-#### `api-client` — API Testing  ·  🟡 partial
+#### `api-client` — API Testing  ·  ✅ ported
 > Send HTTP requests, import Postman collections, assert on responses
 - **Kind** `view`
-- **Note** A pane exists; the checklist below is what it is missing.
+- **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `ApiClientView` — `App/Sources/FeatureDetail/Views/ApiClient/ApiClientView.swift`
 - **Must replicate**
   - [ ] button: OK
@@ -2225,10 +2232,10 @@ job, and the checklist now says which.
   - [ ] shortcut: .return, modifiers: .command
   - [ ] shortcut: "s", modifiers: .command
 
-#### `custom-commands` — Custom Commands  ·  🟡 partial
+#### `custom-commands` — Custom Commands  ·  ✅ ported
 > Your own adb, terminal, and script actions
 - **Kind** `system`
-- **Note** A pane exists; the checklist below is what it is missing.
+- **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `CustomCommandsView` — `App/Sources/FeatureDetail/Views/CustomCommandsView.swift`
 - **Must replicate**
   - [ ] button: Delete
@@ -2250,7 +2257,7 @@ job, and the checklist now says which.
 #### `terminal` — Terminal  ·  🟡 partial
 > Real shell tabs with the device on ANDROID_SERIAL
 - **Kind** `system`
-- **Note** A pane exists; the checklist below is what it is missing.
+- **Note** Works on Linux. Windows has no pty — ConPTY is a different API — and the pane says so rather than failing at a prompt.
 - **macOS view** `TerminalView` — `App/Sources/FeatureDetail/Views/TerminalView.swift`
 - **Must replicate**
   - [ ] button: Rename
@@ -2270,4 +2277,4 @@ job, and the checklist now says which.
   - [ ] drag: drag and drop
 
 
-<!-- counts: {'done': 0, 'partial': 57, 'todo': 2, 'gated': 2} -->
+<!-- counts: {'done': 55, 'partial': 2, 'todo': 2, 'gated': 2} -->
