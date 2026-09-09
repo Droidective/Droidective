@@ -292,8 +292,14 @@ public actor ReactotronServer {
         // guarantee on actor entry, so a burst could land timeline rows out
         // of wire order. The socket callbacks run on a serial queue, so the
         // yields — and therefore the events — keep the order the app sent.
+        // Bounded like the primary event stream: a client that outruns the
+        // actor — the 16 MB-of-queued-frames case `disconnectNotice` describes
+        // — would otherwise queue raw frames with no ceiling, and a frame may
+        // be up to `maximumMessageSize`. Dropping the oldest is the behaviour
+        // one layer up already accepts, and the timeline's own ring evicts
+        // oldest-first regardless.
         let (frames, feed) = AsyncStream.makeStream(
-            of: Data.self, bufferingPolicy: .unbounded)
+            of: Data.self, bufferingPolicy: .bufferingNewest(512))
         frameFeeds[id] = feed
         Task { [weak self] in
             for await data in frames {

@@ -301,6 +301,10 @@ targets:
     sources:
       - App/Tests
       - App/Sources/State/LaunchPrompt.swift
+      # Whether an MCP reconcile may start the Reactotron relay. The relay
+      # raises the change notification from inside its own start, so the rule
+      # is what keeps a failed bind from restarting forever.
+      - App/Sources/State/McpRelayPolicy.swift
       - App/Sources/Theme.swift
       - App/Sources/LogScrollGeometry.swift
       - App/Sources/Root/PaneFreezePolicy.swift

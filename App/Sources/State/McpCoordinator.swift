@@ -107,10 +107,16 @@ final class McpCoordinator {
     /// launch, on every Settings ▸ MCP change, and from the Retry button.
     /// Restarts the listener, so live agent sessions reconnect.
     func applySettings() {
+        schedule(trigger: .settings)
+    }
+
+    /// Queue a reconcile behind the one in flight, so a toggle flurry (or a
+    /// relay restart landing mid-toggle) can't interleave two of them.
+    private func schedule(trigger: McpRelayPolicy.Trigger) {
         let previous = applyTask
         applyTask = Task { [weak self] in
             await previous?.value
-            await self?.reconcile()
+            await self?.reconcile(trigger: trigger)
         }
     }
 
@@ -128,7 +134,12 @@ final class McpCoordinator {
     func reactotronServerChanged() {
         guard isEnabled, let core else { return }
         if core.reactotronSession.isRunning {
-            applySettings()
+            // `.relayChanged`, never `applySettings()`: this callback is raised
+            // from inside the relay's own start, so a reconcile that could
+            // start the relay would be told about its own start — and restart
+            // a relay whose listener had failed in the meantime, forever. See
+            // `McpRelayPolicy`.
+            schedule(trigger: .relayChanged)
         } else {
             startedRelay = false
             let listeningPort: UInt16? = if case let .listening(port) = status {
@@ -156,7 +167,7 @@ final class McpCoordinator {
 
     // MARK: - Reconcile
 
-    private func reconcile() async {
+    private func reconcile(trigger: McpRelayPolicy.Trigger) async {
         guard let core else { return }
         guard isEnabled else {
             await controller.stop()
@@ -170,14 +181,36 @@ final class McpCoordinator {
         }
 
         status = .starting
-        if !core.reactotronSession.isRunning {
+        if McpRelayPolicy.startsRelay(
+            trigger: trigger, relayRunning: core.reactotronSession.isRunning
+        ) {
             await core.reactotronSession.start(serials: core.reactotronSession.readyAndroidSerials)
             if core.reactotronSession.isRunning { startedRelay = true }
         }
         guard let (events, sender) = await core.reactotronSession.mcpAttachment() else {
-            await controller.stop()
-            status = .failed("The Reactotron server isn't running — open the Reactotron "
-                + "feature and start it, then retry.")
+            startedRelay = false
+            let listeningPort: UInt16? = if case let .listening(port) = await controller.status {
+                port
+            } else {
+                nil
+            }
+            switch McpRelayPolicy.withoutRelay(mcpListening: listeningPort != nil) {
+            case .keepServing:
+                // The relay blipped under a server that is already up. Drop the
+                // ghost clients and wait for its next start to re-attach —
+                // tearing the listener down here is what turned a one-second
+                // relay outage into an MCP server that never came back.
+                await controller.noteRelayStopped()
+                if let listeningPort { status = .listeningWithoutRelay(port: listeningPort) }
+            case .reportFailure:
+                await controller.stop()
+                // The relay's own words when it has some — "open the Reactotron
+                // feature and start it" is wrong advice when the feature is
+                // showing a bind error of its own.
+                status = .failed(core.reactotronSession.startFailure
+                    ?? "The Reactotron server isn't running — open the Reactotron "
+                    + "feature and start it, then retry.")
+            }
             return
         }
 

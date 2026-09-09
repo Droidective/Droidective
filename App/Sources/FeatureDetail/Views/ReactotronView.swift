@@ -77,6 +77,12 @@ final class ReactotronSession {
     /// with the session (`reset`), like the buffer they scope.
     fileprivate var paneClearSeqs: [Int: Int] = [:]
 
+    /// The relay's lifecycle in the unified log, next to the server's own
+    /// connection lines: `log show --predicate 'subsystem ==
+    /// "com.rohindh.droidective"'`.
+    fileprivate static let log = Logger(
+        subsystem: "com.rohindh.droidective", category: "reactotron-session")
+
     private let client: AdbClient
     /// Back-reference for toasts and save dialogs; set right after init.
     /// The window the relay reports through (toasts, save panels) — the
@@ -111,6 +117,14 @@ final class ReactotronSession {
     /// True when at least one app is connected — what makes "keep it running"
     /// worth asking about on the way out.
     var hasLiveConnection: Bool { isRunning && !clients.isEmpty }
+
+    /// Why the server is down, when it failed rather than never having been
+    /// started — the same sentence this screen's banner shows. Settings ▸ MCP
+    /// repeats it instead of telling the user to start a server that is
+    /// already failing to bind.
+    var startFailure: String? {
+        connection.isError ? connection.text(app: nil) : nil
+    }
 
     init(client: AdbClient) {
         self.client = client
@@ -188,6 +202,7 @@ final class ReactotronSession {
             return
         }
         connection = .listening
+        Self.log.notice("relay start requested on :\(ReactotronService.defaultPort)")
         await applyReverse(serials: serials)
         consumeTask = Task { [weak self] in
             for await event in stream {
@@ -213,8 +228,7 @@ final class ReactotronSession {
         guard let service else { return }
         // In the unified log next to the server's connection-drop lines, for
         // field diagnosis of tunnel/connection interactions.
-        Logger(subsystem: "com.rohindh.droidective", category: "reactotron-session")
-            .notice("applying adb reverse for \(serials.count) device(s)")
+        Self.log.notice("applying adb reverse for \(serials.count) device(s)")
         reversedSerials.formUnion(serials)
         knownReadySerials.formUnion(serials)
         recordTunnelResults(await service.reverse(serials: serials))
@@ -228,7 +242,12 @@ final class ReactotronSession {
     /// tunnels of already-connected devices.
     func deviceListChanged() {
         let current = Set(readyAndroidSerials)
-        tunnelIssues = tunnelIssues.filter { current.contains($0.key) }
+        // Only when it actually changes: `@Observable` fires on an equal value
+        // too, and this map is read by every open Reactotron view — an
+        // unconditional write re-runs both panes' whole filter pass for a
+        // device list that has nothing to do with the tunnels.
+        let keptIssues = tunnelIssues.filter { current.contains($0.key) }
+        if keptIssues != tunnelIssues { tunnelIssues = keptIssues }
         reverseRefreshAttempts = reverseRefreshAttempts.filter { current.contains($0.key) }
         guard isRunning else {
             knownReadySerials = current
@@ -469,7 +488,12 @@ final class ReactotronSession {
             guard let service else { return }
             reversedSerials.formUnion(serials)
             knownReadySerials.formUnion(serials)
-            let results = await service.reverse(serials: serials)
+            // A button press, so it belongs in Settings ▸ Command Log — unlike
+            // `applyReverse`, which runs from the device poll and would evict
+            // the log's 200 entries.
+            let results = await CommandLog.userInitiated {
+                await service.reverse(serials: serials)
+            }
             recordTunnelResults(results)
             let okCount = results.count(where: \.ok)
             if let failure = results.first(where: { !$0.ok }) {
@@ -544,7 +568,8 @@ final class ReactotronSession {
 
     private func handle(_ event: ReactotronServer.Event) {
         switch event {
-        case .listening:
+        case let .listening(port):
+            Self.log.notice("relay listening on :\(port)")
             if clients.isEmpty { connection = .listening }
         case let .connected(connectionId, _, intro, frameBytes):
             let parsed = ReactotronEvent(command: intro)
@@ -644,6 +669,10 @@ final class ReactotronSession {
             if clients.isEmpty { commands.removeAll() }
             refreshConnectionState()
         case let .failed(reason, portInUse):
+            // Why the relay died, next to the tunnel lines — without it, "MCP
+            // went down at launch" is a sequence nobody can reconstruct.
+            Self.log.error(
+                "relay failed (portInUse: \(portInUse)): \(reason, privacy: .public)")
             // The server tears itself down on failure, so drop our handle to it —
             // otherwise `isRunning` stays true and re-entering the view (or the
             // Retry button) would skip the restart and the error could never clear.
@@ -654,6 +683,10 @@ final class ReactotronSession {
             selectedClient = nil
             commands.removeAll()
             connection = portInUse ? .portInUse : .failed(reason)
+            // A listener that dies leaves MCP serving the clients it had —
+            // agents would see ghosts instead of `no_apps_connected`. The
+            // relay is down now, so this is the same news `stop()` reports.
+            core?.mcp.reactotronServerChanged()
         }
     }
 
@@ -729,6 +762,7 @@ final class ReactotronSession {
             flushPending()
             return
         }
+        trimPending()
         guard flushTask == nil else { return }
         // Hidden tabs stay mounted and lay their rows out like visible ones,
         // and a main thread that is already behind must not be asked for a
@@ -747,6 +781,28 @@ final class ReactotronSession {
             guard !Task.isCancelled else { return }
             self?.flushPending()
         }
+    }
+
+    /// Drop rows the ring would evict on arrival anyway.
+    ///
+    /// The byte bound above caps how much memory the pending buffer holds; it
+    /// does not cap how many *rows* one flush hands SwiftUI, and rows are what
+    /// a layout pass costs. Small events (a plain `log` is a few hundred bytes)
+    /// reach tens of thousands of rows inside that byte budget while nobody is
+    /// watching the feed, and `appendBatch` then appends every one of them and
+    /// evicts all but `ReactotronTimeline.maxItems` in the same turn — at the
+    /// moment the user switches to the tab. Trimming here is the same eviction,
+    /// paid per append instead of all at once.
+    private func trimPending() {
+        let drop = ReactotronTimeline.pendingDropCount(count: pendingItems.count)
+        guard drop > 0 else { return }
+        let dropped = Array(pendingItems[..<drop])
+        pendingItems.removeFirst(drop)
+        pendingBytes -= dropped.reduce(0) { $0 + $1.frameBytes }
+        // Counted as evictions, because that is what they are — the usage
+        // stats that size the caps must not read as if nothing was dropped.
+        evictedItemCount += drop
+        Self.discardInBackground(dropped)
     }
 
     /// One view reported whether it can see the timeline. Becoming visible

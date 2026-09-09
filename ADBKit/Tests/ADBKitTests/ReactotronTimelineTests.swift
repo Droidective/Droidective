@@ -77,4 +77,30 @@ import Testing
             #expect(sizes.last == value % 100)
         }
     }
+
+    // MARK: - Pending buffer
+
+    @Test func aPendingBufferUnderTheCapIsLeftAlone() {
+        #expect(ReactotronTimeline.pendingDropCount(count: 0, maxCount: 100) == 0)
+        #expect(ReactotronTimeline.pendingDropCount(count: 100, maxCount: 100) == 0)
+    }
+
+    @Test func aPendingBufferOverTheCapTrimsToSevenEighths() {
+        // 100 → keep 88 (the same hysteresis `dropCount` applies), so a full
+        // buffer trims in batches instead of shifting on every append.
+        #expect(ReactotronTimeline.pendingDropCount(count: 101, maxCount: 100) == 13)
+        #expect(ReactotronTimeline.pendingDropCount(count: 30_000, maxCount: 100) == 29_912)
+    }
+
+    /// The point of the rule: however long a feed goes unwatched, the flush it
+    /// eventually hands over is the size the ring would have kept anyway.
+    @Test func anUnwatchedFeedNeverQueuesMoreThanTheRingKeeps() {
+        var pending = 0
+        for _ in 0 ..< 50_000 {
+            pending += 1
+            pending -= ReactotronTimeline.pendingDropCount(count: pending, maxCount: 2000)
+            #expect(pending <= 2000)
+        }
+        #expect(pending >= 2000 - 2000 / 8)
+    }
 }
