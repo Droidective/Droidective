@@ -106,6 +106,12 @@ public enum ActionProtocol {
         /// Worth a confirmation step. A client that cannot tell "Take
         /// Screenshot" from "Clear App Data" will eventually run the wrong one.
         public let isDestructive: Bool
+        /// The question the Mac asks before running it, when the registry
+        /// gives one. Sent rather than left to the client to invent: the two
+        /// asking differently about the same irreversible thing is exactly the
+        /// kind of difference someone moving between them has to relearn.
+        /// Nil means the Mac's own fallback, which the client reproduces.
+        public let confirmLabel: String?
         /// True when a hub screen owns this feature on the Mac. Whether to
         /// show it standalone is the client's call, but it cannot make that
         /// call if the registry's answer never reaches it.
@@ -169,6 +175,7 @@ public enum ActionProtocol {
                     needsDevice: def.needsDevice,
                     needsBundle: def.needsBundle,
                     isDestructive: def.isDestructive,
+                    confirmLabel: def.confirmLabel,
                     isAbsorbedByHub: def.isAbsorbedByHub,
                     absorbedBy: def.absorbedByHub,
                     supportsRunAll: def.supportsRunAll,

@@ -11,6 +11,19 @@ import { PACKAGE_PARAM, TOGGLE_PARAM } from "@/lib/wire"
 
 export type FormValues = Record<string, FieldValue>
 
+/**
+ * The question to ask before running a destructive feature.
+ *
+ * The registry's own wording when it has one, and otherwise the Mac's
+ * fallback word for word — `FormActionView` reads
+ * ``feature.confirmLabel ?? "\(feature.title) can disrupt the device. Run it?"``.
+ * Inventing a different sentence here would be a difference someone moving
+ * between the two apps has to notice and relearn.
+ */
+export function confirmPrompt(feature: FeatureSummary): string {
+  return feature.confirmLabel ?? `${feature.title} can disrupt the device. Run it?`
+}
+
 export function initialValues(feature: FeatureSummary): FormValues {
   const values: FormValues = {}
   for (const field of feature.fields) {

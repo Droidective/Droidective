@@ -57,6 +57,13 @@ export interface FeatureSummary {
   needsDevice: boolean
   needsBundle: boolean
   isDestructive: boolean
+  /**
+   * The question to ask before running it, from the registry.
+   *
+   * Null for most destructive features, which fall back to the Mac's own
+   * wording — see `confirmPrompt` in `lib/fields`.
+   */
+  confirmLabel?: string | null
   isAbsorbedByHub: boolean
   /**
    * Which hub folded this feature in, if one did.
