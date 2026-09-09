@@ -446,7 +446,7 @@ final class JSConsoleSession {
         phase = .searching
         // Session over — a later hang must not read as "the console did it".
         Telemetry.shared.setDiagnosticContext("js_console", nil)
-        FeedHealth.shared.forget("js-console")
+        AppMemory.shared.forget(from: self)
         Telemetry.shared.breadcrumb(category: "js-console", "session stopped")
         publishedDiagnostics = nil
     }
@@ -489,10 +489,11 @@ final class JSConsoleSession {
         // Unbucketed, into the shared snapshot the hang and health reports
         // read — this feed and Reactotron were each visible alone and never
         // together, which is what hid a combined 1.5 GB.
-        FeedHealth.shared.report("js-console", FeedHealth.Snapshot(
+        AppMemory.shared.reportFeed(
+            .jsConsole, from: self,
             rows: buffer.entries.count,
             wireBytes: buffer.totalCost,
-            watched: audience.isWatched))
+            watched: audience.isWatched)
         guard snapshot != publishedDiagnostics else { return }
         if ConsoleRateBucket.isBurst(
             from: publishedDiagnostics?.ingestPerMinute, to: snapshot.ingestPerMinute

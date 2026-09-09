@@ -296,10 +296,21 @@ struct RootView: View {
         // Watch the app's own CPU/RAM and report sustained spikes to telemetry
         // with the features open at the time (consent-gated in Telemetry).
         PerformanceMonitor.shared.start {
-            let front = AppCore.shared.frontmost
+            let core = AppCore.shared
+            let workspaces = core.allWorkspaces
+            let openFeatures = workspaces.flatMap(\.openFeatureIDs)
             return PerformanceMonitor.FeatureContext(
-                activeFeature: front?.activeTabID,
-                openFeatures: AppCore.shared.allWorkspaces.flatMap(\.openFeatureIDs)
+                activeFeature: core.frontmost?.activeTabID,
+                openFeatures: openFeatures,
+                // What is actually running, as opposed to what is on screen.
+                // Gathered here because only the app core can reach the window
+                // registry; `sessionSeconds` is stamped by the monitor.
+                census: WorkloadCensus(
+                    mirrorSessions: MirrorSessions.shared.liveCount,
+                    shells: workspaces.reduce(0) { $0 + $1.terminals.shellCount },
+                    devices: core.devices.count,
+                    windows: workspaces.count,
+                    tabs: openFeatures.count)
             )
         }
         HotkeyManager.install(core: state.core)

@@ -85,6 +85,12 @@ struct CrashView: View {
             }
         }
         .measuringWidth(into: $paneWidth)
+        .task {
+            AppMemory.shared.measure(.crashes, from: model) { model in
+                AppMemory.Measurement(
+                    residentBytes: model.retainedBytes, items: model.reports.count, watched: true)
+            }
+        }
         .task(id: "\(state.targetSerials.first ?? "")|\(refreshToken)") {
             await fetch(userInitiated: refreshToken > 0)
         }

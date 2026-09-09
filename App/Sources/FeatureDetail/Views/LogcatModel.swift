@@ -18,6 +18,21 @@ import Foundation
 final class LogcatModel {
     /// Everything collected so far, capped by `LogcatView.maxLines`.
     var lines: [LogLine] = []
+
+    /// What this buffer costs, for `AppMemory`'s ledger.
+    ///
+    /// Walked on demand rather than tracked as lines arrive: five thousand
+    /// strings is a real scan, and doing it on the flush path would add cost
+    /// to exactly the code these numbers exist to make cheaper. The report is
+    /// built every five minutes, or on a hang.
+    ///
+    /// `raw` is the line as it came off the wire; the parsed fields are
+    /// substrings of it that Swift stores separately, and `LogLine` is a
+    /// struct in an array, so the multiplier is the array's own overhead plus
+    /// those copies. Two is the conservative end.
+    var retainedBytes: Int {
+        lines.reduce(0) { $0 + $1.raw.utf8.count } * 2
+    }
     /// Streaming is held; new lines are dropped rather than buffered.
     var paused = false
     /// The level filter ("All", "Error", …) — part of the stream's arguments,

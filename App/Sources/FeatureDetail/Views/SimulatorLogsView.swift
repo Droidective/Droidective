@@ -132,6 +132,12 @@ struct SimulatorLogsView: View {
             }
         }
         .task(id: taskKey) { await streamLoop() }
+        .task {
+            AppMemory.shared.measure(.iosLogs, from: model) { model in
+                AppMemory.Measurement(
+                    residentBytes: model.retainedBytes, items: model.lines.count, watched: true)
+            }
+        }
         // Re-pace on a tab switch rather than re-keying the stream: a restart
         // would clear the feed. Becoming visible also flushes at once, so the
         // reveal doesn't wait out the hidden interval.

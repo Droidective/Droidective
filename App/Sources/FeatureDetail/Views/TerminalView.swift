@@ -30,6 +30,14 @@ final class TerminalManager {
     var activeID: UUID?
     private var groupCounter = 0
 
+    /// Live PTY shells in this window, across every tab and split pane. Read
+    /// by the resource census: a shell is a child process holding a terminal
+    /// buffer, and a session with a dozen of them is a different workload from
+    /// one with none — which no resource event could previously say.
+    var shellCount: Int {
+        tabsByID.values.reduce(0) { $0 + $1.sessions.count }
+    }
+
     /// The rail's drag-in-flight state — which row/group is dragged and where
     /// the insertion guideline sits. On the manager, not view `@State`, so the
     /// root drag janitor can clear it when a drag ends without a drop. The

@@ -16,6 +16,16 @@ import Foundation
 @Observable
 final class CrashModel {
     var reports: [CrashReport] = []
+
+    /// What the parsed crashes cost, for `AppMemory`'s ledger.
+    ///
+    /// `raw` is the fetched text and `body` is the part of it this crash owns,
+    /// so both are resident and both are counted. The fetch is capped at 16 MB,
+    /// which bounds this — but a bound is not a measurement, and the point of
+    /// the ledger is that nothing large goes unattributed.
+    var retainedBytes: Int {
+        reports.reduce(0) { $0 + $1.raw.utf8.count + $1.body.utf8.count } * 2
+    }
     var selectedID: CrashReport.ID?
     /// A fetch has completed at least once, so an empty list means "no
     /// crashes" rather than "not looked yet".

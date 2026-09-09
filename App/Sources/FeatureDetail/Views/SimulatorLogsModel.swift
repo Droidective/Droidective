@@ -12,6 +12,19 @@ import Foundation
 @Observable
 final class SimulatorLogsModel {
     var lines: [SimLogLine] = []
+
+    /// What this buffer costs, for `AppMemory`'s ledger. Walked on demand
+    /// rather than tracked per line, for the reason `LogcatModel.retainedBytes`
+    /// gives — the report is built every five minutes, not every flush.
+    ///
+    /// `searchKey` is a whole second copy of every filterable field, lowercased
+    /// at ingest, so it is counted rather than assumed away.
+    var retainedBytes: Int {
+        lines.reduce(0) { total, line in
+            total + line.message.utf8.count + line.searchKey.utf8.count
+                + line.process.utf8.count + line.subsystem.utf8.count + line.category.utf8.count
+        } * 2
+    }
     var paused = false
     var shownLevels: Set<SimLogLevel> = [.notice, .error, .fault]
     var processFilter: String?
