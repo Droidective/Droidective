@@ -1,3 +1,4 @@
+import ADBKit
 import AppKit
 import Foundation
 import SwiftUI
@@ -79,10 +80,54 @@ final class ScreenshotEditorModel {
     func open(_ capture: NSImage) {
         close()
         image = capture
+        publishMemory()
+    }
+
+    /// Tell `AppMemory` what this editor is holding.
+    ///
+    /// A device screenshot decodes to roughly 18 MB (1440x3120 at 4 bytes a
+    /// pixel) and the undo history keeps `maxUndo` more states, so an editor
+    /// mid-session is one of the larger things in the process — and nothing
+    /// measured it, which is exactly the blind spot that left 1.4 GB
+    /// unaccounted for.
+    ///
+    /// Images are counted by identity, not per snapshot: annotation edits
+    /// share one `NSImage` by reference and only crop and rotate make a new
+    /// one, so counting each snapshot's image separately would report twenty
+    /// copies of a capture that exists once.
+    ///
+    /// Called on the transitions that change the size — opening, closing, and
+    /// each undo-stack move — never per stroke.
+    func publishMemory() {
+        guard let image else { return AppMemory.shared.forget(from: self) }
+        var seen: Set<ObjectIdentifier> = []
+        var bytes = 0
+        for candidate in [image] + undoStack.map(\.image) + redoStack.map(\.image)
+        where seen.insert(ObjectIdentifier(candidate)).inserted {
+            bytes += Self.residentBytes(of: candidate)
+        }
+        AppMemory.shared.report(
+            .screenshot, from: self,
+            residentBytes: bytes,
+            items: undoStack.count + redoStack.count,
+            watched: true)
+    }
+
+    /// A decoded bitmap's cost: pixels times four bytes.
+    ///
+    /// Read off the representation rather than `size`, which is in points — a
+    /// Retina capture would otherwise be under-counted fourfold. An image with
+    /// no bitmap representation (never seen here; every capture is a decoded
+    /// PNG) contributes nothing rather than a guess.
+    private static func residentBytes(of image: NSImage) -> Int {
+        image.representations.reduce(0) { total, rep in
+            max(total, rep.pixelsWide * rep.pixelsHigh * 4)
+        }
     }
 
     /// Close the editor and forget the capture — "New", or the tab closing.
     func close() {
+        AppMemory.shared.forget(from: self)
         image = nil
         annotations = []
         undoStack = []

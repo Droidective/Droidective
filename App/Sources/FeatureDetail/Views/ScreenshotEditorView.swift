@@ -901,18 +901,21 @@ struct ScreenshotEditorView: View {
         }
         redoStack.removeAll()
         dirty = true
+        model.publishMemory()
     }
 
     private func undo() {
         guard let previous = undoStack.popLast() else { return }
         redoStack.append(EditorSnapshot(image: image, annotations: annotations))
         apply(previous)
+        model.publishMemory()
     }
 
     private func redo() {
         guard let next = redoStack.popLast() else { return }
         undoStack.append(EditorSnapshot(image: image, annotations: annotations))
         apply(next)
+        model.publishMemory()
     }
 
     private func apply(_ snapshot: EditorSnapshot) {

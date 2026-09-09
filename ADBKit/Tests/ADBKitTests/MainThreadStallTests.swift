@@ -122,6 +122,90 @@ import Testing
         #expect(window.samples == MainThreadStall.capacity)
     }
 
+    // MARK: - Suspension is not a stall
+
+    /// The bug this ceiling exists for. A backgrounded app on a Mac that went
+    /// to sleep reported single samples of 164 s, 298 s, 407 s and 577 s, and
+    /// every one of them shipped as the hang duration.
+    @Test func aSuspensionIsDiscardedRatherThanReportedAsAHang() throws {
+        let subject = stall([0, 300, 577_585, 0])
+        let window = try #require(subject.summary())
+        #expect(window.worstMilliseconds == 300, "the 9.6-minute sample is a suspension, not a stall")
+        #expect(window.discarded == 1)
+        #expect(window.samples == 3, "the discarded sample is not counted as sampled either")
+        #expect(window.stalls == 1)
+    }
+
+    /// The second-order damage, and the reason discarding beats clamping: when
+    /// the suspension is the *only* stalled sample, it is the median too — so
+    /// a clamp would still report a fabricated typical lateness.
+    @Test func aLoneSuspensionDoesNotBecomeTheMedian() throws {
+        let subject = stall(Array(repeating: 0, count: 20) + [163_929])
+        let window = try #require(subject.summary())
+        #expect(window.medianStallMilliseconds == 0)
+        #expect(window.worstMilliseconds == 0)
+        #expect(window.isQuiet, "nothing real stalled")
+        #expect(window.discarded == 1)
+    }
+
+    /// The ceiling has to sit above the longest stall the app can really
+    /// produce, which is a synchronous adb call at its 30 s timeout. A 28 s
+    /// reading from the field was plausibly an emulator launch blocking the
+    /// main thread, and losing it would hide a real bug.
+    @Test func aLongButPlausibleStallSurvives() throws {
+        let subject = stall([28_233])
+        let window = try #require(subject.summary())
+        #expect(window.worstMilliseconds == 28_233)
+        #expect(window.discarded == 0)
+    }
+
+    @Test func theCeilingItselfIsStillAStall() throws {
+        let subject = stall([60_000, 60_001])
+        let window = try #require(subject.summary())
+        #expect(window.worstMilliseconds == 60_000)
+        #expect(window.discarded == 1)
+    }
+
+    /// A window of nothing but suspensions still reports, so a ceiling set too
+    /// low announces itself as a climbing discard count instead of silently
+    /// eating every hang.
+    @Test func aWindowOfOnlySuspensionsStillReportsTheCount() throws {
+        let subject = stall([90_000, 120_000])
+        let window = try #require(subject.summary())
+        #expect(window.samples == 0)
+        #expect(window.discarded == 2)
+        #expect(window.stalledPercent == 0, "no division by a zero sample count")
+    }
+
+    /// ...but it must not *cause* a report. A sleeping Mac is not news, and
+    /// `reportHealth` sends only when the window is not quiet.
+    @Test func suspensionsAloneLeaveTheWindowQuiet() throws {
+        let subject = stall([300_000])
+        let window = try #require(subject.summary())
+        #expect(window.isQuiet)
+    }
+
+    @Test func drainingAlsoResetsTheDiscardCount() throws {
+        var subject = stall([500_000, 0])
+        let drained = subject.takeWindow()
+        let taken = try #require(drained)
+        #expect(taken.discarded == 1)
+        subject.ingest(.milliseconds(0))
+        let reopened = try #require(subject.summary())
+        #expect(reopened.discarded == 0)
+    }
+
+    /// Discarded samples must not consume the ring either — a suspended app
+    /// could otherwise evict a whole window of real readings.
+    @Test func discardsDoNotEvictRealSamples() throws {
+        var subject = MainThreadStall()
+        subject.ingest(.milliseconds(9_000))
+        for _ in 0..<(MainThreadStall.capacity * 2) { subject.ingest(.seconds(600)) }
+        let window = try #require(subject.summary())
+        #expect(window.worstMilliseconds == 9_000, "the real stall survives a storm of suspensions")
+        #expect(window.samples == 1)
+    }
+
     @Test func aNegativeDurationIsFlooredAtZero() throws {
         var subject = MainThreadStall()
         subject.ingest(.milliseconds(-500))

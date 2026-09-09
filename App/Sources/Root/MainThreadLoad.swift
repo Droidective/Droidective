@@ -67,15 +67,23 @@ final class MainThreadLoad {
         guard sampler == nil else { return }
         sampler = Task { @MainActor [weak self] in
             while !Task.isCancelled {
-                let started = ContinuousClock.now
+                // `SuspendingClock`, not `ContinuousClock`: the two differ by
+                // exactly the thing being measured wrongly here. A continuous
+                // clock keeps counting while the Mac sleeps, so a lid closed
+                // for ten minutes read as a ten-minute main-thread stall —
+                // and once `MainThreadStall` started *keeping* these samples
+                // instead of only pacing feeds with them, that reading shipped
+                // as `stall_worst_ms`. Suspending stops for system sleep by
+                // construction, which is the "was the Mac asleep?" question
+                // the old comment here said could not be answered. App Nap
+                // still throttles a backgrounded app without the machine
+                // sleeping, and no clock separates that from work, so
+                // `MainThreadStall.implausibleLateness` is the second line.
+                let started = SuspendingClock.now
                 try? await Task.sleep(for: Self.period)
                 guard let self, !Task.isCancelled else { return }
-                // A system sleep lands here as an enormous reading; it means
-                // nothing about load, and `FeedFlushCadence.maxInterval` is
-                // what keeps it from parking the feeds. Clamping it here
-                // instead would need a "was the Mac asleep?" guess.
                 self.lateness = FeedFlushCadence.lateness(
-                    elapsed: ContinuousClock.now - started, requested: Self.period)
+                    elapsed: SuspendingClock.now - started, requested: Self.period)
                 self.stall.ingest(self.lateness)
             }
         }

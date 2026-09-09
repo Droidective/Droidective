@@ -342,8 +342,8 @@ final class ReactotronSession {
         Self.discardInBackground((items, snapshots, storeState, subscriptionValues))
         items.removeAll()
         itemsBytes = 0
-        FeedHealth.shared.report("reactotron", FeedHealth.Snapshot(
-            rows: 0, wireBytes: 0, watched: audience.isWatched))
+        AppMemory.shared.reportFeed(
+            .reactotron, from: self, rows: 0, wireBytes: 0, watched: audience.isWatched)
         paneClearSeqs.removeAll()
         commands.removeAll()
         subscriptionPaths.removeAll()
@@ -875,8 +875,9 @@ final class ReactotronSession {
         // Reported every flush, not only when the bucket changes: the shared
         // snapshot is read by the hang and health reports, and a bucketed
         // value is too coarse for "how much is the app holding right now".
-        FeedHealth.shared.report("reactotron", FeedHealth.Snapshot(
-            rows: items.count, wireBytes: itemsBytes, watched: audience.isWatched))
+        AppMemory.shared.reportFeed(
+            .reactotron, from: self, rows: items.count, wireBytes: itemsBytes,
+            watched: audience.isWatched)
         guard snapshot != publishedDiagnostics else { return }
         publishedDiagnostics = snapshot
         Telemetry.shared.setDiagnosticContext("reactotron", [

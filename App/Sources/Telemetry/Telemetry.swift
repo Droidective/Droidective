@@ -107,19 +107,23 @@ final class Telemetry {
     /// event on the free plans. Pass nil to clear. Callers should publish on
     /// state *changes*, not on a hot path — every call crosses both SDKs.
     func setDiagnosticContext(_ key: String, _ values: [String: Any]?) {
+        // Scrubbed once, used by both sinks: a context rides *every*
+        // subsequent event, so an unsafe value here leaks repeatedly rather
+        // than once.
+        let safeValues = values.map { Self.safe($0) }
         if crashReportingEnabled, sentryRunning {
             SentrySDK.configureScope { scope in
-                if let values {
-                    scope.setContext(value: values, key: key)
+                if let safeValues {
+                    scope.setContext(value: safeValues, key: key)
                 } else {
                     scope.removeContext(key: key)
                 }
             }
         }
-        if let values {
+        if let safeValues {
             guard analyticsEnabled, postHogReady else { return }
             var flat: [String: Any] = [:]
-            for (name, value) in values { flat["\(key)_\(name)"] = value }
+            for (name, value) in safeValues { flat["\(key)_\(name)"] = value }
             diagnosticKeys[key] = Array(flat.keys)
             PostHogSDK.shared.register(flat)
         } else if postHogReady {
@@ -153,6 +157,10 @@ final class Telemetry {
     /// paths, URLs or content — same promise as every other sink here.
     func log(_ level: AppLog.Level, _ message: String, _ attributes: [String: Any]) {
         guard crashReportingEnabled, sentryRunning else { return }
+        // `AppLog` already restricts itself to `[String: Int]`, so nothing
+        // unsafe can reach here today. Scrubbed anyway: that restriction is a
+        // property of one caller, and this is the sink.
+        let attributes = Self.safe(attributes)
         let logger = SentrySDK.logger
         switch level {
         case .debug: logger.debug(message, attributes: attributes)
@@ -173,9 +181,27 @@ final class Telemetry {
     }
 
     /// Record an anonymous product-analytics event. No-op unless opted in.
+    ///
+    /// Everything is scrubbed on the way out (`TelemetryScrub`). The privacy
+    /// promise used to be a property of the call sites — this signature takes
+    /// `[String: Any]`, so any one of them could have passed a path — and it
+    /// is now a property of the pipe.
     func track(_ event: String, _ properties: [String: Any] = [:]) {
         guard analyticsEnabled, postHogReady else { return }
-        PostHogSDK.shared.capture(event, properties: properties)
+        PostHogSDK.shared.capture(event, properties: Self.safe(properties))
+    }
+
+    /// Scrub a property bag and record how much had to be removed.
+    ///
+    /// The count ships with the event rather than being swallowed: a
+    /// `telemetry_redacted` that starts appearing is a call site that began
+    /// leaking, and it is the only way a filter like this reports on itself.
+    private static func safe(_ properties: [String: Any]) -> [String: Any] {
+        let (cleaned, redacted) = TelemetryScrub.scrub(properties)
+        guard redacted > 0 else { return cleaned }
+        var flagged = cleaned
+        flagged["telemetry_redacted"] = redacted
+        return flagged
     }
 
     // MARK: - Feature usage
@@ -321,30 +347,95 @@ final class Telemetry {
     /// 1 GB APK.
     private var baselineFootprintBytes: UInt64?
 
+    /// A footprint worth reporting on even when nothing else is wrong.
+    ///
+    /// Above an ordinary session's baseline (measured at 363 MB) and well
+    /// below the alert threshold (1500 MB), so the *climb* between the two is
+    /// visible rather than only its arrival. Without this the health beat was
+    /// gated on feed rows, so the one session that most needed explaining —
+    /// heavy, but held by something that is not a feed — reported nothing at
+    /// all.
+    private static let healthReportFootprintFloor: UInt64 = 512 * 1_048_576
+
+    /// What the app was doing at the last resource sample. Stashed by
+    /// `PerformanceMonitor` every tick because the two reports that most need
+    /// it cannot ask: a hang arrives through Sentry's `beforeSend` with no
+    /// context at all, and a resource alert knows only its own metric. Five
+    /// seconds stale is close enough for a census of counts, and far cheaper
+    /// than walking the window registry from a callback.
+    private var latestCensus = WorkloadCensus()
+
+    /// The CPU/memory window still filling. Peeked by the hang and alert
+    /// reports so a memory alert can say what CPU was doing and vice versa —
+    /// each event used to carry only the metric that tripped it.
+    private var latestUsage: UsageWindow.Summary?
+
+    /// Record the current workload alongside the resource window it was
+    /// sampled with. One call per `PerformanceMonitor` tick.
+    func noteWorkload(_ census: WorkloadCensus, usage: UsageWindow.Summary?) {
+        latestCensus = census
+        latestUsage = usage
+    }
+
+    /// Every number describing the machine's state right now: what the app
+    /// holds, what it cannot account for, how late the main thread is, what is
+    /// running, and what CPU and memory have been doing.
+    ///
+    /// One builder shared by the hang report, the health beat and the resource
+    /// alert, because the three used to carry overlapping but different
+    /// subsets and answering "was memory also high when CPU tripped?" meant
+    /// joining events by hour — which is the same reason `app_health` exists
+    /// at all.
+    ///
+    /// `footprintBytes` is optional because `ProcessStats.sample()` can fail:
+    /// reporting a missing reading as 0 MB would be a lie that reads as a very
+    /// healthy app, and the whole memory half — including the subtraction that
+    /// needs a real denominator — is simply left out instead.
+    private func stateProperties(footprintBytes: UInt64?, stall: MainThreadStall.Window?) -> [String: Any] {
+        var properties: [String: Any] = [:]
+        if let footprintBytes {
+            properties["memory_mb"] = Int(footprintBytes / 1_048_576)
+            if let growth = growthPercent(footprintBytes) { properties["memory_growth_pct"] = growth }
+            for (key, value) in AppMemory.shared.properties(footprintBytes: footprintBytes) {
+                properties[key] = value
+            }
+        }
+        if let stall {
+            properties["stall_worst_ms"] = stall.worstMilliseconds
+            properties["stall_median_ms"] = stall.medianStallMilliseconds
+            properties["stall_percent"] = stall.stalledPercent
+            properties["stall_samples"] = stall.samples
+            // Suspensions thrown out as impossible stalls. Shipped so a
+            // ceiling set too low announces itself here rather than by
+            // quietly swallowing real hangs.
+            if stall.discarded > 0 { properties["stall_discarded"] = stall.discarded }
+        }
+        if let usage = latestUsage {
+            properties["cpu_avg"] = Int(usage.averageCPUPercent.rounded())
+            properties["cpu_peak"] = Int(usage.peakCPUPercent.rounded())
+            properties["memory_avg_mb"] = Int((usage.averageFootprintBytes / 1_048_576).rounded())
+            properties["memory_peak_mb"] = Int(usage.peakFootprintBytes / 1_048_576)
+            properties["memory_delta_mb"] = usage.footprintDeltaBytes / 1_048_576
+            properties["usage_samples"] = usage.samples
+        }
+        for (key, value) in latestCensus.properties { properties[key] = value }
+        return properties
+    }
+
     /// One app-hang report, with the facts the bare event never carried.
     ///
     /// The hang itself supplies no duration — Sentry fills that in from the
     /// configured threshold, so every report reads "at least 2000 ms" — so the
     /// measured stall comes from the app's own sampler (`MainThreadStall`).
-    /// Memory, growth since launch, and what the feeds were holding ride along
-    /// because reconstructing them afterwards meant joining three event types
-    /// by hour, and only after knowing to look.
+    /// Memory, growth since launch, what every retainer holds, how much of the
+    /// footprint nothing accounts for, and what was actually running all ride
+    /// along, because reconstructing any of it afterwards meant joining three
+    /// event types by hour and only after knowing to look.
     func reportHang() {
-        var properties: [String: Any] = [:]
         // Peeked, never drained: the health report owns the window.
-        if let window = MainThreadLoad.shared.stallSummary() {
-            properties["stall_worst_ms"] = window.worstMilliseconds
-            properties["stall_median_ms"] = window.medianStallMilliseconds
-            properties["stall_percent"] = window.stalledPercent
-            properties["stall_samples"] = window.samples
-        }
-        if let sample = ProcessStats.sample() {
-            let megabytes = Int(sample.footprintBytes / 1_048_576)
-            properties["memory_mb"] = megabytes
-            if let growth = growthPercent(sample.footprintBytes) { properties["memory_growth_pct"] = growth }
-        }
-        for (key, value) in FeedHealth.shared.properties { properties[key] = value }
-        track("app_hang", properties)
+        let stall = MainThreadLoad.shared.stallSummary()
+        track("app_hang", stateProperties(
+            footprintBytes: ProcessStats.sample()?.footprintBytes, stall: stall))
     }
 
     /// A periodic picture of the things that go wrong together: how late the
@@ -357,23 +448,19 @@ final class Telemetry {
     /// No single existing event carried two of those three facts, so seeing the
     /// shape meant already suspecting it.
     ///
-    /// Skipped entirely when there is nothing to say: a healthy thread and no
-    /// retained feed rows sends no event, so an idle app costs no quota.
+    /// Skipped entirely when there is nothing to say: a healthy thread, no
+    /// retained rows and an unremarkable footprint sends no event, so an idle
+    /// app costs no quota.
     func reportHealth(footprintBytes: UInt64, stall: MainThreadStall.Window?) {
-        let feeds = FeedHealth.shared.properties
+        let properties = stateProperties(footprintBytes: footprintBytes, stall: stall)
         let quiet = stall?.isQuiet ?? true
-        guard !quiet || (feeds["feed_rows"] ?? 0) > 0 else { return }
-        var properties: [String: Any] = [
-            "memory_mb": Int(footprintBytes / 1_048_576),
-        ]
-        if let growth = growthPercent(footprintBytes) { properties["memory_growth_pct"] = growth }
-        if let stall {
-            properties["stall_worst_ms"] = stall.worstMilliseconds
-            properties["stall_median_ms"] = stall.medianStallMilliseconds
-            properties["stall_percent"] = stall.stalledPercent
-            properties["stall_samples"] = stall.samples
-        }
-        for (key, value) in feeds { properties[key] = value }
+        let holdsRows = (properties["feed_rows"] as? Int ?? 0) > 0
+        // A big footprint with no feed rows and a healthy thread used to send
+        // nothing at all — which is precisely the session that needs
+        // explaining, since the retainer holding it is by definition not one
+        // of the two that report rows.
+        let heavy = footprintBytes >= Self.healthReportFootprintFloor
+        guard !quiet || holdsRows || heavy else { return }
         track("app_health", properties)
         // The same numbers locally, so an incident someone shows you in person
         // is readable without waiting for the backend:
@@ -408,24 +495,45 @@ final class Telemetry {
         let feature = context.activeFeature ?? "none"
         switch event {
         case .began(let metric, let value, let limit):
-            track("app_perf_incident", [
-                "metric": metric.rawValue,
-                "value": chartValue(metric, value),
-                "limit": chartValue(metric, limit),
-                "feature": feature,
-                "open_features": context.openFeatures,
-            ])
+            // Everything about the machine's state, not just the metric that
+            // tripped. An alert that says only "memory 1502 MB while
+            // reactotron is active" cannot be acted on: every tab stays
+            // mounted, so the active feature names what the user was looking
+            // at, and the previous incidents were all attributed that way.
+            // The census says what was *running*, and the ledger says which
+            // retainer holds the bytes — or that none of the measured ones do.
+            var properties = stateProperties(
+                footprintBytes: ProcessStats.sample()?.footprintBytes,
+                stall: MainThreadLoad.shared.stallSummary())
+            properties["metric"] = metric.rawValue
+            properties["value"] = chartValue(metric, value)
+            properties["limit"] = chartValue(metric, limit)
+            properties["feature"] = feature
+            properties["open_features"] = context.openFeatures
+            track("app_perf_incident", properties)
+
+            AppLog.write(
+                .warn, .feed, "resource alert: \(metric.rawValue)",
+                properties.compactMapValues { $0 as? Int }, toBackend: true)
+
             guard crashReportingEnabled, sentryRunning else { return }
             let sentryEvent = Sentry.Event(level: .warning)
             sentryEvent.message = SentryMessage(
-                formatted: "High \(label(metric)): \(readable(metric, value)) while \(feature) is active")
+                formatted: "High \(label(metric)): \(readable(metric, value)) "
+                    + "while \(feature) is active — \(latestCensus.summary)")
             sentryEvent.fingerprint = ["app-perf", metric.rawValue, feature]
             sentryEvent.tags = ["perf_metric": metric.rawValue, "perf_feature": feature]
-            sentryEvent.extra = [
-                "value": readable(metric, value),
-                "limit": readable(metric, limit),
-                "open_features": context.openFeatures.joined(separator: ", "),
-            ]
+            // Numbers only, and every one of them already ships to the other
+            // sink — this is the same picture for whoever opens the Sentry
+            // issue rather than the PostHog event.
+            var extra: [String: Any] = properties
+            extra["value"] = readable(metric, value)
+            extra["limit"] = readable(metric, limit)
+            extra["open_features"] = context.openFeatures.joined(separator: ",")
+            // The workload summary is prose and belongs in the title, not in
+            // a scrubbed property bag — every count in it already ships as a
+            // `work_*` integer.
+            sentryEvent.extra = Self.safe(extra)
             SentrySDK.capture(event: sentryEvent)
         case .ended(let metric, let peak, let seconds):
             track("app_perf_recovered", [
