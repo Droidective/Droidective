@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import raw from "@/lib/__fixtures__/features.json"
-import { coerce, initialValues, missingRequired, runFields } from "@/lib/fields"
+import { coerce, confirmPrompt, initialValues, missingRequired, runFields } from "@/lib/fields"
 import type { FeatureField, FeatureSummary } from "@/lib/wire"
 
 const features = (raw as unknown as { features: FeatureSummary[] }).features
@@ -132,5 +132,40 @@ describe("runFields", () => {
       on: true,
       packageId: "com.x",
     })
+  })
+})
+
+const destructiveFeature = (over: Partial<FeatureSummary>): FeatureSummary =>
+  ({
+    id: "monkey",
+    title: "Monkey Test",
+    subtitle: null,
+    keywords: [],
+    category: "testing",
+    kind: "formAction",
+    implemented: true,
+    needsDevice: true,
+    needsBundle: true,
+    isDestructive: true,
+    isAbsorbedByHub: false,
+    supportsRunAll: false,
+    fields: [],
+    ...over,
+  }) as FeatureSummary
+
+describe("confirmPrompt", () => {
+  it("asks the registry's own question when there is one", () => {
+    expect(confirmPrompt(destructiveFeature({ confirmLabel: "Send random taps? " }))).toBe(
+      "Send random taps? ",
+    )
+  })
+
+  /** Word for word what `FormActionView` falls back to. Drifting from it is
+   * the difference someone moving between the two apps has to relearn. */
+  it("falls back to the Mac's wording", () => {
+    expect(confirmPrompt(destructiveFeature({ confirmLabel: null }))).toBe(
+      "Monkey Test can disrupt the device. Run it?",
+    )
+    expect(confirmPrompt(destructiveFeature({}))).toBe("Monkey Test can disrupt the device. Run it?")
   })
 })

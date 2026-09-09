@@ -1,8 +1,16 @@
+import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { Banner, Button, Select, Slider, Switch, TextInput } from "@/components/Controls"
 import { ResultActions } from "@/components/ResultActions"
-import { coerce } from "@/lib/fields"
+import { coerce, confirmPrompt } from "@/lib/fields"
 import { iconForFeature } from "@/lib/icons"
-import type { DaemonError, Device, FeatureField, FeatureSummary, RunResponse } from "@/lib/wire"
+import type {
+  DaemonError,
+  Device,
+  FeatureField,
+  FeatureSummary,
+  FieldValue,
+  RunResponse,
+} from "@/lib/wire"
 
 /**
  * The pieces an action form is made of: its header, one rendered registry
@@ -22,9 +30,8 @@ import type { DaemonError, Device, FeatureField, FeatureSummary, RunResponse } f
  * A fan-out names its count on the button rather than only in the bar's switch:
  * "Run on 3 devices" is the one place someone sees how many before pressing it.
  */
-export function runLabel(running: boolean, confirming: boolean, targets: number): string {
+export function runLabel(running: boolean, targets: number): string {
   if (running) return "Running…"
-  if (confirming) return "Really run it?"
   return targets > 1 ? `Run on ${String(targets)} devices` : "Run"
 }
 
@@ -55,9 +62,7 @@ export function RunControls({
   ready,
   missing,
   needsApp,
-  confirming,
   onRun,
-  onCancel,
 }: {
   label: string
   tone: "primary" | "danger"
@@ -66,9 +71,7 @@ export function RunControls({
   ready: boolean
   missing: string[]
   needsApp: boolean
-  confirming: boolean
   onRun: () => void
-  onCancel: () => void
 }) {
   return (
     <div className="flex items-center gap-3">
@@ -80,7 +83,6 @@ export function RunControls({
       >
         {label}
       </Button>
-      {confirming ? <Button onClick={onCancel}>Cancel</Button> : null}
       {needsApp ? (
         <span className="text-text-tertiary">Pick an app in the Apps tab first</span>
       ) : null}
@@ -93,6 +95,69 @@ export function RunControls({
         </span>
       ) : null}
     </div>
+  )
+}
+
+/**
+ * A feature's inputs: its toggle if it has one, then a row per registry field.
+ * Renders nothing when the feature takes neither.
+ */
+export function FieldsCard({
+  feature,
+  values,
+  toggleOn,
+  onToggle,
+  onChange,
+}: {
+  feature: FeatureSummary
+  values: Record<string, FieldValue>
+  toggleOn: boolean
+  onToggle: (on: boolean) => void
+  onChange: (name: string, value: FieldValue) => void
+}) {
+  if (feature.kind !== "toggleAction" && feature.fields.length === 0) return null
+  return (
+    <div className="flex flex-col gap-4 rounded-lg border border-border-subtle bg-bg-surface p-4">
+      {feature.kind === "toggleAction" ? (
+        <Switch checked={toggleOn} onChange={onToggle} label={toggleOn ? "On" : "Off"} />
+      ) : null}
+      {feature.fields.map((field) => (
+        <FieldRow
+          key={field.name}
+          field={field}
+          value={values[field.name] ?? ""}
+          onChange={(next) => {
+            onChange(field.name, next)
+          }}
+        />
+      ))}
+    </div>
+  )
+}
+
+/**
+ * The question before an irreversible run.
+ *
+ * Beside `RunControls` because it is the other half of the same button: the
+ * Mac raises a `confirmationDialog` from its Run button, and this app used to
+ * arm the button for a second press instead.
+ */
+export function RunConfirmDialog({
+  feature,
+  onConfirm,
+  onCancel,
+}: {
+  feature: FeatureSummary
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  return (
+    <ConfirmDialog
+      title={confirmPrompt(feature)}
+      confirmLabel={`Run ${feature.title}`}
+      onConfirm={onConfirm}
+      onCancel={onCancel}
+    />
   )
 }
 
