@@ -10,6 +10,21 @@ struct AppsExplorerView: View {
     @Environment(\.tabFeatureID) private var tabFeatureID
     @Environment(\.colorScheme) private var colorScheme
 
+    /// Where the user last put the list/detail seam. App-wide rather than per
+    /// window or per tab: it is a reading preference, and having to re-drag it
+    /// in the second window is the kind of thing that reads as the setting not
+    /// having worked.
+    @AppStorage("appsListWidth") private var storedListWidth: Double = Self.defaultListWidth
+    /// The width during a drag, before it is committed — so a released drag
+    /// that never moved cannot write a clamped value over the stored one.
+    @State private var liveListWidth: Double?
+
+    static let defaultListWidth: Double = 280
+    /// Narrower than this and the list is a column of ellipses; the detail
+    /// needs `detailFloor` whatever the list is doing.
+    static let minimumListWidth: Double = 200
+    static let detailFloor: Double = 300
+
     /// The list and what the user has done with it, held by the window rather
     /// than by this view: re-reading every installed app because a tab moved is
     /// a wait for something already on screen. See `AppsExplorerModel`.
@@ -81,14 +96,20 @@ struct AppsExplorerView: View {
     // underneath the device bar.
     private var content: some View {
         GeometryReader { geo in
-            // In a narrow split pane the old fixed 320pt list starved the
-            // detail — the list now cedes width proportionally (never below
-            // 230pt, never above 320) so both columns stay usable.
-            let listWidth = max(230, min(320, geo.size.width * 0.4))
+            // The seam is the user's, and clamped to the pane it is in: a
+            // width dragged wide in a full window must not starve the detail
+            // when the same tab moves into a split pane. The ceiling is
+            // whatever leaves the detail its floor, so a very narrow pane
+            // simply pins the list at its minimum.
+            let ceiling = max(Self.minimumListWidth, geo.size.width - Self.detailFloor)
+            let listWidth = min(max(liveListWidth ?? storedListWidth, Self.minimumListWidth), ceiling)
             HStack(spacing: 0) {
                 listColumn(width: listWidth)
 
-                Divider()
+                ResizeHandle(
+                    value: $storedListWidth,
+                    live: $liveListWidth,
+                    range: Self.minimumListWidth...ceiling)
 
                 detailColumn
             }

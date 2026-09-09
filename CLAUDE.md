@@ -1490,5 +1490,4 @@ daemon also run on Linux and Windows in CI, minus the Darwin-gated files), plus
 1259 vitest + 55 cargo on the desktop app;
 builds clean with zero warnings (enforced as errors in CI). Verified live against a
 physical device and an Android emulator. Release builds are Developer ID-signed +
-notarized and bundle scrcpy/ffmpeg (see `RELEASING.md`). Open gaps: the Apps
-list/detail divider isn't drag-resizable.
+notarized and bundle scrcpy/ffmpeg (see `RELEASING.md`).
