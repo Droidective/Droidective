@@ -6,9 +6,9 @@
     <description>Most recent Droidective updates.</description>
     <language>en</language>
     <item>
-      <title>Droidective 3.12.1</title>
-      <sparkle:version>970</sparkle:version>
-      <sparkle:shortVersionString>3.12.1</sparkle:shortVersionString>
+      <title>Droidective 3.12.2</title>
+      <sparkle:version>1000</sparkle:version>
+      <sparkle:shortVersionString>3.12.2</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <description><![CDATA[
 <style>
@@ -24,67 +24,92 @@ pre { background: color-mix(in srgb, currentColor 8%, transparent); padding: .6e
 pre code { background: none; padding: 0; }
 a { color: #2f9e44; }
 </style>
-<p>Pinned tabs, Send Text's snippets in the Quick Actions panel, and the fix for
-the thing that made a long Reactotron or JS Console session turn into an app
-that stopped responding for seconds at a time.</p>
-<h3>Pin a tab</h3>
+<p>A bug-fix release. Nine fixes, most of them things the app was getting wrong
+quietly: an operation reporting success it had not had, a number that could not
+be true, or a control that looked broken when it was only busy.</p>
+<h3>Things that were reporting the wrong thing</h3>
 <ul>
 <li>
-<strong>Right-click a tab ▸ Pin Tab</strong> (or Tab ▸ Pin Tab). Pinned tabs sit at the
-front of their pane and stay there, and they survive "Close Other Tabs".</li>
-<li>The × is replaced by a pin you can click to unpin, so the tabs you keep open
-all day are out of reach of a stray click. It is not a lock: ⌘W and Close Tab
-still close a pinned tab, the way they do in Chrome and VS Code.</li>
-<li>A pinned tab stays pinned when you move it to the other pane or drag it out
-into a window of its own.</li>
+<strong>Clear Cache spun for thirty seconds and then said it failed.</strong> On some
+Android images the command it runs never returns at all, so it waited out the
+full timeout before giving up. It is now bounded to ten seconds everywhere it
+appears — the Apps screen, the Quick Actions panel, and both debug consoles.</li>
+<li>
+<strong>A part-finished APK pull left a file that looked finished.</strong> Pulling an app
+that ships as several split files could stop halfway and leave the first one
+sitting at the path you chose. It looks like the app, and installs with
+<code>INSTALL_FAILED_MISSING_SPLIT</code> days later — long after the error message has
+gone. A pull that fails now takes back what it wrote.</li>
+<li>
+<strong>The pull progress bar sat still for most of a split pull</strong>, because it
+watched one file while counting against the size of all of them. It now
+counts every file as it lands.</li>
+<li>
+<strong>Converting an App Bundle could produce an APK that cannot be installed.</strong>
+Without a signing key of your own, bundletool signs with Android Studio's
+debug key — and silently produces an unsigned APK when the Mac has never had
+Android Studio or Gradle on it. The result now says so and points at APK
+Studio ▸ Sign, instead of leaving you to discover it at install time.</li>
 </ul>
-<h3>Snippets in the Quick Actions panel</h3>
+<h3>Update, mirror, and window</h3>
 <ul>
 <li>
-<strong>Send Text's saved snippets now appear in the panel</strong>, under the text field —
-the same recency-ranked list the full Send Text screen shows, with the top few
-and the rest behind "Show more".</li>
-<li>↓/↑ walk them and ⏎ inserts the highlighted one; ⌘⏎ still runs. <code>{clipboard}</code>
-and <code>{ip}</code> fill in as they do everywhere else, and using one from the panel
-bumps it up the list in the main window too.</li>
+<strong>"Check for Updates" says what it is doing.</strong> While an update was
+downloading the button simply went grey, which is indistinguishable from the
+app being broken. It now reads "Downloading Update…", "Checking for
+Updates…" or "Installing Update…", in the menu, in Settings, and in About —
+the last of which had no status text at all.</li>
+<li>
+<strong>The Apps list can be resized.</strong> Drag the divider between the list and the
+detail; the width is remembered.</li>
 </ul>
-<h3>Feeds no longer hold a gigabyte each</h3>
+<h3>Measurements you can trust</h3>
 <ul>
 <li>
-<strong>The Reactotron timeline and the JS Console now size their buffers to your
-Mac</strong> instead of to a fixed number. Both capped 128 MB of received data, but a
-decoded log row costs several times what it did on the wire, so the real cost
-was closer to a gigabyte — each. One session was measured climbing from 363 MB
-to 1.58 GB over three hours and then staying there for a day.</li>
-<li>Nothing was leaking. The buffers were evicting correctly; the limit itself was
-simply far too generous. On a 16 GB Mac each feed now holds up to 192 MB.</li>
+<strong>A hang report no longer counts time the Mac spent asleep.</strong> The duration
+added in v3.12.1 was measured on a clock that keeps running through sleep, so
+a closed lid read as a multi-minute hang — several reports claimed five and
+ten minutes. Anything from v3.12.1 and earlier above about thirty seconds was
+that, not a hang.</li>
+<li>
+<strong>Droidective can now say which part of it is holding memory.</strong> The v3.12.1
+fix capped the two streaming feeds, and the caps hold — but the footprint did
+not come down as far as expected, and every number being collected described
+a feed, so nothing could say the feeds were not the problem. Six of the app's
+buffers now report what they hold, alongside how much of the total that
+accounts for.</li>
+<li>
+<strong>A performance alert says what was actually running</strong> — mirrors, shells,
+devices, windows, open tabs, session length — rather than naming whichever
+screen happened to be in front. Every tab stays loaded, so the screen in
+front was rarely the one doing the work. Average CPU and memory are recorded
+too, which nothing was collecting.</li>
+<li>All of it is numbers, feature names and counts, and it now passes through a
+filter that refuses anything shaped like a path, a URL, an address, a package
+id or a command line before it can leave the Mac. Settings ▸ Privacy still
+turns the whole thing off.</li>
 </ul>
-<h3>A feed you cannot see stops rendering</h3>
+<h3>Windows and Linux</h3>
 <ul>
 <li>
-<strong>A feed in a covered window no longer re-renders every second.</strong> Whether the
-app was "visible" was inferred from which tab was in front and whether
-Droidective was the active app, and neither answers the actual question. With
-the app behind another window and a Reactotron tab in front, the timeline kept
-redrawing for as long as it was left there.</li>
-<li>It now asks the window server directly. Events keep arriving the whole time —
-only the drawing waits — and bringing the window back shows everything at
-once.</li>
-</ul>
-<h3>Hangs can now be measured</h3>
-<ul>
+<strong>A screen left open when the app quits no longer leaves work running.</strong>
+Closing the window with the Performance or Network screen open could strand a
+polling loop inside the background service for as long as it kept running —
+once per occurrence, adding up.</li>
 <li>
-<strong>A hang report says how long the hang was.</strong> It never could before: the
-duration came from the detection threshold, so every report read "at least
-2 seconds" whether the app was gone for two seconds or forty.</li>
-<li>Droidective now also records what each feed was holding when the app
-struggled, which is what makes this kind of problem findable instead of
-guessable. Numbers only — no log contents, no URLs, no device identifiers, and
-it respects the Settings ▸ Privacy toggles like everything else.</li>
+<strong>Data from one device could appear on another's screen.</strong> Switching devices
+while a screen was still loading let the first device's answer arrive into
+the second device's view. On Developer Settings that was worse than a display
+glitch: flipping a toggle against a stale table wrote the setting to the
+wrong device.</li>
+<li>
+<strong>Destructive actions ask with a dialog</strong>, matching the Mac, instead of arming
+the button for a second press.</li>
+<li>The Linux build script pins the protocol on the two installers it downloads.</li>
 </ul>
 ]]></description>
-      <pubDate>Wed, 09 Sep 2026 06:33:21 +0000</pubDate>
-      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.12.1/Droidective-v3.12.1.dmg" sparkle:edSignature="1OTC3FClak6uCwCqNnoAC8w7RCj+VAyTTczpIxgfgkwgEg97frTyZXOM9KTn6fyhqiLzSQyK5+BiSbXumJeGAw==" length="146225754" type="application/octet-stream" />
+      <pubDate>Thu, 10 Sep 2026 02:00:30 +0000</pubDate>
+      <enclosure url="https://github.com/Droidective/Droidective/releases/download/v3.12.2/Droidective-v3.12.2.dmg" sparkle:edSignature="gaVnbD4rOy9MMglucdQeJ4ZLx3JGIMBdCxMsnr+ZXGcUOvOyBbU6ogV7Uc6bhPDSoBEXQIXzPBlk98m9OmjjCg==" length="146492328" type="application/octet-stream" />
     </item>
     
   </channel>
