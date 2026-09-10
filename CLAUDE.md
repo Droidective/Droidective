@@ -136,9 +136,9 @@ opening it — verify those by hand.
 ## Build / test / run
 
 ```
-make test          # all three Swift packages — ADBKit 2122, droidectived 408,
+make test          # all three Swift packages — ADBKit 2196, droidectived 410,
                    #   ReactotronMCP 99. Keep green.
-make test-app      # the AppTests logic bundle — 128 tests
+make test-app      # the AppTests logic bundle — 134 tests
 make verify        # tiers 0-1: warnings-as-errors + all four Swift bundles
 make test-linux    # the same suite on Linux (Apple `container` CLI; the port gate)
 make test-emulator # tier 3: the device-dependent suites against a real emulator
@@ -1097,7 +1097,41 @@ position in `RELEASE_NOTES.md`.
 ## Status
 
 Feature-complete across all planned milestones plus several UX rounds.
-(Latest release: **v3.12.1** — pinned tabs, Send Text's snippets in the Quick
+(Latest release: **v3.12.2** — a bug-fix release, nine of them, most being the
+app reporting something that was not true. **`MainThreadStall` counted system
+sleep as a hang**: `MainThreadLoad` measured on a `ContinuousClock`, which keeps
+counting through sleep, so a closed lid shipped as `stall_worst_ms` of 164 s,
+298 s, 407 s and 577 s — the field added *because* Sentry's duration is fake.
+It measures on a `SuspendingClock` now, with a 60 s ceiling for App Nap that no
+clock separates from work, and discards are counted so a wrong ceiling shows as
+a climbing count rather than swallowed hangs. **Anything before v3.12.2 above
+~30 s is that, not a hang.** **`MemoryLedger`** (ADBKit, pure) answers the
+question v3.12.1 could not: the feed caps held and the footprint did not come
+down, but every number described a feed. Six retainers now report resident
+estimates and the event carries `mem_unknown_mb` — footprint minus everything
+known. `AppMemory` replaces `FeedHealth` and keys holdings by *reporter*, so two
+windows' consoles add up instead of overwriting; the three log buffers are
+measured on demand (`AppMemory.measure`) because walking 5000 strings on the
+flush path would tax the code the ledger exists to lighten. **`WorkloadCensus`
+and `UsageWindow`** say what was running and what the app normally costs — every
+tab stays mounted, so `active_feature` named whatever was on screen while three
+mirrors streamed behind it. **`TelemetryScrub`** moves the privacy promise from
+call-site discipline into the pipe; whitespace is the rule that earns its keep,
+since an adb command line clears every other check. The full inventory, the
+named gaps and the untrustworthy-readings warning are `docs/telemetry-audit.md`.
+Also: the cache clear is bounded on the command rather than by two App-layer
+watchdogs, a failed split pull takes back what it wrote, `PullProgress` counts
+every split, `AabConvertService.isSigned` says when bundletool produced an
+unsigned APK, `UpdatePolicy.checkAction` gives all three update surfaces one
+title, and the Apps list/detail divider is draggable. On the port:
+`StreamSession.attach` cancels a pump whose subscription is already gone — the
+poll `Task` is live before the pump is stored, so a socket closing in that
+window stranded an immortal 1 Hz adb loop — the per-serial resets stop one
+window punching a hole in another's chart, `useLatestRequest` drops an answer
+for a device the user has left, and `ActionForm` confirms with a dialog.
+`FileRetry.remove` retries the Windows delete that CI kept failing on, and the
+relay tests wake on arrival rather than polling a deadline.)
+(Before that: **v3.12.1** — pinned tabs, Send Text's snippets in the Quick
 Actions panel, and the fix for the thing that made a long Reactotron or JS
 Console session turn into an unresponsive app. **Pinned tabs**: `TabPinning`
 (see Key types) holds the prefix rule, the strip draws its insertion guideline
@@ -1484,10 +1518,10 @@ jadx/apktool, recompile, and sign — with keystore creation) plus Frida setup, 
 custom accent color, launching emulators from the device bar, per-feature
 connect-a-device empty states, a live-preview hotkey recorder, and a Settings
 split into Appearance/Privacy; managed tools download from GitHub releases into
-Application Support and are sized/removable in Settings); 2122 ADBKit + 408
-droidectived + 99 ReactotronMCP + 128 AppTests green on macOS (ADBKit and the
+Application Support and are sized/removable in Settings); 2196 ADBKit + 410
+droidectived + 99 ReactotronMCP + 134 AppTests green on macOS (ADBKit and the
 daemon also run on Linux and Windows in CI, minus the Darwin-gated files), plus
-1259 vitest + 55 cargo on the desktop app;
+1267 vitest + 55 cargo on the desktop app;
 builds clean with zero warnings (enforced as errors in CI). Verified live against a
 physical device and an Android emulator. Release builds are Developer ID-signed +
 notarized and bundle scrcpy/ffmpeg (see `RELEASING.md`).
