@@ -116,34 +116,74 @@ import Testing
         #expect(elapsed < .seconds(15), "took \(elapsed), which means it waited on something")
     }
 
-    @Test func manyConcurrentInvocationsDoNotStarveTheRuntime() async {
-        // 16 concurrent slow-ish processes — far past the old failure point.
-        // A canary task must keep making progress while they run.
-        let canaryTicks = LockedBox(0)
+    /// Ticks a counter as fast as the cooperative pool will let it, until
+    /// cancelled. Returns ticks per second, so two phases of different lengths
+    /// can be compared.
+    private func canaryRate(during body: () async -> Void) async -> Double {
+        let ticks = LockedBox(0)
         let canary = Task {
             while !Task.isCancelled {
-                canaryTicks.set(canaryTicks.get() + 1)
+                ticks.set(ticks.get() + 1)
                 try? await Task.sleep(for: .milliseconds(20))
             }
         }
+        let started = ContinuousClock().now
+        await body()
+        let elapsed = ContinuousClock().now - started
+        canary.cancel()
+        let seconds =
+            Double(elapsed.components.seconds)
+            + Double(elapsed.components.attoseconds) / 1e18
+        return seconds > 0 ? Double(ticks.get()) / seconds : 0
+    }
 
-        await withTaskGroup(of: Int32?.self) { group in
-            for _ in 0..<16 {
-                group.addTask {
-                    let output = await runner.run(
-                        executable: ChildCommands.sleepThenPrint.executable,
-                        arguments: ChildCommands.sleepThenPrint.arguments,
-                        timeout: Self.generousTimeout
-                    )
-                    return output.exitCode
+    @Test func manyConcurrentInvocationsDoNotStarveTheRuntime() async {
+        // 16 concurrent slow-ish processes — far past the old failure point.
+        // A canary task must keep making progress while they run.
+        //
+        // Measured as a *ratio* against the same canary with nothing running,
+        // not as an absolute tick count. The absolute version asserted `> 5`
+        // and failed three times in one afternoon on three unrelated branches
+        // — including on `main`, and on a release tag, where it skipped the
+        // release job. It was measuring the whole cooperative pool, which
+        // `swift test` shares with every other suite running in parallel: on a
+        // three-core runner the canary can be starved by work that has nothing
+        // to do with this runner, which is precisely what it must not report.
+        //
+        // A ratio cancels that out. Unrelated load drags both phases down
+        // together; only *this* runner blocking threads drags the loaded phase
+        // down alone — and the failure it guards (`waitUntilExit` holding
+        // every pool thread for the whole run) takes the loaded rate to
+        // essentially zero, which no threshold near 1/10 can miss.
+        let idleRate = await canaryRate {
+            try? await Task.sleep(for: .milliseconds(300))
+        }
+
+        let loadedRate = await canaryRate {
+            await withTaskGroup(of: Int32?.self) { group in
+                for _ in 0..<16 {
+                    group.addTask {
+                        let output = await runner.run(
+                            executable: ChildCommands.sleepThenPrint.executable,
+                            arguments: ChildCommands.sleepThenPrint.arguments,
+                            timeout: Self.generousTimeout
+                        )
+                        return output.exitCode
+                    }
+                }
+                for await code in group {
+                    #expect(code == 0)
                 }
             }
-            for await code in group {
-                #expect(code == 0)
-            }
         }
-        canary.cancel()
-        #expect(canaryTicks.get() > 5, "canary task starved — runner is blocking cooperative threads")
+
+        #expect(idleRate > 0, "the canary never ran even with nothing else happening")
+        #expect(
+            loadedRate > idleRate / 10,
+            """
+            canary task starved — runner is blocking cooperative threads \
+            (idle \(idleRate)/s, under 16 processes \(loadedRate)/s)
+            """)
     }
 
     @Test func cancellationKillsChildAndReturnsPromptly() async {
