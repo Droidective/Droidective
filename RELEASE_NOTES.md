@@ -1,3 +1,82 @@
+## Droidective v3.12.2
+
+A bug-fix release. Nine fixes, most of them things the app was getting wrong
+quietly: an operation reporting success it had not had, a number that could not
+be true, or a control that looked broken when it was only busy.
+
+### Things that were reporting the wrong thing
+
+- **Clear Cache spun for thirty seconds and then said it failed.** On some
+  Android images the command it runs never returns at all, so it waited out the
+  full timeout before giving up. It is now bounded to ten seconds everywhere it
+  appears — the Apps screen, the Quick Actions panel, and both debug consoles.
+- **A part-finished APK pull left a file that looked finished.** Pulling an app
+  that ships as several split files could stop halfway and leave the first one
+  sitting at the path you chose. It looks like the app, and installs with
+  `INSTALL_FAILED_MISSING_SPLIT` days later — long after the error message has
+  gone. A pull that fails now takes back what it wrote.
+- **The pull progress bar sat still for most of a split pull**, because it
+  watched one file while counting against the size of all of them. It now
+  counts every file as it lands.
+- **Converting an App Bundle could produce an APK that cannot be installed.**
+  Without a signing key of your own, bundletool signs with Android Studio's
+  debug key — and silently produces an unsigned APK when the Mac has never had
+  Android Studio or Gradle on it. The result now says so and points at APK
+  Studio ▸ Sign, instead of leaving you to discover it at install time.
+
+### Update, mirror, and window
+
+- **"Check for Updates" says what it is doing.** While an update was
+  downloading the button simply went grey, which is indistinguishable from the
+  app being broken. It now reads "Downloading Update…", "Checking for
+  Updates…" or "Installing Update…", in the menu, in Settings, and in About —
+  the last of which had no status text at all.
+- **The Apps list can be resized.** Drag the divider between the list and the
+  detail; the width is remembered.
+
+### Measurements you can trust
+
+- **A hang report no longer counts time the Mac spent asleep.** The duration
+  added in v3.12.1 was measured on a clock that keeps running through sleep, so
+  a closed lid read as a multi-minute hang — several reports claimed five and
+  ten minutes. Anything from v3.12.1 and earlier above about thirty seconds was
+  that, not a hang.
+- **Droidective can now say which part of it is holding memory.** The v3.12.1
+  fix capped the two streaming feeds, and the caps hold — but the footprint did
+  not come down as far as expected, and every number being collected described
+  a feed, so nothing could say the feeds were not the problem. Six of the app's
+  buffers now report what they hold, alongside how much of the total that
+  accounts for.
+- **A performance alert says what was actually running** — mirrors, shells,
+  devices, windows, open tabs, session length — rather than naming whichever
+  screen happened to be in front. Every tab stays loaded, so the screen in
+  front was rarely the one doing the work. Average CPU and memory are recorded
+  too, which nothing was collecting.
+- All of it is numbers, feature names and counts, and it now passes through a
+  filter that refuses anything shaped like a path, a URL, an address, a package
+  id or a command line before it can leave the Mac. Settings ▸ Privacy still
+  turns the whole thing off.
+
+### Windows and Linux
+
+- **A screen left open when the app quits no longer leaves work running.**
+  Closing the window with the Performance or Network screen open could strand a
+  polling loop inside the background service for as long as it kept running —
+  once per occurrence, adding up.
+- **Data from one device could appear on another's screen.** Switching devices
+  while a screen was still loading let the first device's answer arrive into
+  the second device's view. On Developer Settings that was worse than a display
+  glitch: flipping a toggle against a stale table wrote the setting to the
+  wrong device.
+- **Destructive actions ask with a dialog**, matching the Mac, instead of arming
+  the button for a second press.
+- The Linux build script pins the protocol on the two installers it downloads.
+
+### Install
+
+Download the DMG from the release below, or use Droidective ▸ Check for
+Updates.
+
 ## Droidective v3.12.1
 
 Pinned tabs, Send Text's snippets in the Quick Actions panel, and the fix for
