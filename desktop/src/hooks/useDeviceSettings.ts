@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
+
+import { useLatestRequest } from "@/hooks/useLatestRequest"
 import { useNotifications } from "@/hooks/useNotifications"
 import {
   asDaemonError,
@@ -31,24 +33,30 @@ import type {
  */
 export function useDeveloperSettings(serial: string | null) {
   const { show } = useNotifications()
+  const request = useLatestRequest()
   const [settings, setSettings] = useState<DevSettingsResponse | null>(null)
   const [error, setError] = useState<DaemonError | null>(null)
   const [refreshing, setRefreshing] = useState(false)
 
   const load = useCallback(async () => {
     if (serial === null) return
+    const current = request.begin()
     setError(null)
     try {
-      setSettings(await devSettings(serial))
+      const next = await devSettings(serial)
+      if (!current()) return
+      setSettings(next)
     } catch (thrown) {
+      if (!current()) return
       setError(asDaemonError(thrown))
     }
-  }, [serial])
+  }, [request, serial])
 
   useEffect(() => {
+    request.restart()
     setSettings(null)
     void load()
-  }, [load])
+  }, [load, request])
 
   const refresh = useCallback(() => {
     setRefreshing(true)
@@ -60,6 +68,11 @@ export function useDeveloperSettings(serial: string | null) {
   /** Flip a row now; reconcile with the device only if it says no. */
   const apply = useCallback(
     (optimistic: (current: DevSettingsResponse) => DevSettingsResponse, write: () => Promise<RunResponse>) => {
+      // The table on screen is this device's — the load that produced it was
+      // dropped if the serial changed. Belt and braces anyway: `write` closes
+      // over the serial at render time, and this is the write that would
+      // otherwise land on someone else's phone.
+      if (serial === null) return
       setSettings((current) => (current === null ? current : optimistic(current)))
       void (async () => {
         try {
@@ -74,7 +87,7 @@ export function useDeveloperSettings(serial: string | null) {
         }
       })()
     },
-    [load, show],
+    [load, serial, show],
   )
 
   return { settings, error, refreshing, refresh, apply }
@@ -114,24 +127,30 @@ export function withScale(
  */
 export function useRestrictions(serial: string | null) {
   const { show } = useNotifications()
+  const request = useLatestRequest()
   const [state, setState] = useState<RestrictionsResponse | null>(null)
   const [error, setError] = useState<DaemonError | null>(null)
   const [busy, setBusy] = useState(false)
 
   const load = useCallback(async () => {
     if (serial === null) return
+    const current = request.begin()
     setError(null)
     try {
-      setState(await restrictions(serial))
+      const next = await restrictions(serial)
+      if (!current()) return
+      setState(next)
     } catch (thrown) {
+      if (!current()) return
       setError(asDaemonError(thrown))
     }
-  }, [serial])
+  }, [request, serial])
 
   useEffect(() => {
+    request.restart()
     setState(null)
     void load()
-  }, [load])
+  }, [load, request])
 
   const reconcile = useCallback(
     async (write: () => Promise<RunResponse>) => {

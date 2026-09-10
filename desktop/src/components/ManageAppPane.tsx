@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
+import { useLatestRequest } from "@/hooks/useLatestRequest"
 import { Banner } from "@/components/Controls"
 import { AppActions } from "@/components/AppActions"
 import { NoBundle } from "@/components/NoBundle"
@@ -25,24 +26,29 @@ export function ManageAppPane({
   const [actions, setActions] = useState<AppActionDescriptor[]>([])
   const [app, setApp] = useState<AppSummary | null>(null)
   const [error, setError] = useState<DaemonError | null>(null)
+  const request = useLatestRequest()
 
   const serial = device?.serial ?? null
   const load = useCallback(async () => {
     if (serial === null || packageId === null) return
+    const current = request.begin()
     setError(null)
     try {
       const response = await listApps(serial)
+      if (!current()) return
       setActions(response.actions)
       setApp(response.apps.find((entry) => entry.packageId === packageId) ?? null)
     } catch (thrown) {
+      if (!current()) return
       setError(asDaemonError(thrown))
     }
-  }, [packageId, serial])
+  }, [packageId, request, serial])
 
   useEffect(() => {
+    request.restart()
     setApp(null)
     void load()
-  }, [load])
+  }, [load, request])
 
   if (!device) return <NoDevice feature="app-management" title="Manage App" />
   if (packageId === null) return <NoBundle what="manage it" />

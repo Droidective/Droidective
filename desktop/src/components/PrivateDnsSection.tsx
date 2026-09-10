@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
+import { useLatestRequest } from "@/hooks/useLatestRequest"
 import { RefreshCw } from "lucide-react"
 import { Banner, Button, TextInput } from "@/components/Controls"
 import { HubSection, IconButton } from "@/components/Hub"
@@ -27,26 +28,31 @@ export function PrivateDnsSection({ serial }: { serial: string | null }) {
   const [loaded, setLoaded] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<DaemonError | null>(null)
+  const request = useLatestRequest()
 
   const load = useCallback(async () => {
     if (serial === null) return
+    const current = request.begin()
     setLoaded(false)
     setError(null)
     try {
       const status = await privateDns(serial)
+      if (!current()) return
       setMode(status.mode)
       // Kept when the device has one even in another mode, so switching to
       // Hostname does not lose what was configured.
       if (status.hostname !== null) setHostname(status.hostname)
       setLoaded(true)
     } catch (thrown) {
+      if (!current()) return
       setError(asDaemonError(thrown))
     }
-  }, [serial])
+  }, [request, serial])
 
   useEffect(() => {
+    request.restart()
     void load()
-  }, [load])
+  }, [load, request])
 
   const apply = () => {
     if (serial === null) return

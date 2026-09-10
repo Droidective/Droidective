@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import { useLatestRequest } from "@/hooks/useLatestRequest"
 import { asDaemonError, listCrashes } from "@/lib/daemon"
 import {
   newestUnseen,
@@ -48,6 +49,7 @@ export function useCrashBuffer(serial: string | null): CrashBuffer {
   const [error, setError] = useState<DaemonError | null>(null)
   const [arrival, setArrival] = useState<CrashReport | null>(null)
   const [generation, setGeneration] = useState(0)
+  const request = useLatestRequest()
 
   // Read through a ref so a poll's identity does not change every render.
   const latest = useRef(crashes)
@@ -64,8 +66,12 @@ export function useCrashBuffer(serial: string | null): CrashBuffer {
   const fetch = useCallback(
     async (announce: boolean) => {
       if (serial === null) return
+      // The five-second watch poll outlives a device switch, so a poll
+      // answered for the old device must not replace the new one's list.
+      const stillWanted = request.begin()
       try {
         const next = (await listCrashes(serial)).crashes
+        if (!stillWanted()) return
         setError(null)
         setFailed(false)
         setFetched(true)
@@ -81,16 +87,18 @@ export function useCrashBuffer(serial: string | null): CrashBuffer {
         if (!sameCrashes(latest.current, next)) setCrashes(next)
         setFilters((current) => prunedFilters(current, next))
       } catch (thrown) {
+        if (!stillWanted()) return
         // Keep the last good list, but say so — a swallowed poll failure reads
         // as "still checking" forever.
         setFailed(true)
         setError(asDaemonError(thrown))
       }
     },
-    [serial],
+    [request, serial],
   )
 
   useEffect(() => {
+    request.restart()
     if (serial === null) return
     let live = true
     setLoading(true)
@@ -100,7 +108,7 @@ export function useCrashBuffer(serial: string | null): CrashBuffer {
     return () => {
       live = false
     }
-  }, [serial, fetch, generation])
+  }, [serial, fetch, generation, request])
 
   useEffect(() => {
     if (!watching || serial === null) return
