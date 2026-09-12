@@ -72,7 +72,7 @@ jobs:
     # accepts the bundled clang. Revisit when a Swift release ships clang 20+.
     runs-on: windows-2022
     steps:
-      - uses: compnerd/gha-setup-swift@eeda069c5bc95ac8a9ac5cea7d4f588ae5420ca5  # v0.4.0
+      - uses: compnerd/gha-setup-swift@397094e75494a93fa8d81db0268dbc8f5d6cf7c6  # v0.4.1
         with:
           branch: swift-6.2.4-release
           tag: 6.2.4-RELEASE
@@ -287,7 +287,7 @@ jobs:
         with:
           path: _site
       - id: deploy
-        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128  # v5.0.0
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346  # v5.0.1
 
   # The beta channel's daemon artifacts. Their own job because Linux and
   # Windows binaries cannot be produced on the macOS release runner; the release
@@ -319,7 +319,7 @@ jobs:
         with:
           persist-credentials: false
       - if: matrix.platform == 'windows-x86_64'
-        uses: compnerd/gha-setup-swift@eeda069c5bc95ac8a9ac5cea7d4f588ae5420ca5  # v0.4.0
+        uses: compnerd/gha-setup-swift@397094e75494a93fa8d81db0268dbc8f5d6cf7c6  # v0.4.1
         with:
           branch: swift-6.2.4-release
           tag: 6.2.4-RELEASE
@@ -397,7 +397,7 @@ jobs:
             | sh -s -- -y --profile minimal
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
       - if: matrix.platform == 'windows'
-        uses: compnerd/gha-setup-swift@eeda069c5bc95ac8a9ac5cea7d4f588ae5420ca5  # v0.4.0
+        uses: compnerd/gha-setup-swift@397094e75494a93fa8d81db0268dbc8f5d6cf7c6  # v0.4.1
         with:
           branch: swift-6.2.4-release
           tag: 6.2.4-RELEASE
