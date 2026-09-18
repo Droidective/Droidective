@@ -12,13 +12,22 @@ import SwiftUI
 final class MirrorRenderer: @unchecked Sendable {
     let displayLayer: AVSampleBufferDisplayLayer
 
-    private var renderer: AVSampleBufferVideoRenderer { displayLayer.sampleBufferRenderer }
+    /// Resolved once, on the main actor, rather than read per frame. The macOS
+    /// 27 SDK infers `@MainActor` on `sampleBufferRenderer` (it comes along
+    /// from `CALayer`), so reading it from the off-main enqueue path warns —
+    /// even though that background use is the reason the property exists, as
+    /// AVSampleBufferDisplayLayer.h says where it is declared. The renderer
+    /// itself is documented as safe to enqueue to from any thread, and the
+    /// layer never changes after init, so holding it is both correct and one
+    /// less hop in the hot path.
+    private let renderer: AVSampleBufferVideoRenderer
     private let lock = NSLock()
     private var lastDimensions: (width: Int, height: Int)?
 
     @MainActor init() {
         displayLayer = AVSampleBufferDisplayLayer()
         displayLayer.videoGravity = .resizeAspect
+        renderer = displayLayer.sampleBufferRenderer
     }
 
     func enqueue(_ sampleBuffer: CMSampleBuffer, width: Int, height: Int) {

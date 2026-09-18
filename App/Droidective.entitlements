@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Release builds run under the hardened runtime (a notarization
+	     requirement), which refuses microphone access outright unless the
+	     process carries this entitlement. Refused there, the request never
+	     reaches TCC: no system prompt appears, the app is never listed in
+	     System Settings ▸ Privacy & Security ▸ Microphone, and
+	     AVCaptureDevice.authorizationStatus reports .denied forever — so
+	     "Open Settings" sent people to a list they could not find the app in.
+	     Recordings can mix in the Mac's microphone (see MicrophoneCapture),
+	     so the app genuinely needs it. -->
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
+</dict>
+</plist>

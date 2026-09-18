@@ -17,7 +17,7 @@ packages:
     exactVersion: 1.13.0
   Sparkle:
     url: https://github.com/sparkle-project/Sparkle
-    exactVersion: 2.9.3
+    exactVersion: 2.9.6
   Sentry:
     url: https://github.com/getsentry/sentry-cocoa
     exactVersion: 9.18.0
@@ -288,6 +288,13 @@ targets:
         CODE_SIGN_STYLE: Manual
         ENABLE_HARDENED_RUNTIME: NO
         ENABLE_APP_SANDBOX: NO
+        # Release builds add ENABLE_HARDENED_RUNTIME=YES (notarization requires
+        # it), and the hardened runtime refuses the microphone unless the
+        # process carries com.apple.security.device.audio-input. Applied to
+        # every configuration so a Debug build exercises the same TCC path the
+        # release does. scripts/package-dmg.sh re-signs the sealed bundle and
+        # must pass the same file, or the final seal drops these.
+        CODE_SIGN_ENTITLEMENTS: App/Droidective.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         DEAD_CODE_STRIPPING: YES

@@ -160,8 +160,13 @@ extension AppState {
     /// message; adb's own rejections come back as a failed result instead.
     private func install(_ url: URL, on serial: String, jobID: UUID) async -> FeatureResult {
         do {
-            return try await env.engine.bundleInstall.install(bundlePath: url.path, serial: serial) { stage in
-                Task { @MainActor [weak self] in
+            // Weak on the *outer* closure: it's the escaping one the installer
+            // holds for the length of the install, so a weak capture only on
+            // the inner Task retained self anyway.
+            return try await env.engine.bundleInstall.install(
+                bundlePath: url.path, serial: serial
+            ) { [weak self] stage in
+                Task { @MainActor in
                     self?.updateInstallJob(jobID, stage: Self.stageLabel(stage))
                 }
             }
