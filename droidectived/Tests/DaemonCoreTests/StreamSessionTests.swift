@@ -524,6 +524,12 @@ private enum StreamSessionTestError: Error { case unsupported }
                 // Increments, all three: dropping the middle of a log or a
                 // graph is exactly what a client must be told about.
                 #expect(!topic.isSnapshot)
+            case .pull:
+                #expect(topic.needsSerial)
+                // A snapshot: each event is the whole state of one transfer,
+                // and an older "42%" is worthless once a newer one exists — so
+                // a progress strip can never be handed a `dropped` marker.
+                #expect(topic.isSnapshot)
             case .mirror:
                 #expect(topic.needsSerial)
                 // The strongest increment of the lot: an H.264 delta frame is

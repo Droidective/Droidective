@@ -211,6 +211,7 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         commands::logcat_pid,
         commands::watch_performance,
         commands::watch_netspeed,
+        commands::watch_pull,
         commands::foreground_app,
         commands::watch_reactotron,
         commands::reactotron_reverse,

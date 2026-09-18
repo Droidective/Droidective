@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { useNotifications } from "@/hooks/useNotifications"
-import { asDaemonError, fileOperation, pullFile } from "@/lib/daemon"
+import { usePulls } from "@/hooks/usePulls"
+import { asDaemonError, fileOperation } from "@/lib/daemon"
 import {
   batchLabel,
   childPath,
@@ -190,6 +191,10 @@ function usePaste({
  * Pulling is not a `run` batch: it answers with a host path rather than a
  * device result, and it changes nothing on the device, so there is nothing to
  * reload afterwards.
+ *
+ * It goes through the app-wide strip rather than the one-shot route, so a
+ * transfer reports as it runs and can be cancelled — which is also why it
+ * outlives this screen: `usePulls` is above the workspace.
  */
 function usePull({
   serial,
@@ -204,6 +209,7 @@ function usePull({
   setBusy: (value: string | null) => void
   show: (input: ToastInput) => void
 }): (targets: FileEntry[]) => void {
+  const pulls = usePulls()
   return useCallback(
     (targets: FileEntry[]) => {
       if (serial === null || targets.length === 0) return
@@ -214,7 +220,7 @@ function usePull({
         try {
           let landed: string | null = null
           for (const source of sources) {
-            landed = (await pullFile({ serial, path: source, asRoot: rootMode })).path
+            landed = await pulls.start({ serial, path: source, asRoot: rootMode })
           }
           show({
             ok: true,
@@ -228,7 +234,7 @@ function usePull({
         }
       })()
     },
-    [paths, rootMode, serial, setBusy, show],
+    [paths, pulls, rootMode, serial, setBusy, show],
   )
 }
 

@@ -1664,6 +1664,41 @@ pub async fn watch_netspeed(
     )
 }
 
+/// One `adb pull`, reporting as it goes — what the progress strip watches.
+///
+/// A subscription rather than a request, because the answer is a sequence. It
+/// also buys cancellation: `stop_watching` cancels the daemon's task, and
+/// `SystemProcessRunner` wraps its body in `withTaskCancellationHandler`, so
+/// the adb child dies with it rather than running on to its timeout.
+///
+/// The destination is chosen **here**, in the same folder every other pull
+/// writes to, because the webview has no filesystem of its own and a path from
+/// it would be a path this process then trusted.
+#[tauri::command]
+pub async fn watch_pull(
+    app: AppHandle,
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    path: String,
+    as_root: bool,
+    on_event: Channel<StreamUpdate>,
+) -> Result<i64, DaemonError> {
+    let folder = droidective_folder(&app)?;
+    let destination = folder.join(safe_file_name(leaf_name(&path))?);
+    let stream = supervisor.stream().await?;
+    stream.subscribe(
+        "pull",
+        Some(StreamParams {
+            serial: Some(serial),
+            path: Some(path),
+            destination: Some(destination.to_string_lossy().into_owned()),
+            as_root: Some(as_root),
+            ..StreamParams::default()
+        }),
+        forward(on_event),
+    )
+}
+
 /// The frontmost app on the device, when there is one worth naming.
 ///
 /// A guess, and only ever used as one: a debug tool's restart has to pick an app

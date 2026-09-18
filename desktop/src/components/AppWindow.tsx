@@ -1,7 +1,6 @@
-import { Banner } from "@/components/Controls"
-import { DeviceBarHost } from "@/components/DeviceBarHost"
 import { GrainOverlay } from "@/components/GrainOverlay"
 import { NotificationPanel } from "@/components/NotificationPanel"
+import { WindowChromeTop } from "@/components/WindowChromeTop"
 import { ToastOverlay } from "@/components/ToastOverlay"
 import { WindowProviders } from "@/components/WindowProviders"
 import { WorkspaceShell } from "@/components/WorkspaceShell"
@@ -37,17 +36,12 @@ export function AppWindow({
       openFeatures={openFeatures}
     >
       <div className="flex h-full flex-col">
-        <DeviceBarHost
+        <WindowChromeTop
           session={session}
           workspace={workspace}
           focusedFeature={focusedFeature}
           sidebar={sidebar}
         />
-        {session.error ? (
-          <div className="px-3 pt-3">
-            <Banner tone="error">{session.error.message}</Banner>
-          </div>
-        ) : null}
         {/* The panel is a sibling of the workspace, not an overlay: it is a
             persistent column, the way `NotificationPanelView` sits in the
             Mac's window. */}

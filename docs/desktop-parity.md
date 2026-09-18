@@ -550,10 +550,11 @@ the chrome and the device bar have not.
       re-read whenever the device set changes.
 - [x] **Disconnect a wireless device** from the bar, as the Mac offers beside a
       wireless device's pill.
-- [ ] **Pull progress strip** in the window's safe-area inset. Needs the
-      protocol to grow a pull that *reports* — today `/v1/files/pull` either
-      answers or does not — so it is not UI work, and it sits with the other
-      pull gaps below.
+- [x] **Pull progress strip**, above the workspace where the Mac keeps it: a
+      transfer outlives the screen that started it, so the strip cannot belong
+      to a pane. The protocol grew the `pull` *topic* for it — a route that
+      either answers or does not cannot drive a bar — and that also bought
+      **cancellation**, which was the other named gap.
 
 ### Chrome and feel
 
@@ -1060,12 +1061,18 @@ often someone opens them rather than by how hard they look.
   save dialog here is a plugin and a capability for one button. The Crash
   Catcher's Save writes to the same folder under the same rule.
 
-- **A pull cannot be cancelled, and shows no progress.** The Mac's pull
-  progress strip lives in the window's safe-area inset and polls the
-  destination file's size against the known source size. Here a pull is a
-  request that either answers or does not — so the strip is a *protocol* gap
-  rather than a UI one, and it is the one part of the device-bar item (6) that
-  did not land with the rest.
+- ~~**A pull cannot be cancelled, and shows no progress.**~~ **Landed**, as the
+  `pull` stream topic. Progress is the destination's size polled against the
+  source's `stat`, which is how the Mac measures it, with
+  `PullProgress.belongsToPull` shared so an `.apks` bundle's splits all count.
+  A directory has no total and the bar says so rather than inventing one.
+
+  **One trap, found by running it rather than by reading it**: the transfer has
+  to be awaited in the subscription's *own* task. An unstructured `Task { }`
+  does not inherit cancellation, so the first version survived the unsubscribe
+  that was meant to stop it — a 600 MB pull went on copying after the strip had
+  gone, and every unit test passed. A cancelled pull now also deletes what it
+  had written.
 
 - **App Info's Pull APK saves to `~/Downloads/Droidective`** rather than asking
   where. Same rule as every other pull here, and the same gap.

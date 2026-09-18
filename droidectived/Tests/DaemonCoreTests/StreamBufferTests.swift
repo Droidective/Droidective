@@ -244,7 +244,7 @@ import Testing
                 // and then do nothing.
                 #expect(topic.acceptsInput)
                 #expect(!topic.acceptsResize)
-            case .devices, .logcat, .performance, .netspeed, .reactotron:
+            case .devices, .logcat, .performance, .netspeed, .reactotron, .pull:
                 #expect(!topic.acceptsInput)
                 #expect(!topic.acceptsResize)
             }

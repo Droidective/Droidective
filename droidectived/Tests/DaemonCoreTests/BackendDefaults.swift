@@ -323,6 +323,14 @@ extension StreamSource {
     func openMirror(serial: String, quality: MirrorQuality) async throws -> ScrcpySession {
         throw StubbedOut.notImplemented
     }
+
+    /// An inert pull: a stub testing logcat has no opinion about transfers, and
+    /// an empty stream is the honest "this source does not do that".
+    func pull(
+        serial: String, path: String, destination: String, asRoot: Bool
+    ) async -> AsyncStream<PullProgressPayload> {
+        AsyncStream { $0.finish() }
+    }
 }
 
 enum StubbedOut: Error, CustomStringConvertible {
