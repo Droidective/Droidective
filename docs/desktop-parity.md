@@ -11,9 +11,9 @@ rewriting one when something turns out to be more work than it looked.
 
 | | Count |
 | --- | --- |
-| ✅ Ported | 56 |
+| ✅ Ported | 57 |
 | 🟡 Partial | 1 |
-| ⬜ Not started | 2 |
+| ⬜ Not started | 1 |
 | ⛔ Not applicable off-Apple | 2 |
 | **Total registry features** | **61** |
 
@@ -28,13 +28,10 @@ per-feature checklists below are that audit, and they are still unticked. The
 one **partial** entry is the one with a gap named in the classifier: the
 Terminal on Windows.
 
-**The two not started are `video-editor` and `frida-console`.** The video
-editor is the ffmpeg filter graph and a preview scrubber — the toolchain
-underneath it is no longer the blocker, since ffmpeg became a managed download
-when screen record landed. Frida needs a rooted device to verify, which makes
-it the hardest to be sure of and the least used.
+**The one not started is `frida-console`**, which needs a rooted device to
+verify — the hardest to be sure of and the least used.
 
-**Screens with a real pane today** (39): Screenshot, Terminal, Apps, Logcat, Device Info,
+**Screens with a real pane today** (40): Screenshot, Video Editor, Terminal, Apps, Logcat, Device Info,
 File Explorer, Crash Catcher, Bug Report, Performance, Root Status, Developer
 Settings, System Restrictions, Wi-Fi, Private DNS, Network Speed, Emulators,
 Install App, App Info, Permissions, Memory Usage, Sandbox Browser, Manage App,
@@ -332,8 +329,8 @@ the reason every check in those scripts is fatal.
    import and export, and a cURL paste that parses back. The collection runner
    is deliberately *not* a daemon route: the client walks the tree and sends one
    request at a time, so progress is live and Stop is instant.
-8. ~~**ffmpeg for Windows and Linux**~~ — **screen record landed;** the video
-   editor has not. Off Apple this could not be provisioned and reused: the Mac
+8. ~~**ffmpeg for Windows and Linux**~~ — **screen record landed, and now the
+   video editor too.** Off Apple this could not be provisioned and reused: the Mac
    records through the Apple-gated mirror media stack, so the daemon grew its
    own pipeline — `FfmpegPipe` feeding the scrcpy H.264 stream to `ffmpeg -f
    h264 -i pipe:0 -c:v copy`, with segmented pause/resume through the concat
@@ -373,6 +370,34 @@ the reason every check in those scripts is fatal.
     **Landed** — see the Screen & Capture entry below and the Panels section.
 12. **`frida-console`**, last of the real features: it needs a rooted device to
     verify, which makes it the hardest to be sure of and the least used.
+
+    ~~The **video editor**.~~ **Landed.** Trim, rotate, flip, crop, speed,
+    mute, five formats and three compression levels, undo/redo, and an export
+    that asks where the file should go. Four routes — `formats`, `proxy`,
+    `proxy/remove` and `export` — over `VideoEditing`, which is pure and
+    already tested in ADBKit, so neither app can drift on what a rotation
+    means.
+
+    **The playback ladder moved to the client, and that is the one real
+    divergence in shape.** `VideoEditService.playableProxy` walks remux →
+    transcode behind an "is this playable?" closure; a daemon cannot ask a
+    webview that, so the webview asks for each rung when its `<video>` reports
+    an error. `proxy(for:mode:)` is the single rung both now share, and
+    `playableProxy` is written in terms of it.
+
+    **The bytes reach the player as a blob, not a path.** The webview's
+    capability file stays at `core:default` — no filesystem permission of its
+    own — so the Rust process reads the file and hands the bytes over, capped
+    at 512 MB. A recording is tens of megabytes; past the cap the editor says
+    so rather than filling memory. Enabling Tauri's asset protocol would have
+    been the easy alternative and is exactly the widening this app has avoided
+    everywhere else.
+
+    **Verified against a real recording** made by the app's own recorder on a
+    booted emulator (324×720, 6.9 s): a trim of 2–5 s with a 50% vertical crop
+    and a quarter-turn came back **360×324** with no audio stream, a GIF export
+    came back 240×533, and a no-edit export was **byte-identical** to the
+    source — the file-copy fast path `isIdentity` exists for.
 
 Not in this list, and not scheduled: `ios-logs` and `push-notification`, which
 drive an Apple toolchain rather than a device.
@@ -1353,8 +1378,9 @@ after the screens rather than instead of them.
     while the daemon took IPv4 loopback and neither failed — so the device's
     traffic goes to whichever owns IPv4 loopback. The Mac has the same property
     against upstream's Electron app, so it is parity, not a regression.
-25. ~~**Mirror, screen record**~~ **— landed; the video editor has not.** The
-    mirror, the Mirror Wall and Screen Record all ship. The rest of this entry
+25. ~~**Mirror, screen record, the video editor**~~ **— all landed.** The
+    mirror, the Mirror Wall, Screen Record and the video editor all ship. The
+    rest of this entry
     is the analysis that turned out to be right, kept because it is what the
     video editor and any future decode work will be read against.
 
@@ -1869,10 +1895,10 @@ job, and the checklist now says which.
 - **Kind** `instantAction`
 - **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 
-#### `video-editor` — Video Editor  ·  ⬜ todo
+#### `video-editor` — Video Editor  ·  ✅ ported
 > Trim, rotate, crop, convert & compress video
 - **Kind** `view`
-- **Note** Not started — needs ffmpeg's filter graph and a preview scrubber. The managed ffmpeg it would use is now downloaded (Settings ▸ Tools), so this is the editor itself rather than the toolchain.
+- **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `VideoEditorView` — `App/Sources/FeatureDetail/Views/VideoEditorView.swift`
 - **Must replicate**
   - [ ] label: Open video…
@@ -2193,7 +2219,7 @@ job, and the checklist now says which.
 #### `frida-console` — Frida  ·  ⬜ todo
 > Set up frida-server or frida-gadget for instrumentation
 - **Kind** `view`
-- **Note** Not started on Windows/Linux.
+- **Note** Not started — needs a rooted device to verify, which makes it the hardest to be sure of and the least used.
 - **macOS view** `FridaConsoleView` — `App/Sources/FeatureDetail/Views/FridaConsoleView.swift`
 - **Must replicate**
   - [ ] button: Stop frida-server
@@ -2315,4 +2341,4 @@ job, and the checklist now says which.
   - [ ] drag: drag and drop
 
 
-<!-- counts: {'done': 56, 'partial': 1, 'todo': 2, 'gated': 2} -->
+<!-- counts: {'done': 57, 'partial': 1, 'todo': 1, 'gated': 2} -->

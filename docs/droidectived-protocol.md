@@ -282,7 +282,41 @@ would hold that handler for an hour.
 A device that refuses is a 502 carrying adb's own words, as everywhere else —
 the daemon worked and the device did not.
 
-### 4.5 Errors
+### 4.5 The video editor
+
+Four routes: `/v1/video/formats` lists every container the editor opens (from
+`VideoInputFormat`, so the open panel and the drop filter cannot disagree),
+`/v1/video/export` applies the edit, and `/v1/video/proxy` plus
+`/v1/video/proxy/remove` are the playback ladder.
+
+**The daemon owns ffmpeg and nothing else.** `VideoEditing` already turns an
+edit into an argument vector, pure and tested in ADBKit, and both apps go
+through it — so a rotation or a trim cannot come to mean two different things.
+The wire's `ExportOptions` mirrors `VideoExportOptions` field for field for the
+same reason; a name invented here would silently stop applying.
+
+**The client walks the proxy ladder, not the daemon.** The Mac asks
+AVFoundation whether a file plays and steps remux → transcode until one does
+(`VideoEditService.playableProxy`). The daemon cannot ask a webview that, so the
+webview asks for each rung in turn — the same ladder, with the decision left
+where it can actually be answered. `VideoEditService.proxy(for:mode:)` is the
+one rung, and `playableProxy` is now written in terms of it so the two cannot
+drift.
+
+A crop travels as four separate fields and is **all of them or none**: a partial
+crop would otherwise decode as a rect of zeros and cut the whole frame away. An
+unknown `compression` or `format` falls back to the default rather than failing
+the request — a client sending a newer value should get an export, not an
+error. A missing ffmpeg is a **503** naming Settings ▸ Tools rather than a 502
+carrying a process error, because that one is fixable by whoever reads it.
+
+The bytes a player needs do **not** come over this protocol. The webview has no
+filesystem permission of its own — its capability file stays at `core:default` —
+so the Rust process reads the file and hands the bytes across, capped at 512 MB.
+A recording is tens of megabytes; anything past the cap says so rather than
+filling memory trying.
+
+### 4.6 Errors
 
 One shape everywhere, so the UI has one error path:
 

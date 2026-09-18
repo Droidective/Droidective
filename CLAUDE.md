@@ -23,14 +23,13 @@ daemon** — the Mac app keeps linking ADBKit directly, by decision, so no daemo
 or desktop work can reach the shipping Mac flow.
 **Where the port stands:** the shell is done (multi-window, tabs, split panes,
 palette, hotkeys, tray + background mode, Quick Actions, notifications, toasts,
-drag and drop, translucency, the role picker, a native menu bar), and 29 of the
+drag and drop, translucency, the role picker, a native menu bar), and 31 of the
 32 full-screen views have a pane — the mirror, the Mirror Wall, screen record,
-Reactotron, the JS console, API Testing and APK Studio included. Only
-`video-editor` and `frida-console` have no screen at all; the seven remaining
-catalog features are actions that render from their registry fields. Still
-Mac-only: the welcome tour, the updater, Settings ▸ MCP
-— and the Terminal on *Windows* (ConPTY is a
-different API, and the pane says so). The practical consequence: a new Mac
+the video editor, the screenshot editor, Reactotron, the JS console, API
+Testing and APK Studio included. Only `frida-console` has no screen at all; the
+seven remaining catalog features are actions that render from their registry
+fields. Still Mac-only: the welcome tour, the updater and Settings ▸ MCP — and
+the Terminal on *Windows* (ConPTY is a different API, and the pane says so). The practical consequence: a new Mac
 feature now usually has a port counterpart worth adding in the same breath, and
 `docs/desktop-parity.md` is where it gets tracked. Regenerate that file's
 per-feature half from the sources rather than editing it —

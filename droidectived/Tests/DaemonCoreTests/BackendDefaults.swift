@@ -294,6 +294,14 @@ extension DaemonBackend {
     func clearCommandLog() async {}
 
     func captureScreenshot(serial: String) async throws -> Data { Data() }
+
+    func videoProxy(of path: String, mode: VideoProtocol.ProxyMode) async throws -> String { path }
+
+    func exportVideo(
+        source: String, options: VideoExportOptions, destination: String
+    ) async throws -> String { destination }
+
+    func removeVideoProxy(at path: String) async {}
 }
 
 /// The same trick for `StreamSource`, and for the same reason: a stub testing

@@ -39,6 +39,7 @@ import {
   SandboxPane,
   ScreenRecordPane,
   ScreenshotPane,
+  VideoEditorPane,
   SimulateHubPane,
   TerminalPane,
   WifiPane,
@@ -226,6 +227,10 @@ function hostPane({ id, device, packageId, onOpen }: FeaturePaneProps) {
   switch (id) {
     case "emulators":
       return <EmulatorsPane />
+    case "video-editor":
+      // A file on this machine and ffmpeg beside it; no device is involved at
+      // any point, which is why the Mac's screen works with nothing connected.
+      return <VideoEditorPane />
     case "terminal":
       return <TerminalPane serial={device?.serial ?? null} />
     case "reactotron":

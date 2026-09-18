@@ -136,6 +136,13 @@ public enum DaemonProtocol {
         /// The Screenshot editor's capture: the PNG bytes, not a file. The
         /// `screenshot` *action* is the other path, and writes one.
         case screenshotCapture = "/v1/screenshot/capture"
+        /// The video editor. `proxy` is the playback ladder — the client asks
+        /// for each rung because only it can say whether the last one plays —
+        /// and `export` is the one that produces a file someone keeps.
+        case videoFormats = "/v1/video/formats"
+        case videoProxy = "/v1/video/proxy"
+        case videoExport = "/v1/video/export"
+        case videoProxyRemove = "/v1/video/proxy/remove"
     }
 
     /// The multiplexed stream socket. Not a `Route`: it is a WebSocket upgrade
