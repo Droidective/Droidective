@@ -1,3 +1,40 @@
+## Droidective v3.12.3
+
+A small bug-fix release. Recordings can use the Mac's microphone, which they
+never could, plus three updater fixes and the source changes macOS 27 needed.
+
+### Recording
+
+- **The Mac's microphone could never be switched on.** Turning it on reported
+  that microphone access was off and offered to open System Settings ▸ Privacy
+  & Security ▸ Microphone — where Droidective was not listed, so there was
+  nothing there to switch on. The app was signed without the permission that
+  lets it ask at all, so macOS refused before you were ever prompted, which is
+  why no permission dialog appeared either. It now asks the first time you turn
+  the microphone on. There is nothing to undo first: the old refusal was never
+  recorded against the app, so allowing it once is all it takes. Recording the
+  device's own audio was never affected.
+
+### Updating
+
+- **Three fixes come from the update framework.** Two are security fixes in how
+  an update is unpacked and installed. The third restores window focus for apps
+  running in the background without a Dock icon — the state Droidective is in
+  when "Keep running in the background" is on — where an update window could
+  end up behind everything else.
+
+### macOS 27
+
+- **Droidective is built and checked against macOS 27.** It already ran there;
+  this is the round of source changes Apple's new compiler asked for, together
+  with one in the mirror's video path, where the system moved a property the
+  mirror reads for every frame. Nothing behaves differently.
+
+### Install
+
+Download the DMG from the release below, or use Droidective ▸ Check for
+Updates.
+
 ## Droidective v3.12.2
 
 A bug-fix release. Nine fixes, most of them things the app was getting wrong

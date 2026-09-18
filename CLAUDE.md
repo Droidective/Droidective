@@ -1119,7 +1119,34 @@ position in `RELEASE_NOTES.md`.
 ## Status
 
 Feature-complete across all planned milestones plus several UX rounds.
-(Latest release: **v3.12.2** — a bug-fix release, nine of them, most being the
+(Latest release: **v3.12.3** — a small bug-fix release. **The Mac's microphone
+could never be switched on for a recording**, from v3.8.0 to v3.12.2: the app
+was signed with the hardened runtime and *no entitlements*, and without
+`com.apple.security.device.audio-input` that runtime refuses the microphone
+before TCC is ever consulted — `requestAccess` returns false in 0.00 s, no
+prompt appears, the app is never listed in System Settings ▸ Privacy & Security
+▸ Microphone, and `authorizationStatus` reads `.denied`, so the "Open Settings"
+link pointed at a list the app was not in. Nothing could have caught it: the
+Debug build, `make build` and both test bundles are all unhardened, so the
+failing path only exists in a release build. The fix needs two files to agree
+and `scripts/package-dmg.sh` was the second — its final `codesign` re-seals the
+bundle, and codesign replaces entitlements wholesale rather than merging — so
+it now passes the file and asserts the sealed app carries the key. The deny is
+never persisted, so an updated build just prompts. See the TCC convention above.
+**Xcode 27 / Swift 6.4**: two `ImplicitStrongCapture` errors where an inner
+`[weak self]` was a lie (the outer escaping `@Sendable` closure already held
+self strongly), `MirrorRenderer` resolving `sampleBufferRenderer` once in its
+`@MainActor` init because the macOS 27 SDK infers `@MainActor` on it via
+`CALayer` — the property that exists precisely for background enqueueing — and
+`CommandLog.userInitiated` keeping the deprecated `isolation:` overload of
+`TaskLocal.withValue`, because the replacement makes every call site a
+"sending value of non-Sendable type" error; `verify.sh` downgrades that one
+diagnostic group behind a probe, so Xcode 16 compiles exactly as before. CI
+stays on `macos-15` deliberately. Also **Sparkle 2.9.3 → 2.9.6**: two security
+fixes plus 2.9.4's focus fix for backgrounded, dockless apps — the state this
+app runs in. 2.10.0 was skipped: its macOS 27 fix is for delta updates, and the
+appcast publishes whole DMGs.)
+(Before that: **v3.12.2** — a bug-fix release, nine of them, most being the
 app reporting something that was not true. **`MainThreadStall` counted system
 sleep as a hang**: `MainThreadLoad` measured on a `ContinuousClock`, which keeps
 counting through sleep, so a closed lid shipped as `stall_worst_ms` of 164 s,
