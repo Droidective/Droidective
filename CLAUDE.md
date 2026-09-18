@@ -155,7 +155,9 @@ The agent loop I use: edit → `cd ADBKit && swift test` → `xcodegen generate`
 lands at `DerivedData/Build/Products/Debug/Droidective.app`.
 
 `brew install xcodegen` if missing. App is ad-hoc signed, sandbox OFF (it must
-spawn adb/scrcpy/emulator).
+spawn adb/scrcpy/emulator). Debug builds are *not* hardened, which is why the
+microphone entitlement can only be proven from a release build — see the TCC
+convention below.
 
 ## Marketing site
 
@@ -872,6 +874,23 @@ table) is in `docs/reactotron-mcp-analysis.md`.
   and only one has a picker — and a mic that won't start is surfaced through
   `ScreenRecorder.audioStatus()` while the recording keeps going: losing the
   narration beats losing the take.
+  - **A TCC-protected device needs an entitlement, not just a usage string,
+    and only the release build proves it.** `NSMicrophoneUsageDescription` is
+    what macOS *shows*; `com.apple.security.device.audio-input`
+    (`App/Droidective.entitlements`) is what lets the process ask at all under
+    the hardened runtime, which release builds enable and local builds do not.
+    Without it `requestAccess` returns false in 0.00s, TCC is never consulted —
+    so the app never appears in System Settings ▸ Privacy & Security ▸
+    Microphone — and `authorizationStatus` reads `.denied`, which sent people
+    to a list they could not find Droidective in. It shipped that way from
+    v3.8.0 to v3.12.2 because *every* path that could have caught it is
+    unhardened: the Debug build, `make build`, and the test bundles. Two places
+    have to agree — `CODE_SIGN_ENTITLEMENTS` in project.yml, and
+    `scripts/package-dmg.sh`, whose final `codesign` re-seals the bundle and
+    would otherwise drop what xcodebuild applied (codesign replaces
+    entitlements wholesale; it never merges). The script asserts the sealed app
+    carries the key rather than trusting either half. The deny is not
+    persisted, so a fixed build just prompts normally — no `tccutil reset`.
 - **Sparkle never starts in Debug builds** (`SparkleUpdater.updaterAllowed`).
   Silent staging + install-on-quit replaces the bundle at the app's own path —
   a dev build sharing the release bundle id gets the RELEASE app installed

@@ -97,8 +97,29 @@ if [[ "$SIGN_IDENTITY" != "-" ]]; then
   done
 fi
 
-codesign "${opts[@]}" "$APP"
+# This seal is the app's final signature, so it has to carry the entitlements
+# too: codesign replaces them wholesale, and a re-sign without --entitlements
+# silently drops whatever xcodebuild applied. That is how the hardened runtime
+# came to refuse the microphone in shipped builds while every local (unhardened)
+# build worked — see App/Droidective.entitlements.
+ENTITLEMENTS="$(cd "$(dirname "$0")/.." && pwd)/App/Droidective.entitlements"
+if [[ ! -f "$ENTITLEMENTS" ]]; then
+  echo "error: $ENTITLEMENTS not found — the app must be sealed with its entitlements" >&2
+  exit 1
+fi
+codesign "${opts[@]}" --entitlements "$ENTITLEMENTS" "$APP"
 codesign --verify --deep --strict "$APP"
+
+# Prove the shipped bundle actually carries them. The failure this guards is
+# invisible by inspection — the app launches, records video, and only the
+# microphone is quietly refused — so assert it here rather than discover it
+# from a bug report.
+MIC_ENTITLEMENT="com.apple.security.device.audio-input"
+if ! codesign -d --entitlements - --xml "$APP" 2>/dev/null |
+  plutil -p - 2>/dev/null | grep -q "$MIC_ENTITLEMENT"; then
+  echo "error: the sealed $APP is missing the $MIC_ENTITLEMENT entitlement" >&2
+  exit 1
+fi
 
 # Lay out a styled "drag to Applications" DMG. The window background and icon
 # positions live in a Finder-authored .DS_Store committed in dmg-assets (see
