@@ -54,9 +54,37 @@ assert_passed() {
   echo "  $label: $count tests passed"
 }
 
+# Swift 6.2 deprecated the `isolation:` overload of TaskLocal.withValue, which
+# CommandLog.userInitiated has to keep using — its callers pass @MainActor
+# closures over view state, and the replacement makes every one of them a
+# "sending value of non-Sendable type" error (see CommandLog.swift). Under
+# -warnings-as-errors that single deprecation fails the whole tier on an
+# Xcode 27 toolchain, so deprecations are downgraded back to warnings — that
+# group alone, every other warning still an error.
+#
+# Probed, never assumed: the probe runs the exact combination the build will
+# use, so it says no on both toolchains that would break — one too old to know
+# `-Wwarning` (an unknown argument) and one too old to know the group (an
+# `UnknownWarningGroup` warning, which -warnings-as-errors then promotes to an
+# error). Either way the flags come back empty and the tier runs as it always
+# has, which is what keeps the Xcode 16 toolchain that builds releases today
+# on exactly its current behaviour.
+deprecation_flags() {
+  if echo 'let ok = true' |
+    swiftc -parse -warnings-as-errors -Wwarning DeprecatedDeclaration - >/dev/null 2>&1; then
+    printf '%s' "-Xswiftc -Wwarning -Xswiftc DeprecatedDeclaration"
+  fi
+}
+
 tier0_static() {
   echo "── tier 0: static ─────────────────────────────────────────"
-  if ! (cd "$ROOT/ADBKit" && swift build -Xswiftc -warnings-as-errors) >"$LOG" 2>&1; then
+  local flags
+  flags="$(deprecation_flags)"
+  # Deliberate word splitting: $flags is either empty or two fixed, space-free
+  # option pairs. An array would need bash 4 to expand empty under `set -u`, and
+  # macOS ships bash 3.2.
+  # shellcheck disable=SC2086
+  if ! (cd "$ROOT/ADBKit" && swift build -Xswiftc -warnings-as-errors $flags) >"$LOG" 2>&1; then
     dump_failures
     die "tier 0: ADBKit does not compile warning-free"
   fi

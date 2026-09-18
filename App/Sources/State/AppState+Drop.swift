@@ -132,8 +132,11 @@ extension AppState {
             outcome = try await CommandLog.userInitiated {
                 try await transfer.copyToDevice(
                     paths: job.paths, toDir: job.destination, serial: job.serial,
-                    onStage: { stage in
-                        Task { @MainActor [weak self] in self?.applyStage(stage, to: id) }
+                    // Weak on the *outer* closure: it's the escaping one the
+                    // service holds for the length of the copy, so a weak
+                    // capture only on the inner Task retained self anyway.
+                    onStage: { [weak self] stage in
+                        Task { @MainActor in self?.applyStage(stage, to: id) }
                     })
             }
         } catch {

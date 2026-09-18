@@ -74,6 +74,16 @@ public actor CommandLog {
 extension CommandLog {
     /// Run `body` as a user-initiated action, so the adb commands it triggers
     /// are recorded on the command log. Wraps the `isUserInitiated` task-local.
+    ///
+    /// Swift 6.2 deprecated the `isolation:` overload of `TaskLocal.withValue`
+    /// in favour of a `nonisolated(nonsending)` one, but the two are not
+    /// interchangeable here: callers pass `@MainActor` closures that capture
+    /// view state (`CommandLog.userInitiated { await state.env.engine… }`), and
+    /// running those on anything but the caller's actor is the data race the
+    /// `isolated` parameter exists to prevent. Adopting the replacement turns
+    /// every one of those call sites into a "sending value of non-Sendable
+    /// type" error, so this stays as it is and the deprecation is downgraded
+    /// back to a warning by `deprecation_flags` in scripts/verify.sh.
     public static func userInitiated<T>(
         isolation: isolated (any Actor)? = #isolation,
         _ body: () async throws -> T

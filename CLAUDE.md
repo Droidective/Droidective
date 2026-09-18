@@ -157,7 +157,10 @@ lands at `DerivedData/Build/Products/Debug/Droidective.app`.
 `brew install xcodegen` if missing. App is ad-hoc signed, sandbox OFF (it must
 spawn adb/scrcpy/emulator). Debug builds are *not* hardened, which is why the
 microphone entitlement can only be proven from a release build — see the TCC
-convention below.
+convention below. On a fresh Xcode the Metal toolchain is a separate download
+and `Grain.metal` (plus SwiftTerm's shaders) won't compile without it; the
+failure names `CompileMetalFile` and nothing else, and
+`xcodebuild -downloadComponent MetalToolchain` fixes it.
 
 ## Marketing site
 
