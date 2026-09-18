@@ -316,7 +316,42 @@ so the Rust process reads the file and hands the bytes across, capped at 512 MB.
 A recording is tens of megabytes; anything past the cap says so rather than
 filling memory trying.
 
-### 4.6 Errors
+### 4.6 The Send Text snippets
+
+`/v1/presets/snippets`, `/v1/presets/snippets/write` and `/v1/presets/expand`,
+over the Mac's own `presets.json` in the shared support dir — so a developer
+running both apps has one set of snippets, the arrangement the deep links and
+the custom commands already use.
+
+**Unlike those two, the write is a verb rather than a whole list.** The rules
+that make a snippet — the trimmed, length-clamped name, the uniqueness check,
+the use-count bump that ranks the quick-insert row — are `Presets`' own methods,
+and a client re-deriving them would drift from the Mac the first time one
+changed. `add`, `remove` and `use` each run one of those methods and answer with
+the updated list.
+
+```jsonc
+// POST /v1/presets/snippets/write  { "op": "add", "name": "Metro",
+//                                    "text": "http://{ip}:8081" }
+// → 200
+{ "snippets": [ { "name": "Metro", "text": "http://{ip}:8081",
+                  "uses": 0, "lastUsedAt": 1789768908.7 } ] }
+```
+
+A refused `add` — empty name, empty text, or a name already taken — is a **409**
+carrying the reason rather than a silent no-op, because the screen has a field
+to point at. A `use` naming a snippet that is gone is a **200**: the ranking is
+bookkeeping, and a snippet removed in another window must not turn an insert
+into a failure.
+
+**`expand` exists because the daemon has no clipboard.** `{clipboard}` arrives
+*from* the client — the clipboard belongs to whoever has a window — and `{ip}`
+is this host's own address, which the daemon does have. The substitution itself
+is ADBKit's `SnippetPlaceholders`, so both apps expand identically, including
+its rule that a substituted value is never re-scanned: a clipboard holding
+`{ip}` is inserted verbatim.
+
+### 4.7 Errors
 
 One shape everywhere, so the UI has one error path:
 

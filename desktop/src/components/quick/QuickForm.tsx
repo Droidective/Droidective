@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { FieldRow } from "@/components/ActionFormParts"
 import { Button, Switch } from "@/components/Controls"
+import { QuickSnippetList } from "@/components/quick/QuickSnippetList"
 import { initialValues, missingRequired, type FormValues } from "@/lib/fields"
 import type { FeatureSummary } from "@/lib/wire"
 
@@ -60,6 +61,14 @@ export function QuickForm({
           />
         ))
       )}
+
+      {feature.id === "send-text" ? (
+        <QuickSnippetList
+          onInsert={(text) => {
+            setValues((current) => ({ ...current, text: String(current["text"] ?? "") + text }))
+          }}
+        />
+      ) : null}
 
       <div className="flex items-center gap-2">
         <Button

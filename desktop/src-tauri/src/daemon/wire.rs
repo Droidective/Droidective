@@ -338,6 +338,47 @@ pub struct CrashListResponse {
     pub crashes: Vec<CrashReport>,
 }
 
+// MARK: - the saved Send Text snippets
+
+/// One saved snippet, as `SendTextSnippet` stores it.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Snippet {
+    pub name: String,
+    pub text: String,
+    pub uses: i64,
+    /// Epoch seconds of the last insert; absent for a file written before the
+    /// field existed, and sorted last.
+    pub last_used_at: Option<f64>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SnippetsResponse {
+    pub snippets: Vec<Snippet>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SnippetWriteRequest {
+    /// "add", "remove" or "use".
+    pub op: String,
+    pub name: String,
+    pub text: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SnippetExpandRequest {
+    pub text: String,
+    /// The host's clipboard, which the daemon has no way to read itself.
+    pub clipboard: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SnippetExpandResponse {
+    pub text: String,
+    pub host_ip: Option<String>,
+}
+
 // MARK: - the video editor
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

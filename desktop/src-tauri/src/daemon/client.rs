@@ -22,9 +22,11 @@ use crate::daemon::wire::{
     ReactotronReverseResponse, RecordOptions, RecordStartRequest, RecordStatusResponse,
     RecordStoppedResponse, RestrictionWriteRequest, RestrictionsResponse, RolesResponse,
     RootStatusResponse, RunRequest, RunResponse, SandboxRequest, SandboxResponse,
-    ScreenshotCaptureRequest, ScreenshotCaptureResponse, ToolInstallRequest, ToolInstallResponse,
-    ToolsResponse, VideoExportRequest, VideoFormatsResponse, VideoPathResponse, VideoProxyRequest,
-    VideoRemoveRequest, WifiResponse, WifiWriteRequest, WirelessActionRequest,
+    ScreenshotCaptureRequest, ScreenshotCaptureResponse, SnippetExpandRequest,
+    SnippetExpandResponse, SnippetWriteRequest, SnippetsResponse, ToolInstallRequest,
+    ToolInstallResponse, ToolsResponse, VideoExportRequest, VideoFormatsResponse,
+    VideoPathResponse, VideoProxyRequest, VideoRemoveRequest, WifiResponse, WifiWriteRequest,
+    WirelessActionRequest,
 };
 use crate::error::DaemonError;
 
@@ -391,6 +393,24 @@ impl DaemonClient {
         request: &ScreenshotCaptureRequest,
     ) -> Result<ScreenshotCaptureResponse, DaemonError> {
         self.post("/v1/screenshot/capture", request).await
+    }
+
+    pub async fn snippets(&self) -> Result<SnippetsResponse, DaemonError> {
+        self.post("/v1/presets/snippets", &EMPTY).await
+    }
+
+    pub async fn write_snippet(
+        &self,
+        request: &SnippetWriteRequest,
+    ) -> Result<SnippetsResponse, DaemonError> {
+        self.post("/v1/presets/snippets/write", request).await
+    }
+
+    pub async fn expand_snippet(
+        &self,
+        request: &SnippetExpandRequest,
+    ) -> Result<SnippetExpandResponse, DaemonError> {
+        self.post("/v1/presets/expand", request).await
     }
 
     pub async fn video_formats(&self) -> Result<VideoFormatsResponse, DaemonError> {

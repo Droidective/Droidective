@@ -400,6 +400,8 @@ import Testing
                 filename: "custom-commands.json", default: [], directory: directory),
             apiClient: JSONStore<ApiClientData>(
                 filename: "api-client.json", default: ApiClientData(), directory: directory),
+            presets: JSONStore<Presets>(
+                filename: "presets.json", default: Presets(), directory: directory),
             toolsDirectory: directory)
     }
 

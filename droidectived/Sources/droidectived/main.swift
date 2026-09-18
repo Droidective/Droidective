@@ -54,6 +54,9 @@ let server = DaemonServer(
         // running both apps has one set of collections and environments.
         apiClient: JSONStore<ApiClientData>(
             filename: "api-client.json", default: ApiClientData()),
+        // And the Mac's Send Text snippets, for the same reason again: one
+        // set of saved snippets across both apps rather than two.
+        presets: JSONStore<Presets>(filename: "presets.json", default: Presets()),
         // The same managed-tool directory the engine uses, so a jadx or
         // bundletool downloaded once serves every feature that wants it.
         toolsDirectory: AppPaths.supportDir.appendingPathComponent("tools"),

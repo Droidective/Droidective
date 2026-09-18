@@ -1,8 +1,6 @@
 import { Construction } from "lucide-react"
 import { ActionForm } from "@/components/ActionForm"
-import { AboutPane } from "@/components/AboutPane"
-import { CatalogPane } from "@/components/CatalogPane"
-import { HomeView } from "@/components/HomeView"
+import { chromePane } from "@/components/ChromePane"
 import {
   AabConvertPane,
   ApiClientPane,
@@ -39,13 +37,13 @@ import {
   SandboxPane,
   ScreenRecordPane,
   ScreenshotPane,
+  SendTextPane,
   VideoEditorPane,
   SimulateHubPane,
   TerminalPane,
   WifiPane,
   WirelessAdbPane,
 } from "@/components/panes"
-import { ABOUT_TAB, CATALOG_TAB, HOME_TAB } from "@/lib/layout"
 import { isRunnable, type Device, type FeatureSummary } from "@/lib/wire"
 
 export interface FeaturePaneProps {
@@ -77,6 +75,8 @@ export function FeaturePane(props: FeaturePaneProps) {
   if (chrome !== null) return chrome
   if (props.feature === null) return <NotHere title={props.id} />
 
+  const actionScreen = actionPane(props)
+  if (actionScreen !== null) return actionScreen
   const hostSide = hostPane(props)
   if (hostSide !== null) return hostSide
   const perApp = appPane(props)
@@ -111,6 +111,10 @@ export function FeaturePane(props: FeaturePaneProps) {
     // saves with no dialog, and opening the tab gives you the editor.
     case "screenshot":
       return <ScreenshotPane device={props.device} />
+    // A form action with a screen, as on the Mac: the palette and the panel
+    // still render it from its registry fields; the screen adds the snippets.
+    case "send-text":
+      return <SendTextPane device={props.device} />
     case "device-info":
       return <DeviceInfoPane device={props.device} />
     case "file-explorer":
@@ -153,35 +157,22 @@ export function FeaturePane(props: FeaturePaneProps) {
 }
 
 /**
- * The app's own screens, opened from the sidebar footer rather than the
- * registry. No daemon serves them, so they are matched before the lookup.
+ * The two features that are *actions* in the registry and have a screen too.
+ *
+ * Both stay actions: a hotkey still grabs a screenshot with no dialog, and the
+ * palette and the Quick Actions panel still render Send Text from its fields.
+ * The screen is the other half, exactly as `FeatureDetailView` special-cases
+ * them on the Mac.
  */
-function chromePane(props: FeaturePaneProps) {
-  if (props.id === HOME_TAB) {
-    return (
-      <HomeView
-        features={props.features}
-        sidebarOrder={props.sidebarOrder}
-        categoryOrder={props.categoryOrder}
-        favorites={props.favorites}
-        onOpen={props.onOpen}
-      />
-    )
+function actionPane({ id, device }: FeaturePaneProps) {
+  switch (id) {
+    case "screenshot":
+      return <ScreenshotPane device={device} />
+    case "send-text":
+      return <SendTextPane device={device} />
+    default:
+      return null
   }
-  if (props.id === CATALOG_TAB) {
-    return (
-      <CatalogPane
-        features={props.features}
-        disabled={props.disabledFeatures}
-        sidebarOrder={props.sidebarOrder}
-        categoryOrder={props.categoryOrder}
-        onSetEnabled={props.onSetEnabled}
-        onSetGroupEnabled={props.onSetGroupEnabled}
-      />
-    )
-  }
-  if (props.id === ABOUT_TAB) return <AboutPane />
-  return null
 }
 
 /**

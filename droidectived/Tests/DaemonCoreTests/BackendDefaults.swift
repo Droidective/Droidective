@@ -302,6 +302,14 @@ extension DaemonBackend {
     ) async throws -> String { destination }
 
     func removeVideoProxy(at path: String) async {}
+
+    func snippets() async -> [SendTextSnippet] { [] }
+
+    func writeSnippet(_ request: PresetProtocol.WriteRequest) async -> [SendTextSnippet]? { [] }
+
+    func expandSnippet(_ request: PresetProtocol.ExpandRequest) async -> (String, String?) {
+        (request.text, nil)
+    }
 }
 
 /// The same trick for `StreamSource`, and for the same reason: a stub testing
