@@ -53,7 +53,7 @@ ported in the checklist below without anyone remembering to say so.
 toolchain rather than a device: `ios-logs` and `push-notification` are `xcrun
 simctl` against an iOS Simulator. Everything the port lacks now is *inside* a
 screen that exists, or one of the two above, or a piece of chrome — the
-Command Log sheet, the welcome tour, the updater, and Settings ▸ MCP — each
+welcome tour, the updater, and Settings ▸ MCP — each
 with an entry in the backlog. Hard is not the same as impossible, and a ⛔ that
 means "hard" is a decision nobody goes back to revisit.
 
@@ -358,8 +358,7 @@ the reason every check in those scripts is fatal.
     this platform can produce a drag.
 11. **The polish**, and it is what is left. Window translucency (15) and the
     role picker (9) have landed. Still open, in the order they are worth doing:
-    the **Command Log** (7) — the Privacy tab already names it as missing, and
-    it is the one piece of chrome a bug report needs; the **welcome tour** (22);
+    the **welcome tour** (22);
     and the **updater** (23), which is blocked on a signing keypair rather than
     on effort — `tauri-plugin-updater` needs one whose private half lives in a
     GitHub secret, which is the maintainer's to create, so the ports are
@@ -570,10 +569,11 @@ memory — the file each item names is the thing to replicate.
       family and the text-size scale, the Window opacity/blur/grain sliders
       (which the section names as not ported), and the Developer self-metrics
       overlay.
-- [x] **Privacy** — Data & Storage ▸ the captures and pulls folder, with Open.
-      Telemetry says outright that this app sends nothing, which is true and
-      worth stating rather than leaving as an unchecked box. **Still
-      missing:** Change…/Reset for the folder, and the Command Log.
+- [x] **Privacy** — Data & Storage ▸ the captures and pulls folder, with Open,
+      and the **Command log** with its View… and Clear, as the Mac's row has
+      them. Telemetry says outright that this app sends nothing, which is true
+      and worth stating rather than leaving as an unchecked box. **Still
+      missing:** Change…/Reset for the folder.
 - [x] **Doctor** — the toolchain check over `ToolDetectionService`: a verdict,
       then adb and emulator with their version and path, and the install source
       for anything missing. The Mac's own two checks — scrcpy and ffmpeg are
@@ -605,8 +605,20 @@ memory — the file each item names is the thing to replicate.
 - [x] **Toasts** (`ToastOverlay`) — top-trailing, per action result, with a
       level and an optional Show in folder. Every ported screen was converted
       off its inline banner.
-- [ ] **Command Log** (`CommandLogView`) — every `CommandLog.userInitiated`
-      adb call, opened from Privacy.
+- [x] **Command Log** (`CommandLogView`) — every recorded adb call, opened
+      from Privacy: the 560×420 sheet, the expandable row with its command,
+      `exit N · Xms` and time, stdout and stderr blocks or "(no output)", and
+      Clear behind the Mac's own confirmation dialog.
+
+      **What counts as recorded had to cross the wire.** `AdbClient` already
+      wrote every call into a `CommandLog` gated on a task-local, so the daemon
+      only had to scope it around a route — but the Mac draws the line inside
+      the view (`MeminfoView` records the first read and leaves the 2s poll
+      out), and a route cannot tell a Refresh from the poll after it. So the
+      client marks a poll with `X-Droidective-Background: 1` and an unmarked
+      call is recorded. Absent-means-recorded is the safe direction: a poll
+      that forgets the header is noise someone sees, where an action that
+      forgot it would be missing from the log a bug report is pasted out of.
 - [x] **Role picker** (`RolePickerView`) — shown on first launch, and
       re-openable from Settings ▸ General, which also names the role in effect.
       The catalogue is served (`/v1/features/roles`) rather than re-listed in
@@ -872,8 +884,8 @@ often someone opens them rather than by how hard they look.
    other pull limitations.
 7. ~~**The notification surfaces.**~~ Landed — `ToastOverlay` and the history
    panel behind the device bar's bell, with every ported screen converted off
-   its inline banner. The Command Log sheet is still outstanding: it needs the
-   daemon to record its adb calls, which it does not do yet.
+   its inline banner. The Command Log sheet has landed too — see its entry
+   under Panels and sheets for the header that decides what is in it.
 8. **Settings** — landed as a seven-tab window with General, Appearance and
    Privacy doing something and the other four naming what they wait on.
    Appearance carries Theme and Accent (presets · colour well · hex + Reset)
@@ -1001,8 +1013,8 @@ often someone opens them rather than by how hard they look.
   polling, which the Mac pauses via `tabIsActive`. It needs the pane to know
   whether it is the visible one.
 
-- **Settings has no role picker, no Command Log, no Tools and no MCP tab.** Each
-  names its blocker in the tab itself. Hotkeys and Doctor have landed.
+- **Settings has no MCP tab.** It names its blocker in the tab itself. The role
+  picker, the Command Log, Tools, Hotkeys and Doctor have all landed.
 
 - **A bug report needs `zip` on a Linux host.** macOS ships it and Windows uses
   the system bsdtar, but on Linux it is a package that may not be installed —

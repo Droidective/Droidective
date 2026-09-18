@@ -288,6 +288,10 @@ extension DaemonBackend {
     func installManagedTool(_ tool: ManagedTool) async throws -> String { "/tmp/stub" }
 
     func removeManagedTool(_ tool: ManagedTool) async throws {}
+
+    func commandLog() async -> [CommandLogEntry] { [] }
+
+    func clearCommandLog() async {}
 }
 
 /// The same trick for `StreamSource`, and for the same reason: a stub testing

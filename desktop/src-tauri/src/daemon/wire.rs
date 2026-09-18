@@ -338,6 +338,31 @@ pub struct CrashListResponse {
     pub crashes: Vec<CrashReport>,
 }
 
+// MARK: - the command log
+
+/// One recorded adb call, as `CommandLogProtocol.Entry` sends it.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CommandLogEntry {
+    pub id: String,
+    /// Milliseconds since the epoch.
+    pub at: i64,
+    pub command: String,
+    /// Absent when the process was killed rather than exiting — the row says
+    /// "killed", exactly as `CommandLogRow.exitLabel` does.
+    #[serde(rename = "exitCode")]
+    pub exit_code: Option<i32>,
+    #[serde(rename = "durationMs")]
+    pub duration_ms: i64,
+    pub stdout: String,
+    pub stderr: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CommandLogResponse {
+    /// Most-recent-first.
+    pub entries: Vec<CommandLogEntry>,
+}
+
 // MARK: - Developer Options and the dev-time restrictions
 
 /// One Developer Options row: what it is, and what the device reports.

@@ -19,8 +19,8 @@ use crate::daemon::stream::StreamMessage;
 use crate::daemon::wire::{
     AabConvertRequest, AabConvertResponse, ApkKeystore, ApkReport, ApkSignRequest, ApkSignResponse,
     ApkToolchain, AppControlRequest, AppInfoResponse, AppPullRequest, AppPullResponse, AppRequest,
-    AppsResponse, BugReportRequest, BugReportResponse, CrashListResponse, CustomCommand,
-    CustomCommandRunRequest, CustomCommandsResponse, CustomCommandsWriteRequest,
+    AppsResponse, BugReportRequest, BugReportResponse, CommandLogResponse, CrashListResponse,
+    CustomCommand, CustomCommandRunRequest, CustomCommandsResponse, CustomCommandsWriteRequest,
     DecompileFileRequest, DecompileFileText, DecompileHits, DecompileMode, DecompileRebuildRequest,
     DecompileRebuildResponse, DecompileRequest, DecompileSearchRequest, DecompileTree, DeepLink,
     DeepLinkLaunchRequest, DeepLinksResponse, DeepLinksWriteRequest, DevSettingsResponse,
@@ -264,8 +264,13 @@ pub async fn pull_file(
 pub async fn list_crashes(
     supervisor: State<'_, Supervisor>,
     serial: String,
+    background: bool,
 ) -> Result<CrashListResponse, DaemonError> {
-    supervisor.client().await?.list_crashes(serial).await
+    supervisor
+        .client()
+        .await?
+        .list_crashes(serial, background)
+        .await
 }
 
 #[tauri::command]
@@ -274,6 +279,21 @@ pub async fn clear_crashes(
     serial: String,
 ) -> Result<RunResponse, DaemonError> {
     supervisor.client().await?.clear_crashes(serial).await
+}
+
+/// The recent adb calls behind Settings ▸ Privacy ▸ Command log.
+#[tauri::command]
+pub async fn command_log(
+    supervisor: State<'_, Supervisor>,
+) -> Result<CommandLogResponse, DaemonError> {
+    supervisor.client().await?.command_log().await
+}
+
+#[tauri::command]
+pub async fn clear_command_log(
+    supervisor: State<'_, Supervisor>,
+) -> Result<RunResponse, DaemonError> {
+    supervisor.client().await?.clear_command_log().await
 }
 
 /// Every Developer Options row, definition and current value together.
@@ -422,11 +442,12 @@ pub async fn meminfo(
     supervisor: State<'_, Supervisor>,
     serial: String,
     package_id: String,
+    background: bool,
 ) -> Result<MemInfoResponse, DaemonError> {
     supervisor
         .client()
         .await?
-        .meminfo(&AppRequest { serial, package_id })
+        .meminfo(&AppRequest { serial, package_id }, background)
         .await
 }
 
