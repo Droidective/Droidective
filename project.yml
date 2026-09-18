@@ -17,7 +17,7 @@ packages:
     exactVersion: 1.13.0
   Sparkle:
     url: https://github.com/sparkle-project/Sparkle
-    exactVersion: 2.9.3
+    exactVersion: 2.9.6
   Sentry:
     url: https://github.com/getsentry/sentry-cocoa
     exactVersion: 9.18.0
