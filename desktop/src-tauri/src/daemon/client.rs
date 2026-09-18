@@ -22,8 +22,8 @@ use crate::daemon::wire::{
     ReactotronReverseResponse, RecordOptions, RecordStartRequest, RecordStatusResponse,
     RecordStoppedResponse, RestrictionWriteRequest, RestrictionsResponse, RolesResponse,
     RootStatusResponse, RunRequest, RunResponse, SandboxRequest, SandboxResponse,
-    ToolInstallRequest, ToolInstallResponse, ToolsResponse, WifiResponse, WifiWriteRequest,
-    WirelessActionRequest,
+    ScreenshotCaptureRequest, ScreenshotCaptureResponse, ToolInstallRequest, ToolInstallResponse,
+    ToolsResponse, WifiResponse, WifiWriteRequest, WirelessActionRequest,
 };
 use crate::error::DaemonError;
 
@@ -382,6 +382,14 @@ impl DaemonClient {
     ) -> Result<LogcatPidResponse, DaemonError> {
         self.post_marked("/v1/logcat/pid", &AppRequest { serial, package_id }, true)
             .await
+    }
+
+    /// One PNG of the device screen, base64, for the Screenshot editor.
+    pub async fn capture_screenshot(
+        &self,
+        request: &ScreenshotCaptureRequest,
+    ) -> Result<ScreenshotCaptureResponse, DaemonError> {
+        self.post("/v1/screenshot/capture", request).await
     }
 
     pub async fn command_log(&self) -> Result<CommandLogResponse, DaemonError> {

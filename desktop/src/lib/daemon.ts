@@ -168,10 +168,17 @@ export function asDaemonError(error: unknown): DaemonError {
 // The host capabilities, the stream subscriptions and the per-device settings
 // calls live next door, so this file stays inside its line budget;
 // `@/lib/daemon` remains the one import for all of them.
-export { clearCommandLog, clearCrashes, commandLog, listCrashes } from "@/lib/daemon-diagnostics"
+export {
+  captureScreenshot,
+  clearCommandLog,
+  clearCrashes,
+  commandLog,
+  listCrashes,
+} from "@/lib/daemon-diagnostics"
 export {
   backgroundAvailable,
   capturesFolder,
+  copyImage,
   copyText,
   exportText,
   hideQuickPanel,
@@ -179,6 +186,7 @@ export {
   postNotification,
   quitApp,
   revealPath,
+  savePng,
   setBackgroundMode,
   setGlobalShortcuts,
   setTabPinState,

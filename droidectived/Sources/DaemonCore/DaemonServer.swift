@@ -233,6 +233,9 @@ public protocol DaemonBackend: Sendable {
     /// an answer, and this reads an in-memory actor rather than a device.
     func commandLog() async -> [CommandLogEntry]
     func clearCommandLog() async
+    /// One PNG of the device screen, as bytes. The editor writes nothing until
+    /// the user does, so there is no path to answer with.
+    func captureScreenshot(serial: String) async throws -> Data
 }
 
 /// `DeviceMonitor` in production.
@@ -875,6 +878,10 @@ public struct LiveBackend: DaemonBackend {
 
     public func clearCommandLog() async {
         await client.log.clear()
+    }
+
+    public func captureScreenshot(serial: String) async throws -> Data {
+        try await ScreenCaptureService(client: client).captureScreenshotData(serial: serial)
     }
 
     public func apiWorkspace() async -> ApiClientData {
@@ -1558,6 +1565,11 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
             return Self.answer(await CommandLogRoutes.list(backend: backend))
         case .commandLogClear:
             return Self.answer(await CommandLogRoutes.clear(backend: backend))
+
+        case .screenshotCapture:
+            return Self.answer(
+                await ScreenshotRoutes.capture(
+                    body: Data(body.readableBytesView), backend: backend))
         }
     }
 

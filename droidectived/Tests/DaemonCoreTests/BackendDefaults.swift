@@ -292,6 +292,8 @@ extension DaemonBackend {
     func commandLog() async -> [CommandLogEntry] { [] }
 
     func clearCommandLog() async {}
+
+    func captureScreenshot(serial: String) async throws -> Data { Data() }
 }
 
 /// The same trick for `StreamSource`, and for the same reason: a stub testing

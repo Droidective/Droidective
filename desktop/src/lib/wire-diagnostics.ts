@@ -49,3 +49,9 @@ export interface CommandLogResponse {
   /** Most-recent-first, as `CommandLog.snapshot()` orders them. */
   entries: CommandLogEntry[]
 }
+
+/** One PNG of the device screen, for the Screenshot editor. */
+export interface ScreenshotCaptureResponse {
+  /** base64. Bytes rather than a path: nothing is written yet. */
+  png: string
+}

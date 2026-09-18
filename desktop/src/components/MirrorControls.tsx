@@ -1,4 +1,4 @@
-import { ChevronLeft, Circle, Square, Volume1, Volume2, VolumeX } from "lucide-react"
+import { Camera, ChevronLeft, Circle, Square, Volume1, Volume2, VolumeX } from "lucide-react"
 
 import { KEYCODE, backOrScreenOn, tapKey } from "@/lib/scrcpy-control"
 
@@ -11,10 +11,17 @@ import { KEYCODE, backOrScreenOn, tapKey } from "@/lib/scrcpy-control"
 export function MirrorControls({
   send,
   dropped,
+  onCapture,
 }: {
   send: (bytes: Uint8Array) => void
   /** Frames the daemon discarded, surfaced rather than swallowed. */
   dropped: number
+  /**
+   * Take a still and open it in the editor. Absent while nothing is
+   * streaming — there is no frame to grab, and a button that did nothing
+   * would read as a broken camera.
+   */
+  onCapture?: (() => void) | undefined
 }) {
   const key = (keycode: number) => () => {
     for (const message of tapKey(keycode)) send(message)
@@ -22,6 +29,11 @@ export function MirrorControls({
 
   return (
     <div className="flex items-center justify-center gap-1 border-t border-border-subtle bg-bg-surface px-3 py-2">
+      {onCapture === undefined ? null : (
+        <NavButton label="Screenshot — edit in place" onClick={onCapture}>
+          <Camera size={15} />
+        </NavButton>
+      )}
       <NavButton
         label="Back"
         onClick={() => {

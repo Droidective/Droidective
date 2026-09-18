@@ -117,8 +117,6 @@ BLOCKED = {
 # here by name. A named gap is a plan; a blanket "partial" on everything is a
 # shrug that ages into a lie.
 INCOMPLETE = {
-    "scrcpy": "The pane mirrors and takes input; the screenshot annotation editor "
-              "the Mac opens from it is Mac-only so far.",
     "terminal": "Works on Linux. Windows has no pty — ConPTY is a different API — "
                 "and the pane says so rather than failing at a prompt.",
 }
