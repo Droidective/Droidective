@@ -502,7 +502,7 @@ struct RootView: View {
                    state.workspace.groups.contains(where: { $0.activeTab != "catalog" }) {
                     DeviceBarView()
                     if let operation = state.runningOperation ?? state.installOperation {
-                        OperationProgressStrip(operation: operation)
+                        OperationProgressStrip(operation: operation) { state.cancelRunningOperation() }
                     }
                 }
                 HStack(spacing: 0) {
@@ -1143,8 +1143,14 @@ struct ResizeHandle: View {
 
 /// Progress strip pinned under the device bar: a real percentage bar when
 /// the transfer size is known, a spinner otherwise.
+///
+/// A transfer that can be stopped carries a ✕, and one that knows both sizes
+/// counts them off beside the percentage — a pull of a few hundred megabytes
+/// is long enough that "how much is left" and "let me out of this" are both
+/// worth having, which is what the Windows/Linux strip proved.
 struct OperationProgressStrip: View {
     let operation: AppState.OperationStatus
+    var onCancel: (() -> Void)?
 
     var body: some View {
         HStack(spacing: 10) {
@@ -1162,7 +1168,22 @@ struct OperationProgressStrip: View {
             Text(operation.label)
                 .font(.app(.footnote))
                 .foregroundStyle(.textMuted)
+            if let bytes = operation.bytes {
+                Text(bytes)
+                    .font(.app(.footnote).monospacedDigit())
+                    .foregroundStyle(.textMuted)
+            }
             Spacer()
+            if operation.isCancellable, let onCancel {
+                Button(action: onCancel) {
+                    Image(systemName: "xmark")
+                        .font(.app(.caption2).weight(.bold))
+                        .foregroundStyle(.textMuted)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Stop this transfer")
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)

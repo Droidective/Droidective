@@ -395,11 +395,26 @@ final class AppState {
         var label: String
         /// 0…1 when the total is known, nil = indeterminate.
         var fraction: Double?
+        /// `419.4 MB of 1.2 GB`, when the transfer knows both — see
+        /// `PullProgress.caption`. Nil leaves the percentage to speak alone.
+        var bytes: String?
+        /// Whether the strip offers a ✕. Only a pull run through
+        /// `runCancellableTransfer` can be stopped; an install cannot, so the
+        /// default is off and `installOperation` inherits it.
+        var isCancellable = false
     }
 
     /// The long-running operation in flight (pull, record, copy…) — the
     /// progress strip under the device bar reflects it.
     var runningOperation: OperationStatus?
+
+    /// The task behind `runningOperation`, so the strip's ✕ can stop it.
+    ///
+    /// The pull itself is structured — cancelling this task propagates into
+    /// `SystemProcessRunner.run`, which kills the adb child rather than
+    /// orphaning it until its timeout. Ignored by observation for the reason
+    /// `transferTasks` is: nothing renders a Task.
+    @ObservationIgnored var operationTask: Task<Void, Never>?
 
     /// APK installs in flight or recently finished (one entry per APK ×
     /// device). The install screens render these live; the progress strip
@@ -436,39 +451,93 @@ final class AppState {
 
     /// Wrap a pull whose destination grows on disk: progress is the local
     /// file's size against the known source size — a real percentage.
+    ///
+    /// A directory pull has no single total and keeps an indeterminate bar,
+    /// but it still goes through here rather than through `withOperation`:
+    /// it is the *longest* kind of pull there is, so it is the one most worth
+    /// being able to stop, and its half-copied folder is the one most worth
+    /// cleaning up.
     func withFileProgress<T: Sendable>(
         _ label: String,
         destination: URL,
         expectedBytes: Int?,
         _ work: () async throws -> T
     ) async rethrows -> T {
-        guard let expectedBytes, expectedBytes > 0 else {
-            return try await withOperation(label, work)
-        }
         SystemNotifier.requestAuthorizationOnce()
-        runningOperation = OperationStatus(label: label, fraction: 0)
-        let poller = Task { [weak self] in
-            while true {
-                // A plain `try?` here swallows the cancellation thrown by
-                // sleep and lets one final status write land AFTER the defer
-                // below has cleared the strip — leaving it stuck forever.
-                do {
-                    try await Task.sleep(for: .milliseconds(200))
-                } catch {
-                    return
+        let cancellable = operationTask != nil
+        let total = (expectedBytes ?? 0) > 0 ? expectedBytes : nil
+        runningOperation = OperationStatus(
+            label: label, fraction: total == nil ? nil : 0, isCancellable: cancellable
+        )
+        let poller = total.map { expected in
+            Task { [weak self] in
+                while true {
+                    // A plain `try?` here swallows the cancellation thrown by
+                    // sleep and lets one final status write land AFTER the
+                    // defer below has cleared the strip — stuck forever.
+                    do {
+                        try await Task.sleep(for: .milliseconds(200))
+                    } catch {
+                        return
+                    }
+                    guard !Task.isCancelled else { return }
+                    let copied = Self.bytesWritten(for: destination)
+                    self?.runningOperation = OperationStatus(
+                        label: label,
+                        fraction: min(1, Double(copied) / Double(expected)),
+                        bytes: PullProgress.caption(copied: copied, total: expected),
+                        isCancellable: cancellable
+                    )
                 }
-                guard !Task.isCancelled else { return }
-                self?.runningOperation = OperationStatus(
-                    label: label,
-                    fraction: min(1, Double(Self.bytesWritten(for: destination)) / Double(expectedBytes))
-                )
             }
         }
         defer {
-            poller.cancel()
+            poller?.cancel()
             runningOperation = nil
+            // A cancelled pull leaves a truncated file at a path the user
+            // chose, which is worse than no file: it looks like the transfer
+            // worked. The port deletes it for the same reason.
+            if Task.isCancelled { try? FileManager.default.removeItem(at: destination) }
         }
         return try await work()
+    }
+
+    /// Run a transfer the progress strip's ✕ can stop.
+    ///
+    /// The task is held rather than the closure so cancelling propagates the
+    /// structured way — into `SystemProcessRunner.run`'s cancellation handler,
+    /// which terminates the adb child. A second transfer started while one is
+    /// running replaces the handle; the strip only ever shows one operation,
+    /// so the ✕ has to mean the one on screen.
+    func runCancellableTransfer(_ work: @escaping @MainActor () async -> Void) {
+        operationTask?.cancel()
+        operationTask = Task { @MainActor in
+            await work()
+            operationTask = nil
+        }
+    }
+
+    /// Stop the transfer the strip is showing. Its `defer` clears the strip and
+    /// takes the half-written file with it.
+    func cancelRunningOperation() {
+        operationTask?.cancel()
+        operationTask = nil
+    }
+
+    /// How a transfer that did not finish is reported.
+    ///
+    /// Pressing ✕ is a choice, not a fault, so it says so. The error itself
+    /// cannot be trusted to say which happened: cancelling terminates the adb
+    /// child, so `AdbClient` sees a non-zero exit and the service throws its
+    /// ordinary `PullError.failed` — "Failed to pull big.bin", which reads as
+    /// the transfer going wrong rather than as the user stopping it.
+    /// `Task.isCancelled` is the one signal that distinguishes them, and it is
+    /// read here in the cancelled task's own context.
+    static func transferEnded(_ error: Error) -> Toast {
+        if Task.isCancelled || error is CancellationError {
+            return Toast(message: "Cancelled", ok: false)
+        }
+        return Toast(message: error.localizedDescription, ok: false)
     }
 
     /// How much of a pull has landed: the chosen file plus any splits written

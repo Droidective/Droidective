@@ -551,7 +551,7 @@ struct FileExplorerView: View {
 
         let explorer = state.env.engine.fileExplorer
         let asRoot = rootMode
-        Task {
+        state.runCancellableTransfer {
             await CommandLog.userInitiated {
                 var lastDest: URL?
                 for item in destinations {
@@ -562,7 +562,7 @@ struct FileExplorerView: View {
                             try await explorer.pull(serial: serial, path: item.path, to: item.dest, asRoot: asRoot)
                         }
                     } catch {
-                        state.showToast(Toast(message: error.localizedDescription, ok: false))
+                        state.showToast(AppState.transferEnded(error))
                         return
                     }
                 }

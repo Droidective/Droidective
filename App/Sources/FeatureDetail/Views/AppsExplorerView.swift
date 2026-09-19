@@ -598,7 +598,7 @@ private struct AppDetailPane: View {
         guard let serial = state.targetSerials.first else { return }
         guard let dest = state.askSaveLocation(suggestedName: "\(packageId).apk") else { return }
         pullingApk = true
-        Task {
+        state.runCancellableTransfer {
             await CommandLog.userInitiated {
                 do {
                     let saved = try await state.withFileProgress(
@@ -608,7 +608,7 @@ private struct AppDetailPane: View {
                     }
                     state.showToast(Toast(message: AppInfoView.pulledApkToast(saved), ok: true, revealPath: dest.path))
                 } catch {
-                    state.showToast(Toast(message: error.localizedDescription, ok: false))
+                    state.showToast(AppState.transferEnded(error))
                 }
             }
             pullingApk = false
