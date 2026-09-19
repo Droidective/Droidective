@@ -113,10 +113,19 @@ DRIVING THE UI — read this before planning to screenshot anything
   Screen Recording permission may not be granted to the terminal running the
   session: `screencapture` then returns a *black* image rather than failing,
   and `screencapture -l<windowid>` errors outright. Check with one capture
-  before relying on it.
-  The webview is also not reachable through the AX API in an unbundled dev
-  build — the app's AXChildren holds only its menu bars, no window — so
-  AXPress-driving the page is not available either.
+  before relying on it. A black capture with permission granted usually means
+  the window is on another Space — confirm it is in
+  CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly) and relaunch it
+  onto the active one rather than chasing the permission.
+  The webview is not reachable through the AX API (the app's AXChildren holds
+  only its menu bars, no window), but synthetic CGEvent clicks at
+  window-relative points DO land in it: capture the window, read the target
+  off the image (image px / 2 = window points, the capture is @2x), add the
+  kCGWindowBounds origin read fresh each time, move the mouse then click.
+  Activate the app first or the first click is eaten as activation. Keystrokes
+  into the page do not arrive; keystrokes into a native open/save panel do
+  (Shift-Cmd-G, a full path, Return twice — but in a SAVE panel type a bare
+  filename, since a leading slash opens go-to-folder and the name becomes ".").
   What works instead, and is better anyway:
     - component tests (@testing-library/react is already a dependency, and
       `NetspeedPane.test.tsx` is the worked example) for anything on screen
