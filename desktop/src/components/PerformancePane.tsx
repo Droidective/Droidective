@@ -67,6 +67,7 @@ export function PerformancePane({
           title="Export this recording before stopping?"
           message={`${String(perf.samples.length)} samples captured — exported as JSON + CSV.`}
           confirmLabel="Stop without exporting"
+          cancelLabel="Keep recording"
           extraLabel="Export…"
           onExtra={() => {
             setConfirmingStop(false)
