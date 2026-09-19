@@ -154,4 +154,99 @@ import Testing
         let answer = await ReactotronRoutes.reverse(body: Data("{".utf8), backend: backend)
         #expect(answer.0 == 400)
     }
+
+    // MARK: - Sending a command to a client
+
+    /// A stream source that records what it was asked to send, standing in for
+    /// the relay. The relay's own end of this is covered against real sockets
+    /// in `ReactotronRelayTests`; what matters here is the wire shape.
+    /// A stream source that records what it was asked to send, standing in
+    /// for the relay. The relay's own end is covered against real sockets in
+    /// `ReactotronRelayTests`; what matters here is the wire shape.
+    private final class Source: StreamSource, @unchecked Sendable {
+        var sent: [(type: String, payload: JSONValue, connection: Int?)] = []
+        var delivered = 1
+
+        func devices() async -> AsyncStream<[Device]> { AsyncStream { $0.finish() } }
+        func logcat(serial: String, pid: Int?) async throws -> AsyncStream<[LogLine]> {
+            AsyncStream { $0.finish() }
+        }
+        func stopLogcat(serial: String) async {}
+        func performance(
+            serial: String, packageId: String?, includeProcesses: Bool
+        ) async -> AsyncStream<PerformanceService.PerfPoll> { AsyncStream { $0.finish() } }
+        func netspeed(serial: String) async -> AsyncStream<NetSample> { AsyncStream { $0.finish() } }
+        func reactotron() async throws -> AsyncStream<ReactotronRelay.Event> {
+            AsyncStream { $0.finish() }
+        }
+        func stopReactotron() async {}
+        func openPty(serial: String?, size: PtySize) throws -> any PtyChannel {
+            throw StubbedOut.notImplemented
+        }
+        func sendReactotron(type: String, payload: JSONValue, toConnection: Int?) async -> Int {
+            sent.append((type, payload, toConnection))
+            return delivered
+        }
+    }
+
+    private func sendBody(
+        _ type: String, _ payload: JSONValue, connection: Int? = nil
+    ) throws -> Data {
+        try JSONEncoder().encode(
+            ReactotronProtocolRoutes.SendRequest(
+                type: type, payload: payload, connectionId: connection))
+    }
+
+    @Test func passesTheCommandStraightToTheRelay() async throws {
+        // The daemon is a relay here, not an interpreter: whatever vocabulary
+        // the screen speaks — `state.values.request`, `repl.command` — has to
+        // arrive unchanged, or every new Reactotron command would need a
+        // daemon change to go with it.
+        let source = Source()
+        let answer = await ReactotronRoutes.send(
+            body: try sendBody("state.values.request", .object(["path": .string("user.name")])),
+            source: source)
+        #expect(answer.0 == 200)
+        #expect(source.sent.count == 1)
+        #expect(source.sent.first?.type == "state.values.request")
+        #expect(source.sent.first?.payload == .object(["path": .string("user.name")]))
+        #expect(source.sent.first?.connection == nil)
+    }
+
+    @Test func aimsAtOneClientWhenAsked() async throws {
+        let source = Source()
+        _ = await ReactotronRoutes.send(
+            body: try sendBody("repl.command", .null, connection: 7), source: source)
+        #expect(source.sent.first?.connection == 7)
+    }
+
+    /// Nobody listening is a 200 carrying zero, not an error. The command was
+    /// well-formed and the daemon did what was asked; "no app is connected" is
+    /// a state the screen shows, not a failure of the call.
+    @Test func reachingNobodyIsStillASuccess() async throws {
+        let source = Source()
+        source.delivered = 0
+        let answer = await ReactotronRoutes.send(
+            body: try sendBody("state.values.request", .null), source: source)
+        #expect(answer.0 == 200)
+        let decoded = try JSONDecoder().decode(
+            ReactotronProtocolRoutes.SendResponse.self, from: answer.1)
+        #expect(decoded.delivered == 0)
+    }
+
+    /// An empty type would be framed and sent, and the client would ignore it
+    /// silently — the worst shape of failure, so it is refused here.
+    @Test func anEmptyTypeIsRefused() async throws {
+        let source = Source()
+        let answer = await ReactotronRoutes.send(body: try sendBody("", .null), source: source)
+        #expect(answer.0 == 400)
+        #expect(source.sent.isEmpty)
+    }
+
+    @Test func aSendBodyItCannotReadIsRefused() async {
+        let source = Source()
+        let answer = await ReactotronRoutes.send(body: Data("{".utf8), source: source)
+        #expect(answer.0 == 400)
+        #expect(source.sent.isEmpty)
+    }
 }

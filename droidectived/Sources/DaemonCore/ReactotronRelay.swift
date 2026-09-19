@@ -235,6 +235,46 @@ public actor ReactotronRelay {
         return stream
     }
 
+    /// Send a command *to* a connected client.
+    ///
+    /// The relay was receive-only until the screens that drive an app needed
+    /// it — State, REPL and custom Commands all work by asking the client to do
+    /// something and reading the answer back off the timeline. The envelope is
+    /// `{"type":…,"payload":…}` in a text frame, which is what
+    /// `ReactotronServer` puts on the wire on the Mac; both halves speak one
+    /// protocol and a second shape here would be a second protocol.
+    ///
+    /// Unmasked, because RFC 6455 masks client→server only and a masked frame
+    /// from a server is a protocol error the client is entitled to close on.
+    ///
+    /// `toConnection` nil means every introduced client. Returns how many were
+    /// written to, so a caller can tell "sent" from "nobody was listening" —
+    /// the answer never comes back on the same call, so a silent zero would
+    /// read as a command that vanished.
+    @discardableResult
+    public func send(type: String, payload: JSONValue, toConnection id: Int? = nil) -> Int {
+        let envelope = JSONValue.object(["type": .string(type), "payload": payload])
+        guard let data = try? JSONEncoder().encode(envelope) else { return 0 }
+
+        let targets: [any Channel]
+        if let id {
+            guard let one = connections[id], !closed.contains(id) else { return 0 }
+            targets = [one]
+        } else {
+            targets = connections.filter { introduced.contains($0.key) }.map(\.value)
+        }
+
+        for channel in targets {
+            var buffer = channel.allocator.buffer(capacity: data.count)
+            buffer.writeBytes(data)
+            let frame = WebSocketFrame(fin: true, opcode: .text, data: buffer)
+            // Not wrapped in `NIOAny`: that overload is deprecated because
+            // `NIOAny` is not Sendable, and warnings are errors here.
+            channel.writeAndFlush(frame, promise: nil)
+        }
+        return targets.count
+    }
+
     /// Stops listening and drops every client.
     ///
     /// Idempotent, and it waits out a start rather than tearing down a relay

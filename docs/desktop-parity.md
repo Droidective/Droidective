@@ -858,11 +858,19 @@ What is absent is a *picker* and three panes:
   `Reactotron.onCustomCommand(...)`.
 
 All three send commands *to* the client rather than only reading the stream,
-and the relay can already do that: `ReactotronServer.send(type:payload:
-toConnection:)` is public. So each is the ordinary four layers — a daemon route
-over that call, a Rust command, a pane — rather than new plumbing. The
-`reactotron` stream topic already carries the answers back; the timeline
-renders `subscription` and `SNAPSHOT` rows today.
+and **the port's relay could not send anything at all** — which pass 2 got
+wrong in both directions before it was checked. `ReactotronServer.send` is
+public, but that is ADBKit's `NWListener` relay, which is Apple-gated and is
+the *Mac's*; the daemon has its own NIO relay (`ReactotronRelay`, in
+droidectived precisely so swift-nio stays out of ADBKit's graph) and it was
+receive-only. It does keep `connections: [Int: any Channel]`, so the gap was an
+outbound write rather than a redesign — closed now by
+`ReactotronRelay.send(type:payload:toConnection:)` and
+`POST /v1/reactotron/send`. Read the relay you are actually calling.
+
+With that in place each pane *is* the ordinary four layers. The `reactotron`
+stream topic already carries the answers back; the timeline renders
+`subscription` and `SNAPSHOT` rows today.
 
 Also unported, and smaller: split panes (`Split into two panes`, `Clear the
 whole timeline — both panes`, `Pane cleared`), find-in-object inside the detail

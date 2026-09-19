@@ -1187,7 +1187,9 @@ public actor DaemonServer {
                     withServerUpgrade: (upgraders: [upgrader], completionHandler: { _ in })
                 ).flatMapThrowing {
                     try channel.pipeline.syncOperations.addHandler(
-                        RequestHandler(backend: backend, token: token, port: boundPort),
+                        RequestHandler(
+                            backend: backend, token: token, port: boundPort,
+                            streamSource: streamSource),
                         name: Self.routesHandlerName)
                 }
             }
@@ -1255,13 +1257,21 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
     private let backend: any DaemonBackend
     private let token: String
     private let port: NIOLockedValueBox<Int>
+    /// The relay's owner, for the one route that sends *to* a Reactotron
+    /// client. Absent in a server built without streaming, which serves every
+    /// other route unchanged.
+    private let streamSource: (any StreamSource)?
     private var head: HTTPRequestHead?
     private var body = ByteBufferAllocator().buffer(capacity: 0)
 
-    init(backend: any DaemonBackend, token: String, port: NIOLockedValueBox<Int>) {
+    init(
+        backend: any DaemonBackend, token: String, port: NIOLockedValueBox<Int>,
+        streamSource: (any StreamSource)?
+    ) {
         self.backend = backend
         self.token = token
         self.port = port
+        self.streamSource = streamSource
     }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
@@ -1280,10 +1290,14 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
             let port = self.port.withLockedValue { $0 }
             let backend = self.backend
             let token = self.token
+            // The relay lives on the stream source, so the one route that
+            // drives a connected app needs it here as well as on the socket.
+            let source = self.streamSource
             // The route is async; hop the answer back onto the event loop.
             Task { [self] in
                 let (status, responseBody) = await Self.respond(
-                    head: head, body: body, port: port, token: token, backend: backend)
+                    head: head, body: body, port: port, token: token, backend: backend,
+                    source: source)
                 loop.execute {
                     self.write(context: boxedContext.value, status: status, body: responseBody)
                 }
@@ -1295,7 +1309,7 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
     /// and any future unit test exercise the same decision path.
     static func respond(
         head: HTTPRequestHead, body: ByteBuffer, port: Int, token: String,
-        backend: any DaemonBackend
+        backend: any DaemonBackend, source: (any StreamSource)? = nil
     ) async -> (HTTPResponseStatus, Data) {
         func encoded(_ body: some Encodable) -> Data { DaemonProtocol.encoded(body) }
 
@@ -1326,17 +1340,20 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
         guard !CommandLogProtocol.isBackground(
             head.headers.first(name: CommandLogProtocol.header))
         else {
-            return await dispatch(route: route, body: body, backend: backend)
+            return await dispatch(
+                route: route, body: body, backend: backend, source: source)
         }
         return await CommandLog.userInitiated {
-            await dispatch(route: route, body: body, backend: backend)
+            await dispatch(
+                route: route, body: body, backend: backend, source: source)
         }
     }
 
     /// One authorised route. Split from `respond` so the Command Log's
     /// task-local scope wraps exactly the dispatch and nothing around it.
     private static func dispatch(
-        route: DaemonProtocol.Route, body: ByteBuffer, backend: any DaemonBackend
+        route: DaemonProtocol.Route, body: ByteBuffer, backend: any DaemonBackend,
+        source: (any StreamSource)?
     ) async -> (HTTPResponseStatus, Data) {
         func encoded(_ body: some Encodable) -> Data { DaemonProtocol.encoded(body) }
 
@@ -1520,6 +1537,16 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
         case .reactotronUnreverse:
             return Self.answer(await ReactotronRoutes.unreverse(
                 body: Data(body.readableBytesView), backend: backend))
+        case .reactotronSend:
+            // The relay belongs to the stream source; a server built without
+            // one serves every other route and cannot serve this.
+            guard let source else {
+                return (.serviceUnavailable, encoded(DaemonProtocol.ErrorBody(
+                    code: "relay_unavailable",
+                    message: "This daemon has no Reactotron relay.")))
+            }
+            return Self.answer(await ReactotronRoutes.send(
+                body: Data(body.readableBytesView), source: source))
 
         case .apiRead:
             return Self.answer(await ApiClientRoutes.read(backend: backend))

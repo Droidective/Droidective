@@ -53,6 +53,41 @@ public enum ReactotronProtocolRoutes {
 }
 
 /// `POST /v1/reactotron/reverse` and its removal.
+extension ReactotronProtocolRoutes {
+    /// One command aimed at a connected client.
+    ///
+    /// The type and payload are Reactotron's own vocabulary rather than a
+    /// second one invented here — `state.values.request`,
+    /// `state.action.dispatch`, `repl.command` — so the daemon stays a relay
+    /// and the screens that drive an app are the only thing that has to know
+    /// what each command means.
+    public struct SendRequest: Codable, Equatable, Sendable {
+        public let type: String
+        public let payload: JSONValue
+        /// Which client, or every introduced one when absent. The timeline
+        /// reports connections by id, so a two-app session can aim.
+        public let connectionId: Int?
+
+        public init(type: String, payload: JSONValue, connectionId: Int? = nil) {
+            self.type = type
+            self.payload = payload
+            self.connectionId = connectionId
+        }
+    }
+
+    /// How many clients it reached.
+    ///
+    /// Not whether the command *worked*: the answer arrives later as another
+    /// command on the `reactotron` topic, and a route that pretended to know
+    /// would be inventing a result. Zero means nothing was listening, which is
+    /// the one failure the caller can act on.
+    public struct SendResponse: Codable, Equatable, Sendable {
+        public let delivered: Int
+
+        public init(delivered: Int) { self.delivered = delivered }
+    }
+}
+
 public enum ReactotronRoutes {
     /// How many times to try one device.
     ///
@@ -61,6 +96,29 @@ public enum ReactotronRoutes {
     /// makes "plug in and open Reactotron" fail about as often as it works.
     static let attempts = 3
     static let retryDelay = Duration.milliseconds(500)
+
+    /// Hand a command to the relay for a connected client.
+    ///
+    /// Fire-and-forget by design. Reactotron's request/response pairs are two
+    /// independent commands on one socket — `state.values.request` is answered
+    /// by a `state.values.response` that arrives on the timeline like any other
+    /// event — so a route that waited for the reply would have to invent a
+    /// correlation the protocol does not carry, and would hang whenever a
+    /// client chose not to answer.
+    public static func send(
+        body: Data, source: any StreamSource
+    ) async -> DaemonProtocol.Answer {
+        guard let request = try? JSONDecoder().decode(
+            ReactotronProtocolRoutes.SendRequest.self, from: body),
+            !request.type.isEmpty
+        else { return (400, DaemonProtocol.encoded(DaemonProtocol.badRequest)) }
+
+        let delivered = await source.sendReactotron(
+            type: request.type, payload: request.payload,
+            toConnection: request.connectionId)
+        return (200, DaemonProtocol.encoded(
+            ReactotronProtocolRoutes.SendResponse(delivered: delivered)))
+    }
 
     public static func reverse(body: Data, backend: any DaemonBackend) async -> DaemonProtocol.Answer {
         guard let request = try? JSONDecoder().decode(
