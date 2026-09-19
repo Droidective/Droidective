@@ -98,6 +98,7 @@ public enum DaemonProtocol {
         case toolsDetect = "/v1/tools/detect"
         case reactotronReverse = "/v1/reactotron/reverse"
         case reactotronUnreverse = "/v1/reactotron/unreverse"
+        case reactotronSend = "/v1/reactotron/send"
         /// API Testing. The workspace read/write pair takes the whole document
         /// for the reason the deep links and custom commands do — the client
         /// holds what it is showing — and the rest are the four things a

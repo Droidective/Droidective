@@ -331,6 +331,11 @@ extension StreamSource {
     ) async -> AsyncStream<PullProgressPayload> {
         AsyncStream { $0.finish() }
     }
+
+    /// Nobody was written to. Zero is the same answer a real relay gives with
+    /// no client attached, so a stub reads as "no app connected" rather than as
+    /// a failure — which is what a test not about Reactotron wants it to mean.
+    func sendReactotron(type: String, payload: JSONValue, toConnection: Int?) async -> Int { 0 }
 }
 
 enum StubbedOut: Error, CustomStringConvertible {

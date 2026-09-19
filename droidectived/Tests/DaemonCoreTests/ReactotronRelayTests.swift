@@ -562,5 +562,77 @@ import Testing
         if case .command = event { return true }
         return false
     }
+
+    // MARK: - Sending to a client
+
+    /// The relay was receive-only until the screens that *drive* an app needed
+    /// it. What has to be right is the envelope and the masking: a client that
+    /// cannot parse the frame simply ignores it, and nothing says so.
+    @Test func sendsACommandTheClientCanRead() async throws {
+        let (relay, events, port) = try await relay()
+        defer { Task { await relay.stop() } }
+        let (collected, reader) = collect(events)
+        defer { reader.cancel() }
+
+        let socket = client(port: port)
+        defer { socket.cancel() }
+        try await socket.send(.string(intro("demo-app")))
+        #expect(await collected.wait { $0.contains(where: isConnected) })
+
+        let delivered = await relay.send(
+            type: "state.values.request",
+            payload: .object(["path": .string("user.name")]))
+        #expect(delivered == 1)
+
+        // Read it back off the same socket, which is the only proof the bytes
+        // were a frame the client could take.
+        let received = try await socket.receive()
+        guard case .string(let text) = received else {
+            Issue.record("expected a text frame, got \(received)")
+            return
+        }
+        let decoded = try #require(
+            try JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any])
+        #expect(decoded["type"] as? String == "state.values.request")
+        let payload = try #require(decoded["payload"] as? [String: Any])
+        #expect(payload["path"] as? String == "user.name")
+    }
+
+    /// Zero, not a throw. The answer to a command comes back later on the
+    /// timeline, so a caller has nothing else to tell it the app was not there.
+    @Test func sendingWithNoClientReachesNobody() async throws {
+        let (relay, _, _) = try await relay()
+        defer { Task { await relay.stop() } }
+        #expect(await relay.send(type: "state.values.request", payload: .null) == 0)
+    }
+
+    /// A connection that opened the socket but never introduced itself is not
+    /// a Reactotron client yet — the same rule `connected` events follow.
+    @Test func aBroadcastSkipsAConnectionThatNeverIntroducedItself() async throws {
+        let (relay, _, port) = try await relay()
+        defer { Task { await relay.stop() } }
+        let socket = client(port: port)
+        defer { socket.cancel() }
+        // Open, but send no intro.
+        try await socket.send(.string("{}"))
+        #expect(await relay.send(type: "state.values.request", payload: .null) == 0)
+    }
+
+    /// Aiming at one client. A two-app session is the case this exists for, and
+    /// an id nobody holds must reach nobody rather than everybody.
+    @Test func anUnknownConnectionIdReachesNobody() async throws {
+        let (relay, events, port) = try await relay()
+        defer { Task { await relay.stop() } }
+        let (collected, reader) = collect(events)
+        defer { reader.cancel() }
+
+        let socket = client(port: port)
+        defer { socket.cancel() }
+        try await socket.send(.string(intro("demo-app")))
+        #expect(await collected.wait { $0.contains(where: isConnected) })
+
+        #expect(await relay.send(
+            type: "state.values.request", payload: .null, toConnection: 9_999) == 0)
+    }
 }
 #endif

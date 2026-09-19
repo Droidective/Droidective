@@ -49,6 +49,17 @@ public protocol StreamSource: Sendable {
     /// Called when the last `reactotron` subscription ends, so the relay stops
     /// listening rather than holding port 9090 for nobody.
     func stopReactotron() async
+    /// Send a command to a connected Reactotron client.
+    ///
+    /// Here rather than on `DaemonBackend` because the relay is this source's:
+    /// it owns the listener's lifetime, and a second owner is how the relay and
+    /// the subscription end up disagreeing about whether it is running.
+    ///
+    /// Answers do not come back from this call — the client replies with
+    /// another command, which arrives on the `reactotron` topic like everything
+    /// else. The count of clients written to is what distinguishes "sent" from
+    /// "nobody was connected".
+    func sendReactotron(type: String, payload: JSONValue, toConnection: Int?) async -> Int
     /// Starts a shell on a pseudo-terminal. `serial` only scopes the shell's
     /// `ANDROID_SERIAL`; a terminal opens with no device connected.
     ///
@@ -722,6 +733,10 @@ public struct LiveStreamSource: StreamSource {
 
     public func stopReactotron() async {
         await relay.stop()
+    }
+
+    public func sendReactotron(type: String, payload: JSONValue, toConnection: Int?) async -> Int {
+        await relay.send(type: type, payload: payload, toConnection: toConnection)
     }
 
     /// A login shell, matching the Mac's terminal: `-l`, so the rc files that
