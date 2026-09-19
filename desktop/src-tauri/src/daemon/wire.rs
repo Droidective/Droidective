@@ -357,6 +357,23 @@ pub struct CommandLogEntry {
     pub stderr: String,
 }
 
+// MARK: - the screenshot editor's capture
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ScreenshotCaptureRequest {
+    pub serial: String,
+    /// Seconds to wait before grabbing. The daemon clamps it.
+    #[serde(rename = "delaySeconds")]
+    pub delay_seconds: i32,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ScreenshotCaptureResponse {
+    /// The PNG, base64. Bytes rather than a path: the editor writes nothing
+    /// until the user saves or copies.
+    pub png: String,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CommandLogResponse {
     /// Most-recent-first.

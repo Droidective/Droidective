@@ -260,7 +260,29 @@ about what happened. `at` is epoch milliseconds and `durationMs` is whole
 milliseconds, both converted here so no client re-derives them from a `Date` or
 a `Duration`.
 
-### 4.4 Errors
+### 4.4 The screenshot capture
+
+`/v1/screenshot/capture` answers with the **bytes** of one PNG, base64, rather
+than a path. That is the whole difference from the `screenshot` *action*, which
+grabs and writes a file: the editor promises that nothing reaches the disk until
+someone saves or copies, so there is no file to name. The Mac splits the same
+two paths — `captureForEditor` returns `ScreenCaptureService.captureScreenshotData`
+and `runScreenshot` writes to the capture folder.
+
+`delaySeconds` is the picker's 0/3/5/10 and is **clamped to 30 daemon-side**,
+because it becomes a sleep inside the route handler: a client asking for an hour
+would hold that handler for an hour.
+
+```jsonc
+// POST /v1/screenshot/capture  { "serial": "emulator-5554", "delaySeconds": 3 }
+// → 200
+{ "png": "iVBORw0KGgoAAAANSUhEUg…" }
+```
+
+A device that refuses is a 502 carrying adb's own words, as everywhere else —
+the daemon worked and the device did not.
+
+### 4.5 Errors
 
 One shape everywhere, so the UI has one error path:
 

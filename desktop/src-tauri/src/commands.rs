@@ -31,8 +31,9 @@ use crate::daemon::wire::{
     ManagedTools, MemInfoResponse, PairResponse, PermissionWriteRequest, PermissionsResponse,
     ReactotronReverseRequest, ReactotronReverseResponse, RestrictionWriteRequest,
     RestrictionsResponse, RolesResponse, RootStatusResponse, RunRequest, RunResponse,
-    SandboxRequest, SandboxResponse, StreamParams, ToolInstallRequest, ToolInstallResponse,
-    ToolsResponse, WifiResponse, WifiWriteRequest, WirelessActionRequest,
+    SandboxRequest, SandboxResponse, ScreenshotCaptureRequest, ScreenshotCaptureResponse,
+    StreamParams, ToolInstallRequest, ToolInstallResponse, ToolsResponse, WifiResponse,
+    WifiWriteRequest, WirelessActionRequest,
 };
 use crate::daemon::{DaemonStatus, Supervisor};
 use crate::error::DaemonError;
@@ -279,6 +280,76 @@ pub async fn clear_crashes(
     serial: String,
 ) -> Result<RunResponse, DaemonError> {
     supervisor.client().await?.clear_crashes(serial).await
+}
+
+/// One PNG of the device screen, for the Screenshot editor.
+///
+/// Base64 out of the daemon and base64 on to the webview: the alternative is a
+/// temp file nobody deletes, and the editor's whole promise is that nothing is
+/// written until the user says so.
+#[tauri::command]
+pub async fn capture_screenshot(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    delay_seconds: i32,
+) -> Result<ScreenshotCaptureResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .capture_screenshot(&ScreenshotCaptureRequest {
+            serial,
+            delay_seconds,
+        })
+        .await
+}
+
+/// Saves the edited screenshot, asking where it should go.
+///
+/// A real save dialog rather than this app's usual fixed folder, because the
+/// Mac's editor asks (`askSaveLocation`) and the file is the whole point of the
+/// screen. Returns nil when the dialog was cancelled, which is not an error.
+#[tauri::command]
+pub async fn save_png(
+    app: AppHandle,
+    suggested_name: String,
+    png: Vec<u8>,
+) -> Result<Option<String>, DaemonError> {
+    let folder = droidective_folder(&app)?;
+    let Some(picked) = app
+        .dialog()
+        .file()
+        .add_filter("PNG image", &["png"])
+        .set_directory(folder)
+        .set_file_name(safe_file_name(&suggested_name)?)
+        .blocking_save_file()
+    else {
+        return Ok(None);
+    };
+    let path = picked
+        .into_path()
+        .map_err(|error| DaemonError::Host(format!("could not use that location: {error}")))?;
+    std::fs::write(&path, png).map_err(|error| {
+        DaemonError::Host(format!("could not write {}: {error}", path.display()))
+    })?;
+    Ok(Some(path.to_string_lossy().into_owned()))
+}
+
+/// Puts an image on the clipboard — the editor's Copy.
+///
+/// Here rather than in the webview for the reason `copy_text` is: a page's own
+/// clipboard write needs a gesture the browser agrees was one, and fails
+/// silently on `WebKitGTK`.
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "tauri's command macro hands AppHandle in by value"
+)]
+pub fn copy_image(app: AppHandle, png: Vec<u8>) -> Result<(), DaemonError> {
+    let image = tauri::image::Image::from_bytes(&png)
+        .map_err(|error| DaemonError::Host(format!("could not read that image: {error}")))?;
+    app.clipboard()
+        .write_image(&image)
+        .map_err(|error| DaemonError::Host(format!("could not copy the image: {error}")))
 }
 
 /// The recent adb calls behind Settings ▸ Privacy ▸ Command log.

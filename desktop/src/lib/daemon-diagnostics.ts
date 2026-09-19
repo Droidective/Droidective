@@ -1,6 +1,11 @@
 import { invoke } from "@tauri-apps/api/core"
 
-import type { CommandLogResponse, CrashListResponse, RunResponse } from "@/lib/wire"
+import type {
+  CommandLogResponse,
+  CrashListResponse,
+  RunResponse,
+  ScreenshotCaptureResponse,
+} from "@/lib/wire"
 
 /**
  * The two records you read when something went wrong: the device's crash
@@ -34,4 +39,18 @@ export function clearCommandLog(): Promise<RunResponse> {
 /** Empties `logcat -b crash` on the device. */
 export function clearCrashes(serial: string): Promise<RunResponse> {
   return invoke<RunResponse>("clear_crashes", { serial })
+}
+
+/**
+ * One PNG of the device screen, base64, for the Screenshot editor.
+ *
+ * Bytes rather than a path: the editor writes nothing until the user saves or
+ * copies, which is the promise the screen makes. The `screenshot` *action* is
+ * the other path and does write a file.
+ */
+export function captureScreenshot(
+  serial: string,
+  delaySeconds: number,
+): Promise<ScreenshotCaptureResponse> {
+  return invoke<ScreenshotCaptureResponse>("capture_screenshot", { serial, delaySeconds })
 }

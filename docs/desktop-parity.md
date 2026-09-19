@@ -11,8 +11,8 @@ rewriting one when something turns out to be more work than it looked.
 
 | | Count |
 | --- | --- |
-| ✅ Ported | 55 |
-| 🟡 Partial | 2 |
+| ✅ Ported | 56 |
+| 🟡 Partial | 1 |
 | ⬜ Not started | 2 |
 | ⛔ Not applicable off-Apple | 2 |
 | **Total registry features** | **61** |
@@ -25,8 +25,8 @@ while the generated half said 35 and 24, because they meant different things by
 **"Ported" means a pane is routed, or the feature is an action with nothing to
 build** — not that the screen has been audited against the Mac's. The
 per-feature checklists below are that audit, and they are still unticked. The
-two **partial** entries are the ones with a gap named in the classifier: the
-mirror's screenshot annotation editor, and the Terminal on Windows.
+one **partial** entry is the one with a gap named in the classifier: the
+Terminal on Windows.
 
 **The two not started are `video-editor` and `frida-console`.** The video
 editor is the ffmpeg filter graph and a preview scrubber — the toolchain
@@ -34,7 +34,7 @@ underneath it is no longer the blocker, since ffmpeg became a managed download
 when screen record landed. Frida needs a rooted device to verify, which makes
 it the hardest to be sure of and the least used.
 
-**Screens with a real pane today** (38): Terminal, Apps, Logcat, Device Info,
+**Screens with a real pane today** (39): Screenshot, Terminal, Apps, Logcat, Device Info,
 File Explorer, Crash Catcher, Bug Report, Performance, Root Status, Developer
 Settings, System Restrictions, Wi-Fi, Private DNS, Network Speed, Emulators,
 Install App, App Info, Permissions, Memory Usage, Sandbox Browser, Manage App,
@@ -43,7 +43,8 @@ API Testing, APK Studio, APK Inspector, Sign APK, Decompile APK, AAB to APK,
 Custom Commands, Wireless ADB, and the three hubs (Connection, React Native,
 Simulate) — plus the two app-chrome screens, the catalog and About. That
 covers **29 of the 32 full-screen views** in the catalog; the other seven
-catalog features are actions that render from their registry fields.
+catalog features are actions that render from their registry fields, and
+Screenshot is an action that has a screen as well, exactly as on the Mac.
 
 That list is not written here twice: `scripts/generate-parity-tracker.py` reads
 it out of the desktop app's pane router, so a screen that lands is marked
@@ -368,10 +369,8 @@ the reason every check in those scripts is fatal.
     ADBKit's Apple-only `ReactotronServer`, so serving it off Apple means
     feeding `McpCommandStore` from the daemon's NIO relay instead.
 
-    Also open, and smaller: the **screenshot annotation editor**. The capture
-    itself works — `screenshot` is an instant action and runs from the palette —
-    but the Mac's pen/shape/redact/crop editor has no counterpart, so a capture
-    here is a file rather than something to mark up before sending.
+    ~~Also open, and smaller: the **screenshot annotation editor**.~~
+    **Landed** — see the Screen & Capture entry below and the Panels section.
 12. **`frida-console`**, last of the real features: it needs a rooted device to
     verify, which makes it the hardest to be sure of and the least used.
 
@@ -644,6 +643,31 @@ memory — the file each item names is the thing to replicate.
       device override is in effect.
 - [ ] **Install inbox** (`InstallInbox`) — an APK opened from the file manager
       before the window exists has to be buffered, not dropped.
+- [x] **Screenshot editor** (`ScreenshotEditorView`) — pen, highlighter,
+      arrow, line, rectangle, ellipse, text and redact (blur or solid), the
+      Mac's eight swatches plus a colour well, Thin/Medium/Thick, select mode
+      with move, resize and rotate handles, crop with a rotating box, quarter
+      turns, undo/redo, zoom, Copy and Save…. Opened from the Screenshot tab
+      and from the mirror's camera button, which is where the Mac opens it
+      from too.
+
+      **Everything is a canvas, and the geometry is the port.** The markup is
+      normalized 0…1 to the image, so the on-screen canvas and the
+      full-resolution export share one set of numbers and one painting path —
+      the Mac's arrangement, and the reason a blur looks the same in the saved
+      PNG as it did on screen. A blur redaction draws the *whole* image
+      blurred and clipped to the region rather than the region alone, which is
+      what clamps its edges; blurring the cropped piece fades it to
+      transparent and the sharp original leaks through, the defect
+      `opaque: true` exists to prevent on the Mac.
+
+      **The capture arrives as bytes.** `/v1/screenshot/capture` answers with
+      the PNG rather than a path, because the editor writes nothing until Save
+      or Copy — the `screenshot` action is the other path and does write a
+      file. The mirror's camera reads the last decoded frame off its own
+      canvas instead, as `MirrorViewModel.takeScreenshot` reads the session's
+      snapshot: a second capture would be a different moment from the one on
+      screen.
 - [ ] **Self-metrics overlay** (`DevOverlay`), behind the Appearance switch.
 
 #### The menu bar (`ADTApp.swift`)
@@ -1551,6 +1575,7 @@ job, and the checklist now says which.
 ---
 
 ## Per-feature checklists
+
 ### Input & Clipboard
 #### `send-text` — Send Text  ·  ✅ ported
 > Type text, URLs, or symbols on the device
@@ -1808,10 +1833,10 @@ job, and the checklist now says which.
   - [ ] tooltip: Audio, and breaking tiles out into windows
   - [ ] drag: drag and drop
 
-#### `scrcpy` — Mirror Screen  ·  🟡 partial
+#### `scrcpy` — Mirror Screen  ·  ✅ ported
 > Mirror and control the device with scrcpy
 - **Kind** `view`
-- **Note** The pane mirrors and takes input; the screenshot annotation editor the Mac opens from it is Mac-only so far.
+- **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `ScreenMirrorView` — `App/Sources/FeatureDetail/Views/ScreenMirrorView.swift`
 - **Must replicate**
   - [ ] button: Volume down
@@ -1842,7 +1867,7 @@ job, and the checklist now says which.
 #### `screenshot` — Screenshot  ·  ✅ ported
 > Capture the screen and save it to your Mac
 - **Kind** `instantAction`
-- **Note** Runs from the palette and the action form, rendered from the registry — which is the whole feature.
+- **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 
 #### `video-editor` — Video Editor  ·  ⬜ todo
 > Trim, rotate, crop, convert & compress video
@@ -2063,6 +2088,7 @@ job, and the checklist now says which.
   - [ ] button: Save a Copy…
   - [ ] button: Reveal in Finder
   - [ ] button: Convert another bundle
+  - [ ] label: Unsigned — this will not install
   - [ ] label: Connect a device to install onto
   - [ ] export: save/export to a file
 
@@ -2289,4 +2315,4 @@ job, and the checklist now says which.
   - [ ] drag: drag and drop
 
 
-<!-- counts: {'done': 55, 'partial': 2, 'todo': 2, 'gated': 2} -->
+<!-- counts: {'done': 56, 'partial': 1, 'todo': 2, 'gated': 2} -->

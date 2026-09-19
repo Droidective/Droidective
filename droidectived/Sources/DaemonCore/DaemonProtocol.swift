@@ -133,6 +133,9 @@ public enum DaemonProtocol {
         /// any one device.
         case commandLogList = "/v1/commandlog/list"
         case commandLogClear = "/v1/commandlog/clear"
+        /// The Screenshot editor's capture: the PNG bytes, not a file. The
+        /// `screenshot` *action* is the other path, and writes one.
+        case screenshotCapture = "/v1/screenshot/capture"
     }
 
     /// The multiplexed stream socket. Not a `Route`: it is a WebSocket upgrade

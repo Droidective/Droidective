@@ -28,8 +28,8 @@ drag and drop, translucency, the role picker, a native menu bar), and 29 of the
 Reactotron, the JS console, API Testing and APK Studio included. Only
 `video-editor` and `frida-console` have no screen at all; the seven remaining
 catalog features are actions that render from their registry fields. Still
-Mac-only: the welcome tour, the updater, Settings ▸ MCP,
-the screenshot annotation editor — and the Terminal on *Windows* (ConPTY is a
+Mac-only: the welcome tour, the updater, Settings ▸ MCP
+— and the Terminal on *Windows* (ConPTY is a
 different API, and the pane says so). The practical consequence: a new Mac
 feature now usually has a port counterpart worth adding in the same breath, and
 `docs/desktop-parity.md` is where it gets tracked. Regenerate that file's

@@ -116,3 +116,20 @@ export function openUrl(url: string): Promise<void> {
 export function exportText(name: string, contents: string): Promise<string> {
   return invoke<string>("export_text", { name, contents })
 }
+
+/**
+ * Saves a PNG, asking where it should go.
+ *
+ * A real save dialog rather than this app's usual fixed folder, because the
+ * Mac's screenshot editor asks (`askSaveLocation`) and the file is the whole
+ * point of the screen. Answers null when the dialog was cancelled, which is
+ * not a failure.
+ */
+export function savePng(suggestedName: string, png: Uint8Array): Promise<string | null> {
+  return invoke<string | null>("save_png", { suggestedName, png: [...png] })
+}
+
+/** Puts an image on the clipboard — the screenshot editor's Copy. */
+export function copyImage(png: Uint8Array): Promise<void> {
+  return invoke("copy_image", { png: [...png] })
+}

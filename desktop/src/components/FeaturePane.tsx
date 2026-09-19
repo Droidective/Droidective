@@ -38,6 +38,7 @@ import {
   RootStatusPane,
   SandboxPane,
   ScreenRecordPane,
+  ScreenshotPane,
   SimulateHubPane,
   TerminalPane,
   WifiPane,
@@ -71,32 +72,8 @@ export interface FeaturePaneProps {
  * rather than an empty pane that reads as broken.
  */
 export function FeaturePane(props: FeaturePaneProps) {
-  if (props.id === HOME_TAB) {
-    return (
-      <HomeView
-        features={props.features}
-        sidebarOrder={props.sidebarOrder}
-        categoryOrder={props.categoryOrder}
-        favorites={props.favorites}
-        onOpen={props.onOpen}
-      />
-    )
-  }
-  // The app's own screens, opened from the sidebar footer. No daemon serves
-  // them, so they are matched before the registry lookup below.
-  if (props.id === CATALOG_TAB) {
-    return (
-      <CatalogPane
-        features={props.features}
-        disabled={props.disabledFeatures}
-        sidebarOrder={props.sidebarOrder}
-        categoryOrder={props.categoryOrder}
-        onSetEnabled={props.onSetEnabled}
-        onSetGroupEnabled={props.onSetGroupEnabled}
-      />
-    )
-  }
-  if (props.id === ABOUT_TAB) return <AboutPane />
+  const chrome = chromePane(props)
+  if (chrome !== null) return chrome
   if (props.feature === null) return <NotHere title={props.id} />
 
   const hostSide = hostPane(props)
@@ -129,6 +106,10 @@ export function FeaturePane(props: FeaturePaneProps) {
       return <MirrorPane device={props.device} />
     case "screen-record":
       return <ScreenRecordPane device={props.device} />
+    // An instant action with a screen, as on the Mac: a hotkey still grabs and
+    // saves with no dialog, and opening the tab gives you the editor.
+    case "screenshot":
+      return <ScreenshotPane device={props.device} />
     case "device-info":
       return <DeviceInfoPane device={props.device} />
     case "file-explorer":
@@ -168,6 +149,38 @@ export function FeaturePane(props: FeaturePaneProps) {
         <NotHere title={props.feature.title} subtitle={props.feature.subtitle} />
       )
   }
+}
+
+/**
+ * The app's own screens, opened from the sidebar footer rather than the
+ * registry. No daemon serves them, so they are matched before the lookup.
+ */
+function chromePane(props: FeaturePaneProps) {
+  if (props.id === HOME_TAB) {
+    return (
+      <HomeView
+        features={props.features}
+        sidebarOrder={props.sidebarOrder}
+        categoryOrder={props.categoryOrder}
+        favorites={props.favorites}
+        onOpen={props.onOpen}
+      />
+    )
+  }
+  if (props.id === CATALOG_TAB) {
+    return (
+      <CatalogPane
+        features={props.features}
+        disabled={props.disabledFeatures}
+        sidebarOrder={props.sidebarOrder}
+        categoryOrder={props.categoryOrder}
+        onSetEnabled={props.onSetEnabled}
+        onSetGroupEnabled={props.onSetGroupEnabled}
+      />
+    )
+  }
+  if (props.id === ABOUT_TAB) return <AboutPane />
+  return null
 }
 
 /**
