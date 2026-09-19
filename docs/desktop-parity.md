@@ -842,6 +842,43 @@ the Performance stop dialog's cancel, which said "Cancel" where the Mac says
 "Keep recording". In a dialog about stopping a recording, "Cancel" reads as
 cancelling the recording.
 
+**Pass 2 — Reactotron.** The headline is not in the item count. The Mac's
+`ReactotronView` is **four views behind a picker** — Timeline, Commands, State
+and REPL — and the port has the first one. Its 25/51 reads like half a screen
+missing; it is closer to one screen of four, with the ported one in good shape.
+What is absent is a *picker* and three panes:
+
+- **State** (`statePane`, ~175 lines) — four cards: the store tree pulled on
+  demand, path subscriptions (watch `user.name`, stop watching), dispatch, and
+  snapshots (take, restore, delete). The most valuable of the three: it is what
+  Reactotron is for beyond reading logs.
+- **REPL** (`replPane`) — evaluate an expression against the running app, with
+  `ls` to list what is in scope.
+- **Commands** (`commandsPane`) — the buttons an app registers with
+  `Reactotron.onCustomCommand(...)`.
+
+All three send commands *to* the client rather than only reading the stream,
+and the relay can already do that: `ReactotronServer.send(type:payload:
+toConnection:)` is public. So each is the ordinary four layers — a daemon route
+over that call, a Rust command, a pane — rather than new plumbing. The
+`reactotron` stream topic already carries the answers back; the timeline
+renders `subscription` and `SNAPSHOT` rows today.
+
+Also unported, and smaller: split panes (`Split into two panes`, `Clear the
+whole timeline — both panes`, `Pane cleared`), find-in-object inside the detail
+(`Search keys & values…`, `Reveal in the tree`), multi-row selection and its
+copies, and full-size image events (`Click to view full size`). **`AI Agents`
+is Mac-only by design** — it is the MCP panel, and `ReactotronMCP` is
+`#if canImport(Network)`-gated end to end.
+
+**What the pass fixed.** One functional gap and three wordings. The reverse
+tunnel's button lived only in the status bar, which renders while no client is
+listed — so a tunnel that dropped with the client still on screen left no way
+to re-open it, which is the one moment it is needed. It is in the toolbar
+beside Restart now, as on the Mac. The restart tooltip, the row copy tooltip
+(the only thing advertising the right-click menu) and the two API refinement
+rows took the Mac's words.
+
 **Known real gaps found and not yet closed**, in rough order of size:
 `reactotron` (25/51), `js-console` (14/24), `terminal`'s split panes and groups
 (6/14), `logcat`'s filter/find tooltips and app-picker labels (4/12),
@@ -1865,7 +1902,7 @@ job, and the checklist now says which.
   - [ ] field: Path to watch, e.g. user.name
   - [ ] field: e.g. store.getState()
   - [ ] field: Search keys & values…
-  - [ ] label: Reverse :9090
+  - [x] label: Reverse :9090
   - [ ] label: AI Agents
   - [ ] label: Refresh
   - [ ] label: Dispatch
@@ -1874,18 +1911,18 @@ job, and the checklist now says which.
   - [ ] label: Clear cache and restart
   - [ ] label: Clear data and restart
   - [ ] label: Restart app
-  - [ ] tooltip: Force-stop and relaunch the connected app so it reconnects
-  - [ ] tooltip: Run adb reverse tcp:9090 tcp:9090 on connected devices
+  - [x] tooltip: Force-stop and relaunch the connected app so it reconnects
+  - [x] tooltip: Run adb reverse tcp:9090 tcp:9090 on connected devices
   - [ ] tooltip: Clear the whole timeline — both panes
   - [ ] tooltip: Split into two panes
   - [ ] tooltip: Clear the timeline
   - [ ] tooltip: Stop watching this path
   - [ ] tooltip: Refresh available values
   - [ ] tooltip: Close without applying
-  - [ ] tooltip: Show only requests with this HTTP method
-  - [ ] tooltip: Show only responses in this status class
+  - [x] tooltip: Show only requests with this HTTP method
+  - [x] tooltip: Show only responses in this status class
   - [ ] tooltip: Filter the timeline by event type
-  - [ ] tooltip: Copy this line (right-click for the full object)
+  - [x] tooltip: Copy this line (right-click for the full object)
   - [ ] tooltip: Click to view full size
   - [ ] tooltip: Delete this snapshot
   - [ ] tooltip: Reveal in the tree

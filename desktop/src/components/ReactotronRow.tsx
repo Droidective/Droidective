@@ -149,7 +149,11 @@ export function ReactotronRow({
                 }, 1200)
               })
             }}
-            title="Copy this line"
+            // The Mac's wording, and it earns its length: the row's own
+            // right-click menu (Copy line / Copy object) is the only way to
+            // get the whole payload, and nothing else on the row advertises
+            // that it is there.
+            title="Copy this line (right-click for the full object)"
             aria-label="Copy this line"
             className={cn(
               "shrink-0 self-center hover:text-text-primary",
