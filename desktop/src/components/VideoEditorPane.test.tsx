@@ -38,15 +38,19 @@ describe("VideoEditorPane", () => {
     globalThis.URL.revokeObjectURL = vi.fn()
   })
 
-  it("asks before there is anything to edit, and says the original is safe", () => {
+  // The empty state's words are `VideoEditorView.emptyState`'s, not this
+  // port's own: they name every edit the screen can make and say where a clip
+  // comes from, which is the whole job of the one screen with nothing on it.
+  it("asks before there is anything to edit, in the Mac's words", () => {
     render(<VideoEditorPane />)
-    expect(screen.getByRole("button", { name: "Open a video…" })).toBeDefined()
-    expect(screen.getByText(/the original is never changed/u)).toBeDefined()
+    expect(screen.getByRole("button", { name: "Open video…" })).toBeDefined()
+    expect(screen.getByText(/trim, rotate, crop, change speed, convert, and compress/u)).toBeDefined()
+    expect(screen.getByText(/record one from Screen Record/u)).toBeDefined()
   })
 
   it("filters the open panel by the served list rather than one of its own", async () => {
     render(<VideoEditorPane />)
-    fireEvent.click(screen.getByRole("button", { name: "Open a video…" }))
+    fireEvent.click(screen.getByRole("button", { name: "Open video…" }))
     await waitFor(() => {
       expect(pickFile).toHaveBeenCalledWith("Video", ["mp4", "mkv"])
     })
@@ -54,13 +58,13 @@ describe("VideoEditorPane", () => {
 
   it("shows the file once one is open", async () => {
     render(<VideoEditorPane />)
-    fireEvent.click(screen.getByRole("button", { name: "Open a video…" }))
+    fireEvent.click(screen.getByRole("button", { name: "Open video…" }))
     expect(await screen.findByText("clip.mp4")).toBeDefined()
   })
 
   it("offers the Mac's transform and output controls", async () => {
     render(<VideoEditorPane />)
-    fireEvent.click(screen.getByRole("button", { name: "Open a video…" }))
+    fireEvent.click(screen.getByRole("button", { name: "Open video…" }))
     await screen.findByText("clip.mp4")
     expect(screen.getByLabelText("Rotate left")).toBeDefined()
     expect(screen.getByLabelText("Rotate right")).toBeDefined()
@@ -73,7 +77,7 @@ describe("VideoEditorPane", () => {
 
   it("sends the edit it was given, and reports where the file landed", async () => {
     render(<VideoEditorPane />)
-    fireEvent.click(screen.getByRole("button", { name: "Open a video…" }))
+    fireEvent.click(screen.getByRole("button", { name: "Open video…" }))
     await screen.findByText("clip.mp4")
 
     fireEvent.click(screen.getByLabelText("Rotate right"))
@@ -94,7 +98,7 @@ describe("VideoEditorPane", () => {
   it("says nothing when the save dialog was dismissed", async () => {
     exportVideo.mockResolvedValue(null)
     render(<VideoEditorPane />)
-    fireEvent.click(screen.getByRole("button", { name: "Open a video…" }))
+    fireEvent.click(screen.getByRole("button", { name: "Open video…" }))
     await screen.findByText("clip.mp4")
 
     fireEvent.click(screen.getByRole("button", { name: /Export/u }))
@@ -107,7 +111,7 @@ describe("VideoEditorPane", () => {
 
   it("undoes a transform", async () => {
     render(<VideoEditorPane />)
-    fireEvent.click(screen.getByRole("button", { name: "Open a video…" }))
+    fireEvent.click(screen.getByRole("button", { name: "Open video…" }))
     await screen.findByText("clip.mp4")
 
     fireEvent.click(screen.getByLabelText("Rotate right"))
@@ -135,7 +139,7 @@ describe("VideoEditorPane — what it says when it cannot show a picture", () =>
   it("reports a file it could not read at all", async () => {
     readVideo.mockRejectedValue(new Error("that video is 900 MB — too large to preview here"))
     render(<VideoEditorPane />)
-    fireEvent.click(screen.getByRole("button", { name: "Open a video…" }))
+    fireEvent.click(screen.getByRole("button", { name: "Open video…" }))
     expect(await screen.findByText(/too large to preview here/u)).toBeDefined()
   })
 })

@@ -39,9 +39,17 @@ Deep Links, Reactotron, Mirror Screen, Mirror Wall, Screen Record, JS Console,
 API Testing, APK Studio, APK Inspector, Sign APK, Decompile APK, AAB to APK,
 Custom Commands, Wireless ADB, and the three hubs (Connection, React Native,
 Simulate) — plus the two app-chrome screens, the catalog and About. That
-covers **29 of the 32 full-screen views** in the catalog; the other seven
+covers **30 of the 32 full-screen views** in the catalog; the other seven
 catalog features are actions that render from their registry fields, and
 Screenshot is an action that has a screen as well, exactly as on the Mac.
+
+The two views without a pane are named rather than counted, because a bare
+number is what drifts: **`frida-console`** (not started — it needs a rooted
+device) and **`ios-logs`** (out of scope — `xcrun simctl`). This paragraph said
+29 and CLAUDE.md said 31 while the sources said 30; the arithmetic is
+`catalogFeatureIDs` filtered to `view`/`system` against the desktop pane
+router, which is what `scripts/generate-parity-tracker.py` reads, so it can be
+recomputed rather than remembered.
 
 That list is not written here twice: `scripts/generate-parity-tracker.py` reads
 it out of the desktop app's pane router, so a screen that lands is marked
@@ -805,6 +813,45 @@ two disagree, so a relabelled item cannot leave a stale accelerator behind.
 
 ---
 
+## The audit, and what it has covered
+
+The per-feature checklists are the audit. A tick means the affordance was found
+in `desktop/src` **and read in place** — not that the screen was driven. Ticks
+survive a regenerate (the generator carries them across by feature id and item
+text), so an item whose wording changes on the Mac comes back unticked, which
+is right: what was audited is no longer what is being asked about.
+
+**Pass 1 — the Connection group.** `connection`, `network-speed`,
+`private-dns` and `wifi` are complete and ticked. Two items in the group are
+out of scope rather than missing, and will stay unticked:
+
+- `emulators` — **Shut Down** is the *iOS Simulator* verb. Simulators are
+  `xcrun simctl`, which is a macOS toolchain, so the row it belongs to does not
+  exist off Apple. Every Android verb in that view (Launch, Stop, Cold Boot,
+  Wipe Data, Relaunch) is present.
+- `wireless-adb` — **Scan a QR Code…** is the QR pairing tab, which is in the
+  backlog and cannot be verified on an emulator anyway: adb 37 dropped Bonjour
+  and openscreen ignores same-host advertisements, so its last leg needs a
+  physical phone.
+
+**What the pass fixed**, all of it wording the port had invented rather than
+taken from the Mac: the video editor's empty state (its sentence *and* its
+button), the Apps search placeholder — which had swallowed the Mac's
+`N of M apps` footer, now restored under the list where the Mac puts it — and
+the Performance stop dialog's cancel, which said "Cancel" where the Mac says
+"Keep recording". In a dialog about stopping a recording, "Cancel" reads as
+cancelling the recording.
+
+**Known real gaps found and not yet closed**, in rough order of size:
+`reactotron` (25/51), `js-console` (14/24), `terminal`'s split panes and groups
+(6/14), `logcat`'s filter/find tooltips and app-picker labels (4/12),
+`apk-decompile` (3/10), `apk-studio` (1/5), `scrcpy` (5/12), `mirror-wall`
+(2/6), and single items on `apps` (Explore files), `performance`,
+`crash-catcher`, `aab-convert` (the unsigned-APK warning) and `api-client`.
+Several nominal misses in that list are the documented platform-name
+exception — "Pull to Mac", "Open in Finder", "Reveal in Finder" — and are not
+gaps.
+
 ## Defects in what already shipped
 
 Found by driving the app against a live emulator, not by reading it.
@@ -825,10 +872,12 @@ Found by driving the app against a live emulator, not by reading it.
       verb on another.
 - [x] ~~**Logcat cannot be restarted.**~~ Stop becomes Start, and the
       subscription comes back with the buffer intact.
-- [~] **Logcat has no level or app filter.** The level picker, the
-      find-vs-filter split, export, clear and tag chips have landed. The *app*
-      filter has not: it needs a pid → package map the daemon does not serve
-      yet, and matching on the tag would be a filter that quietly misses lines.
+- [x] ~~**Logcat has no level or app filter.**~~ The level picker, the
+      find-vs-filter split, export, clear and tag chips landed first; the *app*
+      filter followed once the daemon could serve a pid → package map
+      (`POST /v1/logcat/pid`, `lib/logcat-app.ts`). Matching on the tag instead
+      would have been a filter that quietly missed lines, which is why it
+      waited for the route.
 - [x] ~~**The app list re-fetches on every tab switch**, because the pane
       remounts and the data is not lifted.~~ Fixed by the tab shell: an open
       tab stays mounted while it is in the background, so the pane no longer
@@ -1626,7 +1675,7 @@ job, and the checklist now says which.
 #### `send-text` — Send Text  ·  ✅ ported
 > Type text, URLs, or symbols on the device
 - **Kind** `formAction`
-- **Note** Runs from the palette and the action form, rendered from the registry — which is the whole feature.
+- **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **Parameters** `text` (text)
 
 
@@ -1637,9 +1686,9 @@ job, and the checklist now says which.
 - **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `NetworkConnectionView` — `App/Sources/FeatureDetail/Views/NetworkConnectionView.swift`
 - **Must replicate**
-  - [ ] button: Forward
-  - [ ] label: Copy IP
-  - [ ] tooltip: Refresh
+  - [x] button: Forward
+  - [x] label: Copy IP
+  - [x] tooltip: Refresh
 
 #### `emulators` — Emulators & Simulators  ·  ✅ ported
 > Launch and stop Android emulators & iOS Simulators
@@ -1670,9 +1719,9 @@ job, and the checklist now says which.
 - **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `NetworkView` — `App/Sources/FeatureDetail/Views/NetworkView.swift`
 - **Must replicate**
-  - [ ] label: Export
-  - [ ] label: seconds
-  - [ ] tooltip: Export the recording as JSON + CSV
+  - [x] label: Export
+  - [x] label: seconds
+  - [x] tooltip: Export the recording as JSON + CSV
 
 #### `private-dns` — Private DNS  ·  ✅ ported
 > Off, automatic, or a DNS-over-TLS provider
@@ -1680,9 +1729,9 @@ job, and the checklist now says which.
 - **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `PrivateDnsView` — `App/Sources/FeatureDetail/Views/PrivateDnsView.swift`
 - **Must replicate**
-  - [ ] button: Apply
-  - [ ] picker: Mode
-  - [ ] tooltip: Refresh
+  - [x] button: Apply
+  - [x] picker: Mode
+  - [x] tooltip: Refresh
 
 #### `reverse-port` — Reverse Port  ·  ✅ ported
 > Forward a device port to your machine (Metro 8081)
@@ -1696,11 +1745,11 @@ job, and the checklist now says which.
 - **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `WiFiView` — `App/Sources/FeatureDetail/Views/WiFiView.swift`
 - **Must replicate**
-  - [ ] button: Connect
-  - [ ] field: SSID
-  - [ ] label: Passwords need root
-  - [ ] tooltip: Refresh
-  - [ ] tooltip: Copy password
+  - [x] button: Connect
+  - [x] field: SSID
+  - [x] label: Passwords need root
+  - [x] tooltip: Refresh
+  - [x] tooltip: Copy password
 
 #### `wireless-adb` — Wireless ADB  ·  ✅ ported
 > Connect over Wi-Fi (tcpip + Android 11 pairing)
@@ -1728,7 +1777,7 @@ job, and the checklist now says which.
   - [ ] field: URL (e.g. myapp://orders/123)
   - [ ] field: Label (optional)
   - [ ] label: Add deep link
-  - [ ] label: Delete \(link.label)
+  - [ ] label: Delete …
   - [ ] tooltip: Launch on device
 
 #### `js-console` — JS Console  ·  ✅ ported
@@ -1802,8 +1851,8 @@ job, and the checklist now says which.
   - [ ] button: Copy
   - [ ] button: Copy as JSON
   - [ ] button: Deselect
-  - [ ] button: Copy \(selectionCount) Selected Events
-  - [ ] button: Copy \(selectionCount) Selected as JSON
+  - [ ] button: Copy … Selected Events
+  - [ ] button: Copy … Selected as JSON
   - [ ] button: Copy object
   - [ ] button: Copy line
   - [ ] button: Restore
@@ -2163,7 +2212,7 @@ job, and the checklist now says which.
 - **Must replicate**
   - [ ] button: Choose APK…
   - [ ] button: Inspect another…
-  - [ ] label: \(title) (\(items.count))
+  - [ ] label: … (…)
   - [ ] label: Signing
 
 #### `apk-sign` — Sign APK  ·  ✅ ported
@@ -2332,7 +2381,7 @@ job, and the checklist now says which.
   - [ ] field: What it does — e.g. Restart app
   - [ ] label: Presets
   - [ ] label: New
-  - [ ] label: Delete \(command.name)
+  - [ ] label: Delete …
   - [ ] label: Added
   - [ ] tooltip: Choose a script or executable to run
   - [ ] shortcut: .cancelAction

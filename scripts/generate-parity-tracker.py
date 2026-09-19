@@ -40,6 +40,38 @@ PANE_ROUTER = ROOT / "desktop/src/components/FeaturePane.tsx"
 ported_ids = set(re.findall(r'case\s+"([^"]+)":', PANE_ROUTER.read_text()))
 
 
+def _ticks_already_in_the_tracker():
+    """Which checklist items a previous pass has ticked.
+
+    The checklists live in the *generated* half, so without this a regenerate
+    silently throws away every audit result — the work is done by reading two
+    views side by side, and it is not work anyone should do twice because the
+    registry gained a feature. Keyed by (feature id, item text), so an item
+    whose wording changes on the Mac comes back unticked, which is right: the
+    thing that was audited is not the thing being asked about any more.
+    """
+    tracker = ROOT / "docs/desktop-parity.md"
+    if not tracker.exists():
+        return set()
+    ticked, fid = set(), None
+    for line in tracker.read_text().splitlines():
+        heading = re.match(r"#### `([^`]+)`", line)
+        if heading:
+            fid = heading.group(1)
+            continue
+        item = re.match(r"\s*- \[x\] (.+)$", line)
+        if item and fid:
+            ticked.add((fid, item.group(1).strip()))
+    return ticked
+
+
+TICKED = _ticks_already_in_the_tracker()
+
+
+def already_ticked(feature_id, control):
+    return (feature_id, control) in TICKED
+
+
 def affordances(view_name):
     """User-visible controls in a view, as evidence rather than recollection."""
     path = swift_files.get(view_name)
@@ -56,6 +88,11 @@ def affordances(view_name):
         # mean nothing off Apple and must not become checklist items.
         if re.fullmatch(r"[a-z0-9]+(\.[a-z0-9]+)+", label):
             return
+        # `Label("Delete \(link.label)")` is a pattern, not a string. Emitted
+        # verbatim it is an item no port can ever satisfy, and enough of them
+        # make a finished screen read as a broken one. The affordance is real,
+        # so it stays — with the interpolation shown as the placeholder it is.
+        label = re.sub(r"\\\([^)]*\)", "…", label)
         entry = f"{kind}: {label}"
         if entry not in found:
             found.append(entry)
@@ -202,7 +239,7 @@ for category, features in by_category.items():
             if controls:
                 out.append("- **Must replicate**\n")
                 for c in controls:
-                    out.append(f"  - [ ] {c}\n")
+                    out.append(f"  - [{'x' if already_ticked(fid, c) else ' '}] {c}\n")
             else:
                 out.append("  - [ ] *(no controls auto-detected — audit by hand)*\n")
         out.append("\n")

@@ -76,6 +76,7 @@ export function AppsPane({
     <div className="flex min-h-0 flex-1">
       <AppList
         apps={visible}
+        total={apps.length}
         query={query}
         onQuery={setQuery}
         includeSystem={includeSystem}
@@ -108,6 +109,7 @@ export function AppsPane({
 /** The searchable app list. Its own component only so `AppsPane` stays legible. */
 function AppList({
   apps,
+  total,
   query,
   onQuery,
   includeSystem,
@@ -119,6 +121,8 @@ function AppList({
   onRefresh,
 }: {
   apps: AppSummary[]
+  /** Every app read from the device, so the footer can say "N of M". */
+  total: number
   query: string
   onQuery: (value: string) => void
   includeSystem: boolean
@@ -137,7 +141,10 @@ function AppList({
             <input
               value={query}
               aria-label="Search apps"
-              placeholder={`Search ${String(apps.length)} apps…`}
+              // `AppsExplorerView`'s placeholder, which says what a query
+              // matches rather than how many rows there are. The count is
+              // already on screen, under the list.
+              placeholder="Search name, version, or bundle…"
               onChange={(event) => {
                 onQuery(event.target.value)
               }}
@@ -189,6 +196,14 @@ function AppList({
             ))
           )}
         </div>
+
+        {/* `AppsExplorerView` puts the count under the list, not in the search
+            field's placeholder — so it is still there once someone has typed. */}
+        {loaded ? (
+          <div className="px-4 py-1.5 text-[11.5px] text-text-tertiary">
+            {apps.length} of {total} apps
+          </div>
+        ) : null}
       </aside>
   )
 }
