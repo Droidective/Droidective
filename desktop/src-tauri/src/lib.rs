@@ -216,6 +216,7 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         commands::watch_reactotron,
         commands::reactotron_reverse,
         commands::reactotron_unreverse,
+        commands::reactotron_send,
         commands::install_path,
         commands::pick_file,
         commands::pick_folder,

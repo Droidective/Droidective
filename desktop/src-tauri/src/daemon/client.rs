@@ -19,14 +19,14 @@ use crate::daemon::wire::{
     ForegroundResponse, InstallFormatsResponse, InstallRequest, InstallResponse, LaunchResponse,
     LogcatPidResponse, ManagedToolRequest, ManagedTools, ManagedToolsListResponse, MemInfoResponse,
     PairResponse, PermissionWriteRequest, PermissionsResponse, ReactotronReverseRequest,
-    ReactotronReverseResponse, RecordOptions, RecordStartRequest, RecordStatusResponse,
-    RecordStoppedResponse, RestrictionWriteRequest, RestrictionsResponse, RolesResponse,
-    RootStatusResponse, RunRequest, RunResponse, SandboxRequest, SandboxResponse,
-    ScreenshotCaptureRequest, ScreenshotCaptureResponse, SnippetExpandRequest,
-    SnippetExpandResponse, SnippetWriteRequest, SnippetsResponse, ToolInstallRequest,
-    ToolInstallResponse, ToolsResponse, VideoExportRequest, VideoFormatsResponse,
-    VideoPathResponse, VideoProxyRequest, VideoRemoveRequest, WifiResponse, WifiWriteRequest,
-    WirelessActionRequest,
+    ReactotronReverseResponse, ReactotronSendRequest, ReactotronSendResponse, RecordOptions,
+    RecordStartRequest, RecordStatusResponse, RecordStoppedResponse, RestrictionWriteRequest,
+    RestrictionsResponse, RolesResponse, RootStatusResponse, RunRequest, RunResponse,
+    SandboxRequest, SandboxResponse, ScreenshotCaptureRequest, ScreenshotCaptureResponse,
+    SnippetExpandRequest, SnippetExpandResponse, SnippetWriteRequest, SnippetsResponse,
+    ToolInstallRequest, ToolInstallResponse, ToolsResponse, VideoExportRequest,
+    VideoFormatsResponse, VideoPathResponse, VideoProxyRequest, VideoRemoveRequest, WifiResponse,
+    WifiWriteRequest, WirelessActionRequest,
 };
 use crate::error::DaemonError;
 
@@ -464,6 +464,13 @@ impl DaemonClient {
         request: &ReactotronReverseRequest,
     ) -> Result<ReactotronReverseResponse, DaemonError> {
         self.post("/v1/reactotron/unreverse", request).await
+    }
+
+    pub async fn reactotron_send(
+        &self,
+        request: &ReactotronSendRequest,
+    ) -> Result<ReactotronSendResponse, DaemonError> {
+        self.post("/v1/reactotron/send", request).await
     }
 
     pub async fn managed_tool_list(&self) -> Result<ManagedToolsListResponse, DaemonError> {

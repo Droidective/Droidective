@@ -29,12 +29,13 @@ use crate::daemon::wire::{
     FileOperationRequest, FilePullRequest, FilePullResponse, FilesListRequest, FilesListResponse,
     ForegroundResponse, InstallRequest, InstallResponse, LaunchResponse, LogcatPidResponse,
     ManagedTools, MemInfoResponse, PairResponse, PermissionWriteRequest, PermissionsResponse,
-    ReactotronReverseRequest, ReactotronReverseResponse, RestrictionWriteRequest,
-    RestrictionsResponse, RolesResponse, RootStatusResponse, RunRequest, RunResponse,
-    SandboxRequest, SandboxResponse, ScreenshotCaptureRequest, ScreenshotCaptureResponse, Snippet,
-    SnippetExpandRequest, SnippetExpandResponse, SnippetWriteRequest, StreamParams,
-    ToolInstallRequest, ToolInstallResponse, ToolsResponse, VideoExportOptions, VideoExportRequest,
-    VideoProxyRequest, WifiResponse, WifiWriteRequest, WirelessActionRequest,
+    ReactotronReverseRequest, ReactotronReverseResponse, ReactotronSendRequest,
+    ReactotronSendResponse, RestrictionWriteRequest, RestrictionsResponse, RolesResponse,
+    RootStatusResponse, RunRequest, RunResponse, SandboxRequest, SandboxResponse,
+    ScreenshotCaptureRequest, ScreenshotCaptureResponse, Snippet, SnippetExpandRequest,
+    SnippetExpandResponse, SnippetWriteRequest, StreamParams, ToolInstallRequest,
+    ToolInstallResponse, ToolsResponse, VideoExportOptions, VideoExportRequest, VideoProxyRequest,
+    WifiResponse, WifiWriteRequest, WirelessActionRequest,
 };
 use crate::daemon::{DaemonStatus, Supervisor};
 use crate::error::DaemonError;
@@ -1773,6 +1774,30 @@ pub async fn reactotron_unreverse(
         .client()
         .await?
         .reactotron_unreverse(&ReactotronReverseRequest { serials, port })
+        .await
+}
+
+/// Ask the connected app to do something — read its store, dispatch an action,
+/// evaluate an expression.
+///
+/// Fire-and-forget, like the route it calls: Reactotron answers with another
+/// command on the timeline rather than on this call, so what comes back here is
+/// only how many clients heard it.
+#[tauri::command]
+pub async fn reactotron_send(
+    supervisor: State<'_, Supervisor>,
+    kind: String,
+    payload: serde_json::Value,
+    connection_id: Option<i64>,
+) -> Result<ReactotronSendResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .reactotron_send(&ReactotronSendRequest {
+            kind,
+            payload,
+            connection_id,
+        })
         .await
 }
 
