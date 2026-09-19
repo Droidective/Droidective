@@ -5,7 +5,13 @@
  * destination's size against the source's; the daemon does that polling here
  * and sends both numbers, so what is left is the arithmetic and the wording —
  * which is exactly the part that reads wrong when it is approximate.
+ *
+ * Sizes come from the file explorer's formatter, not a second one: the strip
+ * sits two rows above the row being pulled, and the two disagreeing about the
+ * same file (400 MB against 419 MB, from a binary divisor against the decimal
+ * one `ByteCountFormatter` uses on the Mac) reads as a bug in the transfer.
  */
+import { formatBytes } from "@/lib/files"
 
 /** One transfer, as the `pull` topic reports it. */
 export interface PullEvent {
@@ -41,19 +47,6 @@ export interface PullState {
 export function fraction(state: PullState): number | null {
   if (state.total === null || state.total <= 0) return null
   return Math.min(1, Math.max(0, state.copied / state.total))
-}
-
-/** `1.4 MB` — the same units the file explorer uses. */
-export function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  const units = ["KB", "MB", "GB", "TB"]
-  let value = bytes / 1024
-  let unit = 0
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024
-    unit += 1
-  }
-  return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`
 }
 
 /**

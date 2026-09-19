@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest"
+import { formatBytes } from "@/lib/files"
 import {
   apply,
   caption,
   DISMISS_AFTER_MS,
   dismissDelay,
-  formatBytes,
   fraction,
   leafName,
   started,
@@ -42,30 +42,24 @@ describe("fraction", () => {
   })
 })
 
-describe("formatBytes", () => {
-  it("keeps bytes under a kilobyte", () => {
-    expect(formatBytes(0)).toBe("0 B")
-    expect(formatBytes(999)).toBe("999 B")
-  })
-
-  it("steps up through the units", () => {
-    expect(formatBytes(2048)).toBe("2.0 KB")
-    expect(formatBytes(5 * 1024 * 1024)).toBe("5.0 MB")
-    expect(formatBytes(3 * 1024 * 1024 * 1024)).toBe("3.0 GB")
-  })
-
-  it("drops the decimal once the number is wide", () => {
-    expect(formatBytes(15 * 1024 * 1024)).toBe("15 MB")
-  })
-})
-
 describe("caption", () => {
   it("counts while the pull runs", () => {
-    expect(caption(state({ copied: 1024, total: 4096 }))).toBe("1.0 KB of 4.0 KB")
+    expect(caption(state({ copied: 1_000, total: 4_000 }))).toBe("1 KB of 4 KB")
   })
 
   it("counts without a total, rather than saying nothing", () => {
-    expect(caption(state({ copied: 1024, total: null }))).toBe("1.0 KB copied")
+    expect(caption(state({ copied: 1_000, total: null }))).toBe("1 KB copied")
+  })
+
+  it("sizes a file exactly as the row being pulled does", () => {
+    // 400 MiB — the size the strip and the file list showed differently until
+    // the strip stopped dividing by 1024. Two numbers for one file, two rows
+    // apart, read as a broken transfer rather than as two conventions.
+    const bytes = 419_430_400
+    expect(caption(state({ copied: bytes, total: bytes }))).toBe(
+      `${formatBytes(bytes)} of ${formatBytes(bytes)}`,
+    )
+    expect(formatBytes(bytes)).toBe("419 MB")
   })
 
   it("says where it landed once it is done", () => {
