@@ -292,3 +292,39 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         dropped::discard_dropped_file,
     ]
 }
+
+#[cfg(test)]
+mod tests {
+    /// An object URL is not `'self'`.
+    ///
+    /// The video editor hands the player a `blob:` URL — the webview's
+    /// capability file stays at `core:default`, so a video reaches it as bytes
+    /// rather than as a path it could open. CSP checks a `blob:` URL by its
+    /// scheme and never against the document's origin, so without `blob:` in
+    /// `media-src` every rung of the playback ladder is refused before the file
+    /// is parsed: the player reports an error, the editor climbs, remux and
+    /// transcode are refused the same way, and it settles on "this file can't
+    /// be played here" for a file that plays perfectly well. It shipped in the
+    /// video editor's first cut and nothing else could have caught it — jsdom
+    /// has no CSP, and the Linux smoke run opens a screen rather than a clip.
+    #[test]
+    fn the_csp_lets_the_player_read_an_object_url() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tauri.conf.json");
+        let config: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap_or_default())
+                .unwrap_or(serde_json::Value::Null);
+        let csp = config["app"]["security"]["csp"]
+            .as_str()
+            .unwrap_or_default();
+
+        let media = csp
+            .split(';')
+            .map(str::trim)
+            .find(|directive| directive.starts_with("media-src"))
+            .unwrap_or_default();
+        assert!(
+            media.split_whitespace().any(|source| source == "blob:"),
+            "media-src must allow blob: or the video editor cannot play anything — found {media:?}"
+        );
+    }
+}
