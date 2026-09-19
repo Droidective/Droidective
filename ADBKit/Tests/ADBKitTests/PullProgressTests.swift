@@ -46,4 +46,31 @@ import Testing
         #expect(belongs("com.foo.bar.split_config.en.apk", to: "com.foo.bar.apk"))
         #expect(!belongs("com.foo.baz.apk", to: "com.foo.bar.apk"))
     }
+
+    /// What the strip says under the bar.
+    ///
+    /// The sizes themselves are `ByteCountFormatter`'s and are localized, so
+    /// what is asserted here is the decision — when there is a caption at all,
+    /// and that both halves of it are the formatter's own answer, which is
+    /// what keeps the strip agreeing with the File Explorer row above it.
+    @Test func aKnownTotalIsCountedTowards() {
+        let size = { (bytes: Int) in
+            ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
+        }
+        #expect(PullProgress.caption(copied: 1_000, total: 4_000) == "\(size(1_000)) of \(size(4_000))")
+    }
+
+    /// A directory pull, and a file adb gave no size for: there is no total to
+    /// count towards, so the strip says nothing rather than inventing one.
+    @Test func noTotalMeansNoCaption() {
+        #expect(PullProgress.caption(copied: 900, total: nil) == nil)
+        #expect(PullProgress.caption(copied: 0, total: 0) == nil)
+    }
+
+    /// adb writes in blocks and a file system can report the allocated size,
+    /// so copied passing total is ordinary — "1.1 GB of 1.0 GB" is not.
+    @Test func copiedNeverOutrunsTheTotal() {
+        let both = PullProgress.caption(copied: 300, total: 200)
+        #expect(both == PullProgress.caption(copied: 200, total: 200))
+    }
 }

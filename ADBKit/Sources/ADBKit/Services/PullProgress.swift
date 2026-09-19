@@ -27,4 +27,26 @@ public enum PullProgress {
         guard !suffix.isEmpty else { return false }
         return fileName.hasPrefix("\(stem).") && fileName.hasSuffix(".\(suffix)")
     }
+
+    /// `419.4 MB of 1.2 GB` — what the progress strip says under the bar, or
+    /// nil when there is nothing true to say.
+    ///
+    /// Sized with `ByteCountFormatter`'s `.file` style, which is what the File
+    /// Explorer row and every other size in the app uses: the strip sits above
+    /// the row being pulled, and the two disagreeing about one file reads as a
+    /// broken transfer rather than as two conventions.
+    ///
+    /// A directory pull has no single total (`nil`), and neither has a file
+    /// whose size adb did not report, so those say nothing rather than
+    /// counting up towards a number that does not exist — the same reason the
+    /// bar goes indeterminate. `copied` is clamped, because adb writes in
+    /// blocks and a file system may report the allocated size, so passing the
+    /// total briefly is ordinary.
+    public static func caption(copied: Int, total: Int?) -> String? {
+        guard let total, total > 0 else { return nil }
+        let size = { (bytes: Int) in
+            ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
+        }
+        return "\(size(min(copied, total))) of \(size(total))"
+    }
 }
