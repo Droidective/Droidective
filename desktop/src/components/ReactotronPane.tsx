@@ -8,6 +8,7 @@ import {
   ReactotronToolbar,
   ReactotronWaiting,
   RENDER_WINDOW,
+  ReverseButton,
 } from "@/components/reactotron"
 import { useReactotron } from "@/hooks/useReactotron"
 import { useReactotronActions } from "@/hooks/useReactotronActions"
@@ -74,11 +75,18 @@ export function ReactotronPane({ device }: { device: Device | null }) {
         onExport={actions.exportShown}
         onCopyAll={actions.copyShown}
         trailing={
-          <ReactotronRestartMenu
-            serial={device?.serial ?? null}
-            clientName={timeline.clients[0]?.name ?? null}
-            onReport={actions.report}
-          />
+          <>
+            <ReactotronRestartMenu
+              serial={device?.serial ?? null}
+              clientName={timeline.clients[0]?.name ?? null}
+              onReport={actions.report}
+            />
+            {/* Beside Restart, as on the Mac. It used to appear only where the
+                status bar offers it — while no client is connected — so a
+                tunnel that dropped with the client still listed left no way to
+                re-open it, which is the one moment you need the button. */}
+            <ReverseButton disabled={device === null} onReverse={actions.openTunnel} />
+          </>
         }
       />
       <ReactotronStatus

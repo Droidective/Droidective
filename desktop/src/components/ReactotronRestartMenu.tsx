@@ -130,7 +130,10 @@ function SplitButton({
         type="button"
         disabled={disabled}
         onClick={onPrimary}
-        title="Stop the app and start it again"
+        // `RestartAppMenu`'s tooltip on the Mac. It says *why* you would press
+        // it — a client that has lost the relay reconnects on relaunch — which
+        // "stop and start it again" leaves you to work out.
+        title="Force-stop and relaunch the connected app so it reconnects"
         className="flex items-center gap-1.5 rounded-l-md bg-bg-raised px-2 py-1 text-[11.5px] text-text-secondary enabled:hover:text-text-primary disabled:opacity-40"
       >
         <RotateCw size={11} />

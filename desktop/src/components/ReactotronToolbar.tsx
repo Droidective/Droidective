@@ -1,5 +1,5 @@
 import { useRef, useState } from "react"
-import { ArrowDownUp, Eraser, ListFilter, Search, Upload } from "lucide-react"
+import { ArrowDownUp, Eraser, ListFilter, Search, Undo2, Upload } from "lucide-react"
 import { useDismissOnOutside } from "@/hooks/useDismissOnOutside"
 import { cn } from "@/lib/cn"
 import { isFiltering, type TimelineFilter } from "@/lib/reactotron-filter"
@@ -188,6 +188,35 @@ function IconButton({
       )}
     >
       <Icon size={13} />
+    </button>
+  )
+}
+
+/**
+ * Re-open the device's reverse tunnel, beside Restart as on the Mac.
+ *
+ * The device reaches the relay through its own localhost, so without
+ * `adb reverse tcp:9090 tcp:9090` nothing connects. The status bar offers this
+ * too, but only while no client is listed — and a tunnel can drop with the
+ * client still on screen, which is exactly when the button has to be reachable.
+ */
+export function ReverseButton({
+  disabled,
+  onReverse,
+}: {
+  disabled: boolean
+  onReverse: () => void
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onReverse}
+      title="Run adb reverse tcp:9090 tcp:9090 on connected devices"
+      className="flex shrink-0 items-center gap-1.5 rounded-md bg-bg-raised px-2 py-1 text-[11.5px] text-text-secondary enabled:hover:text-text-primary disabled:opacity-40"
+    >
+      <Undo2 size={11} />
+      Reverse :9090
     </button>
   )
 }

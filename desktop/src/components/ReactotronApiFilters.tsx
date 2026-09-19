@@ -23,6 +23,7 @@ export function ReactotronApiFilters({
     <div className="ml-1 flex flex-col gap-2 border-l border-border-subtle pt-1 pl-3">
       <Refinement
         label="Method"
+        hint="Show only requests with this HTTP method"
         // Only what the app has actually sent, not a canned list of verbs it
         // may never use.
         options={seenMethods.map((name) => ({ value: name, label: name }))}
@@ -32,6 +33,7 @@ export function ReactotronApiFilters({
       />
       <Refinement
         label="Status"
+        hint="Show only responses in this status class"
         options={STATUS_CLASSES.map((bucket) => ({
           value: String(bucket),
           label: statusLabel(bucket),
@@ -47,19 +49,27 @@ export function ReactotronApiFilters({
 
 function Refinement({
   label,
+  hint,
   options,
   chosen,
   onChoose,
   empty,
 }: {
   label: string
+  /**
+   * What the row narrows, as the Mac's `.help` says it.
+   *
+   * A pill reading `POST` or `4xx` does not say whether it filters requests or
+   * responses, and the two rows sit one above the other.
+   */
+  hint: string
   options: { value: string; label: string }[]
   chosen: string | null
   onChoose: (value: string | null) => void
   empty?: string
 }) {
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2" title={hint}>
       <span className="w-[52px] shrink-0 text-[11.5px] text-text-secondary">{label}</span>
       {options.length === 0 ? (
         <span className="text-[11.5px] text-text-tertiary">{empty}</span>
