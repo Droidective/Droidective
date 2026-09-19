@@ -846,7 +846,7 @@ cancelling the recording.
 `ReactotronView` is **four views behind a picker** — Timeline, Commands, State
 and REPL — and the port has the first one. Its 25/51 reads like half a screen
 missing; it is closer to one screen of four, with the ported one in good shape.
-What is absent is a *picker* and three panes:
+What was absent is a *picker* and three panes; two of the three have landed:
 
 - ~~**State**~~ — **landed.** Four cards, the Mac's: the store tree pulled on
   demand, path subscriptions, dispatch, and snapshots (take, restore, delete),
@@ -856,8 +856,12 @@ What is absent is a *picker* and three panes:
   two belong together. `state.backup.response` answers both "load the tree" and
   "take a snapshot" and only the asker can tell which, which is the one piece of
   state the hook keeps for disambiguation.
-- **REPL** (`replPane`) — evaluate an expression against the running app, with
-  `ls` to list what is in scope.
+- ~~**REPL**~~ — **landed.** Evaluate an expression against the running app,
+  with the registered names listed above the box: nothing else says what is in
+  scope, and an expression naming something the app never registered comes back
+  `undefined`, which looks identical to one that went wrong. Two details the
+  protocol forces — `repl.execute`'s payload is a bare string, not a wrapper,
+  and a `null` reply prints as `undefined` rather than as an empty panel.
 - **Commands** (`commandsPane`) — the buttons an app registers with
   `Reactotron.onCustomCommand(...)`.
 
