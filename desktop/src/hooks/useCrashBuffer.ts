@@ -64,13 +64,13 @@ export function useCrashBuffer(serial: string | null): CrashBuffer {
   }, [serial])
 
   const fetch = useCallback(
-    async (announce: boolean) => {
+    async (announce: boolean, background: boolean) => {
       if (serial === null) return
       // The five-second watch poll outlives a device switch, so a poll
       // answered for the old device must not replace the new one's list.
       const stillWanted = request.begin()
       try {
-        const next = (await listCrashes(serial)).crashes
+        const next = (await listCrashes(serial, background)).crashes
         if (!stillWanted()) return
         setError(null)
         setFailed(false)
@@ -102,7 +102,8 @@ export function useCrashBuffer(serial: string | null): CrashBuffer {
     if (serial === null) return
     let live = true
     setLoading(true)
-    void fetch(false).finally(() => {
+    // Not the user asking until Refresh has been pressed; see `listCrashes`.
+    void fetch(false, generation === 0).finally(() => {
       if (live) setLoading(false)
     })
     return () => {
@@ -110,15 +111,7 @@ export function useCrashBuffer(serial: string | null): CrashBuffer {
     }
   }, [serial, fetch, generation, request])
 
-  useEffect(() => {
-    if (!watching || serial === null) return
-    const timer = globalThis.setInterval(() => {
-      void fetch(true)
-    }, WATCH_INTERVAL_MS)
-    return () => {
-      globalThis.clearInterval(timer)
-    }
-  }, [watching, serial, fetch])
+  useWatchPoll(watching && serial !== null, fetch)
 
   return {
     crashes,
@@ -138,4 +131,24 @@ export function useCrashBuffer(serial: string | null): CrashBuffer {
     }, []),
     latest,
   }
+}
+
+/**
+ * The five-second Watch poll.
+ *
+ * Its own hook so `useCrashBuffer` stays inside its line budget, and because
+ * it is the one part of the hook with nothing to do with the state around it:
+ * a timer that re-reads, announcing an arrival and staying out of the Command
+ * Log, until Watch is turned off.
+ */
+function useWatchPoll(on: boolean, fetch: (announce: boolean, background: boolean) => void) {
+  useEffect(() => {
+    if (!on) return
+    const timer = globalThis.setInterval(() => {
+      fetch(true, true)
+    }, WATCH_INTERVAL_MS)
+    return () => {
+      globalThis.clearInterval(timer)
+    }
+  }, [on, fetch])
 }

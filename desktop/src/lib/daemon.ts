@@ -4,7 +4,6 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event"
 import type { RoleCatalogue } from "@/lib/roles"
 import type {
   AppsResponse,
-  CrashListResponse,
   DaemonError,
   DaemonStatus,
   Device,
@@ -138,16 +137,6 @@ export function fileInfo(args: {
   return invoke<FileInfoResponse>("file_info", args)
 }
 
-/** Every crash the device has recorded, newest first. */
-export function listCrashes(serial: string): Promise<CrashListResponse> {
-  return invoke<CrashListResponse>("list_crashes", { serial })
-}
-
-/** Empties `logcat -b crash` on the device. */
-export function clearCrashes(serial: string): Promise<RunResponse> {
-  return invoke<RunResponse>("clear_crashes", { serial })
-}
-
 /** Pulls into ~/Downloads/Droidective and answers where it landed. */
 export function pullFile(args: {
   serial: string
@@ -179,6 +168,7 @@ export function asDaemonError(error: unknown): DaemonError {
 // The host capabilities, the stream subscriptions and the per-device settings
 // calls live next door, so this file stays inside its line budget;
 // `@/lib/daemon` remains the one import for all of them.
+export { clearCommandLog, clearCrashes, commandLog, listCrashes } from "@/lib/daemon-diagnostics"
 export {
   backgroundAvailable,
   capturesFolder,

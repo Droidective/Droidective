@@ -178,6 +178,8 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         commands::pull_file,
         commands::list_crashes,
         commands::clear_crashes,
+        commands::command_log,
+        commands::clear_command_log,
         commands::dev_settings,
         commands::write_dev_setting,
         commands::restrictions,

@@ -229,6 +229,10 @@ public protocol DaemonBackend: Sendable {
     /// Downloads one, verifying the release asset's digest.
     func installManagedTool(_ tool: ManagedTool) async throws -> String
     func removeManagedTool(_ tool: ManagedTool) async throws
+    /// The recent adb calls, most-recent-first. Never throws: an empty log is
+    /// an answer, and this reads an in-memory actor rather than a device.
+    func commandLog() async -> [CommandLogEntry]
+    func clearCommandLog() async
 }
 
 /// `DeviceMonitor` in production.
@@ -863,6 +867,16 @@ public struct LiveBackend: DaemonBackend {
         try await ManagedToolStore(rootDirectory: managedToolsDirectory).remove(tool)
     }
 
+    /// The log `AdbClient` has been writing all along — every route shares one
+    /// client, so this is the whole daemon's record rather than one screen's.
+    public func commandLog() async -> [CommandLogEntry] {
+        await client.log.snapshot()
+    }
+
+    public func clearCommandLog() async {
+        await client.log.clear()
+    }
+
     public func apiWorkspace() async -> ApiClientData {
         await apiClientStore.load()
     }
@@ -1200,6 +1214,30 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
         guard let route = DaemonProtocol.Route(rawValue: head.uri) else {
             return (.notFound, encoded(DaemonProtocol.notFound))
         }
+        // The Command Log records what the user did, not what a timer did —
+        // the Mac's rule, kept there by wrapping view actions and leaving
+        // polling alone. Here the same distinction has to cross the wire,
+        // because only the client knows which a call is; see
+        // `CommandLogProtocol.header` for why absent means recorded.
+        //
+        // The stream topics need no such scope: they never reach this function.
+        guard !CommandLogProtocol.isBackground(
+            head.headers.first(name: CommandLogProtocol.header))
+        else {
+            return await dispatch(route: route, body: body, backend: backend)
+        }
+        return await CommandLog.userInitiated {
+            await dispatch(route: route, body: body, backend: backend)
+        }
+    }
+
+    /// One authorised route. Split from `respond` so the Command Log's
+    /// task-local scope wraps exactly the dispatch and nothing around it.
+    private static func dispatch(
+        route: DaemonProtocol.Route, body: ByteBuffer, backend: any DaemonBackend
+    ) async -> (HTTPResponseStatus, Data) {
+        func encoded(_ body: some Encodable) -> Data { DaemonProtocol.encoded(body) }
+
         switch route {
         case .devicesList:
             let devices = await backend.listDevices()
@@ -1515,6 +1553,11 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
                     code: "adb_failed", message: "The app action failed.",
                     detail: "\(error)")))
             }
+
+        case .commandLogList:
+            return Self.answer(await CommandLogRoutes.list(backend: backend))
+        case .commandLogClear:
+            return Self.answer(await CommandLogRoutes.clear(backend: backend))
         }
     }
 

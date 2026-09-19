@@ -202,30 +202,6 @@ export interface FilePullResponse {
   path: string
 }
 
-/** One crash, as `CrashParser` split it out of a logcat buffer. */
-export interface CrashReport {
-  /** Stable across refetches, so a watch poll does not move the selection. */
-  id: string
-  /** A `CrashReport.Kind` raw value: java, native, reactNative, anr, unknown. */
-  kind: string
-  /** Sent by the daemon so both UIs name a kind the same way. */
-  kindLabel: string
-  /** Logcat's own timestamp. A string — logcat prints no year. */
-  timestamp: string | null
-  process: string | null
-  pid: number | null
-  title: string
-  /** The block as logcat printed it. */
-  raw: string
-  /** The block with the threadtime prefixes stripped. */
-  body: string
-}
-
-export interface CrashListResponse {
-  /** Newest first. */
-  crashes: CrashReport[]
-}
-
 /** The connect endpoint a freshly paired device advertised over mDNS. */
 export interface Discovered {
   name: string
@@ -292,5 +268,6 @@ export interface CommandPreset {
 }
 
 export type * from "@/lib/wire-apk"
+export type * from "@/lib/wire-diagnostics"
 export type * from "@/lib/wire-settings"
 export type * from "@/lib/wire-stream"

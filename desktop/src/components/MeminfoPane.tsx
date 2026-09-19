@@ -46,9 +46,11 @@ export function MeminfoPane({
     if (serial === null || packageId === null) return
 
     let live = true
-    const read = async () => {
+    // The first read lands in the Command Log; the two-second poll that
+    // follows stays out of it, exactly as `MeminfoView` splits them.
+    const read = async (background: boolean) => {
       try {
-        const next = await meminfo(serial, packageId)
+        const next = await meminfo(serial, packageId, background)
         if (!live) return
         setInfo(next)
         setError(null)
@@ -63,8 +65,8 @@ export function MeminfoPane({
         if (live) setError(asDaemonError(thrown))
       }
     }
-    void read()
-    const timer = globalThis.setInterval(() => void read(), INTERVAL_MS)
+    void read(false)
+    const timer = globalThis.setInterval(() => void read(true), INTERVAL_MS)
     return () => {
       live = false
       globalThis.clearInterval(timer)

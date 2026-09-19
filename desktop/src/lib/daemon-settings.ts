@@ -141,8 +141,19 @@ export function setPermission(args: {
   return invoke<RunResponse>("set_permission", args)
 }
 
-export function meminfo(serial: string, packageId: string): Promise<MemInfoResponse> {
-  return invoke<MemInfoResponse>("meminfo", { serial, packageId })
+/**
+ * `dumpsys meminfo` for one app.
+ *
+ * `background` is the two-second poll. The Mac records the first read and
+ * leaves the rest out (`MeminfoView`), or the screen being open would evict
+ * the whole 200-entry log in under seven minutes.
+ */
+export function meminfo(
+  serial: string,
+  packageId: string,
+  background: boolean,
+): Promise<MemInfoResponse> {
+  return invoke<MemInfoResponse>("meminfo", { serial, packageId, background })
 }
 
 /** One directory inside a debuggable app's sandbox, via `run-as`. */

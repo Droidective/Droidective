@@ -214,7 +214,53 @@ crash` empties one buffer, and the same crashes can come back through the
 main-buffer fallback on the next list. A client that offers Clear has to keep
 its own high-water mark — the Mac does, and so does `desktop/`.
 
-### 4.3 Errors
+### 4.3 The Command Log, and the header that decides what is in it
+
+`/v1/commandlog/list` and `/v1/commandlog/clear` read and empty the recent adb
+calls behind Settings ▸ Privacy ▸ Command log. Neither takes a body: the log is
+the daemon's, not a device's.
+
+The daemon adds nothing to it. `AdbClient` has always recorded every call it
+makes into the `CommandLog` actor it was handed, gated on the `isUserInitiated`
+task-local, so the entire feature is scoping that task-local around a route —
+which the dispatch does — and reading the actor back out.
+
+**What is in it is the client's decision, and it says so in a header.** The Mac
+keeps background polling out by simply not wrapping it: `MeminfoView`'s comment
+is "the first read is user-initiated so it lands in the Recent log; the 2s
+polling that follows stays out". A route cannot tell a Refresh someone pressed
+from the poll five seconds later, so `X-Droidective-Background: 1` marks the
+poll.
+
+**Absent means recorded**, and that direction is deliberate rather than
+convenient. The log holds 200 entries, so a poll that forgets the header is
+visible noise somebody notices and fixes; an action that forgot the opposite
+flag would be silently missing from the log a bug report is pasted out of — the
+failure the Mac's own feature checklist marks as silent. Three callers mark
+themselves today: the crash Watch poll and its pane's first load, the memory
+screen's two-second read, and every `/v1/logcat/pid` lookup (always, since the
+app filter re-reads it for as long as the pane is open —
+`CommandLog`'s own documentation names it as one of the three things kept out).
+
+The stream topics need no such marking: they never reach the request handler,
+and neither does `DeviceMonitor`'s poll, which runs in a task of its own.
+
+```jsonc
+// POST /v1/commandlog/list  → 200
+{ "entries": [ { "id": "1867297F-…", "at": 1789765007523,
+                 "command": "adb -s emulator-5554 shell getprop",
+                 "exitCode": 0, "durationMs": 36,
+                 "stdout": "[ro.product.model]: [sdk_gphone64_arm64]\n…",
+                 "stderr": "" } ] }
+```
+
+`exitCode` is **absent** when the process was killed rather than exiting, which
+the row renders as "killed" — a timed-out call shown as `exit 0` would be a lie
+about what happened. `at` is epoch milliseconds and `durationMs` is whole
+milliseconds, both converted here so no client re-derives them from a `Date` or
+a `Duration`.
+
+### 4.4 Errors
 
 One shape everywhere, so the UI has one error path:
 

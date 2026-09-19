@@ -7,22 +7,23 @@ use crate::daemon::wire::{
     AabConvertRequest, AabConvertResponse, ApkPathRequest, ApkReport, ApkSignRequest,
     ApkSignResponse, ApkToolchain, AppControlRequest, AppInfoResponse, AppPullRequest,
     AppPullResponse, AppRequest, AppsListRequest, AppsResponse, BugReportRequest,
-    BugReportResponse, CrashListRequest, CrashListResponse, CustomCommandRunRequest,
-    CustomCommandsResponse, CustomCommandsWriteRequest, DecompileFileRequest, DecompileFileText,
-    DecompileHits, DecompileRebuildRequest, DecompileRebuildResponse, DecompileRequest,
-    DecompileSearchRequest, DecompileTree, DeepLinkLaunchRequest, DeepLinksRequest,
-    DeepLinksResponse, DeepLinksWriteRequest, DevSettingsResponse, DevSettingsWriteRequest, Device,
-    DevicePropsResponse, DeviceRequest, DevicesResponse, DnsResponse, DnsWriteRequest,
-    EmulatorActionRequest, EmulatorsResponse, ErrorEnvelope, FeatureSummary, FeaturesResponse,
-    FileInfoRequest, FileInfoResponse, FileOperationRequest, FilePullRequest, FilePullResponse,
-    FilesListRequest, FilesListResponse, ForegroundResponse, InstallFormatsResponse,
-    InstallRequest, InstallResponse, LaunchResponse, LogcatPidResponse, ManagedToolRequest,
-    ManagedTools, ManagedToolsListResponse, MemInfoResponse, PairResponse, PermissionWriteRequest,
-    PermissionsResponse, ReactotronReverseRequest, ReactotronReverseResponse, RecordOptions,
-    RecordStartRequest, RecordStatusResponse, RecordStoppedResponse, RestrictionWriteRequest,
-    RestrictionsResponse, RolesResponse, RootStatusResponse, RunRequest, RunResponse,
-    SandboxRequest, SandboxResponse, ToolInstallRequest, ToolInstallResponse, ToolsResponse,
-    WifiResponse, WifiWriteRequest, WirelessActionRequest,
+    BugReportResponse, CommandLogResponse, CrashListRequest, CrashListResponse,
+    CustomCommandRunRequest, CustomCommandsResponse, CustomCommandsWriteRequest,
+    DecompileFileRequest, DecompileFileText, DecompileHits, DecompileRebuildRequest,
+    DecompileRebuildResponse, DecompileRequest, DecompileSearchRequest, DecompileTree,
+    DeepLinkLaunchRequest, DeepLinksRequest, DeepLinksResponse, DeepLinksWriteRequest,
+    DevSettingsResponse, DevSettingsWriteRequest, Device, DevicePropsResponse, DeviceRequest,
+    DevicesResponse, DnsResponse, DnsWriteRequest, EmulatorActionRequest, EmulatorsResponse,
+    ErrorEnvelope, FeatureSummary, FeaturesResponse, FileInfoRequest, FileInfoResponse,
+    FileOperationRequest, FilePullRequest, FilePullResponse, FilesListRequest, FilesListResponse,
+    ForegroundResponse, InstallFormatsResponse, InstallRequest, InstallResponse, LaunchResponse,
+    LogcatPidResponse, ManagedToolRequest, ManagedTools, ManagedToolsListResponse, MemInfoResponse,
+    PairResponse, PermissionWriteRequest, PermissionsResponse, ReactotronReverseRequest,
+    ReactotronReverseResponse, RecordOptions, RecordStartRequest, RecordStatusResponse,
+    RecordStoppedResponse, RestrictionWriteRequest, RestrictionsResponse, RolesResponse,
+    RootStatusResponse, RunRequest, RunResponse, SandboxRequest, SandboxResponse,
+    ToolInstallRequest, ToolInstallResponse, ToolsResponse, WifiResponse, WifiWriteRequest,
+    WirelessActionRequest,
 };
 use crate::error::DaemonError;
 
@@ -118,8 +119,15 @@ impl DaemonClient {
         self.post("/v1/files/pull", request).await
     }
 
-    pub async fn list_crashes(&self, serial: String) -> Result<CrashListResponse, DaemonError> {
-        self.post("/v1/crashes/list", &CrashListRequest { serial })
+    /// `background` is the five-second Watch poll and the pane's own first
+    /// load; only the Refresh button is the user asking, which is exactly the
+    /// split `CrashView.fetch(userInitiated:)` makes on the Mac.
+    pub async fn list_crashes(
+        &self,
+        serial: String,
+        background: bool,
+    ) -> Result<CrashListResponse, DaemonError> {
+        self.post_marked("/v1/crashes/list", &CrashListRequest { serial }, background)
             .await
     }
 
@@ -189,8 +197,16 @@ impl DaemonClient {
         self.post("/v1/app/permission", request).await
     }
 
-    pub async fn meminfo(&self, request: &AppRequest) -> Result<MemInfoResponse, DaemonError> {
-        self.post("/v1/app/meminfo", request).await
+    /// `background` is the two-second poll. The Mac records the first read and
+    /// leaves the rest out (`MeminfoView`), so the log shows that the screen
+    /// was opened rather than thirty entries a minute for as long as it is.
+    pub async fn meminfo(
+        &self,
+        request: &AppRequest,
+        background: bool,
+    ) -> Result<MemInfoResponse, DaemonError> {
+        self.post_marked("/v1/app/meminfo", request, background)
+            .await
     }
 
     pub async fn sandbox_list(
@@ -356,13 +372,25 @@ impl DaemonClient {
     }
 
     /// The process id an app is running under, for the log's app filter.
+    /// Always background: the app filter re-reads the pid on a timer for as
+    /// long as the pane is open, and `CommandLog`'s own documentation names
+    /// "logcat pid lookups" as one of the three things kept out of the log.
     pub async fn logcat_pid(
         &self,
         serial: String,
         package_id: String,
     ) -> Result<LogcatPidResponse, DaemonError> {
-        self.post("/v1/logcat/pid", &AppRequest { serial, package_id })
+        self.post_marked("/v1/logcat/pid", &AppRequest { serial, package_id }, true)
             .await
+    }
+
+    pub async fn command_log(&self) -> Result<CommandLogResponse, DaemonError> {
+        // Reading the log is not itself worth a line in it.
+        self.post_marked("/v1/commandlog/list", &EMPTY, true).await
+    }
+
+    pub async fn clear_command_log(&self) -> Result<RunResponse, DaemonError> {
+        self.post_marked("/v1/commandlog/clear", &EMPTY, true).await
     }
 
     pub async fn detect_tools(&self) -> Result<ToolsResponse, DaemonError> {
@@ -457,11 +485,32 @@ impl DaemonClient {
         path: &str,
         body: &Body,
     ) -> Result<Reply, DaemonError> {
-        let response = self
+        self.post_marked(path, body, false).await
+    }
+
+    /// `post`, saying whether this call is background polling rather than
+    /// something the user just did.
+    ///
+    /// The daemon scopes the Command Log around a route, and only this side
+    /// knows which of the two a call is — the Mac draws the same line by
+    /// wrapping view actions in `CommandLog.userInitiated` and leaving its
+    /// timers alone. Absent means recorded, so a new route needs no thought;
+    /// only a poll has to opt out.
+    async fn post_marked<Body: Serialize + ?Sized, Reply: DeserializeOwned>(
+        &self,
+        path: &str,
+        body: &Body,
+        background: bool,
+    ) -> Result<Reply, DaemonError> {
+        let mut request = self
             .http
             .post(format!("{}{path}", self.base))
             .bearer_auth(&self.token)
-            .json(body)
+            .json(body);
+        if background {
+            request = request.header(BACKGROUND_HEADER, "1");
+        }
+        let response = request
             .send()
             .await
             .map_err(|error| DaemonError::Transport(error.to_string()))?;
@@ -493,6 +542,11 @@ impl DaemonClient {
 /// The no-argument routes still take a JSON body; an empty object is the
 /// smallest thing the daemon's decoder accepts.
 static EMPTY: &str = "{}";
+
+/// Mirrors `CommandLogProtocol.header` in the daemon. Kept here rather than
+/// derived, because the daemon is the authority and a constant that disagrees
+/// would silently log everything.
+const BACKGROUND_HEADER: &str = "X-Droidective-Background";
 
 /// The API Testing routes this process will forward to.
 ///

@@ -128,6 +128,11 @@ public enum DaemonProtocol {
         case managedToolsList = "/v1/tools/managed"
         case managedToolsInstall = "/v1/tools/managed/install"
         case managedToolsRemove = "/v1/tools/managed/remove"
+        /// The recent adb calls, behind Settings ▸ Privacy ▸ Command log.
+        /// Neither takes a body: the log belongs to the daemon rather than to
+        /// any one device.
+        case commandLogList = "/v1/commandlog/list"
+        case commandLogClear = "/v1/commandlog/clear"
     }
 
     /// The multiplexed stream socket. Not a `Route`: it is a WebSocket upgrade
