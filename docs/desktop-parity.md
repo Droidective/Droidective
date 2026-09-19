@@ -876,9 +876,9 @@ With that in place each pane *is* the ordinary four layers. The `reactotron`
 stream topic already carries the answers back; the timeline renders
 `subscription` and `SNAPSHOT` rows today.
 
-The picker shows Timeline and State only. Commands and REPL join it as they
-land rather than sitting there disabled, which would advertise a screen nobody
-can open.
+The picker shows Timeline, State and REPL. Custom Commands joins when it lands
+rather than sitting there disabled, which would advertise a screen nobody can
+open.
 
 Also unported, and smaller: split panes (`Split into two panes`, `Clear the
 whole timeline — both panes`, `Pane cleared`), find-in-object inside the detail

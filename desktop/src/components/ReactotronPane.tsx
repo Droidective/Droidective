@@ -1,16 +1,18 @@
 import { useMemo, useState } from "react"
-import { ReactotronStatePane } from "@/components/ReactotronStatePane"
-import { useReactotronState } from "@/hooks/useReactotronState"
 import {
   ReactotronFeed,
+  ReactotronReplPane,
   ReactotronFilterSheet,
   ReactotronNotices,
   ReactotronRestartMenu,
+  ReactotronStatePane,
   ReactotronStatus,
   ReactotronToolbar,
   ReactotronWaiting,
   RENDER_WINDOW,
   ReverseButton,
+  useReactotronRepl,
+  useReactotronState,
 } from "@/components/reactotron"
 import { useReactotron } from "@/hooks/useReactotron"
 import { useReactotronActions } from "@/hooks/useReactotronActions"
@@ -45,6 +47,7 @@ export function ReactotronPane({ device }: { device: Device | null }) {
   // Fed the raw rows, not the filtered ones: a `state.values.response` the user
   // has filtered out of view is still the answer this screen asked for.
   const state = useReactotronState(timeline.rows)
+  const repl = useReactotronRepl(timeline.rows)
 
   // The waiting screen gives way only once there is something to read. A relay
   // whose app has since disconnected still has rows, and those last events are
@@ -71,9 +74,10 @@ export function ReactotronPane({ device }: { device: Device | null }) {
       <ReactotronViewPicker view={view} onView={setView} />
       {view === "state" ? (
         <ReactotronStatePane session={state} />
+      ) : view === "repl" ? (
+        <ReactotronReplPane session={repl} />
       ) : (
-        <>
-      <ReactotronTimelineView
+        <ReactotronTimelineView
             filter={filter}
             onFilter={setFilter}
             filtering={filtering}
@@ -86,7 +90,6 @@ export function ReactotronPane({ device }: { device: Device | null }) {
             actions={actions}
             device={device}
           />
-        </>
       )}
     </div>
   )
@@ -187,11 +190,11 @@ function ReactotronTimelineView({
 }
 
 /**
- * Timeline or State — the Mac's `viewPicker`, minus the two panes this app does
- * not have yet. Commands and REPL join it when they land rather than sitting
- * here disabled, which would advertise a screen nobody can open.
+ * Timeline, State or REPL — the Mac's `viewPicker`, minus custom Commands,
+ * which joins when it lands rather than sitting here disabled advertising a
+ * screen nobody can open.
  */
-type ReactotronView = "timeline" | "state"
+type ReactotronView = "timeline" | "state" | "repl"
 
 function ReactotronViewPicker({
   view,
@@ -202,7 +205,7 @@ function ReactotronViewPicker({
 }) {
   return (
     <div className="flex shrink-0 items-center gap-1 border-b border-border-subtle bg-bg-chrome px-3 py-1.5">
-      {(["timeline", "state"] as const).map((option) => (
+      {(["timeline", "state", "repl"] as const).map((option) => (
         <button
           key={option}
           type="button"
