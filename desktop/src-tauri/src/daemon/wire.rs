@@ -936,6 +936,28 @@ pub struct ReactotronReverseResponse {
     pub command: String,
 }
 
+/// One command aimed at a connected Reactotron client.
+///
+/// `payload` is `serde_json::Value` rather than a typed shape on purpose: this
+/// is Reactotron's vocabulary, not ours, and the screens that speak it are the
+/// only thing that needs to know what a `state.values.request` carries. A type
+/// here would mean a Rust change for every command the protocol gains.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ReactotronSendRequest {
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub payload: serde_json::Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub connection_id: Option<i64>,
+}
+
+/// How many clients the relay reached — not whether the command worked. The
+/// answer comes back later on the timeline; zero means nothing was listening.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ReactotronSendResponse {
+    pub delivered: i64,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ToolReport {
     /// adb, scrcpy, ffmpeg, emulator.

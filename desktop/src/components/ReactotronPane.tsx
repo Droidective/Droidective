@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react"
+import { ReactotronStatePane } from "@/components/ReactotronStatePane"
+import { useReactotronState } from "@/hooks/useReactotronState"
 import {
   ReactotronFeed,
   ReactotronFilterSheet,
@@ -13,6 +15,7 @@ import {
 import { useReactotron } from "@/hooks/useReactotron"
 import { useReactotronActions } from "@/hooks/useReactotronActions"
 import { emptyFilter, filterRows, seenMethods, type TimelineFilter } from "@/lib/reactotron-filter"
+import type { TimelineRow } from "@/lib/reactotron-rows"
 import type { Device } from "@/lib/wire"
 
 /**
@@ -30,6 +33,7 @@ export function ReactotronPane({ device }: { device: Device | null }) {
   const [filter, setFilter] = useState<TimelineFilter>(emptyFilter)
   const [filtering, setFiltering] = useState(false)
   const [newestFirst, setNewestFirst] = useState(false)
+  const [view, setView] = useState<ReactotronView>("timeline")
 
   const { timeline } = feed
   const visible = useMemo(() => filterRows(timeline.rows, filter), [timeline.rows, filter])
@@ -38,6 +42,9 @@ export function ReactotronPane({ device }: { device: Device | null }) {
     [timeline.rows, filter.method],
   )
   const actions = useReactotronActions({ device, port: timeline.port, visible })
+  // Fed the raw rows, not the filtered ones: a `state.values.response` the user
+  // has filtered out of view is still the answer this screen asked for.
+  const state = useReactotronState(timeline.rows)
 
   // The waiting screen gives way only once there is something to read. A relay
   // whose app has since disconnected still has rows, and those last events are
@@ -61,15 +68,68 @@ export function ReactotronPane({ device }: { device: Device | null }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-bg-root">
+      <ReactotronViewPicker view={view} onView={setView} />
+      {view === "state" ? (
+        <ReactotronStatePane session={state} />
+      ) : (
+        <>
+      <ReactotronTimelineView
+            filter={filter}
+            onFilter={setFilter}
+            filtering={filtering}
+            onFiltering={setFiltering}
+            newestFirst={newestFirst}
+            onNewestFirst={setNewestFirst}
+            feed={feed}
+            visible={visible}
+            methods={methods}
+            actions={actions}
+            device={device}
+          />
+        </>
+      )}
+    </div>
+  )
+}
+
+/** The timeline half: its toolbar, status, notices, feed and filter sheet. */
+function ReactotronTimelineView({
+  filter,
+  onFilter,
+  filtering,
+  onFiltering,
+  newestFirst,
+  onNewestFirst,
+  feed,
+  visible,
+  methods,
+  actions,
+  device,
+}: {
+  filter: TimelineFilter
+  onFilter: (filter: TimelineFilter) => void
+  filtering: boolean
+  onFiltering: (filtering: boolean) => void
+  newestFirst: boolean
+  onNewestFirst: (newestFirst: boolean) => void
+  feed: ReturnType<typeof useReactotron>
+  visible: TimelineRow[]
+  methods: string[]
+  actions: ReturnType<typeof useReactotronActions>
+  device: Device | null
+}) {
+  const { timeline } = feed
+  return (
+    <>
       <ReactotronToolbar
         filter={filter}
-        onFilter={setFilter}
+        onFilter={onFilter}
         visible={visible.length}
         total={timeline.rows.length}
         newestFirst={newestFirst}
-        onNewestFirst={setNewestFirst}
+        onNewestFirst={onNewestFirst}
         onOpenFilters={() => {
-          setFiltering(true)
+          onFiltering(true)
         }}
         onClear={feed.clear}
         onExport={actions.exportShown}
@@ -114,14 +174,51 @@ export function ReactotronPane({ device }: { device: Device | null }) {
           filter={filter}
           seenMethods={methods}
           onApply={(applied) => {
-            setFilter(applied)
-            setFiltering(false)
+            onFilter(applied)
+            onFiltering(false)
           }}
           onDismiss={() => {
-            setFiltering(false)
+            onFiltering(false)
           }}
         />
       ) : null}
+    </>
+  )
+}
+
+/**
+ * Timeline or State — the Mac's `viewPicker`, minus the two panes this app does
+ * not have yet. Commands and REPL join it when they land rather than sitting
+ * here disabled, which would advertise a screen nobody can open.
+ */
+type ReactotronView = "timeline" | "state"
+
+function ReactotronViewPicker({
+  view,
+  onView,
+}: {
+  view: ReactotronView
+  onView: (view: ReactotronView) => void
+}) {
+  return (
+    <div className="flex shrink-0 items-center gap-1 border-b border-border-subtle bg-bg-chrome px-3 py-1.5">
+      {(["timeline", "state"] as const).map((option) => (
+        <button
+          key={option}
+          type="button"
+          aria-pressed={view === option}
+          onClick={() => {
+            onView(option)
+          }}
+          className={
+            view === option
+              ? "rounded-md bg-accent/20 px-2.5 py-0.5 text-[11.5px] capitalize text-accent"
+              : "rounded-md px-2.5 py-0.5 text-[11.5px] capitalize text-text-secondary hover:text-text-primary"
+          }
+        >
+          {option}
+        </button>
+      ))}
     </div>
   )
 }

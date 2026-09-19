@@ -13,6 +13,7 @@
  */
 
 import { Channel, invoke } from "@tauri-apps/api/core"
+import type { JsonValue } from "@/lib/json"
 import type { PullEvent } from "@/lib/pull-progress"
 import type {
   Device,
@@ -183,6 +184,22 @@ export function reactotronUnreverse(
   port: number | null,
 ): Promise<ReactotronReverseResponse> {
   return invoke("reactotron_unreverse", { serials, port })
+}
+
+/**
+ * Ask the connected app to do something — read its store, dispatch an action.
+ *
+ * Fire-and-forget, like the route: Reactotron answers with another command on
+ * the timeline rather than on this call, so what comes back is only how many
+ * clients heard it. Zero means no app was connected, which is the one outcome
+ * a screen can act on.
+ */
+export function reactotronSend(
+  kind: string,
+  payload: JsonValue,
+  connectionId: number | null = null,
+): Promise<{ delivered: number }> {
+  return invoke("reactotron_send", { kind, payload, connectionId })
 }
 
 /** One open terminal, and everything that can be sent into it. */

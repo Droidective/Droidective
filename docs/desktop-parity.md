@@ -848,10 +848,14 @@ and REPL — and the port has the first one. Its 25/51 reads like half a screen
 missing; it is closer to one screen of four, with the ported one in good shape.
 What is absent is a *picker* and three panes:
 
-- **State** (`statePane`, ~175 lines) — four cards: the store tree pulled on
-  demand, path subscriptions (watch `user.name`, stop watching), dispatch, and
-  snapshots (take, restore, delete). The most valuable of the three: it is what
-  Reactotron is for beyond reading logs.
+- ~~**State**~~ — **landed.** Four cards, the Mac's: the store tree pulled on
+  demand, path subscriptions, dispatch, and snapshots (take, restore, delete),
+  behind a Timeline/State picker. The protocol carries no correlation id, so a
+  request goes out over `/v1/reactotron/send` and its answer arrives as an
+  ordinary timeline row; `useReactotronState` is the only thing that knows the
+  two belong together. `state.backup.response` answers both "load the tree" and
+  "take a snapshot" and only the asker can tell which, which is the one piece of
+  state the hook keeps for disambiguation.
 - **REPL** (`replPane`) — evaluate an expression against the running app, with
   `ls` to list what is in scope.
 - **Commands** (`commandsPane`) — the buttons an app registers with
@@ -871,6 +875,10 @@ outbound write rather than a redesign — closed now by
 With that in place each pane *is* the ordinary four layers. The `reactotron`
 stream topic already carries the answers back; the timeline renders
 `subscription` and `SNAPSHOT` rows today.
+
+The picker shows Timeline and State only. Commands and REPL join it as they
+land rather than sitting there disabled, which would advertise a screen nobody
+can open.
 
 Also unported, and smaller: split panes (`Split into two panes`, `Clear the
 whole timeline — both panes`, `Pane cleared`), find-in-object inside the detail

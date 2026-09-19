@@ -199,6 +199,7 @@ export type { MirrorSession, Subscription, TerminalSession } from "@/lib/daemon-
 export {
   openTerminal,
   reactotronReverse,
+  reactotronSend,
   reactotronUnreverse,
   watchDevices,
   watchLogcat,
