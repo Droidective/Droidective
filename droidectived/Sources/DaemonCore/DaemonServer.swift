@@ -245,6 +245,13 @@ public protocol DaemonBackend: Sendable {
     ) async throws -> String
     /// Best-effort removal of a proxy the editor is done with.
     func removeVideoProxy(at path: String) async
+    /// The saved Send Text snippets, as stored.
+    func snippets() async -> [SendTextSnippet]
+    /// One mutation, answering the updated list — or nil when `Presets`
+    /// refused it (an empty name or text, or a name already taken).
+    func writeSnippet(_ request: PresetProtocol.WriteRequest) async -> [SendTextSnippet]?
+    /// A snippet's text with its live values filled in, and this host's IPv4.
+    func expandSnippet(_ request: PresetProtocol.ExpandRequest) async -> (String, String?)
 }
 
 /// `DeviceMonitor` in production.
@@ -261,6 +268,8 @@ public struct LiveBackend: DaemonBackend {
     private let customCommandStore: JSONStore<[CustomCommand]>
     /// The API Testing workspace — the Mac's own `api-client.json`.
     private let apiClientStore: JSONStore<ApiClientData>
+    /// The Mac's own `presets.json`, for the Send Text snippets.
+    private let presetStore: JSONStore<Presets>
     /// The one recording this daemon will run. An actor, so the routes can be
     /// four verbs over state that outlives any single request.
     private let recorder: DeviceRecorder
@@ -288,6 +297,7 @@ public struct LiveBackend: DaemonBackend {
         deepLinks: JSONStore<DeepLinksMap>,
         customCommands: JSONStore<[CustomCommand]>,
         apiClient: JSONStore<ApiClientData>,
+        presets: JSONStore<Presets>,
         toolsDirectory: URL,
         scrcpyServer: String? = nil
     ) {
@@ -299,6 +309,7 @@ public struct LiveBackend: DaemonBackend {
         deepLinkStore = deepLinks
         customCommandStore = customCommands
         apiClientStore = apiClient
+        presetStore = presets
         apkToolchainValue = ApkToolchain(
             locator: locator, store: ManagedToolStore(rootDirectory: toolsDirectory))
         decompileCache = AppPaths.decompiledCacheDir
@@ -920,6 +931,42 @@ public struct LiveBackend: DaemonBackend {
 
     public func removeVideoProxy(at path: String) async {
         try? FileManager.default.removeItem(at: URL(fileURLWithPath: path))
+    }
+
+    public func snippets() async -> [SendTextSnippet] {
+        await presetStore.load().sendTextSnippets
+    }
+
+    /// One mutation, through `Presets`' own methods.
+    ///
+    /// Read-modify-write rather than a diff: the store is a whole-file JSON
+    /// document shared with the Mac app, and the rules for what a snippet may
+    /// be live on the type rather than here.
+    public func writeSnippet(_ request: PresetProtocol.WriteRequest) async -> [SendTextSnippet]? {
+        var presets = await presetStore.load()
+        switch request.op {
+        case .add:
+            guard presets.addSnippet(named: request.name, text: request.text ?? "") else {
+                return nil
+            }
+        case .remove:
+            presets.removeSnippet(named: request.name)
+        case .use:
+            presets.recordSnippetUse(named: request.name)
+        }
+        // A save that fails leaves the in-memory answer wrong, so it is not
+        // swallowed: the client gets the store's state, not the one it asked
+        // for.
+        guard (try? await presetStore.save(presets)) != nil else { return nil }
+        return presets.sendTextSnippets
+    }
+
+    public func expandSnippet(_ request: PresetProtocol.ExpandRequest) async -> (String, String?) {
+        let hostIp = HostNetwork.primaryIPv4()
+        var values: [String: String] = [:]
+        if let clipboard = request.clipboard { values["clipboard"] = clipboard }
+        if let hostIp { values["ip"] = hostIp }
+        return (SnippetPlaceholders.expand(request.text, values: values), hostIp)
     }
 
     private func videoService() async throws -> VideoEditService {
@@ -1631,6 +1678,15 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
             return Self.answer(
                 await VideoRoutes.removeProxy(
                     body: Data(body.readableBytesView), backend: backend))
+
+        case .presetSnippets:
+            return Self.answer(await PresetRoutes.snippets(backend: backend))
+        case .presetSnippetsWrite:
+            return Self.answer(
+                await PresetRoutes.write(body: Data(body.readableBytesView), backend: backend))
+        case .presetExpand:
+            return Self.answer(
+                await PresetRoutes.expand(body: Data(body.readableBytesView), backend: backend))
         }
     }
 

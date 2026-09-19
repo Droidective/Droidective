@@ -837,18 +837,31 @@ Found by driving the app against a live emulator, not by reading it.
 
 ## Backlog
 
-### Send Text snippets
+### ~~Send Text snippets~~ — landed
 
-The Mac keeps a saved, recency-ranked snippet library for Send Text, with
-`{clipboard}` and `{ip}` expanded at the moment one is inserted
-(`SendTextView` plus `Presets.sendTextSnippets`), and since v3.12 the Quick
-Actions panel's Send Text screen carries the same list under its field
-(`QuickSnippetList` — ↓/↑ walk it, ⏎ inserts, ⌘⏎ still runs). This app has no
-snippet concept at all, so the panel is the *second* half of that job rather
-than the first: it needs the presets store served over the daemon, and a Send
-Text screen to curate snippets from, before the panel list has anything to
-show. Until then the panel's Send Text screen is the plain form, which is what
-it has always been — nothing regressed, the Mac simply grew a thing.
+Both halves. **The screen**: `send-text` stays a `formAction` in the registry —
+the palette and the panel still render it from its fields — and gains a pane
+beside it, as `FeatureDetailView` special-cases it on the Mac. Two sections, as
+`SendTextView` has: the send flow with ⏎ to send, and one recency-ranked
+snippet library with a search over the name *and* the inserted text, one
+creator, and click-to-insert. **The panel**: `QuickSnippetList` under the
+form's field — ↓/↑ walk it, ⏎ inserts the highlighted one while ⌘⏎ still runs,
+the top five show and the rest sit behind "Show N more", and there is no search
+field for the Mac's reason: the panel's one text field holds the text being
+*sent*, so filtering by it would hide the snippet somebody was reaching for.
+
+**The store is the Mac's own `presets.json`**, in the shared support dir, so a
+developer running both has one set of snippets. The write is a **verb** rather
+than the whole list the deep links and custom commands send, because the rules
+that make a snippet are `Presets`' own methods and a second copy would drift;
+`{clipboard}` and `{ip}` are expanded by ADBKit's `SnippetPlaceholders`, with
+the clipboard supplied by the Rust process because a headless daemon has none.
+
+What is ported here rather than served is the **ranking and the filtering**
+(`lib/snippets.ts`), because the panel needs them synchronously while somebody
+is typing; both follow `Presets.recentSnippets` and `SendTextSnippet.matches`
+and are tested against their rules, including the one that is easy to lose —
+a snippet that has never been used sorts after every one that has.
 
 ### A finding that applies to more than one item
 

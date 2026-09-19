@@ -143,6 +143,12 @@ public enum DaemonProtocol {
         case videoProxy = "/v1/video/proxy"
         case videoExport = "/v1/video/export"
         case videoProxyRemove = "/v1/video/proxy/remove"
+        /// The saved Send Text snippets. The write is a verb rather than a
+        /// whole list — see `PresetProtocol` — and `expand` fills a snippet's
+        /// live values in, because `SnippetPlaceholders` is ADBKit's.
+        case presetSnippets = "/v1/presets/snippets"
+        case presetSnippetsWrite = "/v1/presets/snippets/write"
+        case presetExpand = "/v1/presets/expand"
     }
 
     /// The multiplexed stream socket. Not a `Route`: it is a WebSocket upgrade

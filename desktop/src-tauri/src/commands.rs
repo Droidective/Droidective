@@ -31,9 +31,10 @@ use crate::daemon::wire::{
     ManagedTools, MemInfoResponse, PairResponse, PermissionWriteRequest, PermissionsResponse,
     ReactotronReverseRequest, ReactotronReverseResponse, RestrictionWriteRequest,
     RestrictionsResponse, RolesResponse, RootStatusResponse, RunRequest, RunResponse,
-    SandboxRequest, SandboxResponse, ScreenshotCaptureRequest, ScreenshotCaptureResponse,
-    StreamParams, ToolInstallRequest, ToolInstallResponse, ToolsResponse, VideoExportOptions,
-    VideoExportRequest, VideoProxyRequest, WifiResponse, WifiWriteRequest, WirelessActionRequest,
+    SandboxRequest, SandboxResponse, ScreenshotCaptureRequest, ScreenshotCaptureResponse, Snippet,
+    SnippetExpandRequest, SnippetExpandResponse, SnippetWriteRequest, StreamParams,
+    ToolInstallRequest, ToolInstallResponse, ToolsResponse, VideoExportOptions, VideoExportRequest,
+    VideoProxyRequest, WifiResponse, WifiWriteRequest, WirelessActionRequest,
 };
 use crate::daemon::{DaemonStatus, Supervisor};
 use crate::error::DaemonError;
@@ -350,6 +351,52 @@ pub fn copy_image(app: AppHandle, png: Vec<u8>) -> Result<(), DaemonError> {
     app.clipboard()
         .write_image(&image)
         .map_err(|error| DaemonError::Host(format!("could not copy the image: {error}")))
+}
+
+/// The saved Send Text snippets.
+#[tauri::command]
+pub async fn snippets(supervisor: State<'_, Supervisor>) -> Result<Vec<Snippet>, DaemonError> {
+    Ok(supervisor.client().await?.snippets().await?.snippets)
+}
+
+/// One mutation — add, remove, or record a use.
+///
+/// The verb goes over as the daemon's own string and the rules for what a
+/// snippet may be are `Presets`' methods, so a client cannot invent a
+/// different idea of a valid name.
+#[tauri::command]
+pub async fn write_snippet(
+    supervisor: State<'_, Supervisor>,
+    op: String,
+    name: String,
+    text: Option<String>,
+) -> Result<Vec<Snippet>, DaemonError> {
+    Ok(supervisor
+        .client()
+        .await?
+        .write_snippet(&SnippetWriteRequest { op, name, text })
+        .await?
+        .snippets)
+}
+
+/// A snippet's text with `{clipboard}` and `{ip}` filled in.
+///
+/// The clipboard is read **here**, because the daemon is headless and has
+/// none; `{ip}` is the host's own address, which it does have. The expansion
+/// itself is `ADBKit`'s `SnippetPlaceholders`, so both apps substitute the same
+/// way — including its rule that a substituted value is never re-scanned.
+#[tauri::command]
+pub async fn expand_snippet(
+    app: AppHandle,
+    supervisor: State<'_, Supervisor>,
+    text: String,
+) -> Result<SnippetExpandResponse, DaemonError> {
+    let clipboard = app.clipboard().read_text().ok();
+    supervisor
+        .client()
+        .await?
+        .expand_snippet(&SnippetExpandRequest { text, clipboard })
+        .await
 }
 
 /// Every container the video editor opens, for the open panel and the drop
