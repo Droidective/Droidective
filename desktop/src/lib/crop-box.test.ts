@@ -8,7 +8,7 @@ import {
   moveCrop,
   resizeCrop,
   rotateCrop,
-} from "@/lib/screenshot-crop"
+} from "@/lib/crop-box"
 import type { Rect, Size } from "@/lib/screenshot-markup"
 
 const SIZE: Size = { width: 400, height: 800 }

@@ -100,9 +100,8 @@ GATED = {
 # Not started, and big enough that the checklist alone understates them. The
 # note says what each actually needs so the entry is a plan, not a shrug.
 BLOCKED = {
-    "video-editor": "Not started — needs ffmpeg's filter graph and a preview scrubber. "
-                    "The managed ffmpeg it would use is now downloaded (Settings ▸ Tools), "
-                    "so this is the editor itself rather than the toolchain.",
+    "frida-console": "Not started — needs a rooted device to verify, which makes it the "
+                     "hardest to be sure of and the least used.",
 }
 
 # A pane exists but something named is still missing.

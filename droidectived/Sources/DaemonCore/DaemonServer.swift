@@ -236,6 +236,15 @@ public protocol DaemonBackend: Sendable {
     /// One PNG of the device screen, as bytes. The editor writes nothing until
     /// the user does, so there is no path to answer with.
     func captureScreenshot(serial: String) async throws -> Data
+    /// An MP4 of `path` a player can open, at the requested rung of the
+    /// remux → transcode ladder. Throws `VideoBackendError`.
+    func videoProxy(of path: String, mode: VideoProtocol.ProxyMode) async throws -> String
+    /// Applies the edit and writes `destination`, answering where it landed.
+    func exportVideo(
+        source: String, options: VideoExportOptions, destination: String
+    ) async throws -> String
+    /// Best-effort removal of a proxy the editor is done with.
+    func removeVideoProxy(at path: String) async
 }
 
 /// `DeviceMonitor` in production.
@@ -882,6 +891,45 @@ public struct LiveBackend: DaemonBackend {
 
     public func captureScreenshot(serial: String) async throws -> Data {
         try await ScreenCaptureService(client: client).captureScreenshotData(serial: serial)
+    }
+
+    /// The video editor's ffmpeg work.
+    ///
+    /// `VideoEditService` takes a bundled path on the Mac, where ffmpeg ships
+    /// inside the app; here it is a managed download, so the same resolution
+    /// the recorder uses is handed in — and resolved per call rather than at
+    /// startup, since it can be downloaded from Settings ▸ Tools between one
+    /// export and the next.
+    public func videoProxy(of path: String, mode: VideoProtocol.ProxyMode) async throws -> String {
+        let service = try await videoService()
+        // `playableProxy` walks the whole ladder behind an "is this playable?"
+        // closure the daemon cannot answer, so each rung is asked for directly.
+        let proxy = try await service.proxy(for: URL(fileURLWithPath: path), mode: mode)
+        return proxy.path
+    }
+
+    public func exportVideo(
+        source: String, options: VideoExportOptions, destination: String
+    ) async throws -> String {
+        let service = try await videoService()
+        let written = try await service.export(
+            source: URL(fileURLWithPath: source), options: options,
+            to: URL(fileURLWithPath: destination))
+        return written.path
+    }
+
+    public func removeVideoProxy(at path: String) async {
+        try? FileManager.default.removeItem(at: URL(fileURLWithPath: path))
+    }
+
+    private func videoService() async throws -> VideoEditService {
+        guard await LiveBackend.resolveFfmpeg(
+            locator: locator, toolsDirectory: managedToolsDirectory) != nil
+        else { throw VideoBackendError.ffmpegMissing }
+        return VideoEditService(
+            locator: locator,
+            bundledPath: await ManagedToolStore(
+                rootDirectory: managedToolsDirectory).resolve(.ffmpeg))
     }
 
     public func apiWorkspace() async -> ApiClientData {
@@ -1569,6 +1617,19 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
         case .screenshotCapture:
             return Self.answer(
                 await ScreenshotRoutes.capture(
+                    body: Data(body.readableBytesView), backend: backend))
+
+        case .videoFormats:
+            return Self.answer(VideoRoutes.formats())
+        case .videoProxy:
+            return Self.answer(
+                await VideoRoutes.proxy(body: Data(body.readableBytesView), backend: backend))
+        case .videoExport:
+            return Self.answer(
+                await VideoRoutes.export(body: Data(body.readableBytesView), backend: backend))
+        case .videoProxyRemove:
+            return Self.answer(
+                await VideoRoutes.removeProxy(
                     body: Data(body.readableBytesView), backend: backend))
         }
     }

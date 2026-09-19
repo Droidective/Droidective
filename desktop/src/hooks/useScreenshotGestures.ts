@@ -7,7 +7,7 @@ import {
   resizeCrop,
   rotateCrop,
   type CropGrab,
-} from "@/lib/screenshot-crop"
+} from "@/lib/crop-box"
 import {
   handlePoints,
   hitTest,

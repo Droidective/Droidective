@@ -1,12 +1,14 @@
 import { midX, midY, rotate, type Point, type Rect, type Size } from "@/lib/screenshot-markup"
 
 /**
- * The crop box's geometry.
+ * A crop box: the normalized rect, its handles, and what a drag on it does.
  *
- * Separate from the markup's because a crop is not an annotation: it has no
- * colour, no undo entry of its own, and it survives only until Apply. What it
- * shares with an annotation is the awkward part — a rotation, and handles that
- * have to be tested in the rotated frame — so the same care applies.
+ * Shared by the screenshot editor and the video editor, which is why it is not
+ * named for either. A crop is not an annotation — no colour, no undo entry of
+ * its own, gone at Apply — but it carries the awkward part of one: a rotation,
+ * and handles that have to be hit-tested in the rotated frame. The video
+ * editor passes rotation 0, since its own rotation is the quarter-turn control
+ * rather than a tilted box.
  */
 
 /** What a pointer-down on the crop box has taken hold of. */

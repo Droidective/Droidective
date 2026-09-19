@@ -338,6 +338,59 @@ pub struct CrashListResponse {
     pub crashes: Vec<CrashReport>,
 }
 
+// MARK: - the video editor
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct VideoFormatsResponse {
+    /// Every container the editor opens, lowercased.
+    pub extensions: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct VideoProxyRequest {
+    pub path: String,
+    /// "remux" or "transcode" — the client walks the ladder, because only it
+    /// can say whether the last rung actually played.
+    pub mode: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct VideoPathResponse {
+    pub path: String,
+}
+
+/// The edit, field for field with `VideoExportOptions`.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VideoExportOptions {
+    pub trim_start: Option<f64>,
+    pub trim_end: Option<f64>,
+    pub rotation_degrees: i32,
+    pub flip_h: bool,
+    pub flip_v: bool,
+    pub crop_x: Option<f64>,
+    pub crop_y: Option<f64>,
+    pub crop_width: Option<f64>,
+    pub crop_height: Option<f64>,
+    pub speed: f64,
+    pub mute: bool,
+    pub scale_width: Option<i32>,
+    pub compression: String,
+    pub format: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct VideoExportRequest {
+    pub path: String,
+    pub destination: String,
+    pub options: VideoExportOptions,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct VideoRemoveRequest {
+    pub path: String,
+}
+
 // MARK: - the command log
 
 /// One recorded adb call, as `CommandLogProtocol.Entry` sends it.

@@ -23,7 +23,8 @@ use crate::daemon::wire::{
     RecordStoppedResponse, RestrictionWriteRequest, RestrictionsResponse, RolesResponse,
     RootStatusResponse, RunRequest, RunResponse, SandboxRequest, SandboxResponse,
     ScreenshotCaptureRequest, ScreenshotCaptureResponse, ToolInstallRequest, ToolInstallResponse,
-    ToolsResponse, WifiResponse, WifiWriteRequest, WirelessActionRequest,
+    ToolsResponse, VideoExportRequest, VideoFormatsResponse, VideoPathResponse, VideoProxyRequest,
+    VideoRemoveRequest, WifiResponse, WifiWriteRequest, WirelessActionRequest,
 };
 use crate::error::DaemonError;
 
@@ -390,6 +391,29 @@ impl DaemonClient {
         request: &ScreenshotCaptureRequest,
     ) -> Result<ScreenshotCaptureResponse, DaemonError> {
         self.post("/v1/screenshot/capture", request).await
+    }
+
+    pub async fn video_formats(&self) -> Result<VideoFormatsResponse, DaemonError> {
+        self.post("/v1/video/formats", &EMPTY).await
+    }
+
+    pub async fn video_proxy(
+        &self,
+        request: &VideoProxyRequest,
+    ) -> Result<VideoPathResponse, DaemonError> {
+        self.post("/v1/video/proxy", request).await
+    }
+
+    pub async fn export_video(
+        &self,
+        request: &VideoExportRequest,
+    ) -> Result<VideoPathResponse, DaemonError> {
+        self.post("/v1/video/export", request).await
+    }
+
+    pub async fn remove_video_proxy(&self, path: String) -> Result<RunResponse, DaemonError> {
+        self.post("/v1/video/proxy/remove", &VideoRemoveRequest { path })
+            .await
     }
 
     pub async fn command_log(&self) -> Result<CommandLogResponse, DaemonError> {

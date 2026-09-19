@@ -32,8 +32,8 @@ use crate::daemon::wire::{
     ReactotronReverseRequest, ReactotronReverseResponse, RestrictionWriteRequest,
     RestrictionsResponse, RolesResponse, RootStatusResponse, RunRequest, RunResponse,
     SandboxRequest, SandboxResponse, ScreenshotCaptureRequest, ScreenshotCaptureResponse,
-    StreamParams, ToolInstallRequest, ToolInstallResponse, ToolsResponse, WifiResponse,
-    WifiWriteRequest, WirelessActionRequest,
+    StreamParams, ToolInstallRequest, ToolInstallResponse, ToolsResponse, VideoExportOptions,
+    VideoExportRequest, VideoProxyRequest, WifiResponse, WifiWriteRequest, WirelessActionRequest,
 };
 use crate::daemon::{DaemonStatus, Supervisor};
 use crate::error::DaemonError;
@@ -351,6 +351,109 @@ pub fn copy_image(app: AppHandle, png: Vec<u8>) -> Result<(), DaemonError> {
         .write_image(&image)
         .map_err(|error| DaemonError::Host(format!("could not copy the image: {error}")))
 }
+
+/// Every container the video editor opens, for the open panel and the drop
+/// filter. Served rather than listed here, so both apps take it from
+/// `VideoInputFormat`.
+#[tauri::command]
+pub async fn video_formats(supervisor: State<'_, Supervisor>) -> Result<Vec<String>, DaemonError> {
+    Ok(supervisor.client().await?.video_formats().await?.extensions)
+}
+
+/// One rung of the playback ladder: an MP4 the webview may be able to open.
+#[tauri::command]
+pub async fn video_proxy(
+    supervisor: State<'_, Supervisor>,
+    path: String,
+    mode: String,
+) -> Result<String, DaemonError> {
+    Ok(supervisor
+        .client()
+        .await?
+        .video_proxy(&VideoProxyRequest { path, mode })
+        .await?
+        .path)
+}
+
+#[tauri::command]
+pub async fn remove_video_proxy(
+    supervisor: State<'_, Supervisor>,
+    path: String,
+) -> Result<(), DaemonError> {
+    supervisor.client().await?.remove_video_proxy(path).await?;
+    Ok(())
+}
+
+/// Applies the edit, asking where the result should go.
+///
+/// A save dialog rather than the fixed folder, for the reason the screenshot
+/// editor's Save has one: the file is the point of the screen, and the Mac
+/// asks. Answers null when the dialog was cancelled, which is not an error.
+#[tauri::command]
+pub async fn export_video(
+    app: AppHandle,
+    supervisor: State<'_, Supervisor>,
+    path: String,
+    suggested_name: String,
+    extension: String,
+    options: VideoExportOptions,
+) -> Result<Option<String>, DaemonError> {
+    let folder = droidective_folder(&app)?;
+    let Some(picked) = app
+        .dialog()
+        .file()
+        .add_filter("Video", &[extension.as_str()])
+        .set_directory(folder)
+        .set_file_name(safe_file_name(&suggested_name)?)
+        .blocking_save_file()
+    else {
+        return Ok(None);
+    };
+    let destination = picked
+        .into_path()
+        .map_err(|error| DaemonError::Host(format!("could not use that location: {error}")))?;
+    let written = supervisor
+        .client()
+        .await?
+        .export_video(&VideoExportRequest {
+            path,
+            destination: destination.to_string_lossy().into_owned(),
+            options,
+        })
+        .await?;
+    Ok(Some(written.path))
+}
+
+/// A video file's bytes, for the `<video>` element to play from a blob.
+///
+/// The webview has no filesystem permission of its own and keeps none: its
+/// capability file stays at `core:default`, so a page cannot read a path even
+/// if something in it went wrong. Handing the bytes across costs a copy, which
+/// is why the size is capped — a clip somebody recorded is tens of megabytes
+/// and well inside it, and anything larger says so rather than exhausting
+/// memory trying.
+#[tauri::command]
+pub async fn read_video(path: String) -> Result<Vec<u8>, DaemonError> {
+    let size = std::fs::metadata(&path)
+        .map_err(|error| DaemonError::Host(format!("could not read {path}: {error}")))?
+        .len();
+    if size > MAX_PLAYABLE_BYTES {
+        return Err(DaemonError::Host(format!(
+            "that video is {} MB — too large to preview here (the limit is {} MB). \
+             Exporting still works.",
+            size / 1_000_000,
+            MAX_PLAYABLE_BYTES / 1_000_000
+        )));
+    }
+    std::fs::read(&path)
+        .map_err(|error| DaemonError::Host(format!("could not read {path}: {error}")))
+}
+
+/// The most this app will hand a webview to play in one go.
+///
+/// 512 MB: a screen recording is tens of megabytes, and the ceiling exists so
+/// a dropped feature film fails with a sentence rather than by filling memory.
+const MAX_PLAYABLE_BYTES: u64 = 512 * 1024 * 1024;
 
 /// The recent adb calls behind Settings ▸ Privacy ▸ Command log.
 #[tauri::command]

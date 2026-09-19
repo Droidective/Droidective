@@ -6,6 +6,18 @@ import Foundation
 /// lives in `VideoEditing` (pure, tested); this actor handles tool resolution,
 /// the no-edit fast path, and process execution.
 public actor VideoEditService {
+    /// A rung of the playback ladder, cheapest first.
+    ///
+    /// `allCases` order is the ladder's order and `playableProxy` walks it, so
+    /// a rung added here is tried without touching that method.
+    public enum ProxyMode: String, Codable, Sendable, CaseIterable {
+        /// `-c copy` into an MP4 — a file copy's worth of work, and enough for
+        /// H.264 in a container the player will not parse.
+        case remux
+        /// Convert the pixels: VP9, AV1, 10-bit, anything with no decoder.
+        case transcode
+    }
+
     public enum EditError: Error, LocalizedError {
         case ffmpegNotFound
         case exportFailed(String)
@@ -71,21 +83,34 @@ public actor VideoEditService {
     /// nothing here costs the saved file any quality — and trim points chosen
     /// against the proxy carry over unchanged, since both share one timeline.
     public func playableProxy(for source: URL, isPlayable: @Sendable (URL) async -> Bool) async -> URL? {
-        guard let ffmpeg = await ffmpegPath() else { return nil }
-        let remuxed = proxyURL(for: source)
-        if await run(ffmpeg, VideoEditing.remuxArguments(input: source.path, output: remuxed.path)),
-           await isPlayable(remuxed) {
-            return remuxed
+        for mode in ProxyMode.allCases {
+            guard let built = try? await proxy(for: source, mode: mode) else { continue }
+            if await isPlayable(built) { return built }
+            try? FileManager.default.removeItem(at: built)
         }
-        try? FileManager.default.removeItem(at: remuxed)
-
-        let transcoded = proxyURL(for: source)
-        if await run(ffmpeg, VideoEditing.transcodeArguments(input: source.path, output: transcoded.path)),
-           await isPlayable(transcoded) {
-            return transcoded
-        }
-        try? FileManager.default.removeItem(at: transcoded)
         return nil
+    }
+
+    /// One rung of that ladder.
+    ///
+    /// Exposed separately because a caller that is not AVFoundation cannot be
+    /// asked `isPlayable` from in here: `droidectived` builds a proxy for a
+    /// webview, which answers "does this play?" only by trying it, so the
+    /// client walks the ladder and asks for each rung in turn. Same arguments,
+    /// same order, same temp naming — `playableProxy` is now written in terms
+    /// of it so the two cannot drift.
+    public func proxy(for source: URL, mode: ProxyMode) async throws -> URL {
+        guard let ffmpeg = await ffmpegPath() else { throw EditError.ffmpegNotFound }
+        let output = proxyURL(for: source)
+        let arguments = switch mode {
+        case .remux: VideoEditing.remuxArguments(input: source.path, output: output.path)
+        case .transcode: VideoEditing.transcodeArguments(input: source.path, output: output.path)
+        }
+        guard await run(ffmpeg, arguments) else {
+            try? FileManager.default.removeItem(at: output)
+            throw EditError.exportFailed("ffmpeg could not convert that file.")
+        }
+        return output
     }
 
     /// Always `.mp4` whatever went in — the container AVFoundation is
