@@ -13,6 +13,7 @@
  */
 
 import { Channel, invoke } from "@tauri-apps/api/core"
+import type { PullEvent } from "@/lib/pull-progress"
 import type {
   Device,
   LogLine,
@@ -61,6 +62,7 @@ async function subscribe<Item>(
     | "watch_mirror"
     | "watch_netspeed"
     | "watch_performance"
+    | "watch_pull"
     | "watch_reactotron",
   args: Record<string, unknown>,
   onUpdate: (update: StreamUpdate<Item>) => void,
@@ -131,6 +133,21 @@ export function watchNetspeed(
   onUpdate: (update: StreamUpdate<NetSample>) => void,
 ): Promise<Subscription> {
   return subscribe("watch_netspeed", { serial }, onUpdate)
+}
+
+/**
+ * One `adb pull`, reporting as it goes.
+ *
+ * A subscription rather than a request, because the answer is a sequence — the
+ * Mac shows a progress strip while a pull runs, and a call that either answers
+ * or does not cannot drive one. Stopping it **cancels the pull**: the daemon's
+ * task is cancelled and `SystemProcessRunner` takes the adb child with it.
+ */
+export function watchPull(
+  args: { serial: string; path: string; asRoot: boolean },
+  onUpdate: (update: StreamUpdate<PullEvent>) => void,
+): Promise<Subscription> {
+  return subscribe("watch_pull", args, onUpdate)
 }
 
 /**

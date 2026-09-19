@@ -715,6 +715,19 @@ table) is in `docs/reactotron-mcp-analysis.md`.
 - **`.task(id:)` keys must include readiness** (`targetSerials.first`), not just
   serial — a device authorizing keeps the same serial and the view must reload.
   Guard `!Task.isCancelled` before writing fetched results into @State.
+- **On the port, an object URL needs its scheme in the CSP — `'self'` is not
+  it.** The webview's capability file stays at `core:default`, so a video, an
+  image or a download reaches the page as *bytes* and becomes a `blob:` URL;
+  CSP checks that URL by its scheme and never against the document's origin.
+  `desktop/src-tauri/tauri.conf.json`'s `default-src 'self'` therefore refuses
+  it, and the refusal is silent in the element's own terms: the video editor's
+  player reported an error, the ladder climbed, the remux and the transcode
+  were refused the same way, and it settled on "this file can't be played
+  here" for an h264 MP4 that plays fine. Nothing else catches it — jsdom has no
+  CSP and `desktop-linux-smoke` opens a screen rather than a clip — so the rule
+  is a test (`the_csp_lets_the_player_read_an_object_url`). `media-src` carries
+  `blob:`; a new `<img>`/`<audio>`/download fed from an object URL has to add
+  it to *its* directive too.
 - **Drops route by geometry, not type — and drags need declared UTIs.** SwiftUI
   hands a drop to the *deepest* drop region under the cursor even when that
   target's `onDrop(of:)` types don't match the drag (no fallthrough to

@@ -205,6 +205,7 @@ export {
   watchMirror,
   watchNetspeed,
   watchPerformance,
+  watchPull,
   watchReactotron,
 } from "@/lib/daemon-stream"
 export {

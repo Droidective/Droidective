@@ -31,6 +31,15 @@ public enum StreamProtocol {
         /// `MirrorFramePayload` and backlog 25's step 0 in
         /// `docs/desktop-parity.md`.
         case mirror
+        /// One `adb pull`, reporting as it goes.
+        ///
+        /// A topic rather than a route because the answer is a *sequence*: the
+        /// Mac shows a progress strip while a pull runs, and a request that
+        /// either answers or does not cannot drive one. Unsubscribing cancels
+        /// the pull, which is the other half — `SystemProcessRunner` wraps its
+        /// body in `withTaskCancellationHandler`, so the adb child goes with
+        /// the task rather than running on to its timeout.
+        case pull
     }
 
     // MARK: client → server
@@ -96,12 +105,23 @@ public enum StreamProtocol {
             /// means scrcpy's own defaults, which is the single full mirror.
             public let maxSize: Int?
             public let maxFps: Int?
+            /// The device path to pull, where it should land, and whether to
+            /// read it as root.
+            ///
+            /// The destination comes from the client for the reason
+            /// `/v1/files/pull`'s does: the Rust process is the one that knows
+            /// where this platform's Downloads folder is, and a daemon
+            /// inventing a path would be a second answer to that question.
+            public let path: String?
+            public let destination: String?
+            public let asRoot: Bool?
 
             public init(
                 serial: String? = nil, pid: Int? = nil,
                 packageId: String? = nil, processes: Bool? = nil,
                 data: String? = nil, columns: Int? = nil, rows: Int? = nil,
-                maxSize: Int? = nil, maxFps: Int? = nil
+                maxSize: Int? = nil, maxFps: Int? = nil,
+                path: String? = nil, destination: String? = nil, asRoot: Bool? = nil
             ) {
                 self.serial = serial
                 self.pid = pid
@@ -112,6 +132,9 @@ public enum StreamProtocol {
                 self.rows = rows
                 self.maxSize = maxSize
                 self.maxFps = maxFps
+                self.path = path
+                self.destination = destination
+                self.asRoot = asRoot
             }
 
             public var wantsProcesses: Bool { processes ?? false }
@@ -174,6 +197,11 @@ public enum StreamProtocol {
         /// in the tab rather than treating it as a fault — typing `exit` is how
         /// a terminal is meant to end.
         case processExited = "process_exited"
+        /// The work the subscription *was* finished. A pull is the first topic
+        /// with an end of its own: every other one runs until somebody stops
+        /// it, and reporting a finished pull as "unsubscribed" would make the
+        /// strip look cancelled at the moment it succeeded.
+        case completed
     }
 
     /// A server→client frame. Generic over the payload so each topic keeps its
@@ -224,6 +252,8 @@ public enum StreamProtocol {
         case missingData = "missing_data"
         case invalidData = "invalid_data"
         case missingSize = "missing_size"
+        /// `pull` alone: the two paths are the subscription's whole subject.
+        case missingPath = "missing_path"
 
         public var message: String {
             switch self {
@@ -235,6 +265,7 @@ public enum StreamProtocol {
             case .missingData: return "write needs base64 data."
             case .invalidData: return "write's data is not base64."
             case .missingSize: return "resize needs both columns and rows."
+            case .missingPath: return "pull needs a device path and a destination."
             }
         }
     }
@@ -260,6 +291,13 @@ public enum StreamProtocol {
             guard active[command.id] == nil else { return .duplicateID }
             if topic.needsSerial, command.params?.serial?.isEmpty ?? true {
                 return .missingSerial
+            }
+            // A pull with nothing to pull is refused rather than started: the
+            // alternative is a subscription that sits open and silent, which a
+            // client cannot tell from a slow transfer.
+            if topic == .pull,
+               command.params?.path?.isEmpty ?? true || command.params?.destination?.isEmpty ?? true {
+                return .missingPath
             }
             return nil
         case .write:
@@ -303,7 +341,7 @@ extension StreamProtocol.Topic {
     public var needsSerial: Bool {
         switch self {
         case .devices, .pty, .reactotron: return false
-        case .logcat, .performance, .netspeed, .mirror: return true
+        case .logcat, .performance, .netspeed, .mirror, .pull: return true
         }
     }
 
@@ -315,7 +353,7 @@ extension StreamProtocol.Topic {
     public var acceptsInput: Bool {
         switch self {
         case .pty, .mirror: return true
-        case .devices, .logcat, .performance, .netspeed, .reactotron: return false
+        case .devices, .logcat, .performance, .netspeed, .reactotron, .pull: return false
         }
     }
 
@@ -330,7 +368,8 @@ extension StreamProtocol.Topic {
     public var acceptsResize: Bool {
         switch self {
         case .pty: return true
-        case .devices, .logcat, .performance, .netspeed, .reactotron, .mirror: return false
+        case .devices, .logcat, .performance, .netspeed, .reactotron, .mirror, .pull:
+            return false
         }
     }
 
@@ -369,7 +408,11 @@ extension StreamProtocol.Topic {
     /// `MirrorStreamMapper`.
     public var isSnapshot: Bool {
         switch self {
-        case .devices: return true
+        // `pull` is a snapshot for `devices`' reason: each event is the whole
+        // current state of one transfer, and an older "42% done" is worthless
+        // once a newer one exists. It also means the strip can never be handed
+        // a `dropped` marker, which for a progress bar would be noise.
+        case .devices, .pull: return true
         case .logcat, .performance, .netspeed, .pty, .reactotron, .mirror: return false
         }
     }

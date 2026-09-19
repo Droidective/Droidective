@@ -31,6 +31,14 @@ public protocol StreamSource: Sendable {
     /// `performance` is: the counters are cumulative and throughput is the
     /// difference between two reads.
     func netspeed(serial: String) async -> AsyncStream<NetSample>
+    /// One `adb pull`, reporting as it goes and cancelled by unsubscribing.
+    ///
+    /// The destination is the daemon's to choose — the same folder
+    /// `/v1/files/pull` writes to — because the client has no filesystem of
+    /// its own and a path from it would be a path this process then trusted.
+    func pull(
+        serial: String, path: String, destination: String, asRoot: Bool
+    ) async -> AsyncStream<PullProgressPayload>
     /// Everything the Reactotron relay sees, from the moment it is listening.
     ///
     /// Starting the relay is part of subscribing: a client that asked for the
@@ -294,6 +302,23 @@ public actor StreamSession {
                             .compactMap { $0 })
                 }
                 await self?.end(id, reason: .deviceDisconnected)
+            })
+
+        case .pull:
+            guard let serial = command.params?.serial,
+                  let path = command.params?.path,
+                  let destination = command.params?.destination
+            else { return }
+            let stream = await source.pull(
+                serial: serial, path: path, destination: destination,
+                asRoot: command.params?.asRoot ?? false)
+            attach(to: id, Task { [weak self] in
+                for await progress in stream {
+                    await self?.enqueue(
+                        id: id,
+                        items: [try? DaemonProtocol.encode(progress)].compactMap { $0 })
+                }
+                await self?.end(id, reason: .completed)
             })
 
         case .performance:
@@ -571,6 +596,117 @@ public struct LiveStreamSource: StreamSource {
             }
             continuation.onTermination = { _ in task.cancel() }
         }
+    }
+
+    /// How often the strip is refreshed while a pull runs.
+    ///
+    /// Five times a second: adb prints nothing a machine can read, so this is a
+    /// `stat` of the destination, and a bar that only moves once a second on a
+    /// two-second pull looks stuck.
+    public static let pullPollInterval = Duration.milliseconds(200)
+
+    /// One `adb pull`, reporting the destination's size as it grows.
+    ///
+    /// The Mac measures a pull exactly this way, and for the same reason: adb
+    /// has no machine-readable progress, so the file appearing on disk is the
+    /// only honest signal. Which files count is `PullProgress.belongsToPull` in
+    /// ADBKit — an `.apks` bundle arrives as several splits, and polling only
+    /// the chosen one makes the bar sit at base/total for most of the wait.
+    ///
+    /// Cancelling the stream cancels the pull: `SystemProcessRunner` wraps its
+    /// body in `withTaskCancellationHandler`, so the adb child dies with the
+    /// task rather than running on to its timeout.
+    public func pull(
+        serial: String, path: String, destination: String, asRoot: Bool
+    ) async -> AsyncStream<PullProgressPayload> {
+        let adb = client
+        return AsyncStream { continuation in
+            let task = Task {
+                let explorer = FileExplorerService(client: adb)
+                let total = await Self.sourceSize(
+                    explorer, serial: serial, path: path, asRoot: asRoot)
+                continuation.yield(PullProgressPayload(copied: 0, total: total))
+
+                // The transfer is awaited **in this task**, not in a nested
+                // one. An unstructured `Task { }` does not inherit its
+                // parent's cancellation, so a pull started inside one survived
+                // the unsubscribe that was meant to stop it — a 600 MB
+                // transfer went on copying after the strip had gone, which is
+                // exactly what this topic exists to make cancellable. Awaiting
+                // it directly puts `SystemProcessRunner`'s
+                // `withTaskCancellationHandler` on this task's own path, so
+                // the adb child dies with the subscription.
+                let poller = Task {
+                    while !Task.isCancelled {
+                        try? await Task.sleep(for: Self.pullPollInterval)
+                        guard !Task.isCancelled else { break }
+                        continuation.yield(PullProgressPayload(
+                            copied: Self.bytesWritten(for: destination), total: total))
+                    }
+                }
+                defer { poller.cancel() }
+
+                do {
+                    let landed = try await explorer.pull(
+                        serial: serial, path: path,
+                        to: URL(fileURLWithPath: destination), asRoot: asRoot)
+                    continuation.yield(PullProgressPayload(
+                        copied: Self.bytesWritten(for: destination), total: total,
+                        path: landed.path, done: true))
+                } catch {
+                    // A cancelled pull leaves a part-written file behind, and
+                    // a half a video in the downloads folder is worse than
+                    // nothing — the Mac takes back what a failed split pull
+                    // wrote for the same reason.
+                    if Task.isCancelled {
+                        try? FileManager.default.removeItem(
+                            atPath: destination)
+                    } else {
+                        continuation.yield(PullProgressPayload(
+                            copied: 0, total: total, done: true, failure: "\(error)"))
+                    }
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    /// The source's size, or nil when there is no single number to divide by.
+    ///
+    /// A directory is the case that matters: a recursive pull has no total, and
+    /// an invented one is worse than a bar that admits it does not know — which
+    /// is why the Mac leaves directory pulls indeterminate too.
+    private static func sourceSize(
+        _ explorer: FileExplorerService, serial: String, path: String, asRoot: Bool
+    ) async -> Int? {
+        guard let info = try? await explorer.info(serial: serial, path: path, asRoot: asRoot),
+              info.type.lowercased().contains("directory") == false
+        else { return nil }
+        return info.sizeBytes
+    }
+
+    /// Every byte written so far, summed over the files this pull owns.
+    ///
+    /// The directory read is the Mac's `bytesWritten`; the decision about
+    /// *which* names belong is `PullProgress`, shared.
+    private static func bytesWritten(for destination: String) -> Int {
+        let url = URL(fileURLWithPath: destination)
+        let manager = FileManager.default
+        let directory = url.deletingLastPathComponent()
+        guard let names = try? manager.contentsOfDirectory(atPath: directory.path) else {
+            return size(of: destination, manager)
+        }
+        return names.reduce(0) { running, name in
+            guard PullProgress.belongsToPull(
+                fileName: name, destinationName: url.lastPathComponent)
+            else { return running }
+            return running + size(of: directory.appendingPathComponent(name).path, manager)
+        }
+    }
+
+    private static func size(of path: String, _ manager: FileManager) -> Int {
+        (try? manager.attributesOfItem(atPath: path))?[.size] as? Int ?? 0
     }
 
     /// The relay's events, with the relay started if it was not.

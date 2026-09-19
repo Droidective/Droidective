@@ -424,6 +424,38 @@ already had to solve:
   subscription must hold that task so closing the socket kills `adb logcat`
   rather than orphaning it.
 
+### 5.0 The `pull` topic — a transfer that reports
+
+`adb pull` is the one piece of work here that takes long enough to need a
+progress bar, so it is a **subscription rather than a route**: the answer is a
+sequence, and a call that either answers or does not cannot drive a strip.
+
+adb prints nothing a machine can read, so progress is the **destination's size
+on disk** polled against the source's `stat` — the Mac measures it exactly this
+way, and `PullProgress.belongsToPull` in ADBKit is the shared decision about
+which files count, because an `.apks` bundle arrives as several splits and
+polling only the chosen one leaves the bar sitting at base/total for most of
+the wait.
+
+`total` is **absent** for a directory: a recursive pull has no single number to
+divide by, and the strip shows an indeterminate bar rather than a percentage it
+invented. The last event carries `done` with the path it landed at, or
+`failure` with adb's own words — silence is indistinguishable from a slow pull,
+which is how a strip ends up stuck at 40% forever. A finished transfer ends as
+`completed` rather than `unsubscribed`, or the strip would read as cancelled at
+the moment it succeeded.
+
+**Unsubscribing cancels the pull**, and that is the second reason it is a
+topic. One trap is worth writing down, because it passed every unit test and
+failed the first live run: the transfer must be awaited **in the subscription's
+own task**. An unstructured `Task { }` does not inherit its parent's
+cancellation, so a pull started inside one survived the unsubscribe meant to
+stop it — a 600 MB transfer went on copying after the strip had gone. Awaited
+directly, `SystemProcessRunner`'s `withTaskCancellationHandler` sits on the
+cancelled task's own path and the adb child dies with the subscription. A
+cancelled pull also removes what it had written: half a video in the downloads
+folder is worse than nothing.
+
 ### 5.1 Snapshot topics vs increment topics
 
 `StreamProtocol.Topic.isSnapshot` splits the two, and a new topic has to answer

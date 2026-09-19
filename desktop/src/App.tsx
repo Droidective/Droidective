@@ -3,6 +3,7 @@ import { AppWindow } from "@/components/AppWindow"
 import { Banner } from "@/components/Controls"
 import { AppearanceProvider } from "@/hooks/useAppearance"
 import { NotificationsProvider } from "@/hooks/useNotifications"
+import { PullsProvider } from "@/hooks/usePulls"
 import { useSession } from "@/hooks/useSession"
 import { ToolchainProvider } from "@/hooks/useToolchain"
 import { sidebarFeatures } from "@/lib/sidebar"
@@ -30,7 +31,9 @@ export function App() {
     <AppearanceProvider>
       <NotificationsProvider>
         <ToolchainProvider>
-          <AppWindow session={session} features={features} />
+          <PullsProvider>
+            <AppWindow session={session} features={features} />
+          </PullsProvider>
         </ToolchainProvider>
       </NotificationsProvider>
     </AppearanceProvider>

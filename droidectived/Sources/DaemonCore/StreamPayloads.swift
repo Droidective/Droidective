@@ -305,3 +305,28 @@ public struct MirrorFramePayload: Codable, Equatable, Sendable {
         self.data = data
     }
 }
+
+/// How far one `adb pull` has got.
+///
+/// `copied` is the destination's size on disk, which is how the Mac measures it
+/// — adb prints no machine-readable progress, and the file growing is the only
+/// honest signal. `total` is the source's size from `stat`, and is **absent**
+/// for a directory: a recursive pull has no single number to divide by, so the
+/// strip shows an indeterminate bar rather than a percentage it made up.
+public struct PullProgressPayload: Codable, Equatable, Sendable {
+    public let copied: Int
+    public let total: Int?
+    /// Set on the last event only: where the file landed.
+    public let path: String?
+    public let done: Bool
+    /// Set instead of `path` when the pull failed, carrying adb's own words.
+    public let failure: String?
+
+    public init(copied: Int, total: Int?, path: String? = nil, done: Bool = false, failure: String? = nil) {
+        self.copied = copied
+        self.total = total
+        self.path = path
+        self.done = done
+        self.failure = failure
+    }
+}

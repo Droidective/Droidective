@@ -1025,6 +1025,15 @@ pub struct StreamParams {
     pub max_size: Option<u32>,
     #[serde(rename = "maxFps", skip_serializing_if = "Option::is_none")]
     pub max_fps: Option<u32>,
+    /// The device path to pull and where it should land. The destination comes
+    /// from here rather than the daemon because this process is the one that
+    /// knows where the platform's Downloads folder is.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub destination: Option<String>,
+    #[serde(rename = "asRoot", skip_serializing_if = "Option::is_none")]
+    pub as_root: Option<bool>,
 }
 
 impl StreamCommand {
