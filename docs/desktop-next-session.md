@@ -61,32 +61,29 @@ THE RULE THAT MATTERS MOST
   Two standing exceptions: a keyboard shortcut whose modifier has no
   Windows/Linux equivalent, and a label that names a platform.
 
-START HERE: A BUG WORTH MORE THAN THE BACKLOG
-  A Reactotron event whose payload is over ~64 KB kills the stream
-  subscription. The client rejects the frame as "incorrect masking" — the
-  classic symptom of a desynchronised frame header — the event never reaches
-  the timeline, and the feed simply stops. In the real app a `console.log` of
-  a large object would do it.
+THE FRAME BUG IS FIXED — and it was two bugs, neither as described
+  Both of the daemon's WebSocket servers took NIO's `maxFrameSize` default of
+  16,384 bytes (not ~64 KB — that was a guess from the length-encoding
+  boundary), so anything past it got close 1009 and lost the connection. On the
+  stream socket a ~12 KiB terminal paste would have done it, since `write`
+  carries base64. Both now pass `DaemonProtocol.maxWebSocketFrameSize` = 64 MiB,
+  which is the Mac's own number in `ReactotronServer`.
 
-  Reproduce, from a clean app:
-    1. open Reactotron in the app (that is what binds 9090 — the relay starts
-       when something subscribes to the topic, not before)
-    2. ./scripts/reactotron-fake-client.py --big
-    3. drive a `repl.execute` at it — the REPL screen's Evaluate, or
-       POST /v1/reactotron/send with type `repl.execute`
-    4. the 200 KB `repl.execute.response` never arrives and the socket closes
+  The "incorrect masking" was a *separate* bug and had nothing to do with size:
+  both handlers answered a ping by copying the inbound frame and flipping its
+  opcode, which keeps the client's masking key on a server→client frame. Any
+  conformant client closes with 1002 on sight — `websockets` pings at 20 s,
+  which is why it showed up mid `--big` run and looked like one fault.
+  `WebSocketFrame.pong(for:)` is the single helper both call now.
 
-  Without --big the same client answers everything normally and the feed is
-  fine, which is how the three new screens were verified.
-
-  NOT DIAGNOSED. The obvious first guess was wrong: `WebSocketSink.send` writes
-  one `WebSocketFrame` and lets NIO encode it, and NIO handles extended lengths
-  correctly. Capture the bytes the daemon actually emits rather than reading
-  the code — that is where the last hour went and it did not find it.
+  The lesson worth carrying: the previous note's whole diagnosis came from a
+  client library's error string. Capturing the daemon's own bytes off a raw
+  socket settled it in minutes, and the two scripts that did it are the way to
+  check anything like it again.
 
 WHAT IS LEFT, roughly in the tracker's order
-  - The JS Console (14/24 on the tracker), the other half of the RN workflow
-    and the largest screen left.
+  - START HERE: the JS Console (14/24 on the tracker), the other half of the RN
+    workflow and the largest screen left.
   - The welcome tour (backlog 22). The Mac's demo stage plays recordings of the
     *Mac* app, which would be the wrong chrome here, so the six drawn fallbacks
     are what to follow.
