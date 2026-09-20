@@ -19,19 +19,30 @@ One coherent chunk per PR. Stack only if you cannot merge; say so in the body.
   Node: source "$HOME/.nvm/nvm.sh" && nvm use 22 (system node is too old for Vite)
 
 STATE
-  The shell is done. 31 of the 32 full-screen views have a pane; only
-  `frida-console` has no screen at all, and it needs a rooted device to verify.
+  The shell is done. 30 of the 32 full-screen views have a pane; the two
+  without are `frida-console` (needs a rooted device) and `ios-logs` (out of
+  scope — a macOS toolchain). That number was wrong in two places at once for
+  a while, so recompute rather than trust it: catalogFeatureIDs filtered to
+  view/system, against the desktop pane router.
 
   Landed most recently (check the PRs merged before assuming):
-    - The Command Log, over a per-request header that says whether a call is
-      background polling — see `CommandLogProtocol`
-    - The screenshot annotation editor, opened from the Screenshot tab and the
-      mirror's camera button
-    - The video editor, with the playback ladder walked by the client
-    - Send Text snippets, screen and Quick Actions panel, over the Mac's own
-      presets.json
-    - The pull progress strip, as the `pull` stream topic — which also made a
-      pull cancellable
+    - The Command Log, the screenshot editor, the video editor, Send Text
+      snippets and the pull progress strip (#356-#360)
+    - The Mac gained the port's richer pull strip: cancel, a byte count, and a
+      partial file cleaned up (#361). The port is the one that had it first.
+    - The parity tracker became trustworthy (#362): the generator no longer
+      emits Swift string interpolations as unmatchable items, and it now
+      PRESERVES TICKS across a regenerate — before that, auditing was erased by
+      the next `generate-parity-tracker.py` run.
+    - Reactotron: the reverse-tunnel button moved into the toolbar, where it is
+      reachable while a client is connected (#363); the daemon relay learned to
+      SEND to a client (#364); and the State screen landed (#365).
+
+  THE AUDIT IS THE CURRENT MODE OF WORK. `docs/desktop-parity.md`'s per-feature
+  checklists are it. A tick means the affordance was found in desktop/src *and
+  read in place*. Two passes are done — the Connection group, and Reactotron.
+  Each found real defects, not just wording; see "The audit, and what it has
+  covered" in the tracker for what is left and how big each piece is.
 
 READ FIRST
   docs/desktop-parity.md — THE TRACKER. Read "Status today" and then the
@@ -49,6 +60,11 @@ THE RULE THAT MATTERS MOST
   Windows/Linux equivalent, and a label that names a platform.
 
 WHAT IS LEFT, roughly in the tracker's order
+  - Reactotron's REPL and custom Commands panes — the last two of its four
+    views. Both send a command and read the answer off the timeline, exactly as
+    State does, so `useReactotronState` + `lib/reactotron-state.ts` is the
+    worked example and `/v1/reactotron/send` already exists. REPL is the
+    smaller: `repl.ls` lists what is in scope, `repl.command` evaluates.
   - The welcome tour (backlog 22). The Mac's demo stage plays recordings of the
     *Mac* app, which would be the wrong chrome here, so the six drawn fallbacks
     are what to follow.
@@ -110,22 +126,19 @@ GOTCHAS (the ones that cost time)
     `gh pr create --base main`. Split the push and the PR create.
 
 DRIVING THE UI — read this before planning to screenshot anything
-  Screen Recording permission may not be granted to the terminal running the
-  session: `screencapture` then returns a *black* image rather than failing,
-  and `screencapture -l<windowid>` errors outright. Check with one capture
-  before relying on it. A black capture with permission granted usually means
-  the window is on another Space — confirm it is in
-  CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly) and relaunch it
-  onto the active one rather than chasing the permission.
-  The webview is not reachable through the AX API (the app's AXChildren holds
-  only its menu bars, no window), but synthetic CGEvent clicks at
-  window-relative points DO land in it: capture the window, read the target
-  off the image (image px / 2 = window points, the capture is @2x), add the
-  kCGWindowBounds origin read fresh each time, move the mouse then click.
-  Activate the app first or the first click is eaten as activation. Keystrokes
-  into the page do not arrive; keystrokes into a native open/save panel do
-  (Shift-Cmd-G, a full path, Return twice — but in a SAVE panel type a bare
-  filename, since a leading slash opens go-to-folder and the name becomes ".").
+  DO NOT BUDGET ON IT. Synthetic clicks into the webview work for a while and
+  then stop landing — they still move the cursor and still trigger hover, but
+  the click does nothing. This has now degraded mid-session three sessions
+  running, and each time the recovery attempts cost more than the screenshot
+  was worth. Native panels, the Mac app and the menu bar are unaffected.
+  Screen Recording permission may also not be granted to the terminal:
+  `screencapture` then returns a *black* image rather than failing. A black
+  capture WITH permission granted usually means the window is on another Space
+  — check CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly) and
+  relaunch it onto the active one rather than chasing the permission.
+  Keystrokes never reach the page. They do reach a native open/save panel:
+  Shift-Cmd-G, a full path, Return twice — but in a SAVE panel type a bare
+  filename, since a leading slash opens go-to-folder and the name becomes ".".
   What works instead, and is better anyway:
     - component tests (@testing-library/react is already a dependency, and
       `NetspeedPane.test.tsx` is the worked example) for anything on screen
@@ -133,7 +146,10 @@ DRIVING THE UI — read this before planning to screenshot anything
       `lsof -nP -iTCP -sTCP:LISTEN -a -p $(pgrep -f 'droidectived --port')` and
       the token from
       "$HOME/Library/Application Support/com.rohindh.droidective.desktop/droidectived.token"
-    - a `websockets` client for stream topics
+    - a `websockets` client for stream topics — and for Reactotron, a fake
+      client that *answers*. `state.values.request` -> `state.values.response`
+      is a dozen lines of python and proves the whole round trip; that is how
+      the State screen was verified without ever rendering it.
   Synthetic mouse events never start an HTML5 drag in WKWebView, so every drag
   path is checked by hand — keep the *decision* a drop makes in lib/.
 ```
