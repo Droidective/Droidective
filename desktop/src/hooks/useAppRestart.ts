@@ -26,6 +26,18 @@ export interface AppRestart {
     clientName: string | null
     scope: ClearScope
   }) => Promise<RestartOutcome>
+  /**
+   * Restart a package that is already known, skipping the detection.
+   *
+   * The JS Console's case: Metro reports the application id of the target under
+   * debug, so there is nothing to match against the installed list and asking
+   * the device for one would be two round trips to learn what we were told.
+   */
+  restartPackage: (args: {
+    serial: string
+    packageId: string
+    scope: ClearScope
+  }) => Promise<RestartOutcome>
 }
 
 /**
@@ -101,7 +113,7 @@ export function useAppRestart(): AppRestart {
     [restartPackage],
   )
 
-  return { busy, restart }
+  return { busy, restart, restartPackage }
 }
 
 /**

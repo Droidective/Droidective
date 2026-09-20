@@ -9,11 +9,13 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  allHidden,
   appended,
   emptyFeedText,
   filtered,
   levelCounts,
   levelOf,
+  levelSummary,
   localRow,
   MAX_ROWS,
   rowFromCall,
@@ -147,30 +149,53 @@ describe("filtered", () => {
     row(4, "verbose", "chatty"),
   ]
 
-  it("shows everything when no level is ticked", () => {
-    // A filter bar with nothing ticked showing nothing is a console that looks
-    // broken, so an empty set means "all".
-    expect(filtered(rows, { levels: new Set(), query: "" })).toHaveLength(4)
+  it("shows everything when nothing is hidden", () => {
+    expect(filtered(rows, { hidden: new Set(), query: "" })).toHaveLength(4)
   })
 
-  it("shows only the ticked levels", () => {
-    const shown = filtered(rows, { levels: new Set<Level>(["error", "warning"]), query: "" })
-    expect(shown.map((one) => one.id)).toEqual([2, 3])
+  it("drops the levels that are hidden, keeping the rest", () => {
+    // Hidden, not selected: unticking `error` and `warning` in the picker
+    // leaves the other two, where the old selected-set filter would have shown
+    // only the two that were ticked.
+    const shown = filtered(rows, { hidden: new Set<Level>(["error", "warning"]), query: "" })
+    expect(shown.map((one) => one.id)).toEqual([1, 4])
+  })
+
+  it("shows nothing when every level is hidden", () => {
+    expect(filtered(rows, { hidden: allHidden(), query: "" })).toEqual([])
   })
 
   it("matches the query case-insensitively", () => {
-    expect(filtered(rows, { levels: new Set(), query: "WORLD" }).map((one) => one.id)).toEqual([1])
+    expect(filtered(rows, { hidden: new Set(), query: "WORLD" }).map((one) => one.id)).toEqual([1])
   })
 
   it("ignores surrounding whitespace in the query", () => {
-    expect(filtered(rows, { levels: new Set(), query: "  boom  " }).map((one) => one.id)).toEqual([
+    expect(filtered(rows, { hidden: new Set(), query: "  boom  " }).map((one) => one.id)).toEqual([
       2,
     ])
   })
 
   it("combines the level and the query", () => {
-    const shown = filtered(rows, { levels: new Set<Level>(["error"]), query: "hello" })
+    // "hello" is the info row, and info is what stays hidden here.
+    const shown = filtered(rows, { hidden: new Set<Level>(["info"]), query: "hello" })
     expect(shown).toEqual([])
+  })
+})
+
+describe("levelSummary", () => {
+  it("says all levels when nothing is hidden", () => {
+    expect(levelSummary(new Set())).toBe("All levels")
+  })
+
+  it("counts what is shown, not what is hidden", () => {
+    // The question someone glancing at a quiet console is asking is how much
+    // they have turned off, so the numerator is the levels still coming
+    // through.
+    expect(levelSummary(new Set<Level>(["verbose"]))).toBe("Levels 3/4")
+  })
+
+  it("reads 0/4 once everything is hidden", () => {
+    expect(levelSummary(allHidden())).toBe("Levels 0/4")
   })
 })
 

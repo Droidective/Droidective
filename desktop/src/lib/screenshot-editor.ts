@@ -1,3 +1,4 @@
+import { captureStamp } from "@/lib/capture-stamp"
 import {
   annotation,
   isDragShape,
@@ -168,20 +169,12 @@ export function showsRedactControls(
   return settings.tool === "redact"
 }
 
-function pad(value: number): string {
-  return String(value).padStart(2, "0")
-}
-
 /**
  * The file name a save suggests.
  *
- * `ScreenCaptureService.stamp()`'s format exactly — `yyyy-MM-dd_HH-mm-ss` in
- * local time — so a folder holding captures from both apps sorts as one set
- * rather than two interleaved naming schemes.
+ * `ScreenCaptureService.stamp()`'s format exactly, so a folder holding captures
+ * from both apps sorts as one set rather than two interleaved naming schemes.
  */
 export function suggestedName(now: Date): string {
-  const stamp =
-    `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}` +
-    `_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`
-  return `screenshot_${stamp}.png`
+  return `screenshot_${captureStamp(now)}.png`
 }

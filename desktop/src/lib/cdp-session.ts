@@ -15,6 +15,7 @@ import {
   parseExceptionDetails,
   parseIncoming,
   request,
+  type CdpError,
   type RemoteObject,
 } from "@/lib/cdp"
 import { rowFromCall, rowFromException, type ConsoleRow } from "@/lib/console-feed"
@@ -32,12 +33,25 @@ export interface NamedValue {
 /** How long to wait for a reply before giving the caller nothing. */
 const REPLY_TIMEOUT_MS = 10_000
 
+/**
+ * One reply, with the protocol error it may have carried instead of a result.
+ *
+ * The error used to be dropped on the floor here, which made "the runtime
+ * refused this method" indistinguishable from "nothing came back" — and
+ * `Page.reload` refusing is exactly the signal Reload JS falls back on. Callers
+ * that only want the value still get it through `awaitReply`.
+ */
+export interface Reply {
+  result: unknown
+  error: CdpError | null
+}
+
 /** Everything one live socket needs to reach. */
 export interface Wiring {
   socket: React.RefObject<WebSocket | null>
   /** Aborting it detaches every handler — a closing socket must not report. */
   detach: React.RefObject<AbortController | null>
-  pending: React.RefObject<Map<number, (result: unknown) => void>>
+  pending: React.RefObject<Map<number, (reply: Reply) => void>>
   nextRow: React.RefObject<number>
   addRows: (rows: ConsoleRow[]) => void
   setConnection: (connection: Connection) => void
@@ -59,17 +73,31 @@ export function sendOn(
 }
 
 /** Wait for one reply, or give up rather than holding the promise forever. */
-export function awaitReply(
+export function awaitFullReply(
   id: number | null,
-  pending: Map<number, (result: unknown) => void>,
-): Promise<unknown> {
-  if (id === null) return Promise.resolve(null)
+  pending: Map<number, (reply: Reply) => void>,
+): Promise<Reply> {
+  // A send that never went out (no socket) is reported as a refusal rather than
+  // an empty result: the caller is about to decide whether to fall back, and
+  // "nothing happened" is the case where it must.
+  if (id === null) return Promise.resolve({ result: null, error: NOT_SENT })
   return new Promise((resolve) => {
     pending.set(id, resolve)
     setTimeout(() => {
-      if (pending.delete(id)) resolve(null)
+      if (pending.delete(id)) resolve({ result: null, error: TIMED_OUT })
     }, REPLY_TIMEOUT_MS)
   })
+}
+
+const NOT_SENT: CdpError = { code: 0, message: "There is no debugger connection." }
+const TIMED_OUT: CdpError = { code: 0, message: "The runtime did not answer." }
+
+/** The value of one reply, with any protocol error flattened to `null`. */
+export async function awaitReply(
+  id: number | null,
+  pending: Map<number, (reply: Reply) => void>,
+): Promise<unknown> {
+  return (await awaitFullReply(id, pending)).result
 }
 
 export async function findTargets(
@@ -161,7 +189,7 @@ function handleFrame(text: string, wiring: Wiring): void {
     const waiting = wiring.pending.current.get(frame.id)
     if (waiting !== undefined) {
       wiring.pending.current.delete(frame.id)
-      waiting(frame.result)
+      waiting({ result: frame.result, error: frame.error })
     }
     return
   }

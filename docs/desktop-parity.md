@@ -902,6 +902,40 @@ beside Restart now, as on the Mac. The restart tooltip, the row copy tooltip
 (the only thing advertising the right-click menu) and the two API refinement
 rows took the Mac's words.
 
+**Pass 3 — the JS Console, started.** Its two app verbs are in: **Reload JS**
+and the **Restart app** split button with its cache and data variants, the
+second reusing Reactotron's — now `AppRestartMenu`, since the only difference
+between the two screens is how the package is named. Reactotron matches a
+client name against the installed list; Metro reports the application id
+outright, so the JS Console is told. Reload asks the runtime first and falls
+back to the device's own reload keys (the `reload-js` action — the same
+`input keyevent 46 46`) when Hermes refuses `Page.reload`, which it does on
+releases that never implemented it. That fallback needed a fix underneath: a
+CDP reply's protocol *error* was being dropped in `cdp-session`, so "the
+runtime refused this" and "nothing came back" were the same answer everywhere.
+
+**One finding for the Mac, not the port.** `JSConsoleView` shows its
+`adb reverse` button only while disconnected. But this console's own socket
+runs host-to-Metro and never through the tunnel, so it stays connected when the
+device's route drops — which is the shape of the bug #363 fixed for Reactotron,
+where the button was reachable only at the moment you did not need it. The port
+keeps its button visible and says so where it occurs; the Mac is where the
+change belongs.
+
+Its filter bar is the Mac's now too. **The level filter was the design the Mac
+replaced** — a chip per level — and it also filtered the other way round:
+ticking a chip here showed *only* that level, while ticking one there hides it.
+Someone silencing `verbose` on one app and finding the other had silenced
+everything else is the kind of difference the port exists to avoid, so
+`FilterState` holds `hidden` now and the bar is the Mac's pill (`All levels` /
+`Levels 3/4`) over a popover with Show All and Hide All. **Export** writes
+ADBKit's `ConsoleExport` shape exactly — same four keys, sorted, same
+fractional-second stamps — so a dump from either app diffs against the other,
+and `captureStamp` is now shared with the screenshot editor because the file
+name is a contract with the Mac rather than a convenience.
+
+Still open here: find (⌘F), and row selection with its copies.
+
 **Known real gaps found and not yet closed**, in rough order of size:
 `reactotron` (25/51), `js-console` (14/24), `terminal`'s split panes and groups
 (6/14), `logcat`'s filter/find tooltips and app-picker labels (4/12),
@@ -1885,33 +1919,33 @@ job, and the checklist now says which.
 - **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `JSConsoleView` — `App/Sources/FeatureDetail/Views/JSConsoleView.swift`
 - **Must replicate**
-  - [ ] button: Clear Data & Restart
-  - [ ] button: Cancel
-  - [ ] button: Save as JSON…
-  - [ ] button: Copy to Clipboard
-  - [ ] button: Show All
-  - [ ] button: Hide All
+  - [x] button: Clear Data & Restart
+  - [x] button: Cancel
+  - [x] button: Save as JSON…
+  - [x] button: Copy to Clipboard
+  - [x] button: Show All
+  - [x] button: Hide All
   - [ ] button: Copy
   - [ ] button: Copy as JSON
   - [ ] button: Deselect
   - [ ] button: Run adb reverse for the device
   - [ ] button: Run
   - [ ] field: Find in console
-  - [ ] field: 8081
-  - [ ] field: Filter
-  - [ ] label: Reload JS
-  - [ ] label: Clear cache and restart
-  - [ ] label: Clear data and restart
-  - [ ] label: Restart app
-  - [ ] label: adb reverse
-  - [ ] tooltip: Reload the JS bundle — what ⌘R in React Native DevTools does
-  - [ ] tooltip: Metro dev-server port — varies per app
+  - [x] field: 8081
+  - [x] field: Filter
+  - [x] label: Reload JS
+  - [x] label: Clear cache and restart
+  - [x] label: Clear data and restart
+  - [x] label: Restart app
+  - [x] label: adb reverse
+  - [x] tooltip: Reload the JS bundle — what ⌘R in React Native DevTools does
+  - [x] tooltip: Metro dev-server port — varies per app
   - [ ] tooltip: Find & highlight in console (⌘F)
-  - [ ] tooltip: Clear the console
-  - [ ] tooltip: Choose which log levels to show
+  - [x] tooltip: Clear the console
+  - [x] tooltip: Choose which log levels to show
   - [ ] search: searchable list
   - [ ] shortcut: "c", modifiers: .command
-  - [ ] export: save/export to a file
+  - [x] export: save/export to a file
 
 #### `open-dev-menu` — Open Dev Menu  ·  ✅ ported
 > Open the React Native developer menu

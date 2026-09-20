@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 
 import { getPropertiesParams, keepaliveParams, releaseObjectGroupParams } from "@/lib/cdp"
 import {
+  awaitFullReply,
   awaitReply,
   findTargets,
   namedValues,
@@ -13,6 +14,7 @@ import {
   type Wiring,
 } from "@/lib/cdp-session"
 import { appended, localRow, type ConsoleRow } from "@/lib/console-feed"
+import { reloadStep, type ReloadStep } from "@/lib/js-console-actions"
 import type { CdpTarget } from "@/lib/metro"
 
 export interface JsConsole {
@@ -26,6 +28,14 @@ export interface JsConsole {
   clear: () => void
   evaluate: (expression: string) => void
   expand: (objectId: string) => Promise<NamedValue[]>
+  /**
+   * Reload the JS bundle — what ⌘R does in React Native DevTools.
+   *
+   * Resolves to what the runtime said, so the caller can send the device's own
+   * reload keys when it refused. Doing that here would mean this hook reaching
+   * for the daemon, which is the one thing it deliberately does not do.
+   */
+  reloadJs: () => Promise<ReloadStep>
 }
 
 /**
@@ -131,6 +141,8 @@ export function useJsConsole(port: number): JsConsole {
     evaluate: (expression) => echoAndRun(expression, call, nextRow, addRows),
     expand: async (objectId) =>
       namedValues(await call("Runtime.getProperties", getPropertiesParams(objectId))),
+    reloadJs: async () =>
+      reloadStep((await awaitFullReply(send("Page.reload", {}), pending.current)).error),
   }
 }
 
