@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { ChevronDown, ChevronRight, Copy } from "lucide-react"
 import { ReactotronDetail } from "@/components/ReactotronDetail"
+import type { ReactotronSelection } from "@/hooks/useReactotronSelection"
 import { cn } from "@/lib/cn"
 import { copyText } from "@/lib/daemon"
 import { copyLine } from "@/lib/reactotron-copy"
@@ -95,10 +96,13 @@ function clock(at: number): string {
 export function ReactotronRow({
   row,
   onMenu,
+  selection,
 }: {
   row: TimelineRow
   /** Right-click, for the copy menu the pane owns. */
   onMenu?: (at: { x: number; y: number }, row: TimelineRow) => void
+  /** Row picking, when the pane offers it. */
+  selection?: ReactotronSelection | null
 }) {
   const [expanded, setExpanded] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -107,7 +111,17 @@ export function ReactotronRow({
 
   return (
     <div
-      className="flex min-w-0 border-b border-border-subtle/50"
+      data-row={row.id}
+      className={cn(
+        "flex min-w-0 border-b border-border-subtle/50",
+        selection?.has(row.id) === true && "bg-accent/25",
+      )}
+      onPointerDown={(event) => {
+        selection?.onPointerDown(row.id, event)
+      }}
+      onPointerEnter={() => {
+        selection?.onPointerEnter(row.id)
+      }}
       onContextMenu={(event) => {
         if (onMenu === undefined) return
         event.preventDefault()

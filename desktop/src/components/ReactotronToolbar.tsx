@@ -138,7 +138,7 @@ function ExportMenu({
         >
           {[
             { label: "Save as JSON…", run: onExport },
-            { label: "Copy to clipboard", run: onCopy },
+            { label: "Copy to Clipboard", run: onCopy },
           ].map((entry) => (
             <button
               key={entry.label}
