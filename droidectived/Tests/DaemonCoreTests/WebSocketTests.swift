@@ -208,6 +208,35 @@ private let hasWebSocketClient: Bool = {
         }
     }
 
+    @Test func aCommandPastNIOsDefaultFrameSizeIsAnsweredLikeAnyOther() async throws {
+        // This socket took NIO's 16 KiB `maxFrameSize` default too, and here it
+        // is not one feature that dies but every subscription in the window:
+        // the decoder throws, the error handler closes, and logcat, the mirror
+        // and the device list go with whatever sent the oversized frame.
+        //
+        // `write` is the command that gets there first — its `data` is base64,
+        // so pasting about 12 KiB of text into the Terminal clears the limit.
+        // 200 KB of paste here, against an id nothing is subscribed to, so the
+        // answer is a known one and the test needs no pty.
+        try await withServer { port, token in
+            let task = socket(port: port, token: token)
+            defer { task.cancel(with: .goingAway, reason: nil) }
+
+            let paste = Data(repeating: UInt8(ascii: "x"), count: 200_000).base64EncodedString()
+            try await task.send(.string(#"{"op":"write","id":7,"params":{"data":"\#(paste)"}}"#))
+            let failure = try await receiveText(task)
+            #expect(failure.contains(#""event":"failed""#))
+            #expect(failure.contains(StreamProtocol.CommandError.unknownSubscription.message))
+
+            // And the socket is still the one it was: a large frame that closed
+            // the connection would pass the assertion above if the answer had
+            // raced the close.
+            try await task.send(.string(#"{"op":"subscribe","id":8,"topic":"devices"}"#))
+            let ack = try await receiveText(task)
+            #expect(ack.contains(#""event":"subscribed""#))
+        }
+    }
+
     @Test func theRoutesStillWorkAlongsideTheSocket() async throws {
         // One listener serves both; adding the upgrader must not break POST.
         try await withServer { port, token in

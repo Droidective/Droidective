@@ -4,11 +4,17 @@
 Connects to the relay, introduces itself, registers a custom command, and
 answers every request the State, REPL and Commands screens make — the way
 `reactotron-redux` does. It is how those three screens were verified without
-ever rendering them, and it is the reproduction for the >64 KB stream bug
-(see `--big`).
+ever rendering them.
 
     ./scripts/reactotron-fake-client.py            # a normal client
     ./scripts/reactotron-fake-client.py --big      # answer repl with 200 KB
+
+`--big` was the reproduction for the oversized-frame bug: the relay took NIO's
+16 KiB `maxFrameSize` default and answered anything past it with close 1009,
+so the event never reached the timeline and the client was dropped. Fixed, and
+kept because a large payload is worth exercising — but note that `websockets`
+pings every 20 s, which is what exposed the *second* bug there (a masked pong)
+and made one look like the other.
 
 Open Reactotron in either app first: the relay binds 9090 only once something
 subscribes to the topic, so with nothing watching there is nothing to connect
@@ -89,8 +95,8 @@ async def main() -> None:
             elif kind == "repl.ls":
                 await say("repl.ls.response", ["store", "api"])
             elif kind == "repl.execute":
-                # --big is the stream-socket reproduction: a payload over ~64 KB
-                # never reaches the timeline and takes the subscription with it.
+                # 200 KB, comfortably past the 16,384-byte frame limit that
+                # used to drop this connection before the answer was decoded.
                 if BIG:
                     await say("repl.execute.response", {"blob": "x" * 200_000})
                 elif payload == "store.getState()":
