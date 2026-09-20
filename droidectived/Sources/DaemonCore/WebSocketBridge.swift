@@ -27,6 +27,29 @@ final class WebSocketSink: StreamSink, @unchecked Sendable {
     }
 }
 
+extension WebSocketFrame {
+    /// The pong owed to `ping`.
+    ///
+    /// Built fresh rather than by flipping the inbound frame's opcode, which is
+    /// what both of this daemon's handlers used to do and is a protocol
+    /// violation: RFC 6455 masks client→server only, so a `ping` arrives masked
+    /// and carries its masking key, and copying the frame sends that key
+    /// straight back out. A conformant client sees the mask bit on a
+    /// server→client frame, closes with 1002 and reports "incorrect masking" —
+    /// which reads exactly like a desynchronised frame header and sent one
+    /// investigation looking for a length-encoding bug that was never there.
+    ///
+    /// The cost was a feed that stopped dead on the first keepalive: any client
+    /// that pings — `websockets`, OkHttp with a ping interval, a browser — lost
+    /// the socket and everything subscribed on it.
+    ///
+    /// `unmaskedData`, because §5.5.3 requires the pong to carry the ping's
+    /// application data, and `data` is still XORed with the key.
+    static func pong(for ping: WebSocketFrame) -> WebSocketFrame {
+        WebSocketFrame(fin: true, opcode: .pong, data: ping.unmaskedData)
+    }
+}
+
 /// Feeds inbound frames to the session and keeps the connection honest.
 final class WebSocketHandler: ChannelInboundHandler, @unchecked Sendable {
     typealias InboundIn = WebSocketFrame
@@ -51,9 +74,7 @@ final class WebSocketHandler: ChannelInboundHandler, @unchecked Sendable {
                 try? await channel.close().get()
             }
         case .ping:
-            var response = frame
-            response.opcode = .pong
-            context.writeAndFlush(NIOAny(response), promise: nil)
+            context.writeAndFlush(NIOAny(WebSocketFrame.pong(for: frame)), promise: nil)
         case .text, .continuation:
             // `unmaskedData`, never `data`: the RFC requires every
             // client-to-server frame to be masked, so the raw buffer is XORed

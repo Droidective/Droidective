@@ -421,7 +421,11 @@ public actor ReactotronRelay {
 /// burst would land timeline rows out of the order the app logged them — which
 /// is the one thing a timeline must not do. The channel's callbacks are serial,
 /// so the yields keep the wire order and the consumer preserves it.
-private final class RelayConnectionHandler: ChannelInboundHandler, @unchecked Sendable {
+/// Internal rather than private only so `WebSocketPongTests` can drive it
+/// through an `EmbeddedChannel`: this handler and `WebSocketHandler` answer
+/// pings identically, and the bug that made both send a masked pong is only
+/// visible in the frame each one writes.
+final class RelayConnectionHandler: ChannelInboundHandler, @unchecked Sendable {
     typealias InboundIn = WebSocketFrame
     typealias OutboundOut = WebSocketFrame
 
@@ -451,9 +455,7 @@ private final class RelayConnectionHandler: ChannelInboundHandler, @unchecked Se
         case .connectionClose:
             end(reason: "client closed", code: Self.closeCode(frame))
         case .ping:
-            var pong = frame
-            pong.opcode = .pong
-            context.writeAndFlush(NIOAny(pong), promise: nil)
+            context.writeAndFlush(NIOAny(WebSocketFrame.pong(for: frame)), promise: nil)
         case .text, .continuation:
             var payload = frame.unmaskedData
             fragments += payload.readString(length: payload.readableBytes) ?? ""
