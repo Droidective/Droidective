@@ -18,3 +18,5 @@ export { ReactotronReplPane } from "@/components/ReactotronReplPane"
 // is at its dependency ceiling, and a hook and its screen are one import.
 export { useReactotronState } from "@/hooks/useReactotronState"
 export { useReactotronRepl } from "@/hooks/useReactotronRepl"
+export { ReactotronCommandsPane } from "@/components/ReactotronCommandsPane"
+export { useReactotronCommands } from "@/hooks/useReactotronCommands"

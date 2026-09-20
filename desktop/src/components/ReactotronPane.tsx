@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react"
 import {
+  ReactotronCommandsPane,
   ReactotronFeed,
   ReactotronReplPane,
   ReactotronFilterSheet,
@@ -11,6 +12,7 @@ import {
   ReactotronWaiting,
   RENDER_WINDOW,
   ReverseButton,
+  useReactotronCommands,
   useReactotronRepl,
   useReactotronState,
 } from "@/components/reactotron"
@@ -48,6 +50,7 @@ export function ReactotronPane({ device }: { device: Device | null }) {
   // has filtered out of view is still the answer this screen asked for.
   const state = useReactotronState(timeline.rows)
   const repl = useReactotronRepl(timeline.rows)
+  const custom = useReactotronCommands(timeline.rows)
 
   // The waiting screen gives way only once there is something to read. A relay
   // whose app has since disconnected still has rows, and those last events are
@@ -76,6 +79,8 @@ export function ReactotronPane({ device }: { device: Device | null }) {
         <ReactotronStatePane session={state} />
       ) : view === "repl" ? (
         <ReactotronReplPane session={repl} />
+      ) : view === "commands" ? (
+        <ReactotronCommandsPane session={custom} />
       ) : (
         <ReactotronTimelineView
             filter={filter}
@@ -190,11 +195,9 @@ function ReactotronTimelineView({
 }
 
 /**
- * Timeline, State or REPL — the Mac's `viewPicker`, minus custom Commands,
- * which joins when it lands rather than sitting here disabled advertising a
- * screen nobody can open.
+ * The Mac's `viewPicker`, in its order: Timeline, Commands, State, REPL.
  */
-type ReactotronView = "timeline" | "state" | "repl"
+type ReactotronView = "timeline" | "commands" | "state" | "repl"
 
 function ReactotronViewPicker({
   view,
@@ -205,7 +208,7 @@ function ReactotronViewPicker({
 }) {
   return (
     <div className="flex shrink-0 items-center gap-1 border-b border-border-subtle bg-bg-chrome px-3 py-1.5">
-      {(["timeline", "state", "repl"] as const).map((option) => (
+      {(["timeline", "commands", "state", "repl"] as const).map((option) => (
         <button
           key={option}
           type="button"

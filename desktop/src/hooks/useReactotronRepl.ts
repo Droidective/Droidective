@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { reactotronSend } from "@/lib/daemon"
-import { evaluate, listReplNames, readReplEvent } from "@/lib/reactotron-state"
+import { evaluate, listReplNames, readReplEvent } from "@/lib/reactotron-repl"
 import type { TimelineRow } from "@/lib/reactotron-rows"
 
 /**
