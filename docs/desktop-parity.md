@@ -913,10 +913,24 @@ clipboard" for the Mac's "Copy to Clipboard", and the filter sheet's Cancel had
 no tooltip where the Mac says "Close without applying" — the one thing saying
 Cancel *discards* rather than closing with the edits applied.
 
-**Genuinely unported, and it is one feature, not three:** split panes. `Split
-into two panes`, `Clear the whole timeline — both panes`, `Pane cleared` and
-the `Got it` onboarding sheet are all that. Plus full-size image events
-(`Click to view full size`).
+~~Genuinely unported: split panes.~~ **Landed.** Each pane gets its own
+filter and its own order over **one shared buffer** — API traffic on one side,
+logs on the other. The model is `lib/reactotron-panes.ts`, and the two rules
+worth getting right are the ones that are invisible when they go wrong: a
+pane's clear is a **watermark, not a delete** (the buffer is shared, so
+removing rows would empty the other pane too), and its boundary is
+**inclusive** — exclusive leaks the last pre-clear row straight back in.
+Closing the split forgets **only the right pane's** clear: that pane is going
+away, so a reopened split offers the whole timeline again, which is also the
+way back from an accidental clear. The left pane lives on as the single pane,
+so its clear and both filters stay.
+
+The layout follows the Mac's too: in one pane the global controls ride the
+pane's own toolbar, because a timeline topped by two stacked strips wastes the
+room the rows want; the dedicated strip appears only when split.
+
+Still unported: full-size image events (`Click to view full size`), and the
+`Got it` onboarding sheet that sells the split on the Mac.
 
 **`button: Copy value` stays unticked deliberately.** The capability is there —
 a tree row's hover button, `copyValue` — but the Mac puts it in a *right-click
@@ -2056,14 +2070,14 @@ job, and the checklist now says which.
   - [x] label: Refresh
   - [x] label: Dispatch
   - [x] label: Take Snapshot
-  - [ ] label: Pane cleared
+  - [x] label: Pane cleared
   - [x] label: Clear cache and restart
   - [x] label: Clear data and restart
   - [x] label: Restart app
   - [x] tooltip: Force-stop and relaunch the connected app so it reconnects
   - [x] tooltip: Run adb reverse tcp:9090 tcp:9090 on connected devices
-  - [ ] tooltip: Clear the whole timeline — both panes
-  - [ ] tooltip: Split into two panes
+  - [x] tooltip: Clear the whole timeline — both panes
+  - [x] tooltip: Split into two panes
   - [x] tooltip: Clear the timeline
   - [x] tooltip: Stop watching this path
   - [x] tooltip: Refresh available values

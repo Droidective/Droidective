@@ -1,5 +1,5 @@
 import { useRef, useState } from "react"
-import { ArrowDownUp, Eraser, ListFilter, Search, Undo2, Upload } from "lucide-react"
+import { ArrowDownUp, Columns2, Eraser, ListFilter, Search, Undo2, Upload } from "lucide-react"
 import { useDismissOnOutside } from "@/hooks/useDismissOnOutside"
 import { cn } from "@/lib/cn"
 import { isFiltering, type TimelineFilter } from "@/lib/reactotron-filter"
@@ -24,6 +24,7 @@ export function ReactotronToolbar({
   onClear,
   onExport,
   onCopyAll,
+  onSplit,
   trailing,
 }: {
   filter: TimelineFilter
@@ -38,6 +39,13 @@ export function ReactotronToolbar({
   onExport: () => void
   /** Copy what is shown as JSON. */
   onCopyAll: () => void
+  /**
+   * Opens the split, when this pane is the only one.
+   *
+   * Null in split mode: the strip above owns it there, because the toggle
+   * belongs to the timeline rather than to either pane.
+   */
+  onSplit: (() => void) | null
   /** The restart control, which the pane owns because it needs a device. */
   trailing?: React.ReactNode
 }) {
@@ -87,6 +95,7 @@ export function ReactotronToolbar({
           onNewestFirst(!newestFirst)
         }}
       />
+      <SplitButton onSplit={onSplit} />
       <ExportMenu disabled={visible === 0} onExport={onExport} onCopy={onCopyAll} />
       <IconButton
         icon={Eraser}
@@ -106,6 +115,22 @@ export function ReactotronToolbar({
  * a filter narrows the export as well as the view. Disabled when nothing is
  * shown: an empty file is not a useful answer to "export this".
  */
+/** Opens the split. Absent in split mode, where the strip above owns the toggle. */
+function SplitButton({ onSplit }: { onSplit: (() => void) | null }) {
+  if (onSplit === null) return null
+  return (
+    <button
+      type="button"
+      title="Split into two panes"
+      aria-label="Split into two panes"
+      onClick={onSplit}
+      className="shrink-0 rounded p-1 text-text-secondary hover:bg-bg-surface"
+    >
+      <Columns2 size={13} />
+    </button>
+  )
+}
+
 function ExportMenu({
   disabled,
   onExport,

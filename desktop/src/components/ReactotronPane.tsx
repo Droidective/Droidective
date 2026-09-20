@@ -1,28 +1,16 @@
-import { useMemo, useState } from "react"
+import { useState } from "react"
 import {
   ReactotronCommandsPane,
-  ReactotronFeed,
   ReactotronReplPane,
-  ReactotronFilterSheet,
-  ReactotronNotices,
-  AppRestartMenu,
   ReactotronStatePane,
-  ReactotronStatus,
-  ReactotronToolbar,
+  ReactotronTimeline,
   ReactotronWaiting,
-  RowSelectionMenu,
-  RENDER_WINDOW,
-  ReverseButton,
   useReactotronCommands,
   useReactotronRepl,
   useReactotronState,
 } from "@/components/reactotron"
 import { useReactotron } from "@/hooks/useReactotron"
 import { useReactotronActions } from "@/hooks/useReactotronActions"
-import { useReactotronSelection, type ReactotronSelection } from "@/hooks/useReactotronSelection"
-import { copyText } from "@/lib/daemon"
-import { emptyFilter, filterRows, seenMethods, type TimelineFilter } from "@/lib/reactotron-filter"
-import type { TimelineRow } from "@/lib/reactotron-rows"
 import type { Device } from "@/lib/wire"
 
 /**
@@ -37,18 +25,14 @@ import type { Device } from "@/lib/wire"
  */
 export function ReactotronPane({ device }: { device: Device | null }) {
   const feed = useReactotron()
-  const [filter, setFilter] = useState<TimelineFilter>(emptyFilter)
-  const [filtering, setFiltering] = useState(false)
-  const [newestFirst, setNewestFirst] = useState(false)
   const [view, setView] = useState<ReactotronView>("timeline")
 
   const { timeline } = feed
-  const visible = useMemo(() => filterRows(timeline.rows, filter), [timeline.rows, filter])
-  const methods = useMemo(
-    () => seenMethods(timeline.rows, filter.method),
-    [timeline.rows, filter.method],
-  )
-  const actions = useReactotronActions({ device, port: timeline.port, visible })
+  // The export and the copy-all act on the whole timeline rather than one
+  // pane's view of it: with the split open there are two views, and picking
+  // one of them would make what the button writes depend on which pane you
+  // last touched.
+  const actions = useReactotronActions({ device, port: timeline.port, visible: timeline.rows })
   // Fed the raw rows, not the filtered ones: a `state.values.response` the user
   // has filtered out of view is still the answer this screen asked for.
   const state = useReactotronState(timeline.rows)
@@ -85,129 +69,12 @@ export function ReactotronPane({ device }: { device: Device | null }) {
       ) : view === "commands" ? (
         <ReactotronCommandsPane session={custom} />
       ) : (
-        <ReactotronTimelineView
-            filter={filter}
-            onFilter={setFilter}
-            filtering={filtering}
-            onFiltering={setFiltering}
-            newestFirst={newestFirst}
-            onNewestFirst={setNewestFirst}
-            feed={feed}
-            visible={visible}
-            methods={methods}
-            actions={actions}
-            device={device}
-          />
+<ReactotronTimeline feed={feed} actions={actions} device={device} />
       )}
     </div>
   )
 }
 
-/** The timeline half: its toolbar, status, notices, feed and filter sheet. */
-function ReactotronTimelineView({
-  filter,
-  onFilter,
-  filtering,
-  onFiltering,
-  newestFirst,
-  onNewestFirst,
-  feed,
-  visible,
-  methods,
-  actions,
-  device,
-}: {
-  filter: TimelineFilter
-  onFilter: (filter: TimelineFilter) => void
-  filtering: boolean
-  onFiltering: (filtering: boolean) => void
-  newestFirst: boolean
-  onNewestFirst: (newestFirst: boolean) => void
-  feed: ReturnType<typeof useReactotron>
-  visible: TimelineRow[]
-  methods: string[]
-  actions: ReturnType<typeof useReactotronActions>
-  device: Device | null
-}) {
-  const { timeline } = feed
-  const selection = useReactotronSelection(visible, reportingCopy(actions.report))
-
-  return (
-    <>
-      <ReactotronToolbar
-        filter={filter}
-        onFilter={onFilter}
-        visible={visible.length}
-        total={timeline.rows.length}
-        newestFirst={newestFirst}
-        onNewestFirst={onNewestFirst}
-        onOpenFilters={() => {
-          onFiltering(true)
-        }}
-        onClear={feed.clear}
-        onExport={actions.exportShown}
-        onCopyAll={actions.copyShown}
-        trailing={
-          <>
-            <AppRestartMenu
-              serial={device?.serial ?? null}
-              subject={{ kind: "client", name: timeline.clients[0]?.name ?? null }}
-              onReport={actions.report}
-            />
-            {/* Beside Restart, as on the Mac. It used to appear only where the
-                status bar offers it — while no client is connected — so a
-                tunnel that dropped with the client still listed left no way to
-                re-open it, which is the one moment you need the button. */}
-            <ReverseButton disabled={device === null} onReverse={actions.openTunnel} />
-            <TimelineSelectionMenu selection={selection} />
-          </>
-        }
-      />
-      <ReactotronStatus
-        relay={feed.relay}
-        clients={timeline.clients.map((client) => client.name)}
-        port={timeline.port}
-        rows={timeline.rows.length}
-        shown={visible.length}
-        rendered={Math.min(visible.length, RENDER_WINDOW)}
-        renderWindow={RENDER_WINDOW}
-        hasDevice={device !== null}
-        onReverse={actions.openTunnel}
-      />
-      <ReactotronNotices
-        error={feed.error?.message ?? null}
-        ended={feed.ended}
-        failure={actions.failure}
-        notice={actions.notice}
-        tunnel={actions.tunnel}
-      />
-      <ReactotronFeed
-        rows={visible}
-        newestFirst={newestFirst}
-        total={timeline.rows.length}
-        selection={selection}
-      />
-
-      {filtering ? (
-        <ReactotronFilterSheet
-          filter={filter}
-          seenMethods={methods}
-          onApply={(applied) => {
-            onFilter(applied)
-            onFiltering(false)
-          }}
-          onDismiss={() => {
-            onFiltering(false)
-          }}
-        />
-      ) : null}
-    </>
-  )
-}
-
-/**
- * The Mac's `viewPicker`, in its order: Timeline, Commands, State, REPL.
- */
 type ReactotronView = "timeline" | "commands" | "state" | "repl"
 
 function ReactotronViewPicker({
@@ -238,33 +105,4 @@ function ReactotronViewPicker({
       ))}
     </div>
   )
-}
-
-/** The picked-rows control, which the Mac shows only while something is picked. */
-function TimelineSelectionMenu({ selection }: { selection: ReactotronSelection }) {
-  if (selection.count === 0) return null
-  return (
-    <RowSelectionMenu
-      count={selection.count}
-      noun="events"
-      onCopy={selection.copy}
-      onCopyAsJson={selection.copyAsJson}
-      onDeselect={selection.clear}
-    />
-  )
-}
-
-/**
- * What a selection copy does once the text is built: put it on the clipboard
- * and say how many went, through whichever slot the pane reports into.
- */
-function reportingCopy(report: (outcome: { ok: boolean; message: string }) => void) {
-  return (text: string, count: number, asJson: boolean) => {
-    void copyText(text).then(() => {
-      report({
-        ok: true,
-        message: `Copied ${String(count)} ${asJson ? "events as JSON" : "events"}`,
-      })
-    })
-  }
 }

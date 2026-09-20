@@ -21,12 +21,18 @@ export function ReactotronFeed({
   newestFirst,
   total,
   selection,
+  clearedEmpty = false,
+  rightPane = false,
 }: {
   rows: readonly TimelineRow[]
   newestFirst: boolean
   /** Everything buffered, so an empty result can say what it is hiding. */
   total: number
   selection: ReactotronSelection
+  /** True when this pane is empty because it was cleared, not because nothing came. */
+  clearedEmpty?: boolean
+  /** The right pane's clear is undone by closing the split; the left one's is not. */
+  rightPane?: boolean
 }) {
   const [following, setFollowing] = useState(true)
   const [menu, setMenu] = useState<RowMenuTarget | null>(null)
@@ -68,7 +74,16 @@ export function ReactotronFeed({
           }}
         />
       ))}
-      {rows.length === 0 ? (
+      {rows.length === 0 && clearedEmpty ? (
+        <p className="p-8 text-center text-text-tertiary">
+          {/* Empty because the reader cleared this pane, not because nothing
+              arrived — the setup message would mislead on a live session. The
+              right pane says how to get the events back, because closing the
+              split forgets its clear and the left pane's survives. */}
+          Pane cleared. New events will appear here
+          {rightPane ? " — close and reopen the split to bring the cleared events back." : "."}
+        </p>
+      ) : rows.length === 0 ? (
         <p className="p-8 text-center text-text-tertiary">
           {/* Two different empty states, and conflating them misleads: an app
               that has sent nothing yet is not a filter hiding everything. A
