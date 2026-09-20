@@ -914,6 +914,18 @@ gaps.
 
 ## Defects in what already shipped
 
+- [ ] **A stream payload over ~64 KB kills the subscription.** Found while
+      exercising Reactotron's REPL. The client rejects the frame as "incorrect
+      masking" — a desynchronised frame header — the event never reaches the
+      timeline, and the feed stops with no error anywhere. A `console.log` of a
+      large object would do it in the real app, so this is a user-facing bug
+      rather than a test artefact. Reproduce with
+      `./scripts/reactotron-fake-client.py --big` and a `repl.execute`; the
+      same client without `--big` is fine. **Not diagnosed** —
+      `WebSocketSink.send` writes one `WebSocketFrame` and NIO encodes it,
+      which handles extended lengths correctly, so the obvious answer is not
+      the answer. Capture the emitted bytes.
+
 Found by driving the app against a live emulator, not by reading it.
 
 - [x] ~~**`copyText` never reaches the clipboard.**~~ A result carrying

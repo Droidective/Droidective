@@ -36,7 +36,9 @@ STATE
       the next `generate-parity-tracker.py` run.
     - Reactotron: the reverse-tunnel button moved into the toolbar, where it is
       reachable while a client is connected (#363); the daemon relay learned to
-      SEND to a client (#364); and the State screen landed (#365).
+      SEND to a client (#364); and **all four of its views are now ported** —
+      State (#365), REPL (#367), custom Commands (#368). The picker is
+      Timeline / Commands / State / REPL, in the Mac's order.
 
   THE AUDIT IS THE CURRENT MODE OF WORK. `docs/desktop-parity.md`'s per-feature
   checklists are it. A tick means the affordance was found in desktop/src *and
@@ -59,12 +61,32 @@ THE RULE THAT MATTERS MOST
   Two standing exceptions: a keyboard shortcut whose modifier has no
   Windows/Linux equivalent, and a label that names a platform.
 
+START HERE: A BUG WORTH MORE THAN THE BACKLOG
+  A Reactotron event whose payload is over ~64 KB kills the stream
+  subscription. The client rejects the frame as "incorrect masking" — the
+  classic symptom of a desynchronised frame header — the event never reaches
+  the timeline, and the feed simply stops. In the real app a `console.log` of
+  a large object would do it.
+
+  Reproduce, from a clean app:
+    1. open Reactotron in the app (that is what binds 9090 — the relay starts
+       when something subscribes to the topic, not before)
+    2. ./scripts/reactotron-fake-client.py --big
+    3. drive a `repl.execute` at it — the REPL screen's Evaluate, or
+       POST /v1/reactotron/send with type `repl.execute`
+    4. the 200 KB `repl.execute.response` never arrives and the socket closes
+
+  Without --big the same client answers everything normally and the feed is
+  fine, which is how the three new screens were verified.
+
+  NOT DIAGNOSED. The obvious first guess was wrong: `WebSocketSink.send` writes
+  one `WebSocketFrame` and lets NIO encode it, and NIO handles extended lengths
+  correctly. Capture the bytes the daemon actually emits rather than reading
+  the code — that is where the last hour went and it did not find it.
+
 WHAT IS LEFT, roughly in the tracker's order
-  - Reactotron's REPL and custom Commands panes — the last two of its four
-    views. Both send a command and read the answer off the timeline, exactly as
-    State does, so `useReactotronState` + `lib/reactotron-state.ts` is the
-    worked example and `/v1/reactotron/send` already exists. REPL is the
-    smaller: `repl.ls` lists what is in scope, `repl.command` evaluates.
+  - The JS Console (14/24 on the tracker), the other half of the RN workflow
+    and the largest screen left.
   - The welcome tour (backlog 22). The Mac's demo stage plays recordings of the
     *Mac* app, which would be the wrong chrome here, so the six drawn fallbacks
     are what to follow.
@@ -146,10 +168,13 @@ DRIVING THE UI — read this before planning to screenshot anything
       `lsof -nP -iTCP -sTCP:LISTEN -a -p $(pgrep -f 'droidectived --port')` and
       the token from
       "$HOME/Library/Application Support/com.rohindh.droidective.desktop/droidectived.token"
-    - a `websockets` client for stream topics — and for Reactotron, a fake
-      client that *answers*. `state.values.request` -> `state.values.response`
-      is a dozen lines of python and proves the whole round trip; that is how
-      the State screen was verified without ever rendering it.
+    - `./scripts/reactotron-fake-client.py` — a React Native app as far as the
+      relay is concerned. It answers every request the State, REPL and Commands
+      screens make, and announces a custom command on connect. All three
+      screens were verified with it without ever being rendered. Open
+      Reactotron first or there is nothing listening on 9090, and note that
+      whichever app holds 9090 is the one it talks to — with both apps running
+      it is easy to test the wrong one.
   Synthetic mouse events never start an HTML5 drag in WKWebView, so every drag
   path is checked by hand — keep the *decision* a drop makes in lib/.
 ```
