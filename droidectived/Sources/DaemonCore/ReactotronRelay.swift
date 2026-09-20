@@ -324,6 +324,7 @@ public actor ReactotronRelay {
         // subprotocol and no auth header, so the upgrade is unconditional. The
         // guard is the bind address, not the handshake.
         let upgrader = NIOWebSocketServerUpgrader(
+            maxFrameSize: DaemonProtocol.maxWebSocketFrameSize,
             shouldUpgrade: { channel, _ in
                 channel.eventLoop.makeSucceededFuture(HTTPHeaders())
             },

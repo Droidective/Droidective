@@ -1147,6 +1147,7 @@ public actor DaemonServer {
                 // there is one port, one token and one origin policy rather
                 // than two things to keep in agreement.
                 let upgrader = NIOWebSocketServerUpgrader(
+                    maxFrameSize: DaemonProtocol.maxWebSocketFrameSize,
                     shouldUpgrade: { channel, head in
                         // Auth on the *upgrade* request. Checking after the
                         // handshake would leave an authenticated-looking socket
