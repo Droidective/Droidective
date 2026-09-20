@@ -922,8 +922,19 @@ where the button was reachable only at the moment you did not need it. The port
 keeps its button visible and says so where it occurs; the Mac is where the
 change belongs.
 
-Still open here: find (⌘F), export, row selection and its copies, and the
-level menu's Show All / Hide All.
+Its filter bar is the Mac's now too. **The level filter was the design the Mac
+replaced** — a chip per level — and it also filtered the other way round:
+ticking a chip here showed *only* that level, while ticking one there hides it.
+Someone silencing `verbose` on one app and finding the other had silenced
+everything else is the kind of difference the port exists to avoid, so
+`FilterState` holds `hidden` now and the bar is the Mac's pill (`All levels` /
+`Levels 3/4`) over a popover with Show All and Hide All. **Export** writes
+ADBKit's `ConsoleExport` shape exactly — same four keys, sorted, same
+fractional-second stamps — so a dump from either app diffs against the other,
+and `captureStamp` is now shared with the screenshot editor because the file
+name is a contract with the Mac rather than a convenience.
+
+Still open here: find (⌘F), and row selection with its copies.
 
 **Known real gaps found and not yet closed**, in rough order of size:
 `reactotron` (25/51), `js-console` (14/24), `terminal`'s split panes and groups
@@ -1883,31 +1894,31 @@ job, and the checklist now says which.
 - **Must replicate**
   - [x] button: Clear Data & Restart
   - [x] button: Cancel
-  - [ ] button: Save as JSON…
-  - [ ] button: Copy to Clipboard
-  - [ ] button: Show All
-  - [ ] button: Hide All
+  - [x] button: Save as JSON…
+  - [x] button: Copy to Clipboard
+  - [x] button: Show All
+  - [x] button: Hide All
   - [ ] button: Copy
   - [ ] button: Copy as JSON
   - [ ] button: Deselect
   - [ ] button: Run adb reverse for the device
   - [ ] button: Run
   - [ ] field: Find in console
-  - [ ] field: 8081
-  - [ ] field: Filter
+  - [x] field: 8081
+  - [x] field: Filter
   - [x] label: Reload JS
   - [x] label: Clear cache and restart
   - [x] label: Clear data and restart
   - [x] label: Restart app
   - [x] label: adb reverse
   - [x] tooltip: Reload the JS bundle — what ⌘R in React Native DevTools does
-  - [ ] tooltip: Metro dev-server port — varies per app
+  - [x] tooltip: Metro dev-server port — varies per app
   - [ ] tooltip: Find & highlight in console (⌘F)
-  - [ ] tooltip: Clear the console
-  - [ ] tooltip: Choose which log levels to show
+  - [x] tooltip: Clear the console
+  - [x] tooltip: Choose which log levels to show
   - [ ] search: searchable list
   - [ ] shortcut: "c", modifiers: .command
-  - [ ] export: save/export to a file
+  - [x] export: save/export to a file
 
 #### `open-dev-menu` — Open Dev Menu  ·  ✅ ported
 > Open the React Native developer menu

@@ -6,12 +6,11 @@
  * oxlint's dependency and line ceilings, which is the repo's cue to split.
  */
 
-import { ChevronRight, Play, Plug, RefreshCw, RotateCw, Trash2 } from "lucide-react"
+import { ChevronRight, Play, Plug, RefreshCw, RotateCw } from "lucide-react"
 
 import { AppRestartMenu } from "@/components/AppRestartMenu"
 import type { useJsConsole } from "@/hooks/useJsConsole"
 import { DEFAULT_METRO_PORT } from "@/hooks/useJsConsole"
-import { LEVELS, type Level } from "@/lib/console-feed"
 import { consoleRestartTarget } from "@/lib/js-console-actions"
 import { targetLabel } from "@/lib/metro"
 
@@ -35,15 +34,22 @@ export function Bar({
   const connected = console.connection === "connected"
   return (
     <div className="flex shrink-0 items-center gap-2 border-b border-border-subtle px-3 py-2">
-      <span className="text-text-tertiary">Metro</span>
+      {/* "Port" on the Mac; "Metro" here would be the label for the picker
+          beside it, and the two read as one phrase either way. */}
+      <span className="shrink-0 text-text-tertiary">Port</span>
       <input
         type="number"
         aria-label="Metro port"
+        // The Mac's placeholder and its tooltip. A port is the first thing
+        // someone changes when the console finds nothing, and nothing else on
+        // the screen says it varies per app.
+        placeholder={String(DEFAULT_METRO_PORT)}
+        title="Metro dev-server port — varies per app"
         value={port}
         onChange={(event) => onPort(Number(event.target.value) || DEFAULT_METRO_PORT)}
         // Never wider than it needs: nothing in this bar may demand more width
         // than the pane it sits in, or every row below is laid out too wide.
-        className="w-16 rounded border border-border-subtle bg-bg-surface px-1.5 py-1 text-text-primary"
+        className="w-16 rounded border border-border-subtle bg-bg-surface px-1.5 py-1 text-center text-text-primary"
       />
       <select
         aria-label="Debug target"
@@ -150,56 +156,6 @@ function Status({ connection }: { connection: string }) {
       <span className={`size-2 rounded-full ${colour}`} />
       {connection}
     </span>
-  )
-}
-
-export function Filters({
-  levels,
-  counts,
-  query,
-  onQuery,
-  onToggle,
-  onClear,
-}: {
-  levels: ReadonlySet<Level>
-  counts: Record<Level, number>
-  query: string
-  onQuery: (value: string) => void
-  onToggle: (level: Level) => void
-  onClear: () => void
-}) {
-  return (
-    <div className="flex shrink-0 items-center gap-1 border-b border-border-subtle px-3 py-1.5">
-      {LEVELS.map((level) => (
-        <button
-          key={level}
-          type="button"
-          onClick={() => onToggle(level)}
-          // Nothing ticked means everything, so the unticked state is not "off".
-          className={`rounded px-1.5 py-0.5 capitalize ${
-            levels.has(level)
-              ? "bg-accent/20 text-text-primary"
-              : "text-text-tertiary hover:bg-bg-surface"
-          }`}
-        >
-          {level} {counts[level] > 0 ? counts[level] : ""}
-        </button>
-      ))}
-      <input
-        value={query}
-        placeholder="Filter…"
-        onChange={(event) => onQuery(event.target.value)}
-        className="ml-1 min-w-0 flex-1 rounded border border-border-subtle bg-bg-surface px-2 py-1 text-text-primary"
-      />
-      <button
-        type="button"
-        title="Clear the console and release the logged objects"
-        onClick={onClear}
-        className="rounded p-1 text-text-secondary hover:bg-bg-surface"
-      >
-        <Trash2 size={13} />
-      </button>
-    </div>
   )
 }
 

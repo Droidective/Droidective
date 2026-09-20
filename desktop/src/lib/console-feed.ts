@@ -130,32 +130,53 @@ export function appended(
 }
 
 export interface FilterState {
-  /** Which levels to show. Empty means all of them, not none. */
-  levels: ReadonlySet<Level>
+  /**
+   * Which levels to *hide*. Empty is the ordinary state: everything shows.
+   *
+   * Hidden rather than selected, which is what this used to be, because it is
+   * what the Mac's `hiddenLevels` means and the two are not the same filter:
+   * ticking one level there hides that one, while selecting one here showed
+   * only that one. Someone silencing `verbose` on one app and finding the other
+   * had silenced everything else is the kind of difference the port exists to
+   * avoid.
+   */
+  hidden: ReadonlySet<Level>
   query: string
 }
 
-/**
- * The rows a filter leaves.
- *
- * An empty level set means "everything", because a filter bar with nothing
- * ticked showing nothing is a console that looks broken.
- */
+/** The rows a filter leaves. */
 export function filtered(rows: readonly ConsoleRow[], filter: FilterState): ConsoleRow[] {
   const needle = filter.query.trim().toLowerCase()
   return rows.filter((row) => {
-    if (filter.levels.size > 0 && !filter.levels.has(row.level)) return false
+    if (filter.hidden.has(row.level)) return false
     if (needle === "") return true
     return row.text.toLowerCase().includes(needle)
   })
 }
 
-/** Toggling one level in the filter bar. */
-export function toggleLevel(levels: ReadonlySet<Level>, level: Level): Set<Level> {
-  const next = new Set(levels)
+/** Toggling one level in the picker: shown becomes hidden and back. */
+export function toggleLevel(hidden: ReadonlySet<Level>, level: Level): Set<Level> {
+  const next = new Set(hidden)
   if (next.has(level)) next.delete(level)
   else next.add(level)
   return next
+}
+
+/** Every level hidden — the picker's Hide All. */
+export function allHidden(): Set<Level> {
+  return new Set(LEVELS)
+}
+
+/**
+ * What the level pill reads.
+ *
+ * The Mac's wording, and it counts what is *shown*: "Levels 1/4" answers the
+ * question someone glancing at a quiet console is asking, which is how much
+ * they have turned off.
+ */
+export function levelSummary(hidden: ReadonlySet<Level>): string {
+  if (hidden.size === 0) return "All levels"
+  return `Levels ${String(LEVELS.length - hidden.size)}/${String(LEVELS.length)}`
 }
 
 /** How many of each level, for the filter bar's counters. */

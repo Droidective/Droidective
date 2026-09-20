@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react"
 
-import { Bar, Filters, Prompt } from "@/components/JsConsoleParts"
+import { Filters } from "@/components/JsConsoleFilters"
+import { Bar, Prompt } from "@/components/JsConsoleParts"
 import { useJsConsole, DEFAULT_METRO_PORT } from "@/hooks/useJsConsole"
+import { useConsoleExport } from "@/hooks/useConsoleExport"
+import { useJsConsoleActions } from "@/hooks/useJsConsoleActions"
 import { useNotifications } from "@/hooks/useNotifications"
-import { asDaemonError, reactotronReverse, runAction } from "@/lib/daemon"
-import { reloadMessage } from "@/lib/js-console-actions"
-import { filtered, levelCounts, toggleLevel, type Level } from "@/lib/console-feed"
+import { filtered, levelCounts, type Level } from "@/lib/console-feed"
 import { ConsoleFeed } from "@/components/ConsoleFeed"
 import type { Device } from "@/lib/wire"
 
@@ -22,7 +23,7 @@ export function JsConsolePane({ device }: { device: Device | null }) {
   const [port, setPort] = useState(DEFAULT_METRO_PORT)
   const console = useJsConsole(port)
   const { show } = useNotifications()
-  const [levels, setLevels] = useState<ReadonlySet<Level>>(new Set())
+  const [hidden, setHidden] = useState<ReadonlySet<Level>>(new Set())
   const [query, setQuery] = useState("")
   const [draft, setDraft] = useState("")
 
@@ -31,45 +32,19 @@ export function JsConsolePane({ device }: { device: Device | null }) {
     refresh()
   }, [refresh])
 
-  const shown = useMemo(() => filtered(console.rows, { levels, query }), [console.rows, levels, query])
+  const shown = useMemo(
+    () => filtered(console.rows, { hidden, query }),
+    [console.rows, hidden, query],
+  )
   const counts = useMemo(() => levelCounts(console.rows), [console.rows])
+  const exporting = useConsoleExport(shown)
 
-  const reverse = () => {
-    const serial = device?.serial
-    if (serial === undefined) return
-    void (async () => {
-      try {
-        await reactotronReverse([serial], port)
-        show({ message: `Forwarded port ${String(port)} to the device.`, ok: true })
-        refresh()
-      } catch (thrown) {
-        show({ message: asDaemonError(thrown).message, ok: false })
-      }
-    })()
-  }
-
-  const { reloadJs } = console
-  const reload = () => {
-    void (async () => {
-      const step = await reloadJs()
-      // Hermes does not always implement `Page.reload`. The Mac falls back to
-      // the device's own reload keys — which is `reload-js` in the registry,
-      // the very same `input keyevent 46 46` — rather than reporting a failure
-      // someone can do nothing about.
-      if (step === "done" || device === null) {
-        show({ message: reloadMessage(step, null), ok: step === "done" })
-        return
-      }
-      const viaDevice = await runAction({
-        featureId: "reload-js",
-        serial: device.serial,
-      }).then(
-        (result) => ({ ok: result.ok }),
-        () => ({ ok: false }),
-      )
-      show({ message: reloadMessage(step, viaDevice), ok: viaDevice.ok })
-    })()
-  }
+  const actions = useJsConsoleActions({
+    device,
+    port,
+    reloadJs: console.reloadJs,
+    refresh,
+  })
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -78,17 +53,18 @@ export function JsConsolePane({ device }: { device: Device | null }) {
         port={port}
         onPort={setPort}
         serial={device?.serial ?? null}
-        onReload={reload}
+        onReload={actions.reload}
         onReport={show}
-        onReverse={device === null ? null : reverse}
+        onReverse={device === null ? null : actions.reverse}
       />
       <Filters
-        levels={levels}
+        hidden={hidden}
         counts={counts}
         query={query}
         onQuery={setQuery}
-        onToggle={(level) => setLevels((current) => toggleLevel(current, level))}
+        onHidden={setHidden}
         onClear={console.clear}
+        exporting={exporting}
       />
       <ConsoleFeed
         rows={shown}

@@ -56,6 +56,13 @@ function bar(overrides: Record<string, unknown> = {}, serial: string | null = "a
 }
 
 describe("the JS Console's connection bar", () => {
+  it("says the Metro port varies per app, which nothing else on the screen does", () => {
+    render(bar())
+    const field = screen.getByLabelText("Metro port")
+    expect(field.getAttribute("title")).toBe("Metro dev-server port — varies per app")
+    expect(field.getAttribute("placeholder")).toBe("8081")
+  })
+
   it("offers Reload JS while connected", () => {
     render(bar())
     expect(screen.getByRole("button", { name: /Reload JS/u })).toBeTruthy()
