@@ -1,3 +1,4 @@
+import { IS_MAC, shortcutLabel } from "@/lib/platform"
 import { useState } from "react"
 import { Send, TriangleAlert } from "lucide-react"
 
@@ -56,7 +57,7 @@ export function ApiResponsePane({
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center">
         <Send size={26} className="text-text-tertiary" />
-        <p className="text-[13px] text-text-secondary">Enter a URL and press Send (⌘⏎)</p>
+        <p className="text-[13px] text-text-secondary">Enter a URL and press Send ({shortcutLabel("Enter", IS_MAC)})</p>
         <p className="text-[12px] text-text-tertiary">
           Pasting a cURL command into the URL field imports it.
         </p>
