@@ -846,7 +846,9 @@ cancelling the recording.
 `ReactotronView` is **four views behind a picker** — Timeline, Commands, State
 and REPL — and the port has the first one. Its 25/51 reads like half a screen
 missing; it is closer to one screen of four, with the ported one in good shape.
-What was absent is a *picker* and three panes; two of the three have landed:
+What was absent is a *picker* and three panes. **All four views are now
+ported**; the picker is Timeline / Commands / State / REPL, in the Mac's
+order:
 
 - ~~**State**~~ — **landed.** Four cards, the Mac's: the store tree pulled on
   demand, path subscriptions, dispatch, and snapshots (take, restore, delete),
@@ -862,8 +864,13 @@ What was absent is a *picker* and three panes; two of the three have landed:
   `undefined`, which looks identical to one that went wrong. Two details the
   protocol forces — `repl.execute`'s payload is a bare string, not a wrapper,
   and a `null` reply prints as `undefined` rather than as an empty panel.
-- **Commands** (`commandsPane`) — the buttons an app registers with
-  `Reactotron.onCustomCommand(...)`.
+- ~~**Commands**~~ — **landed.** The buttons an app registers with
+  `Reactotron.onCustomCommand(...)`, one card each with a field per declared
+  argument. Unlike the other two this screen asks for nothing: the client
+  announces its commands on connect and withdraws them when they go, so an
+  empty list is the ordinary state rather than a failure, and says what would
+  fill it. A re-registered id replaces rather than appends — a Fast Refresh
+  re-announces everything, and appending shows every button twice.
 
 All three send commands *to* the client rather than only reading the stream,
 and **the port's relay could not send anything at all** — which pass 2 got
@@ -879,10 +886,6 @@ outbound write rather than a redesign — closed now by
 With that in place each pane *is* the ordinary four layers. The `reactotron`
 stream topic already carries the answers back; the timeline renders
 `subscription` and `SNAPSHOT` rows today.
-
-The picker shows Timeline, State and REPL. Custom Commands joins when it lands
-rather than sitting there disabled, which would advertise a screen nobody can
-open.
 
 Also unported, and smaller: split panes (`Split into two panes`, `Clear the
 whole timeline — both panes`, `Pane cleared`), find-in-object inside the detail
