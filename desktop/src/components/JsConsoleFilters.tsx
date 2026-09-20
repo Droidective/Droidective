@@ -5,7 +5,7 @@
  * oxlint's line ceiling, which is the repo's cue to split.
  */
 
-import { ChevronDown, ListFilter, Trash2, Upload } from "lucide-react"
+import { ChevronDown, ListFilter, TextSearch, Trash2, Upload } from "lucide-react"
 import { useRef, useState } from "react"
 
 import { useDismissOnOutside } from "@/hooks/useDismissOnOutside"
@@ -21,6 +21,7 @@ export function Filters({
   onHidden,
   onClear,
   exporting,
+  onFind,
 }: {
   hidden: ReadonlySet<Level>
   counts: Record<Level, number>
@@ -29,6 +30,7 @@ export function Filters({
   onHidden: (hidden: ReadonlySet<Level>) => void
   onClear: () => void
   exporting: ConsoleExport
+  onFind: () => void
 }) {
   return (
     <div className="flex shrink-0 items-center gap-2 border-b border-border-subtle px-3 py-1.5">
@@ -39,6 +41,16 @@ export function Filters({
         onChange={(event) => onQuery(event.target.value)}
         className="min-w-0 flex-1 rounded border border-border-subtle bg-bg-surface px-2 py-1 text-text-primary"
       />
+      <button
+        type="button"
+        // The Mac's tooltip, with Ctrl for its ⌘ — the standing exception.
+        title="Find & highlight in console (Ctrl+F)"
+        aria-label="Find in console"
+        onClick={onFind}
+        className="shrink-0 rounded p-1 text-text-secondary hover:bg-bg-surface"
+      >
+        <TextSearch size={13} />
+      </button>
       <LevelPicker hidden={hidden} counts={counts} onHidden={onHidden} />
       <ExportMenu exporting={exporting} />
       <button

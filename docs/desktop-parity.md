@@ -934,7 +934,19 @@ fractional-second stamps — so a dump from either app diffs against the other,
 and `captureStamp` is now shared with the screenshot editor because the file
 name is a contract with the Mac rather than a convenience.
 
-Still open here: find (⌘F), and row selection with its copies.
+**Find (⌘F)** is in as well — its own strip above the feed, opened by the
+toolbar's button or by Ctrl+F, with the Mac's counter, its wrapping arrows and
+Escape to close. Separate from the filter on purpose, as on the Mac: the filter
+hides rows, find leaves them and walks between the ones that match, marking
+every occurrence and the current one in a second shade. The shortcut is bound
+only while the tab is the one on screen — every open tab stays mounted, so a
+hidden console would otherwise win the key and open a bar nobody can see, which
+is what `FeaturePaneProps.active` now exists to say. That flag is also the seam
+the backlog's "Memory Usage pausing when its tab is hidden" needs.
+
+Still open here: row selection with its copies (`Copy`, `Copy as JSON`,
+`Deselect`, ⌘C), which wants ADBKit's `RowSelection` ported — the anchor rules
+for ⌘-click, ⇧-click and drag, shared on the Mac with the Reactotron timeline.
 
 **Known real gaps found and not yet closed**, in rough order of size:
 `reactotron` (25/51), `js-console` (14/24), `terminal`'s split panes and groups
@@ -1903,7 +1915,7 @@ job, and the checklist now says which.
   - [ ] button: Deselect
   - [ ] button: Run adb reverse for the device
   - [ ] button: Run
-  - [ ] field: Find in console
+  - [x] field: Find in console
   - [x] field: 8081
   - [x] field: Filter
   - [x] label: Reload JS
@@ -1913,10 +1925,10 @@ job, and the checklist now says which.
   - [x] label: adb reverse
   - [x] tooltip: Reload the JS bundle — what ⌘R in React Native DevTools does
   - [x] tooltip: Metro dev-server port — varies per app
-  - [ ] tooltip: Find & highlight in console (⌘F)
+  - [x] tooltip: Find & highlight in console (⌘F)
   - [x] tooltip: Clear the console
   - [x] tooltip: Choose which log levels to show
-  - [ ] search: searchable list
+  - [x] search: searchable list
   - [ ] shortcut: "c", modifiers: .command
   - [x] export: save/export to a file
 

@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useState } from "react"
 
-import { Filters } from "@/components/JsConsoleFilters"
-import { Bar, Prompt } from "@/components/JsConsoleParts"
+import { Bar, ConsoleFeed, Filters, JsConsoleFindBar, Prompt } from "@/components/js-console"
 import { useJsConsole, DEFAULT_METRO_PORT } from "@/hooks/useJsConsole"
 import { useConsoleExport } from "@/hooks/useConsoleExport"
+import { useConsoleFind } from "@/hooks/useConsoleFind"
 import { useJsConsoleActions } from "@/hooks/useJsConsoleActions"
 import { useNotifications } from "@/hooks/useNotifications"
 import { filtered, levelCounts, type Level } from "@/lib/console-feed"
-import { ConsoleFeed } from "@/components/ConsoleFeed"
 import type { Device } from "@/lib/wire"
 
 /**
@@ -19,7 +18,7 @@ import type { Device } from "@/lib/wire"
  *
  * The socket itself is the webview's — see `useJsConsole` for why.
  */
-export function JsConsolePane({ device }: { device: Device | null }) {
+export function JsConsolePane({ device, active }: { device: Device | null; active: boolean }) {
   const [port, setPort] = useState(DEFAULT_METRO_PORT)
   const console = useJsConsole(port)
   const { show } = useNotifications()
@@ -38,6 +37,7 @@ export function JsConsolePane({ device }: { device: Device | null }) {
   )
   const counts = useMemo(() => levelCounts(console.rows), [console.rows])
   const exporting = useConsoleExport(shown)
+  const find = useConsoleFind(shown, active)
 
   const actions = useJsConsoleActions({
     device,
@@ -65,13 +65,27 @@ export function JsConsolePane({ device }: { device: Device | null }) {
         onHidden={setHidden}
         onClear={console.clear}
         exporting={exporting}
+        onFind={find.openBar}
       />
+      {find.open ? (
+        <JsConsoleFindBar
+          query={find.query}
+          onQuery={find.setQuery}
+          count={find.count}
+          hasMatches={find.hasMatches}
+          onNext={find.next}
+          onPrev={find.prev}
+          onClose={find.close}
+        />
+      ) : null}
       <ConsoleFeed
         rows={shown}
         empty={console.rows.length === 0}
         problem={console.problem}
         connection={console.connection}
         targetCount={console.targets.length}
+        find={find.open ? find.query : ""}
+        currentMatch={find.current}
       />
       <Prompt
         value={draft}

@@ -16,6 +16,7 @@ function handedBack(onHidden: Mock): string[] {
 
 function filters(over: { hidden?: ReadonlySet<Level>; enabled?: boolean } = {}) {
   const onHidden = vi.fn()
+  const onFind = vi.fn()
   const saveAsJson = vi.fn()
   const copyToClipboard = vi.fn()
   render(
@@ -26,10 +27,11 @@ function filters(over: { hidden?: ReadonlySet<Level>; enabled?: boolean } = {}) 
       onQuery={vi.fn()}
       onHidden={onHidden}
       onClear={vi.fn()}
+      onFind={onFind}
       exporting={{ enabled: over.enabled ?? true, saveAsJson, copyToClipboard }}
     />,
   )
-  return { onHidden, saveAsJson, copyToClipboard }
+  return { onHidden, onFind, saveAsJson, copyToClipboard }
 }
 
 describe("the level picker", () => {

@@ -2,6 +2,7 @@ import { ChevronRight, CircleAlert, TriangleAlert } from "lucide-react"
 import { useEffect, useRef } from "react"
 
 import { emptyFeedText, type ConsoleRow } from "@/lib/console-feed"
+import { segments } from "@/lib/console-find"
 import { tokensFor, type Token } from "@/lib/console-format"
 
 /**
@@ -18,12 +19,18 @@ export function ConsoleFeed({
   problem,
   connection,
   targetCount,
+  find = "",
+  currentMatch = null,
 }: {
   rows: ConsoleRow[]
   empty: boolean
   problem: string | null
   connection: string
   targetCount: number
+  /** The ⌘F query, highlighted wherever it occurs. */
+  find?: string
+  /** The match the find bar's arrows are on, scrolled to and marked. */
+  currentMatch?: number | null
 }) {
   const scroller = useRef<HTMLDivElement | null>(null)
   const pinned = useRef(true)
@@ -33,6 +40,15 @@ export function ConsoleFeed({
   useEffect(() => {
     if (pinned.current) scroller.current?.scrollTo({ top: scroller.current.scrollHeight })
   }, [rows])
+
+  // Walking to a match wins over following the tail: someone stepping through
+  // find has stopped reading the newest line by definition.
+  useEffect(() => {
+    if (currentMatch === null) return
+    scroller.current
+      ?.querySelector(`[data-row="${String(currentMatch)}"]`)
+      ?.scrollIntoView({ block: "nearest" })
+  }, [currentMatch])
 
   return (
     <div
@@ -52,13 +68,23 @@ export function ConsoleFeed({
           {emptyFeedText(connection, targetCount, problem)}
         </p>
       ) : (
-        rows.map((row) => <Row key={row.id} row={row} />)
+        rows.map((row) => (
+          <Row key={row.id} row={row} find={find} current={row.id === currentMatch} />
+        ))
       )}
     </div>
   )
 }
 
-function Row({ row }: { row: ConsoleRow }) {
+function Row({
+  row,
+  find,
+  current,
+}: {
+  row: ConsoleRow
+  find: string
+  current: boolean
+}) {
   const tone =
     row.level === "error"
       ? "bg-red-500/10 text-red-300"
@@ -75,6 +101,7 @@ function Row({ row }: { row: ConsoleRow }) {
   // token here is a Metro bundle URL with no spaces to break at.
   return (
     <div
+      data-row={row.id}
       className={`whitespace-pre-wrap [overflow-wrap:anywhere] border-b border-border-subtle/40 px-3 py-[3px] ${tone}`}
     >
       {row.source === null ? null : (
@@ -86,7 +113,11 @@ function Row({ row }: { row: ConsoleRow }) {
         </span>
       )}
       <Glyph row={row} />
-      {row.args.length === 0 ? row.text : <Args row={row} />}
+      {row.args.length === 0 ? (
+        <Found text={row.text} find={find} current={current} />
+      ) : (
+        <Args row={row} find={find} current={current} />
+      )}
     </div>
   )
 }
@@ -111,7 +142,7 @@ function Glyph({ row }: { row: ConsoleRow }) {
  * Only the *top level* prints bare, which is why the style is per argument and
  * not per row: `console.log('a', {b: 'c'})` is `a {b: 'c'}`.
  */
-function Args({ row }: { row: ConsoleRow }) {
+function Args({ row, find, current }: { row: ConsoleRow; find: string; current: boolean }) {
   return (
     <>
       {row.args.map((argument, index) => (
@@ -121,7 +152,7 @@ function Args({ row }: { row: ConsoleRow }) {
           {index > 0 ? " " : ""}
           {tokensFor(argument, "consoleArgument").map((token, at) => (
             <span key={at} className={colourOf(token)}>
-              {token.text}
+              <Found text={token.text} find={find} current={current} />
             </span>
           ))}
         </span>
@@ -153,3 +184,30 @@ function colourOf(token: Token): string {
   }
 }
 
+
+/**
+ * `text`, with every occurrence of the find query marked.
+ *
+ * Yellow for a match, amber for one in the row the arrows are on — the Mac's
+ * two shades, and black text on both so a highlight over a coloured token stays
+ * readable.
+ */
+function Found({ text, find, current }: { text: string; find: string; current: boolean }) {
+  if (find.trim() === "") return text
+  return (
+    <>
+      {segments(text, find).map((part, at) =>
+        part.match ? (
+          // eslint-disable-next-line react/no-array-index-key -- the runs are a
+          // pure function of this text and this query; there is no id to use.
+          <mark key={at} className={current ? "bg-amber-400 text-black" : "bg-yellow-300 text-black"}>
+            {part.text}
+          </mark>
+        ) : (
+          // eslint-disable-next-line react/no-array-index-key -- as above.
+          <span key={at}>{part.text}</span>
+        ),
+      )}
+    </>
+  )
+}
