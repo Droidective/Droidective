@@ -1,6 +1,8 @@
 import { ChevronRight, CircleAlert, TriangleAlert } from "lucide-react"
 import { useEffect, useRef } from "react"
 
+import type { ConsoleSelection } from "@/hooks/useConsoleSelection"
+import { cn } from "@/lib/cn"
 import { emptyFeedText, type ConsoleRow } from "@/lib/console-feed"
 import { segments } from "@/lib/console-find"
 import { tokensFor, type Token } from "@/lib/console-format"
@@ -21,6 +23,7 @@ export function ConsoleFeed({
   targetCount,
   find = "",
   currentMatch = null,
+  selection = null,
 }: {
   rows: ConsoleRow[]
   empty: boolean
@@ -31,6 +34,8 @@ export function ConsoleFeed({
   find?: string
   /** The match the find bar's arrows are on, scrolled to and marked. */
   currentMatch?: number | null
+  /** Row picking, when the host offers it. */
+  selection?: ConsoleSelection | null
 }) {
   const scroller = useRef<HTMLDivElement | null>(null)
   const pinned = useRef(true)
@@ -61,7 +66,14 @@ export function ConsoleFeed({
       // Never sideways. A feed that can scroll horizontally lets its content
       // size to max-content, and a long Metro bundle URL then runs off the
       // pane instead of wrapping. Logcat's feed is y-only for the same reason.
-      className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden font-mono text-[11.5px]"
+      className={cn(
+        "min-h-0 flex-1 overflow-y-auto overflow-x-hidden font-mono text-[11.5px]",
+        // Only while sweeping: otherwise the browser selects the text under
+        // the drag at the same time and two selections fight over one gesture.
+        // Off again the moment the button comes up, so copying text out of a
+        // row still works.
+        selection?.dragging === true && "select-none",
+      )}
     >
       {empty ? (
         <p className="p-3 font-sans text-text-tertiary">
@@ -69,7 +81,13 @@ export function ConsoleFeed({
         </p>
       ) : (
         rows.map((row) => (
-          <Row key={row.id} row={row} find={find} current={row.id === currentMatch} />
+          <Row
+            key={row.id}
+            row={row}
+            find={find}
+            current={row.id === currentMatch}
+            selection={selection}
+          />
         ))
       )}
     </div>
@@ -80,10 +98,12 @@ function Row({
   row,
   find,
   current,
+  selection,
 }: {
   row: ConsoleRow
   find: string
   current: boolean
+  selection: ConsoleSelection | null
 }) {
   const tone =
     row.level === "error"
@@ -102,7 +122,17 @@ function Row({
   return (
     <div
       data-row={row.id}
-      className={`whitespace-pre-wrap [overflow-wrap:anywhere] border-b border-border-subtle/40 px-3 py-[3px] ${tone}`}
+      onPointerDown={(event) => {
+        selection?.onPointerDown(row.id, event)
+      }}
+      onPointerEnter={() => {
+        selection?.onPointerEnter(row.id)
+      }}
+      className={cn(
+        "whitespace-pre-wrap [overflow-wrap:anywhere] border-b border-border-subtle/40 px-3 py-[3px]",
+        tone,
+        selection?.has(row.id) === true && "bg-accent/25",
+      )}
     >
       {row.source === null ? null : (
         <span

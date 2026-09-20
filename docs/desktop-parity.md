@@ -944,9 +944,19 @@ hidden console would otherwise win the key and open a bar nobody can see, which
 is what `FeaturePaneProps.active` now exists to say. That flag is also the seam
 the backlog's "Memory Usage pausing when its tab is hidden" needs.
 
-Still open here: row selection with its copies (`Copy`, `Copy as JSON`,
-`Deselect`, ⌘C), which wants ADBKit's `RowSelection` ported — the anchor rules
-for ⌘-click, ⇧-click and drag, shared on the Mac with the Reactotron timeline.
+**Row selection** closes it. ADBKit's `RowSelection` is ported to
+`lib/row-selection.ts` — immutable where the Mac's is a mutating struct,
+because this one lives in React state and identity is what lets a feed skip
+re-rendering rows that did not change. The part worth the tests is the
+**anchor**, not the highlight: where it sits after each gesture decides what
+the next ⇧-click spans, and a ⇧-click that ratchets outward instead of
+re-spanning is the kind of thing you only notice on the fourth click. A plain
+click *clears* rather than selects, which is the Mac's rule and not an
+omission — a row is something you click to read, so picking is the deliberate
+gesture.
+
+Nothing on this screen is outstanding now except `button: Run adb reverse for
+the device` and `button: Run`, which are the empty state's, not the toolbar's.
 
 **Known real gaps found and not yet closed**, in rough order of size:
 `reactotron` (25/51), `js-console` (14/24), `terminal`'s split panes and groups
@@ -1937,9 +1947,9 @@ job, and the checklist now says which.
   - [x] button: Copy to Clipboard
   - [x] button: Show All
   - [x] button: Hide All
-  - [ ] button: Copy
-  - [ ] button: Copy as JSON
-  - [ ] button: Deselect
+  - [x] button: Copy
+  - [x] button: Copy as JSON
+  - [x] button: Deselect
   - [ ] button: Run adb reverse for the device
   - [ ] button: Run
   - [x] field: Find in console
@@ -1956,7 +1966,7 @@ job, and the checklist now says which.
   - [x] tooltip: Clear the console
   - [x] tooltip: Choose which log levels to show
   - [x] search: searchable list
-  - [ ] shortcut: "c", modifiers: .command
+  - [x] shortcut: "c", modifiers: .command
   - [x] export: save/export to a file
 
 #### `open-dev-menu` — Open Dev Menu  ·  ✅ ported

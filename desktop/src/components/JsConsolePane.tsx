@@ -4,6 +4,7 @@ import { Bar, ConsoleFeed, Filters, JsConsoleFindBar, Prompt } from "@/component
 import { useJsConsole, DEFAULT_METRO_PORT } from "@/hooks/useJsConsole"
 import { useConsoleExport } from "@/hooks/useConsoleExport"
 import { useConsoleFind } from "@/hooks/useConsoleFind"
+import { useConsoleSelection } from "@/hooks/useConsoleSelection"
 import { useJsConsoleActions } from "@/hooks/useJsConsoleActions"
 import { useNotifications } from "@/hooks/useNotifications"
 import { filtered, levelCounts, type Level } from "@/lib/console-feed"
@@ -38,6 +39,7 @@ export function JsConsolePane({ device, active }: { device: Device | null; activ
   const counts = useMemo(() => levelCounts(console.rows), [console.rows])
   const exporting = useConsoleExport(shown)
   const find = useConsoleFind(shown, active)
+  const selection = useConsoleSelection(shown)
 
   const actions = useJsConsoleActions({
     device,
@@ -66,6 +68,7 @@ export function JsConsolePane({ device, active }: { device: Device | null; activ
         onClear={console.clear}
         exporting={exporting}
         onFind={find.openBar}
+        selection={selection}
       />
       {find.open ? (
         <JsConsoleFindBar
@@ -86,6 +89,7 @@ export function JsConsolePane({ device, active }: { device: Device | null; activ
         targetCount={console.targets.length}
         find={find.open ? find.query : ""}
         currentMatch={find.current}
+        selection={selection}
       />
       <Prompt
         value={draft}
