@@ -9,6 +9,7 @@
 export { ReactotronFeed, RENDER_WINDOW } from "@/components/ReactotronFeed"
 export { ReactotronFilterSheet } from "@/components/ReactotronFilterSheet"
 export { AppRestartMenu } from "@/components/AppRestartMenu"
+export { RowSelectionMenu } from "@/components/RowSelectionMenu"
 export { ReactotronNotices, ReactotronStatus } from "@/components/ReactotronStatus"
 export { ReactotronToolbar, ReverseButton } from "@/components/ReactotronToolbar"
 export { ReactotronWaiting } from "@/components/ReactotronWaiting"

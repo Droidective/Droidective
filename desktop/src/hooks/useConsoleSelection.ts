@@ -1,34 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useMemo, useRef } from "react"
 
 import { useNotifications } from "@/hooks/useNotifications"
+import { useRowPicking, type Modifiers } from "@/hooks/useRowPicking"
 import { consoleJson } from "@/lib/console-export"
 import { rowText, type ConsoleRow } from "@/lib/console-feed"
 import { asDaemonError, copyText } from "@/lib/daemon"
-import { hasModifier } from "@/lib/platform"
-import {
-  emptySelection,
-  extend,
-  isEmpty,
-  retain,
-  selectRange,
-  toggle,
-  type RowSelection,
-} from "@/lib/row-selection"
 
 export interface ConsoleSelection {
   count: number
   has: (id: number) => boolean
-  /** A row's pointer-down: the modifiers decide, and a drag may follow. */
-  onPointerDown: (id: number, event: { ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }) => void
-  /** The pointer moving onto a row while the button is down. */
+  onPointerDown: (id: number, event: Modifiers) => void
   onPointerEnter: (id: number) => void
-  /**
-   * True while a drag is sweeping rows.
-   *
-   * The feed turns text selection off for the duration: without it the browser
-   * selects the *text* under the sweep at the same time, and two selections
-   * fight over one gesture.
-   */
   dragging: boolean
   copy: () => void
   copyAsJson: () => void
@@ -36,78 +18,30 @@ export interface ConsoleSelection {
 }
 
 /**
- * Picking rows out of the console, and copying them.
+ * Picking rows out of the JS Console, and copying them.
  *
- * **A plain click clears rather than selects**, which is the Mac's rule and not
- * an omission: a row is something you click to read, so selection is the
- * deliberate gesture — Ctrl-click for one, Shift-click or a drag for a range.
- * Where the Mac says ⌘ this says Ctrl, the standing shortcut exception.
+ * The gestures are `useRowPicking`, shared with the Reactotron timeline the way
+ * the Mac shares `RowSelection` between the two screens. What is here is only
+ * what a copy of *console* rows produces.
  */
 export function useConsoleSelection(shown: readonly ConsoleRow[]): ConsoleSelection {
   const { show } = useNotifications()
-  const [selection, setSelection] = useState<RowSelection<number>>(emptySelection)
   const order = useMemo(() => shown.map((row) => row.id), [shown])
-  /** The row a drag began on, while the button is still down. */
-  const dragFrom = useRef<number | null>(null)
-  /** Set when a drag actually swept, so the click that ends it does not clear. */
-  const swept = useRef(false)
-  const [dragging, setDragging] = useState(false)
 
-  // Rows leave the feed — trimmed, filtered out, cleared — and a selection that
-  // kept them would count and copy events the reader cannot see.
-  useEffect(() => {
-    setSelection((current) => retain(current, order))
-  }, [order])
+  // The picked ids and the rows behind them, read through refs so the copy
+  // handed to `useRowPicking` can be stable. It gates a keydown listener, and a
+  // new function on every render would tear that listener down and rebuild it
+  // on every incoming log line.
+  const latest = useRef({ shown, show, picked: [] as number[] })
+  latest.current.shown = shown
+  latest.current.show = show
 
-  useWhileDragging(dragFrom, setDragging)
-
-  const onPointerDown = useCallback(
-    (id: number, event: { ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }) => {
-      dragFrom.current = id
-      if (event.shiftKey) {
-        setSelection((current) => extend(current, id, order))
-        return
-      }
-      if (event.ctrlKey || event.metaKey) {
-        setSelection((current) => toggle(current, id))
-        return
-      }
-      if (swept.current) {
-        // The click that ended a sweep, not a new one.
-        swept.current = false
-        return
-      }
-      setSelection((current) => (isEmpty(current) ? current : emptySelection()))
-    },
-    [order],
-  )
-
-  const onPointerEnter = useCallback(
-    (id: number) => {
-      const from = dragFrom.current
-      // Only once the pointer has left the row it went down on: otherwise a
-      // plain click would select the row it landed on, and a plain click is
-      // how you clear.
-      if (from === null || from === id) return
-      swept.current = true
-      setDragging(true)
-      setSelection((current) => selectRange(current, from, id, order))
-    },
-    [order],
-  )
-
-  const clear = useCallback(() => {
-    setSelection(emptySelection())
+  const copyPicked = useCallback((asJson: boolean) => {
+    const ids = new Set(latest.current.picked)
+    const rows = latest.current.shown.filter((row) => ids.has(row.id))
+    if (rows.length === 0) return
+    copyRows(rows, asJson, latest.current.show)
   }, [])
-
-  const copyPicked = useCallback(
-    (asJson: boolean) => {
-      const rows = shown.filter((row) => selection.ids.has(row.id))
-      if (rows.length === 0) return
-      copyRows(rows, asJson, show)
-    },
-    [selection, shown, show],
-  )
 
   const copy = useCallback(() => {
     copyPicked(false)
@@ -116,17 +50,18 @@ export function useConsoleSelection(shown: readonly ConsoleRow[]): ConsoleSelect
     copyPicked(true)
   }, [copyPicked])
 
-  useCopyShortcut(!isEmpty(selection), copy)
+  const picking = useRowPicking(order, copy)
+  latest.current.picked = picking.picked
 
   return {
-    count: selection.ids.size,
-    has: (id) => selection.ids.has(id),
-    onPointerDown,
-    onPointerEnter,
-    dragging,
+    count: picking.count,
+    has: picking.has,
+    onPointerDown: picking.onPointerDown,
+    onPointerEnter: picking.onPointerEnter,
+    dragging: picking.dragging,
     copy,
     copyAsJson,
-    clear,
+    clear: picking.clear,
   }
 }
 
@@ -151,42 +86,4 @@ function copyRows(
       show({ message: `Copy failed: ${asDaemonError(thrown).message}`, ok: false })
     },
   )
-}
-
-/** Ends the sweep wherever the button comes up, inside the feed or outside it. */
-function useWhileDragging(
-  dragFrom: React.RefObject<number | null>,
-  setDragging: (dragging: boolean) => void,
-): void {
-  useEffect(() => {
-    const end = () => {
-      dragFrom.current = null
-      setDragging(false)
-    }
-    globalThis.addEventListener("pointerup", end)
-    return () => {
-      globalThis.removeEventListener("pointerup", end)
-    }
-  }, [dragFrom, setDragging])
-}
-
-/**
- * Ctrl+C, and **only while rows are picked**.
- *
- * The Mac's reason: bound unconditionally it shadows copying text out of the
- * prompt, the filter, or a line someone highlighted with the mouse.
- */
-function useCopyShortcut(enabled: boolean, copy: () => void): void {
-  useEffect(() => {
-    if (!enabled) return
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (!hasModifier(event) || event.shiftKey || event.altKey || event.key !== "c") return
-      event.preventDefault()
-      copy()
-    }
-    globalThis.addEventListener("keydown", onKeyDown)
-    return () => {
-      globalThis.removeEventListener("keydown", onKeyDown)
-    }
-  }, [enabled, copy])
 }

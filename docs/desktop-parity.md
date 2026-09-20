@@ -887,10 +887,19 @@ With that in place each pane *is* the ordinary four layers. The `reactotron`
 stream topic already carries the answers back; the timeline renders
 `subscription` and `SNAPSHOT` rows today.
 
-Also unported, and smaller: split panes (`Split into two panes`, `Clear the
+~~Multi-row selection and its copies~~ **landed**, and it is why
+`RowSelection` was ported generically for the JS Console: the Mac shares one
+model between the two screens, so this one shares `useRowPicking` — the same
+gestures, the same Ctrl+C gating, and the same shared `RowSelectionMenu`
+differing by the single word the Mac's two versions differ by (*logs* against
+*events*). The timeline's row menu gains the Mac's two bulk verbs, gated past
+one picked row because with a single row they would say what Copy line already
+says.
+
+Still unported, and smaller: split panes (`Split into two panes`, `Clear the
 whole timeline — both panes`, `Pane cleared`), find-in-object inside the detail
-(`Search keys & values…`, `Reveal in the tree`), multi-row selection and its
-copies, and full-size image events (`Click to view full size`). **`AI Agents`
+(`Search keys & values…`, `Reveal in the tree`), and full-size image events
+(`Click to view full size`). **`AI Agents`
 is Mac-only by design** — it is the MCP panel, and `ReactotronMCP` is
 `#if canImport(Network)`-gated end to end.
 
@@ -2003,11 +2012,11 @@ job, and the checklist now says which.
   - [ ] button: Done
   - [ ] button: Save as JSON…
   - [ ] button: Copy to Clipboard
-  - [ ] button: Copy
-  - [ ] button: Copy as JSON
-  - [ ] button: Deselect
-  - [ ] button: Copy … Selected Events
-  - [ ] button: Copy … Selected as JSON
+  - [x] button: Copy
+  - [x] button: Copy as JSON
+  - [x] button: Deselect
+  - [x] button: Copy … Selected Events
+  - [x] button: Copy … Selected as JSON
   - [ ] button: Copy object
   - [ ] button: Copy line
   - [ ] button: Restore
@@ -2044,10 +2053,10 @@ job, and the checklist now says which.
   - [ ] tooltip: Click to view full size
   - [ ] tooltip: Delete this snapshot
   - [ ] tooltip: Reveal in the tree
-  - [ ] menu: right-click context menu
+  - [x] menu: right-click context menu
   - [ ] shortcut: .cancelAction
   - [ ] shortcut: .defaultAction
-  - [ ] shortcut: "c", modifiers: .command
+  - [x] shortcut: "c", modifiers: .command
   - [ ] export: save/export to a file
 
 #### `reload-js` — Reload JS  ·  ✅ ported
