@@ -7,6 +7,18 @@ import { allHidden, type Level } from "@/lib/console-feed"
 
 const counts = { verbose: 2, info: 7, warning: 1, error: 3 }
 
+/** Nothing picked: the selection controls stay out of the bar. */
+const noSelection = {
+  count: 0,
+  has: () => false,
+  onPointerDown: vi.fn(),
+  onPointerEnter: vi.fn(),
+  dragging: false,
+  copy: vi.fn(),
+  copyAsJson: vi.fn(),
+  clear: vi.fn(),
+}
+
 /** The level set the picker handed back, as a sorted array. */
 function handedBack(onHidden: Mock): string[] {
   const first = onHidden.mock.calls[0]
@@ -14,9 +26,14 @@ function handedBack(onHidden: Mock): string[] {
   return [...(first[0] as ReadonlySet<Level>)].toSorted()
 }
 
-function filters(over: { hidden?: ReadonlySet<Level>; enabled?: boolean } = {}) {
+function filters(
+  over: { hidden?: ReadonlySet<Level>; enabled?: boolean; picked?: number } = {},
+) {
   const onHidden = vi.fn()
   const onFind = vi.fn()
+  const copy = vi.fn()
+  const copyAsJson = vi.fn()
+  const clear = vi.fn()
   const saveAsJson = vi.fn()
   const copyToClipboard = vi.fn()
   render(
@@ -28,10 +45,11 @@ function filters(over: { hidden?: ReadonlySet<Level>; enabled?: boolean } = {}) 
       onHidden={onHidden}
       onClear={vi.fn()}
       onFind={onFind}
+      selection={{ ...noSelection, count: over.picked ?? 0, copy, copyAsJson, clear }}
       exporting={{ enabled: over.enabled ?? true, saveAsJson, copyToClipboard }}
     />,
   )
-  return { onHidden, onFind, saveAsJson, copyToClipboard }
+  return { onHidden, onFind, saveAsJson, copyToClipboard, copy, copyAsJson, clear }
 }
 
 describe("the level picker", () => {
@@ -114,5 +132,44 @@ describe("the filter bar's wording", () => {
   it("carries the Mac's tooltip on the level pill", () => {
     filters()
     expect(screen.getByTitle("Choose which log levels to show")).toBeTruthy()
+  })
+})
+
+describe("the selection controls", () => {
+  it("stay out of the bar while nothing is picked", () => {
+    // The Mac renders them the same way: a Copy that is disabled nine times
+    // out of ten is noise.
+    filters()
+    expect(screen.queryByText(/selected/u)).toBeNull()
+  })
+
+  it("say how many are picked", () => {
+    filters({ picked: 3 })
+    expect(screen.getByText("3 selected")).toBeTruthy()
+  })
+
+  it("offer the Mac's three actions behind the button", () => {
+    filters({ picked: 2 })
+    fireEvent.click(screen.getByRole("button", { name: "Selection actions" }))
+    expect(screen.getByRole("menuitem", { name: "Copy" })).toBeTruthy()
+    expect(screen.getByRole("menuitem", { name: "Copy as JSON" })).toBeTruthy()
+    expect(screen.getByRole("menuitem", { name: "Deselect" })).toBeTruthy()
+  })
+
+  it("runs the action and closes", () => {
+    const { copyAsJson } = filters({ picked: 2 })
+    fireEvent.click(screen.getByRole("button", { name: "Selection actions" }))
+    fireEvent.click(screen.getByRole("menuitem", { name: "Copy as JSON" }))
+    expect(copyAsJson).toHaveBeenCalledOnce()
+    expect(screen.queryByRole("menuitem", { name: "Copy as JSON" })).toBeNull()
+  })
+
+  it("writes the gestures down, since nothing else does", () => {
+    filters({ picked: 1 })
+    expect(
+      screen.getByRole("button", { name: "Selection actions" }).getAttribute("title"),
+    ).toBe(
+      "Copy the selected logs (Ctrl+C) — Ctrl-click to pick rows, Shift-click or drag for a range",
+    )
   })
 })

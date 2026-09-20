@@ -5,11 +5,12 @@
  * oxlint's line ceiling, which is the repo's cue to split.
  */
 
-import { ChevronDown, ListFilter, TextSearch, Trash2, Upload } from "lucide-react"
+import { ChevronDown, Copy, ListFilter, TextSearch, Trash2, Upload } from "lucide-react"
 import { useRef, useState } from "react"
 
 import { useDismissOnOutside } from "@/hooks/useDismissOnOutside"
 import type { ConsoleExport } from "@/hooks/useConsoleExport"
+import type { ConsoleSelection } from "@/hooks/useConsoleSelection"
 import { allHidden, LEVELS, levelSummary, toggleLevel, type Level } from "@/lib/console-feed"
 import { cn } from "@/lib/cn"
 
@@ -22,6 +23,7 @@ export function Filters({
   onClear,
   exporting,
   onFind,
+  selection,
 }: {
   hidden: ReadonlySet<Level>
   counts: Record<Level, number>
@@ -31,6 +33,7 @@ export function Filters({
   onClear: () => void
   exporting: ConsoleExport
   onFind: () => void
+  selection: ConsoleSelection
 }) {
   return (
     <div className="flex shrink-0 items-center gap-2 border-b border-border-subtle px-3 py-1.5">
@@ -41,6 +44,7 @@ export function Filters({
         onChange={(event) => onQuery(event.target.value)}
         className="min-w-0 flex-1 rounded border border-border-subtle bg-bg-surface px-2 py-1 text-text-primary"
       />
+      {selection.count === 0 ? null : <SelectionControls selection={selection} />}
       <button
         type="button"
         // The Mac's tooltip, with Ctrl for its ⌘ — the standing exception.
@@ -62,6 +66,68 @@ export function Filters({
         <Trash2 size={13} />
       </button>
     </div>
+  )
+}
+
+/**
+ * What the Mac shows once rows are picked: the count, and a menu of the three
+ * things you can do with them.
+ *
+ * Only while something is selected — the Mac renders it the same way, because
+ * a Copy that is disabled nine times out of ten is just noise in the bar.
+ */
+function SelectionControls({ selection }: { selection: ConsoleSelection }) {
+  const [open, setOpen] = useState(false)
+  const box = useRef<HTMLDivElement | null>(null)
+  useDismissOnOutside(box, setOpen)
+
+  const pick = (run: () => void) => {
+    setOpen(false)
+    run()
+  }
+
+  return (
+    <div ref={box} className="relative flex shrink-0 items-center gap-1.5">
+      <span className="text-text-tertiary">{selection.count} selected</span>
+      <button
+        type="button"
+        aria-label="Selection actions"
+        aria-expanded={open}
+        // The Mac's sentence, which is also the only place the gestures are
+        // written down.
+        title="Copy the selected logs (Ctrl+C) — Ctrl-click to pick rows, Shift-click or drag for a range"
+        onClick={() => {
+          setOpen(!open)
+        }}
+        className="rounded p-1 text-text-secondary hover:bg-bg-surface"
+      >
+        <Copy size={13} />
+      </button>
+      {open ? (
+        <div
+          role="menu"
+          className="absolute top-full right-0 z-40 mt-1 min-w-[150px] rounded-md border border-border-subtle bg-bg-raised py-1 shadow-2xl"
+        >
+          <MenuItem label="Copy" onClick={() => { pick(selection.copy) }} />
+          <MenuItem label="Copy as JSON" onClick={() => { pick(selection.copyAsJson) }} />
+          <div className="my-1 border-t border-border-subtle" />
+          <MenuItem label="Deselect" onClick={() => { pick(selection.clear) }} />
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function MenuItem({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      className="w-full px-3 py-1 text-left text-text-primary hover:bg-accent/20"
+    >
+      {label}
+    </button>
   )
 }
 
