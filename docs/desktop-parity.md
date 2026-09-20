@@ -960,17 +960,44 @@ gaps.
 
 ## Defects in what already shipped
 
-- [ ] **A stream payload over ~64 KB kills the subscription.** Found while
-      exercising Reactotron's REPL. The client rejects the frame as "incorrect
-      masking" — a desynchronised frame header — the event never reaches the
-      timeline, and the feed stops with no error anywhere. A `console.log` of a
-      large object would do it in the real app, so this is a user-facing bug
-      rather than a test artefact. Reproduce with
-      `./scripts/reactotron-fake-client.py --big` and a `repl.execute`; the
-      same client without `--big` is fine. **Not diagnosed** —
-      `WebSocketSink.send` writes one `WebSocketFrame` and NIO encodes it,
-      which handles extended lengths correctly, so the obvious answer is not
-      the answer. Capture the emitted bytes.
+- [x] ~~**A stream payload over ~64 KB kills the subscription.**~~ **Two bugs,
+      and neither was the one written down.** The note above described a
+      payload "over ~64 KB" rejected as "incorrect masking", and read that as
+      a desynchronised frame header — the 64 KB guess came from the 16-bit to
+      64-bit length boundary and the masking guess from what a Python client
+      printed. Capturing the daemon's bytes off both sockets found the frames
+      well-formed and the two faults independent:
+
+      - **The real threshold is 16,384 bytes, and the fault is inbound.**
+        `NIOWebSocketServerUpgrader`'s `maxFrameSize` defaults to `1 << 14`,
+        and *both* of the daemon's WebSocket servers took it. Past it the
+        decoder throws, NIO's error handler answers **close 1009** and drops
+        the connection — measured with a raw socket: 16,300 bytes arrive,
+        16,400 do not. On the relay that loses the event and the client; on
+        the stream socket it would lose every subscription in the window, and
+        `write`'s base64 payload means a **~12 KiB terminal paste** was enough
+        to trigger it. Both now pass `DaemonProtocol.maxWebSocketFrameSize`,
+        which is 64 MiB — the Mac's own number, set in `ReactotronServer` for
+        the reason recorded there (OkHttp queues up to 16 MiB outbound, so a
+        receive limit under it fails the connection rather than the frame).
+      - **The "incorrect masking" was a masked pong**, and has nothing to do
+        with size. Both handlers answered a `ping` by copying the inbound
+        frame and flipping its opcode — which keeps the client's masking key
+        on a server→client frame, and RFC 6455 masks client→server only. A
+        conformant client closes with 1002 on sight, so the feed died on the
+        first keepalive: `websockets` pings at 20 s, which is why it surfaced
+        during a `--big` run and looked like the same bug. Confirmed against
+        the running daemon — `8a 89 6b59 25fe`, mask bit set — and fixed by
+        `WebSocketFrame.pong(for:)`, one helper both handlers call.
+
+      Verified end to end against the real daemon: a 200,058-byte
+      `repl.execute.response` now reaches a stream subscriber intact, and a
+      masked ping comes back `8a 09` with the payload in plaintext.
+      Regressions: `aFramePastNIOsDefaultSizeStillReachesTheTimeline`,
+      `aCommandPastNIOsDefaultFrameSizeIsAnsweredLikeAnyOther` and
+      `WebSocketPongTests` — the last on `EmbeddedChannel`, so it asserts the
+      frame's own bytes and runs on Linux and Windows too, where the
+      `URLSession`-based socket suites are skipped.
 
 Found by driving the app against a live emulator, not by reading it.
 

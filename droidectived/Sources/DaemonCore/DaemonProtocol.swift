@@ -157,6 +157,30 @@ public enum DaemonProtocol {
     /// `everyRouteIsReachable` assert something untrue about it.
     public static let streamPath = "/v1/stream"
 
+    /// The largest WebSocket frame either of this daemon's listeners will accept.
+    ///
+    /// NIO's default is `1 << 14` — **16 KiB** — and a frame past it is not a
+    /// truncated message but a dead connection: the decoder throws
+    /// `invalidFrameLength`, `WebSocketProtocolErrorHandler` answers with a
+    /// close, and every subscription on that socket goes with it. Both of this
+    /// daemon's WebSocket servers took that default and both were wrong for it:
+    ///
+    /// - the Reactotron relay receives whatever a React Native app logs, and a
+    ///   `console.log` of a large object or one base64 display image clears
+    ///   16 KiB easily — which is the bug this was found as: the event never
+    ///   reached the timeline and the feed stopped with no error anywhere;
+    /// - the stream socket carries `write`, whose base64 payload is a terminal
+    ///   paste, so pasting ~12 KiB of text would have taken down the pty *and*
+    ///   every other subscription in that window.
+    ///
+    /// The number is the Mac's. `ReactotronServer` sets
+    /// `NWProtocolWebSocket.maximumMessageSize` to exactly this, for the reason
+    /// written there: Android's RN WebSocket (OkHttp) queues up to 16 MiB
+    /// outbound, so one frame can approach that, and a receive limit under it
+    /// fails the whole connection rather than the frame. Both hosts speak the
+    /// same protocol to the same clients, so they take the same limit.
+    public static let maxWebSocketFrameSize = 64 * 1024 * 1024
+
     /// A route's answer before it meets NIO.
     ///
     /// The route groups that live outside `DaemonServer` deal in a plain status

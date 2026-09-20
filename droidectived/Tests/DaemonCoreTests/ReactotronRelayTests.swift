@@ -273,6 +273,40 @@ import Testing
         #expect(frame.utf8.count != frame.count, "otherwise the test proves nothing about bytes")
     }
 
+    @Test func aFramePastNIOsDefaultSizeStillReachesTheTimeline() async throws {
+        // NIO's `maxFrameSize` defaults to 16 KiB and this relay took it, which
+        // is not a truncated message: the decoder throws, NIO's error handler
+        // answers 1009 and closes, and the connection carrying the timeline
+        // dies. A `console.log` of a large object does it, and a base64 display
+        // image does it every time.
+        //
+        // 200 KB, which is what the reproduction sends
+        // (`scripts/reactotron-fake-client.py --big`). The boundary is exactly
+        // 16,384 bytes — measured: 16,300 arrived, 16,400 did not — so any size
+        // comfortably past it proves the same thing; the number is not the
+        // point.
+        let (relay, events, port) = try await relay()
+        defer { Task { await relay.stop() } }
+        let (collected, reader) = collect(events)
+        defer { reader.cancel() }
+
+        let socket = client(port: port)
+        defer { socket.cancel() }
+        let blob = String(repeating: "x", count: 200_000)
+        let frame = #"{"type":"log","payload":{"message":"\#(blob)"}}"#
+        try await socket.send(.string(frame))
+
+        #expect(await collected.wait { events in
+            events.contains { event in
+                // The byte count too: it is what the timeline bounds its memory
+                // by, and a frame this size is the case where a reassembly bug
+                // would otherwise not show.
+                guard case .command(_, let command, let bytes) = event else { return false }
+                return command.commandType == .log && bytes == frame.utf8.count
+            }
+        })
+    }
+
     @Test func reportsAFrameItCouldNotDecodeRatherThanDroppingIt() async throws {
         // A client sending malformed JSON is a bug someone has to see. Silence
         // makes it look like the relay is receiving nothing at all.

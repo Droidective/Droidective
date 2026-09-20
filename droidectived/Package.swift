@@ -46,7 +46,14 @@ let package = Package(
         ),
         .testTarget(
             name: "DaemonCoreTests",
-            dependencies: ["DaemonCore"],
+            dependencies: [
+                "DaemonCore",
+                // For `EmbeddedChannel`, which is what lets the frames a
+                // WebSocket handler writes be asserted on directly — the
+                // masking rules are only visible in the bytes, and the
+                // `URLSession` client the socket suites use is Apple-only.
+                .product(name: "NIOEmbedded", package: "swift-nio"),
+            ],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
     ]
