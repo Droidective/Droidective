@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { ChevronDown, ChevronRight, Copy, Search, Type } from "lucide-react"
+import { ChevronDown, ChevronRight, Copy, Search, Type, X } from "lucide-react"
 import { cn } from "@/lib/cn"
 import { copyText } from "@/lib/daemon"
 import { jsonMatches, type TreeMatch } from "@/lib/json-search"
@@ -85,8 +85,12 @@ function FindBar({ query, onQuery }: { query: string; onQuery: (query: string) =
       <Search size={11} className="shrink-0 text-text-tertiary" />
       <input
         value={query}
-        aria-label="Find in this object"
-        placeholder="Find in this object…"
+        // The Mac's placeholder. It says what is searched, which "Find in this
+        // object" left you to guess — keys as well as values is the part worth
+        // knowing, since looking for a field name is the usual reason to open
+        // this at all.
+        aria-label="Search keys & values"
+        placeholder="Search keys & values…"
         onChange={(event) => {
           onQuery(event.target.value)
         }}
@@ -95,6 +99,18 @@ function FindBar({ query, onQuery }: { query: string; onQuery: (query: string) =
         }}
         className="min-w-0 flex-1 bg-transparent py-1 font-mono text-[11px] text-text-primary outline-none placeholder:text-text-tertiary"
       />
+      {query === "" ? null : (
+        <button
+          type="button"
+          aria-label="Clear the search"
+          onClick={() => {
+            onQuery("")
+          }}
+          className="shrink-0 text-text-tertiary hover:text-text-primary"
+        >
+          <X size={11} />
+        </button>
+      )}
     </div>
   )
 }
@@ -118,6 +134,9 @@ function Results({
           onClick={() => {
             onReveal(match)
           }}
+          // The Mac's tooltip, and the only thing saying a result is clickable
+          // rather than a read-out.
+          title="Reveal in the tree"
           className="flex min-w-0 items-baseline gap-2 px-2 py-0.5 text-left hover:bg-bg-raised"
         >
           <span className="shrink-0 font-mono text-[10.5px] text-rt-key">{match.displayPath}</span>

@@ -896,10 +896,32 @@ differing by the single word the Mac's two versions differ by (*logs* against
 one picked row because with a single row they would say what Copy line already
 says.
 
-Still unported, and smaller: split panes (`Split into two panes`, `Clear the
-whole timeline — both panes`, `Pane cleared`), find-in-object inside the detail
-(`Search keys & values…`, `Reveal in the tree`), and full-size image events
-(`Click to view full size`). **`AI Agents`
+**Find-in-object was not unported at all** — that line above was stale, and
+checking before building is the only reason it was not built twice.
+`lib/json-search.ts` and `JsonTree`'s find bar have been there since the
+timeline landed, `expandingStringifiedJson` included, so a stringified payload
+is searched as the object the reader sees rather than the escaped wall. What
+was actually wrong was the wording: the field said "Find in this object…"
+where the Mac says **"Search keys & values…"** — and which half you can search
+is the thing worth knowing, since a field name is the usual reason to open it.
+The results had no "Reveal in the tree" tooltip either, which was the only
+thing that would have said they are clickable, and no clear button. All three
+fixed, and the find bar has tests now; it had none.
+
+Two more wordings the same pass found: the toolbar's export menu said "Copy to
+clipboard" for the Mac's "Copy to Clipboard", and the filter sheet's Cancel had
+no tooltip where the Mac says "Close without applying" — the one thing saying
+Cancel *discards* rather than closing with the edits applied.
+
+**Genuinely unported, and it is one feature, not three:** split panes. `Split
+into two panes`, `Clear the whole timeline — both panes`, `Pane cleared` and
+the `Got it` onboarding sheet are all that. Plus full-size image events
+(`Click to view full size`).
+
+**`button: Copy value` stays unticked deliberately.** The capability is there —
+a tree row's hover button, `copyValue` — but the Mac puts it in a *right-click
+menu* on the row, and the tracker's rule is the same gesture, not merely the
+same outcome. `JsonTree` rows have no context menu yet. **`AI Agents`
 is Mac-only by design** — it is the MCP panel, and `ReactotronMCP` is
 `#if canImport(Network)`-gated end to end.
 
@@ -2005,54 +2027,54 @@ job, and the checklist now says which.
 - **Must replicate**
   - [ ] button: OK
   - [ ] button: Retry
-  - [ ] button: Add
-  - [ ] button: Evaluate
+  - [x] button: Add
+  - [x] button: Evaluate
   - [ ] button: All
-  - [ ] button: Cancel
-  - [ ] button: Done
-  - [ ] button: Save as JSON…
-  - [ ] button: Copy to Clipboard
+  - [x] button: Cancel
+  - [x] button: Done
+  - [x] button: Save as JSON…
+  - [x] button: Copy to Clipboard
   - [x] button: Copy
   - [x] button: Copy as JSON
   - [x] button: Deselect
   - [x] button: Copy … Selected Events
   - [x] button: Copy … Selected as JSON
-  - [ ] button: Copy object
-  - [ ] button: Copy line
-  - [ ] button: Restore
+  - [x] button: Copy object
+  - [x] button: Copy line
+  - [x] button: Restore
   - [ ] button: Copy value
-  - [ ] button: Send
+  - [x] button: Send
   - [ ] button: Got it
-  - [ ] button: Clear Data & Restart
-  - [ ] picker: View
+  - [x] button: Clear Data & Restart
+  - [x] picker: View
   - [ ] picker: App
-  - [ ] field: Path to watch, e.g. user.name
-  - [ ] field: e.g. store.getState()
-  - [ ] field: Search keys & values…
+  - [x] field: Path to watch, e.g. user.name
+  - [x] field: e.g. store.getState()
+  - [x] field: Search keys & values…
   - [x] label: Reverse :9090
   - [ ] label: AI Agents
-  - [ ] label: Refresh
-  - [ ] label: Dispatch
-  - [ ] label: Take Snapshot
+  - [x] label: Refresh
+  - [x] label: Dispatch
+  - [x] label: Take Snapshot
   - [ ] label: Pane cleared
-  - [ ] label: Clear cache and restart
-  - [ ] label: Clear data and restart
-  - [ ] label: Restart app
+  - [x] label: Clear cache and restart
+  - [x] label: Clear data and restart
+  - [x] label: Restart app
   - [x] tooltip: Force-stop and relaunch the connected app so it reconnects
   - [x] tooltip: Run adb reverse tcp:9090 tcp:9090 on connected devices
   - [ ] tooltip: Clear the whole timeline — both panes
   - [ ] tooltip: Split into two panes
-  - [ ] tooltip: Clear the timeline
-  - [ ] tooltip: Stop watching this path
-  - [ ] tooltip: Refresh available values
-  - [ ] tooltip: Close without applying
+  - [x] tooltip: Clear the timeline
+  - [x] tooltip: Stop watching this path
+  - [x] tooltip: Refresh available values
+  - [x] tooltip: Close without applying
   - [x] tooltip: Show only requests with this HTTP method
   - [x] tooltip: Show only responses in this status class
-  - [ ] tooltip: Filter the timeline by event type
+  - [x] tooltip: Filter the timeline by event type
   - [x] tooltip: Copy this line (right-click for the full object)
   - [ ] tooltip: Click to view full size
-  - [ ] tooltip: Delete this snapshot
-  - [ ] tooltip: Reveal in the tree
+  - [x] tooltip: Delete this snapshot
+  - [x] tooltip: Reveal in the tree
   - [x] menu: right-click context menu
   - [ ] shortcut: .cancelAction
   - [ ] shortcut: .defaultAction
