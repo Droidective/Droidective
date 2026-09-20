@@ -5,7 +5,7 @@ import {
   ReactotronReplPane,
   ReactotronFilterSheet,
   ReactotronNotices,
-  ReactotronRestartMenu,
+  AppRestartMenu,
   ReactotronStatePane,
   ReactotronStatus,
   ReactotronToolbar,
@@ -144,9 +144,9 @@ function ReactotronTimelineView({
         onCopyAll={actions.copyShown}
         trailing={
           <>
-            <ReactotronRestartMenu
+            <AppRestartMenu
               serial={device?.serial ?? null}
-              clientName={timeline.clients[0]?.name ?? null}
+              subject={{ kind: "client", name: timeline.clients[0]?.name ?? null }}
               onReport={actions.report}
             />
             {/* Beside Restart, as on the Mac. It used to appear only where the

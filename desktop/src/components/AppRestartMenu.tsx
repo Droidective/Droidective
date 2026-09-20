@@ -7,6 +7,19 @@ import { cn } from "@/lib/cn"
 import { askMessage, CLEAR_DATA_PROMPT, type ClearScope } from "@/lib/reactotron-restart"
 
 /**
+ * Which app this screen wants restarted.
+ *
+ * Reactotron knows the client's *name* and has to match it against what is
+ * installed; the JS Console is told the application id outright by Metro. The
+ * Mac keeps two `RestartAppMenu`-shaped views for exactly that difference — the
+ * chrome and the wording are identical and only the detection differs, so here
+ * it is one component and the detection is the prop.
+ */
+export type RestartSubject =
+  | { kind: "client"; name: string | null }
+  | { kind: "package"; packageId: string | null }
+
+/**
  * The Mac's split Restart button: pressing it restarts, and the chevron opens
  * the two clearing variants.
  *
@@ -16,14 +29,13 @@ import { askMessage, CLEAR_DATA_PROMPT, type ClearScope } from "@/lib/reactotron
  * data always goes through a confirmation — it signs you out and wipes local
  * storage — and clearing cache never does.
  */
-export function ReactotronRestartMenu({
+export function AppRestartMenu({
   serial,
-  clientName,
+  subject,
   onReport,
 }: {
   serial: string | null
-  /** What the connected client called itself, or null when none is connected. */
-  clientName: string | null
+  subject: RestartSubject
   /** Where the outcome goes — a banner, a toast, whatever the caller has. */
   onReport: (outcome: { ok: boolean; message: string }) => void
 }) {
@@ -37,14 +49,26 @@ export function ReactotronRestartMenu({
   const run = (scope: ClearScope) => {
     setOpen(false)
     if (serial === null) return
-    void restart.restart({ serial, clientName, scope }).then((outcome) => {
+    const clientName = subject.kind === "client" ? subject.name : null
+    let outcome
+    if (subject.kind === "client") {
+      outcome = restart.restart({ serial, clientName: subject.name, scope })
+    } else if (subject.packageId === null) {
+      // Nothing connected on a screen that is told its package: there is no
+      // appId, so there is nothing to detect from and the Mac would open its
+      // installed-apps picker. Same answer as the detection failing below.
+      onReport({ ok: false, message: askMessage("no-client", null) })
+      return
+    } else {
+      outcome = restart.restartPackage({ serial, packageId: subject.packageId, scope })
+    }
+    void outcome.then((done) => {
       // `ask` means the target could not be established. The Mac opens a picker
       // sheet; there is none here yet, so the reason names the way out instead
       // of being swallowed — see backlog 24's remaining line.
       onReport({
-        ok: outcome.ok,
-        message:
-          outcome.ask === undefined ? outcome.message : askMessage(outcome.ask, clientName),
+        ok: done.ok,
+        message: done.ask === undefined ? done.message : askMessage(done.ask, clientName),
       })
     })
   }
