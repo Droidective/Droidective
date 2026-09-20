@@ -128,7 +128,11 @@ function Footer({
           ? "Showing everything"
           : `${hiddenCount} of ${EVENT_KINDS.length} hidden`}
       </span>
-      <Button onClick={onCancel}>Cancel</Button>
+      {/* The Mac's tooltip on the same control: it is the one thing saying
+          Cancel discards the edits rather than closing with them applied. */}
+      <Button onClick={onCancel} title="Close without applying">
+        Cancel
+      </Button>
       <Button tone="primary" onClick={onDone}>
         Done
       </Button>
