@@ -290,6 +290,7 @@ export {
   emptyWindowLayout,
   forgetWindowLayout,
   loadWindowLayout,
+  requestedFeature,
   requestedSerial,
   saveWindowLayout,
   type WindowLayout,

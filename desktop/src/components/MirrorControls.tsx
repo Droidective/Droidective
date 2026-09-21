@@ -1,4 +1,13 @@
-import { Camera, ChevronLeft, Circle, Square, Volume1, Volume2, VolumeX } from "lucide-react"
+import {
+  Camera,
+  ChevronLeft,
+  Circle,
+  PictureInPicture2,
+  Square,
+  Volume1,
+  Volume2,
+  VolumeX,
+} from "lucide-react"
 
 import { KEYCODE, backOrScreenOn, tapKey } from "@/lib/scrcpy-control"
 
@@ -12,6 +21,7 @@ export function MirrorControls({
   send,
   dropped,
   onCapture,
+  onPopOut,
 }: {
   send: (bytes: Uint8Array) => void
   /** Frames the daemon discarded, surfaced rather than swallowed. */
@@ -22,6 +32,14 @@ export function MirrorControls({
    * would read as a broken camera.
    */
   onCapture?: (() => void) | undefined
+  /**
+   * Open this device's mirror in a window of its own.
+   *
+   * Absent when there is no device to pin the window to — a pop-out that
+   * followed the selection would be a second copy of this pane rather than
+   * the Mac's per-device window.
+   */
+  onPopOut?: (() => void) | undefined
 }) {
   const key = (keycode: number) => () => {
     for (const message of tapKey(keycode)) send(message)
@@ -62,6 +80,14 @@ export function MirrorControls({
       <NavButton label="Mute" onClick={key(KEYCODE.volumeMute)}>
         <VolumeX size={16} />
       </NavButton>
+      {onPopOut === undefined ? null : (
+        <>
+          <span className="mx-2 h-4 w-px bg-border-subtle" />
+          <NavButton label="Open in a separate window" onClick={onPopOut}>
+            <PictureInPicture2 size={15} />
+          </NavButton>
+        </>
+      )}
       {dropped > 0 && (
         <span className="ml-auto text-xs text-text-tertiary">
           {dropped} frame{dropped === 1 ? "" : "s"} dropped

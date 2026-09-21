@@ -5,6 +5,7 @@ import {
   HOME_TAB,
   loadLayout,
   loadWindowLayout,
+  requestedFeature,
   restoreWorkspaceFrom,
   saveLayout,
   saveWindowLayout,
@@ -108,7 +109,7 @@ export function useWorkspace(features: FeatureSummary[]): WorkspaceController {
     if (restored.current || features.length === 0) return
     restored.current = true
     const known = new Set(features.map((feature) => feature.id))
-    const own = loadWindowLayout(globalThis.localStorage, windowLabel, layout)
+    const own = firstLayout(windowLabel, layout)
     setWorkspace(
       restoreWorkspaceFrom(
         { ...layout, panes: own.panes, focusedPane: own.focusedPane },
@@ -272,3 +273,17 @@ function useLayoutEditors(
   }
 }
 
+/**
+ * This window's layout the first time it opens.
+ *
+ * The pop-out's screen is read only here — a save that read it would keep
+ * re-adding the tab the reader has since closed.
+ */
+function firstLayout(label: string, shared: Parameters<typeof loadWindowLayout>[2]) {
+  return loadWindowLayout(
+    globalThis.localStorage,
+    label,
+    shared,
+    requestedFeature(globalThis.location.search),
+  )
+}

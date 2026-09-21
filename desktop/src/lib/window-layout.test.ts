@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest"
 
 import { emptyLayout, HOME_TAB, type LayoutState } from "@/lib/layout"
 import {
+  popOutLayout,
+  requestedFeature,
   currentWindowLabel,
   emptyWindowLayout,
   forgetWindowLayout,
@@ -166,3 +168,43 @@ describe("saveWindowLayout and forgetWindowLayout", () => {
     }).not.toThrow()
   })
 })
+
+describe("a pop-out window", () => {
+  it("reads the screen it was asked to open on", () => {
+    expect(requestedFeature("?w=w1&serial=emulator-5554&feature=scrcpy")).toBe("scrcpy")
+  })
+
+  it("reads none for an ordinary New Window", () => {
+    // Which is what lands it on Home.
+    expect(requestedFeature("?w=w1&serial=emulator-5554")).toBeNull()
+    expect(requestedFeature("?w=w1&feature=")).toBeNull()
+  })
+
+  it("opens on that screen, with Home still in the pane", () => {
+    // Opening *only* the pop-out would leave a window with no way back to
+    // anything else; Home leads the strip everywhere else too.
+    const layout = popOutLayout("scrcpy")
+    expect(layout.panes[0]?.tabs).toEqual([HOME_TAB, "scrcpy"])
+    expect(layout.panes[0]?.activeTab).toBe("scrcpy")
+  })
+
+  it("uses the pop-out layout for a window with nothing saved yet", () => {
+    const empty = { getItem: () => null }
+    const layout = loadWindowLayout(empty, "w1", emptyLayout(), "scrcpy")
+    expect(layout.panes[0]?.activeTab).toBe("scrcpy")
+  })
+
+  it("never drags the pop-out's tab back once the window has saved a layout", () => {
+    // `w1` is reused by the next window to take that label, and a pop-out's
+    // screen must not reappear in it.
+    const saved = JSON.stringify({
+      serial: null,
+      panes: [{ tabs: [HOME_TAB], activeTab: HOME_TAB }],
+      focusedPane: 0,
+      splitFraction: 0.5,
+    })
+    const layout = loadWindowLayout({ getItem: () => saved }, "w1", emptyLayout(), "scrcpy")
+    expect(layout.panes[0]?.tabs).toEqual([HOME_TAB])
+  })
+})
+
