@@ -1,6 +1,6 @@
-import { Construction } from "lucide-react"
 import { ActionForm } from "@/components/ActionForm"
 import { chromePane } from "@/components/ChromePane"
+import { NotHere } from "@/components/NotHere"
 import {
   AabConvertPane,
   ApiClientPane,
@@ -98,6 +98,7 @@ export function FeaturePane(props: FeaturePaneProps) {
           device={props.device}
           selected={props.packageId}
           onSelect={props.onSelectPackage}
+          onOpen={props.onOpen}
         />
       )
     case "aab-convert":
@@ -283,18 +284,4 @@ function hostPane({ id, active, device, packageId, onOpen }: FeaturePaneProps) {
     default:
       return null
   }
-}
-
-function NotHere({ title, subtitle }: { title: string; subtitle?: string | null }) {
-  return (
-    <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center">
-      <Construction size={22} className="text-text-tertiary" />
-      <h2 className="text-[15px] text-text-primary">{title}</h2>
-      {subtitle ? <p className="text-text-secondary">{subtitle}</p> : null}
-      <p className="max-w-sm text-text-tertiary">
-        This screen has not been built for Windows and Linux yet. `docs/desktop-parity.md` tracks
-        what it needs.
-      </p>
-    </div>
-  )
 }

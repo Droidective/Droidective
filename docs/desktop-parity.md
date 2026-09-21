@@ -2555,7 +2555,7 @@ job, and the checklist now says which.
   - [x] label: Restart
   - [x] label: Force Stop
   - [x] label: Clear Cache
-  - [ ] label: Explore files
+  - [x] label: Explore files
   - [ ] label: Restore
   - [x] label: Clear Data
   - [x] label: Uninstall

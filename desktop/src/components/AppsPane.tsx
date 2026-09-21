@@ -24,10 +24,13 @@ export function AppsPane({
   device,
   selected,
   onSelect,
+  onOpen,
 }: {
   device: Device | null
   selected: string | null
   onSelect: (packageId: string | null) => void
+  /** Opens another screen — what "Explore files" needs. */
+  onOpen: (id: string) => void
 }) {
   const [apps, setApps] = useState<AppSummary[]>([])
   const [actions, setActions] = useState<AppActionDescriptor[]>([])
@@ -97,7 +100,13 @@ export function AppsPane({
             </Banner>
           </div>
         ) : current ? (
-          <AppDetail key={current.packageId} app={current} actions={actions} serial={device.serial} />
+          <AppDetail
+            key={current.packageId}
+            app={current}
+            actions={actions}
+            serial={device.serial}
+            onOpen={onOpen}
+          />
         ) : (
           <p className="p-6 text-text-tertiary">Pick an app.</p>
         )}
@@ -212,10 +221,12 @@ function AppDetail({
   app,
   actions,
   serial,
+  onOpen,
 }: {
   app: AppSummary
   actions: AppActionDescriptor[]
   serial: string
+  onOpen: (id: string) => void
 }) {
   return (
     <div className="flex h-full flex-col gap-4 overflow-y-auto p-6">
@@ -234,6 +245,16 @@ function AppDetail({
       </header>
 
       <AppActions actions={actions} packageId={app.packageId} serial={serial} />
+      {/* The Mac's verb, and the one thing this pane could not reach: an app's
+          own files. The Sandbox Browser is already scoped to the selected
+          package, so opening it is the whole action. */}
+      <Button
+        onClick={() => {
+          onOpen("sandbox-browser")
+        }}
+      >
+        Explore files
+      </Button>
     </div>
   )
 }
