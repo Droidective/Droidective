@@ -285,6 +285,7 @@ export {
   metroRunning,
   metroTargets,
   pickFile,
+  copyFileTo,
   pickFolder,
   rebuildDecompiled,
   searchDecompiled,

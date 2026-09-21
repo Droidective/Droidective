@@ -5,8 +5,8 @@ import { HubColumn, HubRowList, HubSection } from "@/components/Hub"
 import { NoBundle, NotInstalled } from "@/components/NoBundle"
 import { NoDevice } from "@/components/screen"
 import { useNotifications } from "@/hooks/useNotifications"
-import { appInfo, asDaemonError, pullApk } from "@/lib/daemon"
-import { infoRows, pulledApkMessage } from "@/lib/appinfo"
+import { appInfo, asDaemonError, exportText, pullApk } from "@/lib/daemon"
+import { infoRows, infoText, infoFileName, pulledApkMessage } from "@/lib/appinfo"
 import type { AppInfoResponse, DaemonError, Device } from "@/lib/wire"
 
 /**
@@ -76,10 +76,27 @@ export function AppInfoPane({ device, packageId }: { device: Device | null; pack
     })()
   }
 
+  const saveInfo = () => {
+    exportText(infoFileName(packageId, new Date()), infoText(info)).then(
+      (path) => {
+        show({ message: `Saved to ${path}`, ok: true, revealPath: path })
+      },
+      (thrown: unknown) => {
+        show({ message: asDaemonError(thrown).message, ok: false })
+      },
+    )
+  }
+
   return (
     <HubColumn>
       <HubSection title="App info">
         <HubRowList rows={infoRows(info)} />
+        {/* The Mac saves this too: an app's version, install dates and flags
+            are what gets pasted into a ticket, and re-reading them off the
+            screen is the part nobody does accurately. */}
+        <div className="mt-2">
+          <Button onClick={saveInfo}>Save as text…</Button>
+        </div>
       </HubSection>
       <HubSection title="APK">
         <div>

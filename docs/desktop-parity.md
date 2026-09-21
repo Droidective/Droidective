@@ -2180,7 +2180,7 @@ job, and the checklist now says which.
   - [ ] shortcut: .cancelAction
   - [ ] shortcut: .defaultAction
   - [x] shortcut: "c", modifiers: .command
-  - [ ] export: save/export to a file
+  - [x] export: save/export to a file
 
 #### `reload-js` — Reload JS  ·  ✅ ported
 > Reload the JS bundle (double-tap R)
@@ -2467,12 +2467,12 @@ job, and the checklist now says which.
   - [x] button: Convert to APK
   - [x] button: Change…
   - [x] button: Install on device
-  - [ ] button: Save a Copy…
+  - [x] button: Save a Copy…
   - [x] button: Reveal in Finder
   - [x] button: Convert another bundle
-  - [ ] label: Unsigned — this will not install
+  - [x] label: Unsigned — this will not install
   - [x] label: Connect a device to install onto
-  - [ ] export: save/export to a file
+  - [x] export: save/export to a file
 
 #### `apk-decompile` — Decompile APK  ·  ✅ ported
 > Browse Java (jadx) or smali + resources (apktool)
@@ -2530,7 +2530,7 @@ job, and the checklist now says which.
 - **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `AppInfoView` — `App/Sources/FeatureDetail/Views/AppInfoView.swift`
 - **Must replicate**
-  - [ ] export: save/export to a file
+  - [x] export: save/export to a file
 
 #### `app-management` — Manage App  ·  ✅ ported
 > Open, stop, clear, or uninstall an app
@@ -2619,7 +2619,7 @@ job, and the checklist now says which.
   - [x] button: Home
   - [x] label: ..
   - [x] tooltip: Pull to ~/Downloads/Droidective
-  - [ ] export: save/export to a file
+  - [x] export: save/export to a file
 
 
 ### Tool UX

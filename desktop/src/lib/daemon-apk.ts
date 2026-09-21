@@ -72,6 +72,11 @@ export function pickFile(label: string, extensions: string[]): Promise<string | 
 }
 
 /** Picks a folder — where a signed APK or a converted bundle should land. */
+/** Copy a file into a folder the user picked, keeping its name. */
+export function copyFileTo(from: string, directory: string): Promise<string> {
+  return invoke<string>("copy_file_to", { from, directory })
+}
+
 export function pickFolder(): Promise<string | null> {
   return invoke("pick_folder")
 }
