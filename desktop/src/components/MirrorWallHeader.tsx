@@ -55,7 +55,12 @@ function DeviceMenu({ wall }: { wall: MirrorWallState }) {
 
   return (
     <div ref={anchor} className="relative">
-      <MenuButton onClick={() => setOpen((current) => !current)}>
+      <MenuButton
+        // The Mac's tooltip. The wall picks its own devices rather than
+        // following the bar, and nothing else on the header says so.
+        title="Pick which devices this wall shows"
+        onClick={() => setOpen((current) => !current)}
+      >
         Devices
         <ChevronDown size={13} />
       </MenuButton>
@@ -142,15 +147,18 @@ function ColumnMenu({ wall }: { wall: MirrorWallState }) {
 
 function MenuButton({
   onClick,
+  title,
   children,
 }: {
   onClick: () => void
+  title?: string | undefined
   children: React.ReactNode
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      title={title}
       className="flex items-center gap-1.5 rounded border border-border-subtle px-2 py-1 text-xs text-text-primary hover:bg-bg-hover"
     >
       {children}

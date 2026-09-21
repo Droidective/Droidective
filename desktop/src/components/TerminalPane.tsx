@@ -1,11 +1,10 @@
 import { Plus, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
-import { TerminalShell } from "@/components/TerminalShell"
+import { SplitLayout } from "@/components/TerminalSplitLayout"
 import { TerminalTabMenu } from "@/components/TerminalTabMenu"
 import { useRegisterTerminalCommands } from "@/hooks/useTerminalCommands"
-import { tabLabel, useTerminalTabs, type TerminalTab, type TerminalTabs } from "@/hooks/useTerminalTabs"
+import { tabLabel, useTerminalTabs, type TerminalTabs } from "@/hooks/useTerminalTabs"
 import { IS_MAC } from "@/lib/platform"
-import { firstPaneId, type SplitNode } from "@/lib/terminal"
 import { cn } from "@/lib/cn"
 
 /**
@@ -208,47 +207,6 @@ function TabNameField({
  * closed one shift slots, and React would hand an existing DOM node — with a
  * live shell drawing into it — to a different pane.
  */
-function SplitLayout({
-  node,
-  tab,
-  tabs,
-}: {
-  node: SplitNode
-  tab: TerminalTab
-  tabs: TerminalTabs
-}) {
-  if (node.kind === "pane") {
-    const focused = tab.focused === node.id && tab.id === tabs.active
-    return (
-      <div
-        className={cn(
-          "flex min-h-0 min-w-0 flex-1 border",
-          focused ? "border-accent/40" : "border-transparent",
-        )}
-        onFocusCapture={() => tabs.focus(tab.id, node.id)}
-      >
-        <TerminalShell
-          serial={tabs.serials[node.id] ?? null}
-          active={focused}
-          onExit={() => tabs.closePane(tab.id, node.id)}
-        />
-      </div>
-    )
-  }
-  return (
-    <div
-      className={cn(
-        "flex min-h-0 min-w-0 flex-1 gap-px",
-        node.direction === "vertical" ? "flex-row" : "flex-col",
-      )}
-    >
-      {node.children.map((child) => (
-        <SplitLayout key={firstPaneId(child) ?? ""} node={child} tab={tab} tabs={tabs} />
-      ))}
-    </div>
-  )
-}
-
 /** The tab strip's right-click menu, and what each item does. */
 function TabMenu({
   menu,

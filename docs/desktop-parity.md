@@ -1090,6 +1090,49 @@ chip says `Remove tag filter`; APK Studio's `Change…` became
 something *about* it rather than swapping the file the whole studio works on;
 and Custom Commands' name field carries the Mac's placeholder.
 
+## What the last 44 are, and why 329/329 is not the target
+
+The audit stands at **285 of 329**. The rest are not a backlog of labels
+somebody forgot; they are four different things, and lumping them together is
+what would make the number meaningless.
+
+**Out of scope, and the tracker has said so since pass 1 (3).** `emulators`'
+`Shut Down` is the *iOS Simulator* verb, `wireless-adb`'s `Scan a QR Code…`
+cannot be verified without a physical phone (adb 37 dropped Bonjour and
+openscreen ignores same-host advertisements), and `reactotron`'s `AI Agents` is
+the MCP panel — `ReactotronMCP` is `#if canImport(Network)`-gated end to end.
+These will never tick, and should not.
+
+**Needs hardware this machine does not have (2).** `frida-console`'s
+`Stop frida-server` needs a rooted device; `apk-decompile`'s
+`Open APK in jadx-GUI` launches an external GUI that is not part of this
+app's toolchain.
+
+**One subsystem, thirteen items.** Every remaining `scrcpy` and `mirror-wall`
+audio item — `Stream audio`, `Microphone`, `Mute / unmute`,
+`Audio from the Focused Device` and their tooltips — is the *same* feature:
+scrcpy's audio stream. The daemon's transport already opens the audio socket
+and `ScrcpyServerParams` already has `audio` and `audioSource`, but nothing
+requests it, nothing forwards the frames, and nothing decodes them — that last
+part is a WebCodecs `AudioDecoder` and a Web Audio graph in the page. It is a
+four-layer feature whose only honest verification is a real device, and
+building it blind to tick four toggles would be the opposite of what this
+audit is for.
+
+**Genuinely buildable, and the real backlog (26).** Terminal groups
+(`New Group…`, `New Terminal Here`, `Close Group`) and tab drag; the mirror
+wall's tile drag and `Arrange Mirror Windows`; an `activeOverrides` record so
+Simulate can offer `Reset all overrides` — which this app deliberately does not
+keep today and says so in `SimulateHubPane`; an enable/disable verb so Apps can
+offer `Restore`; API Testing's two collection exports; logcat's saved-bundle
+picker; and a handful of dialog buttons and post-run states.
+
+**One deliberate divergence stays unticked on purpose**: logcat's export
+tooltip says "Export what is shown" where the Mac says "Export buffer", because
+this app exports the *filtered* view and the Mac's wording would be inaccurate
+here. Ticking it would mean either lying about the wording or making the
+tooltip lie about the behaviour.
+
 **Known real gaps found and not yet closed**, in rough order of size:
 `reactotron` (25/51), `js-console` (14/24), `terminal`'s split panes and groups
 (6/14), `logcat`'s filter/find tooltips and app-picker labels (4/12),
@@ -2211,7 +2254,7 @@ job, and the checklist now says which.
   - [ ] toggle: Audio from the Focused Device
   - [x] picker: Columns
   - [x] label: Devices
-  - [ ] tooltip: Pick which devices this wall shows
+  - [x] tooltip: Pick which devices this wall shows
   - [ ] tooltip: Audio, and breaking tiles out into windows
   - [ ] drag: drag and drop
 
@@ -2538,7 +2581,7 @@ job, and the checklist now says which.
 - **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `AppManagementView` — `App/Sources/FeatureDetail/Views/AppManagementView.swift`
 - **Must replicate**
-  - [ ] button: Cancel
+  - [x] button: Cancel
 
 #### `apps` — Apps  ·  ✅ ported
 > All installed & system apps — manage, permissions, info
@@ -2547,7 +2590,7 @@ job, and the checklist now says which.
 - **macOS view** `AppsExplorerView` — `App/Sources/FeatureDetail/Views/AppsExplorerView.swift`
 - **Must replicate**
   - [x] button: Clear Data
-  - [ ] button: Cancel
+  - [x] button: Cancel
   - [x] button: Uninstall
   - [ ] button: Done
   - [x] field: Search name, version, or bundle…
@@ -2608,7 +2651,7 @@ job, and the checklist now says which.
 - **Kind** `view` · **hub member** · **needs an app**
 - **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `PermissionsView` — `App/Sources/FeatureDetail/Views/PermissionsView.swift`
-  - [ ] *(no controls auto-detected — audit by hand)*
+  - [x] *(no controls auto-detected — audit by hand)*
 
 #### `sandbox-browser` — Sandbox Browser  ·  ✅ ported
 > Browse and pull app files (debug builds)
@@ -2667,7 +2710,7 @@ job, and the checklist now says which.
   - [x] picker: Terminal
   - [x] field: What it does — e.g. Restart app
   - [x] label: Presets
-  - [ ] label: New
+  - [x] label: New
   - [x] label: Delete …
   - [ ] label: Added
   - [ ] tooltip: Choose a script or executable to run
@@ -2692,7 +2735,7 @@ job, and the checklist now says which.
   - [x] button: plus
   - [x] field: Name
   - [x] tooltip: Close this terminal (kills its shell)
-  - [ ] tooltip: Close this pane (kills its shell)
+  - [x] tooltip: Close this pane (kills its shell)
   - [x] menu: right-click context menu
   - [ ] drag: drag and drop
 

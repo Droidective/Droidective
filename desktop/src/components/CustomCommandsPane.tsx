@@ -53,7 +53,7 @@ export function CustomCommandsPane({
               label="Presets"
               onClick={() => setShowPresets((open) => !open)}
             />
-            <HeaderButton label="Add" onClick={() => setDraft(emptyDraft())} />
+            <HeaderButton label="New" onClick={() => setDraft(emptyDraft())} />
           </div>
         }
       >
