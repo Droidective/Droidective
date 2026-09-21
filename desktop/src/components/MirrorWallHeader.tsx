@@ -1,6 +1,7 @@
 import { useRef, useState } from "react"
-import { Check, ChevronDown, Columns3 } from "lucide-react"
+import { Check, ChevronDown, Columns3, PictureInPicture2 } from "lucide-react"
 
+import { useWindows } from "@/hooks/useWindows"
 import { useDismissOnOutside } from "@/hooks/useDismissOnOutside"
 import type { MirrorWallState } from "@/hooks/useMirrorWall"
 import { cn } from "@/lib/cn"
@@ -12,6 +13,7 @@ export function MirrorWallHeader({ wall }: { wall: MirrorWallState }) {
     <div className="flex items-center gap-2 border-b border-border-subtle bg-bg-surface px-3 py-2">
       <DeviceMenu wall={wall} />
       <ColumnMenu wall={wall} />
+      <PopOutButton wall={wall} />
       <span className="ml-auto text-xs text-text-tertiary">
         {wall.selection.length === 0
           ? ""
@@ -20,6 +22,29 @@ export function MirrorWallHeader({ wall }: { wall: MirrorWallState }) {
             }`}
       </span>
     </div>
+  )
+}
+
+/**
+ * Break every tile out into a window of its own — the Mac's "Open Each in Its
+ * Own Window".
+ *
+ * One window per device, each pinned to its serial, which is what makes this
+ * different from opening the wall twice. Absent with nothing selected: there
+ * would be no windows to open.
+ */
+function PopOutButton({ wall }: { wall: MirrorWallState }) {
+  const windows = useWindows()
+  if (wall.selection.length === 0) return null
+  return (
+    <MenuButton
+      onClick={() => {
+        for (const serial of wall.selection) windows.newWindow(serial, "scrcpy")
+      }}
+    >
+      <PictureInPicture2 size={13} />
+      Open Each in Its Own Window
+    </MenuButton>
   )
 }
 

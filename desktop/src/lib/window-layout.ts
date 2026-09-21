@@ -61,6 +61,34 @@ export function requestedSerial(search: string): string | null {
 }
 
 /**
+ * The screen a pop-out asked for, if any.
+ *
+ * Absent for an ordinary New Window, which lands on Home. Present when a
+ * feature was opened *into* a window of its own — the mirror, pinned to the
+ * device the query already names.
+ */
+export function requestedFeature(search: string): string | null {
+  const feature = new URLSearchParams(search).get("feature")
+  return feature === null || feature === "" ? null : feature
+}
+
+/**
+ * A fresh window that opens on one screen.
+ *
+ * Home stays in the pane and leads the strip, as it does everywhere else; the
+ * asked-for screen opens beside it and is the active tab. Opening *only* the
+ * pop-out screen would leave a window with no way back to anything else.
+ */
+export function popOutLayout(feature: string): WindowLayout {
+  return {
+    serial: null,
+    panes: [{ tabs: [HOME_TAB, feature], activeTab: feature }],
+    focusedPane: 0,
+    splitFraction: 0.5,
+  }
+}
+
+/**
  * Read one window's arrangement, folding in the pre-multi-window layout the
  * first time.
  *
@@ -73,10 +101,15 @@ export function loadWindowLayout(
   storage: Pick<Storage, "getItem">,
   label: string,
   shared: LayoutState,
+  popOut: string | null = null,
 ): WindowLayout {
   const own = read(storage, windowKey(label))
   if (own !== null) return own
-  if (label !== MAIN_WINDOW) return emptyWindowLayout()
+  // A pop-out's screen only decides its *first* layout: once the window has
+  // saved one, reopening `w1` must not drag the old pop-out's tab back.
+  if (label !== MAIN_WINDOW) {
+    return popOut === null ? emptyWindowLayout() : popOutLayout(popOut)
+  }
   return {
     serial: null,
     panes: shared.panes.length === 0 ? emptyWindowLayout().panes : shared.panes,

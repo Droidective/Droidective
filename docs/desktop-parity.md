@@ -1035,6 +1035,34 @@ app exports the *filtered* view, so the Mac's wording would be inaccurate here
 and accuracy beats matching. Crash Catcher's save tooltip names the folder
 because this app saves without asking, where the Mac opens a panel.
 
+**Pass 5 — the mirror family.** `scrcpy` and `mirror-wall`, and the first
+thing it found is that most of the "missing" buttons were never missing:
+the generated checklist lists an icon-only button by its **SF Symbol name**,
+so `button: circle`, `button: square` and `button: camera` are Home, Recents
+and Screenshot — all three present, in the Mac's order. Worth knowing before
+anyone builds them again.
+
+**The pop-out mirror landed.** `Open in a separate window` on the mirror and
+`Open Each in Its Own Window` on the wall, each opening a window **pinned to
+one serial** rather than following the device bar — which is the whole point:
+watching one device while the window behind it does something else. The seam
+was already there, since a window is opened with `?w=…&serial=…`; it gains a
+`&feature=`, and that screen decides only the window's *first* layout. A save
+must never read it, or every write would re-add the tab the reader had just
+closed — and `w1` is reused by the next window to take that label.
+
+Home still leads the strip in a pop-out. Opening only the mirror would leave
+a window with no way back to anything else.
+
+**What is left on the mirror is one feature and one platform call.** The audio
+toggles (`Stream audio`, `Microphone`, `Audio from the Focused Device`, and
+the three recording-audio tooltips) are a daemon-and-up piece — scrcpy carries
+one device audio stream per session, so it is `ScrcpyServerParams` work before
+it is a button. `Arrange Mirror Windows` is `AppCore.arrangeMirrorWindows`
+tiling real `NSWindow`s; Tauri can position windows, so it is possible, but it
+is a different job from a toggle. `Reconnect` and `Show touches` are small and
+unbuilt.
+
 **Known real gaps found and not yet closed**, in rough order of size:
 `reactotron` (25/51), `js-console` (14/24), `terminal`'s split panes and groups
 (6/14), `logcat`'s filter/find tooltips and app-picker labels (4/12),
@@ -2151,11 +2179,11 @@ job, and the checklist now says which.
 - **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `MirrorWallView` — `App/Sources/FeatureDetail/Views/MirrorWallView.swift`
 - **Must replicate**
-  - [ ] button: Open Each in Its Own Window
+  - [x] button: Open Each in Its Own Window
   - [ ] button: Arrange Mirror Windows
   - [ ] toggle: Audio from the Focused Device
-  - [ ] picker: Columns
-  - [ ] label: Devices
+  - [x] picker: Columns
+  - [x] label: Devices
   - [ ] tooltip: Pick which devices this wall shows
   - [ ] tooltip: Audio, and breaking tiles out into windows
   - [ ] drag: drag and drop
@@ -2166,13 +2194,13 @@ job, and the checklist now says which.
 - **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `ScreenMirrorView` — `App/Sources/FeatureDetail/Views/ScreenMirrorView.swift`
 - **Must replicate**
-  - [ ] button: Volume down
-  - [ ] button: Volume up
+  - [x] button: Volume down
+  - [x] button: Volume up
   - [ ] button: Mute / unmute
-  - [ ] button: Open in a separate window
-  - [ ] button: circle
-  - [ ] button: square
-  - [ ] button: camera
+  - [x] button: Open in a separate window
+  - [x] button: circle
+  - [x] button: square
+  - [x] button: camera
   - [ ] button: Reconnect
   - [ ] toggle: Stream audio (restarts mirror)
   - [ ] toggle: Show touches

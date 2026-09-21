@@ -170,13 +170,17 @@ pub fn workspace_claims(workspaces: State<'_, Workspaces>) -> Vec<WindowClaim> {
     clippy::needless_pass_by_value,
     reason = "tauri's command macro hands AppHandle and State in by value"
 )]
-pub fn open_workspace_window(app: AppHandle<Wry>, serial: Option<String>) -> tauri::Result<String> {
+pub fn open_workspace_window(
+    app: AppHandle<Wry>,
+    serial: Option<String>,
+    feature: Option<String>,
+) -> tauri::Result<String> {
     let label = next_label(&app);
     // The label rides in the URL as well as naming the window. Without it the
     // page reads `currentWindowLabel` as `main`, and two windows then share one
     // `localStorage` key — which is not a cosmetic problem: the second window
     // opens on the first's tabs and the two clobber each other's arrangement.
-    let query = window_query(&label, serial.as_deref());
+    let query = window_query(&label, serial.as_deref(), feature.as_deref());
     let window = WebviewWindowBuilder::new(
         &app,
         &label,
@@ -256,11 +260,17 @@ pub fn request_close_feature(app: AppHandle<Wry>, label: String, feature: String
 /// reads `currentWindowLabel` as `main`, and two windows then share one
 /// `localStorage` key — which is not cosmetic: the second window opens on the
 /// first's tabs and the two clobber each other's arrangement.
-fn window_query(label: &str, serial: Option<&str>) -> String {
+fn window_query(label: &str, serial: Option<&str>, feature: Option<&str>) -> String {
+    use std::fmt::Write as _;
     let mut query = format!("?w={}", urlencoding_encode(label));
     if let Some(value) = serial {
-        use std::fmt::Write as _;
         let _ = write!(query, "&serial={}", urlencoding_encode(value));
+    }
+    // Which screen the new window opens on. Absent for an ordinary "New
+    // Window", which lands on Home; present for a pop-out — the mirror in its
+    // own window, pinned to the device the query already names.
+    if let Some(value) = feature {
+        let _ = write!(query, "&feature={}", urlencoding_encode(value));
     }
     query
 }
@@ -378,11 +388,27 @@ mod tests {
     /// clobber each other. Found by opening a second window, not by reading.
     #[test]
     fn the_query_carries_the_label_and_then_the_device() {
-        assert_eq!(window_query("w1", None), "?w=w1");
+        assert_eq!(window_query("w1", None, None), "?w=w1");
         assert_eq!(
-            window_query("w2", Some("192.168.1.10:5555")),
+            window_query("w2", Some("192.168.1.10:5555"), None),
             "?w=w2&serial=192.168.1.10%3A5555"
         );
+    }
+
+    /// A pop-out names the screen as well as the device: the mirror in its own
+    /// window, pinned to the device the query already carries.
+    #[test]
+    fn a_pop_out_names_the_screen_it_opens_on() {
+        assert_eq!(
+            window_query("w3", Some("emulator-5554"), Some("scrcpy")),
+            "?w=w3&serial=emulator-5554&feature=scrcpy"
+        );
+    }
+
+    /// An ordinary New Window names no screen, and lands on Home.
+    #[test]
+    fn an_ordinary_window_names_no_screen() {
+        assert!(!window_query("w4", Some("emulator-5554"), None).contains("feature"));
     }
 
     #[test]

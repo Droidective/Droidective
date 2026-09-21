@@ -34,8 +34,11 @@ export function releaseClaim(label: string): Promise<void> {
 }
 
 /** A new workspace window, optionally opening on a device. */
-export function openWorkspaceWindow(serial: string | null): Promise<string> {
-  return invoke("open_workspace_window", { serial })
+export function openWorkspaceWindow(
+  serial: string | null,
+  feature: string | null = null,
+): Promise<string> {
+  return invoke("open_workspace_window", { serial, feature })
 }
 
 /** Bring another window to the front. */
