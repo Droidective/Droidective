@@ -192,6 +192,9 @@ function TagBar({
         <button
           type="button"
           onClick={onClear}
+          // The Mac's tooltip on the same control — the chip itself only
+          // says what it would go back to, not that clicking it is what does.
+          title="Remove tag filter"
           className="flex shrink-0 items-center gap-1 rounded-full bg-bg-raised px-2 py-0.5 text-[11px] text-text-secondary hover:text-text-primary"
         >
           <X size={9} strokeWidth={3} />

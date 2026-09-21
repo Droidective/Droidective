@@ -1,6 +1,7 @@
 import { Plus, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { TerminalShell } from "@/components/TerminalShell"
+import { TerminalTabMenu } from "@/components/TerminalTabMenu"
 import { useRegisterTerminalCommands } from "@/hooks/useTerminalCommands"
 import { tabLabel, useTerminalTabs, type TerminalTab, type TerminalTabs } from "@/hooks/useTerminalTabs"
 import { IS_MAC } from "@/lib/platform"
@@ -100,6 +101,7 @@ function TabStrip({
   onRename: (tab: string | null) => void
 }) {
   const modifier = IS_MAC ? "⇧⌘" : "Ctrl+Shift+"
+  const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null)
   return (
     <div className="flex shrink-0 items-center gap-1 border-b border-border-subtle bg-bg-chrome px-2 py-1">
       {tabs.tabs.map((tab) => (
@@ -125,6 +127,11 @@ function TabStrip({
               type="button"
               onClick={() => tabs.select(tab.id)}
               onDoubleClick={() => onRename(tab.id)}
+              onContextMenu={(event) => {
+                event.preventDefault()
+                tabs.select(tab.id)
+                setMenu({ id: tab.id, x: event.clientX, y: event.clientY })
+              }}
               title={tabs.serials[tab.focused] ?? "No device scoped"}
             >
               {tabLabel(tab)}
@@ -132,6 +139,9 @@ function TabStrip({
           )}
           <button
             type="button"
+            // The Mac's wording: what makes this different from closing a tab
+            // anywhere else in the app is that a live shell dies with it.
+            title="Close this terminal (kills its shell)"
             aria-label={`Close shell ${String(tab.ordinal)}`}
             className="text-text-tertiary opacity-0 group-hover:opacity-100 hover:text-text-primary"
             onClick={() => tabs.closeTab(tab.id)}
@@ -140,6 +150,7 @@ function TabStrip({
           </button>
         </div>
       ))}
+      <TabMenu menu={menu} setMenu={setMenu} tabs={tabs} serial={serial} onRename={onRename} />
       <button
         type="button"
         aria-label="New shell"
@@ -235,5 +246,46 @@ function SplitLayout({
         <SplitLayout key={firstPaneId(child) ?? ""} node={child} tab={tab} tabs={tabs} />
       ))}
     </div>
+  )
+}
+
+/** The tab strip's right-click menu, and what each item does. */
+function TabMenu({
+  menu,
+  setMenu,
+  tabs,
+  serial,
+  onRename,
+}: {
+  menu: { id: string; x: number; y: number } | null
+  setMenu: (menu: null) => void
+  tabs: TerminalTabs
+  serial: string | null
+  onRename: (tab: string) => void
+}) {
+  if (menu === null) return null
+  const pick = (run: () => void) => () => {
+    setMenu(null)
+    run()
+  }
+  return (
+    <TerminalTabMenu
+      at={menu}
+      onRename={pick(() => {
+        onRename(menu.id)
+      })}
+      onSplitVertically={pick(() => {
+        tabs.split("vertical", serial)
+      })}
+      onSplitHorizontally={pick(() => {
+        tabs.split("horizontal", serial)
+      })}
+      onClose={pick(() => {
+        tabs.closeTab(menu.id)
+      })}
+      onDismiss={() => {
+        setMenu(null)
+      }}
+    />
   )
 }

@@ -21,6 +21,8 @@ export interface Mirror {
   deviceName: string | null
   streaming: boolean
   error: DaemonError | null
+  /** Tear the session down and start a new one — the Mac's Reconnect. */
+  reconnect: () => void
   /** Frames the daemon discarded because this client fell behind. */
   dropped: number
   /** Send a control message — a tap, a key, a scroll. */
@@ -198,6 +200,15 @@ export function useMirror(serial: string | null, quality: Quality = FULL_QUALITY
   const [streaming, setStreaming] = useState(false)
   const [error, setError] = useState<DaemonError | null>(null)
   const [dropped, setDropped] = useState(0)
+  /**
+   * Bumped by `reconnect`, and in the session effect's deps so bumping it
+   * tears the old session down and starts a new one.
+   *
+   * A counter rather than a flag: two reconnects in a row have to be two
+   * restarts, and a boolean that was already true would make the second do
+   * nothing — which is exactly when someone presses it again.
+   */
+  const [attempt, setAttempt] = useState(0)
 
   // Refs throughout: the decoder callback runs outside React's world and must
   // not re-subscribe the stream every time a frame lands.
@@ -270,7 +281,11 @@ export function useMirror(serial: string | null, quality: Quality = FULL_QUALITY
       // `close`, not `flush`: pending frames are for a screen that is gone.
       if (built !== null && built.state !== "closed") built.close()
     }
-  }, [serial, maxSize, maxFps])
+  }, [serial, maxSize, maxFps, attempt])
 
-  return { size, deviceName, streaming, error, dropped, send, attach }
+  const reconnect = useCallback(() => {
+    setAttempt((current) => current + 1)
+  }, [])
+
+  return { size, deviceName, streaming, error, dropped, send, attach, reconnect }
 }

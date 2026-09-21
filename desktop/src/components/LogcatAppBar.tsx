@@ -34,7 +34,9 @@ export function LogcatAppBar({
   return (
     <div className="flex items-center gap-2 px-3 pb-2">
       <span className="shrink-0 text-[11.5px] text-text-tertiary">App</span>
-      <div className="w-[220px] shrink-0">
+      {/* The Mac's tooltip on the same picker: nothing else says a saved
+          bundle is what fills it. */}
+      <div className="w-[220px] shrink-0" title="Stream one app's logs — pick a saved bundle or add a new one">
         <Select
           value={narrowed ? "app" : "all"}
           options={[
@@ -55,11 +57,14 @@ export function LogcatAppBar({
       <button
         type="button"
         onClick={onUseForegroundApp}
+        // The Mac's tooltip; its label is "Use app on device screen", which is
+        // what the button says now — "App on screen" left it ambiguous whether
+        // it *reads* the screen or filters to it.
         title="Narrow to whatever is on the device screen"
         className="flex shrink-0 items-center gap-1 rounded-md bg-bg-raised px-2 py-1 text-[11.5px] text-text-secondary hover:bg-border-subtle hover:text-text-primary"
       >
         <Crosshair size={12} />
-        App on screen
+        Use app on device screen
       </button>
       {narrowed ? (
         <span
