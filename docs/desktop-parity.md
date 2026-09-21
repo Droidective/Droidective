@@ -2530,11 +2530,11 @@ job, and the checklist now says which.
 - **macOS view** `DecompileBrowserView` — `App/Sources/FeatureDetail/Views/DecompileBrowserView.swift`
 - **Must replicate**
   - [x] button: Choose APK…
-  - [ ] button: Try again
+  - [x] button: Try again
   - [x] button: Choose another APK
   - [ ] button: Open APK in jadx-GUI
   - [x] button: Open decompiled files in Finder
-  - [ ] button: Decompile another
+  - [x] button: Decompile another
   - [x] picker: Decompiler
   - [x] label: Find
   - [x] label: Open externally
@@ -2687,8 +2687,8 @@ job, and the checklist now says which.
   - [x] button: Edit Global Variables…
   - [x] button: Retry
   - [x] button: Edit Environment
-  - [ ] menu: Export Collection…
-  - [ ] menu: Export Collection with Secrets…
+  - [x] menu: Export Collection…
+  - [x] menu: Export Collection with Secrets…
   - [x] menu: Run Collection…
   - [x] field: Enter a URL or paste a cURL command
   - [x] tooltip: HTTP method

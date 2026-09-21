@@ -113,10 +113,13 @@ function Toolbar({ state }: { state: Decompile }) {
       {state.embedded ? null : (
         <button
           type="button"
-          onClick={state.choose}
+          // The Mac's verb once a tree is on screen: this drops the loaded APK
+          // and goes back to the chooser, where "Choose another APK" is what
+          // the failure state offers.
+          onClick={state.clearApk}
           className="rounded border border-border-subtle px-2 py-1 text-text-secondary hover:bg-bg-surface"
         >
-          Choose another APK
+          Decompile another
         </button>
       )}
     </div>
