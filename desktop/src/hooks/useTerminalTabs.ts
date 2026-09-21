@@ -7,6 +7,14 @@ import {
   type SplitDirection,
   type SplitNode,
 } from "@/lib/terminal"
+import {
+  addTab,
+  emptyEntries,
+  newGroup as newGroupIn,
+  removeGroup,
+  removeTab,
+  type Entry,
+} from "@/lib/terminal-groups"
 
 export interface TerminalTab {
   id: string
@@ -41,6 +49,14 @@ export interface TerminalTabs {
   cycle: (by: 1 | -1) => void
   /** Renames a tab; an empty name puts the derived "Shell N" back. */
   rename: (tab: string, title: string) => void
+  /** The rail's rows: loose tabs and groups, in display order. */
+  entries: Entry[]
+  /** Wrap a tab in a new group, named. */
+  newGroup: (tab: string, name: string) => void
+  /** Open a shell straight into a group — the Mac's "New Terminal Here". */
+  openInGroup: (groupId: string, serial: string | null) => void
+  /** Close a group *and every shell in it*. */
+  closeGroup: (groupId: string) => void
 }
 
 /**
@@ -67,7 +83,9 @@ export function useTerminalTabs(): TerminalTabs {
   // right after a tab closed, which reads as the shortcut being broken.
   const selected = tabs.some((tab) => tab.id === active) ? active : (tabs[0]?.id ?? null)
 
-  const openTab = useCallback((serial: string | null) => {
+  const [entries, setEntries] = useState<Entry[]>(emptyEntries)
+
+  const open = useCallback((serial: string | null, groupId?: string) => {
     const tab = crypto.randomUUID()
     const pane = crypto.randomUUID()
     const ordinal = nextOrdinal.current
@@ -77,8 +95,16 @@ export function useTerminalTabs(): TerminalTabs {
       ...current,
       { id: tab, ordinal, title: null, tree: singlePane(pane), focused: pane },
     ])
+    setEntries((current) => addTab(current, tab, groupId))
     setActive(tab)
   }, [])
+
+  const openTab = useCallback(
+    (serial: string | null) => {
+      open(serial)
+    },
+    [open],
+  )
 
   const split = useCallback(
     (direction: SplitDirection, serial: string | null) => {
@@ -106,26 +132,12 @@ export function useTerminalTabs(): TerminalTabs {
 
   const closeTab = useCallback((tab: string) => {
     setTabs((current) => current.filter((entry) => entry.id !== tab))
+    setEntries((current) => removeTab(current, tab))
   }, [])
 
-  const cycle = useCallback(
-    (by: 1 | -1) => {
-      const target = neighborTab(tabs, selected, by)
-      if (target !== null) setActive(target)
-    },
-    [tabs, selected],
-  )
 
-  const rename = useCallback((tab: string, title: string) => {
-    setTabs((current) => withTitle(current, tab, title))
-  }, [])
-
-  const focus = useCallback((tab: string, pane: string) => {
-    setActive(tab)
-    setTabs((current) =>
-      current.map((entry) => (entry.id === tab ? { ...entry, focused: pane } : entry)),
-    )
-  }, [])
+  const { cycle, rename, focus } = useSelectionVerbs(tabs, selected, setTabs, setActive)
+  const groups = useGroupVerbs(setEntries, setTabs, open)
 
   return {
     tabs,
@@ -138,6 +150,8 @@ export function useTerminalTabs(): TerminalTabs {
     openTab,
     split,
     closePane,
+    entries,
+    ...groups,
     closeTab,
     cycle,
     rename,
@@ -194,4 +208,75 @@ export function withoutPane(
   const focused =
     found.focused === pane ? (neighborPane(found.tree, pane) ?? found.focused) : found.focused
   return tabs.map((entry) => (entry.id === tab ? { ...entry, tree: next, focused } : entry))
+}
+
+/**
+ * The three group verbs, lifted out so the hook stays under its line ceiling.
+ *
+ * `closeGroup` takes the tabs down with the group, because the model hands
+ * back the ids it held precisely so they are not left running with nothing on
+ * screen to close them from.
+ */
+function useGroupVerbs(
+  setEntries: React.Dispatch<React.SetStateAction<Entry[]>>,
+  setTabs: React.Dispatch<React.SetStateAction<TerminalTab[]>>,
+  open: (serial: string | null, groupId?: string) => void,
+) {
+  return {
+    newGroup: useCallback(
+      (tab: string, name: string) => {
+        setEntries((current) => newGroupIn(current, tab, name, crypto.randomUUID()))
+      },
+      [setEntries],
+    ),
+    openInGroup: useCallback(
+      (groupId: string, serial: string | null) => {
+        open(serial, groupId)
+      },
+      [open],
+    ),
+    closeGroup: useCallback(
+      (groupId: string) => {
+        setEntries((current) => {
+          const { entries: left, closed } = removeGroup(current, groupId)
+          setTabs((tabsNow) => tabsNow.filter((tab) => !closed.includes(tab.id)))
+          return left
+        })
+      },
+      [setEntries, setTabs],
+    ),
+  }
+}
+
+/** Cycling, renaming and focusing — lifted out to keep the hook readable. */
+function useSelectionVerbs(
+  tabs: TerminalTab[],
+  selected: string | null,
+  setTabs: React.Dispatch<React.SetStateAction<TerminalTab[]>>,
+  setActive: React.Dispatch<React.SetStateAction<string | null>>,
+) {
+  return {
+    cycle: useCallback(
+      (by: 1 | -1) => {
+        const target = neighborTab(tabs, selected, by)
+        if (target !== null) setActive(target)
+      },
+      [tabs, selected, setActive],
+    ),
+    rename: useCallback(
+      (tab: string, title: string) => {
+        setTabs((current) => withTitle(current, tab, title))
+      },
+      [setTabs],
+    ),
+    focus: useCallback(
+      (tab: string, pane: string) => {
+        setActive(tab)
+        setTabs((current) =>
+          current.map((entry) => (entry.id === tab ? { ...entry, focused: pane } : entry)),
+        )
+      },
+      [setTabs, setActive],
+    ),
+  }
 }
