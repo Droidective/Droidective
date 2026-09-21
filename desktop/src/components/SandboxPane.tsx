@@ -236,7 +236,7 @@ function Row({
           </span>
           <IconButton
             icon={<Download size={13} />}
-            label="Pull to Downloads"
+            label="Pull to ~/Downloads/Droidective"
             onClick={onPull}
           />
         </>

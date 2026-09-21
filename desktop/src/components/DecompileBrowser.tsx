@@ -1,19 +1,13 @@
-import {
-  ChevronDown,
-  ChevronRight,
-  FileCode,
-  Folder,
-  FolderOpen,
-  Hammer,
-  Loader2,
-  RefreshCw,
-  Search,
-} from "lucide-react"
-import { useEffect, useMemo, useRef } from "react"
+import { ExternalLink, Hammer, Loader2, RefreshCw, Search } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
 
 import type { Decompile } from "@/hooks/useDecompile"
-import { hitsByFile, isBinary, relativePath, visibleRows } from "@/lib/decompile"
-import type { DecompileFileText, DecompileHits, DecompileMode, DecompileTree } from "@/lib/wire"
+import { DecompileTreeView as Tree, Hits } from "@/components/DecompileTreeView"
+import { DecompileViewerBody as ViewerBody } from "@/components/DecompileViewerBody"
+import { revealPath } from "@/lib/daemon"
+import { relativePath } from "@/lib/decompile"
+import { hasModifier } from "@/lib/platform"
+import type { DecompileFileText, DecompileMode, DecompileTree } from "@/lib/wire"
 
 /** What the two decompilers give you, in the words the Mac's screen uses. */
 export const MODES: { id: DecompileMode; title: string; blurb: string }[] = [
@@ -122,105 +116,9 @@ function Toolbar({ state }: { state: Decompile }) {
           onClick={state.choose}
           className="rounded border border-border-subtle px-2 py-1 text-text-secondary hover:bg-bg-surface"
         >
-          Choose APK…
+          Choose another APK
         </button>
       )}
-    </div>
-  )
-}
-
-function Tree({
-  tree,
-  expanded,
-  selected,
-  onToggle,
-  onOpen,
-}: {
-  tree: DecompileTree
-  expanded: ReadonlySet<string>
-  selected: string | null
-  onToggle: (path: string) => void
-  onOpen: (path: string) => void
-}) {
-  // Flattened rather than recursed: jadx over a real app writes tens of
-  // thousands of files, and only the open ones are ever drawn.
-  const rows = useMemo(() => visibleRows(tree.tree, expanded), [tree, expanded])
-  return (
-    <div className="py-1">
-      {rows.map((row) => (
-        <button
-          key={row.node.path}
-          type="button"
-          onClick={() => (row.isDirectory ? onToggle(row.node.path) : onOpen(row.node.path))}
-          style={{ paddingLeft: `${row.depth * 12 + 6}px` }}
-          className={`flex w-full items-center gap-1 py-[3px] pr-2 text-left hover:bg-bg-surface ${
-            selected === row.node.path ? "bg-bg-surface text-text-primary" : "text-text-secondary"
-          }`}
-        >
-          {row.isDirectory ? (
-            <>
-              {row.expanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
-              {row.expanded ? (
-                <FolderOpen size={12} className="text-text-tertiary" />
-              ) : (
-                <Folder size={12} className="text-text-tertiary" />
-              )}
-            </>
-          ) : (
-            <FileCode size={12} className="ml-[11px] text-text-tertiary" />
-          )}
-          <span className="truncate">{row.node.name}</span>
-        </button>
-      ))}
-    </div>
-  )
-}
-
-function Hits({
-  root,
-  hits,
-  onReveal,
-}: {
-  root: string
-  hits: DecompileHits
-  onReveal: (path: string) => void
-}) {
-  const grouped = useMemo(() => hitsByFile(hits.hits), [hits])
-  if (hits.hits.length === 0) {
-    return <p className="p-3 text-text-tertiary">Nothing matched.</p>
-  }
-  return (
-    <div className="py-1">
-      {hits.capped ? (
-        <p className="px-3 py-1 text-[11.5px] text-text-tertiary">
-          Showing the first {hits.hits.length} matches.
-        </p>
-      ) : null}
-      {grouped.map((group) => (
-        <div key={group.path} className="mb-1">
-          <button
-            type="button"
-            onClick={() => onReveal(group.path)}
-            className="w-full truncate px-2 py-[3px] text-left text-text-primary hover:bg-bg-surface"
-            title={group.path}
-          >
-            {relativePath(root, group.path)}
-          </button>
-          {group.hits.map((hit) => (
-            <button
-              key={`${hit.path}:${hit.line}`}
-              type="button"
-              onClick={() => onReveal(hit.path)}
-              className="flex w-full gap-2 px-2 py-[2px] pl-5 text-left hover:bg-bg-surface"
-            >
-              <span className="shrink-0 tabular-nums text-text-tertiary">{hit.line}</span>
-              <span className="truncate font-mono text-[11.5px] text-text-secondary">
-                {hit.text}
-              </span>
-            </button>
-          ))}
-        </div>
-      ))}
     </div>
   )
 }
@@ -238,10 +136,30 @@ function Viewer({
 }) {
   const scroller = useRef<HTMLDivElement | null>(null)
 
-  // A new file starts at the top, not wherever the last one was left.
+  const [find, setFind] = useState("")
+  const findField = useRef<HTMLInputElement | null>(null)
+
+  // A new file starts at the top, not wherever the last one was left. The
+  // query goes with it: a find left over from another file would mark rows
+  // nobody searched for.
   useEffect(() => {
     scroller.current?.scrollTo({ top: 0 })
+    setFind("")
   }, [path])
+
+  // Ctrl+F focuses the box rather than opening a second one — there is only
+  // ever one file on screen here.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!hasModifier(event) || event.altKey || event.shiftKey || event.key !== "f") return
+      event.preventDefault()
+      findField.current?.focus()
+    }
+    globalThis.addEventListener("keydown", onKeyDown)
+    return () => {
+      globalThis.removeEventListener("keydown", onKeyDown)
+    }
+  }, [])
 
   if (path === null) {
     return (
@@ -262,34 +180,38 @@ function Viewer({
             {Math.round(source.byteCount / 1024)} KB
           </span>
         ) : null}
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          <input
+            value={find}
+            placeholder="Find"
+            aria-label="Find in file"
+            // Ctrl+F where the Mac binds ⌘F — the standing shortcut exception.
+            title="Find in file (Ctrl+F)"
+            ref={findField}
+            onChange={(event) => {
+              setFind(event.target.value)
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setFind("")
+            }}
+            className="w-32 rounded border border-border-subtle bg-bg-surface px-2 py-0.5 text-text-primary"
+          />
+          {/* The Mac's verb. A decompiled file is often wanted in a real
+              editor, and this is the only way out of the viewer to one. */}
+          <button
+            type="button"
+            title="Open externally"
+            aria-label="Open externally"
+            onClick={() => void revealPath(path)}
+            className="rounded p-1 text-text-secondary hover:bg-bg-surface"
+          >
+            <ExternalLink size={13} />
+          </button>
+        </div>
       </div>
       <div ref={scroller} className="min-h-0 flex-1 overflow-auto">
-        <ViewerBody path={path} source={source} loading={loading} />
+        <ViewerBody path={path} source={source} loading={loading} find={find} />
       </div>
     </div>
-  )
-}
-
-function ViewerBody({
-  path,
-  source,
-  loading,
-}: {
-  path: string
-  source: DecompileFileText | null
-  loading: boolean
-}) {
-  if (loading) return <p className="p-3 text-text-tertiary">Reading…</p>
-  if (isBinary(path)) {
-    return (
-      <p className="p-3 text-text-tertiary">
-        This is a binary file — apktool copies assets through as they are.
-      </p>
-    )
-  }
-  return (
-    <pre className="whitespace-pre p-3 font-mono text-[11.5px] leading-[1.5] text-text-primary">
-      {source?.text ?? ""}
-    </pre>
   )
 }
