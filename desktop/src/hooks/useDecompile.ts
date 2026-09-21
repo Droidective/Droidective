@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 
 import { useNotifications } from "@/hooks/useNotifications"
 import { managedTools } from "@/lib/daemon"
@@ -23,6 +23,10 @@ export interface Decompile {
   toolReady: boolean | null
   /** True while fetching it. */
   installing: boolean
+  /** Why the last run failed, or null. The screen offers Try again from it. */
+  failure: string | null
+  /** Forget the loaded APK — the Mac's "Decompile another". */
+  clearApk: () => void
   install: () => void
   mode: DecompileMode
   tree: DecompileTree | null
@@ -108,6 +112,7 @@ export function useDecompile(apkPath: string | null): Decompile {
   const { show } = useNotifications()
 
   const [path, setPath] = useState<string | null>(apkPath)
+  const [failure, setFailure] = useState<string | null>(null)
   const [mode, setMode] = useState<DecompileMode>("jadx")
   const [tree, setTree] = useState<DecompileTree | null>(null)
   const [busy, setBusy] = useState(false)
@@ -115,9 +120,7 @@ export function useDecompile(apkPath: string | null): Decompile {
   const [selected, setSelected] = useState<string | null>(null)
   const [source, setSource] = useState<DecompileFileText | null>(null)
   const [loadingFile, setLoadingFile] = useState(false)
-  const [query, setQuery] = useState("")
-  const [hits, setHits] = useState<DecompileHits | null>(null)
-  const [searching, setSearching] = useState(false)
+  const { query, setQuery, hits, setHits, searching, setSearching } = useSearchState()
   const [installing, setInstalling] = useState(false)
   const toolReady = useToolReady(mode, installing)
 
@@ -132,17 +135,26 @@ export function useDecompile(apkPath: string | null): Decompile {
       setSelected(null)
       setSource(null)
       setBusy(true)
-      void runDecompile(which, chosen, refresh, { setTree, setExpanded, show }).finally(() =>
+      void runDecompile(which, chosen, refresh, {
+        setTree,
+        setExpanded,
+        setFailure,
+        show,
+      }).finally(() =>
         setBusy(false),
       )
     },
-    [show],
+    [show, setHits],
   )
 
   const open = useOpenFile(tree, setSelected, setSource, setLoadingFile, show)
+  const clearApk = useClearApk({ setPath, setTree, setFailure, setSelected, setSource })
+
 
   return {
     path,
+    failure,
+    clearApk,
     embedded: apkPath !== null,
     mode,
     tree,
@@ -203,3 +215,37 @@ export function useDecompile(apkPath: string | null): Decompile {
  * Clearing on failure matters: leaving the previous APK's output on screen
  * under a failure toast reads as though the new one decompiled.
  */
+
+/**
+ * Forget the loaded APK and everything read from it — "Decompile another".
+ *
+ * Every field together: leaving the tree or the open file behind would show
+ * the previous APK's sources under a chooser asking for the next one.
+ */
+function useClearApk(sink: {
+  setPath: (path: string | null) => void
+  setTree: (tree: DecompileTree | null) => void
+  setFailure: (failure: string | null) => void
+  setSelected: (selected: string | null) => void
+  setSource: (source: DecompileFileText | null) => void
+}): () => void {
+  const latest = useRef(sink)
+  latest.current = sink
+  return useCallback(() => {
+    latest.current.setPath(null)
+    latest.current.setTree(null)
+    latest.current.setFailure(null)
+    latest.current.setSelected(null)
+    latest.current.setSource(null)
+  }, [])
+}
+
+/** The in-tree search's three pieces, together so the hook stays readable. */
+function useSearchState() {
+  const [query, setQuery] = useState("")
+  const [hits, setHits] = useState<DecompileHits | null>(null)
+  const [searching, setSearching] = useState(false)
+  // `useState`'s setters are stable, so the object's churn per render never
+  // reaches a dependency array — the members are what callers capture.
+  return { query, setQuery, hits, setHits, searching, setSearching }
+}

@@ -29,7 +29,7 @@ export interface SidebarActions extends TreeActions {
   onRenameCollection: (collectionId: string) => void
   onCollectionAuth: (collectionId: string) => void
   onCollectionVariables: (collectionId: string) => void
-  onExportCollection: (collection: ApiCollection) => void
+  onExportCollection: (collection: ApiCollection, includeSecrets: boolean) => void
   onRunCollection: (collectionId: string) => void
   onDeleteCollection: (collection: ApiCollection) => void
 
@@ -193,9 +193,17 @@ function CollectionHeader({
       },
     },
     {
-      label: "Export…",
+      // The Mac's two items rather than one: a collection's variables can hold
+      // tokens, and which of the two you meant is not something to infer.
+      label: "Export Collection…",
       onSelect: () => {
-        actions.onExportCollection(collection)
+        actions.onExportCollection(collection, false)
+      },
+    },
+    {
+      label: "Export Collection with Secrets…",
+      onSelect: () => {
+        actions.onExportCollection(collection, true)
       },
     },
     {

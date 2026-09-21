@@ -182,7 +182,7 @@ function menuEntries(data: ApiClientData, actions: RequestBarActions): MenuEntry
   ]
 
   if (data.collections.length > 0) {
-    entries.push({ label: "Export collection", heading: true, separatorBefore: true })
+    entries.push({ label: "Export Collection…", heading: true, separatorBefore: true })
     for (const collection of data.collections) {
       entries.push({
         label: collection.name,
@@ -191,7 +191,7 @@ function menuEntries(data: ApiClientData, actions: RequestBarActions): MenuEntry
         },
       })
     }
-    entries.push({ label: "Export with secrets", heading: true })
+    entries.push({ label: "Export Collection with Secrets…", heading: true })
     for (const collection of data.collections) {
       entries.push({
         label: collection.name,

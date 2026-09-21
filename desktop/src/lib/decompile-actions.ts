@@ -49,6 +49,8 @@ export async function runDecompile(
   sink: {
     setTree: (tree: DecompileTree | null) => void
     setExpanded: (expanded: ReadonlySet<string>) => void
+    /** Why it failed, or null — the screen offers Try again from this. */
+    setFailure: (message: string | null) => void
     show: Show
   },
 ): Promise<void> {
@@ -56,9 +58,15 @@ export async function runDecompile(
     const answer = await decompileApk(path, mode, refresh)
     sink.setTree(answer)
     sink.setExpanded(defaultExpanded(answer.tree))
+    sink.setFailure(null)
   } catch (thrown) {
+    const message = withDetail(asDaemonError(thrown))
     sink.setTree(null)
-    sink.show({ message: withDetail(asDaemonError(thrown)), ok: false })
+    // Kept as well as toasted: a toast is gone by the time someone decides
+    // what to do about it, and the decision here is whether to try the same
+    // APK again or pick another.
+    sink.setFailure(message)
+    sink.show({ message, ok: false })
   }
 }
 

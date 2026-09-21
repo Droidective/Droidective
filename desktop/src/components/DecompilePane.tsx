@@ -80,6 +80,32 @@ function Chooser({ state }: { state: Decompile }) {
             {path}
           </p>
         )}
+        {state.failure === null ? null : (
+          <div className="flex flex-col items-start gap-2 rounded border border-warn/40 p-2.5">
+            <p className="text-warn">{state.failure}</p>
+            {/* The Mac's two ways out of a failed run: the same APK again, or
+                a different one. A toast is gone by the time someone decides
+                which. */}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => state.run(true)}
+                className="rounded border border-border-subtle px-2 py-1 text-text-secondary hover:bg-bg-surface"
+              >
+                Try again
+              </button>
+              {state.embedded ? null : (
+                <button
+                  type="button"
+                  onClick={state.clearApk}
+                  className="rounded border border-border-subtle px-2 py-1 text-text-secondary hover:bg-bg-surface"
+                >
+                  Choose another APK
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </HubSection>
   )
