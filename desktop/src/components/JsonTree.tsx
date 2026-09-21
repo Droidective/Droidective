@@ -177,6 +177,18 @@ function Row({
         highlighted ? "bg-accent/15" : "",
       )}
       style={{ paddingLeft: Math.max(0, row.depth - 1) * INDENT }}
+      // The Mac puts Copy value on a right-click; the hover button beside it
+      // is this app's own, and keeping both costs nothing. One row, one verb,
+      // two ways to reach it.
+      onContextMenu={(event) => {
+        event.preventDefault()
+        void copyText(copyValue(row)).then(() => {
+          setCopied(true)
+          setTimeout(() => {
+            setCopied(false)
+          }, 1200)
+        })
+      }}
     >
       <button
         type="button"
@@ -223,8 +235,8 @@ function Row({
             }, 1200)
           })
         }}
-        title="Copy this value"
-        aria-label="Copy this value"
+        title="Copy value"
+        aria-label="Copy value"
         className={cn(
           "shrink-0 hover:text-text-primary",
           copied ? "text-accent" : "text-text-tertiary opacity-0 group-hover:opacity-100",

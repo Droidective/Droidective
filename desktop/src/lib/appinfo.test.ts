@@ -7,6 +7,8 @@ import {
   pulledApkMessage,
   sandboxParent,
   sandboxRoot,
+  infoFileName,
+  infoText,
 } from "@/lib/appinfo"
 import type { AppInfoResponse, MemInfoResponse } from "@/lib/wire"
 
@@ -136,5 +138,22 @@ describe("sandboxParent", () => {
 
   it("refuses a path that is not inside the sandbox at all", () => {
     expect(sandboxParent("/sdcard/Download", root)).toBeNull()
+  })
+})
+
+describe("saving the info", () => {
+  it("writes the rows the screen shows, in the same order", () => {
+    // An export that differed from what is on screen would be a second thing
+    // to keep true.
+    const shown = info({ versionName: "1.2" })
+    const text = infoText(shown)
+    const rows = infoRows(shown).map((row) => `${row.label}: ${String(row.value)}`)
+    expect(text.split("\n")).toEqual(rows)
+  })
+
+  it("stamps the file name the way every other save here does", () => {
+    expect(infoFileName("com.example", new Date(2026, 8, 21, 10, 30, 0))).toBe(
+      "app-info_com.example_2026-09-21_10-30-00.txt",
+    )
   })
 })

@@ -13,6 +13,7 @@ import {
   installPath,
   pickFile,
   pickFolder,
+  copyFileTo,
   revealPath,
 } from "@/lib/daemon"
 import type { Device } from "@/lib/wire"
@@ -20,6 +21,7 @@ import type { Device } from "@/lib/wire"
 interface Built {
   path: string
   sizeBytes: number
+  isSigned: boolean
 }
 
 /**
@@ -197,6 +199,15 @@ function ConvertedView({
   return (
     <HubColumn>
       <HubSection title={baseName(built.path)} subtitle={built.path}>
+        {built.isSigned ? null : (
+          <p className="text-warn">
+            {/* The Mac's sentence. bundletool signs with a debug key when it is
+                given no keystore, and on some versions not at all — and an
+                unsigned APK fails `adb install` with a parse error that names
+                nothing about signing. */}
+            Unsigned — this will not install
+          </p>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           <ApkAction
             label="Install on device"
@@ -205,6 +216,14 @@ function ConvertedView({
             onClick={onInstall}
           />
           <ApkAction label="Reveal in folder" onClick={() => void revealPath(built.path)} />
+          {/* The Mac's verb: the built APK lands in a working directory, and
+              keeping one means putting it somewhere of your own. */}
+          <ApkAction
+            label="Save a Copy…"
+            onClick={() => {
+              void saveCopy(built.path)
+            }}
+          />
           <ApkAction label="Convert another bundle" onClick={onAgain} />
         </div>
         {device === null && (
@@ -213,4 +232,16 @@ function ConvertedView({
       </HubSection>
     </HubColumn>
   )
+}
+
+/**
+ * Keep a copy of the built APK somewhere of your own.
+ *
+ * The convert writes into a working directory that is easy to lose track of;
+ * the Mac offers the same verb for the same reason.
+ */
+async function saveCopy(path: string): Promise<void> {
+  const directory = await pickFolder()
+  if (directory === null) return
+  await copyFileTo(path, directory)
 }

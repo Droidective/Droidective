@@ -7,6 +7,7 @@
  * None of it needs a device, so all of it is tested.
  */
 
+import { captureStamp } from "@/lib/capture-stamp"
 import type { AppInfoResponse, MemInfoResponse } from "@/lib/wire"
 
 export interface Row {
@@ -102,3 +103,21 @@ export function sandboxParent(path: string, root: string): string | null {
 export function sandboxRoot(packageId: string): string {
   return `/data/data/${packageId}`
 }
+
+/**
+ * The info as plain text, for the save.
+ *
+ * The same rows the screen shows, in the same order: an export that differed
+ * from what was on screen would be a second thing to keep true.
+ */
+export function infoText(info: AppInfoResponse): string {
+  return infoRows(info)
+    .map((row) => `${row.label}: ${String(row.value)}`)
+    .join("\n")
+}
+
+/** `app-info_com.example_2026-09-21_10-30-00.txt`, stamped like every save here. */
+export function infoFileName(packageId: string, now: Date): string {
+  return `app-info_${packageId}_${captureStamp(now)}.txt`
+}
+

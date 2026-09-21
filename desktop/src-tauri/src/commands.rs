@@ -993,6 +993,33 @@ pub fn export_text(app: AppHandle, name: String, contents: String) -> Result<Str
     Ok(path.to_string_lossy().into_owned())
 }
 
+/// Copy a file into a folder the user picked, keeping its name.
+///
+/// "Save a Copy…" — the built APK lands in a working directory that is easy to
+/// lose track of, and keeping one means putting it somewhere of your own. The
+/// destination comes from a folder picker rather than from the page, so this
+/// writes only where the user just pointed.
+///
+/// # Errors
+///
+/// Fails when the source cannot be read or the destination cannot be written.
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "tauri's command macro hands String arguments in by value"
+)]
+pub fn copy_file_to(from: String, directory: String) -> Result<String, DaemonError> {
+    let source = PathBuf::from(&from);
+    let name = source
+        .file_name()
+        .ok_or_else(|| DaemonError::Host(format!("{from} has no file name")))?;
+    let target = PathBuf::from(&directory).join(name);
+    std::fs::copy(&source, &target).map_err(|error| {
+        DaemonError::Host(format!("could not copy to {}: {error}", target.display()))
+    })?;
+    Ok(target.to_string_lossy().into_owned())
+}
+
 /// `~/Downloads/Droidective`, created if it is not there yet.
 ///
 /// The one place this app decides where files land, shared by `export_text`

@@ -1444,6 +1444,17 @@ pub struct AabConvertRequest {
 pub struct AabConvertResponse {
     pub path: String,
     pub size_bytes: i64,
+    /// Whether bundletool signed what it produced. An unsigned APK installs
+    /// nowhere, and `adb install` reports that as a parse error naming nothing
+    /// about signing — so the screen has to say it before anyone tries.
+    #[serde(default = "signed_by_default")]
+    pub is_signed: bool,
+}
+
+/// Older daemons did not send this. Absent means signed, which is what
+/// bundletool does when it is given a keystore or falls back to the debug key.
+const fn signed_by_default() -> bool {
+    true
 }
 
 /// A recording's knobs. Zero means the device's or scrcpy's own default on all

@@ -731,7 +731,8 @@ public struct LiveBackend: DaemonBackend {
             outputDirectory: URL(fileURLWithPath: request.outputDirectory),
             credentials: request.keystore?.credentials)
         return ApkProtocol.ConvertResponse(
-            path: converted.url.path, sizeBytes: converted.sizeBytes)
+            path: converted.url.path, sizeBytes: converted.sizeBytes,
+            isSigned: converted.isSigned)
     }
 
     public func decompileApk(

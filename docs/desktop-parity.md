@@ -2061,7 +2061,7 @@ job, and the checklist now says which.
   - [x] button: Delete
   - [x] button: Cancel
   - [x] button: Save
-  - [ ] field: URL (e.g. myapp://orders/123)
+  - [x] field: URL (e.g. myapp://orders/123)
   - [x] field: Label (optional)
   - [x] label: Add deep link
   - [x] label: Delete …
@@ -2082,7 +2082,7 @@ job, and the checklist now says which.
   - [x] button: Copy
   - [x] button: Copy as JSON
   - [x] button: Deselect
-  - [ ] button: Run adb reverse for the device
+  - [x] button: Run adb reverse for the device
   - [x] button: Run
   - [x] field: Find in console
   - [x] field: 8081
@@ -2127,10 +2127,10 @@ job, and the checklist now says which.
 - **macOS view** `ReactotronView` — `App/Sources/FeatureDetail/Views/ReactotronView.swift`
 - **Must replicate**
   - [ ] button: OK
-  - [ ] button: Retry
+  - [x] button: Retry
   - [x] button: Add
   - [x] button: Evaluate
-  - [ ] button: All
+  - [x] button: All
   - [x] button: Cancel
   - [x] button: Done
   - [x] button: Save as JSON…
@@ -2143,12 +2143,12 @@ job, and the checklist now says which.
   - [x] button: Copy object
   - [x] button: Copy line
   - [x] button: Restore
-  - [ ] button: Copy value
+  - [x] button: Copy value
   - [x] button: Send
   - [ ] button: Got it
   - [x] button: Clear Data & Restart
   - [x] picker: View
-  - [ ] picker: App
+  - [x] picker: App
   - [x] field: Path to watch, e.g. user.name
   - [x] field: e.g. store.getState()
   - [x] field: Search keys & values…
@@ -2173,14 +2173,14 @@ job, and the checklist now says which.
   - [x] tooltip: Show only responses in this status class
   - [x] tooltip: Filter the timeline by event type
   - [x] tooltip: Copy this line (right-click for the full object)
-  - [ ] tooltip: Click to view full size
+  - [x] tooltip: Click to view full size
   - [x] tooltip: Delete this snapshot
   - [x] tooltip: Reveal in the tree
   - [x] menu: right-click context menu
   - [ ] shortcut: .cancelAction
   - [ ] shortcut: .defaultAction
   - [x] shortcut: "c", modifiers: .command
-  - [ ] export: save/export to a file
+  - [x] export: save/export to a file
 
 #### `reload-js` — Reload JS  ·  ✅ ported
 > Reload the JS bundle (double-tap R)
@@ -2243,7 +2243,7 @@ job, and the checklist now says which.
 - **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `ScreenRecordView` — `App/Sources/FeatureDetail/Views/ScreenRecordView.swift`
 - **Must replicate**
-  - [ ] label: Stop & Save
+  - [x] label: Stop & Save
   - [x] label: Stop
 
 #### `screenshot` — Screenshot  ·  ✅ ported
@@ -2377,7 +2377,7 @@ job, and the checklist now says which.
 - **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `BugReportView` — `App/Sources/FeatureDetail/Views/BugReportView.swift`
 - **Must replicate**
-  - [ ] button: Open in Finder
+  - [x] button: Open in Finder
   - [x] label: Generate bug report
 
 #### `crash-catcher` — Crash Catcher  ·  ✅ ported
@@ -2467,12 +2467,12 @@ job, and the checklist now says which.
   - [x] button: Convert to APK
   - [x] button: Change…
   - [x] button: Install on device
-  - [ ] button: Save a Copy…
+  - [x] button: Save a Copy…
   - [x] button: Reveal in Finder
   - [x] button: Convert another bundle
-  - [ ] label: Unsigned — this will not install
+  - [x] label: Unsigned — this will not install
   - [x] label: Connect a device to install onto
-  - [ ] export: save/export to a file
+  - [x] export: save/export to a file
 
 #### `apk-decompile` — Decompile APK  ·  ✅ ported
 > Browse Java (jadx) or smali + resources (apktool)
@@ -2482,14 +2482,14 @@ job, and the checklist now says which.
 - **Must replicate**
   - [x] button: Choose APK…
   - [ ] button: Try again
-  - [ ] button: Choose another APK
+  - [x] button: Choose another APK
   - [ ] button: Open APK in jadx-GUI
-  - [ ] button: Open decompiled files in Finder
+  - [x] button: Open decompiled files in Finder
   - [ ] button: Decompile another
   - [x] picker: Decompiler
-  - [ ] label: Find
-  - [ ] label: Open externally
-  - [ ] tooltip: Find in file (⌘F)
+  - [x] label: Find
+  - [x] label: Open externally
+  - [x] tooltip: Find in file (⌘F)
 
 #### `apk-inspector` — APK Inspector  ·  ✅ ported
 > Inspect an APK — manifest, permissions, SDK, signing
@@ -2510,7 +2510,7 @@ job, and the checklist now says which.
 - **Must replicate**
   - [x] button: Choose APK…
   - [x] button: Choose a different APK…
-  - [ ] button: Open in Finder
+  - [x] button: Open in Finder
 
 #### `apk-studio` — APK Studio  ·  ✅ ported
 > Inspect, decompile, recompile, and sign APKs in one place
@@ -2520,7 +2520,7 @@ job, and the checklist now says which.
 - **Must replicate**
   - [x] button: Open another APK
   - [x] button: Choose APK…
-  - [ ] button: Open sources in Finder
+  - [x] button: Open sources in Finder
   - [ ] button: Sign the rebuilt APK
   - [ ] button: Open in Finder
 
@@ -2530,7 +2530,7 @@ job, and the checklist now says which.
 - **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `AppInfoView` — `App/Sources/FeatureDetail/Views/AppInfoView.swift`
 - **Must replicate**
-  - [ ] export: save/export to a file
+  - [x] export: save/export to a file
 
 #### `app-management` — Manage App  ·  ✅ ported
 > Open, stop, clear, or uninstall an app
@@ -2555,7 +2555,7 @@ job, and the checklist now says which.
   - [x] label: Restart
   - [x] label: Force Stop
   - [x] label: Clear Cache
-  - [ ] label: Explore files
+  - [x] label: Explore files
   - [ ] label: Restore
   - [x] label: Clear Data
   - [x] label: Uninstall
@@ -2618,8 +2618,8 @@ job, and the checklist now says which.
 - **Must replicate**
   - [x] button: Home
   - [x] label: ..
-  - [ ] tooltip: Pull to ~/Downloads/Droidective
-  - [ ] export: save/export to a file
+  - [x] tooltip: Pull to ~/Downloads/Droidective
+  - [x] export: save/export to a file
 
 
 ### Tool UX
@@ -2668,7 +2668,7 @@ job, and the checklist now says which.
   - [x] field: What it does — e.g. Restart app
   - [x] label: Presets
   - [ ] label: New
-  - [ ] label: Delete …
+  - [x] label: Delete …
   - [ ] label: Added
   - [ ] tooltip: Choose a script or executable to run
   - [ ] shortcut: .cancelAction
@@ -2680,8 +2680,8 @@ job, and the checklist now says which.
 - **Note** Works on Linux. Windows has no pty — ConPTY is a different API — and the pane says so rather than failing at a prompt.
 - **macOS view** `TerminalView` — `App/Sources/FeatureDetail/Views/TerminalView.swift`
 - **Must replicate**
-  - [ ] button: Rename
-  - [ ] button: Cancel
+  - [x] button: Rename
+  - [x] button: Cancel
   - [x] button: Rename…
   - [ ] button: New Group…
   - [x] button: Split Vertically
@@ -2689,8 +2689,8 @@ job, and the checklist now says which.
   - [x] button: Close Terminal
   - [ ] button: New Terminal Here
   - [ ] button: Close Group
-  - [ ] button: plus
-  - [ ] field: Name
+  - [x] button: plus
+  - [x] field: Name
   - [x] tooltip: Close this terminal (kills its shell)
   - [ ] tooltip: Close this pane (kills its shell)
   - [x] menu: right-click context menu

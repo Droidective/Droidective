@@ -1,4 +1,5 @@
 import { JsonTree } from "@/components/JsonTree"
+import { ReactotronImage } from "@/components/ReactotronImage"
 import { ReactotronApiDetail } from "@/components/ReactotronApiDetail"
 import { looksLikeJson } from "@/lib/embedded-json"
 import { isJsonObject, type JsonValue } from "@/lib/json"
@@ -35,6 +36,15 @@ export function ReactotronDetail({ event, payload }: { event: ReactotronEvent; p
         <Sectioned ms={event.ms}>
           <JsonTree value={event.action ?? payload ?? {}} />
         </Sectioned>
+      )
+    case "image":
+      return (
+        <ReactotronImage
+          uri={event.uri}
+          caption={event.caption}
+          width={event.width}
+          height={event.height}
+        />
       )
     case "benchmark":
       return <BenchmarkDetail steps={event.steps} />

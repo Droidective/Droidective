@@ -71,6 +71,14 @@ export interface ApkSignResponse {
 export interface AabConvertResponse {
   path: string
   sizeBytes: number
+  /**
+   * Whether bundletool signed what it produced.
+   *
+   * An unsigned APK installs nowhere, and `adb install` reports that as a
+   * parse error naming nothing about signing — so the screen says it before
+   * anyone tries.
+   */
+  isSigned: boolean
 }
 
 /** Which decompiler ran. Mirrors the daemon's own enum. */

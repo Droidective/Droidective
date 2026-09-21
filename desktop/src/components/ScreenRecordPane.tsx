@@ -149,7 +149,7 @@ function Controls({
       <Button tone="danger" onClick={onStop} disabled={busy}>
         <span className="flex w-[104px] items-center justify-center gap-2">
           <Square size={13} />
-          Stop
+          Stop &amp; Save
         </span>
       </Button>
     </div>

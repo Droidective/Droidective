@@ -268,6 +268,7 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         commands::hide_quick_panel,
         commands::open_url,
         commands::captures_folder,
+        commands::copy_file_to,
         commands::export_text,
         api::api_workspace,
         api::api_write,

@@ -155,10 +155,19 @@ public enum ApkProtocol {
     public struct ConvertResponse: Codable, Equatable, Sendable {
         public let path: String
         public let sizeBytes: Int64
+        /// Whether bundletool signed the APK it produced.
+        ///
+        /// It signs with a debug key when no keystore is given, and *not at
+        /// all* on some versions — an unsigned APK installs nowhere, and the
+        /// failure arrives from `adb install` as a parse error that names
+        /// nothing about signing. `AabConvertService` already works this out;
+        /// dropping it here left the UI unable to warn.
+        public let isSigned: Bool
 
-        public init(path: String, sizeBytes: Int64) {
+        public init(path: String, sizeBytes: Int64, isSigned: Bool = true) {
             self.path = path
             self.sizeBytes = sizeBytes
+            self.isSigned = isSigned
         }
     }
 
