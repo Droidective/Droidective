@@ -10,16 +10,25 @@ function menu() {
     onSplitHorizontally: vi.fn(),
     onClose: vi.fn(),
     onDismiss: vi.fn(),
+    onNewGroup: vi.fn(),
+    onNewTerminalHere: null,
+    onCloseGroup: null,
   }
   render(<TerminalTabMenu at={{ x: 10, y: 10 }} {...handlers} />)
   return handlers
 }
 
 describe("a terminal tab's right-click menu", () => {
-  it("offers the Mac's four items, in its order", () => {
+  it("offers the Mac's items, in its order", () => {
     menu()
     const labels = screen.getAllByRole("menuitem").map((one) => one.textContent)
-    expect(labels).toEqual(["Rename…", "Split Vertically", "Split Horizontally", "Close Terminal"])
+    expect(labels).toEqual([
+      "Rename…",
+      "New Group…",
+      "Split Vertically",
+      "Split Horizontally",
+      "Close Terminal",
+    ])
   })
 
   it("splits the way each item says", () => {
@@ -44,10 +53,27 @@ describe("a terminal tab's right-click menu", () => {
     expect(onDismiss).toHaveBeenCalled()
   })
 
-  it("offers no group items, because this app has no terminal groups", () => {
-    // The Mac's menu has New Group…, New Terminal Here and Close Group.
-    // Offering them with nothing behind them would be worse than their absence.
+  it("hides the two group verbs on a tab that is in no group", () => {
+    // Close Group on a loose tab would be a verb with nothing to act on; the
+    // Mac's menu is arranged the same way.
     menu()
-    expect(screen.queryByRole("menuitem", { name: /Group/u })).toBeNull()
+    expect(screen.queryByRole("menuitem", { name: "New Terminal Here" })).toBeNull()
+    expect(screen.queryByRole("menuitem", { name: "Close Group" })).toBeNull()
+  })
+
+  it("offers them on a tab that is in one", () => {
+    const handlers = {
+      onRename: vi.fn(),
+      onSplitVertically: vi.fn(),
+      onSplitHorizontally: vi.fn(),
+      onClose: vi.fn(),
+      onDismiss: vi.fn(),
+      onNewGroup: vi.fn(),
+      onNewTerminalHere: vi.fn(),
+      onCloseGroup: vi.fn(),
+    }
+    render(<TerminalTabMenu at={{ x: 10, y: 10 }} {...handlers} />)
+    expect(screen.getByRole("menuitem", { name: "New Terminal Here" })).toBeTruthy()
+    expect(screen.getByRole("menuitem", { name: "Close Group" })).toBeTruthy()
   })
 })

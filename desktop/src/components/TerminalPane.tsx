@@ -1,9 +1,11 @@
-import { Plus, X } from "lucide-react"
+import { Plus } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { SplitLayout } from "@/components/TerminalSplitLayout"
+import { TabChip, type Strip } from "@/components/TerminalTabChip"
+import { groupOfTab } from "@/lib/terminal-groups"
 import { TerminalTabMenu } from "@/components/TerminalTabMenu"
 import { useRegisterTerminalCommands } from "@/hooks/useTerminalCommands"
-import { tabLabel, useTerminalTabs, type TerminalTabs } from "@/hooks/useTerminalTabs"
+import { useTerminalTabs, type TerminalTabs } from "@/hooks/useTerminalTabs"
 import { IS_MAC } from "@/lib/platform"
 import { cn } from "@/lib/cn"
 
@@ -101,54 +103,28 @@ function TabStrip({
 }) {
   const modifier = IS_MAC ? "⇧⌘" : "Ctrl+Shift+"
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null)
+  const strip: Strip = { tabs, renaming, onRename, onMenu: setMenu }
   return (
     <div className="flex shrink-0 items-center gap-1 border-b border-border-subtle bg-bg-chrome px-2 py-1">
-      {tabs.tabs.map((tab) => (
-        <div
-          key={tab.id}
-          className={cn(
-            "group flex items-center gap-1 rounded px-2 py-1",
-            tab.id === tabs.active
-              ? "bg-bg-raised text-text-primary"
-              : "text-text-secondary hover:bg-bg-surface",
-          )}
-        >
-          {renaming === tab.id ? (
-            <TabNameField
-              value={tabLabel(tab)}
-              onCommit={(name) => {
-                tabs.rename(tab.id, name)
-                onRename(null)
-              }}
-            />
-          ) : (
-            <button
-              type="button"
-              onClick={() => tabs.select(tab.id)}
-              onDoubleClick={() => onRename(tab.id)}
-              onContextMenu={(event) => {
-                event.preventDefault()
-                tabs.select(tab.id)
-                setMenu({ id: tab.id, x: event.clientX, y: event.clientY })
-              }}
-              title={tabs.serials[tab.focused] ?? "No device scoped"}
-            >
-              {tabLabel(tab)}
-            </button>
-          )}
-          <button
-            type="button"
-            // The Mac's wording: what makes this different from closing a tab
-            // anywhere else in the app is that a live shell dies with it.
-            title="Close this terminal (kills its shell)"
-            aria-label={`Close shell ${String(tab.ordinal)}`}
-            className="text-text-tertiary opacity-0 group-hover:opacity-100 hover:text-text-primary"
-            onClick={() => tabs.closeTab(tab.id)}
+      {tabs.entries.map((entry) =>
+        entry.kind === "tab" ? (
+          <TabChip key={entry.id} id={entry.id} strip={strip} />
+        ) : (
+          // A group is its name and the tabs inside it, boxed. The Mac's rail
+          // is vertical and collapses a group to its header; this strip is
+          // horizontal, and what someone needs to see here is which tabs
+          // belong together.
+          <span
+            key={entry.group.id}
+            className="flex items-center gap-1 rounded border border-border-subtle px-1"
           >
-            <X size={12} />
-          </button>
-        </div>
-      ))}
+            <span className="px-1 text-text-tertiary">{entry.group.name}</span>
+            {entry.group.tabIds.map((id) => (
+              <TabChip key={id} id={id} strip={strip} />
+            ))}
+          </span>
+        ),
+      )}
       <TabMenu menu={menu} setMenu={setMenu} tabs={tabs} serial={serial} onRename={onRename} />
       <button
         type="button"
@@ -168,46 +144,6 @@ function TabStrip({
   )
 }
 
-/**
- * The rename field. Commits on Return or on losing focus, cancels on Escape —
- * the shape of the Mac's rename sheet, minus the sheet: a tab is one word, and a
- * dialog for one word is a dialog too many.
- */
-function TabNameField({
-  value,
-  onCommit,
-}: {
-  value: string
-  onCommit: (name: string) => void
-}) {
-  const [draft, setDraft] = useState(value)
-  return (
-    <input
-      // eslint-disable-next-line jsx-a11y/no-autofocus
-      autoFocus
-      className="w-24 rounded bg-bg-root px-1 text-text-primary outline-none"
-      value={draft}
-      onChange={(event) => setDraft(event.target.value)}
-      onBlur={() => onCommit(draft)}
-      onKeyDown={(event) => {
-        // Stopped here so the pane's own capture handler does not read a
-        // shortcut out of someone typing a tab name.
-        event.stopPropagation()
-        if (event.key === "Enter") onCommit(draft)
-        if (event.key === "Escape") onCommit(value)
-      }}
-    />
-  )
-}
-
-/**
- * One tab's panes.
- *
- * Keyed by the subtree's first pane rather than its index: the panes after a
- * closed one shift slots, and React would hand an existing DOM node — with a
- * live shell drawing into it — to a different pane.
- */
-/** The tab strip's right-click menu, and what each item does. */
 function TabMenu({
   menu,
   setMenu,
@@ -222,6 +158,9 @@ function TabMenu({
   onRename: (tab: string) => void
 }) {
   if (menu === null) return null
+  // Which group this tab is in, if any: the two group verbs would otherwise
+  // act on nothing.
+  const group = groupOfTab(tabs.entries, menu.id)
   const pick = (run: () => void) => () => {
     setMenu(null)
     run()
@@ -241,6 +180,25 @@ function TabMenu({
       onClose={pick(() => {
         tabs.closeTab(menu.id)
       })}
+      onNewGroup={pick(() => {
+        // Created with the default name and renamed from the header, rather
+        // than a prompt standing in the way of the gesture.
+        tabs.newGroup(menu.id, "")
+      })}
+      onNewTerminalHere={
+        group === null
+          ? null
+          : pick(() => {
+              tabs.openInGroup(group.id, serial)
+            })
+      }
+      onCloseGroup={
+        group === null
+          ? null
+          : pick(() => {
+              tabs.closeGroup(group.id)
+            })
+      }
       onDismiss={() => {
         setMenu(null)
       }}

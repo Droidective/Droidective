@@ -1119,8 +1119,14 @@ four-layer feature whose only honest verification is a real device, and
 building it blind to tick four toggles would be the opposite of what this
 audit is for.
 
-**Genuinely buildable, and the real backlog (26).** Terminal groups
-(`New Group…`, `New Terminal Here`, `Close Group`) and tab drag; the mirror
+**Genuinely buildable, and the real backlog (23).** ~~Terminal groups~~ landed —
+`TerminalTabs` ported to `lib/terminal-groups.ts`, invariants and all: a group
+left empty deletes itself, grouping an already-grouped tab detaches it first,
+and removing a group hands back the tab ids it held so the caller can take the
+shells down with it. The strip draws a group as its name and the tabs inside
+it, boxed, rather than the Mac's collapsible rail row — this strip is
+horizontal, and what has to be visible here is which tabs belong together. Tab
+drag; the mirror
 wall's tile drag and `Arrange Mirror Windows`; an `activeOverrides` record so
 Simulate can offer `Reset all overrides` — which this app deliberately does not
 keep today and says so in `SimulateHubPane`; an enable/disable verb so Apps can
@@ -2726,12 +2732,12 @@ job, and the checklist now says which.
   - [x] button: Rename
   - [x] button: Cancel
   - [x] button: Rename…
-  - [ ] button: New Group…
+  - [x] button: New Group…
   - [x] button: Split Vertically
   - [x] button: Split Horizontally
   - [x] button: Close Terminal
-  - [ ] button: New Terminal Here
-  - [ ] button: Close Group
+  - [x] button: New Terminal Here
+  - [x] button: Close Group
   - [x] button: plus
   - [x] field: Name
   - [x] tooltip: Close this terminal (kills its shell)
