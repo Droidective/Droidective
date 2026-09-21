@@ -7,6 +7,7 @@ import {
   Save,
 } from "lucide-react"
 
+import { IS_MAC, shortcutLabel } from "@/lib/platform"
 import { IconButton } from "@/components/api/ApiKit"
 import { ApiMenuButton, type MenuEntry } from "@/components/api/ApiMenu"
 import { Button, TextInput } from "@/components/Controls"
@@ -102,7 +103,7 @@ export function ApiRequestBar({
           />
         </div>
 
-        <Button tone="primary" onClick={actions.onSend} disabled={!canSend} title="Send (⌘⏎)">
+        <Button tone="primary" onClick={actions.onSend} disabled={!canSend} title={`Send the request (${shortcutLabel("Enter", IS_MAC)})`}>
           {sending ? "Sending…" : "Send"}
         </Button>
         {sending ? <Button onClick={actions.onCancel}>Cancel</Button> : null}
@@ -141,7 +142,7 @@ function Toolbar({ data, actions }: { data: ApiClientData; actions: RequestBarAc
       <IconButton label="Import a cURL command" onClick={actions.onImportCurl}>
         <Braces size={14} />
       </IconButton>
-      <IconButton label="Save this request (⌘S)" onClick={actions.onSave}>
+      <IconButton label={`Save this request (${shortcutLabel("s", IS_MAC)})`} onClick={actions.onSave}>
         <Save size={14} />
       </IconButton>
       <IconButton label="New request" onClick={actions.onNewRequest}>

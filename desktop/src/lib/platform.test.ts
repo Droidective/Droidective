@@ -42,3 +42,18 @@ describe("isLinuxHost", () => {
     expect(isLinuxHost("Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36")).toBe(false)
   })
 })
+
+describe("shortcutLabel for named keys", () => {
+  it("writes Enter the way each host does", () => {
+    // Not cosmetic: a tooltip promising ⌘⏎ on Linux names a key that host
+    // does not have, and the API pane shipped exactly that.
+    expect(shortcutLabel("Enter", true)).toBe("⌘⏎")
+    expect(shortcutLabel("Enter", false)).toBe("Ctrl+Enter")
+  })
+
+  it("still upper-cases a single letter", () => {
+    expect(shortcutLabel("s", true)).toBe("⌘S")
+    expect(shortcutLabel("s", false)).toBe("Ctrl+S")
+  })
+})
+

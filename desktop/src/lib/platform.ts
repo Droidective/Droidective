@@ -8,7 +8,24 @@
 
 /** "⌘W" on a Mac, "Ctrl+W" elsewhere. */
 export function shortcutLabel(key: string, mac: boolean): string {
-  return mac ? `⌘${key.toUpperCase()}` : `Ctrl+${key.toUpperCase()}`
+  return mac ? `⌘${macKey(key)}` : `Ctrl+${pcKey(key)}`
+}
+
+/**
+ * A named key as each platform writes it.
+ *
+ * The Mac spells Enter as a glyph and runs the chord together (⌘⏎); Windows
+ * and Linux name it and join with a plus (Ctrl+Enter). Getting this wrong is
+ * not cosmetic — a tooltip promising ⌘⏎ on Linux names a key that host does
+ * not have.
+ */
+function macKey(key: string): string {
+  if (key === "Enter") return "⏎"
+  return key.length === 1 ? key.toUpperCase() : key
+}
+
+function pcKey(key: string): string {
+  return key.length === 1 ? key.toUpperCase() : key
 }
 
 export function isMacHost(userAgent: string): boolean {

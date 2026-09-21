@@ -1,5 +1,7 @@
 import { useState } from "react"
 
+import { useApiShortcuts } from "@/hooks/useApiShortcuts"
+
 import { ApiSplit, ApiStrips } from "@/components/api/ApiPaneParts"
 import { ApiRequestBar } from "@/components/api/ApiRequestBar"
 import { ApiRequestEditor, type RequestTab } from "@/components/api/ApiRequestEditor"
@@ -41,6 +43,15 @@ export function ApiWorkbench({
   // The editor's tab is nobody else's business, so it lives here rather than
   // in the pane above.
   const [tab, setTab] = useState<RequestTab>("params")
+
+  // The two chords the request bar's tooltips name. They were labelled before
+  // anything bound them — see `useApiShortcuts`.
+  useApiShortcuts({
+    onSend: actions.bar.onSend,
+    onSave: actions.bar.onSave,
+    canSend: client.canSend,
+    canSave: true,
+  })
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
