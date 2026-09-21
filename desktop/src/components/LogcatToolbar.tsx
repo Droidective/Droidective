@@ -119,7 +119,11 @@ function FilterRow({
         icon={Filter}
         value={filter.text}
         label="Filter lines"
-        placeholder="Filter — hides the rest…"
+        // The Mac's placeholder and its tooltip. The tooltip is what carries
+        // the difference from Find, which is why the placeholder does not have
+        // to.
+        placeholder="Filter lines…"
+        title="Show only the lines containing this text"
         onChange={(text) => {
           onFilter({ ...filter, text })
         }}
@@ -129,6 +133,8 @@ function FilterRow({
         value={find}
         label="Find in the log"
         placeholder="Find — highlights only…"
+        // Ctrl+F where the Mac binds ⌘F — the standing shortcut exception.
+        title="Find & highlight in the log without hiding lines (Ctrl+F)"
         onChange={onFind}
       />
       {find.trim() === "" ? null : (
@@ -218,12 +224,15 @@ function Field({
   value,
   label,
   placeholder,
+  title,
   onChange,
 }: {
   icon: typeof Search
   value: string
   label: string
   placeholder: string
+  /** The Mac puts one on both of these; without it nothing says what the two boxes differ by. */
+  title: string
   onChange: (value: string) => void
 }) {
   return (
@@ -233,6 +242,7 @@ function Field({
         value={value}
         aria-label={label}
         placeholder={placeholder}
+        title={title}
         onChange={(event) => {
           onChange(event.target.value)
         }}

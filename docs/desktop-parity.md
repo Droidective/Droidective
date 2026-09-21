@@ -913,10 +913,24 @@ clipboard" for the Mac's "Copy to Clipboard", and the filter sheet's Cancel had
 no tooltip where the Mac says "Close without applying" — the one thing saying
 Cancel *discards* rather than closing with the edits applied.
 
-**Genuinely unported, and it is one feature, not three:** split panes. `Split
-into two panes`, `Clear the whole timeline — both panes`, `Pane cleared` and
-the `Got it` onboarding sheet are all that. Plus full-size image events
-(`Click to view full size`).
+~~Genuinely unported: split panes.~~ **Landed.** Each pane gets its own
+filter and its own order over **one shared buffer** — API traffic on one side,
+logs on the other. The model is `lib/reactotron-panes.ts`, and the two rules
+worth getting right are the ones that are invisible when they go wrong: a
+pane's clear is a **watermark, not a delete** (the buffer is shared, so
+removing rows would empty the other pane too), and its boundary is
+**inclusive** — exclusive leaks the last pre-clear row straight back in.
+Closing the split forgets **only the right pane's** clear: that pane is going
+away, so a reopened split offers the whole timeline again, which is also the
+way back from an accidental clear. The left pane lives on as the single pane,
+so its clear and both filters stay.
+
+The layout follows the Mac's too: in one pane the global controls ride the
+pane's own toolbar, because a timeline topped by two stacked strips wastes the
+room the rows want; the dedicated strip appears only when split.
+
+Still unported: full-size image events (`Click to view full size`), and the
+`Got it` onboarding sheet that sells the split on the Mac.
 
 **`button: Copy value` stays unticked deliberately.** The capability is there —
 a tree row's hover button, `copyValue` — but the Mac puts it in a *right-click
@@ -988,6 +1002,38 @@ gesture.
 
 Nothing on this screen is outstanding now except `button: Run adb reverse for
 the device` and `button: Run`, which are the empty state's, not the toolbar's.
+
+**Pass 4 — a sweep across ten screens**, and it moved the audit from 83 to
+190 of 329. File Explorer, Crash Catcher, API Testing, Emulators, Apps, Deep
+Links, Custom Commands, AAB to APK, Logcat and Performance.
+
+**What a tick from this pass means, exactly**, because a tick that overstates
+its evidence is worse than none: the affordance's own text occurs on a
+**non-comment line inside that feature's own files**, and each feature's main
+component was read. That is weaker than the per-item reading passes 1–3 did on
+Connection and Reactotron, and it is recorded here so nobody mistakes the two.
+Items whose text is a bare word — `Cancel`, `Done`, `All` — were matched only
+within the feature's own files, never across `desktop/src`, because those match
+a dozen screens each.
+
+**What it found.** Three user-visible strings promised **⌘** on a build that
+runs only on Windows and Linux — API Testing's `Send (⌘⏎)`, its `Save this
+request (⌘S)`, and the response pane's empty state. Worse, **nothing bound
+either chord**: the tooltips named keys the host does not have *for shortcuts
+that did not exist*. `platform.ts`' own header says why that matters ("a
+tooltip promising ⌘W is simply wrong"), and it already had the helper. Both are
+bound now (`useApiShortcuts`) and labelled per host.
+
+Logcat's filter and find boxes carried **no tooltips at all**, where the Mac
+puts one on each — and the tooltip is what carries the difference between the
+two boxes, which is the one thing about that pair worth explaining. Its filter
+placeholder is the Mac's now too.
+
+**Two deliberate divergences, named rather than ticked away.** Logcat's export
+tooltip says "Export what is shown" where the Mac says "Export buffer": this
+app exports the *filtered* view, so the Mac's wording would be inaccurate here
+and accuracy beats matching. Crash Catcher's save tooltip names the folder
+because this app saves without asking, where the Mac opens a panel.
 
 **Known real gaps found and not yet closed**, in rough order of size:
 `reactotron` (25/51), `js-console` (14/24), `terminal`'s split panes and groups
@@ -1882,17 +1928,17 @@ job, and the checklist now says which.
 - **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `EmulatorsView` — `App/Sources/FeatureDetail/Views/EmulatorsView.swift`
 - **Must replicate**
-  - [ ] button: Wipe Data
-  - [ ] button: Cancel
-  - [ ] button: Relaunch
-  - [ ] button: Stop
-  - [ ] button: Launch
-  - [ ] button: Cold Boot (skip snapshot)
-  - [ ] button: Wipe Data…
+  - [x] button: Wipe Data
+  - [x] button: Cancel
+  - [x] button: Relaunch
+  - [x] button: Stop
+  - [x] button: Launch
+  - [x] button: Cold Boot (skip snapshot)
+  - [x] button: Wipe Data…
   - [ ] button: Shut Down
-  - [ ] button: Boot
-  - [ ] label: Refresh
-  - [ ] tooltip: Stop the emulator and boot it again
+  - [x] button: Boot
+  - [x] label: Refresh
+  - [x] tooltip: Stop the emulator and boot it again
 
 #### `get-ip` — Copy Device IP  ·  ✅ ported
 > Get the Wi-Fi IP address and copy it
@@ -1957,14 +2003,14 @@ job, and the checklist now says which.
 - **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `DeepLinksView` — `App/Sources/FeatureDetail/Views/DeepLinksView.swift`
 - **Must replicate**
-  - [ ] button: Delete
-  - [ ] button: Cancel
-  - [ ] button: Save
+  - [x] button: Delete
+  - [x] button: Cancel
+  - [x] button: Save
   - [ ] field: URL (e.g. myapp://orders/123)
-  - [ ] field: Label (optional)
-  - [ ] label: Add deep link
+  - [x] field: Label (optional)
+  - [x] label: Add deep link
   - [ ] label: Delete …
-  - [ ] tooltip: Launch on device
+  - [x] tooltip: Launch on device
 
 #### `js-console` — JS Console  ·  ✅ ported
 > Hermes REPL + live console over the Metro debugger
@@ -2056,14 +2102,14 @@ job, and the checklist now says which.
   - [x] label: Refresh
   - [x] label: Dispatch
   - [x] label: Take Snapshot
-  - [ ] label: Pane cleared
+  - [x] label: Pane cleared
   - [x] label: Clear cache and restart
   - [x] label: Clear data and restart
   - [x] label: Restart app
   - [x] tooltip: Force-stop and relaunch the connected app so it reconnects
   - [x] tooltip: Run adb reverse tcp:9090 tcp:9090 on connected devices
-  - [ ] tooltip: Clear the whole timeline — both panes
-  - [ ] tooltip: Split into two panes
+  - [x] tooltip: Clear the whole timeline — both panes
+  - [x] tooltip: Split into two panes
   - [x] tooltip: Clear the timeline
   - [x] tooltip: Stop watching this path
   - [x] tooltip: Refresh available values
@@ -2198,24 +2244,24 @@ job, and the checklist now says which.
 - **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `FileExplorerView` — `App/Sources/FeatureDetail/Views/FileExplorerView.swift`
 - **Must replicate**
-  - [ ] button: Create
-  - [ ] button: Cancel
-  - [ ] button: Delete
-  - [ ] button: Copy
-  - [ ] button: Cut
-  - [ ] button: Pull to Mac
-  - [ ] button: Get Info
-  - [ ] button: Done
-  - [ ] toggle: Root
-  - [ ] field: Folder name
-  - [ ] label: New Folder
-  - [ ] label: ..
-  - [ ] tooltip: Clear clipboard
-  - [ ] tooltip: Browse the whole filesystem as root
-  - [ ] tooltip: Refresh
-  - [ ] tooltip: Add to selection
-  - [ ] menu: right-click context menu
-  - [ ] export: save/export to a file
+  - [x] button: Create
+  - [x] button: Cancel
+  - [x] button: Delete
+  - [x] button: Copy
+  - [x] button: Cut
+  - [x] button: Pull to Mac
+  - [x] button: Get Info
+  - [x] button: Done
+  - [x] toggle: Root
+  - [x] field: Folder name
+  - [x] label: New Folder
+  - [x] label: ..
+  - [x] tooltip: Clear clipboard
+  - [x] tooltip: Browse the whole filesystem as root
+  - [x] tooltip: Refresh
+  - [x] tooltip: Add to selection
+  - [x] menu: right-click context menu
+  - [x] export: save/export to a file
 
 #### `http-proxy` — HTTP Proxy  ·  ✅ ported
 > Set or clear the global proxy (Charles, Proxyman)
@@ -2285,23 +2331,23 @@ job, and the checklist now says which.
 - **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `CrashView` — `App/Sources/FeatureDetail/Views/CrashView.swift`
 - **Must replicate**
-  - [ ] button: Clear Buffer
+  - [x] button: Clear Buffer
   - [ ] button: Try Again
-  - [ ] toggle: Raw log
-  - [ ] picker: Kind
-  - [ ] picker: Process
-  - [ ] field: Filter crashes…
-  - [ ] label: Copy
+  - [x] toggle: Raw log
+  - [x] picker: Kind
+  - [x] picker: Process
+  - [x] field: Filter crashes…
+  - [x] label: Copy
   - [ ] label: Couldn't read crashes
-  - [ ] label: No crashes detected
+  - [x] label: No crashes detected
   - [ ] label: Checking…
-  - [ ] tooltip: Fetch crashes from the device
-  - [ ] tooltip: Show only crashes containing this text
-  - [ ] tooltip: Copy this crash for pasting into Slack, Jira, or anywhere
-  - [ ] tooltip: Save this crash to a file
-  - [ ] tooltip: Clear the device's crash buffer
-  - [ ] tooltip: Show the original logcat lines instead of just the messages
-  - [ ] export: save/export to a file
+  - [x] tooltip: Fetch crashes from the device
+  - [x] tooltip: Show only crashes containing this text
+  - [x] tooltip: Copy this crash for pasting into Slack, Jira, or anywhere
+  - [x] tooltip: Save this crash to a file
+  - [x] tooltip: Clear the device's crash buffer
+  - [x] tooltip: Show the original logcat lines instead of just the messages
+  - [x] export: save/export to a file
 
 #### `ios-logs` — iOS Logs  ·  ⛔ n/a
 > Live simulator log stream (unified log)
@@ -2314,16 +2360,16 @@ job, and the checklist now says which.
 - **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `LogcatView` — `App/Sources/FeatureDetail/Views/LogcatView.swift`
 - **Must replicate**
-  - [ ] picker: Level
-  - [ ] field: Filter lines…
-  - [ ] label: All apps
+  - [x] picker: Level
+  - [x] field: Filter lines…
+  - [x] label: All apps
   - [ ] label: Add from installed apps
   - [ ] label: Use app on device screen
   - [ ] label: Add manually / manage…
-  - [ ] tooltip: Show only the lines containing this text
-  - [ ] tooltip: Find & highlight in the log without hiding lines (⌘F)
+  - [x] tooltip: Show only the lines containing this text
+  - [x] tooltip: Find & highlight in the log without hiding lines (⌘F)
   - [ ] tooltip: Export buffer to ~/Downloads/Droidective
-  - [ ] tooltip: Clear
+  - [x] tooltip: Clear
   - [ ] tooltip: Stream one app's logs — pick a saved bundle or add a new one
   - [ ] tooltip: Remove tag filter
   - [ ] export: save/export to a file
@@ -2334,16 +2380,16 @@ job, and the checklist now says which.
 - **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `PerformanceView` — `App/Sources/FeatureDetail/Views/PerformanceView.swift`
 - **Must replicate**
-  - [ ] button: Export…
-  - [ ] button: Stop without exporting
-  - [ ] button: Keep recording
-  - [ ] picker: Sort
-  - [ ] field: Filter by name…
-  - [ ] label: Export
-  - [ ] label: seconds
-  - [ ] tooltip: Start, pause, or resume sampling
-  - [ ] tooltip: Stop recording
-  - [ ] tooltip: Export the recording as JSON + CSV
+  - [x] button: Export…
+  - [x] button: Stop without exporting
+  - [x] button: Keep recording
+  - [x] picker: Sort
+  - [x] field: Filter by name…
+  - [x] label: Export
+  - [x] label: seconds
+  - [x] tooltip: Start, pause, or resume sampling
+  - [x] tooltip: Stop recording
+  - [x] tooltip: Export the recording as JSON + CSV
 
 #### `root-status` — Root Status  ·  ✅ ported
 > Check whether the device is rooted, and how
@@ -2361,16 +2407,16 @@ job, and the checklist now says which.
 - **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `AabConvertView` — `App/Sources/FeatureDetail/Views/AabConvertView.swift`
 - **Must replicate**
-  - [ ] button: Choose AAB…
-  - [ ] button: Clear
-  - [ ] button: Convert to APK
-  - [ ] button: Change…
-  - [ ] button: Install on device
+  - [x] button: Choose AAB…
+  - [x] button: Clear
+  - [x] button: Convert to APK
+  - [x] button: Change…
+  - [x] button: Install on device
   - [ ] button: Save a Copy…
   - [ ] button: Reveal in Finder
-  - [ ] button: Convert another bundle
+  - [x] button: Convert another bundle
   - [ ] label: Unsigned — this will not install
-  - [ ] label: Connect a device to install onto
+  - [x] label: Connect a device to install onto
   - [ ] export: save/export to a file
 
 #### `apk-decompile` — Decompile APK  ·  ✅ ported
@@ -2445,20 +2491,20 @@ job, and the checklist now says which.
 - **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `AppsExplorerView` — `App/Sources/FeatureDetail/Views/AppsExplorerView.swift`
 - **Must replicate**
-  - [ ] button: Clear Data
+  - [x] button: Clear Data
   - [ ] button: Cancel
-  - [ ] button: Uninstall
+  - [x] button: Uninstall
   - [ ] button: Done
-  - [ ] field: Search name, version, or bundle…
-  - [ ] label: Open
-  - [ ] label: Restart
-  - [ ] label: Force Stop
-  - [ ] label: Clear Cache
+  - [x] field: Search name, version, or bundle…
+  - [x] label: Open
+  - [x] label: Restart
+  - [x] label: Force Stop
+  - [x] label: Clear Cache
   - [ ] label: Explore files
   - [ ] label: Restore
-  - [ ] label: Clear Data
-  - [ ] label: Uninstall
-  - [ ] tooltip: Refresh
+  - [x] label: Clear Data
+  - [x] label: Uninstall
+  - [x] tooltip: Refresh
   - [ ] export: save/export to a file
 
 #### `current-activity` — Copy Current Activity  ·  ✅ ported
@@ -2529,27 +2575,27 @@ job, and the checklist now says which.
 - **macOS view** `ApiClientView` — `App/Sources/FeatureDetail/Views/ApiClient/ApiClientView.swift`
 - **Must replicate**
   - [ ] button: OK
-  - [ ] button: Discard and Start New
-  - [ ] button: Save First…
-  - [ ] button: Cancel
-  - [ ] button: Import Postman Collection or Environment…
-  - [ ] button: Export Everything…
-  - [ ] button: Edit Global Variables…
-  - [ ] button: Retry
-  - [ ] button: Edit Environment
+  - [x] button: Discard and Start New
+  - [x] button: Save First…
+  - [x] button: Cancel
+  - [x] button: Import Postman Collection or Environment…
+  - [x] button: Export Everything…
+  - [x] button: Edit Global Variables…
+  - [x] button: Retry
+  - [x] button: Edit Environment
   - [ ] menu: Export Collection…
   - [ ] menu: Export Collection with Secrets…
   - [ ] menu: Run Collection…
-  - [ ] field: Enter a URL or paste a cURL command
-  - [ ] tooltip: HTTP method
-  - [ ] tooltip: Send the request (⌘⏎)
-  - [ ] tooltip: Import a cURL command
-  - [ ] tooltip: Save this request (⌘S)
-  - [ ] tooltip: New request
-  - [ ] tooltip: Import, export, and run
-  - [ ] tooltip: Active environment
-  - [ ] shortcut: .return, modifiers: .command
-  - [ ] shortcut: "s", modifiers: .command
+  - [x] field: Enter a URL or paste a cURL command
+  - [x] tooltip: HTTP method
+  - [x] tooltip: Send the request (⌘⏎)
+  - [x] tooltip: Import a cURL command
+  - [x] tooltip: Save this request (⌘S)
+  - [x] tooltip: New request
+  - [x] tooltip: Import, export, and run
+  - [x] tooltip: Active environment
+  - [x] shortcut: .return, modifiers: .command
+  - [x] shortcut: "s", modifiers: .command
 
 #### `custom-commands` — Custom Commands  ·  ✅ ported
 > Your own adb, terminal, and script actions
@@ -2557,15 +2603,15 @@ job, and the checklist now says which.
 - **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `CustomCommandsView` — `App/Sources/FeatureDetail/Views/CustomCommandsView.swift`
 - **Must replicate**
-  - [ ] button: Delete
-  - [ ] button: Cancel
-  - [ ] button: Save
-  - [ ] button: Done
-  - [ ] button: Add
-  - [ ] picker: Show output
-  - [ ] picker: Terminal
+  - [x] button: Delete
+  - [x] button: Cancel
+  - [x] button: Save
+  - [x] button: Done
+  - [x] button: Add
+  - [x] picker: Show output
+  - [x] picker: Terminal
   - [ ] field: What it does — e.g. Restart app
-  - [ ] label: Presets
+  - [x] label: Presets
   - [ ] label: New
   - [ ] label: Delete …
   - [ ] label: Added

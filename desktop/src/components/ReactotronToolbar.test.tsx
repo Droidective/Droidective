@@ -49,6 +49,7 @@ describe("ReverseButton", () => {
         onClear={vi.fn()}
         onExport={vi.fn()}
         onCopyAll={vi.fn()}
+      onSplit={vi.fn()}
         trailing={<ReverseButton disabled={false} onReverse={vi.fn()} />}
       />,
     )
