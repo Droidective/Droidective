@@ -63,14 +63,7 @@ export function MirrorPane({ device }: { device: Device | null }) {
   }
 
   if (mirror.error !== null) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
-        <h2 className="text-[15px] font-medium text-text-primary">
-          The mirror could not start
-        </h2>
-        <p className="max-w-md text-text-secondary">{mirror.error.message}</p>
-      </div>
-    )
+    return <MirrorFailed message={mirror.error.message} onReconnect={mirror.reconnect} />
   }
 
   // The first frame is what proves there is anything to tap.
@@ -131,4 +124,23 @@ function usePopOut(serial: string | null): (() => void) | undefined {
   return () => {
     windows.newWindow(serial, "scrcpy")
   }
+}
+
+/** What a mirror that could not start says, and the way back from it. */
+function MirrorFailed({ message, onReconnect }: { message: string; onReconnect: () => void }) {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
+      <h2 className="text-[15px] font-medium text-text-primary">The mirror could not start</h2>
+      <p className="max-w-md text-text-secondary">{message}</p>
+      {/* The Mac's Reconnect. Without it the way back is leaving the tab and
+          returning, which is a worse version of pressing a button. */}
+      <button
+        type="button"
+        onClick={onReconnect}
+        className="rounded-md bg-bg-raised px-3 py-1 text-text-primary hover:bg-border-subtle"
+      >
+        Reconnect
+      </button>
+    </div>
+  )
 }

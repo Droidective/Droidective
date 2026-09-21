@@ -1063,6 +1063,33 @@ tiling real `NSWindow`s; Tauri can position windows, so it is possible, but it
 is a different job from a toggle. `Reconnect` and `Show touches` are small and
 unbuilt.
 
+**Pass 6 — the long tail, and three things it built.** Eighteen more screens
+swept the way pass 4 was swept, plus the gaps that turned out to be small
+enough to close on the spot:
+
+- **The terminal tab's right-click menu.** Splitting, renaming and closing
+  were already on the menu bar with their shortcuts; this is the second way to
+  them, and for someone who has never opened the menu bar it is the only one.
+  The Mac's wording and order. **Its group items are deliberately absent** —
+  `New Group…`, `New Terminal Here` and `Close Group` — because this app has
+  no terminal groups, and offering them with nothing behind them is worse than
+  their absence.
+- **The mirror's Reconnect.** A mirror that failed had no way back short of
+  leaving the tab and returning, which is a worse version of pressing a
+  button. The attempt is a *counter* rather than a flag, since two reconnects
+  in a row have to be two restarts — and pressing it twice is exactly what
+  someone does.
+- **Crash Catcher's Try Again**, in the failed state rather than only in the
+  toolbar: that is where someone is looking when the read failed.
+
+Wordings the pass corrected: logcat's app picker gained the Mac's tooltip and
+its button now reads `Use app on device screen` (from "App on screen", which
+left it ambiguous whether it *reads* the screen or filters to it); the tag
+chip says `Remove tag filter`; APK Studio's `Change…` became
+`Open another APK`, since "Change…" beside a loaded APK reads as changing
+something *about* it rather than swapping the file the whole studio works on;
+and Custom Commands' name field carries the Mac's placeholder.
+
 **Known real gaps found and not yet closed**, in rough order of size:
 `reactotron` (25/51), `js-console` (14/24), `terminal`'s split panes and groups
 (6/14), `logcat`'s filter/find tooltips and app-picker labels (4/12),
@@ -2017,10 +2044,10 @@ job, and the checklist now says which.
 - **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `WirelessAdbView` — `App/Sources/FeatureDetail/Views/WirelessAdbView.swift`
 - **Must replicate**
-  - [ ] button: Enable Wi-Fi & Connect
-  - [ ] button: Pair
-  - [ ] button: Connect
-  - [ ] button: Disconnect
+  - [x] button: Enable Wi-Fi & Connect
+  - [x] button: Pair
+  - [x] button: Connect
+  - [x] button: Disconnect
   - [ ] label: Scan a QR Code…
 
 
@@ -2037,7 +2064,7 @@ job, and the checklist now says which.
   - [ ] field: URL (e.g. myapp://orders/123)
   - [x] field: Label (optional)
   - [x] label: Add deep link
-  - [ ] label: Delete …
+  - [x] label: Delete …
   - [x] tooltip: Launch on device
 
 #### `js-console` — JS Console  ·  ✅ ported
@@ -2056,7 +2083,7 @@ job, and the checklist now says which.
   - [x] button: Copy as JSON
   - [x] button: Deselect
   - [ ] button: Run adb reverse for the device
-  - [ ] button: Run
+  - [x] button: Run
   - [x] field: Find in console
   - [x] field: 8081
   - [x] field: Filter
@@ -2090,8 +2117,8 @@ job, and the checklist now says which.
 - **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `ReactNativeView` — `App/Sources/FeatureDetail/Views/ReactNativeView.swift`
 - **Must replicate**
-  - [ ] button: Forward
-  - [ ] button: Set
+  - [x] button: Forward
+  - [x] button: Set
 
 #### `reactotron` — Reactotron  ·  ✅ ported
 > Live React Native inspector — logs, network, state, custom display
@@ -2201,7 +2228,7 @@ job, and the checklist now says which.
   - [x] button: circle
   - [x] button: square
   - [x] button: camera
-  - [ ] button: Reconnect
+  - [x] button: Reconnect
   - [ ] toggle: Stream audio (restarts mirror)
   - [ ] toggle: Show touches
   - [ ] toggle: Microphone
@@ -2217,7 +2244,7 @@ job, and the checklist now says which.
 - **macOS view** `ScreenRecordView` — `App/Sources/FeatureDetail/Views/ScreenRecordView.swift`
 - **Must replicate**
   - [ ] label: Stop & Save
-  - [ ] label: Stop
+  - [x] label: Stop
 
 #### `screenshot` — Screenshot  ·  ✅ ported
 > Capture the screen and save it to your Mac
@@ -2230,7 +2257,7 @@ job, and the checklist now says which.
 - **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `VideoEditorView` — `App/Sources/FeatureDetail/Views/VideoEditorView.swift`
 - **Must replicate**
-  - [ ] label: Open video…
+  - [x] label: Open video…
 
 
 ### Device State
@@ -2250,7 +2277,7 @@ job, and the checklist now says which.
 - **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `DeveloperSettingsView` — `App/Sources/FeatureDetail/Views/DeveloperSettingsView.swift`
 - **Must replicate**
-  - [ ] tooltip: Refresh from the device
+  - [x] tooltip: Refresh from the device
 
 #### `device-info` — Device Info  ·  ✅ ported
 > Browse and search every device property
@@ -2258,7 +2285,7 @@ job, and the checklist now says which.
 - **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `DeviceInfoView` — `App/Sources/FeatureDetail/Views/DeviceInfoView.swift`
 - **Must replicate**
-  - [ ] field: Filter properties…
+  - [x] field: Filter properties…
 
 #### `fake-battery` — Fake Battery  ·  ✅ ported
 > Set a fake battery level and unplugged state
@@ -2328,10 +2355,10 @@ job, and the checklist now says which.
 - **macOS view** `SimulateView` — `App/Sources/FeatureDetail/Views/SimulateView.swift`
 - **Must replicate**
   - [ ] button: Reset all overrides
-  - [ ] button: Apply
-  - [ ] button: Send
-  - [ ] button: Set
-  - [ ] button: Clear
+  - [x] button: Apply
+  - [x] button: Send
+  - [x] button: Set
+  - [x] button: Clear
 
 #### `system-restrictions` — System Restrictions  ·  ✅ ported
 > Dev toggles — verifier, hidden APIs, SELinux (root)
@@ -2339,8 +2366,8 @@ job, and the checklist now says which.
 - **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `SystemRestrictionsView` — `App/Sources/FeatureDetail/Views/SystemRestrictionsView.swift`
 - **Must replicate**
-  - [ ] button: Remount /system read-write
-  - [ ] tooltip: Refresh
+  - [x] button: Remount /system read-write
+  - [x] tooltip: Refresh
 
 
 ### Logs & Diagnostics
@@ -2351,7 +2378,7 @@ job, and the checklist now says which.
 - **macOS view** `BugReportView` — `App/Sources/FeatureDetail/Views/BugReportView.swift`
 - **Must replicate**
   - [ ] button: Open in Finder
-  - [ ] label: Generate bug report
+  - [x] label: Generate bug report
 
 #### `crash-catcher` — Crash Catcher  ·  ✅ ported
 > Browse device crashes — watch, filter, copy for Slack/Jira
@@ -2360,15 +2387,15 @@ job, and the checklist now says which.
 - **macOS view** `CrashView` — `App/Sources/FeatureDetail/Views/CrashView.swift`
 - **Must replicate**
   - [x] button: Clear Buffer
-  - [ ] button: Try Again
+  - [x] button: Try Again
   - [x] toggle: Raw log
   - [x] picker: Kind
   - [x] picker: Process
   - [x] field: Filter crashes…
   - [x] label: Copy
-  - [ ] label: Couldn't read crashes
+  - [x] label: Couldn't read crashes
   - [x] label: No crashes detected
-  - [ ] label: Checking…
+  - [x] label: Checking…
   - [x] tooltip: Fetch crashes from the device
   - [x] tooltip: Show only crashes containing this text
   - [x] tooltip: Copy this crash for pasting into Slack, Jira, or anywhere
@@ -2392,15 +2419,15 @@ job, and the checklist now says which.
   - [x] field: Filter lines…
   - [x] label: All apps
   - [ ] label: Add from installed apps
-  - [ ] label: Use app on device screen
+  - [x] label: Use app on device screen
   - [ ] label: Add manually / manage…
   - [x] tooltip: Show only the lines containing this text
   - [x] tooltip: Find & highlight in the log without hiding lines (⌘F)
   - [ ] tooltip: Export buffer to ~/Downloads/Droidective
   - [x] tooltip: Clear
-  - [ ] tooltip: Stream one app's logs — pick a saved bundle or add a new one
-  - [ ] tooltip: Remove tag filter
-  - [ ] export: save/export to a file
+  - [x] tooltip: Stream one app's logs — pick a saved bundle or add a new one
+  - [x] tooltip: Remove tag filter
+  - [x] export: save/export to a file
 
 #### `performance` — Performance Monitor  ·  ✅ ported
 > Live CPU, RAM & FPS with recording and export
@@ -2425,7 +2452,7 @@ job, and the checklist now says which.
 - **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `RootStatusView` — `App/Sources/FeatureDetail/Views/RootStatusView.swift`
 - **Must replicate**
-  - [ ] label: Re-check
+  - [x] label: Re-check
 
 
 ### App Management
@@ -2441,7 +2468,7 @@ job, and the checklist now says which.
   - [x] button: Change…
   - [x] button: Install on device
   - [ ] button: Save a Copy…
-  - [ ] button: Reveal in Finder
+  - [x] button: Reveal in Finder
   - [x] button: Convert another bundle
   - [ ] label: Unsigned — this will not install
   - [x] label: Connect a device to install onto
@@ -2453,13 +2480,13 @@ job, and the checklist now says which.
 - **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `DecompileBrowserView` — `App/Sources/FeatureDetail/Views/DecompileBrowserView.swift`
 - **Must replicate**
-  - [ ] button: Choose APK…
+  - [x] button: Choose APK…
   - [ ] button: Try again
   - [ ] button: Choose another APK
   - [ ] button: Open APK in jadx-GUI
   - [ ] button: Open decompiled files in Finder
   - [ ] button: Decompile another
-  - [ ] picker: Decompiler
+  - [x] picker: Decompiler
   - [ ] label: Find
   - [ ] label: Open externally
   - [ ] tooltip: Find in file (⌘F)
@@ -2470,10 +2497,10 @@ job, and the checklist now says which.
 - **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `ApkInspectorView` — `App/Sources/FeatureDetail/Views/ApkInspectorView.swift`
 - **Must replicate**
-  - [ ] button: Choose APK…
-  - [ ] button: Inspect another…
+  - [x] button: Choose APK…
+  - [x] button: Inspect another…
   - [ ] label: … (…)
-  - [ ] label: Signing
+  - [x] label: Signing
 
 #### `apk-sign` — Sign APK  ·  ✅ ported
 > Zipalign and sign an APK — debug key or your keystore
@@ -2481,8 +2508,8 @@ job, and the checklist now says which.
 - **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `ApkSignView` — `App/Sources/FeatureDetail/Views/ApkSignView.swift`
 - **Must replicate**
-  - [ ] button: Choose APK…
-  - [ ] button: Choose a different APK…
+  - [x] button: Choose APK…
+  - [x] button: Choose a different APK…
   - [ ] button: Open in Finder
 
 #### `apk-studio` — APK Studio  ·  ✅ ported
@@ -2491,8 +2518,8 @@ job, and the checklist now says which.
 - **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `ApkStudioView` — `App/Sources/FeatureDetail/Views/ApkStudioView.swift`
 - **Must replicate**
-  - [ ] button: Open another APK
-  - [ ] button: Choose APK…
+  - [x] button: Open another APK
+  - [x] button: Choose APK…
   - [ ] button: Open sources in Finder
   - [ ] button: Sign the rebuilt APK
   - [ ] button: Open in Finder
@@ -2559,8 +2586,8 @@ job, and the checklist now says which.
 - **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `InstallAppView` — `App/Sources/FeatureDetail/Views/InstallAppView.swift`
 - **Must replicate**
-  - [ ] button: Choose File…
-  - [ ] label: Connect a device to install onto
+  - [x] button: Choose File…
+  - [x] label: Connect a device to install onto
 
 #### `meminfo` — Memory Usage  ·  ✅ ported
 > Live memory usage for an app
@@ -2568,7 +2595,7 @@ job, and the checklist now says which.
 - **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `MeminfoView` — `App/Sources/FeatureDetail/Views/MeminfoView.swift`
 - **Must replicate**
-  - [ ] label: seconds
+  - [x] label: seconds
 
 #### `monkey` — Monkey Test  ·  ✅ ported
 > Fire random events to hunt for crashes
@@ -2589,8 +2616,8 @@ job, and the checklist now says which.
 - **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `SandboxBrowserView` — `App/Sources/FeatureDetail/Views/SandboxBrowserView.swift`
 - **Must replicate**
-  - [ ] button: Home
-  - [ ] label: ..
+  - [x] button: Home
+  - [x] label: ..
   - [ ] tooltip: Pull to ~/Downloads/Droidective
   - [ ] export: save/export to a file
 
@@ -2613,7 +2640,7 @@ job, and the checklist now says which.
   - [x] button: Edit Environment
   - [ ] menu: Export Collection…
   - [ ] menu: Export Collection with Secrets…
-  - [ ] menu: Run Collection…
+  - [x] menu: Run Collection…
   - [x] field: Enter a URL or paste a cURL command
   - [x] tooltip: HTTP method
   - [x] tooltip: Send the request (⌘⏎)
@@ -2638,7 +2665,7 @@ job, and the checklist now says which.
   - [x] button: Add
   - [x] picker: Show output
   - [x] picker: Terminal
-  - [ ] field: What it does — e.g. Restart app
+  - [x] field: What it does — e.g. Restart app
   - [x] label: Presets
   - [ ] label: New
   - [ ] label: Delete …
@@ -2655,18 +2682,18 @@ job, and the checklist now says which.
 - **Must replicate**
   - [ ] button: Rename
   - [ ] button: Cancel
-  - [ ] button: Rename…
+  - [x] button: Rename…
   - [ ] button: New Group…
-  - [ ] button: Split Vertically
-  - [ ] button: Split Horizontally
-  - [ ] button: Close Terminal
+  - [x] button: Split Vertically
+  - [x] button: Split Horizontally
+  - [x] button: Close Terminal
   - [ ] button: New Terminal Here
   - [ ] button: Close Group
   - [ ] button: plus
   - [ ] field: Name
-  - [ ] tooltip: Close this terminal (kills its shell)
+  - [x] tooltip: Close this terminal (kills its shell)
   - [ ] tooltip: Close this pane (kills its shell)
-  - [ ] menu: right-click context menu
+  - [x] menu: right-click context menu
   - [ ] drag: drag and drop
 
 

@@ -66,9 +66,12 @@ export function ApkStudioPane() {
           <button
             type="button"
             onClick={choose}
+            // The Mac's wording. "Change…" beside a loaded APK reads as
+            // changing something *about* it; this button swaps the file the
+            // whole studio is working on.
             className="shrink-0 rounded border border-border-subtle px-2 py-1 text-text-secondary hover:bg-bg-surface"
           >
-            Change…
+            Open another APK
           </button>
         </div>
       </div>

@@ -114,6 +114,16 @@ function Body({
     return (
       <Filler>
         Couldn’t read crashes. Check the connection, then refresh.
+        {/* The Mac offers the retry here rather than only in the toolbar: this
+            is where someone is looking when the read failed, and hunting for
+            Refresh above is a step that need not exist. */}
+        <button
+          type="button"
+          onClick={crashes.refresh}
+          className="mt-3 rounded-md bg-bg-raised px-3 py-1 text-text-primary hover:bg-border-subtle"
+        >
+          Try Again
+        </button>
       </Filler>
     )
   }
@@ -138,7 +148,7 @@ function Body({
   )
 }
 
-function Filler({ children }: { children: string }) {
+function Filler({ children }: { children: React.ReactNode }) {
   return (
     <p className="flex min-h-0 flex-1 items-center justify-center px-8 text-center text-text-tertiary">
       {children}

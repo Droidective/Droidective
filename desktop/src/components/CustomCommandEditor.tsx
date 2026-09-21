@@ -30,7 +30,7 @@ export function CustomCommandEditor({
         <input
           type="text"
           value={draft.name}
-          placeholder="e.g. Restart app"
+          placeholder="What it does — e.g. Restart app"
           onChange={(event) => onChange({ ...draft, name: event.target.value })}
           className="rounded border border-border-subtle bg-bg-surface px-2 py-1 text-text-primary placeholder:text-text-tertiary"
         />
