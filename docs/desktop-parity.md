@@ -2143,7 +2143,7 @@ job, and the checklist now says which.
   - [x] button: Copy object
   - [x] button: Copy line
   - [x] button: Restore
-  - [ ] button: Copy value
+  - [x] button: Copy value
   - [x] button: Send
   - [ ] button: Got it
   - [x] button: Clear Data & Restart
@@ -2173,7 +2173,7 @@ job, and the checklist now says which.
   - [x] tooltip: Show only responses in this status class
   - [x] tooltip: Filter the timeline by event type
   - [x] tooltip: Copy this line (right-click for the full object)
-  - [ ] tooltip: Click to view full size
+  - [x] tooltip: Click to view full size
   - [x] tooltip: Delete this snapshot
   - [x] tooltip: Reveal in the tree
   - [x] menu: right-click context menu
