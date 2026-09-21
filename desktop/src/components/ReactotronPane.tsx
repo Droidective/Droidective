@@ -10,6 +10,7 @@ import {
   ReactotronStatus,
   ReactotronToolbar,
   ReactotronWaiting,
+  RowSelectionMenu,
   RENDER_WINDOW,
   ReverseButton,
   useReactotronCommands,
@@ -18,6 +19,8 @@ import {
 } from "@/components/reactotron"
 import { useReactotron } from "@/hooks/useReactotron"
 import { useReactotronActions } from "@/hooks/useReactotronActions"
+import { useReactotronSelection, type ReactotronSelection } from "@/hooks/useReactotronSelection"
+import { copyText } from "@/lib/daemon"
 import { emptyFilter, filterRows, seenMethods, type TimelineFilter } from "@/lib/reactotron-filter"
 import type { TimelineRow } from "@/lib/reactotron-rows"
 import type { Device } from "@/lib/wire"
@@ -127,6 +130,8 @@ function ReactotronTimelineView({
   device: Device | null
 }) {
   const { timeline } = feed
+  const selection = useReactotronSelection(visible, reportingCopy(actions.report))
+
   return (
     <>
       <ReactotronToolbar
@@ -154,6 +159,7 @@ function ReactotronTimelineView({
                 tunnel that dropped with the client still listed left no way to
                 re-open it, which is the one moment you need the button. */}
             <ReverseButton disabled={device === null} onReverse={actions.openTunnel} />
+            <TimelineSelectionMenu selection={selection} />
           </>
         }
       />
@@ -175,7 +181,12 @@ function ReactotronTimelineView({
         notice={actions.notice}
         tunnel={actions.tunnel}
       />
-      <ReactotronFeed rows={visible} newestFirst={newestFirst} total={timeline.rows.length} />
+      <ReactotronFeed
+        rows={visible}
+        newestFirst={newestFirst}
+        total={timeline.rows.length}
+        selection={selection}
+      />
 
       {filtering ? (
         <ReactotronFilterSheet
@@ -227,4 +238,33 @@ function ReactotronViewPicker({
       ))}
     </div>
   )
+}
+
+/** The picked-rows control, which the Mac shows only while something is picked. */
+function TimelineSelectionMenu({ selection }: { selection: ReactotronSelection }) {
+  if (selection.count === 0) return null
+  return (
+    <RowSelectionMenu
+      count={selection.count}
+      noun="events"
+      onCopy={selection.copy}
+      onCopyAsJson={selection.copyAsJson}
+      onDeselect={selection.clear}
+    />
+  )
+}
+
+/**
+ * What a selection copy does once the text is built: put it on the clipboard
+ * and say how many went, through whichever slot the pane reports into.
+ */
+function reportingCopy(report: (outcome: { ok: boolean; message: string }) => void) {
+  return (text: string, count: number, asJson: boolean) => {
+    void copyText(text).then(() => {
+      report({
+        ok: true,
+        message: `Copied ${String(count)} ${asJson ? "events as JSON" : "events"}`,
+      })
+    })
+  }
 }

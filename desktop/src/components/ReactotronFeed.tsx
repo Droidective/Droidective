@@ -1,6 +1,8 @@
 import { useRef, useState } from "react"
 import { ReactotronRow } from "@/components/ReactotronRow"
 import { ReactotronRowMenu, type RowMenuTarget } from "@/components/ReactotronRowMenu"
+import type { ReactotronSelection } from "@/hooks/useReactotronSelection"
+import { cn } from "@/lib/cn"
 import { copyText } from "@/lib/daemon"
 import type { TimelineRow } from "@/lib/reactotron-rows"
 
@@ -18,11 +20,13 @@ export function ReactotronFeed({
   rows,
   newestFirst,
   total,
+  selection,
 }: {
   rows: readonly TimelineRow[]
   newestFirst: boolean
   /** Everything buffered, so an empty result can say what it is hiding. */
   total: number
+  selection: ReactotronSelection
 }) {
   const [following, setFollowing] = useState(true)
   const [menu, setMenu] = useState<RowMenuTarget | null>(null)
@@ -46,13 +50,19 @@ export function ReactotronFeed({
           : element.scrollHeight - element.scrollTop - element.clientHeight
         setFollowing(distance < 24)
       }}
-      className="min-h-0 flex-1 overflow-y-auto"
+      className={cn(
+        "min-h-0 flex-1 overflow-y-auto",
+        // Only while sweeping: otherwise the browser selects the text under
+        // the drag at the same time and two selections fight over one gesture.
+        selection.dragging && "select-none",
+      )}
       data-selectable
     >
       {rendered.map((row) => (
         <ReactotronRow
           key={row.id}
           row={row}
+          selection={selection}
           onMenu={(at, target) => {
             setMenu({ ...at, row: target })
           }}
@@ -73,6 +83,12 @@ export function ReactotronFeed({
         <ReactotronRowMenu
           at={menu}
           row={menu.row}
+          selectionCount={selection.count}
+          onCopySelection={(asJson) => {
+            setMenu(null)
+            if (asJson) selection.copyAsJson()
+            else selection.copy()
+          }}
           onDismiss={() => {
             setMenu(null)
           }}

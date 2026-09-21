@@ -48,6 +48,15 @@ import { isRunnable, type Device, type FeatureSummary } from "@/lib/wire"
 
 export interface FeaturePaneProps {
   id: string
+  /**
+   * Whether this tab is the one on screen.
+   *
+   * Every open tab stays mounted and the inactive ones are only `hidden`, so a
+   * pane that binds a key or paces a poll has to be told — the Mac gates ⌘F on
+   * `activeTabID` for the same reason: a hidden keep-alive tab winning the
+   * shortcut sends the focus request into a view nobody can see.
+   */
+  active: boolean
   feature: FeatureSummary | null
   features: FeatureSummary[]
   device: Device | null
@@ -214,7 +223,7 @@ function appPane({ id, device, packageId }: FeaturePaneProps) {
  * What they have in common is what `hints.test.ts` cuts on: none of them can
  * reach the connect-a-device empty state, so a line for it would be dead text.
  */
-function hostPane({ id, device, packageId, onOpen }: FeaturePaneProps) {
+function hostPane({ id, active, device, packageId, onOpen }: FeaturePaneProps) {
   switch (id) {
     case "emulators":
       return <EmulatorsPane />
@@ -230,7 +239,7 @@ function hostPane({ id, device, packageId, onOpen }: FeaturePaneProps) {
       // Metro is a process on this machine, so the console connects with no
       // device at all; the selection only decides which device gets the
       // `adb reverse` that lets it reach Metro.
-      return <JsConsolePane device={device} />
+      return <JsConsolePane device={device} active={active} />
     case "apk-inspector":
       // Device-free: an APK is a file on this machine, so both work with
       // nothing connected.

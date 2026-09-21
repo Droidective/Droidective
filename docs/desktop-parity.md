@@ -887,10 +887,41 @@ With that in place each pane *is* the ordinary four layers. The `reactotron`
 stream topic already carries the answers back; the timeline renders
 `subscription` and `SNAPSHOT` rows today.
 
-Also unported, and smaller: split panes (`Split into two panes`, `Clear the
-whole timeline — both panes`, `Pane cleared`), find-in-object inside the detail
-(`Search keys & values…`, `Reveal in the tree`), multi-row selection and its
-copies, and full-size image events (`Click to view full size`). **`AI Agents`
+~~Multi-row selection and its copies~~ **landed**, and it is why
+`RowSelection` was ported generically for the JS Console: the Mac shares one
+model between the two screens, so this one shares `useRowPicking` — the same
+gestures, the same Ctrl+C gating, and the same shared `RowSelectionMenu`
+differing by the single word the Mac's two versions differ by (*logs* against
+*events*). The timeline's row menu gains the Mac's two bulk verbs, gated past
+one picked row because with a single row they would say what Copy line already
+says.
+
+**Find-in-object was not unported at all** — that line above was stale, and
+checking before building is the only reason it was not built twice.
+`lib/json-search.ts` and `JsonTree`'s find bar have been there since the
+timeline landed, `expandingStringifiedJson` included, so a stringified payload
+is searched as the object the reader sees rather than the escaped wall. What
+was actually wrong was the wording: the field said "Find in this object…"
+where the Mac says **"Search keys & values…"** — and which half you can search
+is the thing worth knowing, since a field name is the usual reason to open it.
+The results had no "Reveal in the tree" tooltip either, which was the only
+thing that would have said they are clickable, and no clear button. All three
+fixed, and the find bar has tests now; it had none.
+
+Two more wordings the same pass found: the toolbar's export menu said "Copy to
+clipboard" for the Mac's "Copy to Clipboard", and the filter sheet's Cancel had
+no tooltip where the Mac says "Close without applying" — the one thing saying
+Cancel *discards* rather than closing with the edits applied.
+
+**Genuinely unported, and it is one feature, not three:** split panes. `Split
+into two panes`, `Clear the whole timeline — both panes`, `Pane cleared` and
+the `Got it` onboarding sheet are all that. Plus full-size image events
+(`Click to view full size`).
+
+**`button: Copy value` stays unticked deliberately.** The capability is there —
+a tree row's hover button, `copyValue` — but the Mac puts it in a *right-click
+menu* on the row, and the tracker's rule is the same gesture, not merely the
+same outcome. `JsonTree` rows have no context menu yet. **`AI Agents`
 is Mac-only by design** — it is the MCP panel, and `ReactotronMCP` is
 `#if canImport(Network)`-gated end to end.
 
@@ -934,7 +965,29 @@ fractional-second stamps — so a dump from either app diffs against the other,
 and `captureStamp` is now shared with the screenshot editor because the file
 name is a contract with the Mac rather than a convenience.
 
-Still open here: find (⌘F), and row selection with its copies.
+**Find (⌘F)** is in as well — its own strip above the feed, opened by the
+toolbar's button or by Ctrl+F, with the Mac's counter, its wrapping arrows and
+Escape to close. Separate from the filter on purpose, as on the Mac: the filter
+hides rows, find leaves them and walks between the ones that match, marking
+every occurrence and the current one in a second shade. The shortcut is bound
+only while the tab is the one on screen — every open tab stays mounted, so a
+hidden console would otherwise win the key and open a bar nobody can see, which
+is what `FeaturePaneProps.active` now exists to say. That flag is also the seam
+the backlog's "Memory Usage pausing when its tab is hidden" needs.
+
+**Row selection** closes it. ADBKit's `RowSelection` is ported to
+`lib/row-selection.ts` — immutable where the Mac's is a mutating struct,
+because this one lives in React state and identity is what lets a feed skip
+re-rendering rows that did not change. The part worth the tests is the
+**anchor**, not the highlight: where it sits after each gesture decides what
+the next ⇧-click spans, and a ⇧-click that ratchets outward instead of
+re-spanning is the kind of thing you only notice on the fourth click. A plain
+click *clears* rather than selects, which is the Mac's rule and not an
+omission — a row is something you click to read, so picking is the deliberate
+gesture.
+
+Nothing on this screen is outstanding now except `button: Run adb reverse for
+the device` and `button: Run`, which are the empty state's, not the toolbar's.
 
 **Known real gaps found and not yet closed**, in rough order of size:
 `reactotron` (25/51), `js-console` (14/24), `terminal`'s split panes and groups
@@ -1925,12 +1978,12 @@ job, and the checklist now says which.
   - [x] button: Copy to Clipboard
   - [x] button: Show All
   - [x] button: Hide All
-  - [ ] button: Copy
-  - [ ] button: Copy as JSON
-  - [ ] button: Deselect
+  - [x] button: Copy
+  - [x] button: Copy as JSON
+  - [x] button: Deselect
   - [ ] button: Run adb reverse for the device
   - [ ] button: Run
-  - [ ] field: Find in console
+  - [x] field: Find in console
   - [x] field: 8081
   - [x] field: Filter
   - [x] label: Reload JS
@@ -1940,11 +1993,11 @@ job, and the checklist now says which.
   - [x] label: adb reverse
   - [x] tooltip: Reload the JS bundle — what ⌘R in React Native DevTools does
   - [x] tooltip: Metro dev-server port — varies per app
-  - [ ] tooltip: Find & highlight in console (⌘F)
+  - [x] tooltip: Find & highlight in console (⌘F)
   - [x] tooltip: Clear the console
   - [x] tooltip: Choose which log levels to show
-  - [ ] search: searchable list
-  - [ ] shortcut: "c", modifiers: .command
+  - [x] search: searchable list
+  - [x] shortcut: "c", modifiers: .command
   - [x] export: save/export to a file
 
 #### `open-dev-menu` — Open Dev Menu  ·  ✅ ported
@@ -1974,58 +2027,58 @@ job, and the checklist now says which.
 - **Must replicate**
   - [ ] button: OK
   - [ ] button: Retry
-  - [ ] button: Add
-  - [ ] button: Evaluate
+  - [x] button: Add
+  - [x] button: Evaluate
   - [ ] button: All
-  - [ ] button: Cancel
-  - [ ] button: Done
-  - [ ] button: Save as JSON…
-  - [ ] button: Copy to Clipboard
-  - [ ] button: Copy
-  - [ ] button: Copy as JSON
-  - [ ] button: Deselect
-  - [ ] button: Copy … Selected Events
-  - [ ] button: Copy … Selected as JSON
-  - [ ] button: Copy object
-  - [ ] button: Copy line
-  - [ ] button: Restore
+  - [x] button: Cancel
+  - [x] button: Done
+  - [x] button: Save as JSON…
+  - [x] button: Copy to Clipboard
+  - [x] button: Copy
+  - [x] button: Copy as JSON
+  - [x] button: Deselect
+  - [x] button: Copy … Selected Events
+  - [x] button: Copy … Selected as JSON
+  - [x] button: Copy object
+  - [x] button: Copy line
+  - [x] button: Restore
   - [ ] button: Copy value
-  - [ ] button: Send
+  - [x] button: Send
   - [ ] button: Got it
-  - [ ] button: Clear Data & Restart
-  - [ ] picker: View
+  - [x] button: Clear Data & Restart
+  - [x] picker: View
   - [ ] picker: App
-  - [ ] field: Path to watch, e.g. user.name
-  - [ ] field: e.g. store.getState()
-  - [ ] field: Search keys & values…
+  - [x] field: Path to watch, e.g. user.name
+  - [x] field: e.g. store.getState()
+  - [x] field: Search keys & values…
   - [x] label: Reverse :9090
   - [ ] label: AI Agents
-  - [ ] label: Refresh
-  - [ ] label: Dispatch
-  - [ ] label: Take Snapshot
+  - [x] label: Refresh
+  - [x] label: Dispatch
+  - [x] label: Take Snapshot
   - [ ] label: Pane cleared
-  - [ ] label: Clear cache and restart
-  - [ ] label: Clear data and restart
-  - [ ] label: Restart app
+  - [x] label: Clear cache and restart
+  - [x] label: Clear data and restart
+  - [x] label: Restart app
   - [x] tooltip: Force-stop and relaunch the connected app so it reconnects
   - [x] tooltip: Run adb reverse tcp:9090 tcp:9090 on connected devices
   - [ ] tooltip: Clear the whole timeline — both panes
   - [ ] tooltip: Split into two panes
-  - [ ] tooltip: Clear the timeline
-  - [ ] tooltip: Stop watching this path
-  - [ ] tooltip: Refresh available values
-  - [ ] tooltip: Close without applying
+  - [x] tooltip: Clear the timeline
+  - [x] tooltip: Stop watching this path
+  - [x] tooltip: Refresh available values
+  - [x] tooltip: Close without applying
   - [x] tooltip: Show only requests with this HTTP method
   - [x] tooltip: Show only responses in this status class
-  - [ ] tooltip: Filter the timeline by event type
+  - [x] tooltip: Filter the timeline by event type
   - [x] tooltip: Copy this line (right-click for the full object)
   - [ ] tooltip: Click to view full size
-  - [ ] tooltip: Delete this snapshot
-  - [ ] tooltip: Reveal in the tree
-  - [ ] menu: right-click context menu
+  - [x] tooltip: Delete this snapshot
+  - [x] tooltip: Reveal in the tree
+  - [x] menu: right-click context menu
   - [ ] shortcut: .cancelAction
   - [ ] shortcut: .defaultAction
-  - [ ] shortcut: "c", modifiers: .command
+  - [x] shortcut: "c", modifiers: .command
   - [ ] export: save/export to a file
 
 #### `reload-js` — Reload JS  ·  ✅ ported

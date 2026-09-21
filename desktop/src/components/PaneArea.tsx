@@ -190,6 +190,7 @@ function PaneBody({
         >
           <PaneContents
             id={id}
+            active={id === group.activeTab}
             feature={props.featureByID(id)}
             features={props.features}
             device={props.device}
