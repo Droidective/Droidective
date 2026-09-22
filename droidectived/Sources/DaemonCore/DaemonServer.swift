@@ -19,6 +19,9 @@ public protocol DaemonBackend: Sendable {
     ) async -> FeatureResult
     /// Every installed app on the device, user and system.
     func listApps(serial: String) async throws -> [AppListing]
+    func appLifecycles(serial: String) async -> [String: AppLifecycle]
+    func setAppDisabled(serial: String, packageId: String, _ disabled: Bool) async throws -> AdbResult
+    func setAppRemoved(serial: String, packageId: String, _ removed: Bool) async throws -> AdbResult
     /// The package of the frontmost activity, or nil when there is nothing
     /// worth naming. Not an error when absent: the launcher is in front more
     /// often than any app is.
@@ -374,6 +377,29 @@ public struct LiveBackend: DaemonBackend {
 
     public func listApps(serial: String) async throws -> [AppListing] {
         try await AppsExplorerService(client: client).listAll(serial: serial)
+    }
+
+    /// Every package's disabled / removed-for-user state, keyed by package id.
+    ///
+    /// Read with the list rather than per app: it is three `pm list packages`
+    /// calls for the whole device, where asking per selection would be three
+    /// per click.
+    public func appLifecycles(serial: String) async -> [String: AppLifecycle] {
+        await SystemAppsService(client: client).states(serial: serial)
+    }
+
+    public func setAppDisabled(
+        serial: String, packageId: String, _ disabled: Bool
+    ) async throws -> AdbResult {
+        try await SystemAppsService(client: client).setDisabled(
+            serial: serial, packageId: packageId, disabled)
+    }
+
+    public func setAppRemoved(
+        serial: String, packageId: String, _ removed: Bool
+    ) async throws -> AdbResult {
+        try await SystemAppsService(client: client).setRemoved(
+            serial: serial, packageId: packageId, removed)
     }
 
     public func foregroundPackage(serial: String) async throws -> String? {
@@ -1627,8 +1653,11 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
             else { return (.badRequest, encoded(DaemonProtocol.badRequest)) }
             do {
                 let apps = try await backend.listApps(serial: request.serial)
+                let lifecycles = await backend.appLifecycles(serial: request.serial)
                 return (.ok, encoded(AppProtocol.ListResponse(
-                    apps: apps.map(AppProtocol.AppSummary.init))))
+                    apps: apps.map {
+                        AppProtocol.AppSummary($0, lifecycle: lifecycles[$0.packageId])
+                    })))
             } catch {
                 // adb refused: the device went away, or is unauthorised. That
                 // is the device's answer rather than a daemon fault, so it
@@ -1684,6 +1713,10 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
                     code: "adb_failed", message: "The app action failed.",
                     detail: "\(error)")))
             }
+
+        case .appsLifecycle:
+            return Self.answer(
+                await AppRoutes.lifecycle(body: Data(body.readableBytesView), backend: backend))
 
         case .commandLogList:
             return Self.answer(await CommandLogRoutes.list(backend: backend))

@@ -1,6 +1,7 @@
 import { Boxes } from "lucide-react"
 
 import { AppActions } from "@/components/AppActions"
+import { AppLifecycleActions } from "@/components/AppLifecycleActions"
 import { AppPullButton } from "@/components/AppPullButton"
 import { Button } from "@/components/Controls"
 import type { AppActionDescriptor, AppSummary } from "@/lib/wire"
@@ -11,11 +12,14 @@ export function AppDetail({
   actions,
   serial,
   onFiles,
+  onChanged,
 }: {
   app: AppSummary
   actions: AppActionDescriptor[]
   serial: string
   onFiles: () => void
+  /** Re-read the list after a lifecycle change — it carries the state shown. */
+  onChanged: () => void
 }) {
   return (
     <div className="flex h-full flex-col gap-4 overflow-y-auto p-6">
@@ -29,6 +33,8 @@ export function AppDetail({
             {app.packageId}
             {app.versionName === null ? "" : ` · ${app.versionName}`}
             {app.isSystem ? " · system app" : ""}
+            {app.disabled ? " · disabled" : ""}
+            {app.removed ? " · removed for this user" : ""}
           </p>
         </div>
       </header>
@@ -50,6 +56,9 @@ export function AppDetail({
         >
           Explore files
         </Button>
+        {/* The Mac's Manage section: whichever of Disable / Enable / Restore
+            this app's own state allows. */}
+        <AppLifecycleActions app={app} serial={serial} onChanged={onChanged} />
       </div>
     </div>
   )

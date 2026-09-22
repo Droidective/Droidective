@@ -78,6 +78,9 @@ export function AppsPane({
             onFiles={() => {
               setFiles(current.packageId)
             }}
+            onChanged={() => {
+              void load()
+            }}
           />
         ) : (
           <p className="p-6 text-text-tertiary">Pick an app.</p>

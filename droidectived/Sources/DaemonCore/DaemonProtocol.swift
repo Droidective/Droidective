@@ -14,6 +14,10 @@ public enum DaemonProtocol {
         case actionsRun = "/v1/actions/run"
         case appsList = "/v1/apps/list"
         case appsControl = "/v1/apps/control"
+        /// Disable / enable / remove-for-user / restore — the reversible
+        /// half, which `/v1/apps/control` deliberately does not carry: its
+        /// verbs act on a *running* app, and these act on the installation.
+        case appsLifecycle = "/v1/apps/lifecycle"
         /// Which package is in front, for a caller that has to guess at one.
         case appsForeground = "/v1/apps/foreground"
         /// One app's process id, so a log client can narrow to it. See

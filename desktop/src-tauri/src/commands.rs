@@ -18,24 +18,25 @@ use tauri_plugin_opener::OpenerExt;
 use crate::daemon::stream::StreamMessage;
 use crate::daemon::wire::{
     AabConvertRequest, AabConvertResponse, ApkKeystore, ApkReport, ApkSignRequest, ApkSignResponse,
-    ApkToolchain, AppControlRequest, AppInfoResponse, AppPullRequest, AppPullResponse, AppRequest,
-    AppsResponse, BugReportRequest, BugReportResponse, CommandLogResponse, CrashListResponse,
-    CustomCommand, CustomCommandRunRequest, CustomCommandsResponse, CustomCommandsWriteRequest,
-    DecompileFileRequest, DecompileFileText, DecompileHits, DecompileMode, DecompileRebuildRequest,
-    DecompileRebuildResponse, DecompileRequest, DecompileSearchRequest, DecompileTree, DeepLink,
-    DeepLinkLaunchRequest, DeepLinksResponse, DeepLinksWriteRequest, DevSettingsResponse,
-    DevSettingsWriteRequest, Device, DevicePropsResponse, DnsResponse, DnsWriteRequest,
-    EmulatorActionRequest, EmulatorsResponse, FeatureSummary, FileInfoRequest, FileInfoResponse,
-    FileOperationRequest, FilePullRequest, FilePullResponse, FilesListRequest, FilesListResponse,
-    ForegroundResponse, InstallRequest, InstallResponse, LaunchResponse, LogcatPidResponse,
-    ManagedTools, MemInfoResponse, PairResponse, PermissionWriteRequest, PermissionsResponse,
-    ReactotronReverseRequest, ReactotronReverseResponse, ReactotronSendRequest,
-    ReactotronSendResponse, RestrictionWriteRequest, RestrictionsResponse, RolesResponse,
-    RootStatusResponse, RunRequest, RunResponse, SandboxRequest, SandboxResponse,
-    ScreenshotCaptureRequest, ScreenshotCaptureResponse, Snippet, SnippetExpandRequest,
-    SnippetExpandResponse, SnippetWriteRequest, StreamParams, ToolInstallRequest,
-    ToolInstallResponse, ToolsResponse, VideoExportOptions, VideoExportRequest, VideoProxyRequest,
-    WifiResponse, WifiWriteRequest, WirelessActionRequest,
+    ApkToolchain, AppControlRequest, AppInfoResponse, AppLifecycleRequest, AppPullRequest,
+    AppPullResponse, AppRequest, AppsResponse, BugReportRequest, BugReportResponse,
+    CommandLogResponse, CrashListResponse, CustomCommand, CustomCommandRunRequest,
+    CustomCommandsResponse, CustomCommandsWriteRequest, DecompileFileRequest, DecompileFileText,
+    DecompileHits, DecompileMode, DecompileRebuildRequest, DecompileRebuildResponse,
+    DecompileRequest, DecompileSearchRequest, DecompileTree, DeepLink, DeepLinkLaunchRequest,
+    DeepLinksResponse, DeepLinksWriteRequest, DevSettingsResponse, DevSettingsWriteRequest, Device,
+    DevicePropsResponse, DnsResponse, DnsWriteRequest, EmulatorActionRequest, EmulatorsResponse,
+    FeatureSummary, FileInfoRequest, FileInfoResponse, FileOperationRequest, FilePullRequest,
+    FilePullResponse, FilesListRequest, FilesListResponse, ForegroundResponse, InstallRequest,
+    InstallResponse, LaunchResponse, LogcatPidResponse, ManagedTools, MemInfoResponse,
+    PairResponse, PermissionWriteRequest, PermissionsResponse, ReactotronReverseRequest,
+    ReactotronReverseResponse, ReactotronSendRequest, ReactotronSendResponse,
+    RestrictionWriteRequest, RestrictionsResponse, RolesResponse, RootStatusResponse, RunRequest,
+    RunResponse, SandboxRequest, SandboxResponse, ScreenshotCaptureRequest,
+    ScreenshotCaptureResponse, Snippet, SnippetExpandRequest, SnippetExpandResponse,
+    SnippetWriteRequest, StreamParams, ToolInstallRequest, ToolInstallResponse, ToolsResponse,
+    VideoExportOptions, VideoExportRequest, VideoProxyRequest, WifiResponse, WifiWriteRequest,
+    WirelessActionRequest,
 };
 use crate::daemon::{DaemonStatus, Supervisor};
 use crate::error::DaemonError;
@@ -129,6 +130,31 @@ pub async fn list_apps(
     serial: String,
 ) -> Result<AppsResponse, DaemonError> {
     supervisor.client().await?.list_apps(serial).await
+}
+
+/// Disable, enable, remove for this user, or restore one package.
+///
+/// Separate from `control_app` because these are not app *actions*: they
+/// change what the package is for this user rather than what it is doing, and
+/// both directions of both are reversible.
+#[tauri::command]
+pub async fn app_lifecycle(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    package_id: String,
+    disabled: Option<bool>,
+    removed: Option<bool>,
+) -> Result<RunResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .app_lifecycle(&AppLifecycleRequest {
+            serial,
+            package_id,
+            disabled,
+            removed,
+        })
+        .await
 }
 
 #[tauri::command]

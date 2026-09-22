@@ -163,6 +163,16 @@ pub struct AppSummary {
     pub version_name: Option<String>,
     #[serde(rename = "isSystem")]
     pub is_system: bool,
+    /// Disabled for this user — `pm disable-user`, reversible.
+    ///
+    /// Defaulted so a daemon that predates the field still decodes: absent
+    /// means ordinary, which is what every app is until something changes it.
+    #[serde(default)]
+    pub disabled: bool,
+    /// Uninstalled for this user but still on the system image, so restorable.
+    /// A package gone for good is not in the list at all.
+    #[serde(default)]
+    pub removed: bool,
 }
 
 /// A verb the daemon accepts, with its own destructive flag.
@@ -985,6 +995,20 @@ pub struct AppControlRequest {
     /// enum: the daemon owns the verb list and rejects an unknown one, so
     /// mirroring it here would only add a place to fall behind.
     pub action: String,
+}
+
+/// Disable / enable / remove-for-user / restore, as `/v1/apps/lifecycle`
+/// takes it. Exactly one field is set, which is what picks the verb; the
+/// daemon refuses a body that names both or neither.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppLifecycleRequest {
+    pub serial: String,
+    #[serde(rename = "packageId")]
+    pub package_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub removed: Option<bool>,
 }
 
 /// `{"error":{"code":…,"message":…,"detail":…}}`.

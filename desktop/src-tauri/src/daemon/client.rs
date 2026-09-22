@@ -5,8 +5,8 @@ use serde::Serialize;
 
 use crate::daemon::wire::{
     AabConvertRequest, AabConvertResponse, ApkPathRequest, ApkReport, ApkSignRequest,
-    ApkSignResponse, ApkToolchain, AppControlRequest, AppInfoResponse, AppPullRequest,
-    AppPullResponse, AppRequest, AppsListRequest, AppsResponse, BugReportRequest,
+    ApkSignResponse, ApkToolchain, AppControlRequest, AppInfoResponse, AppLifecycleRequest,
+    AppPullRequest, AppPullResponse, AppRequest, AppsListRequest, AppsResponse, BugReportRequest,
     BugReportResponse, CommandLogResponse, CrashListRequest, CrashListResponse,
     CustomCommandRunRequest, CustomCommandsResponse, CustomCommandsWriteRequest,
     DecompileFileRequest, DecompileFileText, DecompileHits, DecompileRebuildRequest,
@@ -87,6 +87,13 @@ impl DaemonClient {
         request: &AppControlRequest,
     ) -> Result<RunResponse, DaemonError> {
         self.post("/v1/apps/control", request).await
+    }
+
+    pub async fn app_lifecycle(
+        &self,
+        request: &AppLifecycleRequest,
+    ) -> Result<RunResponse, DaemonError> {
+        self.post("/v1/apps/lifecycle", request).await
     }
 
     pub async fn root_status(&self, serial: String) -> Result<RootStatusResponse, DaemonError> {
