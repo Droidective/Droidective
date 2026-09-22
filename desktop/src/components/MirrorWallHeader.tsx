@@ -1,11 +1,12 @@
 import { useRef, useState } from "react"
-import { Check, ChevronDown, Columns3, PictureInPicture2 } from "lucide-react"
+import { Check, ChevronDown, Columns3, Grid2x2, PictureInPicture2 } from "lucide-react"
 
 import { useWindows } from "@/hooks/useWindows"
 import { useDismissOnOutside } from "@/hooks/useDismissOnOutside"
 import type { MirrorWallState } from "@/hooks/useMirrorWall"
 import { cn } from "@/lib/cn"
-import { MAXIMUM_DEVICES } from "@/lib/mirror-wall"
+import { mirrorWindowLayout, setWindowFrames } from "@/lib/daemon"
+import { MAXIMUM_DEVICES, windowFrames } from "@/lib/mirror-wall"
 
 /** The wall's own controls: which devices are on it, and how they are laid out. */
 export function MirrorWallHeader({ wall }: { wall: MirrorWallState }) {
@@ -14,6 +15,7 @@ export function MirrorWallHeader({ wall }: { wall: MirrorWallState }) {
       <DeviceMenu wall={wall} />
       <ColumnMenu wall={wall} />
       <PopOutButton wall={wall} />
+      <ArrangeButton />
       <span className="ml-auto text-xs text-text-tertiary">
         {wall.selection.length === 0
           ? ""
@@ -44,6 +46,41 @@ function PopOutButton({ wall }: { wall: MirrorWallState }) {
     >
       <PictureInPicture2 size={13} />
       Open Each in Its Own Window
+    </MenuButton>
+  )
+}
+
+/**
+ * Tile the open pop-out mirrors across their screen — the Mac's
+ * `AppCore.arrangeMirrorWindows`.
+ *
+ * The grid is `windowFrames`, the same column rule the wall lays its own tiles
+ * out with, so arranging the windows produces the picture the wall would have
+ * drawn. The Rust process reports the work area and which windows are pop-outs
+ * (an ordinary window that happens to have a Mirror tab is not one) and applies
+ * the answer; nothing about the arithmetic lives there.
+ */
+function ArrangeButton() {
+  return (
+    <MenuButton
+      onClick={() => {
+        void (async () => {
+          const layout = await mirrorWindowLayout()
+          // Nothing to arrange is not a failure — the button is on the wall's
+          // header, where opening the windows is one press away.
+          if (layout.area === null || layout.labels.length === 0) return
+          const frames = windowFrames(layout.area, layout.labels.length)
+          await setWindowFrames(
+            layout.labels.flatMap((label, index) => {
+              const frame = frames[index]
+              return frame === undefined ? [] : [{ label, ...frame }]
+            }),
+          )
+        })()
+      }}
+    >
+      <Grid2x2 size={13} />
+      Arrange Mirror Windows
     </MenuButton>
   )
 }

@@ -2256,13 +2256,13 @@ job, and the checklist now says which.
 - **macOS view** `MirrorWallView` — `App/Sources/FeatureDetail/Views/MirrorWallView.swift`
 - **Must replicate**
   - [x] button: Open Each in Its Own Window
-  - [ ] button: Arrange Mirror Windows
+  - [x] button: Arrange Mirror Windows
   - [ ] toggle: Audio from the Focused Device
   - [x] picker: Columns
   - [x] label: Devices
   - [x] tooltip: Pick which devices this wall shows
   - [ ] tooltip: Audio, and breaking tiles out into windows
-  - [ ] drag: drag and drop
+  - [x] drag: drag and drop
 
 #### `scrcpy` — Mirror Screen  ·  ✅ ported
 > Mirror and control the device with scrcpy
@@ -2743,7 +2743,7 @@ job, and the checklist now says which.
   - [x] tooltip: Close this terminal (kills its shell)
   - [x] tooltip: Close this pane (kills its shell)
   - [x] menu: right-click context menu
-  - [ ] drag: drag and drop
+  - [x] drag: drag and drop
 
 
 <!-- counts: {'done': 57, 'partial': 1, 'todo': 1, 'gated': 2} -->

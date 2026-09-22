@@ -18,6 +18,7 @@ import {
   quality,
   reconciled,
   toggled,
+  windowFrames,
 } from "@/lib/mirror-wall"
 
 describe("the grid", () => {
@@ -131,5 +132,48 @@ describe("reordering by dragging a caption", () => {
     expect(moved(order, 1, 1)).toEqual(order)
     expect(moved(order, -1, 0)).toEqual(order)
     expect(moved(order, 0, 9)).toEqual(order)
+  })
+})
+
+describe("windowFrames", () => {
+  const screen = { x: 0, y: 25, width: 1600, height: 1000 }
+
+  it("puts one window over the whole work area", () => {
+    expect(windowFrames(screen, 1)).toEqual([{ x: 0, y: 25, width: 1600, height: 1000 }])
+  })
+
+  it("splits two side by side", () => {
+    expect(windowFrames(screen, 2)).toEqual([
+      { x: 0, y: 25, width: 800, height: 1000 },
+      { x: 800, y: 25, width: 800, height: 1000 },
+    ])
+  })
+
+  it("counts rows downward, not upward", () => {
+    // The Mac counts up from the bottom because AppKit's origin is there.
+    // Porting that arithmetic unchanged would put the first window at the
+    // bottom of the screen and the last at the top.
+    const frames = windowFrames(screen, 4)
+    expect(frames[0]?.y).toBe(25)
+    expect(frames[2]?.y).toBe(525)
+  })
+
+  it("starts at the work area's own origin, not the screen's", () => {
+    // The menu bar, the taskbar and a dock are all outside it.
+    const offset = windowFrames({ x: 40, y: 60, width: 800, height: 600 }, 2)
+    expect(offset[0]?.x).toBe(40)
+    expect(offset[0]?.y).toBe(60)
+  })
+
+  it("never asks for more columns than there are windows", () => {
+    // Three prefers three across, but two windows must not be laid out in a
+    // three-column grid with an empty slot.
+    expect(windowFrames(screen, 2)).toHaveLength(2)
+    expect(new Set(windowFrames(screen, 2).map((frame) => frame.x)).size).toBe(2)
+  })
+
+  it("lays out nothing for nothing", () => {
+    expect(windowFrames(screen, 0)).toEqual([])
+    expect(windowFrames({ x: 0, y: 0, width: 0, height: 0 }, 3)).toEqual([])
   })
 })

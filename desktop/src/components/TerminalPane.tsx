@@ -1,12 +1,8 @@
-import { Plus } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { SplitLayout } from "@/components/TerminalSplitLayout"
-import { TabChip, type Strip } from "@/components/TerminalTabChip"
-import { groupOfTab } from "@/lib/terminal-groups"
-import { TerminalTabMenu } from "@/components/TerminalTabMenu"
+import { TabStrip } from "@/components/TerminalTabStrip"
 import { useRegisterTerminalCommands } from "@/hooks/useTerminalCommands"
-import { useTerminalTabs, type TerminalTabs } from "@/hooks/useTerminalTabs"
-import { IS_MAC } from "@/lib/platform"
+import { useTerminalTabs } from "@/hooks/useTerminalTabs"
 import { cn } from "@/lib/cn"
 
 /**
@@ -87,121 +83,5 @@ export function TerminalPane({ serial }: { serial: string | null }) {
         </div>
       ) : null}
     </div>
-  )
-}
-
-function TabStrip({
-  tabs,
-  serial,
-  renaming,
-  onRename,
-}: {
-  tabs: TerminalTabs
-  serial: string | null
-  renaming: string | null
-  onRename: (tab: string | null) => void
-}) {
-  const modifier = IS_MAC ? "⇧⌘" : "Ctrl+Shift+"
-  const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null)
-  const strip: Strip = { tabs, renaming, onRename, onMenu: setMenu }
-  return (
-    <div className="flex shrink-0 items-center gap-1 border-b border-border-subtle bg-bg-chrome px-2 py-1">
-      {tabs.entries.map((entry) =>
-        entry.kind === "tab" ? (
-          <TabChip key={entry.id} id={entry.id} strip={strip} />
-        ) : (
-          // A group is its name and the tabs inside it, boxed. The Mac's rail
-          // is vertical and collapses a group to its header; this strip is
-          // horizontal, and what someone needs to see here is which tabs
-          // belong together.
-          <span
-            key={entry.group.id}
-            className="flex items-center gap-1 rounded border border-border-subtle px-1"
-          >
-            <span className="px-1 text-text-tertiary">{entry.group.name}</span>
-            {entry.group.tabIds.map((id) => (
-              <TabChip key={id} id={id} strip={strip} />
-            ))}
-          </span>
-        ),
-      )}
-      <TabMenu menu={menu} setMenu={setMenu} tabs={tabs} serial={serial} onRename={onRename} />
-      <button
-        type="button"
-        aria-label="New shell"
-        title={`New shell (${modifier}T)`}
-        className="rounded p-1 text-text-secondary hover:bg-bg-surface hover:text-text-primary"
-        onClick={() => tabs.openTab(serial)}
-      >
-        <Plus size={14} />
-      </button>
-      {/* The same accelerators the File menu shows. A hint here because the
-          menu is where they are declared but not where anyone looks first. */}
-      <span className="ml-auto text-text-tertiary">
-        {modifier}N new · {modifier}D beside · {modifier}E below · {modifier}W close
-      </span>
-    </div>
-  )
-}
-
-function TabMenu({
-  menu,
-  setMenu,
-  tabs,
-  serial,
-  onRename,
-}: {
-  menu: { id: string; x: number; y: number } | null
-  setMenu: (menu: null) => void
-  tabs: TerminalTabs
-  serial: string | null
-  onRename: (tab: string) => void
-}) {
-  if (menu === null) return null
-  // Which group this tab is in, if any: the two group verbs would otherwise
-  // act on nothing.
-  const group = groupOfTab(tabs.entries, menu.id)
-  const pick = (run: () => void) => () => {
-    setMenu(null)
-    run()
-  }
-  return (
-    <TerminalTabMenu
-      at={menu}
-      onRename={pick(() => {
-        onRename(menu.id)
-      })}
-      onSplitVertically={pick(() => {
-        tabs.split("vertical", serial)
-      })}
-      onSplitHorizontally={pick(() => {
-        tabs.split("horizontal", serial)
-      })}
-      onClose={pick(() => {
-        tabs.closeTab(menu.id)
-      })}
-      onNewGroup={pick(() => {
-        // Created with the default name and renamed from the header, rather
-        // than a prompt standing in the way of the gesture.
-        tabs.newGroup(menu.id, "")
-      })}
-      onNewTerminalHere={
-        group === null
-          ? null
-          : pick(() => {
-              tabs.openInGroup(group.id, serial)
-            })
-      }
-      onCloseGroup={
-        group === null
-          ? null
-          : pick(() => {
-              tabs.closeGroup(group.id)
-            })
-      }
-      onDismiss={() => {
-        setMenu(null)
-      }}
-    />
   )
 }

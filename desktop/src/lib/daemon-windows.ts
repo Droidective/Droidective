@@ -89,3 +89,30 @@ export function setWindowBlur(label: string, enabled: boolean): Promise<boolean>
 export function windowBlurSupported(): Promise<boolean> {
   return invoke("window_blur_supported")
 }
+
+/** Where the pop-out mirrors could be tiled, and which windows they are. */
+export interface MirrorWindowLayout {
+  /**
+   * The usable area of the screen the first pop-out is on, or null when there
+   * are none — physical pixels, with the taskbar and the dock outside it.
+   */
+  area: { x: number; y: number; width: number; height: number } | null
+  /** Pop-out window labels, in serial order. */
+  labels: string[]
+}
+
+export function mirrorWindowLayout(): Promise<MirrorWindowLayout> {
+  return invoke<MirrorWindowLayout>("mirror_window_layout")
+}
+
+/**
+ * Put each named window where it was told.
+ *
+ * The arithmetic is `mirror-wall.ts`' `windowFrames`, tested beside the grid
+ * the wall itself draws — this only applies it.
+ */
+export function setWindowFrames(
+  frames: { label: string; x: number; y: number; width: number; height: number }[],
+): Promise<void> {
+  return invoke<void>("set_window_frames", { frames })
+}

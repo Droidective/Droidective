@@ -7,6 +7,7 @@ import {
   type SplitDirection,
   type SplitNode,
 } from "@/lib/terminal"
+import { applyDrop, type Drag, type Drop } from "@/lib/terminal-drop"
 import {
   addTab,
   emptyEntries,
@@ -57,6 +58,15 @@ export interface TerminalTabs {
   openInGroup: (groupId: string, serial: string | null) => void
   /** Close a group *and every shell in it*. */
   closeGroup: (groupId: string) => void
+  /**
+   * Drop a dragged tab or group onto `target`.
+   *
+   * One entry point rather than five, because the strip knows *where* the drop
+   * landed and the model knows what each landing means — splitting the
+   * decision across both is how a drag onto a group header ends up doing
+   * something different from a drag onto its first tab.
+   */
+  dropOn: (drag: Drag, target: Drop) => void
 }
 
 /**
@@ -244,6 +254,12 @@ function useGroupVerbs(
         })
       },
       [setEntries, setTabs],
+    ),
+    dropOn: useCallback(
+      (drag: Drag, target: Drop) => {
+        setEntries((current) => applyDrop(current, drag, target))
+      },
+      [setEntries],
     ),
   }
 }

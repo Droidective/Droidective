@@ -182,6 +182,7 @@ export {
   watchReactotron,
 } from "@/lib/daemon-stream"
 export { activeOverrides, resetOverrides } from "@/lib/daemon-overrides"
+export { mirrorWindowLayout, setWindowFrames } from "@/lib/daemon-windows"
 export {
   appInfo,
   connectWireless,
