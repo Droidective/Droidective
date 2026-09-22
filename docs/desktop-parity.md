@@ -24,9 +24,10 @@ while the generated half said 35 and 24, because they meant different things by
 
 **"Ported" means a pane is routed, or the feature is an action with nothing to
 build** — not that the screen has been audited against the Mac's. The
-per-feature checklists below are that audit, and they are still unticked. The
-one **partial** entry is the one with a gap named in the classifier: the
-Terminal on Windows.
+per-feature checklists below are that audit, and they stand at **313 of 329**;
+"What the last 16 are" says what the rest are and why most of them should not
+tick. The one **partial** entry is the one with a gap named in the classifier:
+the Terminal on Windows.
 
 **The one not started is `frida-console`**, which needs a rooted device to
 verify — the hardest to be sure of and the least used.
@@ -1090,10 +1091,10 @@ chip says `Remove tag filter`; APK Studio's `Change…` became
 something *about* it rather than swapping the file the whole studio works on;
 and Custom Commands' name field carries the Mac's placeholder.
 
-## What the last 44 are, and why 329/329 is not the target
+## What the last 16 are, and why 329/329 is not the target
 
-The audit stands at **285 of 329**. The rest are not a backlog of labels
-somebody forgot; they are four different things, and lumping them together is
+The audit stands at **313 of 329**. What is left is not a backlog of labels
+somebody forgot; it is four different things, and lumping them together is
 what would make the number meaningless.
 
 **Out of scope, and the tracker has said so since pass 1 (3).** `emulators`'
@@ -1108,7 +1109,7 @@ These will never tick, and should not.
 `Open APK in jadx-GUI` launches an external GUI that is not part of this
 app's toolchain.
 
-**One subsystem, thirteen items.** Every remaining `scrcpy` and `mirror-wall`
+**One subsystem, nine items.** Every remaining `scrcpy` and `mirror-wall`
 audio item — `Stream audio`, `Microphone`, `Mute / unmute`,
 `Audio from the Focused Device` and their tooltips — is the *same* feature:
 scrcpy's audio stream. The daemon's transport already opens the audio socket
@@ -1117,37 +1118,43 @@ requests it, nothing forwards the frames, and nothing decodes them — that last
 part is a WebCodecs `AudioDecoder` and a Web Audio graph in the page. It is a
 four-layer feature whose only honest verification is a real device, and
 building it blind to tick four toggles would be the opposite of what this
-audit is for.
+audit is for. The mirror's ⋯ menu exists now and holds Show touches; when the
+stream lands, the two audio toggles go in beside it and its tooltip goes back
+to the Mac's "Audio and touch options" from the "Touch options" it says today.
 
-**Genuinely buildable, and the real backlog (23).** ~~Terminal groups~~ landed —
-`TerminalTabs` ported to `lib/terminal-groups.ts`, invariants and all: a group
-left empty deletes itself, grouping an already-grouped tab detaches it first,
-and removing a group hands back the tab ids it held so the caller can take the
-shells down with it. The strip draws a group as its name and the tabs inside
-it, boxed, rather than the Mac's collapsible rail row — this strip is
-horizontal, and what has to be visible here is which tabs belong together. Tab
-drag; the mirror
-wall's tile drag and `Arrange Mirror Windows`; an `activeOverrides` record so
-Simulate can offer `Reset all overrides` — which this app deliberately does not
-keep today and says so in `SimulateHubPane`; an enable/disable verb so Apps can
-offer `Restore`; API Testing's two collection exports; logcat's saved-bundle
-picker; and a handful of dialog buttons and post-run states.
+**Two deliberate divergences stay unticked on purpose.** Logcat's export
+tooltip says "Export what is shown" where the Mac says "Export buffer",
+because this app exports the *filtered* view and the Mac's wording would be
+inaccurate here; ticking it would mean either lying about the wording or
+making the tooltip lie about the behaviour. And logcat's
+`Add manually / manage…` manages *saved bundles*, a store this app does not
+keep — its sibling, `Add from installed apps`, is built, and opens the
+installed-apps picker the Mac opens from the same menu.
 
-**One deliberate divergence stays unticked on purpose**: logcat's export
-tooltip says "Export what is shown" where the Mac says "Export buffer", because
-this app exports the *filtered* view and the Mac's wording would be inaccurate
-here. Ticking it would mean either lying about the wording or making the
-tooltip lie about the behaviour.
+**What the last stretch built.** The Mac's alert (`AlertDialog`, one `OK`,
+Return dismisses) and with it Reactotron's device-disconnect notice, its
+first-open intro sheet, and API Testing's import and export failures — which
+were toasts, and are the answer to what was just asked for. Custom Commands'
+script picker and its `Added` preset state, plus Escape and the accelerator.
+An `InstalledAppsPicker`, opened from Logcat as the Mac opens it. APK Studio's
+rebuilt result row, with `Sign the rebuilt APK` handing the file to the Sign
+tab. Apps' `Explore files` as a sheet over the list rather than a trip to
+another tab, `Pull APK` in the detail, and the whole Manage section —
+`/v1/apps/lifecycle` over ADBKit's `SystemAppsService`, which the daemon had
+never exposed. Simulate's `Reset all overrides`, which needed
+`/v1/overrides/active` first: the button appears only when there is something
+to reset, so it needed the *reconciled* set rather than a local record. The
+mirror's ⋯ menu with Show touches. `Arrange Mirror Windows`. And the terminal
+strip's drag, with `terminal-drop.ts` as the one table saying what a drop
+means.
 
-**Known real gaps found and not yet closed**, in rough order of size:
-`reactotron` (25/51), `js-console` (14/24), `terminal`'s split panes and groups
-(6/14), `logcat`'s filter/find tooltips and app-picker labels (4/12),
-`apk-decompile` (3/10), `apk-studio` (1/5), `scrcpy` (5/12), `mirror-wall`
-(2/6), and single items on `apps` (Explore files), `performance`,
-`crash-catcher`, `aab-convert` (the unsigned-APK warning) and `api-client`.
-Several nominal misses in that list are the documented platform-name
-exception — "Pull to Mac", "Open in Finder", "Reveal in Finder" — and are not
-gaps.
+**Known real gaps outside the per-feature checklists**, in rough order of
+size: the welcome tour, What's New, the star prompt, the overrides pill, the
+install inbox, the self-metrics overlay, the bundle manager (and with it the
+device bar's bundle pill — the picker half of that pair is built), and
+Settings ▸ MCP. Several nominal misses elsewhere are the documented
+platform-name exception — "Pull to Mac", "Open in Finder", "Reveal in Finder"
+— and are not gaps.
 
 ## Defects in what already shipped
 

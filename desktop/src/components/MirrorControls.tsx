@@ -163,7 +163,12 @@ function OptionsMenu({
   return (
     <div ref={box} className="relative">
       <NavButton
-        label="Audio and touch options"
+        // The Mac says "Audio and touch options". There is no audio behind
+        // this menu yet, and a tooltip promising one is the same mistake as a
+        // tooltip promising ⌘W on a host that has no ⌘ — so it names what is
+        // actually here. It goes back to the Mac's wording when the audio
+        // stream lands.
+        label="Touch options"
         onClick={() => {
           setOpen((was) => !was)
         }}
