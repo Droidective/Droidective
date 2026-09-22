@@ -673,9 +673,18 @@ memory — the file each item names is the thing to replicate.
 - [x] **Wireless connect sheet** (`WirelessConnectSheet`) — the three-tab
       pairing / connect / tcpip bootstrap, opened from the device dropdown.
 - [ ] **Installed-apps picker** (`InstalledAppsPickerView`) and the **bundle
-      manager** (`BundleManagerView`).
-- [ ] **Overrides pill** (`OverridesPillView`) — the standing reminder that a
-      device override is in effect.
+      manager** (`BundleManagerView`). The picker is built, and the device
+      bar's app pill with it — opened from there and from Logcat, as the Mac
+      opens it from both. What is left is the *store*: nicknamed packages, and
+      the `Add manually / manage…` item both menus leave out because there is
+      nothing yet to manage.
+- [x] ~~**Overrides pill** (`OverridesPillView`)~~ — the standing reminder that
+      a device override is in effect, amber in the device bar, shown only when
+      something is overridden. It reads the reconciled set, which is what makes
+      it honest: a proxy someone cleared in Settings stops counting rather than
+      sitting in a menu offering to undo it. The menu clears one kind before it
+      offers all of them, the Mac's order, because the reason you notice the
+      pill is usually one specific thing.
 - [ ] **Install inbox** (`InstallInbox`) — an APK opened from the file manager
       before the window exists has to be buffered, not dropped.
 - [x] **Screenshot editor** (`ScreenshotEditorView`) — pen, highlighter,

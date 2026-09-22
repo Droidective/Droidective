@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   effectiveRunOnAll,
   readyDevices,
+  showsAppPill,
   showsRunAll,
   summarise,
   supportsRunAll,
@@ -135,5 +136,37 @@ describe("summarise", () => {
 
   it("says so when there was nothing to run on", () => {
     expect(summarise([])).toEqual({ ok: false, message: "No device connected." })
+  })
+})
+
+const screen = (over: Partial<FeatureSummary>): FeatureSummary =>
+  ({ id: "x", needsBundle: false, ...over }) as FeatureSummary
+
+describe("showsAppPill", () => {
+
+  it("offers it for a screen that needs an app", () => {
+    expect(showsAppPill(screen({ id: "app-info", needsBundle: true }))).toBe(true)
+  })
+
+  it("offers it for the Mac's three that do not declare it", () => {
+    // A custom command may carry {bundleId}, deep links are saved per app, and
+    // Performance samples one — none of which the registry flag covers.
+    for (const id of ["custom-commands", "performance", "react-native"]) {
+      expect(showsAppPill(screen({ id }))).toBe(true)
+    }
+  })
+
+  it("does NOT offer it on logcat, which has its own app bar", () => {
+    // Two controls for one choice is worse than one in the wrong place — the
+    // Mac excludes it for the same reason.
+    expect(showsAppPill(screen({ id: "logcat", needsBundle: true }))).toBe(false)
+  })
+
+  it("offers nothing with no screen focused", () => {
+    expect(showsAppPill(null)).toBe(false)
+  })
+
+  it("stays out of the way of a screen that has no use for an app", () => {
+    expect(showsAppPill(screen({ id: "wifi" }))).toBe(false)
   })
 })

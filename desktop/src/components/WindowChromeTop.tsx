@@ -16,11 +16,15 @@ export function WindowChromeTop({
   workspace,
   focusedFeature,
   sidebar,
+  packageId,
+  onSelectPackage,
 }: {
   session: Session
   workspace: Parameters<typeof DeviceBarHost>[0]["workspace"]
   focusedFeature: Parameters<typeof DeviceBarHost>[0]["focusedFeature"]
   sidebar: Parameters<typeof DeviceBarHost>[0]["sidebar"]
+  packageId: string | null
+  onSelectPackage: (packageId: string | null) => void
 }) {
   return (
     <>
@@ -29,6 +33,8 @@ export function WindowChromeTop({
         workspace={workspace}
         focusedFeature={focusedFeature}
         sidebar={sidebar}
+        packageId={packageId}
+        onSelectPackage={onSelectPackage}
       />
       {session.error ? (
         <div className="px-3 pt-3">

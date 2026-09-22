@@ -5,6 +5,7 @@ import { ToastOverlay } from "@/components/ToastOverlay"
 import { WindowProviders } from "@/components/WindowProviders"
 import { WorkspaceShell } from "@/components/WorkspaceShell"
 import type { Session } from "@/hooks/useSession"
+import { useSelectedPackage } from "@/hooks/useSelectedPackage"
 import { useWindowChrome } from "@/hooks/useWindowChrome"
 import type { FeatureSummary } from "@/lib/wire"
 
@@ -23,6 +24,9 @@ export function AppWindow({
   features: FeatureSummary[]
 }) {
   const { workspace, sidebar, focusedFeature } = useWindowChrome(features)
+  // One owner for the window: the bar's app pill and the panes change and read
+  // the same choice.
+  const [packageId, setPackageId] = useSelectedPackage(session.selected?.serial ?? null)
   // Every open tab, not only the exclusive ones: which of them matter is a
   // rule in `lib/workspaces.ts`, and the registry should not have an opinion.
   const openFeatures = workspace.workspace.groups.flatMap((group) => [...group.openTabs])
@@ -41,6 +45,8 @@ export function AppWindow({
           workspace={workspace}
           focusedFeature={focusedFeature}
           sidebar={sidebar}
+          packageId={packageId}
+          onSelectPackage={setPackageId}
         />
         {/* The panel is a sibling of the workspace, not an overlay: it is a
             persistent column, the way `NotificationPanelView` sits in the
@@ -51,6 +57,8 @@ export function AppWindow({
             device={session.selected}
             workspace={workspace}
             sidebar={sidebar}
+            packageId={packageId}
+            onSelectPackage={setPackageId}
           />
           <NotificationPanel />
         </div>
