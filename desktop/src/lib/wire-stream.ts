@@ -170,7 +170,13 @@ export interface NetSample {
  * `description` is absent, and every keyframe carries its own SPS/PPS.
  */
 export interface MirrorFrame {
-  kind: "config" | "frame"
+  /**
+   * Audio rides the *same* subscription as video, and for the same reason the
+   * video kinds share one payload: a client cannot play a buffer before it
+   * knows the format, and a second topic would make that a race it had to
+   * sequence itself.
+   */
+  kind: "config" | "frame" | "audioConfig" | "audio"
   /** `config`: the RFC 6381 string `VideoDecoder.configure` takes. */
   codec?: string | undefined
   /**
@@ -185,6 +191,14 @@ export interface MirrorFrame {
   deviceName?: string | undefined
   /** `frame`: a keyframe, which is `EncodedVideoChunk`'s `type: "key"`. */
   key?: boolean | undefined
+  /**
+   * `audioConfig`: samples per second — 48 000, as scrcpy's raw encoder sends.
+   * Carried rather than assumed, so a client that guessed wrong would be wrong
+   * audibly rather than silently resampling.
+   */
+  sampleRate?: number | undefined
+  /** `audioConfig`: interleaved channel count, 2 for scrcpy's raw stereo. */
+  channels?: number | undefined
   /** `frame`: presentation timestamp in microseconds, on the device's clock. */
   pts?: number | undefined
   /** `frame`: base64 Annex-B bytes. */

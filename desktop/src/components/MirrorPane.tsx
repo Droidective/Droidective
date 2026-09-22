@@ -20,9 +20,12 @@ import type { Device } from "@/lib/wire"
  * measurement behind it.
  */
 export function MirrorPane({ device }: { device: Device | null }) {
-  const mirror = useMirror(device?.serial ?? null)
-  const popOut = useMirrorPopOut(device?.serial ?? null)
   const options = useMirrorOptions(device?.serial ?? null)
+  // The audio choice rides the quality because that is what the subscription
+  // takes, and flipping it restarts the session — scrcpy decides audio at
+  // start, which is what the toggle's own label says.
+  const mirror = useMirror(device?.serial ?? null, options.quality)
+  const popOut = useMirrorPopOut(device?.serial ?? null)
   const surface = useRef<HTMLDivElement | null>(null)
   const pointer = useMirrorPointer(surface, mirror.size, mirror.send)
   const editor = useScreenshotEditor()

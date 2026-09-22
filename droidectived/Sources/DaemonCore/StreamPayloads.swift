@@ -247,7 +247,11 @@ public struct NetSamplePayload: Codable, Equatable, Sendable {
 /// repackaged as AVCC. Keyframes carry the SPS/PPS ahead of them (see
 /// `MirrorStreamMapper`), so the stream stays self-describing.
 public struct MirrorFramePayload: Codable, Equatable, Sendable {
-    /// "config" or "frame".
+    /// "config", "frame", "audioConfig" or "audio".
+    ///
+    /// Audio rides the *same* subscription as video for the reason the video
+    /// kinds do: a client cannot play a buffer before it knows the format, and
+    /// a second topic would make that a race it had to sequence itself.
     public let kind: String
     /// `config`: the RFC 6381 string `VideoDecoder.configure` takes, read out
     /// of the SPS rather than assumed — the device picks the profile.
@@ -273,8 +277,14 @@ public struct MirrorFramePayload: Codable, Equatable, Sendable {
     /// clock. Passed through rather than restamped: it is what the recorder
     /// would mux by, and a host-clock guess would drift over a long session.
     public let pts: UInt64?
-    /// `frame`: base64 Annex-B bytes.
+    /// `frame`: base64 Annex-B bytes. `audio`: base64 interleaved s16le PCM.
     public let data: String?
+    /// `audioConfig`: samples per second — 48 000, as scrcpy's raw encoder
+    /// sends. Carried rather than assumed so a client that guessed wrong would
+    /// be wrong *audibly* here instead of silently resampling.
+    public let sampleRate: Int?
+    /// `audioConfig`: interleaved channel count, 2 for scrcpy's raw stereo.
+    public let channels: Int?
 
     /// The configuration a client needs before any frame can be decoded.
     public static func config(
@@ -291,9 +301,29 @@ public struct MirrorFramePayload: Codable, Equatable, Sendable {
             key: key, pts: pts, data: bytes.base64EncodedString())
     }
 
+    /// What a client needs before the first PCM buffer can be played.
+    ///
+    /// Sent only once the device's audio codec has been read and found to be
+    /// `raw`. Anything else (the server fell back to Opus, or audio was
+    /// refused) sends nothing at all, and the mirror stays silent rather than
+    /// feeding a graph bytes it cannot interpret.
+    public static func audioConfig(sampleRate: Int, channels: Int) -> Self {
+        .init(
+            kind: "audioConfig", codec: nil, width: nil, height: nil, deviceName: nil,
+            key: nil, pts: nil, data: nil, sampleRate: sampleRate, channels: channels)
+    }
+
+    /// One chunk of interleaved s16le PCM, on the device's clock.
+    public static func audio(_ pcm: Data, pts: UInt64) -> Self {
+        .init(
+            kind: "audio", codec: nil, width: nil, height: nil, deviceName: nil,
+            key: nil, pts: pts, data: pcm.base64EncodedString())
+    }
+
     private init(
         kind: String, codec: String?, width: Int?, height: Int?, deviceName: String?,
-        key: Bool?, pts: UInt64?, data: String?
+        key: Bool?, pts: UInt64?, data: String?,
+        sampleRate: Int? = nil, channels: Int? = nil
     ) {
         self.kind = kind
         self.codec = codec
@@ -303,6 +333,8 @@ public struct MirrorFramePayload: Codable, Equatable, Sendable {
         self.key = key
         self.pts = pts
         self.data = data
+        self.sampleRate = sampleRate
+        self.channels = channels
     }
 }
 

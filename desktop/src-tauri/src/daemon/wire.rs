@@ -1086,6 +1086,12 @@ pub struct StreamParams {
     /// control codes included — see the daemon's `Command.Params.data`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data: Option<String>,
+    /// Whether a `mirror` subscription should carry the device's audio too.
+    /// Asked for rather than assumed: scrcpy captures one stream per session
+    /// and starting it costs a device-side encoder, so a wall of six silent
+    /// tiles would be six encoders for nothing.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audio: Option<bool>,
     /// The terminal window. Both or neither; the daemon refuses half a size.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub columns: Option<u16>,

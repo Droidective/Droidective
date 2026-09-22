@@ -11,6 +11,7 @@ import {
 } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 
+import type { MirrorOptions } from "@/hooks/useMirrorOptions"
 import { KEYCODE, backOrScreenOn, tapKey } from "@/lib/scrcpy-control"
 
 /**
@@ -45,7 +46,7 @@ export function MirrorControls({
    */
   onPopOut?: (() => void) | undefined
   /** The ⋯ menu's contents. Absent with no device to write the setting to. */
-  options?: { showTouches: boolean; setShowTouches: (on: boolean) => void } | undefined
+  options?: MirrorOptions | undefined
 }) {
   const key = (keycode: number) => () => {
     for (const message of tapKey(keycode)) send(message)
@@ -134,11 +135,7 @@ function NavButton({
  * than a scrcpy option, so flipping it on mid-recording works, which is the
  * point of having it here at all.
  */
-function OptionsMenu({
-  options,
-}: {
-  options: { showTouches: boolean; setShowTouches: (on: boolean) => void }
-}) {
+function OptionsMenu({ options }: { options: MirrorOptions }) {
   const [open, setOpen] = useState(false)
   const box = useRef<HTMLDivElement | null>(null)
 
@@ -177,19 +174,45 @@ function OptionsMenu({
       </NavButton>
       {open && (
         <div className="absolute bottom-full right-0 z-20 mb-1 w-[200px] rounded-lg border border-border-subtle bg-bg-raised p-1 shadow-xl">
-          <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[11.5px] text-text-primary hover:bg-bg-hover">
-            <input
-              type="checkbox"
-              checked={options.showTouches}
-              onChange={(event) => {
-                options.setShowTouches(event.target.checked)
-              }}
-              className="accent-accent"
-            />
-            Show touches
-          </label>
+          {/* The Mac's order and its wording, restart warning included: scrcpy
+              takes audio as a start option, so turning it on tears the session
+              down and brings it back. */}
+          <OptionRow
+            label="Stream audio (restarts mirror)"
+            checked={options.streamAudio}
+            onChange={options.setStreamAudio}
+          />
+          <OptionRow
+            label="Show touches"
+            checked={options.showTouches}
+            onChange={options.setShowTouches}
+          />
         </div>
       )}
     </div>
+  )
+}
+
+function OptionRow({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string
+  checked: boolean
+  onChange: (on: boolean) => void
+}) {
+  return (
+    <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[11.5px] text-text-primary hover:bg-bg-hover">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => {
+          onChange(event.target.checked)
+        }}
+        className="accent-accent"
+      />
+      {label}
+    </label>
   )
 }

@@ -1100,9 +1100,9 @@ chip says `Remove tag filter`; APK Studio's `Change…` became
 something *about* it rather than swapping the file the whole studio works on;
 and Custom Commands' name field carries the Mac's placeholder.
 
-## What the last 16 are, and why 329/329 is not the target
+## What the last 14 are, and why 329/329 is not the target
 
-The audit stands at **313 of 329**. What is left is not a backlog of labels
+The audit stands at **315 of 329**. What is left is not a backlog of labels
 somebody forgot; it is four different things, and lumping them together is
 what would make the number meaningless.
 
@@ -1118,18 +1118,28 @@ These will never tick, and should not.
 `Open APK in jadx-GUI` launches an external GUI that is not part of this
 app's toolchain.
 
-**One subsystem, nine items.** Every remaining `scrcpy` and `mirror-wall`
-audio item — `Stream audio`, `Microphone`, `Mute / unmute`,
-`Audio from the Focused Device` and their tooltips — is the *same* feature:
-scrcpy's audio stream. The daemon's transport already opens the audio socket
-and `ScrcpyServerParams` already has `audio` and `audioSource`, but nothing
-requests it, nothing forwards the frames, and nothing decodes them — that last
-part is a WebCodecs `AudioDecoder` and a Web Audio graph in the page. It is a
-four-layer feature whose only honest verification is a real device, and
-building it blind to tick four toggles would be the opposite of what this
-audit is for. The mirror's ⋯ menu exists now and holds Show touches; when the
-stream lands, the two audio toggles go in beside it and its tooltip goes back
-to the Mac's "Audio and touch options" from the "Touch options" it says today.
+**~~One subsystem, nine items.~~ The stream landed; seven are left, and they
+are two smaller subsystems.** `Stream audio` works — the ⋯ menu carries it
+beside Show touches, with the Mac's own "(restarts mirror)", because scrcpy
+takes audio as a *start* option. It needed no `AudioDecoder` in the end:
+`ScrcpyServerParams` already asks for `raw`, so what arrives is s16le PCM and
+the page only has to schedule it. Verified against a live emulator — 48 kHz
+stereo, ~14.5 s of PCM in a 15 s window, the format packet always ahead of the
+first buffer, and nothing at all with the toggle off.
+
+What is left divides in two. **The recording half** — `Mute / unmute` and the
+two recording-audio tooltips — is about what a *take* captures, not what is
+played, and needs the recorder's own audio path. **`Microphone`** is the
+device's own mic as the captured source: scrcpy carries one stream per session,
+so it and `Stream audio` are mutually exclusive, and offering it means teaching
+the UI that. **The wall's two** (`Audio from the Focused Device` and its
+tooltip) are a policy over six tiles rather than a transport question — only
+one tile should be audible, and which one is the focus is a concept the wall
+does not have yet.
+
+A playback mute deliberately was *not* added: the Mac's `Mute / unmute` mutes
+the recording, and inventing a second meaning for the same words here is the
+kind of difference this port exists to avoid.
 
 **Two deliberate divergences stay unticked on purpose.** Logcat's export
 tooltip says "Export what is shown" where the Mac says "Export buffer",
@@ -2294,10 +2304,10 @@ job, and the checklist now says which.
   - [x] button: square
   - [x] button: camera
   - [x] button: Reconnect
-  - [ ] toggle: Stream audio (restarts mirror)
+  - [x] toggle: Stream audio (restarts mirror)
   - [x] toggle: Show touches
   - [ ] toggle: Microphone
-  - [ ] tooltip: Audio and touch options
+  - [x] tooltip: Audio and touch options
   - [ ] tooltip: Volume, audio, touch, and window options
   - [ ] tooltip: Recording audio — device playback or mic, plus the Mac's mic
   - [ ] tooltip: Mute or unmute what's being recorded

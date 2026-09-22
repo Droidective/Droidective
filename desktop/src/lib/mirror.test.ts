@@ -232,3 +232,47 @@ describe("replayable", () => {
     expect(MAX_PENDING_FRAMES).toBeLessThanOrEqual(600)
   })
 })
+
+describe("audio", () => {
+  it("configures the graph from the format the daemon sent", () => {
+    // Carried rather than assumed: a client that guessed 44 100 would be wrong
+    // audibly, and silently resampling is worse than saying so.
+    const { step } = stepMirror(newGate(), {
+      kind: "audioConfig",
+      sampleRate: 48_000,
+      channels: 2,
+    })
+    expect(step).toEqual({ do: "audio-configure", sampleRate: 48_000, channels: 2 })
+  })
+
+  it("hands PCM straight through, decoded", () => {
+    const { step } = stepMirror(newGate(), { kind: "audio", data: btoa("\u0001\u0002") })
+    expect(step.do).toBe("audio")
+    expect(step.do === "audio" && [...step.pcm]).toEqual([1, 2])
+  })
+
+  it("never touches the video gate", () => {
+    // A mirror whose sound arrives before its first keyframe is still a mirror
+    // waiting for a keyframe — the gate is about a VideoDecoder.
+    const waiting = noteGap(newGate())
+    const after = stepMirror(waiting, { kind: "audio", data: btoa("\u0001\u0002") }).gate
+    expect(after).toEqual(waiting)
+  })
+
+  it("plays nothing it cannot describe", () => {
+    for (const incomplete of [
+      { kind: "audioConfig" as const },
+      { kind: "audioConfig" as const, sampleRate: 48_000 },
+      { kind: "audio" as const },
+    ]) {
+      expect(stepMirror(newGate(), incomplete).step).toEqual({ do: "skip", why: "malformed" })
+    }
+  })
+
+  it("does not need a configured decoder first", () => {
+    // Audio and video configure independently; requiring the video decoder
+    // would make a silent first second of every session.
+    const { step } = stepMirror(newGate(), { kind: "audio", data: btoa("\u0001\u0002") })
+    expect(step.do).toBe("audio")
+  })
+})

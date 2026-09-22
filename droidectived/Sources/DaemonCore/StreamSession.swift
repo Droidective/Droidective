@@ -74,7 +74,7 @@ public protocol StreamSource: Sendable {
     /// above all — so that arrives as a `failed` with a reason rather than as a
     /// subscription that never produces a frame. `ScrcpySession.start()` is the
     /// slow half and stays the caller's to run.
-    func openMirror(serial: String, quality: MirrorQuality) async throws -> ScrcpySession
+    func openMirror(serial: String, quality: MirrorQuality, audio: Bool) async throws -> ScrcpySession
 }
 
 /// One WebSocket connection's worth of subscriptions.
@@ -256,7 +256,9 @@ public actor StreamSession {
             guard let serial = command.params?.serial else { return }
             do {
                 mirror = try await source.openMirror(
-                    serial: serial, quality: command.params?.mirrorQuality ?? .deviceDefault)
+                    serial: serial,
+                    quality: command.params?.mirrorQuality ?? .deviceDefault,
+                    audio: command.params?.wantsAudio ?? false)
             } catch {
                 await sink.send(
                     StreamFrame.encode(
@@ -787,7 +789,9 @@ public struct LiveStreamSource: StreamSource {
         return await ScrcpyServerLocator.resolve(locator: locator)
     }
 
-    public func openMirror(serial: String, quality: MirrorQuality) async throws -> ScrcpySession {
+    public func openMirror(
+        serial: String, quality: MirrorQuality, audio: Bool
+    ) async throws -> ScrcpySession {
         guard let server = await scrcpyServer() else {
             throw MirrorError.scrcpyServerMissing
         }
@@ -802,6 +806,10 @@ public struct LiveStreamSource: StreamSource {
                 // many it is drawing.
                 params: ScrcpyServerParams(
                     scid: ScrcpyServerParams.randomSCID(),
+                    // `raw` rather than the server's Opus default, which is
+                    // what lets the page play it with no decoder at all — see
+                    // `ScrcpySession.pumpAudio`.
+                    audio: audio,
                     maxSize: quality.maxSize,
                     maxFps: quality.maxFps)))
     }

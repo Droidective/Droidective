@@ -327,7 +327,9 @@ private enum StreamSessionTestError: Error { case unsupported }
         func openPty(serial: String?, size: PtySize) throws -> any PtyChannel {
             throw StreamSessionTestError.unsupported
         }
-        func openMirror(serial: String, quality: MirrorQuality) async throws -> ScrcpySession {
+        func openMirror(
+        serial: String, quality: MirrorQuality, audio: Bool
+    ) async throws -> ScrcpySession {
             throw StreamSessionTestError.unsupported
         }
 

@@ -1,18 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { asDaemonError, watchMirror, type MirrorSession } from "@/lib/daemon"
-import {
-  codecSupport,
-  MAX_PENDING_FRAMES,
-  newGate,
-  noteGap,
-  replayable,
-  stepMirror,
-  type DecodeStep,
-  type MirrorGate,
-} from "@/lib/mirror"
+import { newGate, type DecodeStep, type MirrorGate } from "@/lib/mirror"
+import { handler, type Wiring } from "@/lib/mirror-pipeline"
+import { MirrorAudioPlayer } from "@/lib/mirror-player"
 import { FULL_QUALITY, type Quality } from "@/lib/mirror-wall"
 import { encodeControl } from "@/lib/scrcpy-control"
-import type { DaemonError, MirrorFrame, StreamUpdate } from "@/lib/wire"
+import type { DaemonError } from "@/lib/wire"
 
 export interface Mirror {
   /** The video's own size, from the decoded frames. Zero until the first. */
@@ -31,155 +24,6 @@ export interface Mirror {
   attach: (canvas: HTMLCanvasElement | null) => void
 }
 
-/** What the pieces below need to reach. Assembled once per subscription. */
-interface Wiring {
-  canvas: React.RefObject<HTMLCanvasElement | null>
-  gate: React.RefObject<MirrorGate>
-  decoder: React.RefObject<VideoDecoder | null>
-  /** Frames that arrived while `configure` was still awaiting its support check. */
-  pending: React.RefObject<DecodeStep[]>
-  setSize: (size: { width: number; height: number }) => void
-  setDeviceName: (name: string | null) => void
-  setStreaming: (streaming: boolean) => void
-  setDropped: (update: (count: number) => number) => void
-  fail: (message: string) => void
-  live: () => boolean
-}
-
-/**
- * Draw a decoded frame, sizing the canvas from the frame itself.
- *
- * The frames are the authority on size, not the config's hint: a device can
- * rotate mid-session and the daemon does not re-measure.
- */
-function paint(frame: VideoFrame, wiring: Wiring): void {
-  try {
-    const element = wiring.canvas.current
-    if (element === null) return
-    const { displayWidth: width, displayHeight: height } = frame
-    if (element.width !== width || element.height !== height) {
-      element.width = width
-      element.height = height
-      wiring.setSize({ width, height })
-    }
-    element.getContext("2d")?.drawImage(frame, 0, 0)
-  } finally {
-    // Always, even if drawing threw: a VideoFrame holds a decoder buffer, and
-    // leaking a few stalls the decoder outright.
-    frame.close()
-  }
-}
-
-/**
- * Build a decoder for the codec the device negotiated, once it is known to be
- * decodable here.
- */
-async function configure(codec: string, wiring: Wiring): Promise<void> {
-  const support = await codecSupport(codec)
-  if (!wiring.live()) return
-  if (!support.ok) {
-    // The measured case on Linux — see `missingCodecHint`. Reported rather than
-    // left as a black rectangle, which is what this check is for.
-    wiring.pending.current = []
-    wiring.fail(support.hint ?? "This webview cannot decode the device's video.")
-    return
-  }
-  wiring.decoder.current?.close()
-  const built = new VideoDecoder({
-    output: (frame) => paint(frame, wiring),
-    error: (thrown) => wiring.fail(thrown.message),
-  })
-  // `optimizeForLatency`: this is a live screen, so a decoder buffering frames
-  // to smooth playback is showing the past.
-  built.configure({ codec, optimizeForLatency: true })
-  wiring.decoder.current = built
-  // The await above spans frames, and scrcpy's first keyframe lands inside it.
-  // Replaying from that keyframe is what gets a picture up now rather than at
-  // the next one, which scrcpy leaves ten seconds away by default.
-  const replay = replayable(wiring.pending.current)
-  wiring.pending.current = []
-  if (replay.length === 0) wiring.gate.current = noteGap(wiring.gate.current)
-  for (const step of replay) decodeInto(built, step, wiring)
-}
-
-/** Hand one chunk to a configured decoder, reporting a rejection. */
-function decodeInto(decoder: VideoDecoder, step: DecodeStep, wiring: Wiring): void {
-  try {
-    decoder.decode(
-      new EncodedVideoChunk({
-        type: step.type,
-        timestamp: step.timestamp,
-        data: step.data,
-      }),
-    )
-  } catch (thrown) {
-    // A decoder that rejects a chunk is done — it does not recover on the next
-    // one, so say so rather than showing a frozen picture.
-    wiring.fail(thrown instanceof Error ? thrown.message : String(thrown))
-  }
-}
-
-/** One payload, through the rules in `lib/mirror.ts` and into the decoder. */
-function accept(frame: MirrorFrame, wiring: Wiring): void {
-  const outcome = stepMirror(wiring.gate.current, frame)
-  wiring.gate.current = outcome.gate
-  const step = outcome.step
-  if (step.do === "configure") {
-    wiring.setDeviceName(step.deviceName)
-    // A hint for the first layout only — `paint` corrects it.
-    wiring.setSize({ width: step.width, height: step.height })
-    void configure(step.codec, wiring)
-    return
-  }
-  if (step.do !== "decode") return
-  const decoder = wiring.decoder.current
-  // `configure` awaits its support check, so frames — the first keyframe among
-  // them — arrive before the decoder exists. Holding them is what keeps that
-  // keyframe: dropping it left every following delta to be decoded against
-  // pictures no decoder ever saw, which WebCodecs ends the session over
-  // ("Key frame is required"). Past the cap the backlog is stale enough that
-  // the next keyframe is the better start, so the gate waits for one.
-  if (decoder === null || decoder.state !== "configured") {
-    if (wiring.pending.current.length >= MAX_PENDING_FRAMES) {
-      wiring.pending.current = []
-      wiring.gate.current = noteGap(wiring.gate.current)
-      return
-    }
-    wiring.pending.current.push(step)
-    return
-  }
-  decodeInto(decoder, step, wiring)
-}
-
-/**
- * What each stream event means.
- *
- * Lifted out of the effect because it is the stream's protocol rather than this
- * hook's lifecycle — and because `dropped` has to reach the gate, not just a
- * counter: until the next keyframe every delta references pictures this decoder
- * never saw.
- */
-function handler(wiring: Wiring) {
-  return (update: StreamUpdate<MirrorFrame>) => {
-    switch (update.event) {
-      case "subscribed":
-        wiring.setStreaming(true)
-        break
-      case "batch":
-        for (const item of update.items) accept(item, wiring)
-        break
-      case "dropped":
-        wiring.gate.current = noteGap(wiring.gate.current)
-        wiring.setDropped((count) => count + update.count)
-        break
-      case "ended":
-        wiring.setStreaming(false)
-        break
-      default:
-        wiring.fail(update.message)
-    }
-  }
-}
 
 /**
  * One device's screen, decoded in this webview.
@@ -190,11 +34,154 @@ function handler(wiring: Wiring) {
  * decides what each payload means, so the rules that matter are tested without
  * a decoder, a canvas or a device.
  */
+/**
+ * The two callbacks that outlive every session: where to paint, and how to
+ * talk back. Neither depends on the subscription, so neither belongs in it.
+ */
+function useMirrorIO(
+  canvas: React.RefObject<HTMLCanvasElement | null>,
+  session: React.RefObject<MirrorSession | null>,
+): Pick<Mirror, "attach" | "send"> {
+  return {
+    attach: useCallback(
+      (element: HTMLCanvasElement | null) => {
+        canvas.current = element
+      },
+      [canvas],
+    ),
+    send: useCallback(
+      (bytes: Uint8Array) => {
+        // Fire and forget: a tap that fails is not worth a dialog, and the next
+        // frame will show whether it landed. Ordering is the socket's job.
+        void session.current?.send(encodeControl(bytes))
+      },
+      [session],
+    ),
+  }
+}
+
+/** Everything one subscription needs to write back into. */
+interface SessionRefs {
+  canvas: React.RefObject<HTMLCanvasElement | null>
+  session: React.RefObject<MirrorSession | null>
+  decoder: React.RefObject<VideoDecoder | null>
+  gate: React.RefObject<MirrorGate>
+  pending: React.RefObject<DecodeStep[]>
+}
+
+interface SessionSinks {
+  setSize: (size: { width: number; height: number }) => void
+  setDeviceName: (name: string | null) => void
+  setStreaming: (streaming: boolean) => void
+  setError: (error: DaemonError | null) => void
+  setDropped: React.Dispatch<React.SetStateAction<number>>
+}
+
+/**
+ * One scrcpy session, for as long as its inputs hold still.
+ *
+ * Its own hook because it is the only long thing here, and because its
+ * dependency list is the feature's whole restart policy: the serial, the two
+ * quality numbers, whether sound was asked for — scrcpy takes audio as a
+ * *start* option, which is why the Mac's toggle says "restarts mirror" — and
+ * the reconnect counter.
+ */
+function useMirrorSession(args: {
+  serial: string | null
+  maxSize: number
+  maxFps: number
+  wantsAudio: boolean
+  attempt: number
+  player: MirrorAudioPlayer
+  refs: SessionRefs
+  sinks: SessionSinks
+}): void {
+  const { serial, maxSize, maxFps, wantsAudio, attempt, player } = args
+  // Through a ref, the way `useClearApk` takes its sink: every one of these is
+  // stable in practice (a `useRef` box, a `useState` setter), but they arrive
+  // as arguments, where the linter cannot see that — and listing them would
+  // restart the scrcpy server on every render.
+  const latest = useRef(args)
+  latest.current = args
+
+  useEffect(() => {
+    const { canvas, session, decoder, gate, pending } = latest.current.refs
+    const { setSize, setDeviceName, setStreaming, setError, setDropped } = latest.current.sinks
+
+    // A new session is a new stream: everything the last one left behind
+    // describes a device this one is not watching.
+    setSize({ width: 0, height: 0 })
+    setDeviceName(null)
+    setStreaming(false)
+    setError(null)
+    setDropped(0)
+    gate.current = newGate()
+    pending.current = []
+    player.close()
+    if (serial === null) return
+
+    let cancelled = false
+    const wiring: Wiring = {
+      canvas,
+      gate,
+      decoder,
+      pending,
+      setSize,
+      setDeviceName,
+      setStreaming,
+      setDropped,
+      audio: player,
+      live: () => !cancelled,
+      fail: (message) => {
+        if (cancelled) return
+        setError({ code: "mirror_failed", message, detail: null })
+        setStreaming(false)
+      },
+    }
+
+    watchMirror(serial, { maxSize, maxFps, audio: wantsAudio }, handler(wiring)).then(
+      (handle) => {
+        if (cancelled) {
+          // Stopping is what removes the `adb forward`, so a subscription that
+          // arrives after unmount must still be torn down.
+          void handle.stop()
+          return
+        }
+        session.current = handle
+      },
+      (thrown: unknown) => {
+        if (!cancelled) setError(asDaemonError(thrown))
+      },
+    )
+
+    return () => {
+      cancelled = true
+      void session.current?.stop()
+      session.current = null
+      const built = decoder.current
+      decoder.current = null
+      pending.current = []
+      // Same reasoning for the sound: the queue is for a session that is gone,
+      // and letting it drain would play seconds of a device nobody is watching.
+      player.close()
+      // `close`, not `flush`: pending frames are for a screen that is gone.
+      if (built !== null && built.state !== "closed") built.close()
+    }
+    // `wantsAudio` restarts the session on purpose: scrcpy takes audio as a
+    // *start* option, which is why the Mac's own toggle says "restarts mirror".
+  }, [serial, maxSize, maxFps, wantsAudio, attempt, player])
+}
+
 export function useMirror(serial: string | null, quality: Quality = FULL_QUALITY): Mirror {
+  // One player for the hook's life, not per session: a reconnect should not
+  // cost an `AudioContext`, and browsers cap how many a page may hold.
+  const audioRef = useRef<MirrorAudioPlayer | null>(null)
+  audioRef.current ??= new MirrorAudioPlayer()
+  const player = audioRef.current
   // Destructured so the effect depends on the two numbers rather than the
   // object: a caller computing quality inline hands a fresh identity every
   // render, and depending on that would restart the scrcpy server on each one.
-  const { maxSize, maxFps } = quality
+  const { maxSize, maxFps, audio: wantsAudio = false } = quality
   const [size, setSize] = useState({ width: 0, height: 0 })
   const [deviceName, setDeviceName] = useState<string | null>(null)
   const [streaming, setStreaming] = useState(false)
@@ -218,70 +205,18 @@ export function useMirror(serial: string | null, quality: Quality = FULL_QUALITY
   const gate = useRef<MirrorGate>(newGate())
   const pending = useRef<DecodeStep[]>([])
 
-  const attach = useCallback((element: HTMLCanvasElement | null) => {
-    canvas.current = element
-  }, [])
+  const { attach, send } = useMirrorIO(canvas, session)
 
-  const send = useCallback((bytes: Uint8Array) => {
-    // Fire and forget: a tap that fails is not worth a dialog, and the next
-    // frame will show whether it landed. Ordering is the socket's job.
-    void session.current?.send(encodeControl(bytes))
-  }, [])
-
-  useEffect(() => {
-    setSize({ width: 0, height: 0 })
-    setDeviceName(null)
-    setStreaming(false)
-    setError(null)
-    setDropped(0)
-    gate.current = newGate()
-    pending.current = []
-    if (serial === null) return
-
-    let cancelled = false
-    const wiring: Wiring = {
-      canvas,
-      gate,
-      decoder,
-      pending,
-      setSize,
-      setDeviceName,
-      setStreaming,
-      setDropped,
-      live: () => !cancelled,
-      fail: (message) => {
-        if (cancelled) return
-        setError({ code: "mirror_failed", message, detail: null })
-        setStreaming(false)
-      },
-    }
-
-    watchMirror(serial, { maxSize, maxFps }, handler(wiring)).then(
-      (handle) => {
-        if (cancelled) {
-          // Stopping is what removes the `adb forward`, so a subscription that
-          // arrives after unmount must still be torn down.
-          void handle.stop()
-          return
-        }
-        session.current = handle
-      },
-      (thrown: unknown) => {
-        if (!cancelled) setError(asDaemonError(thrown))
-      },
-    )
-
-    return () => {
-      cancelled = true
-      void session.current?.stop()
-      session.current = null
-      const built = decoder.current
-      decoder.current = null
-      pending.current = []
-      // `close`, not `flush`: pending frames are for a screen that is gone.
-      if (built !== null && built.state !== "closed") built.close()
-    }
-  }, [serial, maxSize, maxFps, attempt])
+  useMirrorSession({
+    serial,
+    maxSize,
+    maxFps,
+    wantsAudio,
+    attempt,
+    player,
+    refs: { canvas, session, decoder, gate, pending },
+    sinks: { setSize, setDeviceName, setStreaming, setError, setDropped },
+  })
 
   const reconnect = useCallback(() => {
     setAttempt((current) => current + 1)

@@ -254,14 +254,23 @@ export interface MirrorSession extends Subscription {
  */
 export async function watchMirror(
   serial: string,
-  quality: { maxSize: number; maxFps: number },
+  quality: { maxSize: number; maxFps: number; audio?: boolean },
   onUpdate: (update: StreamUpdate<MirrorFrame>) => void,
 ): Promise<MirrorSession> {
   const subscription = await subscribe<MirrorFrame>(
     "watch_mirror",
     // Resolved here rather than by the daemon: the Mirror Wall steps quality
     // down as tiles are added, and only this side knows how many it is drawing.
-    { serial, maxSize: quality.maxSize, maxFps: quality.maxFps },
+    //
+    // Audio is asked for rather than always on: scrcpy captures one stream per
+    // session and starting it costs a device-side encoder, so a wall of six
+    // silent tiles would be six encoders for nothing.
+    {
+      serial,
+      maxSize: quality.maxSize,
+      maxFps: quality.maxFps,
+      audio: quality.audio ?? false,
+    },
     onUpdate,
   )
   const id = subscription.id
