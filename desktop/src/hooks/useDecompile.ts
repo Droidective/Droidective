@@ -48,6 +48,13 @@ export interface Decompile {
   search: () => void
   reveal: (path: string) => void
   rebuild: () => void
+  /**
+   * What the last rebuild wrote, or null.
+   *
+   * Kept rather than left to the toast: the Mac's result row offers two things
+   * to do with it, and a toast that has slid away cannot.
+   */
+  rebuilt: string | null
 }
 
 /**
@@ -108,6 +115,26 @@ function useOpenFile(
   )
 }
 
+/**
+ * Whether the chosen decompiler is here, and fetching it if it is not.
+ *
+ * The two belong together: the answer is re-asked after an install, so a
+ * separate `installing` flag and a separate readiness probe would have to be
+ * kept in step by their callers.
+ */
+function useToolInstall(mode: DecompileMode): Pick<Decompile, "toolReady" | "installing" | "install"> {
+  const { show } = useNotifications()
+  const [installing, setInstalling] = useState(false)
+  return {
+    toolReady: useToolReady(mode, installing),
+    installing,
+    install: () => {
+      setInstalling(true)
+      void fetchTool(mode, show).finally(() => setInstalling(false))
+    },
+  }
+}
+
 export function useDecompile(apkPath: string | null): Decompile {
   const { show } = useNotifications()
 
@@ -116,13 +143,13 @@ export function useDecompile(apkPath: string | null): Decompile {
   const [mode, setMode] = useState<DecompileMode>("jadx")
   const [tree, setTree] = useState<DecompileTree | null>(null)
   const [busy, setBusy] = useState(false)
+  const [rebuilt, setRebuilt] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set())
   const [selected, setSelected] = useState<string | null>(null)
   const [source, setSource] = useState<DecompileFileText | null>(null)
   const [loadingFile, setLoadingFile] = useState(false)
   const { query, setQuery, hits, setHits, searching, setSearching } = useSearchState()
-  const [installing, setInstalling] = useState(false)
-  const toolReady = useToolReady(mode, installing)
+  const tool = useToolInstall(mode)
 
   // An APK handed in (APK Studio) should not need choosing a second time.
   useEffect(() => {
@@ -158,12 +185,7 @@ export function useDecompile(apkPath: string | null): Decompile {
     embedded: apkPath !== null,
     mode,
     tree,
-    toolReady,
-    installing,
-    install: () => {
-      setInstalling(true)
-      void fetchTool(mode, show).finally(() => setInstalling(false))
-    },
+    ...tool,
     busy,
     expanded,
     selected,
@@ -200,11 +222,14 @@ export function useDecompile(apkPath: string | null): Decompile {
       setHits(null)
       open(which)
     },
+    rebuilt,
     rebuild: () => {
       const root = tree?.root
       if (root === undefined) return
       setBusy(true)
-      void runRebuild(root, path, show).finally(() => setBusy(false))
+      void runRebuild(root, path, show)
+        .then(setRebuilt)
+        .finally(() => setBusy(false))
     },
   }
 }

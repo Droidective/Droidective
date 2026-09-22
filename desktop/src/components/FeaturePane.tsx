@@ -98,7 +98,6 @@ export function FeaturePane(props: FeaturePaneProps) {
           device={props.device}
           selected={props.packageId}
           onSelect={props.onSelectPackage}
-          onOpen={props.onOpen}
         />
       )
     case "aab-convert":

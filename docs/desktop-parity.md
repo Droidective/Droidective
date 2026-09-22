@@ -2279,7 +2279,7 @@ job, and the checklist now says which.
   - [x] button: camera
   - [x] button: Reconnect
   - [ ] toggle: Stream audio (restarts mirror)
-  - [ ] toggle: Show touches
+  - [x] toggle: Show touches
   - [ ] toggle: Microphone
   - [ ] tooltip: Audio and touch options
   - [ ] tooltip: Volume, audio, touch, and window options
@@ -2467,7 +2467,7 @@ job, and the checklist now says which.
   - [x] picker: Level
   - [x] field: Filter lines…
   - [x] label: All apps
-  - [ ] label: Add from installed apps
+  - [x] label: Add from installed apps
   - [x] label: Use app on device screen
   - [ ] label: Add manually / manage…
   - [x] tooltip: Show only the lines containing this text
@@ -2548,7 +2548,7 @@ job, and the checklist now says which.
 - **Must replicate**
   - [x] button: Choose APK…
   - [x] button: Inspect another…
-  - [ ] label: … (…)
+  - [x] label: … (…)
   - [x] label: Signing
 
 #### `apk-sign` — Sign APK  ·  ✅ ported
@@ -2570,8 +2570,8 @@ job, and the checklist now says which.
   - [x] button: Open another APK
   - [x] button: Choose APK…
   - [x] button: Open sources in Finder
-  - [ ] button: Sign the rebuilt APK
-  - [ ] button: Open in Finder
+  - [x] button: Sign the rebuilt APK
+  - [x] button: Open in Finder
 
 #### `app-info` — App Info  ·  ✅ ported
 > Version, target SDK, size — and pull the APK
@@ -2598,7 +2598,7 @@ job, and the checklist now says which.
   - [x] button: Clear Data
   - [x] button: Cancel
   - [x] button: Uninstall
-  - [ ] button: Done
+  - [x] button: Done
   - [x] field: Search name, version, or bundle…
   - [x] label: Open
   - [x] label: Restart
@@ -2609,7 +2609,7 @@ job, and the checklist now says which.
   - [x] label: Clear Data
   - [x] label: Uninstall
   - [x] tooltip: Refresh
-  - [ ] export: save/export to a file
+  - [x] export: save/export to a file
 
 #### `current-activity` — Copy Current Activity  ·  ✅ ported
 > Show the foreground Activity right now

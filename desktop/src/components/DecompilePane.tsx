@@ -18,7 +18,14 @@ import { useDecompile, type Decompile } from "@/hooks/useDecompile"
  * is what confines them to it (`DecompileProtocol.confined`). Nothing here
  * decides what may be read; it only carries the root the daemon handed out.
  */
-export function DecompilePane({ apkPath = null }: { apkPath?: string | null }) {
+export function DecompilePane({
+  apkPath = null,
+  onSign,
+}: {
+  apkPath?: string | null
+  /** APK Studio's Sign tab, for a rebuilt APK. Absent standalone. */
+  onSign?: ((path: string) => void) | undefined
+}) {
   const tools = useApkToolchain()
   const state = useDecompile(apkPath)
   const tree = state.tree
@@ -33,7 +40,7 @@ export function DecompilePane({ apkPath = null }: { apkPath?: string | null }) {
       </div>
     )
   }
-  return <DecompileBrowser state={state} tree={tree} />
+  return <DecompileBrowser state={state} tree={tree} onSign={onSign} />
 }
 
 function Chooser({ state }: { state: Decompile }) {

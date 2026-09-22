@@ -32,9 +32,11 @@ export function LogcatToolbar({
   appFilter,
   packageId,
   canNarrow,
+  canPick,
   narrowed,
   onNarrow,
   onUseForegroundApp,
+  onAddFromInstalled,
 }: {
   filter: LogFilter
   onFilter: (filter: LogFilter) => void
@@ -48,9 +50,11 @@ export function LogcatToolbar({
   /** The app chosen in Apps, which is what narrowing follows. */
   packageId: string | null
   canNarrow: boolean
+  canPick: boolean
   narrowed: boolean
   onNarrow: (narrowed: boolean) => void
   onUseForegroundApp: () => void
+  onAddFromInstalled: () => void
 }) {
   return (
     <div className="shrink-0 border-b border-border-subtle bg-bg-chrome">
@@ -67,9 +71,11 @@ export function LogcatToolbar({
         appFilter={appFilter}
         packageId={packageId}
         canNarrow={canNarrow}
+        canPick={canPick}
         narrowed={narrowed}
         onNarrow={onNarrow}
         onUseForegroundApp={onUseForegroundApp}
+        onAddFromInstalled={onAddFromInstalled}
       />
 
       <TagBar

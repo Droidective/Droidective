@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react"
-import { Download } from "lucide-react"
 import { Banner, Button } from "@/components/Controls"
 import { HubColumn, HubRowList, HubSection } from "@/components/Hub"
 import { NoBundle, NotInstalled } from "@/components/NoBundle"
 import { NoDevice } from "@/components/screen"
 import { useNotifications } from "@/hooks/useNotifications"
-import { appInfo, asDaemonError, exportText, pullApk } from "@/lib/daemon"
-import { infoRows, infoText, infoFileName, pulledApkMessage } from "@/lib/appinfo"
+import { AppPullButton } from "@/components/AppPullButton"
+import { appInfo, asDaemonError, exportText } from "@/lib/daemon"
+import { infoRows, infoText, infoFileName } from "@/lib/appinfo"
 import type { AppInfoResponse, DaemonError, Device } from "@/lib/wire"
 
 /**
@@ -20,7 +20,6 @@ export function AppInfoPane({ device, packageId }: { device: Device | null; pack
   const { show } = useNotifications()
   const [info, setInfo] = useState<AppInfoResponse | null>(null)
   const [error, setError] = useState<DaemonError | null>(null)
-  const [pulling, setPulling] = useState(false)
 
   const serial = device?.serial ?? null
   useEffect(() => {
@@ -56,26 +55,6 @@ export function AppInfoPane({ device, packageId }: { device: Device | null; pack
   if (info === null) return <p className="p-5 text-text-tertiary">Reading app info…</p>
   if (!info.installed) return <NotInstalled packageId={packageId} />
 
-  const pull = () => {
-    if (serial === null) return
-    setPulling(true)
-    void (async () => {
-      try {
-        const result = await pullApk(serial, packageId)
-        const landed = result.paths.at(-1)
-        show({
-          ok: true,
-          message: pulledApkMessage(result.paths),
-          ...(landed === undefined ? {} : { revealPath: landed }),
-        })
-      } catch (thrown) {
-        show({ ok: false, message: asDaemonError(thrown).message })
-      } finally {
-        setPulling(false)
-      }
-    })()
-  }
-
   const saveInfo = () => {
     exportText(infoFileName(packageId, new Date()), infoText(info)).then(
       (path) => {
@@ -100,12 +79,7 @@ export function AppInfoPane({ device, packageId }: { device: Device | null; pack
       </HubSection>
       <HubSection title="APK">
         <div>
-          <Button tone="primary" onClick={pull} disabled={pulling}>
-            <span className="flex items-center gap-1.5">
-              <Download size={12} />
-              {pulling ? "Pulling…" : "Pull APK"}
-            </span>
-          </Button>
+          {serial === null ? null : <AppPullButton serial={serial} packageId={packageId} />}
         </div>
       </HubSection>
     </HubColumn>

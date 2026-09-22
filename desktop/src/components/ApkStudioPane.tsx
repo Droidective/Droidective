@@ -26,13 +26,20 @@ export function ApkStudioPane() {
   const { show } = useNotifications()
   const [apk, setApk] = useState<string | null>(null)
   const [tab, setTab] = useState<StudioTab>("inspect")
+  // What the Sign tab is pointed at, when a rebuild has produced something
+  // other than the studio's own APK. Cleared with the APK, or signing would
+  // still be aimed at the last load's rebuild.
+  const [signTarget, setSignTarget] = useState<string | null>(null)
 
   const choose = () => {
     void (async () => {
       try {
         const picked = await pickFile("APK", ["apk"])
         // A dismissed dialog is a choice, not a failure.
-        if (picked !== null) setApk(picked)
+        if (picked !== null) {
+          setApk(picked)
+          setSignTarget(null)
+        }
       } catch (thrown) {
         show({ message: asDaemonError(thrown).message, ok: false })
       }
@@ -83,10 +90,16 @@ export function ApkStudioPane() {
           <ApkInspectorPane apkPath={apk} />
         </Slot>
         <Slot active={tab === "decompile"}>
-          <DecompilePane apkPath={apk} />
+          <DecompilePane
+            apkPath={apk}
+            onSign={(rebuilt) => {
+              setSignTarget(rebuilt)
+              setTab("sign")
+            }}
+          />
         </Slot>
         <Slot active={tab === "sign"}>
-          <ApkSignPane apkPath={apk} />
+          <ApkSignPane apkPath={signTarget ?? apk} />
         </Slot>
       </div>
     </div>

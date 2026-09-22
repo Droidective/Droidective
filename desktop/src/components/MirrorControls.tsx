@@ -2,17 +2,20 @@ import {
   Camera,
   ChevronLeft,
   Circle,
+  MoreHorizontal,
   PictureInPicture2,
   Square,
   Volume1,
   Volume2,
   VolumeX,
 } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
 
 import { KEYCODE, backOrScreenOn, tapKey } from "@/lib/scrcpy-control"
 
 /**
- * The mirror's button row: back, home, recents, then the three volume keys.
+ * The mirror's button row: back, home, recents, then the three volume keys,
+ * then the ⋯ menu the Mac keeps its session options behind.
  *
  * The same set and the same order as the Mac's `ScreenMirrorView` bar, because
  * someone moving between the two should not have to look for them.
@@ -22,6 +25,7 @@ export function MirrorControls({
   dropped,
   onCapture,
   onPopOut,
+  options,
 }: {
   send: (bytes: Uint8Array) => void
   /** Frames the daemon discarded, surfaced rather than swallowed. */
@@ -40,6 +44,8 @@ export function MirrorControls({
    * the Mac's per-device window.
    */
   onPopOut?: (() => void) | undefined
+  /** The ⋯ menu's contents. Absent with no device to write the setting to. */
+  options?: { showTouches: boolean; setShowTouches: (on: boolean) => void } | undefined
 }) {
   const key = (keycode: number) => () => {
     for (const message of tapKey(keycode)) send(message)
@@ -88,6 +94,7 @@ export function MirrorControls({
           </NavButton>
         </>
       )}
+      {options === undefined ? null : <OptionsMenu options={options} />}
       {dropped > 0 && (
         <span className="ml-auto text-xs text-text-tertiary">
           {dropped} frame{dropped === 1 ? "" : "s"} dropped
@@ -116,5 +123,68 @@ function NavButton({
     >
       {children}
     </button>
+  )
+}
+
+/**
+ * The ⋯ menu — session options, not per-tap controls.
+ *
+ * The Mac's reasoning for the menu, kept: neither of these earns an
+ * always-visible bar slot. Show touches is a live write on the device rather
+ * than a scrcpy option, so flipping it on mid-recording works, which is the
+ * point of having it here at all.
+ */
+function OptionsMenu({
+  options,
+}: {
+  options: { showTouches: boolean; setShowTouches: (on: boolean) => void }
+}) {
+  const [open, setOpen] = useState(false)
+  const box = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onDown = (event: MouseEvent) => {
+      if (!(event.target instanceof Node) || box.current?.contains(event.target) !== true) {
+        setOpen(false)
+      }
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false)
+    }
+    globalThis.addEventListener("mousedown", onDown)
+    globalThis.addEventListener("keydown", onKeyDown)
+    return () => {
+      globalThis.removeEventListener("mousedown", onDown)
+      globalThis.removeEventListener("keydown", onKeyDown)
+    }
+  }, [open])
+
+  return (
+    <div ref={box} className="relative">
+      <NavButton
+        label="Audio and touch options"
+        onClick={() => {
+          setOpen((was) => !was)
+        }}
+      >
+        <MoreHorizontal size={16} />
+      </NavButton>
+      {open && (
+        <div className="absolute bottom-full right-0 z-20 mb-1 w-[200px] rounded-lg border border-border-subtle bg-bg-raised p-1 shadow-xl">
+          <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-[11.5px] text-text-primary hover:bg-bg-hover">
+            <input
+              type="checkbox"
+              checked={options.showTouches}
+              onChange={(event) => {
+                options.setShowTouches(event.target.checked)
+              }}
+              className="accent-accent"
+            />
+            Show touches
+          </label>
+        </div>
+      )}
+    </div>
   )
 }
