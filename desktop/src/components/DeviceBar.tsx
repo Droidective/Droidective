@@ -1,13 +1,13 @@
 import { useState } from "react"
 import { Layers, PanelLeft, PanelLeftDashed, RefreshCw, WifiOff } from "lucide-react"
 import { AdbWarning } from "@/components/AdbWarning"
+import { BarPills } from "@/components/BarPills"
 import { Switch } from "@/components/Controls"
 import { DeviceMenu, DevicePill, IconButton } from "@/components/DeviceMenu"
-import { NotificationBell } from "@/components/NotificationPanel"
 import { WirelessSheet, type WirelessMode } from "@/components/WirelessSheet"
 import { useDeviceBarActions } from "@/hooks/useDeviceBarActions"
 import { StatusIcon } from "@/components/DeviceStatusIcon"
-import type { Device } from "@/lib/wire"
+import type { ActiveOverride, Device } from "@/lib/wire"
 
 export interface DeviceBarProps {
   devices: Device[]
@@ -27,6 +27,15 @@ export interface DeviceBarProps {
   /** The leading button: pinned sidebar ↔ Dock-style auto-hide. */
   sidebarAutoHide: boolean
   onToggleSidebarMode: () => void
+  /** Shown only for a screen that acts on an app — see `showsAppPill`. */
+  showsAppPill: boolean
+  packageId: string | null
+  onSelectPackage: (packageId: string | null) => void
+  /** What this device has overridden, and the two ways to clear it. */
+  overrides: ActiveOverride[]
+  overridesBusy: boolean
+  onResetOverride: (kind: string) => void
+  onResetAllOverrides: () => void
 }
 
 /**
@@ -56,9 +65,15 @@ export function DeviceBar(props: DeviceBarProps) {
       <StatusIcon device={props.selected} />
       <DeviceControl bar={props} onWireless={setSheet} />
 
+      {/* Beside the device, as on the Mac: the two together are what an
+          app-scoped screen acts on. */}
+      {props.showsAppPill && <BarPills.App bar={props} />}
+
       <AdbWarning />
 
       <span className="flex-1" />
+
+      <BarPills.Overrides bar={props} />
 
       {props.showsRunAll ? (
         <div
@@ -77,7 +92,7 @@ export function DeviceBar(props: DeviceBarProps) {
 
       {/* Top-right, so the toasts drop from underneath it — which is what
           makes the two surfaces read as one thing on the Mac. */}
-      <NotificationBell />
+      <BarPills.Bell />
 
       {sheet === null ? null : (
         <WirelessSheet

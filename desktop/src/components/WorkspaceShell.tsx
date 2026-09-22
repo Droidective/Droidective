@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useState } from "react"
 import { PaneArea } from "@/components/PaneArea"
 import { noOverlays, ShellOverlays, type OverlayState } from "@/components/ShellOverlays"
 import { Sidebar } from "@/components/Sidebar"
@@ -20,6 +20,8 @@ export function WorkspaceShell({
   device,
   workspace,
   sidebar,
+  packageId,
+  onSelectPackage,
 }: {
   features: FeatureSummary[]
   device: Device | null
@@ -27,12 +29,17 @@ export function WorkspaceShell({
   workspace: WorkspaceController
   /** Owned by `App` too, because the device bar carries the sidebar button. */
   sidebar: SidebarModeController
+  /**
+   * Owned by `AppWindow`, because the device bar's app pill changes the same
+   * choice these panes read. Two owners would be two answers to "which app?".
+   */
+  packageId: string | null
+  onSelectPackage: (packageId: string | null) => void
 }) {
   const [overlays, setOverlays] = useState<OverlayState>(noOverlays)
   const patch = useCallback((next: Partial<OverlayState>) => {
     setOverlays((current) => ({ ...current, ...next }))
   }, [])
-  const [packageId, setPackageId] = useSelectedPackage(device?.serial ?? null)
 
   // Focus the pane first, so whatever is chosen opens in the one that asked.
   const { focusPane } = workspace
@@ -66,12 +73,8 @@ export function WorkspaceShell({
       features={features}
       activeID={focused}
       workspace={workspace}
-      onOpenSettings={() => {
-        patch({ settings: true })
-      }}
-      onRowContextMenu={(id, x, y) => {
-        patch({ rowMenu: { id, x, y }, recording: false })
-      }}
+      onOpenSettings={() => patch({ settings: true })}
+      onRowContextMenu={(id, x, y) => patch({ rowMenu: { id, x, y }, recording: false })}
     />
   )
 
@@ -93,7 +96,7 @@ export function WorkspaceShell({
         device={device}
         workspace={workspace}
         packageId={packageId}
-        onSelectPackage={setPackageId}
+        onSelectPackage={onSelectPackage}
         onNewTab={onNewTab}
         onContextMenu={(id, x, y) => {
           patch({ tabMenu: { id, x, y } })
@@ -237,22 +240,4 @@ function WorkspacePanes({
       onSplitFraction={workspace.setSplitFraction}
     />
   )
-}
-
-/**
- * The chosen app, and the rule that it does not survive a device change.
- *
- * Lifted out of the Apps pane because a `needsBundle` action needs the same
- * choice and so it cannot live inside one tab. Dropped on a new selection
- * because a package id means nothing on a different device — carrying it over
- * would silently target an app that may not be installed there.
- */
-function useSelectedPackage(
-  serial: string | null,
-): [string | null, (packageId: string | null) => void] {
-  const [packageId, setPackageId] = useState<string | null>(null)
-  useEffect(() => {
-    setPackageId(null)
-  }, [serial])
-  return [packageId, setPackageId]
 }

@@ -1,8 +1,9 @@
 import { DeviceBar } from "@/components/DeviceBar"
+import { useActiveOverrides } from "@/hooks/useActiveOverrides"
 import type { Session } from "@/hooks/useSession"
 import type { SidebarModeController } from "@/hooks/useSidebarMode"
 import type { WorkspaceController } from "@/hooks/useWorkspace"
-import { effectiveRunOnAll, showsRunAll } from "@/lib/targets"
+import { effectiveRunOnAll, showsAppPill, showsRunAll } from "@/lib/targets"
 import type { FeatureSummary } from "@/lib/wire"
 
 /**
@@ -18,13 +19,20 @@ export function DeviceBarHost({
   workspace,
   focusedFeature,
   sidebar,
+  packageId,
+  onSelectPackage,
 }: {
   session: Session
   workspace: WorkspaceController
   focusedFeature: FeatureSummary | null
   sidebar: SidebarModeController
+  packageId: string | null
+  onSelectPackage: (packageId: string | null) => void
 }) {
   const runOnAll = workspace.layout.runOnAll
+  // The bar is where the Mac shows this, and it is the one place on screen
+  // that outlives whichever tab set the override.
+  const overrides = useActiveOverrides(session.selected?.serial ?? null)
   return (
     <DeviceBar
       sidebarAutoHide={sidebar.mode.autoHide}
@@ -41,6 +49,13 @@ export function DeviceBarHost({
       // The Mac pins the device pill while a fan-out is on: the selection is
       // one of the targets, so changing it mid-run would change what ran.
       deviceLocked={effectiveRunOnAll(runOnAll, focusedFeature)}
+      showsAppPill={showsAppPill(focusedFeature)}
+      packageId={packageId}
+      onSelectPackage={onSelectPackage}
+      overrides={overrides.overrides}
+      overridesBusy={overrides.busy}
+      onResetOverride={overrides.reset}
+      onResetAllOverrides={overrides.resetAll}
     />
   )
 }

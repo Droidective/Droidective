@@ -104,3 +104,25 @@ export function summarise(outcomes: readonly Outcome[]): { ok: boolean; message:
     message: `Ran on ${String(outcomes.length - failed.length)} of ${String(outcomes.length)} — failed on ${names}`,
   }
 }
+
+/**
+ * Whether the bar should offer the app pill for the focused screen.
+ *
+ * `AppsExplorerView`'s `bundlePickerVisible`, rule for rule. A `needsBundle`
+ * feature obviously needs one; custom commands may carry `{bundleId}`, deep
+ * links are saved per app on the React Native hub, and Performance samples one.
+ *
+ * **Logcat is deliberately excluded**, and that is the part worth keeping: it
+ * has its own app bar with the same two ways to answer, and the Mac's note says
+ * showing both pickers confused people. Two controls for one choice is worse
+ * than one in the wrong place.
+ */
+export function showsAppPill(feature: FeatureSummary | null): boolean {
+  if (feature === null || feature.id === "logcat") return false
+  return (
+    feature.needsBundle ||
+    feature.id === "custom-commands" ||
+    feature.id === "performance" ||
+    feature.id === "react-native"
+  )
+}

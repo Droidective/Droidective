@@ -25,26 +25,27 @@ STATE
   a while, so recompute rather than trust it: catalogFeatureIDs filtered to
   view/system, against the desktop pane router.
 
-  Landed most recently (check the PRs merged before assuming):
-    - The Command Log, the screenshot editor, the video editor, Send Text
-      snippets and the pull progress strip (#356-#360)
-    - The Mac gained the port's richer pull strip: cancel, a byte count, and a
-      partial file cleaned up (#361). The port is the one that had it first.
-    - The parity tracker became trustworthy (#362): the generator no longer
-      emits Swift string interpolations as unmatchable items, and it now
-      PRESERVES TICKS across a regenerate — before that, auditing was erased by
-      the next `generate-parity-tracker.py` run.
-    - Reactotron: the reverse-tunnel button moved into the toolbar, where it is
-      reachable while a client is connected (#363); the daemon relay learned to
-      SEND to a client (#364); and **all four of its views are now ported** —
-      State (#365), REPL (#367), custom Commands (#368). The picker is
-      Timeline / Commands / State / REPL, in the Mac's order.
+  THE AUDIT IS THE MODE OF WORK, and it stands at 313 of 329. The per-feature
+  checklists in `docs/desktop-parity.md` are it. A tick means the affordance
+  was found in desktop/src *and read in place*.
 
-  THE AUDIT IS THE CURRENT MODE OF WORK. `docs/desktop-parity.md`'s per-feature
-  checklists are it. A tick means the affordance was found in desktop/src *and
-  read in place*. Two passes are done — the Connection group, and Reactotron.
-  Each found real defects, not just wording; see "The audit, and what it has
-  covered" in the tracker for what is left and how big each piece is.
+  "What the last 16 are" in the tracker says what remains and why most of it
+  should never tick. The short version: 3 out of scope, 2 need hardware this
+  machine lacks, 9 are one subsystem (scrcpy's audio stream), 2 are deliberate
+  divergences where the Mac's wording would be inaccurate here.
+
+  Landed most recently (check the merged PRs before assuming):
+    - #380-#383 closed the audit's buildable gaps in bulk — decompile find,
+      images, exports, unsigned APKs, terminal groups.
+    - #384 took it from 292 to 313: the Mac's `AlertDialog` (one OK, Return
+      dismisses) and with it Reactotron's disconnect alert and intro sheet and
+      API Testing's import/export failures; Custom Commands' script picker and
+      `Added`; an `InstalledAppsPicker`; APK Studio's rebuilt result row;
+      Apps' Explore-files sheet, Pull APK and the whole Manage section
+      (`/v1/apps/lifecycle` over ADBKit's `SystemAppsService`, which the daemon
+      had never exposed); Simulate's `Reset all overrides` (which needed
+      `/v1/overrides/active` first); the mirror's ⋯ menu with Show touches;
+      `Arrange Mirror Windows`; and the terminal strip's drag.
 
 READ FIRST
   docs/desktop-parity.md — THE TRACKER. Read "Status today" and then the
@@ -81,9 +82,21 @@ THE FRAME BUG IS FIXED — and it was two bugs, neither as described
   socket settled it in minutes, and the two scripts that did it are the way to
   check anything like it again.
 
-WHAT IS LEFT, roughly in the tracker's order
-  - START HERE: the JS Console (14/24 on the tracker), the other half of the RN
-    workflow and the largest screen left.
+WHAT IS LEFT, roughly by value
+  - scrcpy's AUDIO STREAM is the biggest single piece: nine of the sixteen
+    remaining audit items are this one feature. The daemon's transport already
+    opens the audio socket and `ScrcpyServerParams` already has `audio` and
+    `audioSource`, but nothing requests it, nothing forwards the frames, and
+    nothing decodes them — that last part is a WebCodecs `AudioDecoder` and a
+    Web Audio graph in the page. Four layers, and only honestly verifiable
+    against a real device. When it lands, the mirror's ⋯ tooltip goes back to
+    the Mac's "Audio and touch options" from the "Touch options" it says today.
+  - WINDOWS HAS NO RUNTIME COVERAGE, and this is the biggest exposure on the
+    list even though it is not a feature. `build-windows` compiles the app;
+    nothing launches it. `scripts/smoke-desktop-windows.ps1` exists but fires
+    only on beta tags. `desktop-linux-smoke` found the app unusable three ways
+    over on its first run — that is the class of bug Windows is currently
+    blind to.
   - The welcome tour (backlog 22). The Mac's demo stage plays recordings of the
     *Mac* app, which would be the wrong chrome here, so the six drawn fallbacks
     are what to follow.
@@ -100,8 +113,11 @@ WHAT IS LEFT, roughly in the tracker's order
     37 dropped Bonjour and openscreen ignores same-host advertisements, so the
     last leg needs a physical phone.
   - `frida-console`, which needs a rooted device.
-  - The installed-apps picker and bundle manager; the overrides pill; the
-    install inbox; the self-metrics overlay.
+  - The BUNDLE MANAGER is the last half of a pair: `InstalledAppsPicker` and
+    the device bar's app pill are built, so what is missing is the *store* —
+    nicknamed packages, and the `Add manually / manage…` item that both the
+    pill and Logcat's app bar leave out because there is nothing to manage.
+  - The install inbox; the self-metrics overlay.
   - Inside screens: the File Explorer's keyboard navigation and clipboard keys,
     Install App's live stage line, Memory Usage pausing when its tab is hidden.
 
@@ -117,8 +133,27 @@ EVERY FEATURE IS FOUR LAYERS
 
 VERIFY
   make desktop-test          # tsc + oxlint + vitest + cargo fmt/clippy/test
-  cd droidectived && swift test
-  cd ADBKit && swift test
+  make verify                # tiers 0-1: warnings-as-errors + all four bundles
+  make test-linux            # the port gate: the same suite on Linux
+
+  The whole cross-platform ladder, all of which has been run green at least
+  once (2025-09-22) — times are for a warm cache:
+    make verify              ~2 min
+    make test-linux          ~4 min   (container system start first, once/boot)
+    make test-emulator       ~1 min   (needs a device; see the disk note below)
+    make test-smoke          ~2 min   (the Mac app actually launches)
+    make desktop-linux       ~50 min cold, minutes warm — builds the .deb in a
+                             container. The AppImage step fails locally on
+                             `linuxdeploy`; the .deb, which is what the smoke
+                             installs, builds fine.
+    ./scripts/smoke-desktop-linux.sh <deb>   ~4 min — installs into a bare
+                             ubuntu:24.04, drives the palette under Xvfb, and
+                             photographs the framebuffer. Every check is fatal.
+
+  test-emulator needs ROOM: `AppBundleInstallLiveTests` installs a second copy
+  of an app, and a 6 GB AVD sitting at 96% fails it with the device's own
+  "Requested internal only, but not enough space". Grow
+  disk.dataPartition.size in ~/.android/avd/<name>.avd/config.ini and restart.
 
   Run it for real (rebuild the sidecar after ANY daemon change):
     export PATH="$HOME/.cargo/bin:$PATH"
@@ -161,6 +196,18 @@ DRIVING THE UI — read this before planning to screenshot anything
   What works instead, and is better anyway:
     - component tests (@testing-library/react is already a dependency, and
       `NetspeedPane.test.tsx` is the worked example) for anything on screen
+    - the daemon end to end, which is the most reliable thing here and was
+      what proved `/v1/apps/lifecycle`, `/v1/overrides/*` and the mirror
+      stream against a live emulator. Start one yourself rather than hunting
+      the app's:
+        droidectived/.build/out/Products/Debug/droidectived --port 0 \
+          --token-file /tmp/tok    # prints "listening 127.0.0.1:<port>"
+      then POST with `Authorization: Bearer $(cat /tmp/tok)`. For the stream
+      socket make a venv (`python3 -m venv`; pip is externally managed here)
+      and install `websockets` — one subscribe proved mirror frames of 129 KB
+      and logcat frames of 149 KB arrive intact, which is the 16 KiB frame bug
+      staying fixed. ROUND-TRIP anything you change on a device and check the
+      device itself afterwards, not the daemon's own read.
     - curl against the running app's own daemon for routes: read the port with
       `lsof -nP -iTCP -sTCP:LISTEN -a -p $(pgrep -f 'droidectived --port')` and
       the token from
