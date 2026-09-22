@@ -1,4 +1,6 @@
 import { useState } from "react"
+import { AlertDialog } from "@/components/AlertDialog"
+import { ReactotronIntroSheet } from "@/components/ReactotronIntroSheet"
 import {
   ReactotronCommandsPane,
   ReactotronReplPane,
@@ -11,6 +13,8 @@ import {
 } from "@/components/reactotron"
 import { useReactotron } from "@/hooks/useReactotron"
 import { useReactotronActions } from "@/hooks/useReactotronActions"
+import { useDisconnectAlert } from "@/hooks/useDisconnectAlert"
+import { hasSeen, markSeen } from "@/lib/seen"
 import type { Device } from "@/lib/wire"
 
 /**
@@ -23,9 +27,11 @@ import type { Device } from "@/lib/wire"
  *
  * Mounting subscribes, which is what starts the relay; unmounting stops it.
  */
-export function ReactotronPane({ device }: { device: Device | null }) {
+export function ReactotronPane({ device, active }: { device: Device | null; active: boolean }) {
   const feed = useReactotron()
   const [view, setView] = useState<ReactotronView>("timeline")
+  const [intro, setIntro] = useState(() => !hasSeen(globalThis.localStorage, INTRO))
+  const disconnected = useDisconnectAlert(device, active)
 
   const { timeline } = feed
   // The export and the copy-all act on the whole timeline rather than one
@@ -61,6 +67,24 @@ export function ReactotronPane({ device }: { device: Device | null }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-bg-root">
+      {intro && (
+        <ReactotronIntroSheet
+          onDismiss={() => {
+            markSeen(globalThis.localStorage, INTRO)
+            setIntro(false)
+          }}
+        />
+      )}
+      {disconnected.showing && (
+        <AlertDialog
+          title="Device disconnected"
+          message={
+            "Reactotron keeps listening on :9090 and the timeline stays as it is. " +
+            "Reconnect a device or start an emulator to keep receiving events."
+          }
+          onDismiss={disconnected.dismiss}
+        />
+      )}
       <ReactotronViewPicker view={view} onView={setView} />
       {view === "state" ? (
         <ReactotronStatePane session={state} />
@@ -77,6 +101,7 @@ export function ReactotronPane({ device }: { device: Device | null }) {
 
 type ReactotronView = "timeline" | "commands" | "state" | "repl"
 
+const INTRO = "reactotron-intro"
 function ReactotronViewPicker({
   view,
   onView,

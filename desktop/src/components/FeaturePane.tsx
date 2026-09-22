@@ -235,7 +235,7 @@ function hostPane({ id, active, device, packageId, onOpen }: FeaturePaneProps) {
     case "terminal":
       return <TerminalPane serial={device?.serial ?? null} />
     case "reactotron":
-      return <ReactotronPane device={device} />
+      return <ReactotronPane device={device} active={active} />
     case "js-console":
       // Metro is a process on this machine, so the console connects with no
       // device at all; the selection only decides which device gets the

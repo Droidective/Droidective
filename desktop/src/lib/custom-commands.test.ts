@@ -16,11 +16,13 @@ import {
   inferKind,
   isComplete,
   needsBundle,
+  presetAdded,
   removed,
   toCommand,
   upserted,
+  withScript,
 } from "@/lib/custom-commands"
-import type { CustomCommand } from "@/lib/wire"
+import type { CommandPreset, CustomCommand } from "@/lib/wire"
 
 describe("which runner a line goes through", () => {
   it("routes a leading adb token to the adb runner and strips it", () => {
@@ -160,5 +162,39 @@ describe("the list transforms the three verbs are", () => {
   it("removes by id", () => {
     expect(removed([one, two], "1").map((command) => command.id)).toEqual(["2"])
     expect(removed([one], "absent")).toHaveLength(1)
+  })
+})
+
+describe("withScript", () => {
+  it("leads with the path and keeps what was typed as arguments", () => {
+    expect(withScript("/opt/bin/report", "--verbose")).toBe("'/opt/bin/report' --verbose")
+  })
+
+  it("is just the path when nothing was typed", () => {
+    expect(withScript("/opt/bin/report", "")).toBe("'/opt/bin/report'")
+    expect(withScript("/opt/bin/report", "   ")).toBe("'/opt/bin/report'")
+  })
+
+  it("quotes a path the shell would otherwise read", () => {
+    // The line goes through a login shell. An unquoted `$` or backtick in a
+    // path expands, and the command runs against something else entirely.
+    expect(withScript("/tmp/my $HOME/run me.sh", "")).toBe(String.raw`'/tmp/my $HOME/run me.sh'`)
+    expect(withScript("/tmp/it's here.sh", "")).toBe(String.raw`'/tmp/it'\''s here.sh'`)
+  })
+})
+
+describe("presetAdded", () => {
+  const preset = { name: "Restart app", command: "shell am force-stop x", detail: "" } as CommandPreset
+
+  it("matches by name, not by command", () => {
+    // Adding a preset opens it for editing, so the saved copy has usually
+    // diverged by the time this list is looked at again.
+    const saved = [{ name: "Restart app", command: "shell am force-stop y" } as CustomCommand]
+    expect(presetAdded(saved, preset)).toBe(true)
+  })
+
+  it("is false for a list without it", () => {
+    expect(presetAdded([], preset)).toBe(false)
+    expect(presetAdded([{ name: "Something else" } as CustomCommand], preset)).toBe(false)
   })
 })

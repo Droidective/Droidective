@@ -2175,7 +2175,7 @@ job, and the checklist now says which.
 - **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `ReactotronView` — `App/Sources/FeatureDetail/Views/ReactotronView.swift`
 - **Must replicate**
-  - [ ] button: OK
+  - [x] button: OK
   - [x] button: Retry
   - [x] button: Add
   - [x] button: Evaluate
@@ -2194,7 +2194,7 @@ job, and the checklist now says which.
   - [x] button: Restore
   - [x] button: Copy value
   - [x] button: Send
-  - [ ] button: Got it
+  - [x] button: Got it
   - [x] button: Clear Data & Restart
   - [x] picker: View
   - [x] picker: App
@@ -2226,8 +2226,8 @@ job, and the checklist now says which.
   - [x] tooltip: Delete this snapshot
   - [x] tooltip: Reveal in the tree
   - [x] menu: right-click context menu
-  - [ ] shortcut: .cancelAction
-  - [ ] shortcut: .defaultAction
+  - [x] shortcut: .cancelAction
+  - [x] shortcut: .defaultAction
   - [x] shortcut: "c", modifiers: .command
   - [x] export: save/export to a file
 
@@ -2678,7 +2678,7 @@ job, and the checklist now says which.
 - **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `ApiClientView` — `App/Sources/FeatureDetail/Views/ApiClient/ApiClientView.swift`
 - **Must replicate**
-  - [ ] button: OK
+  - [x] button: OK
   - [x] button: Discard and Start New
   - [x] button: Save First…
   - [x] button: Cancel
@@ -2718,10 +2718,10 @@ job, and the checklist now says which.
   - [x] label: Presets
   - [x] label: New
   - [x] label: Delete …
-  - [ ] label: Added
-  - [ ] tooltip: Choose a script or executable to run
-  - [ ] shortcut: .cancelAction
-  - [ ] shortcut: .return, modifiers: .command
+  - [x] label: Added
+  - [x] tooltip: Choose a script or executable to run
+  - [x] shortcut: .cancelAction
+  - [x] shortcut: .return, modifiers: .command
 
 #### `terminal` — Terminal  ·  🟡 partial
 > Real shell tabs with the device on ANDROID_SERIAL

@@ -1262,11 +1262,14 @@ pub async fn pick_file(
     extensions: Vec<String>,
 ) -> Result<Option<String>, DaemonError> {
     let filters: Vec<&str> = extensions.iter().map(String::as_str).collect();
-    let picked = app
-        .dialog()
-        .file()
-        .add_filter(&label, &filters)
-        .blocking_pick_file();
+    let mut builder = app.dialog().file();
+    // No extensions means *any* file — a script to run, a multipart part. A
+    // filter with an empty extension list is not that: GTK's picker then shows
+    // nothing at all, and the dialog reads as an empty folder.
+    if !filters.is_empty() {
+        builder = builder.add_filter(&label, &filters);
+    }
+    let picked = builder.blocking_pick_file();
     let Some(picked) = picked else {
         return Ok(None);
     };
