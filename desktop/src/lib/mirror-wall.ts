@@ -31,6 +31,14 @@ export interface Quality {
   maxSize: number
   /** scrcpy `max_fps` — 0 leaves the device uncapped. */
   maxFps: number
+  /**
+   * Whether this session should carry the device's sound.
+   *
+   * Not part of what `quality(tiles:)` steps down — a wall tile's audio is a
+   * choice, not a consequence of how many tiles there are — so it is absent
+   * from the computed qualities and set by whoever is playing it.
+   */
+  audio?: boolean
 }
 
 /**

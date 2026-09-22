@@ -30,8 +30,14 @@ export type MirrorStep =
       deviceName: string | null
     }
   | DecodeStep
+  | AudioStep
   /** Nothing to do, and why — the reasons are distinct bugs if they persist. */
   | { do: "skip"; why: "unconfigured" | "awaiting-key" | "malformed" }
+
+/** Sound, once the format that describes it has arrived. */
+export type AudioStep =
+  | { do: "audio-configure"; sampleRate: number; channels: number }
+  | { do: "audio"; pcm: Uint8Array }
 
 /** One chunk to hand a configured decoder. */
 export interface DecodeStep {
@@ -99,6 +105,23 @@ export function stepMirror(
   gate: MirrorGate,
   frame: MirrorFrame,
 ): { gate: MirrorGate; step: MirrorStep } {
+  // Audio first, and it never touches the gate: the gate is about a *video*
+  // decoder, and a mirror whose sound arrives before its first keyframe is
+  // still a mirror waiting for a keyframe.
+  if (frame.kind === "audioConfig") {
+    if (typeof frame.sampleRate !== "number" || typeof frame.channels !== "number") {
+      return { gate, step: { do: "skip", why: "malformed" } }
+    }
+    return {
+      gate,
+      step: { do: "audio-configure", sampleRate: frame.sampleRate, channels: frame.channels },
+    }
+  }
+  if (frame.kind === "audio") {
+    const pcm = typeof frame.data === "string" ? decodeFrame(frame.data) : null
+    if (pcm === null) return { gate, step: { do: "skip", why: "malformed" } }
+    return { gate, step: { do: "audio", pcm } }
+  }
   if (frame.kind === "config") {
     if (
       typeof frame.codec !== "string" ||

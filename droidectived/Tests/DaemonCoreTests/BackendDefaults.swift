@@ -338,7 +338,9 @@ extension DaemonBackend {
 /// nothing honest for a stub to hand back. A test that means to exercise the
 /// topic overrides this; every other one is saying "not this".
 extension StreamSource {
-    func openMirror(serial: String, quality: MirrorQuality) async throws -> ScrcpySession {
+    func openMirror(
+        serial: String, quality: MirrorQuality, audio: Bool
+    ) async throws -> ScrcpySession {
         throw StubbedOut.notImplemented
     }
 

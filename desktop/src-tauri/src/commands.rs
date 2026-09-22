@@ -1210,6 +1210,7 @@ pub async fn watch_mirror(
     serial: String,
     max_size: Option<u32>,
     max_fps: Option<u32>,
+    audio: Option<bool>,
     on_event: Channel<StreamUpdate>,
 ) -> Result<i64, DaemonError> {
     let stream = supervisor.stream().await?;
@@ -1219,6 +1220,7 @@ pub async fn watch_mirror(
             serial: Some(serial),
             max_size,
             max_fps,
+            audio,
             ..StreamParams::default()
         }),
         forward(on_event),

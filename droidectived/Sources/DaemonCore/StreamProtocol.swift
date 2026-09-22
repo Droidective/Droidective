@@ -97,6 +97,15 @@ public enum StreamProtocol {
             /// not a size.
             public let columns: Int?
             public let rows: Int?
+            /// Whether a `mirror` subscription should carry the device's audio
+            /// as well as its screen.
+            ///
+            /// Asked for rather than always on: scrcpy captures one audio
+            /// stream per session, starting it costs a second socket and a
+            /// device-side encoder, and most mirrors are watched silently. A
+            /// wall of six tiles asking for audio it never plays would be six
+            /// encoders for nothing.
+            public let audio: Bool?
             /// scrcpy's `max_size` and `max_fps` for a `mirror` subscription.
             ///
             /// The client resolves these, because it is the one that knows how
@@ -120,7 +129,7 @@ public enum StreamProtocol {
                 serial: String? = nil, pid: Int? = nil,
                 packageId: String? = nil, processes: Bool? = nil,
                 data: String? = nil, columns: Int? = nil, rows: Int? = nil,
-                maxSize: Int? = nil, maxFps: Int? = nil,
+                maxSize: Int? = nil, maxFps: Int? = nil, audio: Bool? = nil,
                 path: String? = nil, destination: String? = nil, asRoot: Bool? = nil
             ) {
                 self.serial = serial
@@ -132,12 +141,17 @@ public enum StreamProtocol {
                 self.rows = rows
                 self.maxSize = maxSize
                 self.maxFps = maxFps
+                self.audio = audio
                 self.path = path
                 self.destination = destination
                 self.asRoot = asRoot
             }
 
             public var wantsProcesses: Bool { processes ?? false }
+
+            /// Whether this mirror subscription asked for sound. Absent means
+            /// no, so an older client gets exactly the stream it always got.
+            public var wantsAudio: Bool { audio ?? false }
 
             /// The decoded keystrokes, or nil if `data` is absent or not
             /// base64. One place decides, so validation and the write itself

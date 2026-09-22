@@ -1,17 +1,25 @@
 import { useCallback, useEffect, useState } from "react"
 
 import { useNotifications } from "@/hooks/useNotifications"
+import { FULL_QUALITY, type Quality } from "@/lib/mirror-wall"
 import { useWindows } from "@/hooks/useWindows"
 import { asDaemonError, writeDevSetting } from "@/lib/daemon"
 
 const SHOW_TOUCHES = "droidective.mirrorShowTouches"
+const STREAM_AUDIO = "droidective.mirrorStreamAudio"
 
 /**
  * The mirror's session options — the Mac's ⋯ menu.
  *
- * Only Show touches so far. Stream audio and Microphone are the same menu on
- * the Mac but a different subsystem here: scrcpy's audio stream is not carried
- * yet, and a toggle with nothing behind it is worse than its absence.
+ * Stream audio and Show touches. The Mac's third, Microphone, is the device's
+ * *own* mic as the captured source; scrcpy carries one audio stream per
+ * session, so it and Stream audio are mutually exclusive there. It is not
+ * offered here yet, and a toggle with nothing behind it is worse than its
+ * absence.
+ *
+ * **Stream audio restarts the mirror**, and the Mac's label says so, because
+ * scrcpy takes audio as a *start* option rather than something a live session
+ * can be asked for.
  *
  * Show touches is a *live settings write* on the device, not a scrcpy start
  * option — the same call Developer Options makes, which is why flipping it on
@@ -19,12 +27,24 @@ const SHOW_TOUCHES = "droidective.mirrorShowTouches"
  * (`mirrorShowTouches` on the Mac) and re-applied when the device changes, so
  * switching devices does not silently leave it off on the new one.
  */
-export function useMirrorOptions(serial: string | null): {
+export interface MirrorOptions {
+  /**
+   * What to hand `useMirror`: the single mirror's quality, carrying the audio
+   * choice. Here rather than at the call site so the two cannot disagree about
+   * whether sound was asked for.
+   */
+  quality: Quality
+  /** Whether the session carries the device's sound. Restarts it when flipped. */
+  streamAudio: boolean
+  setStreamAudio: (on: boolean) => void
   showTouches: boolean
   setShowTouches: (on: boolean) => void
-} {
+}
+
+export function useMirrorOptions(serial: string | null): MirrorOptions {
   const { show } = useNotifications()
   const [showTouches, setStored] = useState(() => readFlag(SHOW_TOUCHES))
+  const [streamAudio, setStreamAudio] = useState(() => readFlag(STREAM_AUDIO))
 
   const write = useCallback(
     (on: boolean) => {
@@ -44,6 +64,12 @@ export function useMirrorOptions(serial: string | null): {
   }, [showTouches, write])
 
   return {
+    quality: { ...FULL_QUALITY, audio: streamAudio },
+    streamAudio,
+    setStreamAudio: (on: boolean) => {
+      setStreamAudio(on)
+      writeFlag(STREAM_AUDIO, on)
+    },
     showTouches,
     setShowTouches: (on: boolean) => {
       setStored(on)
