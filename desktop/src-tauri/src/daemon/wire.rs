@@ -997,6 +997,33 @@ pub struct AppControlRequest {
     pub action: String,
 }
 
+/// One device-state override in effect, as `/v1/overrides/active` sends it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActiveOverride {
+    /// An `OverrideKind` raw value — "proxy", "layout", "battery", "demo",
+    /// "animation", "locale", "darkMode".
+    pub kind: String,
+    /// The daemon's own label for the kind, so this client does not keep a
+    /// second copy of the seven names.
+    pub label: String,
+    pub value: String,
+    #[serde(rename = "setAt")]
+    pub set_at: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OverridesResponse {
+    pub overrides: Vec<ActiveOverride>,
+}
+
+/// Clear one override, or every one of them when `kind` is absent.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OverrideResetRequest {
+    pub serial: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+}
+
 /// Disable / enable / remove-for-user / restore, as `/v1/apps/lifecycle`
 /// takes it. Exactly one field is set, which is what picks the verb; the
 /// daemon refuses a body that names both or neither.

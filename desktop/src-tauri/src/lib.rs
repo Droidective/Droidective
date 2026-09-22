@@ -171,6 +171,8 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         commands::list_apps,
         commands::control_app,
         commands::app_lifecycle,
+        commands::active_overrides,
+        commands::reset_overrides,
         commands::device_props,
         commands::root_status,
         commands::list_files,

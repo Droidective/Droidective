@@ -1,7 +1,10 @@
 import { useState } from "react"
 import { Button, Select, TextInput } from "@/components/Controls"
 import { HubColumn, HubSection, SwitchRow } from "@/components/Hub"
+import { Apply, Field, Slider } from "@/components/SimulateControls"
 import { NoDevice } from "@/components/screen"
+import { ResetOverridesRow } from "@/components/ResetOverridesRow"
+import { useActiveOverrides } from "@/hooks/useActiveOverrides"
 import { useHubAction, type HubActions } from "@/hooks/useHubAction"
 import { localeOptions } from "@/lib/hub-fields"
 import { TOGGLE_PARAM, type Device, type FeatureSummary } from "@/lib/wire"
@@ -14,14 +17,17 @@ import { TOGGLE_PARAM, type Device, type FeatureSummary } from "@/lib/wire"
  * route a generated form uses, so nothing here re-implements an action; the
  * gathered features stay searchable and hotkey-able.
  *
- * **Two things the Mac's screen has and this does not**, both named rather than
- * quietly missing. Its push-notification section is `simctl` against an iOS
+ * **One thing the Mac's screen has and this does not**, named rather than
+ * quietly missing: its push-notification section is `simctl` against an iOS
  * Simulator, which does not exist on Windows or Linux — the section is absent
  * rather than present and permanently broken, the same call the Emulators
- * screen made. And its "Reset all overrides" button reads `activeOverrides`,
- * the reconciled record of what has been overridden, which this app does not
- * keep: the two switches in Appearance therefore start off and say what they
- * will *apply* rather than what the device currently is.
+ * screen made.
+ *
+ * The two switches in Appearance still start off and say what they will
+ * *apply* rather than what the device currently is. `activeOverrides` now
+ * answers what has been overridden — which is what the reset row reads — but
+ * it covers the kinds this app set, not every possible device state, so a
+ * switch positioned from it would be right more often than it was honest.
  *
  * The whole screen is keyed on the device, so a half-typed density or proxy
  * cannot follow the selection to the next one — the Mac clears the same fields
@@ -34,12 +40,20 @@ export function SimulateHubPane({
   device: Device | null
   features: FeatureSummary[]
 }) {
-  const actions = useHubAction(device)
+  const overrides = useActiveOverrides(device?.serial ?? null)
+  const actions = useHubAction(device, overrides.refresh)
 
   if (!device) return <NoDevice feature="simulate" title="Simulate" />
 
   return (
     <HubColumn>
+      {overrides.overrides.length > 0 && (
+        <ResetOverridesRow
+          overrides={overrides.overrides}
+          busy={overrides.busy}
+          onReset={overrides.resetAll}
+        />
+      )}
       <BatterySection key={`battery-${device.serial}`} actions={actions} />
       <AppearanceSection key={`appearance-${device.serial}`} actions={actions} />
       <LayoutSection key={`layout-${device.serial}`} actions={actions} />
@@ -218,76 +232,5 @@ function ProxySection({ actions }: { actions: HubActions }) {
         </Button>
       </div>
     </HubSection>
-  )
-}
-
-/** SwiftUI's `Slider` with the value read out above it, as every section does. */
-function Slider({
-  label,
-  ariaLabel,
-  min,
-  max,
-  step,
-  value,
-  onChange,
-}: {
-  label: string
-  ariaLabel: string
-  min: number
-  max: number
-  step: number
-  value: number
-  onChange: (value: number) => void
-}) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <span className="text-text-primary">{label}</span>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        aria-label={ariaLabel}
-        onChange={(event) => {
-          onChange(Number(event.target.value))
-        }}
-        className="accent-accent"
-      />
-    </div>
-  )
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <span className="text-[11.5px] text-text-tertiary">{label}</span>
-      {children}
-    </div>
-  )
-}
-
-/** The section's own Apply, disabled only while its own action is in flight. */
-function Apply({
-  actions,
-  featureId,
-  fields,
-}: {
-  actions: HubActions
-  featureId: string
-  fields: Parameters<HubActions["run"]>[1]
-}) {
-  return (
-    <div>
-      <Button
-        tone="primary"
-        disabled={actions.runningId === featureId}
-        onClick={() => {
-          actions.run(featureId, fields)
-        }}
-      >
-        Apply
-      </Button>
-    </div>
   )
 }

@@ -5,6 +5,12 @@ public struct ActiveOverride: Sendable, Equatable, Identifiable {
     public let value: String
     public let setAt: Double
 
+    public init(kind: OverrideKind, value: String, setAt: Double) {
+        self.kind = kind
+        self.value = value
+        self.setAt = setAt
+    }
+
     public var id: String { kind.rawValue }
 }
 

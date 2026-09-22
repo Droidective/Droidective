@@ -181,6 +181,7 @@ export {
   watchPull,
   watchReactotron,
 } from "@/lib/daemon-stream"
+export { activeOverrides, resetOverrides } from "@/lib/daemon-overrides"
 export {
   appInfo,
   connectWireless,

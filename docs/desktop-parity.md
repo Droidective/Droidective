@@ -2403,7 +2403,7 @@ job, and the checklist now says which.
 - **Note** A pane is routed for it. The checklist below is the Mac's affordances, to audit against — not a list of known gaps.
 - **macOS view** `SimulateView` — `App/Sources/FeatureDetail/Views/SimulateView.swift`
 - **Must replicate**
-  - [ ] button: Reset all overrides
+  - [x] button: Reset all overrides
   - [x] button: Apply
   - [x] button: Send
   - [x] button: Set

@@ -29,14 +29,14 @@ use crate::daemon::wire::{
     FeatureSummary, FileInfoRequest, FileInfoResponse, FileOperationRequest, FilePullRequest,
     FilePullResponse, FilesListRequest, FilesListResponse, ForegroundResponse, InstallRequest,
     InstallResponse, LaunchResponse, LogcatPidResponse, ManagedTools, MemInfoResponse,
-    PairResponse, PermissionWriteRequest, PermissionsResponse, ReactotronReverseRequest,
-    ReactotronReverseResponse, ReactotronSendRequest, ReactotronSendResponse,
-    RestrictionWriteRequest, RestrictionsResponse, RolesResponse, RootStatusResponse, RunRequest,
-    RunResponse, SandboxRequest, SandboxResponse, ScreenshotCaptureRequest,
-    ScreenshotCaptureResponse, Snippet, SnippetExpandRequest, SnippetExpandResponse,
-    SnippetWriteRequest, StreamParams, ToolInstallRequest, ToolInstallResponse, ToolsResponse,
-    VideoExportOptions, VideoExportRequest, VideoProxyRequest, WifiResponse, WifiWriteRequest,
-    WirelessActionRequest,
+    OverrideResetRequest, OverridesResponse, PairResponse, PermissionWriteRequest,
+    PermissionsResponse, ReactotronReverseRequest, ReactotronReverseResponse,
+    ReactotronSendRequest, ReactotronSendResponse, RestrictionWriteRequest, RestrictionsResponse,
+    RolesResponse, RootStatusResponse, RunRequest, RunResponse, SandboxRequest, SandboxResponse,
+    ScreenshotCaptureRequest, ScreenshotCaptureResponse, Snippet, SnippetExpandRequest,
+    SnippetExpandResponse, SnippetWriteRequest, StreamParams, ToolInstallRequest,
+    ToolInstallResponse, ToolsResponse, VideoExportOptions, VideoExportRequest, VideoProxyRequest,
+    WifiResponse, WifiWriteRequest, WirelessActionRequest,
 };
 use crate::daemon::{DaemonStatus, Supervisor};
 use crate::error::DaemonError;
@@ -130,6 +130,29 @@ pub async fn list_apps(
     serial: String,
 ) -> Result<AppsResponse, DaemonError> {
     supervisor.client().await?.list_apps(serial).await
+}
+
+/// The device-state overrides in effect, reconciled against the device.
+#[tauri::command]
+pub async fn active_overrides(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+) -> Result<OverridesResponse, DaemonError> {
+    supervisor.client().await?.active_overrides(serial).await
+}
+
+/// Clear one override, or all of them when `kind` is absent.
+#[tauri::command]
+pub async fn reset_overrides(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    kind: Option<String>,
+) -> Result<RunResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .reset_overrides(&OverrideResetRequest { serial, kind })
+        .await
 }
 
 /// Disable, enable, remove for this user, or restore one package.

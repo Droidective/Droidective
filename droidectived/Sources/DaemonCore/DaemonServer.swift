@@ -20,6 +20,8 @@ public protocol DaemonBackend: Sendable {
     /// Every installed app on the device, user and system.
     func listApps(serial: String) async throws -> [AppListing]
     func appLifecycles(serial: String) async -> [String: AppLifecycle]
+    func activeOverrides(serial: String) async throws -> [ADBKit.ActiveOverride]
+    func resetOverrides(serial: String, kind: OverrideKind?) async throws
     func setAppDisabled(serial: String, packageId: String, _ disabled: Bool) async throws -> AdbResult
     func setAppRemoved(serial: String, packageId: String, _ removed: Bool) async throws -> AdbResult
     /// The package of the frontmost activity, or nil when there is nothing
@@ -377,6 +379,21 @@ public struct LiveBackend: DaemonBackend {
 
     public func listApps(serial: String) async throws -> [AppListing] {
         try await AppsExplorerService(client: client).listAll(serial: serial)
+    }
+
+    /// The overrides actually in effect, read back from the device where it
+    /// can be — a proxy cleared in Settings is not an override any more.
+    public func activeOverrides(serial: String) async throws -> [ADBKit.ActiveOverride] {
+        try await engine.overrides.active(serial: serial)
+    }
+
+    /// Clear one override, or every one of them.
+    public func resetOverrides(serial: String, kind: OverrideKind?) async throws {
+        if let kind {
+            try await engine.overrides.reset(serial: serial, kind: kind)
+        } else {
+            try await engine.overrides.resetAll(serial: serial)
+        }
     }
 
     /// Every package's disabled / removed-for-user state, keyed by package id.
@@ -1717,6 +1734,13 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
         case .appsLifecycle:
             return Self.answer(
                 await AppRoutes.lifecycle(body: Data(body.readableBytesView), backend: backend))
+
+        case .overridesActive:
+            return Self.answer(
+                await OverrideRoutes.active(body: Data(body.readableBytesView), backend: backend))
+        case .overridesReset:
+            return Self.answer(
+                await OverrideRoutes.reset(body: Data(body.readableBytesView), backend: backend))
 
         case .commandLogList:
             return Self.answer(await CommandLogRoutes.list(backend: backend))

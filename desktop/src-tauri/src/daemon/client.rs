@@ -18,15 +18,16 @@ use crate::daemon::wire::{
     FileOperationRequest, FilePullRequest, FilePullResponse, FilesListRequest, FilesListResponse,
     ForegroundResponse, InstallFormatsResponse, InstallRequest, InstallResponse, LaunchResponse,
     LogcatPidResponse, ManagedToolRequest, ManagedTools, ManagedToolsListResponse, MemInfoResponse,
-    PairResponse, PermissionWriteRequest, PermissionsResponse, ReactotronReverseRequest,
-    ReactotronReverseResponse, ReactotronSendRequest, ReactotronSendResponse, RecordOptions,
-    RecordStartRequest, RecordStatusResponse, RecordStoppedResponse, RestrictionWriteRequest,
-    RestrictionsResponse, RolesResponse, RootStatusResponse, RunRequest, RunResponse,
-    SandboxRequest, SandboxResponse, ScreenshotCaptureRequest, ScreenshotCaptureResponse,
-    SnippetExpandRequest, SnippetExpandResponse, SnippetWriteRequest, SnippetsResponse,
-    ToolInstallRequest, ToolInstallResponse, ToolsResponse, VideoExportRequest,
-    VideoFormatsResponse, VideoPathResponse, VideoProxyRequest, VideoRemoveRequest, WifiResponse,
-    WifiWriteRequest, WirelessActionRequest,
+    OverrideResetRequest, OverridesResponse, PairResponse, PermissionWriteRequest,
+    PermissionsResponse, ReactotronReverseRequest, ReactotronReverseResponse,
+    ReactotronSendRequest, ReactotronSendResponse, RecordOptions, RecordStartRequest,
+    RecordStatusResponse, RecordStoppedResponse, RestrictionWriteRequest, RestrictionsResponse,
+    RolesResponse, RootStatusResponse, RunRequest, RunResponse, SandboxRequest, SandboxResponse,
+    ScreenshotCaptureRequest, ScreenshotCaptureResponse, SnippetExpandRequest,
+    SnippetExpandResponse, SnippetWriteRequest, SnippetsResponse, ToolInstallRequest,
+    ToolInstallResponse, ToolsResponse, VideoExportRequest, VideoFormatsResponse,
+    VideoPathResponse, VideoProxyRequest, VideoRemoveRequest, WifiResponse, WifiWriteRequest,
+    WirelessActionRequest,
 };
 use crate::error::DaemonError;
 
@@ -87,6 +88,18 @@ impl DaemonClient {
         request: &AppControlRequest,
     ) -> Result<RunResponse, DaemonError> {
         self.post("/v1/apps/control", request).await
+    }
+
+    pub async fn active_overrides(&self, serial: String) -> Result<OverridesResponse, DaemonError> {
+        self.post("/v1/overrides/active", &AppsListRequest { serial })
+            .await
+    }
+
+    pub async fn reset_overrides(
+        &self,
+        request: &OverrideResetRequest,
+    ) -> Result<RunResponse, DaemonError> {
+        self.post("/v1/overrides/reset", request).await
     }
 
     pub async fn app_lifecycle(

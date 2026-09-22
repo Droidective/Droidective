@@ -25,6 +25,10 @@ extension DaemonBackend {
 
     func appLifecycles(serial: String) async -> [String: AppLifecycle] { [:] }
 
+    func activeOverrides(serial: String) async throws -> [ADBKit.ActiveOverride] { [] }
+
+    func resetOverrides(serial: String, kind: OverrideKind?) async throws {}
+
     func setAppDisabled(
         serial: String, packageId: String, _ disabled: Bool
     ) async throws -> AdbResult {
