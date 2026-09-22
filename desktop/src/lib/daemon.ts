@@ -3,7 +3,6 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event"
 
 import type { RoleCatalogue } from "@/lib/roles"
 import type {
-  AppsResponse,
   DaemonError,
   DaemonStatus,
   Device,
@@ -13,7 +12,6 @@ import type {
   FileOperation,
   FilePullResponse,
   FilesListResponse,
-  ForegroundResponse,
   RootStatusResponse,
   RunResponse,
 } from "@/lib/wire"
@@ -60,40 +58,6 @@ export function runAction(args: {
   fields?: Record<string, FieldValue>
 }): Promise<RunResponse> {
   return invoke<RunResponse>("run_action", { args })
-}
-
-export function listApps(serial: string): Promise<AppsResponse> {
-  return invoke<AppsResponse>("list_apps", { serial })
-}
-
-/** Everything `getprop` printed, as the daemon passed it through. */
-export function deviceProps(serial: string): Promise<{ properties: Record<string, string> }> {
-  return invoke<{ properties: Record<string, string> }>("device_props", { serial })
-}
-
-/** The frontmost app on the device, when there is one worth naming. */
-/**
- * The process id an app is running under, or null when it is not running.
- *
- * Null is an answer rather than a failure: an app whose log you opened before
- * launching it is the ordinary case, and the log waits for it.
- */
-export function logcatPid(serial: string, packageId: string): Promise<number | null> {
-  return invoke<{ pid: number | null }>("logcat_pid", { serial, packageId }).then(
-    (answer) => answer.pid ?? null,
-  )
-}
-
-export function foregroundApp(serial: string): Promise<ForegroundResponse> {
-  return invoke<ForegroundResponse>("foreground_app", { serial })
-}
-
-export function controlApp(args: {
-  serial: string
-  packageId: string
-  action: string
-}): Promise<RunResponse> {
-  return invoke<RunResponse>("control_app", args)
 }
 
 /** Whether this device gives a root shell, and the signals behind the verdict. */
@@ -168,6 +132,14 @@ export function asDaemonError(error: unknown): DaemonError {
 // The host capabilities, the stream subscriptions and the per-device settings
 // calls live next door, so this file stays inside its line budget;
 // `@/lib/daemon` remains the one import for all of them.
+export {
+  appLifecycle,
+  controlApp,
+  deviceProps,
+  foregroundApp,
+  listApps,
+  logcatPid,
+} from "@/lib/daemon-apps"
 export { expandSnippet, snippets, writeSnippet } from "@/lib/daemon-snippets"
 export {
   captureScreenshot,
@@ -209,6 +181,8 @@ export {
   watchPull,
   watchReactotron,
 } from "@/lib/daemon-stream"
+export { activeOverrides, resetOverrides } from "@/lib/daemon-overrides"
+export { mirrorWindowLayout, setWindowFrames } from "@/lib/daemon-windows"
 export {
   appInfo,
   connectWireless,

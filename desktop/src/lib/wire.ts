@@ -90,6 +90,13 @@ export interface AppSummary {
   displayName: string
   versionName: string | null
   isSystem: boolean
+  /** Disabled for this user — `pm disable-user`, reversible. */
+  disabled: boolean
+  /**
+   * Uninstalled for this user but still on the system image, so restorable.
+   * A package gone for good is not in the list at all.
+   */
+  removed: boolean
 }
 
 /** A verb the daemon accepts, with the runner's own destructive flag. */
@@ -271,3 +278,13 @@ export type * from "@/lib/wire-apk"
 export type * from "@/lib/wire-diagnostics"
 export type * from "@/lib/wire-settings"
 export type * from "@/lib/wire-stream"
+
+/** One device-state override in effect, as `/v1/overrides/active` sends it. */
+export interface ActiveOverride {
+  /** "proxy" | "layout" | "battery" | "demo" | "animation" | "locale" | "darkMode". */
+  kind: string
+  /** The daemon's own label, so this client keeps no second copy of the seven. */
+  label: string
+  value: string
+  setAt: number
+}

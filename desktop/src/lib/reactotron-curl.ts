@@ -9,14 +9,7 @@
  */
 
 import { compactJson, isJsonObject, type JsonValue } from "@/lib/json"
-
-/**
- * Wraps a value for `sh`, the way ADBKit's `shellQuote` does: single quotes,
- * with any embedded quote closed, escaped and reopened.
- */
-export function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", String.raw`'\''`)}'`
-}
+import { shellQuote } from "@/lib/shell"
 
 /** The text of a value as a header or a body carries it. */
 function rendered(value: JsonValue): string {

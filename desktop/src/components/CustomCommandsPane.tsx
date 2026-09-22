@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { LayoutGrid, Pencil, Pin, Play, Trash2 } from "lucide-react"
+import { Check, LayoutGrid, Pencil, Pin, Play, Trash2 } from "lucide-react"
 
 import { CustomCommandEditor } from "@/components/CustomCommandEditor"
 import { HubColumn, HubSection } from "@/components/Hub"
@@ -9,12 +9,13 @@ import {
   draftFromPreset,
   draftOf,
   emptyDraft,
+  presetAdded,
   removed,
   toCommand,
   upserted,
   type Draft,
 } from "@/lib/custom-commands"
-import type { CustomCommand, Device } from "@/lib/wire"
+import type { CommandPreset, CustomCommand, Device } from "@/lib/wire"
 
 /**
  * Custom Commands — your own adb and shell actions, saved.
@@ -98,22 +99,61 @@ export function CustomCommandsPane({
           accessory={<HeaderButton label="Done" onClick={() => setShowPresets(false)} />}
         >
           {store.presets.map((preset) => (
-            <button
+            <PresetRow
               key={preset.name}
-              type="button"
-              onClick={() => {
+              preset={preset}
+              added={presetAdded(store.commands, preset)}
+              onAdd={() => {
                 setDraft(draftFromPreset(preset))
                 setShowPresets(false)
               }}
-              className="flex flex-col items-start gap-0.5 rounded p-1.5 text-left hover:bg-bg-hover"
-            >
-              <span className="text-text-primary">{preset.name}</span>
-              <span className="text-[11.5px] text-text-tertiary">{preset.detail}</span>
-            </button>
+            />
           ))}
         </HubSection>
       )}
     </HubColumn>
+  )
+}
+
+/**
+ * One preset, and whether it is already saved.
+ *
+ * The Mac shows "Added" with a check in place of the Add button for a preset
+ * whose name is in the list — so a library someone has been through does not
+ * invite them to add the same thing twice. Matched by name, for the reason
+ * `presetAdded` gives.
+ */
+function PresetRow({
+  preset,
+  added,
+  onAdd,
+}: {
+  preset: CommandPreset
+  added: boolean
+  onAdd: () => void
+}) {
+  return (
+    <div className="flex items-start gap-2.5 rounded p-1.5">
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="text-text-primary">{preset.name}</span>
+        <span className="font-mono text-[11.5px] text-text-tertiary">adb {preset.command}</span>
+        <span className="text-[11.5px] text-text-tertiary">{preset.detail}</span>
+      </span>
+      {added ? (
+        <span className="flex shrink-0 items-center gap-1 text-[11.5px] text-text-tertiary">
+          <Check size={12} />
+          Added
+        </span>
+      ) : (
+        <button
+          type="button"
+          onClick={onAdd}
+          className="shrink-0 rounded border border-border-subtle px-2 py-0.5 text-[11.5px] text-text-primary hover:bg-bg-hover"
+        >
+          Add
+        </button>
+      )}
+    </div>
   )
 }
 

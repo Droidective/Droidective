@@ -8,6 +8,8 @@ function app(packageId: string, overrides: Partial<AppSummary> = {}): AppSummary
     displayName: packageId.split(".").at(-1) ?? packageId,
     versionName: "1.0",
     isSystem: false,
+    disabled: false,
+    removed: false,
     ...overrides,
   }
 }

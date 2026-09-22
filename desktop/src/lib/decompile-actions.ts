@@ -124,18 +124,24 @@ export async function runSearch(
   }
 }
 
-export async function runRebuild(root: string, path: string | null, show: Show): Promise<void> {
+export async function runRebuild(
+  root: string,
+  path: string | null,
+  show: Show,
+): Promise<string | null> {
   try {
     const folder = await pickFolder()
-    if (folder === null) return
+    if (folder === null) return null
     const base = (path ?? "app").split("/").pop() ?? "app"
     const name = base.replace(/\.apk$/iu, "")
     const answer = await rebuildDecompiled(root, root, `${folder}/${name}-rebuilt.apk`)
     // Unsigned by design: apktool's output will not install until it is signed,
     // and APK Sign is the screen that does that.
     show({ message: "Rebuilt. Sign it before installing.", revealPath: answer.output, ok: true })
+    return answer.output
   } catch (thrown) {
     show({ message: withDetail(asDaemonError(thrown)), ok: false })
+    return null
   }
 }
 

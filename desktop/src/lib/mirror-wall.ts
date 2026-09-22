@@ -159,3 +159,42 @@ export function moved(selection: string[], from: number, to: number): string[] {
 function capped(serials: string[]): string[] {
   return serials.slice(0, MAXIMUM_DEVICES)
 }
+
+/** A window's place on screen, in the screen's own pixels. */
+export interface WindowFrame {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/**
+ * Tile `count` pop-out mirror windows across a work area — the Mac's
+ * `MirrorWall.windowFrames`.
+ *
+ * The same grid the wall itself lays out, and the same column rule, so
+ * arranging the windows produces the picture the wall would have drawn.
+ *
+ * **One difference from the Mac, and it is the coordinate system.** AppKit's
+ * screen origin is bottom-left, so its version counts rows up from the bottom.
+ * Windows and Linux put the origin at the top-left, so rows count down — the
+ * first row is at `area.y`. Porting the arithmetic unchanged would put row one
+ * at the bottom of the screen.
+ */
+export function windowFrames(area: WindowFrame, count: number): WindowFrame[] {
+  if (count <= 0 || area.width <= 0 || area.height <= 0) return []
+  const columns = Math.max(1, Math.min(autoColumns(area.width, count), count))
+  const rows = Math.ceil(count / columns)
+  const width = area.width / columns
+  const height = area.height / rows
+  const frames: WindowFrame[] = []
+  for (let index = 0; index < count; index += 1) {
+    frames.push({
+      x: area.x + (index % columns) * width,
+      y: area.y + Math.floor(index / columns) * height,
+      width,
+      height,
+    })
+  }
+  return frames
+}

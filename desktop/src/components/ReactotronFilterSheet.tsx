@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Check } from "lucide-react"
 import { Button } from "@/components/Controls"
 import { ReactotronApiFilters } from "@/components/ReactotronApiFilters"
@@ -31,15 +31,16 @@ export function ReactotronFilterSheet({
   const [method, setMethod] = useState<string | null>(filter.method)
   const [status, setStatus] = useState<StatusClass | null>(filter.status)
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onDismiss()
-    }
-    globalThis.addEventListener("keydown", onKeyDown)
-    return () => {
-      globalThis.removeEventListener("keydown", onKeyDown)
-    }
-  }, [onDismiss])
+  // Read through a ref so the listener does not have to be rebuilt on every
+  // toggle — it would otherwise re-register on each keystroke of the sheet.
+  const applyNow = useRef(() => {
+    onApply({ ...filter, hiddenKinds: hidden, method, status })
+  })
+  applyNow.current = () => {
+    onApply({ ...filter, hiddenKinds: hidden, method, status })
+  }
+
+  useSheetKeys(onDismiss, applyNow)
 
   const toggle = (kind: EventKind) => {
     setHidden((current) =>
@@ -201,4 +202,29 @@ function KindChip({
       {label}
     </button>
   )
+}
+
+/** Whether a keystroke belongs to something being typed rather than the sheet. */
+function isTyping(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  return target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable
+}
+
+/**
+ * Escape dismisses, Return applies — the Mac's cancel and default actions.
+ *
+ * Return is ignored while a text field has focus: there it belongs to whatever
+ * is being typed.
+ */
+function useSheetKeys(onDismiss: () => void, applyNow: React.RefObject<() => void>): void {
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onDismiss()
+      if (event.key === "Enter" && !isTyping(event.target)) applyNow.current()
+    }
+    globalThis.addEventListener("keydown", onKeyDown)
+    return () => {
+      globalThis.removeEventListener("keydown", onKeyDown)
+    }
+  }, [onDismiss, applyNow])
 }

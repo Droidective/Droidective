@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import type { Decompile } from "@/hooks/useDecompile"
 import { DecompileTreeView as Tree, Hits } from "@/components/DecompileTreeView"
 import { DecompileViewerBody as ViewerBody } from "@/components/DecompileViewerBody"
+import { RebuiltRow } from "@/components/RebuiltRow"
 import { revealPath } from "@/lib/daemon"
 import { relativePath } from "@/lib/decompile"
 import { hasModifier } from "@/lib/platform"
@@ -23,13 +24,16 @@ export const MODES: { id: DecompileMode; title: string; blurb: string }[] = [
 export function DecompileBrowser({
   state,
   tree,
+  onSign,
 }: {
   state: Decompile
   tree: DecompileTree
+  onSign?: ((path: string) => void) | undefined
 }) {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <Toolbar state={state} />
+      {state.rebuilt === null ? null : <RebuiltRow path={state.rebuilt} onSign={onSign} />}
       <div className="flex min-h-0 flex-1">
         <div className="w-1/3 min-w-[180px] max-w-[420px] overflow-auto border-r border-border-subtle">
           {state.hits === null ? (

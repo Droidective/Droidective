@@ -18,20 +18,21 @@ use tauri_plugin_opener::OpenerExt;
 use crate::daemon::stream::StreamMessage;
 use crate::daemon::wire::{
     AabConvertRequest, AabConvertResponse, ApkKeystore, ApkReport, ApkSignRequest, ApkSignResponse,
-    ApkToolchain, AppControlRequest, AppInfoResponse, AppPullRequest, AppPullResponse, AppRequest,
-    AppsResponse, BugReportRequest, BugReportResponse, CommandLogResponse, CrashListResponse,
-    CustomCommand, CustomCommandRunRequest, CustomCommandsResponse, CustomCommandsWriteRequest,
-    DecompileFileRequest, DecompileFileText, DecompileHits, DecompileMode, DecompileRebuildRequest,
-    DecompileRebuildResponse, DecompileRequest, DecompileSearchRequest, DecompileTree, DeepLink,
-    DeepLinkLaunchRequest, DeepLinksResponse, DeepLinksWriteRequest, DevSettingsResponse,
-    DevSettingsWriteRequest, Device, DevicePropsResponse, DnsResponse, DnsWriteRequest,
-    EmulatorActionRequest, EmulatorsResponse, FeatureSummary, FileInfoRequest, FileInfoResponse,
-    FileOperationRequest, FilePullRequest, FilePullResponse, FilesListRequest, FilesListResponse,
-    ForegroundResponse, InstallRequest, InstallResponse, LaunchResponse, LogcatPidResponse,
-    ManagedTools, MemInfoResponse, PairResponse, PermissionWriteRequest, PermissionsResponse,
-    ReactotronReverseRequest, ReactotronReverseResponse, ReactotronSendRequest,
-    ReactotronSendResponse, RestrictionWriteRequest, RestrictionsResponse, RolesResponse,
-    RootStatusResponse, RunRequest, RunResponse, SandboxRequest, SandboxResponse,
+    ApkToolchain, AppControlRequest, AppInfoResponse, AppLifecycleRequest, AppPullRequest,
+    AppPullResponse, AppRequest, AppsResponse, BugReportRequest, BugReportResponse,
+    CommandLogResponse, CrashListResponse, CustomCommand, CustomCommandRunRequest,
+    CustomCommandsResponse, CustomCommandsWriteRequest, DecompileFileRequest, DecompileFileText,
+    DecompileHits, DecompileMode, DecompileRebuildRequest, DecompileRebuildResponse,
+    DecompileRequest, DecompileSearchRequest, DecompileTree, DeepLink, DeepLinkLaunchRequest,
+    DeepLinksResponse, DeepLinksWriteRequest, DevSettingsResponse, DevSettingsWriteRequest, Device,
+    DevicePropsResponse, DnsResponse, DnsWriteRequest, EmulatorActionRequest, EmulatorsResponse,
+    FeatureSummary, FileInfoRequest, FileInfoResponse, FileOperationRequest, FilePullRequest,
+    FilePullResponse, FilesListRequest, FilesListResponse, ForegroundResponse, InstallRequest,
+    InstallResponse, LaunchResponse, LogcatPidResponse, ManagedTools, MemInfoResponse,
+    OverrideResetRequest, OverridesResponse, PairResponse, PermissionWriteRequest,
+    PermissionsResponse, ReactotronReverseRequest, ReactotronReverseResponse,
+    ReactotronSendRequest, ReactotronSendResponse, RestrictionWriteRequest, RestrictionsResponse,
+    RolesResponse, RootStatusResponse, RunRequest, RunResponse, SandboxRequest, SandboxResponse,
     ScreenshotCaptureRequest, ScreenshotCaptureResponse, Snippet, SnippetExpandRequest,
     SnippetExpandResponse, SnippetWriteRequest, StreamParams, ToolInstallRequest,
     ToolInstallResponse, ToolsResponse, VideoExportOptions, VideoExportRequest, VideoProxyRequest,
@@ -129,6 +130,54 @@ pub async fn list_apps(
     serial: String,
 ) -> Result<AppsResponse, DaemonError> {
     supervisor.client().await?.list_apps(serial).await
+}
+
+/// The device-state overrides in effect, reconciled against the device.
+#[tauri::command]
+pub async fn active_overrides(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+) -> Result<OverridesResponse, DaemonError> {
+    supervisor.client().await?.active_overrides(serial).await
+}
+
+/// Clear one override, or all of them when `kind` is absent.
+#[tauri::command]
+pub async fn reset_overrides(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    kind: Option<String>,
+) -> Result<RunResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .reset_overrides(&OverrideResetRequest { serial, kind })
+        .await
+}
+
+/// Disable, enable, remove for this user, or restore one package.
+///
+/// Separate from `control_app` because these are not app *actions*: they
+/// change what the package is for this user rather than what it is doing, and
+/// both directions of both are reversible.
+#[tauri::command]
+pub async fn app_lifecycle(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    package_id: String,
+    disabled: Option<bool>,
+    removed: Option<bool>,
+) -> Result<RunResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .app_lifecycle(&AppLifecycleRequest {
+            serial,
+            package_id,
+            disabled,
+            removed,
+        })
+        .await
 }
 
 #[tauri::command]
@@ -1262,11 +1311,14 @@ pub async fn pick_file(
     extensions: Vec<String>,
 ) -> Result<Option<String>, DaemonError> {
     let filters: Vec<&str> = extensions.iter().map(String::as_str).collect();
-    let picked = app
-        .dialog()
-        .file()
-        .add_filter(&label, &filters)
-        .blocking_pick_file();
+    let mut builder = app.dialog().file();
+    // No extensions means *any* file — a script to run, a multipart part. A
+    // filter with an empty extension list is not that: GTK's picker then shows
+    // nothing at all, and the dialog reads as an empty folder.
+    if !filters.is_empty() {
+        builder = builder.add_filter(&label, &filters);
+    }
+    let picked = builder.blocking_pick_file();
     let Some(picked) = picked else {
         return Ok(None);
     };

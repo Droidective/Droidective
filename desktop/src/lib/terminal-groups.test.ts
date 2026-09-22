@@ -5,7 +5,13 @@ import {
   allTabIds,
   DEFAULT_GROUP_NAME,
   emptyEntries,
+  entryId,
   groupOfTab,
+  moveGroupBefore,
+  moveGroupToEnd,
+  moveTabBefore,
+  moveTabToEnd,
+  moveTabToGroup,
   newGroup,
   removeGroup,
   removeTab,
@@ -96,5 +102,89 @@ describe("removing", () => {
 
   it("returns nothing for a group that is not there", () => {
     expect(removeGroup(rail(), "nope").closed).toEqual([])
+  })
+})
+
+describe("moving a tab", () => {
+  const grouped = newGroup([{ kind: "tab", id: "a" }, { kind: "tab", id: "b" }], "b", "Work", "g1")
+
+  it("the destination follows the target: before a loose tab it lands loose", () => {
+    const start: Entry[] = [{ kind: "tab", id: "a" }, { kind: "tab", id: "b" }]
+    expect(moveTabBefore(start, "b", "a")).toEqual([
+      { kind: "tab", id: "b" },
+      { kind: "tab", id: "a" },
+    ])
+  })
+
+  it("…and before a grouped tab it joins that group", () => {
+    // The one rule here worth a test: a second "which group?" decision at the
+    // call site would disagree with this the first time a group was dragged.
+    const moved = moveTabBefore(grouped, "a", "b")
+    expect(groupOfTab(moved, "a")?.id).toBe("g1")
+    expect(allTabIds(moved)).toEqual(["a", "b"])
+  })
+
+  it("leaves a group it emptied behind", () => {
+    const moved = moveTabBefore(grouped, "b", "a")
+    expect(moved.some((entry) => entry.kind === "group")).toBe(false)
+    expect(allTabIds(moved)).toEqual(["b", "a"])
+  })
+
+  it("does nothing for an unknown id, or for a tab dropped on itself", () => {
+    const start: Entry[] = [{ kind: "tab", id: "a" }]
+    expect(moveTabBefore(start, "a", "a")).toEqual(start)
+    expect(moveTabBefore(start, "a", "zz")).toEqual(start)
+    expect(moveTabBefore(start, "zz", "a")).toEqual(start)
+  })
+
+  it("drops onto a group's header by joining the end of it", () => {
+    const start = [...grouped, { kind: "tab" as const, id: "c" }]
+    expect(allTabIds(moveTabToGroup(start, "c", "g1"))).toEqual(["a", "b", "c"])
+  })
+
+  it("does not churn a group whose only tab is the one being dropped on it", () => {
+    expect(moveTabToGroup(grouped, "b", "g1")).toEqual(grouped)
+  })
+
+  it("moves out of a group to the strip's end", () => {
+    const moved = moveTabToEnd(grouped, "b")
+    expect(groupOfTab(moved, "b")).toBeNull()
+    expect(allTabIds(moved)).toEqual(["a", "b"])
+  })
+
+  it("leaves a tab that is already last alone", () => {
+    const start: Entry[] = [{ kind: "tab", id: "a" }, { kind: "tab", id: "b" }]
+    expect(moveTabToEnd(start, "b")).toEqual(start)
+  })
+})
+
+describe("moving a group", () => {
+  const start = newGroup(
+    [{ kind: "tab", id: "a" }, { kind: "tab", id: "b" }, { kind: "tab", id: "c" }],
+    "b",
+    "Work",
+    "g1",
+  )
+
+  it("moves before another top-level entry, group or loose tab", () => {
+    expect(moveGroupBefore(start, "g1", "a").map((entry) => entryId(entry))).toEqual(["g1", "a", "c"])
+  })
+
+  it("takes its tabs with it", () => {
+    expect(allTabIds(moveGroupBefore(start, "g1", "a"))).toEqual(["b", "a", "c"])
+  })
+
+  it("moves to the end", () => {
+    expect(moveGroupToEnd(start, "g1").map((entry) => entryId(entry))).toEqual(["a", "c", "g1"])
+  })
+
+  it("stays put for a target that is inside a group rather than a top-level row", () => {
+    // Sending it to one end instead would move a group nobody dragged there.
+    expect(moveGroupBefore(start, "g1", "b")).toEqual(start)
+  })
+
+  it("does nothing for an unknown group", () => {
+    expect(moveGroupBefore(start, "zz", "a")).toEqual(start)
+    expect(moveGroupToEnd(start, "zz")).toEqual(start)
   })
 })

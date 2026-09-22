@@ -27,8 +27,12 @@ export interface HubActions {
  * them to the same `run_action` route the generated `ActionForm` uses. The
  * targets are the device bar's, so Run on all applies here exactly as it does
  * to a form — which is what `supportsRunAll` on the hub members is for.
+ *
+ * `onRan` fires after every action, in both directions: it is how the Simulate
+ * hub knows to re-read what the device has overridden, since applying one is
+ * what creates one.
  */
-export function useHubAction(device: Device | null): HubActions {
+export function useHubAction(device: Device | null, onRan?: () => void): HubActions {
   const { show } = useNotifications()
   const { serials } = useTargets()
   const [runningId, setRunningId] = useState<string | null>(null)
@@ -61,10 +65,13 @@ export function useHubAction(device: Device | null): HubActions {
           // Only if this action is still the one showing as running — a newer
           // click on another button owns the state now, as the Mac's does.
           setRunningId((current) => (current === featureId ? null : current))
+          // Applying an override is what creates one, so whoever is showing
+          // what is overridden has to look again.
+          onRan?.()
         }
       })()
     },
-    [device, serials, show],
+    [device, serials, show, onRan],
   )
 
   return { run, runningId }

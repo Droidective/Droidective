@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { curlCommand, formParts, shellQuote, urlMergingParams } from "@/lib/reactotron-curl"
+import { curlCommand, formParts, urlMergingParams } from "@/lib/reactotron-curl"
+import { shellQuote } from "@/lib/shell"
 
 /**
  * The cURL builder, following ADBKit's `ReactotronCurlTests`.

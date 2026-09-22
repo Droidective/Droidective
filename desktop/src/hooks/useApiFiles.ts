@@ -1,4 +1,4 @@
-import { useCallback } from "react"
+import { useCallback, useState } from "react"
 
 import { useNotifications } from "@/hooks/useNotifications"
 import type { ApiClientData, ApiCollection, ApiEnvironment } from "@/lib/api/model"
@@ -20,6 +20,16 @@ export interface ApiFiles {
   saveResponseBody: (response: ApiSendResponse) => void
   /** For a binary body or a multipart part: a host path, or null if cancelled. */
   choose: () => Promise<string | null>
+  /**
+   * What an import or an export could not do, waiting to be read.
+   *
+   * The Mac puts these three in an alert rather than a toast, because a
+   * collection that did not import is not something to notice in passing — it
+   * is the answer to what was just asked for. Everything else on this screen
+   * stays a toast, as it does there.
+   */
+  alert: string | null
+  dismissAlert: () => void
 }
 
 /**
@@ -36,6 +46,7 @@ export function useApiFiles(
   update: (change: (data: ApiClientData) => ApiClientData) => void,
 ): ApiFiles {
   const { show } = useNotifications()
+  const [alert, setAlert] = useState<string | null>(null)
 
   const write = useCallback(
     (name: string, contents: string) => {
@@ -58,7 +69,7 @@ export function useApiFiles(
         if (path === null) return
         const answer = await apiImport(path)
         if (answer.collections.length === 0 && answer.environments.length === 0) {
-          show({ message: answer.summary, ok: false })
+          setAlert(answer.summary)
           return
         }
         update((previous) => mergeImport(previous, answer))
@@ -66,48 +77,20 @@ export function useApiFiles(
           answer.warnings.length === 0 ? "" : ` · ${answer.warnings.join(" · ")}`
         show({ message: `${answer.summary}${notes}`, ok: true })
       } catch (thrown) {
-        show({ message: asDaemonError(thrown).message, ok: false })
+        setAlert(asDaemonError(thrown).message)
       }
     })()
   }, [show, update])
 
-  const exportPayload = useCallback(
-    (
-      payload: Parameters<typeof apiExport>[0],
-      includeSecrets: boolean,
-    ) => {
-      apiExport(payload, includeSecrets).then(
-        (answer) => {
-          write(answer.suggestedName, answer.json)
-        },
-        (thrown: unknown) => {
-          show({ message: asDaemonError(thrown).message, ok: false })
-        },
-      )
-    },
-    [show, write],
-  )
+  const exports = useApiExports(write, setAlert)
 
   return {
+    alert,
+    dismissAlert: useCallback(() => {
+      setAlert(null)
+    }, []),
     importFile,
-    exportCollection: useCallback(
-      (collection: ApiCollection, includeSecrets: boolean) => {
-        exportPayload({ kind: "collection", collection }, includeSecrets)
-      },
-      [exportPayload],
-    ),
-    exportEnvironment: useCallback(
-      (environment: ApiEnvironment) => {
-        exportPayload({ kind: "environment", environment }, false)
-      },
-      [exportPayload],
-    ),
-    exportWorkspace: useCallback(
-      (data: ApiClientData) => {
-        exportPayload({ kind: "workspace", workspace: data }, false)
-      },
-      [exportPayload],
-    ),
+    ...exports,
     saveResponseBody: useCallback(
       (response: ApiSendResponse) => {
         const name = `response${extensionFor(response)}`
@@ -130,6 +113,53 @@ export function useApiFiles(
     // filter would be this screen inventing a restriction the Mac does not
     // have (`NSOpenPanel` there sets no content types).
     choose: useCallback(() => pickFile("Any file", []), []),
+  }
+}
+
+/**
+ * The three exports, which differ only in what they wrap.
+ *
+ * Separate from the rest so `useApiFiles` stays readable; each goes through
+ * one `apiExport`, and a failure is an alert rather than a toast for the reason
+ * `ApiFiles.alert` gives.
+ */
+function useApiExports(
+  write: (name: string, contents: string) => void,
+  setAlert: (message: string) => void,
+): Pick<ApiFiles, "exportCollection" | "exportEnvironment" | "exportWorkspace"> {
+  const exportPayload = useCallback(
+    (payload: Parameters<typeof apiExport>[0], includeSecrets: boolean) => {
+      apiExport(payload, includeSecrets).then(
+        (answer) => {
+          write(answer.suggestedName, answer.json)
+        },
+        (thrown: unknown) => {
+          setAlert(asDaemonError(thrown).message)
+        },
+      )
+    },
+    [write, setAlert],
+  )
+
+  return {
+    exportCollection: useCallback(
+      (collection: ApiCollection, includeSecrets: boolean) => {
+        exportPayload({ kind: "collection", collection }, includeSecrets)
+      },
+      [exportPayload],
+    ),
+    exportEnvironment: useCallback(
+      (environment: ApiEnvironment) => {
+        exportPayload({ kind: "environment", environment }, false)
+      },
+      [exportPayload],
+    ),
+    exportWorkspace: useCallback(
+      (data: ApiClientData) => {
+        exportPayload({ kind: "workspace", workspace: data }, false)
+      },
+      [exportPayload],
+    ),
   }
 }
 

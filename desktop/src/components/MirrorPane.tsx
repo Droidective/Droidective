@@ -1,7 +1,7 @@
 import { useCallback, useRef } from "react"
 
 import { MirrorControls } from "@/components/MirrorControls"
-import { useWindows } from "@/hooks/useWindows"
+import { useMirrorOptions, useMirrorPopOut } from "@/hooks/useMirrorOptions"
 import { NoDevice } from "@/components/NoDevice"
 import { ScreenshotEditor } from "@/components/ScreenshotEditor"
 import { useMirror } from "@/hooks/useMirror"
@@ -21,7 +21,8 @@ import type { Device } from "@/lib/wire"
  */
 export function MirrorPane({ device }: { device: Device | null }) {
   const mirror = useMirror(device?.serial ?? null)
-  const popOut = usePopOut(device?.serial ?? null)
+  const popOut = useMirrorPopOut(device?.serial ?? null)
+  const options = useMirrorOptions(device?.serial ?? null)
   const surface = useRef<HTMLDivElement | null>(null)
   const pointer = useMirrorPointer(surface, mirror.size, mirror.send)
   const editor = useScreenshotEditor()
@@ -105,27 +106,11 @@ export function MirrorPane({ device }: { device: Device | null }) {
         dropped={mirror.dropped}
         onCapture={live ? capture : undefined}
         onPopOut={popOut}
+        options={options}
       />
     </div>
   )
 }
-
-/**
- * Open this device's mirror in a window of its own.
- *
- * Pinned to the serial rather than following the device bar: the point of a
- * pop-out is watching one device while the window behind it does something
- * else. Undefined with no device — there would be nothing to pin it to, and a
- * button that opened an empty window reads as broken.
- */
-function usePopOut(serial: string | null): (() => void) | undefined {
-  const windows = useWindows()
-  if (serial === null) return undefined
-  return () => {
-    windows.newWindow(serial, "scrcpy")
-  }
-}
-
 /** What a mirror that could not start says, and the way back from it. */
 function MirrorFailed({ message, onReconnect }: { message: string; onReconnect: () => void }) {
   return (

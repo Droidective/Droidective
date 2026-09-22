@@ -7,6 +7,7 @@
  * `CustomCommandService.draftParts` makes the same call on the same input.
  */
 
+import { shellQuote } from "@/lib/shell"
 import type { CommandPreset, CustomCommand } from "@/lib/wire"
 
 /**
@@ -118,4 +119,32 @@ export function upserted(commands: CustomCommand[], command: CustomCommand): Cus
 
 export function removed(commands: CustomCommand[], id: string): CustomCommand[] {
   return commands.filter((command) => command.id !== id)
+}
+
+/**
+ * A chosen script's path, dropped into a command that is being written.
+ *
+ * The Mac's `chooseScript`: the path leads and whatever was already typed
+ * follows it as arguments, so picking a script after typing `--verbose` gives
+ * `'/path/to/script' --verbose` rather than losing one or the other.
+ *
+ * Quoted with `shellQuote` rather than by doubling the quotes by hand — the
+ * line runs through a login shell, where `$`, backticks and parentheses in a
+ * path would otherwise expand or break it.
+ */
+export function withScript(path: string, command: string): string {
+  const quoted = shellQuote(path)
+  const rest = command.trim()
+  return rest === "" ? quoted : `${quoted} ${rest}`
+}
+
+/**
+ * Whether a preset is already in the saved list.
+ *
+ * Matched by name, as the Mac matches it: the command itself is the starting
+ * point for an edit, so the copy someone saved has usually diverged from the
+ * preset by the time they look at this list again.
+ */
+export function presetAdded(commands: readonly CustomCommand[], preset: CommandPreset): boolean {
+  return commands.some((command) => command.name === preset.name)
 }

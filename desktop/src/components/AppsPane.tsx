@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Boxes, RefreshCw, Search } from "lucide-react"
-import { AppActions } from "@/components/AppActions"
+import { AppDetail } from "@/components/AppDetail"
+import { AppFilesSheet as FilesSheet } from "@/components/AppFilesSheet"
 import { NoDevice } from "@/components/screen"
 import { Banner, Button, Switch } from "@/components/Controls"
 import { searchApps, sortApps } from "@/lib/apps"
@@ -24,46 +25,15 @@ export function AppsPane({
   device,
   selected,
   onSelect,
-  onOpen,
 }: {
   device: Device | null
   selected: string | null
   onSelect: (packageId: string | null) => void
-  /** Opens another screen — what "Explore files" needs. */
-  onOpen: (id: string) => void
 }) {
-  const [apps, setApps] = useState<AppSummary[]>([])
-  const [actions, setActions] = useState<AppActionDescriptor[]>([])
+  const { apps, actions, loading, error, load } = useAppList(device?.serial ?? null)
   const [query, setQuery] = useState("")
   const [includeSystem, setIncludeSystem] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<DaemonError | null>(null)
-
-  const serial = device?.serial ?? null
-  const load = useCallback(async () => {
-    if (serial === null) return
-    setLoading(true)
-    setError(null)
-    try {
-      const response = await listApps(serial)
-      setApps(response.apps)
-      setActions(response.actions)
-    } catch (thrown) {
-      setError(asDaemonError(thrown))
-    } finally {
-      setLoading(false)
-    }
-  }, [serial])
-
-  // A full `dumpsys package packages` parse, so it is fetched on open rather
-  // than polled. Clearing the selection is deliberately *not* done here: this
-  // pane remounts on every tab switch, and resetting on mount would throw
-  // away a choice the palette is still using. The device change that really
-  // invalidates it is handled where the state lives.
-  useEffect(() => {
-    setApps([])
-    void load()
-  }, [load])
+  const [files, setFiles] = useState<string | null>(null)
 
   const visible = useMemo(
     () => sortApps(searchApps(apps, query, includeSystem)),
@@ -105,14 +75,72 @@ export function AppsPane({
             app={current}
             actions={actions}
             serial={device.serial}
-            onOpen={onOpen}
+            onFiles={() => {
+              setFiles(current.packageId)
+            }}
+            onChanged={() => {
+              void load()
+            }}
           />
         ) : (
           <p className="p-6 text-text-tertiary">Pick an app.</p>
         )}
       </div>
+      {files === null ? null : (
+        <FilesSheet
+          device={device}
+          packageId={files}
+          onDone={() => {
+            setFiles(null)
+          }}
+        />
+      )}
     </div>
   )
+}
+
+/**
+ * The installed packages, and what can be done to one.
+ *
+ * A full `dumpsys package packages` parse, so it is fetched on open rather than
+ * polled. Clearing the *selection* is deliberately not done here: this pane
+ * remounts on every tab switch, and resetting on mount would throw away a
+ * choice the palette is still using. The device change that really invalidates
+ * it is handled where the state lives.
+ */
+function useAppList(serial: string | null): {
+  apps: AppSummary[]
+  actions: AppActionDescriptor[]
+  loading: boolean
+  error: DaemonError | null
+  load: () => Promise<void>
+} {
+  const [apps, setApps] = useState<AppSummary[]>([])
+  const [actions, setActions] = useState<AppActionDescriptor[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<DaemonError | null>(null)
+
+  const load = useCallback(async () => {
+    if (serial === null) return
+    setLoading(true)
+    setError(null)
+    try {
+      const response = await listApps(serial)
+      setApps(response.apps)
+      setActions(response.actions)
+    } catch (thrown) {
+      setError(asDaemonError(thrown))
+    } finally {
+      setLoading(false)
+    }
+  }, [serial])
+
+  useEffect(() => {
+    setApps([])
+    void load()
+  }, [load])
+
+  return { apps, actions, loading, error, load }
 }
 
 /** The searchable app list. Its own component only so `AppsPane` stays legible. */
@@ -214,47 +242,5 @@ function AppList({
           </div>
         ) : null}
       </aside>
-  )
-}
-
-function AppDetail({
-  app,
-  actions,
-  serial,
-  onOpen,
-}: {
-  app: AppSummary
-  actions: AppActionDescriptor[]
-  serial: string
-  onOpen: (id: string) => void
-}) {
-  return (
-    <div className="flex h-full flex-col gap-4 overflow-y-auto p-6">
-      <header className="flex items-start gap-3">
-        <Boxes size={22} className="mt-0.5 shrink-0 text-accent" />
-        <div className="min-w-0">
-          <h2 className="text-[17px] font-semibold text-text-primary" data-selectable>
-            {app.displayName}
-          </h2>
-          <p className="mt-0.5 text-text-secondary" data-selectable>
-            {app.packageId}
-            {app.versionName === null ? "" : ` · ${app.versionName}`}
-            {app.isSystem ? " · system app" : ""}
-          </p>
-        </div>
-      </header>
-
-      <AppActions actions={actions} packageId={app.packageId} serial={serial} />
-      {/* The Mac's verb, and the one thing this pane could not reach: an app's
-          own files. The Sandbox Browser is already scoped to the selected
-          package, so opening it is the whole action. */}
-      <Button
-        onClick={() => {
-          onOpen("sandbox-browser")
-        }}
-      >
-        Explore files
-      </Button>
-    </div>
   )
 }

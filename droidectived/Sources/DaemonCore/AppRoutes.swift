@@ -23,12 +23,23 @@ public enum AppProtocol {
         public let displayName: String
         public let versionName: String?
         public let isSystem: Bool
+        /// Disabled for this user — `pm disable-user`, reversible.
+        public let disabled: Bool
+        /// Uninstalled for this user but still on the system image, so
+        /// restorable with `cmd package install-existing`. A package that is
+        /// gone for good is not in the list at all.
+        public let removed: Bool
 
-        public init(_ listing: AppListing) {
+        public init(_ listing: AppListing, lifecycle: AppLifecycle? = nil) {
             packageId = listing.packageId
             displayName = listing.displayName
             versionName = listing.versionName
             isSystem = listing.isSystem
+            // Absent means ordinary: a package the lifecycle read did not
+            // mention is installed and enabled, which is the state every app
+            // is in until something changes it.
+            disabled = lifecycle?.disabled ?? false
+            removed = lifecycle?.removed ?? false
         }
     }
 
@@ -96,8 +107,95 @@ public enum AppProtocol {
         }
     }
 
+    /// Disable, enable, remove-for-user or restore one package.
+    ///
+    /// Separate from `ControlRequest` because these are not
+    /// `AppControlService.AppAction`s: they change what the package *is* for
+    /// this user rather than what it is doing, and both directions of both
+    /// verbs are reversible — which is why they are a flag rather than four
+    /// action ids.
+    public struct LifecycleRequest: Codable, Equatable, Sendable {
+        public let serial: String
+        public let packageId: String
+        /// Exactly one of these, which is what picks the verb.
+        public let disabled: Bool?
+        public let removed: Bool?
+
+        public init(serial: String, packageId: String, disabled: Bool?, removed: Bool?) {
+            self.serial = serial
+            self.packageId = packageId
+            self.disabled = disabled
+            self.removed = removed
+        }
+    }
+
+    /// What to say about a lifecycle write.
+    ///
+    /// `pm` reports a refusal on stdout with exit code 0 as often as not —
+    /// "Failure [not installed for 0]" — so the text is what carries the
+    /// answer, and an empty one means it simply did it.
+    public static func lifecycleMessage(_ result: AdbResult) -> String {
+        let said = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !said.isEmpty { return said }
+        let complained = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !complained.isEmpty { return complained }
+        return result.exitCode == 0 ? "Done." : "The package manager refused."
+    }
+
+    /// Whether `pm` refused while still exiting 0.
+    ///
+    /// It does that routinely — "Failure [not installed for 0]" on a package
+    /// that was never removed — and taking the exit code at its word would
+    /// report a refusal as a success.
+    public static func saidFailure(_ result: AdbResult) -> Bool {
+        (result.stdout + result.stderr).contains("Failure")
+    }
+
+    public static let unknownLifecycle = DaemonProtocol.ErrorBody(
+        code: "unknown_lifecycle",
+        message: "Say which lifecycle change to make.",
+        detail: "send exactly one of `disabled` or `removed`")
+
     public static let unknownAction = DaemonProtocol.ErrorBody(
         code: "unknown_action",
         message: "No such app action.",
         detail: "known actions: \(actions.map(\.id).joined(separator: ", "))")
+}
+
+/// The lifecycle route: disable, enable, remove for this user, restore.
+///
+/// Its own helper rather than a case in the server's switch because the
+/// interesting part is a decision — which of two writes a body asks for, and
+/// what to do when it asks for neither or both — and that is worth testing
+/// without a socket.
+enum AppRoutes {
+    static func lifecycle(body: Data, backend: any DaemonBackend) async -> DaemonProtocol.Answer {
+        guard let request = try? JSONDecoder().decode(AppProtocol.LifecycleRequest.self, from: body)
+        else { return (400, DaemonProtocol.encoded(DaemonProtocol.badRequest)) }
+
+        // Exactly one, so a body naming both cannot run two writes and report
+        // one of them — and a body naming neither is a mistake rather than a
+        // no-op that looks like success.
+        let result: AdbResult
+        do {
+            switch (request.disabled, request.removed) {
+            case let (disabled?, nil):
+                result = try await backend.setAppDisabled(
+                    serial: request.serial, packageId: request.packageId, disabled)
+            case let (nil, removed?):
+                result = try await backend.setAppRemoved(
+                    serial: request.serial, packageId: request.packageId, removed)
+            default:
+                return (400, DaemonProtocol.encoded(AppProtocol.unknownLifecycle))
+            }
+        } catch {
+            return (502, DaemonProtocol.encoded(DaemonProtocol.ErrorBody(
+                code: "adb_failed", message: "The app lifecycle change failed.",
+                detail: "\(error)")))
+        }
+
+        return (200, DaemonProtocol.encoded(ActionProtocol.RunResponse(FeatureResult(
+            ok: result.exitCode == 0 && !AppProtocol.saidFailure(result),
+            message: AppProtocol.lifecycleMessage(result)))))
+    }
 }

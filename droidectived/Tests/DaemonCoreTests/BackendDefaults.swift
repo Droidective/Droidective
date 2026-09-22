@@ -23,6 +23,24 @@ extension DaemonBackend {
 
     func listApps(serial: String) async throws -> [AppListing] { [] }
 
+    func appLifecycles(serial: String) async -> [String: AppLifecycle] { [:] }
+
+    func activeOverrides(serial: String) async throws -> [ADBKit.ActiveOverride] { [] }
+
+    func resetOverrides(serial: String, kind: OverrideKind?) async throws {}
+
+    func setAppDisabled(
+        serial: String, packageId: String, _ disabled: Bool
+    ) async throws -> AdbResult {
+        AdbResult(stdout: "", stderr: "", exitCode: 0, timedOut: false)
+    }
+
+    func setAppRemoved(
+        serial: String, packageId: String, _ removed: Bool
+    ) async throws -> AdbResult {
+        AdbResult(stdout: "", stderr: "", exitCode: 0, timedOut: false)
+    }
+
     func foregroundPackage(serial: String) async throws -> String? { nil }
 
     func logcatPid(serial: String, packageId: String) async throws -> Int? { nil }

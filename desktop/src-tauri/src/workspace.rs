@@ -23,6 +23,9 @@ const CLAIMS_EVENT: &str = "workspace://claims";
 /// `request_close_feature`.
 const CLOSE_FEATURE_EVENT: &str = "workspace://close-feature";
 
+/// The feature a window opens straight onto to be a pop-out mirror.
+const MIRROR_FEATURE: &str = "scrcpy";
+
 /// What one window is holding.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -60,6 +63,12 @@ struct State_ {
     ordinals: HashMap<String, usize>,
     /// Never reused, so two windows can never share a number in one session.
     next_ordinal: usize,
+    /// Label → serial, for windows opened *as* a pop-out mirror.
+    ///
+    /// Recorded here rather than inferred from a claim's features, because an
+    /// ordinary window with a Mirror tab open publishes the same feature —
+    /// and arranging those would move windows nobody asked about.
+    popouts: HashMap<String, String>,
 }
 
 impl Workspaces {
@@ -111,7 +120,29 @@ impl Workspaces {
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         state.claims.remove(label);
         state.ordinals.remove(label);
+        state.popouts.remove(label);
         Self::snapshot(&mut state)
+    }
+
+    /// Remember that this window is a pop-out mirror for `serial`.
+    fn note_popout(&self, label: String, serial: String) {
+        let mut state = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        state.popouts.insert(label, serial);
+    }
+
+    /// Every pop-out mirror, in serial order — the order the Mac arranges
+    /// them in, so the same devices land in the same places each time.
+    fn popouts(&self) -> Vec<String> {
+        let state = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut rows: Vec<(&String, &String)> = state.popouts.iter().collect();
+        rows.sort_by(|left, right| left.1.cmp(right.1));
+        rows.into_iter().map(|(label, _)| label.clone()).collect()
     }
 
     fn current(&self) -> Vec<WindowClaim> {
@@ -172,6 +203,7 @@ pub fn workspace_claims(workspaces: State<'_, Workspaces>) -> Vec<WindowClaim> {
 )]
 pub fn open_workspace_window(
     app: AppHandle<Wry>,
+    workspaces: State<'_, Workspaces>,
     serial: Option<String>,
     feature: Option<String>,
 ) -> tauri::Result<String> {
@@ -206,7 +238,112 @@ pub fn open_workspace_window(
     .focused(true)
     .build()?;
     window.set_focus()?;
+    // Only a window opened straight onto the mirror is a pop-out. An ordinary
+    // window that later opens a Mirror tab is not one, and must not be moved
+    // by Arrange Mirror Windows.
+    if feature.as_deref() == Some(MIRROR_FEATURE) {
+        if let Some(serial) = serial {
+            workspaces.note_popout(label.clone(), serial);
+        }
+    }
     Ok(label)
+}
+
+/// Where the pop-out mirrors could be tiled, and which they are.
+///
+/// The *arithmetic* is not here: `lib/mirror-wall.ts` has it, tested, next to
+/// the grid the wall itself draws — so arranging the windows produces the
+/// picture the wall would have drawn. This reports the work area and the
+/// windows; `set_window_frames` applies the answer.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MirrorWindowLayout {
+    /// The usable area of the screen the first pop-out is on, in physical
+    /// pixels: the taskbar, the dock and the menu bar are outside it.
+    pub area: Option<WindowFrame>,
+    /// Pop-out labels in serial order.
+    pub labels: Vec<String>,
+}
+
+/// One window's place on screen.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WindowFrame {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+/// One window and where to put it.
+#[derive(Debug, Clone, Deserialize)]
+pub struct PlacedWindow {
+    pub label: String,
+    #[serde(flatten)]
+    pub frame: WindowFrame,
+}
+
+/// # Errors
+///
+/// Fails if the platform cannot be asked about its monitors.
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "tauri's command macro hands AppHandle and State in by value"
+)]
+pub fn mirror_window_layout(
+    app: AppHandle<Wry>,
+    workspaces: State<'_, Workspaces>,
+) -> tauri::Result<MirrorWindowLayout> {
+    // A pop-out whose window has already gone is dropped rather than counted:
+    // it would otherwise take a slot in the grid and leave a gap.
+    let labels: Vec<String> = workspaces
+        .popouts()
+        .into_iter()
+        .filter(|label| app.get_webview_window(label).is_some())
+        .collect();
+
+    let area = match labels
+        .first()
+        .and_then(|label| app.get_webview_window(label))
+    {
+        // The monitor *that window* is on, not the primary one: someone with
+        // the pop-outs on a second screen does not want them gathered onto the
+        // first.
+        Some(window) => window.current_monitor()?.map(|monitor| {
+            let position = monitor.position();
+            let size = monitor.size();
+            WindowFrame {
+                x: f64::from(position.x),
+                y: f64::from(position.y),
+                width: f64::from(size.width),
+                height: f64::from(size.height),
+            }
+        }),
+        None => None,
+    };
+
+    Ok(MirrorWindowLayout { area, labels })
+}
+
+/// Put each named window where it was told.
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "tauri's command macro hands AppHandle in by value"
+)]
+pub fn set_window_frames(app: AppHandle<Wry>, frames: Vec<PlacedWindow>) {
+    for placed in frames {
+        let Some(window) = app.get_webview_window(&placed.label) else {
+            continue;
+        };
+        // Best effort per window: one that refuses to move should not stop the
+        // rest being arranged.
+        let _ = window.set_position(tauri::PhysicalPosition::new(placed.frame.x, placed.frame.y));
+        let _ = window.set_size(tauri::PhysicalSize::new(
+            placed.frame.width,
+            placed.frame.height,
+        ));
+    }
 }
 
 /// Brings a window to the front — the Focus Window N button, and selecting a

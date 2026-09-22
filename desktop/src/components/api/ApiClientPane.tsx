@@ -100,6 +100,8 @@ export function ApiClientPane() {
         onKeepEditing={() => {
           setPendingNew(false)
         }}
+        alert={files.alert}
+        onDismissAlert={files.dismissAlert}
       />
     </div>
   )

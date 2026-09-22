@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react"
 import { NoDevice } from "@/components/NoDevice"
+import { InstalledAppsPicker } from "@/components/InstalledAppsPicker"
 import { Notices, RENDER_WINDOW, Row, StatusRow } from "@/components/LogcatChrome"
 import { LogcatToolbar } from "@/components/LogcatToolbar"
 import { useLogcatAppFilter, type LogcatAppFilter } from "@/hooks/useLogcatAppFilter"
@@ -35,7 +36,8 @@ export function LogcatPane({
   const [find, setFind] = useState("")
   const [following, setFollowing] = useState(true)
   const [saved, setSaved] = useState<string | null>(null)
-  const scroller = useRef<HTMLDivElement | null>(null)
+  const [picking, setPicking] = useState(false)
+  const tail = useTail(following, setFollowing)
 
   const { buffer } = stream
   const visible = useMemo(
@@ -48,18 +50,6 @@ export function LogcatPane({
     () => (find.trim() === "" ? 0 : visible.filter((row) => matchesFind(row, find)).length),
     [visible, find],
   )
-
-  // Pinning to the bottom is a layout effect in spirit, but it only has to
-  // happen after the rows are in the DOM, which this is.
-  const pin = (element: HTMLDivElement | null) => {
-    scroller.current = element
-    if (element && following) element.scrollTop = element.scrollHeight
-  }
-
-  const jumpToNewest = () => {
-    setFollowing(true)
-    if (scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight
-  }
 
   if (!device) {
     return <NoDevice feature="logcat" title="Logcat" />
@@ -76,12 +66,16 @@ export function LogcatPane({
         tags={tags}
         app={app}
         packageId={packageId}
+        serial={serial}
+        onAddFromInstalled={() => {
+          setPicking(true)
+        }}
         stream={stream}
         buffer={buffer}
         shown={visible.length}
         rendered={rendered.length}
         following={following}
-        onFollow={jumpToNewest}
+        onFollow={tail.jumpToNewest}
         saved={saved}
         failure={failure}
         onExport={() => {
@@ -91,10 +85,26 @@ export function LogcatPane({
         }}
       />
 
+      {picking && serial !== null && (
+        <InstalledAppsPicker
+          serial={serial}
+          onPick={(chosen) => {
+            setPicking(false)
+            onSelectPackage(chosen)
+            // Picking one is the whole point of the sheet, so it narrows to it
+            // rather than leaving the switch for a second step.
+            app.setNarrowed(true)
+          }}
+          onCancel={() => {
+            setPicking(false)
+          }}
+        />
+      )}
+
       <Feed
         rows={rendered}
         find={find}
-        pin={pin}
+        pin={tail.pin}
         onFollowing={setFollowing}
         onTag={(tag) => {
           setFilter((current) =>
@@ -104,6 +114,29 @@ export function LogcatPane({
       />
     </div>
   )
+}
+
+/**
+ * Following the newest line, and getting back to it.
+ *
+ * Pinning to the bottom is a layout effect in spirit, but it only has to happen
+ * after the rows are in the DOM, which the ref callback is.
+ */
+function useTail(
+  following: boolean,
+  setFollowing: (following: boolean) => void,
+): { pin: (element: HTMLDivElement | null) => void; jumpToNewest: () => void } {
+  const scroller = useRef<HTMLDivElement | null>(null)
+  return {
+    pin: (element) => {
+      scroller.current = element
+      if (element && following) element.scrollTop = element.scrollHeight
+    },
+    jumpToNewest: () => {
+      setFollowing(true)
+      if (scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight
+    },
+  }
 }
 
 /**
@@ -162,6 +195,8 @@ function Header({
   tags,
   app,
   packageId,
+  serial,
+  onAddFromInstalled,
   stream,
   buffer,
   shown,
@@ -180,6 +215,8 @@ function Header({
   tags: string[]
   app: LogcatAppFilter
   packageId: string | null
+  serial: string | null
+  onAddFromInstalled: () => void
   stream: LogcatStream
   buffer: LogBuffer
   shown: number
@@ -202,9 +239,11 @@ function Header({
         appFilter={app.filter}
         packageId={packageId}
         canNarrow={packageId !== null}
+        canPick={serial !== null}
         narrowed={app.narrowed}
         onNarrow={app.setNarrowed}
         onUseForegroundApp={app.useForegroundApp}
+        onAddFromInstalled={onAddFromInstalled}
         onExport={onExport}
       />
 
