@@ -72,7 +72,7 @@ jobs:
     # accepts the bundled clang. Revisit when a Swift release ships clang 20+.
     runs-on: windows-2022
     steps:
-      - uses: compnerd/gha-setup-swift@397094e75494a93fa8d81db0268dbc8f5d6cf7c6  # v0.4.1
+      - uses: compnerd/gha-setup-swift@bbae8ce86bac5a3449f3992b3d88bc4ca25f2057  # v0.5.0
         with:
           branch: swift-6.2.4-release
           tag: 6.2.4-RELEASE
@@ -319,7 +319,7 @@ jobs:
         with:
           persist-credentials: false
       - if: matrix.platform == 'windows-x86_64'
-        uses: compnerd/gha-setup-swift@397094e75494a93fa8d81db0268dbc8f5d6cf7c6  # v0.4.1
+        uses: compnerd/gha-setup-swift@bbae8ce86bac5a3449f3992b3d88bc4ca25f2057  # v0.5.0
         with:
           branch: swift-6.2.4-release
           tag: 6.2.4-RELEASE
@@ -397,7 +397,7 @@ jobs:
             | sh -s -- -y --profile minimal
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
       - if: matrix.platform == 'windows'
-        uses: compnerd/gha-setup-swift@397094e75494a93fa8d81db0268dbc8f5d6cf7c6  # v0.4.1
+        uses: compnerd/gha-setup-swift@bbae8ce86bac5a3449f3992b3d88bc4ca25f2057  # v0.5.0
         with:
           branch: swift-6.2.4-release
           tag: 6.2.4-RELEASE
