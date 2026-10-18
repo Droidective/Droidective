@@ -40,6 +40,9 @@ final class AppCore {
     /// Xcode iOS Simulators not currently booted, for the device-bar "Start a
     /// simulator" section — the AVD list's simctl twin.
     var availableSimulators: [Simulator] = []
+    /// The tailnet as the device bar's Tailscale section shows it; nil when
+    /// this Mac has no Tailscale CLI, which hides the section.
+    var tailscale: TailscaleStatus?
     /// Per-serial enrichment for the device picker (version, battery).
     var deviceDetails: [String: DeviceDetails] = [:]
     var adbStatus: ToolStatus?
@@ -799,11 +802,15 @@ final class AppCore {
     /// Emit an anonymous `device_connected` once per device this session (no
     /// serial leaves the machine — it's only the local dedup key). Android
     /// only — simulators skip the details fetch that triggers it.
+    ///
+    /// `isTailnet` is how Tailscale-mode sessions are counted: a boolean worked
+    /// out here, so neither the 100.x address nor the peer's name is sent.
     private func reportDeviceConnected(_ device: Device) {
         guard reportedDeviceSerials.insert(device.serial).inserted else { return }
         Telemetry.shared.trackDeviceConnected(
             isEmulator: device.serial.hasPrefix("emulator-"),
-            isWireless: device.isWireless
+            isWireless: device.isWireless,
+            isTailnet: TailscalePeers.isTailnet(serial: device.serial)
         )
     }
 
@@ -820,7 +827,9 @@ final class AppCore {
     }
 
     /// Picker label with enrichment: "Pixel 7 (005F) · Android 14 · 82%",
-    /// or "iPhone 16 Pro · iOS 18.2 · Simulator" for a booted simulator.
+    /// or "iPhone 16 Pro · iOS 18.2 · Simulator" for a booted simulator. A
+    /// phone reached over Tailscale says so last, because it is the reason
+    /// its mirror is slower and some features ask before running.
     func deviceTitle(_ device: Device) -> String {
         guard device.isReady else {
             return device.state == "unauthorized"
@@ -834,6 +843,7 @@ final class AppCore {
                 if let version = details.androidVersion { parts.append("Android \(version)") }
                 if let battery = details.batteryLevel { parts.append("\(battery)%") }
             }
+            if TailscalePeers.isTailnet(serial: device.serial) { parts.append("Tailscale") }
         case .iosSimulator:
             if let runtime = device.product { parts.append(runtime) }
             parts.append("Simulator")
@@ -959,6 +969,7 @@ final class AppCore {
     /// process launch — one per change, not one per window.
     private var avdRefresh: Task<Void, Never>?
     private var simulatorRefresh: Task<Void, Never>?
+    private var tailscaleRefresh: Task<Void, Never>?
 
     /// Refresh `availableAvds` from `emulator -list-avds`, tagging which are
     /// already running. A no-op (clears the list) when the SDK emulator is absent.
@@ -992,6 +1003,23 @@ final class AppCore {
         simulatorRefresh = task
         await task.value
         simulatorRefresh = nil
+    }
+
+    /// Refresh `tailscale` — the tailnet's Android phones for the device bar's
+    /// Tailscale section. A background read, so outside the Command Log; it
+    /// runs the Tailscale CLI, not adb. Coalesced like the AVD list, and
+    /// written only on a change so an open menu is not re-rendered for nothing.
+    func refreshTailscale() async {
+        if let tailscaleRefresh { return await tailscaleRefresh.value }
+        let task = Task { [self] in
+            let status = FeatureRegistry.visiblePlatforms(for: selectedRole).contains(.android)
+                ? await env.engine.tailscale.status()
+                : nil
+            if tailscale != status { tailscale = status }
+        }
+        tailscaleRefresh = task
+        await task.value
+        tailscaleRefresh = nil
     }
 
     // MARK: - Quit

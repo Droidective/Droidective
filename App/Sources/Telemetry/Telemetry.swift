@@ -310,17 +310,33 @@ final class Telemetry {
     /// A device became visible. Carries only connection-shape flags — no
     /// device identity (model, OS version, serial), matching the app's "no
     /// device data" promise in Settings ▸ Privacy and the privacy policy.
-    func trackDeviceConnected(isEmulator: Bool, isWireless: Bool) {
+    /// `isTailnet` marks a phone reached over Tailscale — counted as a flag,
+    /// never as the address or the peer's name. `TelemetryScrub` drops an IPv4
+    /// but lets a hostname through, so the flag is the only form it may take.
+    func trackDeviceConnected(isEmulator: Bool, isWireless: Bool, isTailnet: Bool) {
         track("device_connected", [
             "is_emulator": isEmulator,
             "is_wireless": isWireless,
+            "is_tailnet": isTailnet,
         ])
         if crashReportingEnabled, sentryRunning {
             let crumb = Breadcrumb(level: .info, category: "device")
-            let kind = isEmulator ? "emulator" : (isWireless ? "wireless" : "usb")
+            let kind = isEmulator
+                ? "emulator" : (isTailnet ? "tailnet" : (isWireless ? "wireless" : "usb"))
             crumb.message = "connected: \(kind)"
             SentrySDK.addBreadcrumb(crumb)
         }
+    }
+
+    /// One use of the device menu's Tailscale section: `action` is a fixed
+    /// label ("connect" or "prepare"), and nothing about the phone or the
+    /// tailnet rides along.
+    func trackTailscaleAction(_ action: TailscaleAction, ok: Bool) {
+        track("tailscale_action", ["action": action.rawValue, "ok": ok])
+    }
+
+    enum TailscaleAction: String {
+        case connect, prepare
     }
 
     // MARK: - Performance

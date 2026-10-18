@@ -1975,6 +1975,7 @@ final class AppState {
         get { core.availableSimulators }
         set { core.availableSimulators = newValue }
     }
+    var tailscale: TailscaleStatus? { core.tailscale }
     var deviceDetails: [String: DeviceDetails] { core.deviceDetails }
     var adbStatus: ToolStatus? { core.adbStatus }
     var adbMissing: Bool { core.adbMissing }

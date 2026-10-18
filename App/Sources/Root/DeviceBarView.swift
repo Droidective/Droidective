@@ -20,6 +20,8 @@ struct DeviceBarView: View {
     /// with set-up still to do. Keyed by serial so a stale answer for the
     /// previous device can never put the entry under the next one.
     @State private var phoneSetupSerial: String?
+    /// The phone "Prepare for Tailscale" is asking about, while it asks.
+    @State private var preparingForTailscale: Device?
 
     var body: some View {
         @Bindable var state = state
@@ -131,6 +133,7 @@ struct DeviceBarView: View {
         .task(id: phoneSetupCandidate) {
             await probePhoneSetup()
         }
+        .modifier(TailscalePrepareConfirmation(device: $preparingForTailscale))
     }
 
     private var selectedDevice: Device? {
@@ -212,6 +215,42 @@ struct DeviceBarView: View {
                         serial: device.serial, name: state.deviceDisplayName(device))
                 } label: {
                     Label("Set Up Droidective on This Phone…", systemImage: "checklist")
+                }
+            }
+        }
+    }
+
+    // MARK: - Tailscale
+
+    /// The tailnet's Android phones to connect, the reason there are none, and
+    /// "Prepare for Tailscale" for a USB phone. Absent without a Tailscale CLI
+    /// on this Mac, and when it would have no rows: a tailnet whose phones are
+    /// all connected already lists them above, marked "Tailscale".
+    @ViewBuilder
+    private var tailscaleSection: some View {
+        let peers = state.connectableTailscalePeers
+        let notice = state.tailscale?.notice
+        let candidate = state.tailscale == nil ? nil : state.tailscalePrepareCandidate
+        if state.tailscale != nil, notice != nil || !peers.isEmpty || candidate != nil {
+            Section("Tailscale") {
+                if let notice {
+                    Text(notice)
+                }
+                ForEach(peers) { peer in
+                    Button {
+                        state.connectTailscale(peer)
+                    } label: {
+                        Label("Connect \(peer.name)", systemImage: "network")
+                    }
+                }
+                if let candidate {
+                    Button {
+                        preparingForTailscale = candidate
+                    } label: {
+                        Label(
+                            "Prepare \(state.deviceDisplayName(candidate)) for Tailscale…",
+                            systemImage: "cable.connector")
+                    }
                 }
             }
         }
@@ -305,6 +344,7 @@ struct DeviceBarView: View {
                 }
             }
             phoneSetupItem
+            tailscaleSection
             Section("Wireless debugging") {
                 // The QR tab first, and it is what "Pair new device…" opens:
                 // it asks the user for nothing, where the pairing-code tab
@@ -339,6 +379,7 @@ struct DeviceBarView: View {
             .onAppear {
                 state.refreshDevices()
                 Task { await probePhoneSetup() }
+                Task { await state.refreshTailscale() }
             }
         } label: {
             devicePill
@@ -366,6 +407,7 @@ struct DeviceBarView: View {
         .task(id: state.devices.map(\.serial).joined()) {
             await state.refreshAvds()
             await state.refreshSimulators()
+            await state.refreshTailscale()
         }
     }
 
@@ -529,6 +571,31 @@ struct DeviceBarView: View {
                 Text("Choose app bundle…")
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+}
+
+/// "Prepare for Tailscale" asks before it runs: `adb tcpip 5555` leaves a
+/// plaintext adb listener on every network the phone joins until it restarts,
+/// and `TailscaleService.prepareWarning` says so in the words the
+/// Windows/Linux app is served too.
+private struct TailscalePrepareConfirmation: ViewModifier {
+    @Environment(AppState.self) private var state
+    @Binding var device: Device?
+
+    func body(content: Content) -> some View {
+        content.confirmationDialog(
+            device.map { TailscaleService.prepareTitle(deviceName: state.deviceDisplayName($0)) } ?? "",
+            isPresented: Binding(get: { device != nil }, set: { if !$0 { device = nil } }),
+            titleVisibility: .visible,
+            presenting: device
+        ) { device in
+            Button(TailscaleService.prepareConfirmLabel) {
+                state.prepareForTailscale(serial: device.serial)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
+            Text(TailscaleService.prepareWarning)
         }
     }
 }
