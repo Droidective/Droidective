@@ -80,8 +80,14 @@ fn on_window_event(window: &tauri::Window, event: &WindowEvent) {
 /// `tauri.conf.json` or a window the platform refuses to create. A daemon that
 /// will not start is *not* an error here: the UI comes up and says so.
 #[expect(
+    clippy::allow_attributes,
+    reason = "the one place an `expect` cannot work: see the `allow` below"
+)]
+#[allow(
     clippy::exit,
-    reason = "tauri::generate_context! expands to a process::exit on a malformed config"
+    reason = "tauri::generate_context! expands to a process::exit on a malformed config. \
+              Clippy 1.97 reports it and 1.99 does not, so an `expect` fails as \
+              unfulfilled on one and no attribute fails `exit = deny` on the other"
 )]
 pub fn run() -> tauri::Result<()> {
     let app = tauri::Builder::default()
