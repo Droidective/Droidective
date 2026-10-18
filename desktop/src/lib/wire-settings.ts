@@ -253,3 +253,29 @@ export interface PhoneSetupRun {
   status: PhoneSetupStatus
   failure: string | null
 }
+
+/** One Android phone on the user's tailnet — ADBKit's `TailscalePeer`. */
+export interface TailscalePeer {
+  id: string
+  name: string
+  ipv4: string
+}
+
+/**
+ * The device menu's Tailscale section — `TailscaleProtocol.Status`.
+ *
+ * Every field is the daemon's answer: `peers` already leaves out the phones adb
+ * lists, `notice` is the line to show instead of a list, and `prepareWarning`
+ * is the security warning "Prepare for Tailscale" asks with — served so the two
+ * apps cannot word it differently.
+ */
+export interface TailscaleStatus {
+  /** False when there is no Tailscale CLI here: the menu has no section. */
+  installed: boolean
+  flavor: string | null
+  backendState: string | null
+  running: boolean
+  notice: string | null
+  peers: TailscalePeer[]
+  prepareWarning: string
+}

@@ -1,8 +1,10 @@
 import { useState } from "react"
 import { FieldRow } from "@/components/ActionFormParts"
 import { Button, Switch } from "@/components/Controls"
+import { QuickLinkWarning } from "@/components/quick/QuickParts"
 import { QuickSnippetList } from "@/components/quick/QuickSnippetList"
 import { initialValues, missingRequired, type FormValues } from "@/lib/fields"
+import type { LinkCutQuestion } from "@/lib/tailnet"
 import type { FeatureSummary } from "@/lib/wire"
 
 /**
@@ -21,10 +23,13 @@ import type { FeatureSummary } from "@/lib/wire"
 export function QuickForm({
   feature,
   running,
+  linkWarning,
   onRun,
 }: {
   feature: FeatureSummary
   running: boolean
+  /** Set while a run on a tailnet phone waits for its second press. */
+  linkWarning: LinkCutQuestion | null
   onRun: (values: FormValues, toggleOn: boolean) => void
 }) {
   const [values, setValues] = useState<FormValues>(() => initialValues(feature))
@@ -70,6 +75,8 @@ export function QuickForm({
         />
       ) : null}
 
+      {linkWarning === null ? null : <QuickLinkWarning question={linkWarning} />}
+
       <div className="flex items-center gap-2">
         <Button
           tone="primary"
@@ -80,10 +87,12 @@ export function QuickForm({
         >
           {running ? "Running…" : "Run"}
         </Button>
-        {missing.length === 0 ? null : (
+        {missing.length > 0 ? (
           <span className="text-[11.5px] text-text-tertiary">
             Fill in {missing.join(", ")}.
           </span>
+        ) : linkWarning === null ? null : (
+          <span className="text-[11.5px] text-text-tertiary">Enter again to run anyway</span>
         )}
       </div>
     </form>

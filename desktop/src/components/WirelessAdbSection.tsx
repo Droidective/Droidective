@@ -3,6 +3,7 @@ import { useState } from "react"
 import { HubSection } from "@/components/Hub"
 import { useConnectedDevices } from "@/hooks/useConnectedDevices"
 import { useNotifications } from "@/hooks/useNotifications"
+import { useRemoteLinkGuard } from "@/hooks/useRemoteLink"
 import {
   asDaemonError,
   connectWireless,
@@ -27,6 +28,10 @@ export function WirelessAdbSection() {
   const devices = useConnectedDevices()
   const { show } = useNotifications()
   const [busy, setBusy] = useState(false)
+  // `adb tcpip` restarts adb on the phone. The list below is cabled devices
+  // only, so this asks only if a phone reached over Tailscale ever lands in
+  // it — the same guard the Mac's section runs.
+  const remoteLink = useRemoteLinkGuard()
 
   const usb = devices.filter((device) => !device.isWireless)
   const wireless = devices.filter((device) => device.isWireless)
@@ -63,12 +68,17 @@ export function WirelessAdbSection() {
               <Action
                 label="Enable Wi-Fi & Connect"
                 busy={busy}
-                onClick={() => attempt("Enable Wi-Fi & Connect", () => enableTcpip(device.serial))}
+                onClick={() => {
+                  remoteLink.ask("wireless-adb", [device.serial], "Enable Wi-Fi & Connect", () => {
+                    attempt("Enable Wi-Fi & Connect", () => enableTcpip(device.serial))
+                  })
+                }}
               />
             </div>
           ))
         )}
       </HubSection>
+      {remoteLink.dialog}
 
       <PairSection busy={busy} attempt={attempt} />
 

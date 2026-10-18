@@ -1,8 +1,15 @@
 import { useEffect, useRef } from "react"
 import { QuickBundlePicker } from "@/components/quick/QuickBundlePicker"
 import { QuickForm } from "@/components/quick/QuickForm"
-import { QuickFooter, QuickGrid, QuickHeader, QuickList } from "@/components/quick/QuickParts"
-import { COLUMNS, useQuickPanel } from "@/hooks/useQuickPanel"
+import {
+  QuickFooter,
+  QuickGrid,
+  QuickHeader,
+  QuickLinkWarning,
+  QuickList,
+} from "@/components/quick/QuickParts"
+import { COLUMNS, useQuickPanel, type QuickPanelState } from "@/hooks/useQuickPanel"
+import type { FeatureSummary } from "@/lib/wire"
 
 /**
  * The Quick Actions panel — the Mac's `QuickActionsView`.
@@ -31,30 +38,18 @@ export function QuickPanel() {
   if (panel.form !== null) {
     return (
       <Screen onBack={panel.back} title={panel.form.title}>
-        <QuickForm feature={panel.form} running={panel.running} onRun={panel.submitForm} />
+        <QuickForm
+          feature={panel.form}
+          running={panel.running}
+          linkWarning={panel.linkWarning}
+          onRun={panel.submitForm}
+        />
       </Screen>
     )
   }
 
   if (panel.picking !== null) {
-    const feature = panel.picking
-    return (
-      <Screen onBack={panel.back} title={`Run ${feature.title} on…`}>
-        <QuickList
-          rows={panel.ready.map((device) => ({ id: device.serial, title: device.label }))}
-          onPick={(serial) => {
-            panel.pickDevice([serial])
-          }}
-          {...(feature.supportsRunAll
-            ? {
-                onPickAll: () => {
-                  panel.pickDevice(panel.ready.map((device) => device.serial))
-                },
-              }
-            : {})}
-        />
-      </Screen>
-    )
+    return <PickDeviceScreen panel={panel} feature={panel.picking} />
   }
 
   if (panel.pickingApp !== null) {
@@ -110,6 +105,43 @@ export function QuickPanel() {
       </div>
       <QuickFooter outcome={panel.outcome} armed={panel.armed !== null} />
     </div>
+  )
+}
+
+/**
+ * The pick-device interstitial. A link-cutting feature picked for a phone
+ * reached over Tailscale arms here first, and picking the same again is the
+ * second press — the panel cannot hold a dialog.
+ */
+function PickDeviceScreen({
+  panel,
+  feature,
+}: {
+  panel: QuickPanelState
+  feature: FeatureSummary
+}) {
+  return (
+    <Screen onBack={panel.back} title={`Run ${feature.title} on…`}>
+      {panel.linkWarning === null ? null : (
+        <div className="mb-2 px-2">
+          <QuickLinkWarning question={panel.linkWarning} />
+          <p className="pt-1 text-[11.5px] text-text-tertiary">Choose it again to run anyway.</p>
+        </div>
+      )}
+      <QuickList
+        rows={panel.ready.map((device) => ({ id: device.serial, title: device.label }))}
+        onPick={(serial) => {
+          panel.pickDevice([serial])
+        }}
+        {...(feature.supportsRunAll
+          ? {
+              onPickAll: () => {
+                panel.pickDevice(panel.ready.map((device) => device.serial))
+              },
+            }
+          : {})}
+      />
+    </Screen>
   )
 }
 

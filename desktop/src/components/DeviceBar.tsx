@@ -6,9 +6,12 @@ import { Switch } from "@/components/Controls"
 import { DeviceMenu, DevicePill, IconButton } from "@/components/DeviceMenu"
 import { DeviceSheets, type DeviceSheet } from "@/components/DeviceSheets"
 import {
+  tailscaleMenu,
   useDeviceBarActions,
   usePhoneSetupProbe,
+  useTailscale,
   type PhoneSetupProbe,
+  type Tailscale,
 } from "@/hooks/useDeviceBarActions"
 import { StatusIcon } from "@/components/DeviceStatusIcon"
 import type { ActiveOverride, Device } from "@/lib/wire"
@@ -54,6 +57,7 @@ export interface DeviceBarProps {
 export function DeviceBar(props: DeviceBarProps) {
   const [sheet, setSheet] = useState<DeviceSheet | null>(null)
   const phoneSetup = usePhoneSetupProbe(props.selected)
+  const tailscale = useTailscale(props.devices, props.onRefresh)
 
   return (
     <div className="flex h-[46px] shrink-0 items-center gap-2.5 border-b border-border-subtle bg-bg-chrome px-3">
@@ -68,7 +72,12 @@ export function DeviceBar(props: DeviceBarProps) {
         {props.sidebarAutoHide ? <PanelLeftDashed size={15} /> : <PanelLeft size={15} />}
       </IconButton>
       <StatusIcon device={props.selected} />
-      <DeviceControl bar={props} phoneSetup={phoneSetup} onSheet={setSheet} />
+      <DeviceControl
+        bar={props}
+        phoneSetup={phoneSetup}
+        tailscale={tailscale}
+        onSheet={setSheet}
+      />
 
       {/* Beside the device, as on the Mac: the two together are what an
           app-scoped screen acts on. */}
@@ -104,6 +113,7 @@ export function DeviceBar(props: DeviceBarProps) {
         devices={props.devices}
         onSelectDevice={props.onSelect}
         onPhoneStatus={phoneSetup.report}
+        onPrepareForTailscale={tailscale.prepare}
         onDismiss={() => {
           setSheet(null)
         }}
@@ -116,10 +126,12 @@ export function DeviceBar(props: DeviceBarProps) {
 function DeviceControl({
   bar,
   phoneSetup,
+  tailscale,
   onSheet,
 }: {
   bar: DeviceBarProps
   phoneSetup: PhoneSetupProbe
+  tailscale: Tailscale
   onSheet: (sheet: DeviceSheet) => void
 }) {
   const { avds, launch, disconnect } = useDeviceBarActions(bar.devices)
@@ -134,7 +146,10 @@ function DeviceControl({
         onToggle={() => {
           // Asked again on every open, as the Mac's menu does, so an app
           // installed while the phone is plugged in is noticed.
-          if (!menuOpen) phoneSetup.reprobe()
+          if (!menuOpen) {
+            phoneSetup.reprobe()
+            tailscale.reprobe()
+          }
           setMenuOpen((open) => !open)
         }}
       />
@@ -159,6 +174,7 @@ function DeviceControl({
                 }
               : null
           }
+          tailscale={tailscaleMenu(tailscale, selected, onSheet)}
           onManageEmulators={() => {
             bar.onOpenFeature("emulators")
           }}

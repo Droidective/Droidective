@@ -35,9 +35,9 @@ use crate::daemon::wire::{
     RestrictionWriteRequest, RestrictionsResponse, RolesResponse, RootStatusResponse, RunRequest,
     RunResponse, SandboxRequest, SandboxResponse, ScreenshotCaptureRequest,
     ScreenshotCaptureResponse, Snippet, SnippetExpandRequest, SnippetExpandResponse,
-    SnippetWriteRequest, StreamParams, ToolInstallRequest, ToolInstallResponse, ToolsResponse,
-    VideoExportOptions, VideoExportRequest, VideoProxyRequest, WifiResponse, WifiWriteRequest,
-    WirelessActionRequest,
+    SnippetWriteRequest, StreamParams, TailscalePeer, TailscaleStatus, ToolInstallRequest,
+    ToolInstallResponse, ToolsResponse, VideoExportOptions, VideoExportRequest, VideoProxyRequest,
+    WifiResponse, WifiWriteRequest, WirelessActionRequest,
 };
 use crate::daemon::{DaemonStatus, Supervisor};
 use crate::error::DaemonError;
@@ -1507,6 +1507,37 @@ pub async fn set_up_phone(
     serial: String,
 ) -> Result<PhoneSetupRunResponse, DaemonError> {
     supervisor.client().await?.set_up_phone(serial).await
+}
+
+/// The tailnet's Android phones, as the device menu's Tailscale section shows
+/// them. Always a background read.
+#[tauri::command]
+pub async fn tailscale_status(
+    supervisor: State<'_, Supervisor>,
+) -> Result<TailscaleStatus, DaemonError> {
+    supervisor.client().await?.tailscale_status().await
+}
+
+/// `adb connect` to one tailnet phone by its 100.x address.
+#[tauri::command]
+pub async fn connect_tailscale(
+    supervisor: State<'_, Supervisor>,
+    peer: TailscalePeer,
+) -> Result<RunResponse, DaemonError> {
+    supervisor.client().await?.connect_tailscale(peer).await
+}
+
+/// `adb tcpip 5555` on a USB phone, so it can be reached over the tailnet.
+#[tauri::command]
+pub async fn prepare_for_tailscale(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+) -> Result<RunResponse, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .prepare_for_tailscale(serial)
+        .await
 }
 
 /// Runs jadx or apktool over one APK and answers the tree it wrote.

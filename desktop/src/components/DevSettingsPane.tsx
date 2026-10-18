@@ -3,6 +3,7 @@ import { Banner, Select } from "@/components/Controls"
 import { HubColumn, HubSection, IconButton, SwitchRow } from "@/components/Hub"
 import { NoDevice } from "@/components/NoDevice"
 import { useDeveloperSettings, withScale, withToggle } from "@/hooks/useDeviceSettings"
+import { useRemoteLinkGuard } from "@/hooks/useRemoteLink"
 import { writeDevSetting } from "@/lib/daemon"
 import {
   DEV_SECTIONS,
@@ -25,6 +26,10 @@ import type { Device, DevScale } from "@/lib/wire"
 export function DevSettingsPane({ device }: { device: Device | null }) {
   const serial = device?.serial ?? null
   const { settings, error, refreshing, refresh, apply } = useDeveloperSettings(serial)
+  // On a phone reached over Tailscale every change asks first, as the Mac's
+  // does. The row only moves once the write is allowed to happen, so a cancel
+  // leaves it showing what the device has.
+  const remoteLink = useRemoteLinkGuard()
 
   if (!device) return <NoDevice feature="dev-settings" title="Developer Settings" />
 
@@ -42,22 +47,27 @@ export function DevSettingsPane({ device }: { device: Device | null }) {
 
   const setToggle = (id: string, on: boolean) => {
     if (serial === null) return
-    apply(
-      (current) => withToggle(current, id, on),
-      () => writeDevSetting({ serial, id, on }),
-    )
+    remoteLink.ask("dev-settings", [serial], "Change Setting", () => {
+      apply(
+        (current) => withToggle(current, id, on),
+        () => writeDevSetting({ serial, id, on }),
+      )
+    })
   }
 
   const setScale = (id: string, value: number) => {
     if (serial === null) return
-    apply(
-      (current) => withScale(current, id, value),
-      () => writeDevSetting({ serial, id, value }),
-    )
+    remoteLink.ask("dev-settings", [serial], "Change Setting", () => {
+      apply(
+        (current) => withScale(current, id, value),
+        () => writeDevSetting({ serial, id, value }),
+      )
+    })
   }
 
   return (
     <HubColumn>
+      {remoteLink.dialog}
       {error === null ? null : <Banner tone="error">{error.message}</Banner>}
       {DEV_SECTIONS.map((section, index) => (
         <HubSection

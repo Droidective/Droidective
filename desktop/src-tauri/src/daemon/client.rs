@@ -25,9 +25,9 @@ use crate::daemon::wire::{
     RestrictionsResponse, RolesResponse, RootStatusResponse, RunRequest, RunResponse,
     SandboxRequest, SandboxResponse, ScreenshotCaptureRequest, ScreenshotCaptureResponse,
     SnippetExpandRequest, SnippetExpandResponse, SnippetWriteRequest, SnippetsResponse,
-    ToolInstallRequest, ToolInstallResponse, ToolsResponse, VideoExportRequest,
-    VideoFormatsResponse, VideoPathResponse, VideoProxyRequest, VideoRemoveRequest, WifiResponse,
-    WifiWriteRequest, WirelessActionRequest,
+    TailscalePeer, TailscaleStatus, ToolInstallRequest, ToolInstallResponse, ToolsResponse,
+    VideoExportRequest, VideoFormatsResponse, VideoPathResponse, VideoProxyRequest,
+    VideoRemoveRequest, WifiResponse, WifiWriteRequest, WirelessActionRequest,
 };
 use crate::error::DaemonError;
 
@@ -303,6 +303,22 @@ impl DaemonClient {
 
     pub async fn set_up_phone(&self, serial: String) -> Result<PhoneSetupRunResponse, DaemonError> {
         self.post("/v1/phonesetup/run", &DeviceRequest { serial })
+            .await
+    }
+
+    /// Always background: the device menu reads it on every open and on every
+    /// device change, and it runs `adb devices` to leave out the phones adb
+    /// already lists — a poll, not something the user did.
+    pub async fn tailscale_status(&self) -> Result<TailscaleStatus, DaemonError> {
+        self.post_marked("/v1/tailscale/status", &EMPTY, true).await
+    }
+
+    pub async fn connect_tailscale(&self, peer: TailscalePeer) -> Result<RunResponse, DaemonError> {
+        self.post("/v1/tailscale/connect", &peer).await
+    }
+
+    pub async fn prepare_for_tailscale(&self, serial: String) -> Result<RunResponse, DaemonError> {
+        self.post("/v1/tailscale/prepare", &DeviceRequest { serial })
             .await
     }
 

@@ -2,6 +2,7 @@ import { useCallback, useState } from "react"
 
 import { asDaemonError, hideQuickPanel, runAction } from "@/lib/daemon"
 import { runFields, type FormValues } from "@/lib/fields"
+import { useQuickLinkGuard, type LinkGuard } from "@/hooks/useQuickLinkGuard"
 import { runOnTargets } from "@/lib/runner"
 import type { Device, FeatureSummary } from "@/lib/wire"
 
@@ -91,6 +92,7 @@ function useRunner(
   ready: readonly Device[],
   closeAfterRun: boolean,
   stack: ReturnType<typeof useRunStack>,
+  guard: LinkGuard["guard"],
 ) {
   const [outcome, setOutcome] = useState<{ message: string; ok: boolean } | null>(null)
   const [running, setRunning] = useState(false)
@@ -159,9 +161,12 @@ function useRunner(
         setPicking(feature)
         return
       }
-      withDevice(feature, [ready[0]?.serial ?? ""], values, on)
+      const serials = [ready[0]?.serial ?? ""]
+      guard(feature, serials, () => {
+        withDevice(feature, serials, values, on)
+      })
     },
-    [ready, perform, withDevice, setForm, setHeld, setPicking],
+    [ready, perform, withDevice, setForm, setHeld, setPicking, guard],
   )
 
   return { outcome, setOutcome, running, perform, withDevice, start }
@@ -183,13 +188,16 @@ export function useQuickRun({
   closeAfterRun: boolean
 }) {
   const stack = useRunStack()
+  const link = useQuickLinkGuard(ready)
   const { outcome, setOutcome, running, perform, withDevice, start } = useRunner(
     ready,
     closeAfterRun,
     stack,
+    link.guard,
   )
   const [armed, setArmed] = useState<string | null>(null)
   const { clear, setForm, setPicking } = stack
+  const { guard, clearWarning } = link
 
   return {
     form: stack.form,
@@ -199,6 +207,8 @@ export function useQuickRun({
     bundleSerial: stack.held?.serials?.[0] ?? null,
     running,
     armed,
+    /** A tailnet run waiting for its second press, and what it would risk. */
+    linkWarning: link.warning,
     outcome,
     report: setOutcome,
     disarm: useCallback(() => {
@@ -227,11 +237,15 @@ export function useQuickRun({
     ),
     pickDevice: useCallback(
       (serials: string[]) => {
-        if (stack.picking === null) return
-        setPicking(null)
-        withDevice(stack.picking, serials, stack.held?.values ?? {}, stack.held?.on ?? true)
+        const feature = stack.picking
+        if (feature === null) return
+        // The picker stays up while armed: it is where the question shows.
+        guard(feature, serials, () => {
+          setPicking(null)
+          withDevice(feature, serials, stack.held?.values ?? {}, stack.held?.on ?? true)
+        })
       },
-      [stack.picking, stack.held, withDevice, setPicking],
+      [stack.picking, stack.held, withDevice, setPicking, guard],
     ),
     pickApp: useCallback(
       (packageId: string) => {
@@ -247,11 +261,13 @@ export function useQuickRun({
       [stack.pickingApp, stack.held, perform],
     ),
     back: useCallback(() => {
+      // Leaving the screen withdraws the question with it.
+      clearWarning()
       if (stack.atRoot) {
         void hideQuickPanel()
         return
       }
       clear()
-    }, [stack.atRoot, clear]),
+    }, [stack.atRoot, clear, clearWarning]),
   }
 }

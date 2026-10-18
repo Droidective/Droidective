@@ -68,7 +68,12 @@ export function ConfirmDialog({
       >
         <h2 className="text-[14px] font-medium text-text-primary">{title}</h2>
         {message === undefined ? null : (
-          <p className="mt-1.5 text-[12.5px] text-text-secondary">{message}</p>
+          // pre-line: a served message can carry paragraphs — "Prepare for
+          // Tailscale"'s warning has two — and a dialog should not run them
+          // together.
+          <p className="mt-1.5 whitespace-pre-line text-[12.5px] text-text-secondary">
+            {message}
+          </p>
         )}
         <div className="mt-4 flex justify-end gap-2">
           <Button onClick={onCancel}>{cancelLabel}</Button>

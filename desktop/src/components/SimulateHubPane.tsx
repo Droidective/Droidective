@@ -193,6 +193,8 @@ function NetworkSection({ actions }: { actions: HubActions }) {
       <SwitchRow title="Wi-Fi" checked={wifi} onChange={setWifi} />
       <SwitchRow title="Mobile data" checked={data} onChange={setData} />
       <SwitchRow title="Airplane mode" checked={airplane} onChange={setAirplane} />
+      {/* Asks first on a phone reached over Tailscale: turning a radio off
+          can take it off the network. `Apply` knows which features do. */}
       <Apply actions={actions} featureId="network-toggles" fields={{ wifi, data, airplane }} />
     </HubSection>
   )

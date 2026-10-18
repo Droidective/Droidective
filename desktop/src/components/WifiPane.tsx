@@ -4,6 +4,7 @@ import { Banner, Button, Select, Switch, TextInput } from "@/components/Controls
 import { IconButton } from "@/components/Hub"
 import { NoDevice } from "@/components/screen"
 import { WifiSaved } from "@/components/WifiSaved"
+import { useRemoteLinkGuard } from "@/hooks/useRemoteLink"
 import { useWifi } from "@/hooks/useWifi"
 import { canConnect, SECURITY_MODES, wifiDetail, wifiHeadline } from "@/lib/network"
 import type { Device } from "@/lib/wire"
@@ -22,6 +23,9 @@ export function WifiPane({ device }: { device: Device | null }) {
   const [ssid, setSsid] = useState("")
   const [security, setSecurity] = useState("wpa2")
   const [password, setPassword] = useState("")
+  // Switching the radio off or joining another network can take a phone
+  // reached over Tailscale off the network, so there both ask first.
+  const remoteLink = useRemoteLinkGuard()
 
   if (!device) return <NoDevice feature="wifi" title="Wi-Fi" />
 
@@ -52,7 +56,12 @@ export function WifiPane({ device }: { device: Device | null }) {
           />
           <Switch
             checked={status?.enabled ?? false}
-            onChange={setEnabled}
+            onChange={(on) => {
+              const label = on ? "Turn Wi-Fi On" : "Turn Wi-Fi Off"
+              remoteLink.ask("wifi", [device.serial], label, () => {
+                setEnabled(on)
+              })
+            }}
             ariaLabel="Wi-Fi"
           />
         </section>
@@ -77,8 +86,10 @@ export function WifiPane({ device }: { device: Device | null }) {
             </p>
             <Button
               onClick={() => {
-                connect(ssid, security, password)
-                setPassword("")
+                remoteLink.ask("wifi", [device.serial], "Connect", () => {
+                  connect(ssid, security, password)
+                  setPassword("")
+                })
               }}
               disabled={!canConnect(ssid, busy)}
             >
@@ -86,6 +97,7 @@ export function WifiPane({ device }: { device: Device | null }) {
             </Button>
           </div>
         </section>
+        {remoteLink.dialog}
 
         <WifiSaved
           networks={data?.networks ?? []}

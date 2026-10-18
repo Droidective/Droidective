@@ -4,6 +4,7 @@ import { useQuickSession, type QuickSession } from "@/hooks/useQuickSession"
 import { asDaemonError } from "@/lib/daemon"
 import { type FormValues } from "@/lib/fields"
 import { moveInGrid, openableScreens, quickActions, quickCommands } from "@/lib/quick-actions"
+import type { LinkCutQuestion } from "@/lib/tailnet"
 import type { CustomCommand, Device, FeatureSummary } from "@/lib/wire"
 
 /** The columns the grid wraps at — the Mac's five. */
@@ -29,6 +30,8 @@ export interface QuickPanelState {
   running: boolean
   /** A destructive action waiting for its confirming second press. */
   armed: string | null
+  /** A run on a tailnet phone waiting for its second press, and its risk. */
+  linkWarning: LinkCutQuestion | null
   outcome: { message: string; ok: boolean } | null
   activate: (feature: FeatureSummary) => void
   submitForm: (values: FormValues, toggleOn: boolean) => void

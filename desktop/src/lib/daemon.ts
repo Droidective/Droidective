@@ -248,6 +248,7 @@ export {
 } from "@/lib/daemon-record"
 export { customCommands, runCustomCommand, writeCustomCommands } from "@/lib/daemon-commands"
 export { phoneSetupStatus, setUpPhone } from "@/lib/daemon-phone"
+export { connectTailscale, prepareForTailscale, tailscaleStatus } from "@/lib/daemon-tailscale"
 export {
   apkToolchain,
   convertAab,
