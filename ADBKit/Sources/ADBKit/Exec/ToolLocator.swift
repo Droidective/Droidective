@@ -48,6 +48,9 @@ public actor ToolLocator {
     /// inner = found-or-not.
     private var buildToolsDirCache: String??
     private var javaCache: String??
+    /// The Tailscale CLI, found or not. Not-found expires like `cache`'s does,
+    /// so Tailscale installed mid-session is noticed by the next menu open.
+    private var tailscaleCache: (cli: TailscaleCLI?, expiresAt: Date?)?
     private let runner: any ProcessRunning
     private let environment: [String: String]
     private let now: @Sendable () -> Date
@@ -98,6 +101,7 @@ public actor ToolLocator {
         cache.removeAll()
         buildToolsDirCache = nil
         javaCache = nil
+        tailscaleCache = nil
     }
 
     /// Newest SDK build-tools directory (e.g. …/build-tools/34.0.0), or nil when
@@ -175,6 +179,50 @@ public actor ToolLocator {
         return resolved
     }
 
+    /// The Tailscale CLI and which kind it is, or nil when there is none.
+    ///
+    /// Optional the way `java` is, and kept out of the Doctor's tool report
+    /// for the same reason: most people debugging a phone do not run
+    /// Tailscale, and a missing-tool row would read as something to fix. A
+    /// `tailscale` on the install prefixes wins over the Mac app's bundle,
+    /// because it runs as itself; the bundle is the App Store build's only
+    /// CLI. See `TailscaleCLI`.
+    public func tailscaleCLI() async -> TailscaleCLI? {
+        if let cached = tailscaleCache {
+            if let expiresAt = cached.expiresAt, now() >= expiresAt {
+                tailscaleCache = nil
+            } else {
+                return cached.cli
+            }
+        }
+        var resolved = tailscaleCandidatePaths.first(where: isExecutableFile)
+            .map { TailscaleCLI(path: $0, flavor: .standalone) }
+        #if os(macOS)
+        if resolved == nil, isExecutableFile(TailscaleCLI.macAppBundlePath) {
+            resolved = TailscaleCLI(path: TailscaleCLI.macAppBundlePath, flavor: .appBundle)
+        }
+        #endif
+        if resolved == nil, let path = await resolveViaLoginShellCommand("tailscale") {
+            resolved = TailscaleCLI(path: path, flavor: .standalone)
+        }
+        tailscaleCache = (
+            resolved, resolved == nil ? now().addingTimeInterval(Self.notFoundTTL) : nil
+        )
+        return resolved
+    }
+
+    /// Where an installed `tailscale` lands: the package-manager prefixes,
+    /// and on Windows the installer's own directory.
+    private var tailscaleCandidatePaths: [String] {
+        let name = Self.executableName("tailscale")
+        #if os(Windows)
+        return [environment["ProgramFiles"].map { "\($0)\\Tailscale\\\(name)" }]
+            .compactMap(\.self)
+        #else
+        return Self.installPrefixes.map { "\($0)/\(name)" }
+        #endif
+    }
+
     #if os(macOS)
     /// Ask macOS's `/usr/libexec/java_home` for the default JDK, then point at
     /// its `bin/java`. Exits non-zero when no JDK is installed.
@@ -205,6 +253,11 @@ public actor ToolLocator {
         javaCache = .some(path)
     }
 
+    /// Pre-populate the Tailscale CLI (tests). Seeded entries never expire.
+    public func seedTailscale(_ cli: TailscaleCLI?) {
+        tailscaleCache = (cli, nil)
+    }
+
     /// Resolve adb or throw a typed error the UI maps to an install prompt.
     public func adbPath() async throws(AdbError) -> String {
         guard let path = await resolve(.adb) else { throw .adbNotFound }
@@ -230,19 +283,22 @@ public actor ToolLocator {
         ].compactMap(\.self)
     }
 
-    private func candidatePaths(for tool: Tool) -> [String] {
-        // The standard third-party install prefixes — wherever the user's
-        // package manager put the binary (macOS: Apple Silicon then Intel
-        // Homebrew; Linux: distro packages). Windows installs land on PATH,
-        // which the resolve fallback scans.
+    /// The standard third-party install prefixes — wherever the user's
+    /// package manager put the binary (macOS: Apple Silicon then Intel
+    /// Homebrew; Linux: distro packages). Windows installs land on PATH,
+    /// which the resolve fallback scans.
+    private static var installPrefixes: [String] {
         #if os(macOS)
-        let installPrefixes = ["/opt/homebrew/bin", "/usr/local/bin"]
+        return ["/opt/homebrew/bin", "/usr/local/bin"]
         #elseif os(Windows)
-        let installPrefixes: [String] = []
+        return []
         #else
-        let installPrefixes = ["/usr/local/bin", "/usr/bin"]
+        return ["/usr/local/bin", "/usr/bin"]
         #endif
+    }
 
+    private func candidatePaths(for tool: Tool) -> [String] {
+        let installPrefixes = Self.installPrefixes
         let name = Self.executableName(tool.rawValue)
         switch tool {
         case .adb:

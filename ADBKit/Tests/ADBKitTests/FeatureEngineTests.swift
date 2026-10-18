@@ -513,6 +513,17 @@ import Testing
         }
     }
 
+    @Test func remoteLinkFlagsAreAllRealFeatures() {
+        // A typo'd id would leave the real feature running on a tailnet phone
+        // without asking, with nothing failing to say so.
+        let registryIDs = Set(FeatureRegistry.byID.keys)
+        #expect(!FeatureRegistry.remoteLinkWarnings.isEmpty)
+        for id in FeatureRegistry.remoteLinkWarnings.keys {
+            #expect(registryIDs.contains(id), "remoteLinkWarnings lists \"\(id)\", which is not in the registry")
+            #expect(FeatureRegistry.byID[id]?.remoteLinkWarning != nil)
+        }
+    }
+
     @Test func everyImplementedActionResolvesToARunner() async {
         // The #1 scaling hazard: an action feature added to implementedIDs but
         // missing its dispatch case silently falls through to the "coming soon"

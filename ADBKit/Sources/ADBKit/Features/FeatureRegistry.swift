@@ -661,6 +661,20 @@ public enum FeatureRegistry {
     /// keeps this in lockstep with the `supportsRunAll` flag.
     public static let runAllFeatureIDs: Set<String> = Set(all.filter(\.supportsRunAll).map(\.id))
 
+    /// Features that can take a phone off the network, each with the sentence
+    /// saying how. On a phone reached over Tailscale they ask before running
+    /// (`RemoteLink.asksFirst`), because a link this cuts can only be restored
+    /// on the phone itself. The keys are the flag; `FeatureRegistryTests`
+    /// keeps every one a real feature.
+    public static let remoteLinkWarnings: [String: String] = [
+        "network-toggles":
+            "Turning off Wi-Fi or mobile data, or turning on airplane mode, can take it off your tailnet.",
+        "wifi": "Turning Wi-Fi off or joining another network can take it off your tailnet.",
+        "wireless-adb":
+            "Switching adb to tcpip restarts adb on the phone, which drops every connection to it.",
+        "dev-settings": "Developer settings change how the phone runs, and are applied on the phone itself.",
+    ]
+
     /// Curated, ordered catalog features per role — the focused set a newcomer
     /// gets after picking a role on first launch. The order is the recommended
     /// sidebar order; the launchpad re-ranks it by real usage over time. Roles
@@ -816,5 +830,11 @@ public extension FeatureDef {
     /// built yet would strand the feature with no way in.
     var absorbedByHub: String? {
         FeatureRegistry.hubOfMember[id]
+    }
+
+    /// How this feature can take a phone off the network, when it can. See
+    /// `FeatureRegistry.remoteLinkWarnings`.
+    var remoteLinkWarning: String? {
+        FeatureRegistry.remoteLinkWarnings[id]
     }
 }
