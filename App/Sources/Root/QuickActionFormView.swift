@@ -37,11 +37,30 @@ struct QuickActionFormView: View {
     /// The Mac's LAN IP — the `{ip}` placeholder's value, read the way the
     /// main window's Send Text screen reads it.
     @State private var macIP: String?
+    /// Set by a first Run that would risk cutting a tailnet phone's link; the
+    /// next press runs. See `submit`.
+    @State private var linkCutQuestion: LinkCutQuestion?
+
+    private struct LinkCutQuestion {
+        let title: String
+        let message: String
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             ForEach(feature.fields, id: \.name) { field in
                 fieldRow(for: field)
+            }
+            if let question = linkCutQuestion {
+                VStack(alignment: .leading, spacing: 4) {
+                    Label(question.title, systemImage: "exclamationmark.triangle.fill")
+                        .font(.app(.callout))
+                        .foregroundStyle(.orange)
+                    Text(question.message)
+                        .font(.app(.caption))
+                        .foregroundStyle(.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             HStack(spacing: 10) {
                 Button {
@@ -53,7 +72,7 @@ struct QuickActionFormView: View {
                 .disabled(running)
                 // ⌘⏎ always runs, whether or not a snippet is highlighted.
                 .keyboardShortcut(.return, modifiers: .command)
-                Text(highlightedSnippet == nil ? "⏎ or ⌘⏎ to run" : "⏎ inserts · ⌘⏎ runs")
+                Text(runHint)
                     .font(.app(.caption))
                     .foregroundStyle(.textMuted)
             }
@@ -88,6 +107,11 @@ struct QuickActionFormView: View {
             guard !Task.isCancelled else { return }
             focusedField = first
         }
+    }
+
+    private var runHint: String {
+        if linkCutQuestion != nil { return "⌘⏎ again to run anyway" }
+        return highlightedSnippet == nil ? "⏎ or ⌘⏎ to run" : "⏎ inserts · ⌘⏎ runs"
     }
 
     private var firstFocusableField: String? {
@@ -297,6 +321,15 @@ struct QuickActionFormView: View {
             onFinish(QuickRunOutcome(message: "Pick a saved bundle first.", ok: false))
             return
         }
+        // The panel can't host a dialog, so a feature that can take a phone
+        // reached over Tailscale off the network asks the panel's way: the
+        // first press arms and says why, the second runs.
+        if linkCutQuestion == nil, let question = state.remoteLinkQuestion(
+            feature.id, serials: targetsProvider(feature) ?? state.targetSerials) {
+            linkCutQuestion = LinkCutQuestion(title: question.title, message: question.message)
+            return
+        }
+        linkCutQuestion = nil
         var params: [String: FeatureValue] = [:]
         for field in feature.fields {
             switch field.control {

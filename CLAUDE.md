@@ -130,7 +130,15 @@ opening it — verify those by hand.
 5. **Logic lives in ADBKit.** adb/Process/parsing go in an ADBKit service with a
    pure, static, tested parser — never `Process`/`adb` in a SwiftUI view.
    **[silent — but a review red flag]**
-6. **Verify** — `cd ADBKit && swift test` green, then `make build` with zero
+6. **If it can take a phone off the network** (radios, Wi-Fi, adb's
+   transport…) — add its id and one sentence saying how to
+   `FeatureRegistry.remoteLinkWarnings`, and route every run of it through
+   `AppState.askingBeforeCuttingRemoteLink` (`.remoteLinkConfirmation` on the
+   view). On a phone reached over Tailscale it then asks first, in both apps —
+   the daemon serves the sentence as `remoteLinkWarning`. **[test:
+   `remoteLinkFlagsAreAllRealFeatures` for the id] · [silent: a run path that
+   skips the guard just doesn't ask]**
+7. **Verify** — `cd ADBKit && swift test` green, then `make build` with zero
    warnings (warnings are errors).
 
 ## Build / test / run
@@ -815,6 +823,20 @@ table) is in `docs/reactotron-mcp-analysis.md`.
     and `AdbClient.loggedCommand` masks it (pure, tested in
     `CommandLogRedactionTests`). A new command that takes a secret in argv
     extends `redactCredentials`; one that can take a file instead should.
+- **Tailscale mode is a serial, not a mode.** A phone on the user's tailnet is
+  reached by plain `adb connect <100.x>:5555` — no backend of ours — so
+  everything keys off `TailscalePeers.isTailnet(serial:)` (100.64.0.0/10 in an
+  `ip:port` serial). Connect by the IPv4, never the MagicDNS name:
+  `DeviceListParser` only recognises `ip:port` as wireless. Such a device gets
+  the remote mirror preset (`RemoteLink.mirrorParams` — 2 Mbit/s, 1280 px,
+  30 fps, applied in `MirrorViewModel.start` and the daemon's `openMirror`),
+  `· Tailscale` in its title, and the link-cut question above. The Tailscale
+  CLI is optional like `java` — `ToolLocator.tailscaleCLI()` says which kind it
+  found (the App Store build is the app bundle run with `TAILSCALE_BE_CLI=1`
+  through `/usr/bin/env`, because `SystemProcessRunner(environment:)` replaces
+  the environment) and it stays out of the Doctor. Telemetry counts it as a
+  boolean (`is_tailnet`, `tailscale_action`): `TelemetryScrub` drops an IPv4
+  but lets a hostname through, so a peer's name must never reach an event.
 - **Window translucency is token-driven — never paint an opaque full-pane
   fill.** Settings ▸ Appearance ▸ Window has Opacity (10–100%) / Blur / Grain
   sliders. `.bgRoot` / `.bgSurface` are *environment-resolving ShapeStyles*

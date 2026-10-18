@@ -11,6 +11,7 @@ struct DeveloperSettingsView: View {
     @State private var toggles: [String: Bool]?
     @State private var scales: [String: Double] = [:]
     @State private var refreshBusy = false
+    @State private var linkCut: RemoteLinkPrompt?
 
     private var serial: String { state.targetSerials.first ?? "" }
     private var engine: FeatureEngine { state.env.engine }
@@ -30,6 +31,16 @@ struct DeveloperSettingsView: View {
             }
         }
         .task(id: state.targetSerials.first ?? "") { await load() }
+        .remoteLinkConfirmation($linkCut)
+    }
+
+    /// On a phone reached over Tailscale every change asks first; a declined
+    /// one leaves the row showing the device's value, since nothing was
+    /// written to the optimistic state.
+    private func askingFirst(_ perform: @escaping @MainActor () -> Void) {
+        state.askingBeforeCuttingRemoteLink(
+            "dev-settings", serials: [serial], confirmLabel: "Change Setting",
+            prompt: $linkCut, perform: perform)
     }
 
     private var form: some View {
@@ -93,10 +104,12 @@ struct DeveloperSettingsView: View {
         Binding(
             get: { toggles?[toggle.id] ?? false },
             set: { newValue in
-                Task { @MainActor in
-                    toggles?[toggle.id] = newValue
-                    await apply {
-                        try await engine.developerSettings.set(toggle, on: newValue, serial: serial)
+                askingFirst {
+                    Task { @MainActor in
+                        toggles?[toggle.id] = newValue
+                        await apply {
+                            try await engine.developerSettings.set(toggle, on: newValue, serial: serial)
+                        }
                     }
                 }
             }
@@ -109,10 +122,12 @@ struct DeveloperSettingsView: View {
         Binding(
             get: { scales[scale.id] ?? 1.0 },
             set: { newValue in
-                Task { @MainActor in
-                    scales[scale.id] = newValue
-                    await apply {
-                        try await engine.developerSettings.setScale(scale, value: newValue, serial: serial)
+                askingFirst {
+                    Task { @MainActor in
+                        scales[scale.id] = newValue
+                        await apply {
+                            try await engine.developerSettings.setScale(scale, value: newValue, serial: serial)
+                        }
                     }
                 }
             }

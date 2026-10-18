@@ -13,6 +13,7 @@ struct FormActionView: View {
     @State private var sliderValues: [String: Double] = [:]
     @State private var presets = Presets()
     @State private var confirmingRun = false
+    @State private var linkCut: RemoteLinkPrompt?
     @FocusState private var focusedField: String?
 
     var body: some View {
@@ -24,6 +25,8 @@ struct FormActionView: View {
             }
         }
         .id(feature.id)
+        // Its own level, apart from the destructive-run dialog on the form.
+        .remoteLinkConfirmation($linkCut)
     }
 
     private var formContent: some View {
@@ -37,7 +40,10 @@ struct FormActionView: View {
                     if feature.isDestructive {
                         confirmingRun = true
                     } else {
-                        submit()
+                        state.askingBeforeCuttingRemoteLink(
+                            feature.id, serials: state.targetSerials,
+                            confirmLabel: "Run \(feature.title)", prompt: $linkCut
+                        ) { submit() }
                     }
                 } label: {
                     Label("Run", systemImage: "play.fill")

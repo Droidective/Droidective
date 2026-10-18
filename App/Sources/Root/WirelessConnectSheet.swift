@@ -46,6 +46,7 @@ struct WirelessConnectSheet: View {
     /// code" restarts the whole flow.
     @State private var qrRequest = QrPairingRequest.random()
     @State private var qrPhase = QrPairingPhase.waitingForScan
+    @State private var linkCut: RemoteLinkPrompt?
 
     private struct Status: Equatable {
         let ok: Bool
@@ -278,13 +279,21 @@ struct WirelessConnectSheet: View {
                     HStack {
                         Text(device.label)
                         Spacer()
-                        Button("Switch to Wi-Fi") { runTcpip(device.serial) }
-                            .buttonStyle(.borderedProminent)
-                            .disabled(busy)
+                        Button("Switch to Wi-Fi") {
+                            // tcpip restarts adb on the phone, dropping every
+                            // connection to it — a tailnet one included.
+                            state.askingBeforeCuttingRemoteLink(
+                                "wireless-adb", serials: [device.serial],
+                                confirmLabel: "Switch to Wi-Fi", prompt: $linkCut
+                            ) { runTcpip(device.serial) }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(busy)
                     }
                 }
             }
         }
+        .remoteLinkConfirmation($linkCut)
     }
 
     // MARK: - Status
