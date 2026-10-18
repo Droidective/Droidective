@@ -67,6 +67,10 @@ public enum DaemonProtocol {
         /// Wireless adb — pair, connect, disconnect, and the USB→Wi-Fi
         /// bootstrap — with the verb in the body.
         case wirelessAction = "/v1/wireless/action"
+        /// Droidective for Android on one phone: what is done, and the
+        /// one-click set-up. See `PhoneSetupProtocol`.
+        case phoneSetupStatus = "/v1/phonesetup/status"
+        case phoneSetupRun = "/v1/phonesetup/run"
         /// The saved deep links: read one app's list, replace it, launch one.
         /// The write takes the whole list rather than an add/edit/delete verb —
         /// the client holds what it is showing, and three routes would each

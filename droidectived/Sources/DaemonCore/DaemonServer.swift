@@ -132,6 +132,12 @@ public protocol DaemonBackend: Sendable {
     func disconnectWireless(target: String?) async throws -> FeatureResult
     /// `adb tcpip 5555` on a USB device, then connect to its Wi-Fi address.
     func enableTcpip(serial: String) async throws -> FeatureResult
+    /// Where Droidective for Android stands on one phone. Throws only when the
+    /// device cannot be read at all.
+    func phoneSetupStatus(serial: String) async throws -> PhoneAppSetupStatus
+    /// Grants what is missing and starts Shizuku if it is stopped. A step the
+    /// phone refused comes back in the outcome, not as a throw.
+    func setUpPhone(serial: String) async throws -> PhoneAppSetupOutcome
     /// `adb reverse tcp:<port> tcp:<port>` on one device, or its removal.
     ///
     /// Narrow on purpose. What the Reactotron relay needs is this one tunnel,
@@ -723,6 +729,14 @@ public struct LiveBackend: DaemonBackend {
 
     public func enableTcpip(serial: String) async throws -> FeatureResult {
         try await connection.enableTcpip(serial: serial)
+    }
+
+    public func phoneSetupStatus(serial: String) async throws -> PhoneAppSetupStatus {
+        try await PhoneAppSetupService(client: client).status(serial: serial)
+    }
+
+    public func setUpPhone(serial: String) async throws -> PhoneAppSetupOutcome {
+        try await PhoneAppSetupService(client: client).setUp(serial: serial)
     }
 
     public func deepLinks(packageId: String) async -> [DeepLink] {
@@ -1523,6 +1537,12 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
 
         case .wirelessAction:
             return Self.answer(await ConnectionRoutes.action(
+                body: Data(body.readableBytesView), backend: backend))
+        case .phoneSetupStatus:
+            return Self.answer(await PhoneSetupRoutes.status(
+                body: Data(body.readableBytesView), backend: backend))
+        case .phoneSetupRun:
+            return Self.answer(await PhoneSetupRoutes.run(
                 body: Data(body.readableBytesView), backend: backend))
 
         case .deepLinksRead:

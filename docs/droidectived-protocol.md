@@ -351,7 +351,35 @@ is ADBKit's `SnippetPlaceholders`, so both apps expand identically, including
 its rule that a substituted value is never re-scanned: a clipboard holding
 `{ip}` is inserted verbatim.
 
-### 4.7 Errors
+### 4.7 Phone set-up
+
+`/v1/phonesetup/status` and `/v1/phonesetup/run` are the device menu's "Set Up
+Droidective on This Phone…", over ADBKit's `PhoneAppSetupService`: grant
+Droidective for Android `WRITE_SECURE_SETTINGS` and `DUMP` with the two `pm
+grant` lines the Android app's own test vector pins, then start Shizuku from
+the native starter inside its APK when it is installed and stopped.
+
+```jsonc
+// POST /v1/phonesetup/run  { "serial": "emulator-5554" }
+// → 200
+{ "status": { "appInstalled": true, "appVersion": "0.1.0",
+              "grantedPermissions": ["android.permission.WRITE_SECURE_SETTINGS",
+                                     "android.permission.DUMP"],
+              "missingPermissions": [], "shizukuInstalled": true,
+              "shizukuRunning": false, "needsSetup": true },
+  "failure": "Shizuku didn't start: fatal: can't start server" }
+```
+
+**The derived answers travel.** `missingPermissions` and `needsSetup` are
+`PhoneAppSetupStatus`'s, because whether Shizuku counts is a rule — it does
+only when it is installed — and a client restating it would be a second
+opinion. **A step the phone refused is a 200** with `failure` set, beside the
+status read back afterwards, so a partial run still shows what landed. Only a
+device that cannot be read at all is a 502, carrying the service's own words
+("Device is offline."). `status` takes `X-Droidective-Background`: the device
+bar's probe sends it, the sheet's first read does not.
+
+### 4.8 Errors
 
 One shape everywhere, so the UI has one error path:
 

@@ -244,6 +244,16 @@ extension DaemonBackend {
         FeatureResult(ok: true, message: "stub")
     }
 
+    func phoneSetupStatus(serial: String) async throws -> PhoneAppSetupStatus {
+        PhoneAppSetupStatus(
+            appInstalled: false, appVersion: nil, grantedPermissions: [],
+            shizukuInstalled: false, shizukuRunning: false)
+    }
+
+    func setUpPhone(serial: String) async throws -> PhoneAppSetupOutcome {
+        PhoneAppSetupOutcome(status: try await phoneSetupStatus(serial: serial), failure: nil)
+    }
+
     func deepLinks(packageId: String) async -> [DeepLink] { [] }
 
     func writeDeepLinks(packageId: String, links: [DeepLink]) async throws {}
