@@ -313,6 +313,20 @@ import Testing
         #expect(!adbCalls.contains { $0.arguments.contains("connect") || $0.arguments.contains("shell") })
     }
 
+    @Test func onlyAReadyUSBPhoneCanBePrepared() {
+        func device(_ serial: String, state: String = "device", wireless: Bool = false,
+                    platform: DevicePlatform = .android) -> Device {
+            Device(serial: serial, state: state, model: nil, product: nil, transportId: nil,
+                   label: serial, isWireless: wireless, platform: platform)
+        }
+        #expect(TailscaleService.canPrepare(device("R58M123ABC")))
+        #expect(!TailscaleService.canPrepare(device("R58M123ABC", state: "unauthorized")))
+        #expect(!TailscaleService.canPrepare(device("192.168.1.20:5555", wireless: true)))
+        #expect(!TailscaleService.canPrepare(device("100.101.102.103:5555", wireless: true)))
+        #expect(!TailscaleService.canPrepare(device("emulator-5554")))
+        #expect(!TailscaleService.canPrepare(device("AAAA-1111", platform: .iosSimulator)))
+    }
+
     @Test func aRefusedPrepareSaysWhy() async throws {
         let runner = MockProcessRunner()
         runner.script(argsPrefix: ["-s", "R58M123ABC", "tcpip"], stderr: "error: device unauthorized.", exitCode: 1)

@@ -71,6 +71,14 @@ public struct TailscaleService: Sendable {
             androidPeers: network.backendState == "Running" ? network.androidPeers : [])
     }
 
+    /// Whether "Prepare for Tailscale" applies to `device`: an Android phone
+    /// on a USB cable and ready. A wireless one is already in tcpip mode, and
+    /// an emulator is never on a tailnet.
+    public static func canPrepare(_ device: Device) -> Bool {
+        device.platform == .android && device.isReady && !device.isWireless
+            && !device.serial.hasPrefix("emulator-")
+    }
+
     /// `adb tcpip 5555` on a USB-connected phone, and nothing more.
     ///
     /// Not `ConnectionService.enableTcpip`, which goes on to read wlan0 and
@@ -133,6 +141,9 @@ public struct TailscaleService: Sendable {
 
         That listener is plaintext, and it is open on every network the phone joins, not just \
         your tailnet. It disappears when the phone restarts.
+
+        Switching restarts adb on the phone, which stops anything started over adb — Shizuku \
+        included.
         """
 
     public static let prepareConfirmLabel = "Prepare"
