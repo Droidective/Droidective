@@ -71,6 +71,12 @@ public enum DaemonProtocol {
         /// one-click set-up. See `PhoneSetupProtocol`.
         case phoneSetupStatus = "/v1/phonesetup/status"
         case phoneSetupRun = "/v1/phonesetup/run"
+        /// Tailscale mode: the tailnet's Android phones, connecting one, and
+        /// preparing a USB phone to be reached that way. See
+        /// `TailscaleProtocol`.
+        case tailscaleStatus = "/v1/tailscale/status"
+        case tailscaleConnect = "/v1/tailscale/connect"
+        case tailscalePrepare = "/v1/tailscale/prepare"
         /// The saved deep links: read one app's list, replace it, launch one.
         /// The write takes the whole list rather than an add/edit/delete verb —
         /// the client holds what it is showing, and three routes would each

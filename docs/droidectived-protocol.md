@@ -379,7 +379,50 @@ device that cannot be read at all is a 502, carrying the service's own words
 ("Device is offline."). `status` takes `X-Droidective-Background`: the device
 bar's probe sends it, the sheet's first read does not.
 
-### 4.8 Errors
+### 4.8 Tailscale mode
+
+`/v1/tailscale/status`, `/v1/tailscale/connect` and `/v1/tailscale/prepare` are
+the device menu's Tailscale section, over ADBKit's `TailscaleService`. There is
+no backend of ours in it: the phone and this machine are both on the user's
+tailnet, and adb connects to the phone's 100.x address.
+
+```jsonc
+// POST /v1/tailscale/status  {}
+// → 200
+{ "installed": true, "flavor": "appBundle", "backendState": "Running",
+  "running": true, "notice": null,
+  "peers": [{ "id": "nGALAXY", "name": "galaxy-s24", "ipv4": "100.88.0.9" }],
+  "prepareWarning": "This runs adb tcpip 5555. Until the phone restarts, …" }
+
+// POST /v1/tailscale/connect  { "id": "nGALAXY", "name": "galaxy-s24", "ipv4": "100.88.0.9" }
+// → 200  { "ok": true, "message": "Connected to galaxy-s24 over Tailscale", … }
+
+// POST /v1/tailscale/prepare  { "serial": "R58M123ABC" }
+// → 200  { "ok": true, "message": "Ready for Tailscale until it restarts — …", … }
+```
+
+**The derived answers travel.** `peers` holds online Android peers that adb
+does not already list, so the route reads the device list beside the tailnet;
+`notice` is the line to show when there is nothing to connect; and
+`prepareWarning` is the security warning "Prepare for Tailscale" confirms with —
+served, because two wordings of a warning are two chances to understate it.
+`installed: false` means no Tailscale CLI on this machine, and the client shows
+no Tailscale section at all. **A connect names a tailnet address or is a 400**
+(`bad_tailscale_peer`): `/v1/wireless/action` already connects anything else.
+**`prepare` is `adb tcpip 5555` and nothing more** — unlike the wireless
+route's `tcpip` verb, it does not go on to connect over Wi-Fi. A command adb ran
+and refused is a 200 with `ok: false`; only adb itself missing is a 502.
+`status` runs `adb devices` and is a poll, so clients send
+`X-Droidective-Background` with it.
+
+Two Tailscale-mode rules live outside these routes. A `mirror` subscription for
+a tailnet serial is capped to the remote preset — 2 Mbit/s, 1280 px, 30 fps —
+in `openMirror`, whatever the client asked for, as the Mac's mirror is. And
+`/v1/features/list` carries `remoteLinkWarning` on the features that can take a
+phone off the network (`FeatureRegistry.remoteLinkWarnings`): a client asks
+before running one of those on a tailnet serial.
+
+### 4.9 Errors
 
 One shape everywhere, so the UI has one error path:
 

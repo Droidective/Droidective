@@ -138,6 +138,13 @@ public protocol DaemonBackend: Sendable {
     /// Grants what is missing and starts Shizuku if it is stopped. A step the
     /// phone refused comes back in the outcome, not as a throw.
     func setUpPhone(serial: String) async throws -> PhoneAppSetupOutcome
+    /// The tailnet as the device menu shows it, or nil when this machine has
+    /// no Tailscale CLI.
+    func tailscaleStatus() async -> TailscaleStatus?
+    /// `adb connect <tailnet IPv4>:5555`.
+    func connectTailscale(_ peer: TailscalePeer) async throws -> FeatureResult
+    /// `adb tcpip 5555` on a USB phone, and nothing more.
+    func prepareForTailscale(serial: String) async throws -> FeatureResult
     /// `adb reverse tcp:<port> tcp:<port>` on one device, or its removal.
     ///
     /// Narrow on purpose. What the Reactotron relay needs is this one tunnel,
@@ -737,6 +744,18 @@ public struct LiveBackend: DaemonBackend {
 
     public func setUpPhone(serial: String) async throws -> PhoneAppSetupOutcome {
         try await PhoneAppSetupService(client: client).setUp(serial: serial)
+    }
+
+    public func tailscaleStatus() async -> TailscaleStatus? {
+        await engine.tailscale.status()
+    }
+
+    public func connectTailscale(_ peer: TailscalePeer) async throws -> FeatureResult {
+        try await engine.tailscale.connect(peer)
+    }
+
+    public func prepareForTailscale(serial: String) async throws -> FeatureResult {
+        try await engine.tailscale.prepare(serial: serial)
     }
 
     public func deepLinks(packageId: String) async -> [DeepLink] {
@@ -1543,6 +1562,14 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
                 body: Data(body.readableBytesView), backend: backend))
         case .phoneSetupRun:
             return Self.answer(await PhoneSetupRoutes.run(
+                body: Data(body.readableBytesView), backend: backend))
+        case .tailscaleStatus:
+            return Self.answer(await TailscaleRoutes.status(backend: backend))
+        case .tailscaleConnect:
+            return Self.answer(await TailscaleRoutes.connect(
+                body: Data(body.readableBytesView), backend: backend))
+        case .tailscalePrepare:
+            return Self.answer(await TailscaleRoutes.prepare(
                 body: Data(body.readableBytesView), backend: backend))
 
         case .deepLinksRead:
