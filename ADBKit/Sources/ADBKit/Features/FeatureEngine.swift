@@ -69,6 +69,7 @@ public struct FeatureEngine: Sendable {
     public let dns: DnsService
     public let restrictions: RestrictionsService
     public let developerSettings: DeveloperSettingsService
+    public let phoneAppSetup: PhoneAppSetupService
     public let simulators: SimulatorService
     public let httpClient: HttpClientService
     let textInput: TextInputService
@@ -118,6 +119,7 @@ public struct FeatureEngine: Sendable {
         self.dns = DnsService(client: client)
         self.restrictions = RestrictionsService(client: client)
         self.developerSettings = DeveloperSettingsService(client: client)
+        self.phoneAppSetup = PhoneAppSetupService(client: client)
         self.httpClient = HttpClientService()
         self.textInput = TextInputService(client: client)
         self.screenCapture = ScreenCaptureService(client: client)
