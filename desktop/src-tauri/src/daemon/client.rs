@@ -19,15 +19,15 @@ use crate::daemon::wire::{
     ForegroundResponse, InstallFormatsResponse, InstallRequest, InstallResponse, LaunchResponse,
     LogcatPidResponse, ManagedToolRequest, ManagedTools, ManagedToolsListResponse, MemInfoResponse,
     OverrideResetRequest, OverridesResponse, PairResponse, PermissionWriteRequest,
-    PermissionsResponse, ReactotronReverseRequest, ReactotronReverseResponse,
-    ReactotronSendRequest, ReactotronSendResponse, RecordOptions, RecordStartRequest,
-    RecordStatusResponse, RecordStoppedResponse, RestrictionWriteRequest, RestrictionsResponse,
-    RolesResponse, RootStatusResponse, RunRequest, RunResponse, SandboxRequest, SandboxResponse,
-    ScreenshotCaptureRequest, ScreenshotCaptureResponse, SnippetExpandRequest,
-    SnippetExpandResponse, SnippetWriteRequest, SnippetsResponse, ToolInstallRequest,
-    ToolInstallResponse, ToolsResponse, VideoExportRequest, VideoFormatsResponse,
-    VideoPathResponse, VideoProxyRequest, VideoRemoveRequest, WifiResponse, WifiWriteRequest,
-    WirelessActionRequest,
+    PermissionsResponse, PhoneSetupRunResponse, PhoneSetupStatus, ReactotronReverseRequest,
+    ReactotronReverseResponse, ReactotronSendRequest, ReactotronSendResponse, RecordOptions,
+    RecordStartRequest, RecordStatusResponse, RecordStoppedResponse, RestrictionWriteRequest,
+    RestrictionsResponse, RolesResponse, RootStatusResponse, RunRequest, RunResponse,
+    SandboxRequest, SandboxResponse, ScreenshotCaptureRequest, ScreenshotCaptureResponse,
+    SnippetExpandRequest, SnippetExpandResponse, SnippetWriteRequest, SnippetsResponse,
+    ToolInstallRequest, ToolInstallResponse, ToolsResponse, VideoExportRequest,
+    VideoFormatsResponse, VideoPathResponse, VideoProxyRequest, VideoRemoveRequest, WifiResponse,
+    WifiWriteRequest, WirelessActionRequest,
 };
 use crate::error::DaemonError;
 
@@ -284,6 +284,26 @@ impl DaemonClient {
         request: &WirelessActionRequest,
     ) -> Result<RunResponse, DaemonError> {
         self.post("/v1/wireless/action", request).await
+    }
+
+    /// `background` is the device bar's probe, which stays out of the Command
+    /// Log; the sheet's own read is something the user just asked for.
+    pub async fn phone_setup_status(
+        &self,
+        serial: String,
+        background: bool,
+    ) -> Result<PhoneSetupStatus, DaemonError> {
+        self.post_marked(
+            "/v1/phonesetup/status",
+            &DeviceRequest { serial },
+            background,
+        )
+        .await
+    }
+
+    pub async fn set_up_phone(&self, serial: String) -> Result<PhoneSetupRunResponse, DaemonError> {
+        self.post("/v1/phonesetup/run", &DeviceRequest { serial })
+            .await
     }
 
     pub async fn deep_links(&self, package_id: String) -> Result<DeepLinksResponse, DaemonError> {

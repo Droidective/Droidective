@@ -4,8 +4,12 @@ import { AdbWarning } from "@/components/AdbWarning"
 import { BarPills } from "@/components/BarPills"
 import { Switch } from "@/components/Controls"
 import { DeviceMenu, DevicePill, IconButton } from "@/components/DeviceMenu"
-import { WirelessSheet, type WirelessMode } from "@/components/WirelessSheet"
-import { useDeviceBarActions } from "@/hooks/useDeviceBarActions"
+import { DeviceSheets, type DeviceSheet } from "@/components/DeviceSheets"
+import {
+  useDeviceBarActions,
+  usePhoneSetupProbe,
+  type PhoneSetupProbe,
+} from "@/hooks/useDeviceBarActions"
 import { StatusIcon } from "@/components/DeviceStatusIcon"
 import type { ActiveOverride, Device } from "@/lib/wire"
 
@@ -48,7 +52,8 @@ export interface DeviceBarProps {
  * subsystems are: `docs/desktop-parity.md` says which item each waits on.
  */
 export function DeviceBar(props: DeviceBarProps) {
-  const [sheet, setSheet] = useState<WirelessMode | null>(null)
+  const [sheet, setSheet] = useState<DeviceSheet | null>(null)
+  const phoneSetup = usePhoneSetupProbe(props.selected)
 
   return (
     <div className="flex h-[46px] shrink-0 items-center gap-2.5 border-b border-border-subtle bg-bg-chrome px-3">
@@ -63,7 +68,7 @@ export function DeviceBar(props: DeviceBarProps) {
         {props.sidebarAutoHide ? <PanelLeftDashed size={15} /> : <PanelLeft size={15} />}
       </IconButton>
       <StatusIcon device={props.selected} />
-      <DeviceControl bar={props} onWireless={setSheet} />
+      <DeviceControl bar={props} phoneSetup={phoneSetup} onSheet={setSheet} />
 
       {/* Beside the device, as on the Mac: the two together are what an
           app-scoped screen acts on. */}
@@ -94,16 +99,15 @@ export function DeviceBar(props: DeviceBarProps) {
           makes the two surfaces read as one thing on the Mac. */}
       <BarPills.Bell />
 
-      {sheet === null ? null : (
-        <WirelessSheet
-          mode={sheet}
-          devices={props.devices}
-          onSelectDevice={props.onSelect}
-          onDismiss={() => {
-            setSheet(null)
-          }}
-        />
-      )}
+      <DeviceSheets
+        sheet={sheet}
+        devices={props.devices}
+        onSelectDevice={props.onSelect}
+        onPhoneStatus={phoneSetup.report}
+        onDismiss={() => {
+          setSheet(null)
+        }}
+      />
     </div>
   )
 }
@@ -111,10 +115,12 @@ export function DeviceBar(props: DeviceBarProps) {
 /** The pill, its dropdown, and the two buttons that sit beside them. */
 function DeviceControl({
   bar,
-  onWireless,
+  phoneSetup,
+  onSheet,
 }: {
   bar: DeviceBarProps
-  onWireless: (mode: WirelessMode) => void
+  phoneSetup: PhoneSetupProbe
+  onSheet: (sheet: DeviceSheet) => void
 }) {
   const { avds, launch, disconnect } = useDeviceBarActions(bar.devices)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -126,6 +132,9 @@ function DeviceControl({
         open={menuOpen}
         disabled={bar.deviceLocked}
         onToggle={() => {
+          // Asked again on every open, as the Mac's menu does, so an app
+          // installed while the phone is plugged in is noticed.
+          if (!menuOpen) phoneSetup.reprobe()
           setMenuOpen((open) => !open)
         }}
       />
@@ -138,11 +147,18 @@ function DeviceControl({
           onSelect={bar.onSelect}
           onLaunchAvd={launch}
           onPair={() => {
-            onWireless("pair")
+            onSheet({ kind: "wireless", mode: "pair" })
           }}
           onConnect={() => {
-            onWireless("connect")
+            onSheet({ kind: "wireless", mode: "connect" })
           }}
+          onPhoneSetup={
+            selected !== null && phoneSetup.needsSetup
+              ? () => {
+                  onSheet({ kind: "phone-setup", device: selected })
+                }
+              : null
+          }
           onManageEmulators={() => {
             bar.onOpenFeature("emulators")
           }}

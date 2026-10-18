@@ -253,6 +253,8 @@ fn handlers() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync +
         commands::connect_wireless,
         commands::disconnect_wireless,
         commands::enable_tcpip,
+        commands::phone_setup_status,
+        commands::set_up_phone,
         commands::deep_links,
         commands::write_deep_links,
         commands::launch_deep_link,

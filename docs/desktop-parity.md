@@ -559,6 +559,17 @@ the chrome and the device bar have not.
       re-read whenever the device set changes.
 - [x] **Disconnect a wireless device** from the bar, as the Mac offers beside a
       wireless device's pill.
+- [x] **Set up Droidective for Android** — the menu's "Set Up Droidective on
+      This Phone…", in its own section above Wireless debugging and shown only
+      while the selected phone has the app with set-up still to do. It is
+      asked again on every open, as the Mac's is, so an app installed while
+      the phone is plugged in is noticed; that probe is marked background and
+      stays out of the Command Log. The sheet is the Mac's `PhoneSetupSheet`:
+      three rows (app, permissions, Shizuku), one Set Up button, and the
+      failing step's reason inline. Everything runs daemon-side over ADBKit's
+      `PhoneAppSetupService` (`/v1/phonesetup/status`, `/v1/phonesetup/run`),
+      so the `pm grant` lines and the rule that Shizuku counts only when it is
+      installed are one copy for both apps.
 - [x] **Pull progress strip**, above the workspace where the Mac keeps it: a
       transfer outlives the screen that started it, so the strip cannot belong
       to a pane. The protocol grew the `pull` *topic* for it — a route that
@@ -672,6 +683,9 @@ memory — the file each item names is the thing to replicate.
 - [ ] **Star prompt** (`StarPromptView`) — the recurring, capped GitHub nudge.
 - [x] **Wireless connect sheet** (`WirelessConnectSheet`) — the three-tab
       pairing / connect / tcpip bootstrap, opened from the device dropdown.
+- [x] **Phone set-up sheet** (`PhoneSetupSheet`) — Droidective for Android's
+      grants and Shizuku, opened from the device dropdown; see the device
+      bar's entry.
 - [ ] **Installed-apps picker** (`InstalledAppsPickerView`) and the **bundle
       manager** (`BundleManagerView`). The picker is built, and the device
       bar's app pill with it — opened from there and from Logcat, as the Mac

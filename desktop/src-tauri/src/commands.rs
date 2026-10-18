@@ -30,13 +30,14 @@ use crate::daemon::wire::{
     FilePullResponse, FilesListRequest, FilesListResponse, ForegroundResponse, InstallRequest,
     InstallResponse, LaunchResponse, LogcatPidResponse, ManagedTools, MemInfoResponse,
     OverrideResetRequest, OverridesResponse, PairResponse, PermissionWriteRequest,
-    PermissionsResponse, ReactotronReverseRequest, ReactotronReverseResponse,
-    ReactotronSendRequest, ReactotronSendResponse, RestrictionWriteRequest, RestrictionsResponse,
-    RolesResponse, RootStatusResponse, RunRequest, RunResponse, SandboxRequest, SandboxResponse,
-    ScreenshotCaptureRequest, ScreenshotCaptureResponse, Snippet, SnippetExpandRequest,
-    SnippetExpandResponse, SnippetWriteRequest, StreamParams, ToolInstallRequest,
-    ToolInstallResponse, ToolsResponse, VideoExportOptions, VideoExportRequest, VideoProxyRequest,
-    WifiResponse, WifiWriteRequest, WirelessActionRequest,
+    PermissionsResponse, PhoneSetupRunResponse, PhoneSetupStatus, ReactotronReverseRequest,
+    ReactotronReverseResponse, ReactotronSendRequest, ReactotronSendResponse,
+    RestrictionWriteRequest, RestrictionsResponse, RolesResponse, RootStatusResponse, RunRequest,
+    RunResponse, SandboxRequest, SandboxResponse, ScreenshotCaptureRequest,
+    ScreenshotCaptureResponse, Snippet, SnippetExpandRequest, SnippetExpandResponse,
+    SnippetWriteRequest, StreamParams, ToolInstallRequest, ToolInstallResponse, ToolsResponse,
+    VideoExportOptions, VideoExportRequest, VideoProxyRequest, WifiResponse, WifiWriteRequest,
+    WirelessActionRequest,
 };
 use crate::daemon::{DaemonStatus, Supervisor};
 use crate::error::DaemonError;
@@ -1483,6 +1484,29 @@ pub async fn enable_tcpip(
             serial: Some(serial),
         })
         .await
+}
+
+/// Where Droidective for Android stands on one phone.
+#[tauri::command]
+pub async fn phone_setup_status(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    background: bool,
+) -> Result<PhoneSetupStatus, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .phone_setup_status(serial, background)
+        .await
+}
+
+/// Grants the app what it is missing and starts Shizuku if it is stopped.
+#[tauri::command]
+pub async fn set_up_phone(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+) -> Result<PhoneSetupRunResponse, DaemonError> {
+    supervisor.client().await?.set_up_phone(serial).await
 }
 
 /// Runs jadx or apktool over one APK and answers the tree it wrote.

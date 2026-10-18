@@ -1,14 +1,21 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useNotifications } from "@/hooks/useNotifications"
-import { asDaemonError, disconnectWireless, emulatorAction, emulators } from "@/lib/daemon"
-import type { Avd, Device } from "@/lib/wire"
+import {
+  asDaemonError,
+  disconnectWireless,
+  emulatorAction,
+  emulators,
+  phoneSetupStatus,
+} from "@/lib/daemon"
+import { isReady } from "@/lib/targets"
+import type { Avd, Device, PhoneSetupStatus } from "@/lib/wire"
 
 /**
  * The two things the device bar can do to the world: start an AVD, and drop a
  * wireless connection.
  *
- * Together because they are the bar's only daemon calls, and keeping them here
- * leaves the bar itself about layout. The AVD list is re-read whenever the
+ * Together — with the phone set-up probe below — because they are the bar's
+ * only daemon calls, and keeping them here leaves the bar itself about layout. The AVD list is re-read whenever the
  * device set changes, as the Mac's `.task(id:)` on the joined serials does: an
  * AVD that just booted is a device now, so it should stop being offered as one
  * to launch.
@@ -63,4 +70,57 @@ export function useDeviceBarActions(devices: readonly Device[]): {
       })()
     },
   }
+}
+
+export interface PhoneSetupProbe {
+  /** The selected phone has Droidective for Android with set-up still to do. */
+  needsSetup: boolean
+  /** Ask again — the device menu does on every open, as the Mac's does. */
+  reprobe: () => void
+  /** A status the sheet read, so the entry goes the moment set-up is done. */
+  report: (serial: string, status: PhoneSetupStatus) => void
+}
+
+/**
+ * Whether the device menu offers "Set Up Droidective on This Phone…" — the
+ * Mac's `probePhoneSetup`.
+ *
+ * Marked background, so it stays out of the Command Log, and a failed read
+ * just leaves the entry out: a menu is no place to report one. The answer is
+ * kept with the serial it was asked about, so a reply for the previous device
+ * can never put the entry under the next one.
+ */
+export function usePhoneSetupProbe(selected: Device | null): PhoneSetupProbe {
+  const candidate =
+    selected !== null && selected.platform === "android" && isReady(selected)
+      ? selected.serial
+      : null
+  const [needsFor, setNeedsFor] = useState<string | null>(null)
+  const [generation, setGeneration] = useState(0)
+
+  useEffect(() => {
+    if (candidate === null) return
+    let live = true
+    phoneSetupStatus(candidate, true).then(
+      (status) => {
+        if (live) setNeedsFor(status.needsSetup ? candidate : null)
+      },
+      () => {
+        if (live) setNeedsFor(null)
+      },
+    )
+    return () => {
+      live = false
+    }
+  }, [candidate, generation])
+
+  const reprobe = useCallback(() => {
+    setGeneration((value) => value + 1)
+  }, [])
+
+  const report = useCallback((serial: string, status: PhoneSetupStatus) => {
+    setNeedsFor(status.needsSetup ? serial : null)
+  }, [])
+
+  return { needsSetup: candidate !== null && needsFor === candidate, reprobe, report }
 }

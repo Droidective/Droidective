@@ -829,6 +829,38 @@ pub struct PairResponse {
     pub discovered: Option<Discovered>,
 }
 
+// MARK: - phone set-up
+
+/// Droidective for Android on one phone — `PhoneSetupProtocol.Status`.
+///
+/// `missing_permissions` and `needs_setup` are the daemon's answers, carried
+/// rather than derived here: whether Shizuku counts is `PhoneAppSetupStatus`'s
+/// decision, and a second copy of it would drift from the Mac's.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "a 1:1 mirror of the daemon's JSON; each field is an independent \
+              fact the phone reported, and the webview reads them by name"
+)]
+pub struct PhoneSetupStatus {
+    pub app_installed: bool,
+    pub app_version: Option<String>,
+    pub granted_permissions: Vec<String>,
+    pub missing_permissions: Vec<String>,
+    pub shizuku_installed: bool,
+    pub shizuku_running: bool,
+    pub needs_setup: bool,
+}
+
+/// A set-up run: the status read back afterwards, and the first failing
+/// step's reason. A step the phone refused is a success-shaped reply.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PhoneSetupRunResponse {
+    pub status: PhoneSetupStatus,
+    pub failure: Option<String>,
+}
+
 // MARK: - deep links, the bug report, and the toolchain
 
 /// One saved deep link. `id` travels back unchanged so an edit updates rather
@@ -1188,7 +1220,7 @@ pub struct StreamEvent {
     reason = "an assertion is how a test reports failure; the Result is for decoding"
 )]
 mod tests {
-    use super::{FeaturesResponse, StreamEvent};
+    use super::{FeaturesResponse, PhoneSetupRunResponse, StreamEvent};
 
     /// Real `POST /v1/features/list` output, shared with the UI's own tests.
     ///
@@ -1241,6 +1273,25 @@ mod tests {
             .first()
             .ok_or_else(|| serde::de::Error::custom("no options"))?;
         assert_ne!(first.value, first.label, "a choice carries both halves");
+        Ok(())
+    }
+
+    #[test]
+    fn a_phone_set_up_reply_decodes_with_its_optionals_absent() -> Result<(), serde_json::Error> {
+        // Swift omits a nil optional rather than writing null, so a phone with
+        // no version and a run with no failure arrive without those keys.
+        let reply: PhoneSetupRunResponse = serde_json::from_str(
+            r#"{"status":{"appInstalled":true,"grantedPermissions":["android.permission.DUMP"],
+                "missingPermissions":["android.permission.WRITE_SECURE_SETTINGS"],
+                "shizukuInstalled":true,"shizukuRunning":false,"needsSetup":true}}"#,
+        )?;
+        assert!(reply.failure.is_none());
+        assert!(reply.status.app_version.is_none());
+        assert!(reply.status.needs_setup);
+        assert_eq!(
+            reply.status.missing_permissions,
+            ["android.permission.WRITE_SECURE_SETTINGS"]
+        );
         Ok(())
     }
 
