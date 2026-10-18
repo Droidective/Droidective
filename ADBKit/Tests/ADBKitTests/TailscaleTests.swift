@@ -136,8 +136,11 @@ import Testing
         #expect(!TailscalePeers.isTailnetAddress("100.64.1.256"))
         #expect(!TailscalePeers.isTailnetAddress("100.64.1.1.1"))
         #expect(!TailscalePeers.isTailnetAddress("100.64..1"))
-        // Fullwidth digits, which `isNumber` would wave through.
+        // Fullwidth digits, which `isNumber` would wave through, and a sign,
+        // which `Int` would.
         #expect(!TailscalePeers.isTailnetAddress("１００.64.1.1"))
+        #expect(!TailscalePeers.isTailnetAddress("100.+64.1.1"))
+        #expect(!TailscalePeers.isTailnet(serial: "100.64.1.1:+5555"))
         #expect(!TailscalePeers.isTailnetAddress(""))
     }
 

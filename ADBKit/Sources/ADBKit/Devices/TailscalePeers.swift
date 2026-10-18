@@ -129,7 +129,8 @@ public enum TailscalePeers {
         guard octets.count == 4 else { return false }
         var values: [Int] = []
         for octet in octets {
-            guard (1...3).contains(octet.count), octet.allSatisfy(\.isASCII),
+            // Digits only: `Int` would also take "+64".
+            guard (1...3).contains(octet.count), octet.allSatisfy({ $0.isASCII && $0.isNumber }),
                   let value = Int(octet), (0...255).contains(value)
             else { return false }
             values.append(value)
