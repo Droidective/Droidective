@@ -51,7 +51,7 @@ public actor ScreenRecorder {
         public let microphoneLevel: Float
         /// Why the microphone isn't contributing, if it isn't. The recording
         /// keeps going without it rather than failing.
-        public let microphoneFailure: String?
+        public let microphoneFailure: MicrophoneCapture.CaptureError?
     }
 
     private var session: MirrorSession?
@@ -67,7 +67,7 @@ public actor ScreenRecorder {
     private var microphonePump: Task<Void, Never>?
     private var microphoneSink: AsyncStream<MicrophoneChunk>.Continuation?
     private var microphoneLevel: Float = 0
-    private var microphoneFailure: String?
+    private var microphoneFailure: MicrophoneCapture.CaptureError?
     /// Mute state survives pause/resume, so each new segment starts out matching
     /// what the user last chose.
     private var deviceMuted = false
@@ -243,7 +243,7 @@ public actor ScreenRecorder {
             try await capture.start { sink.yield($0) }
         } catch {
             sink.finish()
-            microphoneFailure = Self.message(for: error)
+            microphoneFailure = error
             return
         }
         microphone = capture
@@ -270,16 +270,12 @@ public actor ScreenRecorder {
             // A format the graph couldn't deliver only shows up while capturing,
             // so it's collected on the way out.
             if microphoneFailure == nil, let failure = await microphone.failure() {
-                microphoneFailure = failure.errorDescription
+                microphoneFailure = failure
             }
             await microphone.stop()
         }
         microphone = nil
         microphoneLevel = 0
-    }
-
-    private static func message(for error: Error) -> String {
-        (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
     }
 
     private static func waitUntilStreaming(session: MirrorSession) async -> Bool {
