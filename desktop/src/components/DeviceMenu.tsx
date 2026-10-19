@@ -4,6 +4,7 @@ import {
   ChevronDown,
   Layers,
   Link2,
+  ListChecks,
   PlayCircle,
   Smartphone,
   Wifi,
@@ -16,7 +17,8 @@ import type { Avd, Device } from "@/lib/wire"
  * The device dropdown — the Mac's `deviceControl` menu.
  *
  * Its sections, in its order: the devices, the AVDs that are not already
- * running, the two wireless-debugging entries, then Manage emulators. A native
+ * running, set-up for Droidective for Android when the phone needs it, the two
+ * wireless-debugging entries, then Manage emulators. A native
  * `<select>` cannot hold sections that *do* things, which is why this is a
  * popover: the Mac's menu is where an emulator gets launched and a device gets
  * paired, and losing that would mean losing the shortest path to both.
@@ -30,6 +32,7 @@ export function DeviceMenu({
   onLaunchAvd,
   onPair,
   onConnect,
+  onPhoneSetup,
   onManageEmulators,
   onDismiss,
 }: {
@@ -42,6 +45,8 @@ export function DeviceMenu({
   onLaunchAvd: (avd: Avd) => void
   onPair: () => void
   onConnect: () => void
+  /** Present only while the selected phone has the app with set-up to do. */
+  onPhoneSetup: (() => void) | null
   onManageEmulators: () => void
   onDismiss: () => void
 }) {
@@ -83,23 +88,17 @@ export function DeviceMenu({
       >
         <Devices devices={devices} selected={selected} disabled={disabled} onSelect={onSelect} />
 
-        {launchable.length === 0 ? null : (
-          <Group title="Start an emulator">
-            {launchable.map((avd) => (
-              <Item
-                key={avd.name}
-                icon={<PlayCircle size={13} />}
-                onSelect={act(() => {
-                  onLaunchAvd(avd)
-                })}
-              >
-                {avd.displayName}
-              </Item>
-            ))}
-          </Group>
-        )}
+        <Launchable
+          avds={launchable}
+          onLaunch={(avd) => {
+            onLaunchAvd(avd)
+            onDismiss()
+          }}
+        />
 
         <WindowsGroup onDismiss={onDismiss} serial={selected?.serial ?? null} />
+
+        {onPhoneSetup === null ? null : <PhoneSetupEntry onSelect={act(onPhoneSetup)} />}
 
         <Group title="Wireless debugging">
           <Item icon={<Link2 size={13} />} onSelect={act(onPair)}>
@@ -155,6 +154,40 @@ function Devices({
           {device.state === "device" ? device.label : `${device.label} — ${device.state}`}
         </Item>
       ))}
+    </>
+  )
+}
+
+function Launchable({ avds, onLaunch }: { avds: Avd[]; onLaunch: (avd: Avd) => void }) {
+  if (avds.length === 0) return null
+  return (
+    <Group title="Start an emulator">
+      {avds.map((avd) => (
+        <Item
+          key={avd.name}
+          icon={<PlayCircle size={13} />}
+          onSelect={() => {
+            onLaunch(avd)
+          }}
+        >
+          {avd.displayName}
+        </Item>
+      ))}
+    </Group>
+  )
+}
+
+/**
+ * Set-up for Droidective for Android, in its own unlabelled section as the
+ * Mac's menu has it, just above Wireless debugging.
+ */
+function PhoneSetupEntry({ onSelect }: { onSelect: () => void }) {
+  return (
+    <>
+      <div className="my-1 h-px bg-border-subtle" />
+      <Item icon={<ListChecks size={13} />} onSelect={onSelect}>
+        Set Up Droidective on This Phone…
+      </Item>
     </>
   )
 }

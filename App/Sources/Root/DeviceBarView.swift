@@ -15,6 +15,11 @@ struct DeviceBarView: View {
     @State private var showInstalledApps = false
     @State private var wirelessSheet: WirelessSheetMode?
     @State private var refreshSpin = 0.0
+    @State private var phoneSetupSheet: PhoneSetupTarget?
+    /// The selected phone, once a probe has found Droidective for Android on it
+    /// with set-up still to do. Keyed by serial so a stale answer for the
+    /// previous device can never put the entry under the next one.
+    @State private var phoneSetupSerial: String?
 
     var body: some View {
         @Bindable var state = state
@@ -118,6 +123,14 @@ struct DeviceBarView: View {
         .sheet(item: $wirelessSheet) { mode in
             WirelessConnectSheet(mode: mode)
         }
+        .sheet(item: $phoneSetupSheet) { target in
+            PhoneSetupSheet(target: target) { status in
+                phoneSetupSerial = status.needsSetup ? target.serial : nil
+            }
+        }
+        .task(id: phoneSetupCandidate) {
+            await probePhoneSetup()
+        }
     }
 
     private var selectedDevice: Device? {
@@ -157,6 +170,49 @@ struct DeviceBarView: View {
                     systemImage: "macwindow")
             } else {
                 Text(state.deviceTitle(device))
+            }
+        }
+    }
+
+    // MARK: - Phone set-up
+
+    /// A ready Android device is the only kind Droidective for Android can be on.
+    private var phoneSetupCandidate: String? {
+        guard let device = selectedDevice, device.platform == .android, device.isReady
+        else { return nil }
+        return device.serial
+    }
+
+    /// Runs when the selected device changes or becomes ready, and on every
+    /// dropdown open so an app installed while the phone is plugged in is
+    /// noticed. Background, so deliberately outside the Command Log: one
+    /// `pm list packages` when the app isn't there.
+    ///
+    /// The open-time probe is an unstructured task that a device switch does
+    /// not cancel, hence the second look at the candidate after the await. It
+    /// writes only on a change, so an open menu is not re-rendered for nothing.
+    private func probePhoneSetup() async {
+        let serial = phoneSetupCandidate
+        var needing: String?
+        if let serial, await state.env.engine.phoneAppSetup.needsSetup(serial: serial) {
+            needing = serial
+        }
+        guard !Task.isCancelled, serial == phoneSetupCandidate,
+              phoneSetupSerial != needing
+        else { return }
+        phoneSetupSerial = needing
+    }
+
+    @ViewBuilder
+    private var phoneSetupItem: some View {
+        if let device = selectedDevice, phoneSetupSerial == device.serial {
+            Section {
+                Button {
+                    phoneSetupSheet = PhoneSetupTarget(
+                        serial: device.serial, name: state.deviceDisplayName(device))
+                } label: {
+                    Label("Set Up Droidective on This Phone…", systemImage: "checklist")
+                }
             }
         }
     }
@@ -248,6 +304,7 @@ struct DeviceBarView: View {
                     }
                 }
             }
+            phoneSetupItem
             Section("Wireless debugging") {
                 // The QR tab first, and it is what "Pair new device…" opens:
                 // it asks the user for nothing, where the pairing-code tab
@@ -279,7 +336,10 @@ struct DeviceBarView: View {
             // Attached to the one always-present item (never the whole content:
             // a Group modifier replicates onto every child and would fan out N
             // refreshes per open).
-            .onAppear { state.refreshDevices() }
+            .onAppear {
+                state.refreshDevices()
+                Task { await probePhoneSetup() }
+            }
         } label: {
             devicePill
         }

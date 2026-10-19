@@ -247,6 +247,7 @@ export {
   stageDroppedFile,
 } from "@/lib/daemon-record"
 export { customCommands, runCustomCommand, writeCustomCommands } from "@/lib/daemon-commands"
+export { phoneSetupStatus, setUpPhone } from "@/lib/daemon-phone"
 export {
   apkToolchain,
   convertAab,
