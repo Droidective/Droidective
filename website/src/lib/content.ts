@@ -312,20 +312,3 @@ export const faqs: { q: string; html: string }[] = [
   { q: "Does it work with React Native?", html: "Yes. There is a dedicated React Native hub: open the dev menu, reload the JS bundle, reverse the Metro port, save deep links per app, and set the dev-server host." },
   { q: "Apple Silicon or Intel?", html: "Both. Droidective runs on any Mac with macOS 14 Sonoma or later." },
 ]
-
-export const footerLinks = [
-  { label: "GitHub", href: GITHUB_URL },
-  { label: "Releases", href: RELEASES_URL },
-  { label: "Blog", href: "/blog/" },
-  { label: "Changelog", href: "/changelog/" },
-  { label: "Issues", href: `${GITHUB_URL}/issues` },
-  { label: "License", href: `${GITHUB_URL}/blob/main/LICENSE` },
-  { label: "Privacy", href: "/privacy.html" },
-  { label: "For Android developers", href: "/for-android-developers.html" },
-  { label: "For iOS developers", href: "/for-ios-developers.html" },
-  { label: "For QA & testers", href: "/for-qa-and-testers.html" },
-  { label: "For support teams", href: "/for-support-teams.html" },
-  { label: "For security testers", href: "/for-security-testers.html" },
-  { label: "React Native debugger", href: "/react-native-debugger.html" },
-  { label: "scrcpy GUI for Mac", href: "/scrcpy-gui-mac.html" },
-]

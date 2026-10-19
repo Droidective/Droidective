@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Droidective for Android — Developer Toggles &amp; Tools on the Phone</title>
+  <meta name="description" content="Droidective for Android puts developer toggles and tools on the phone itself: home-screen widgets, Quick Settings tiles, Logcat, Crash Catcher, Install App and automations, with Shizuku or root for the settings Android keeps from ordinary apps. Free and open source." />
+  <meta name="keywords" content="android developer toggles, android developer widgets, shizuku developer tools, install xapk apkm, android crash catcher, logcat on phone, quick settings developer tiles" />
+  <meta name="author" content="Rohindh R" />
+  <meta name="robots" content="index, follow" />
+  <meta name="theme-color" content="#0d0f0e" />
+  <link rel="canonical" href="https://droidective.com/android-app.html" />
+  <link rel="icon" type="image/png" href="assets/icon-64.png" media="(prefers-color-scheme: dark)" />
+  <link rel="icon" type="image/png" href="assets/icon-light-64.png" media="(prefers-color-scheme: light)" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Droidective" />
+  <meta property="og:title" content="Droidective for Android — Developer Toggles & Tools on the Phone" />
+  <meta property="og:description" content="52 developer toggles as widgets, tiles and a notification bar, plus Logcat, Crash Catcher, Install App and automations, on the phone itself." />
+  <meta property="og:url" content="https://droidective.com/android-app.html" />
+  <meta property="og:image" content="https://droidective.com/assets/icon.png" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;1,400&display=swap" rel="stylesheet" />
+  <script src="/analytics.js" defer></script>
+  <style>
+    :root {
+      --ink-900: #0a0c0b; --ink-850: #0d0f0e; --ink-800: #121514; --ink-700: #16191a;
+      --line: rgba(231, 234, 229, 0.08); --line-2: rgba(231, 234, 229, 0.14);
+      --green: #9be021; --green-bright: #b6f24a; --glow: rgba(155, 224, 33, 0.30);
+      --amber: #e0b44a;
+      --text: #e7eae5; --muted: #99a39a; --faint: #7d867e;
+      --maxw: 960px; --radius: 16px;
+      --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+      --sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: var(--sans); color: var(--text); background: var(--ink-850); line-height: 1.6; -webkit-font-smoothing: antialiased; }
+    .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
+    a { color: inherit; text-decoration: none; }
+    a:focus-visible { outline: 2px solid var(--green); outline-offset: 3px; border-radius: 6px; }
+    header { border-bottom: 1px solid var(--line); padding: 18px 0; position: sticky; top: 0; background: rgba(13, 15, 14, 0.72); backdrop-filter: blur(10px); z-index: 10; }
+    header .wrap { display: flex; align-items: center; justify-content: space-between; }
+    .brand { display: inline-flex; align-items: center; gap: 9px; font-weight: 700; }
+    .brand img { width: 26px; height: 26px; }
+    .nav a { color: var(--muted); font-size: 14px; margin-left: 22px; }
+    .nav a:hover { color: var(--text); }
+    .btn { display: inline-flex; align-items: center; gap: 8px; padding: 11px 18px; border-radius: 11px; font-weight: 700; font-size: 15px; }
+    .btn-primary { background: var(--green); color: var(--ink-900); }
+    .btn-primary:hover { background: var(--green-bright); }
+    .btn-ghost { border: 1px solid var(--line-2); color: var(--text); }
+    .crumb { color: var(--faint); font-family: var(--mono); font-size: 12.5px; margin: 36px 0 0; }
+    .crumb a:hover { color: var(--muted); }
+    .kicker { display: inline-block; font-family: var(--mono); font-size: 12.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--green); margin: 14px 0 6px; }
+    h1 { font-size: clamp(32px, 5.5vw, 52px); line-height: 1.05; letter-spacing: -0.03em; margin: 0 0 16px; text-wrap: balance; }
+    h1 .hl { color: var(--green); }
+    .lede { font-size: clamp(17px, 1.6vw, 20px); color: var(--muted); max-width: 60ch; margin: 0 0 30px; }
+    .cta-row { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; }
+    .note { color: var(--faint); font-size: 13px; font-family: var(--mono); }
+    h2 { font-size: clamp(22px, 3vw, 30px); letter-spacing: -0.02em; margin: 56px 0 22px; text-wrap: balance; }
+    .section-lede { color: var(--muted); max-width: 62ch; margin: -8px 0 22px; }
+    code { font-family: var(--mono); font-size: 0.88em; color: var(--green-bright); }
+
+    /* Four phone frames side by side; two across on a narrow screen. */
+    .phones { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin: 44px 0 8px; }
+    .phones figure { margin: 0; display: flex; flex-direction: column; gap: 10px; }
+    .phones img { width: 100%; max-width: 100%; height: auto; aspect-ratio: 9 / 20; object-fit: cover; display: block; border: 1px solid var(--line-2); border-radius: 22px; background: var(--ink-800); }
+    .phones figcaption { font-family: var(--mono); font-size: 12px; color: var(--faint); text-align: center; }
+
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
+    .card { background: var(--ink-800); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; }
+    .card h3 { margin: 0 0 8px; font-size: 17px; }
+    .card p { margin: 0; color: var(--muted); font-size: 15px; }
+
+    /* Access levels: the same four badges the app puts beside every toggle. */
+    .levels-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--ink-800); }
+    .levels { width: 100%; min-width: 600px; border-collapse: collapse; font-size: 15px; }
+    .levels th { text-align: left; font-family: var(--mono); font-size: 11.5px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); padding: 14px 18px; border-bottom: 1px solid var(--line); }
+    .levels td { padding: 14px 18px; border-bottom: 1px solid var(--line); vertical-align: top; color: var(--muted); }
+    .levels tr:last-child td { border-bottom: 0; }
+    .levels td:first-child { white-space: nowrap; }
+    .badge { display: inline-block; font-family: var(--mono); font-size: 12px; font-weight: 500; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--line-2); color: var(--text); }
+    .badge-granted { color: #9cc3ff; border-color: rgba(156, 195, 255, 0.28); }
+    .badge-shell { color: var(--amber); border-color: rgba(224, 180, 74, 0.32); }
+    .badge-root { color: #ff9a8a; border-color: rgba(255, 154, 138, 0.30); }
+
+    .steps { list-style: none; counter-reset: step; margin: 0; padding: 0; display: grid; gap: 14px; }
+    .steps li { counter-increment: step; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; background: var(--ink-800); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px 22px; }
+    .steps li::before { content: counter(step); font-family: var(--mono); font-weight: 700; color: var(--ink-900); background: var(--green); width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; font-size: 14px; }
+    .steps h3 { margin: 2px 0 6px; font-size: 17px; }
+    .steps p { margin: 0 0 8px; color: var(--muted); font-size: 15px; }
+    .steps p:last-child { margin-bottom: 0; }
+    .steps a { color: var(--green); }
+    .steps a:hover { text-decoration: underline; }
+    .cmd { margin: 10px 0 0; padding: 12px 14px; background: var(--ink-900); border: 1px solid var(--line); border-radius: 10px; overflow-x: auto; font-family: var(--mono); font-size: 13px; color: var(--text); white-space: pre; }
+    .after-steps { margin-top: 16px; }
+    .levels a { color: var(--green); }
+    .levels a:hover { text-decoration: underline; }
+    .fingerprint { word-break: break-all; color: var(--green-bright); }
+
+    .closer { text-align: center; background: var(--ink-800); border: 1px solid var(--line); border-radius: var(--radius); padding: 44px 24px; margin: 64px 0; }
+    .closer h2 { margin: 0 0 18px; }
+    .related { display: flex; flex-wrap: wrap; gap: 18px; justify-content: center; margin-top: 10px; }
+    .related a { color: var(--green); font-size: 14px; }
+    .related a:hover { text-decoration: underline; }
+    footer { border-top: 1px solid var(--line); padding: 28px 0; color: var(--faint); font-size: 13px; }
+    footer a { color: var(--muted); }
+    footer a:hover { color: var(--text); }
+
+    @media (max-width: 720px) {
+      .phones { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .nav a { margin-left: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <a class="brand" href="/"><img src="assets/icon-64.png" alt="" /> Droidective</a>
+      <nav class="nav">
+        <a href="/">Home</a>
+        <a href="/for-android-developers.html">Mac app</a>
+        <a href="https://github.com/Droidective/droidective-android">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <p class="crumb"><a href="/">Droidective</a> / Droidective for Android</p>
+    <span class="kicker">Droidective for Android</span>
+    <h1>Developer toggles and tools, <span class="hl">on the phone itself</span></h1>
+    <p class="lede">The same toggles Droidective drives from your Mac, as home-screen widgets, Quick Settings tiles and a notification bar. Plus Logcat, a crash catcher, an installer for split APKs, and automations, with Shizuku or root for the settings Android keeps from ordinary apps.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" data-dl="android-app" href="https://github.com/Droidective/droidective-android/releases/latest">Download the APK</a>
+      <a class="btn btn-ghost" href="https://github.com/Droidective/droidective-android">View on GitHub</a>
+    </div>
+    <p class="note">Free &amp; open source · MIT · Android 11+ · Released on GitHub, not Google Play</p>
+
+    <div class="phones">
+      <figure>
+        <img src="assets/android-widget-bar.webp" width="540" height="1200" alt="A Droidective toggle bar on an Android home screen: Wi-Fi, Bluetooth, flashlight, auto-rotate, Do Not Disturb and layout bounds" loading="lazy" />
+        <figcaption>A home-screen bar</figcaption>
+      </figure>
+      <figure>
+        <img src="assets/android-toggles.webp" width="540" height="1200" alt="The Toggles tab: network toggles with their current state and the access level each needs" loading="lazy" />
+        <figcaption>52 toggles</figcaption>
+      </figure>
+      <figure>
+        <img src="assets/android-tools.webp" width="540" height="1200" alt="The Tools tab: Developer Settings, Logcat, Simulate, Demo Mode, System Restrictions, HTTP Proxy and Private DNS" loading="lazy" />
+        <figcaption>Developer tools</figcaption>
+      </figure>
+      <figure>
+        <img src="assets/android-automations.webp" width="540" height="1200" alt="The Automations tab with two examples to start from: Bedtime and After a restart" loading="lazy" />
+        <figcaption>Automations</figcaption>
+      </figure>
+    </div>
+
+    <h2>What's in it</h2>
+    <div class="grid">
+      <div class="card">
+        <h3>Widgets everywhere</h3>
+        <p>Home-screen bars, folders, a notification bar, twelve Quick Settings tiles and shortcuts, all built from the same items: toggles, apps, other apps' shortcuts, your own shell commands, deep links and automations.</p>
+      </div>
+      <div class="card">
+        <h3>52 toggles</h3>
+        <p>Network, sound, display, device and developer settings, from mobile data and preferred network type to layout bounds, show taps and animation scales.</p>
+      </div>
+      <div class="card">
+        <h3>Developer tools</h3>
+        <p>Developer Settings, Logcat, Simulate, Demo Mode, HTTP Proxy, Private DNS, Wireless ADB, Network Speed, Apps, Current Activity, Memory Usage, Device Info and more.</p>
+      </div>
+      <div class="card">
+        <h3>Install App</h3>
+        <p>APK, APKS, XAPK and APKM files, installing only the splits this phone needs: its processor, screen density and languages.</p>
+      </div>
+      <div class="card">
+        <h3>Crash Catcher</h3>
+        <p>Recent crashes, native crashes and ANRs, each with its full report to copy or share, and a notification when an app you watch crashes.</p>
+      </div>
+      <div class="card">
+        <h3>Automations</h3>
+        <p>When something happens, run actions once. While something holds, keep toggles set and put each one back when it ends. Schedules, Bluetooth, Wi-Fi, apps opening, charging and more.</p>
+      </div>
+    </div>
+
+    <h2>Four levels of access</h2>
+    <p class="section-lede">Android keeps many settings from ordinary apps. Every toggle names the level it needs, and without it does the closest thing it can, usually opening the right system screen.</p>
+    <div class="levels-scroll">
+      <table class="levels">
+        <thead>
+          <tr><th scope="col">Level</th><th scope="col">What it is</th><th scope="col">How to get it</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="badge">App</span></td>
+            <td>Ordinary permissions and special access, such as Modify system settings</td>
+            <td>Android's own prompts</td>
+          </tr>
+          <tr>
+            <td><span class="badge badge-granted">Granted</span></td>
+            <td><code>WRITE_SECURE_SETTINGS</code> and <code>DUMP</code>, plus the crash-report permission</td>
+            <td>Three <code>adb shell pm grant</code> lines from a computer, which the app's Setup tab shows</td>
+          </tr>
+          <tr>
+            <td><span class="badge badge-shell">Shell</span></td>
+            <td>The shell user's access, through Shizuku</td>
+            <td>Start <a href="https://shizuku.rikka.app/">Shizuku</a> from its app</td>
+          </tr>
+          <tr>
+            <td><span class="badge badge-root">Root</span></td>
+            <td><code>su</code>, through Magisk or KernelSU</td>
+            <td>Turn on Use root in the Setup tab</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2>Install it</h2>
+    <ol class="steps">
+      <li>
+        <div>
+          <h3>Download the APK</h3>
+          <p>Open the <a href="https://github.com/Droidective/droidective-android/releases/latest">latest release</a> on the phone and install <code>droidective-android-&lt;version&gt;.apk</code>, allowing your browser to install apps when Android asks. From a computer:</p>
+          <div class="cmd">adb install droidective-android-0.1.0.apk</div>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Check the signature</h3>
+          <p>Every release is signed with the same key. Its certificate's SHA-256 digest is <span class="fingerprint">2B:05:9F:5E:11:61:0A:1D:D9:48:E7:77:12:1E:DF:1A:95:3C:F5:DC:DF:0E:86:AD:E0:8D:6A:27:87:D6:D8:B0</span>, and a <code>.sha256</code> file beside each APK holds the file's own hash.</p>
+          <div class="cmd">apksigner verify --print-certs droidective-android-0.1.0.apk</div>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Grant what only adb can</h3>
+          <p>With USB debugging on, run these from a computer. On Android 11 to 14 the last permission is <code>READ_LOGS</code> instead. The app's Setup tab shows the lines for your phone, and where it stands at every level.</p>
+          <div class="cmd">adb shell pm grant com.droidective.android android.permission.WRITE_SECURE_SETTINGS
+adb shell pm grant com.droidective.android android.permission.DUMP
+adb shell pm grant com.droidective.android android.permission.READ_DROPBOX_DATA</div>
+        </div>
+      </li>
+    </ol>
+    <p class="note after-steps">The app checks GitHub once a day for a newer release. The request carries only the app's version, and Setup ▸ Updates turns it off.</p>
+
+    <div class="closer">
+      <h2>Put the toggles on your phone</h2>
+      <a class="btn btn-primary" data-dl="android-app" href="https://github.com/Droidective/droidective-android/releases/latest">Download the APK</a>
+      <div class="related">
+        <a href="/for-android-developers.html">Droidective for Mac →</a>
+        <a href="https://github.com/Droidective/droidective-android/blob/main/RELEASE_NOTES.md">Release notes →</a>
+        <a href="https://github.com/Droidective/droidective-android">Star on GitHub →</a>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <div class="wrap">© 2026 Rohindh R · <a href="/">droidective.com</a> · <a href="/privacy.html">Privacy</a></div>
+  </footer>
+</body>
+</html>
