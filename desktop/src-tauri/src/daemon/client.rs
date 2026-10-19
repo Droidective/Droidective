@@ -19,7 +19,7 @@ use crate::daemon::wire::{
     ForegroundResponse, InstallFormatsResponse, InstallRequest, InstallResponse, LaunchResponse,
     LogcatPidResponse, ManagedToolRequest, ManagedTools, ManagedToolsListResponse, MemInfoResponse,
     OverrideResetRequest, OverridesResponse, PairResponse, PermissionWriteRequest,
-    PermissionsResponse, PhoneSetupRunResponse, PhoneSetupStatus, ReactotronReverseRequest,
+    PermissionsResponse, PhoneSetupOfferResponse, PhoneSetupStatus, ReactotronReverseRequest,
     ReactotronReverseResponse, ReactotronSendRequest, ReactotronSendResponse, RecordOptions,
     RecordStartRequest, RecordStatusResponse, RecordStoppedResponse, RestrictionWriteRequest,
     RestrictionsResponse, RolesResponse, RootStatusResponse, RunRequest, RunResponse,
@@ -301,8 +301,13 @@ impl DaemonClient {
         .await
     }
 
-    pub async fn set_up_phone(&self, serial: String) -> Result<PhoneSetupRunResponse, DaemonError> {
-        self.post("/v1/phonesetup/run", &DeviceRequest { serial })
+    /// Always background: the device menu asks on every open and on every
+    /// device change, so it stays out of the Command Log.
+    pub async fn phone_setup_offer(
+        &self,
+        serial: String,
+    ) -> Result<PhoneSetupOfferResponse, DaemonError> {
+        self.post_marked("/v1/phonesetup/offer", &DeviceRequest { serial }, true)
             .await
     }
 

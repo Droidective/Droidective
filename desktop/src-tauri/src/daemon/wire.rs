@@ -838,9 +838,10 @@ pub struct PairResponse {
 
 /// Droidective for Android on one phone — `PhoneSetupProtocol.Status`.
 ///
-/// `missing_permissions` and `needs_setup` are the daemon's answers, carried
-/// rather than derived here: whether Shizuku counts is `PhoneAppSetupStatus`'s
-/// decision, and a second copy of it would drift from the Mac's.
+/// `missing_permissions`, `needs_setup`, `step` and `has_work` are the daemon's
+/// answers, carried rather than derived here: whether Shizuku counts and
+/// whether a version is older are `ADBKit`'s decisions, and a second copy of
+/// them would drift from the Mac's.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 #[expect(
@@ -851,19 +852,38 @@ pub struct PairResponse {
 pub struct PhoneSetupStatus {
     pub app_installed: bool,
     pub app_version: Option<String>,
+    pub sdk: Option<i64>,
     pub granted_permissions: Vec<String>,
     pub missing_permissions: Vec<String>,
     pub shizuku_installed: bool,
     pub shizuku_running: bool,
     pub needs_setup: bool,
+    pub latest_version: Option<String>,
+    pub latest_problem: Option<String>,
+    /// `install`, `update` or `none`: what a run does about the app itself.
+    pub step: String,
+    pub has_work: bool,
+    /// What the device menu should offer after this read.
+    pub offer: Option<PhoneSetupOffer>,
 }
 
-/// A set-up run: the status read back afterwards, and the first failing
-/// step's reason. A step the phone refused is a success-shaped reply.
+/// What the device menu offers one phone — `PhoneSetupProtocol.Offer`, with
+/// `ADBKit`'s words for the entry.
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct PhoneSetupRunResponse {
-    pub status: PhoneSetupStatus,
-    pub failure: Option<String>,
+#[serde(rename_all = "camelCase")]
+pub struct PhoneSetupOffer {
+    /// `install`, `update` or `setUp`.
+    pub kind: String,
+    pub menu_title: String,
+    pub from: Option<String>,
+    pub to: Option<String>,
+}
+
+/// `offer` is absent when there's nothing to offer, which is also the answer
+/// for a phone that couldn't be read.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PhoneSetupOfferResponse {
+    pub offer: Option<PhoneSetupOffer>,
 }
 
 // MARK: - Tailscale mode
@@ -1257,7 +1277,9 @@ pub struct StreamEvent {
     reason = "an assertion is how a test reports failure; the Result is for decoding"
 )]
 mod tests {
-    use super::{FeaturesResponse, PhoneSetupRunResponse, StreamEvent, TailscaleStatus};
+    use super::{
+        FeaturesResponse, PhoneSetupOfferResponse, PhoneSetupStatus, StreamEvent, TailscaleStatus,
+    };
 
     /// Real `POST /v1/features/list` output, shared with the UI's own tests.
     ///
@@ -1325,21 +1347,52 @@ mod tests {
     }
 
     #[test]
-    fn a_phone_set_up_reply_decodes_with_its_optionals_absent() -> Result<(), serde_json::Error> {
+    fn a_phone_set_up_status_decodes_with_its_optionals_absent() -> Result<(), serde_json::Error> {
         // Swift omits a nil optional rather than writing null, so a phone with
-        // no version and a run with no failure arrive without those keys.
-        let reply: PhoneSetupRunResponse = serde_json::from_str(
-            r#"{"status":{"appInstalled":true,"grantedPermissions":["android.permission.DUMP"],
+        // no version, an unread SDK and an unanswered GitHub arrive without
+        // those keys.
+        let status: PhoneSetupStatus = serde_json::from_str(
+            r#"{"appInstalled":true,"grantedPermissions":["android.permission.DUMP"],
                 "missingPermissions":["android.permission.WRITE_SECURE_SETTINGS"],
-                "shizukuInstalled":true,"shizukuRunning":false,"needsSetup":true}}"#,
+                "shizukuInstalled":true,"shizukuRunning":false,"needsSetup":true,
+                "step":"none","hasWork":true}"#,
         )?;
-        assert!(reply.failure.is_none());
-        assert!(reply.status.app_version.is_none());
-        assert!(reply.status.needs_setup);
+        assert!(status.app_version.is_none());
+        assert!(status.sdk.is_none());
+        assert!(status.latest_version.is_none());
+        assert!(status.needs_setup);
+        assert_eq!(status.step, "none");
         assert_eq!(
-            reply.status.missing_permissions,
+            status.missing_permissions,
             ["android.permission.WRITE_SECURE_SETTINGS"]
         );
+        Ok(())
+    }
+
+    #[test]
+    fn a_phone_set_up_offer_decodes_present_and_absent() -> Result<(), serde_json::Error> {
+        let update: PhoneSetupOfferResponse = serde_json::from_str(
+            r#"{"offer":{"kind":"update","menuTitle":"Update Droidective on This Phone…",
+                "from":"0.1.0","to":"0.1.1"}}"#,
+        )?;
+        let read: Vec<_> = update
+            .offer
+            .iter()
+            .map(|offer| {
+                (
+                    offer.kind.as_str(),
+                    offer.menu_title.as_str(),
+                    offer.to.as_deref(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            read,
+            [("update", "Update Droidective on This Phone…", Some("0.1.1"))]
+        );
+        // Swift's nil `offer` is an absent key.
+        let none: PhoneSetupOfferResponse = serde_json::from_str("{}")?;
+        assert!(none.offer.is_none());
         Ok(())
     }
 

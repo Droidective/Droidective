@@ -106,6 +106,10 @@ public actor PhoneAppReleaseCheck {
     }
 
     public static let failureRetry: TimeInterval = 15 * 60
+    /// How long the device menu trusts an answer.
+    public static let menuMaxAge: TimeInterval = 6 * 60 * 60
+    /// Fresher for the set-up sheet: opening it is asking.
+    public static let sheetMaxAge: TimeInterval = 10 * 60
 
     private let http: any HTTPFetching
     private let now: @Sendable () -> Date

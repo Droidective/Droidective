@@ -67,10 +67,11 @@ public enum DaemonProtocol {
         /// Wireless adb — pair, connect, disconnect, and the USB→Wi-Fi
         /// bootstrap — with the verb in the body.
         case wirelessAction = "/v1/wireless/action"
-        /// Droidective for Android on one phone: what is done, and the
-        /// one-click set-up. See `PhoneSetupProtocol`.
+        /// Droidective for Android on one phone: what is done, and what the
+        /// device menu offers. The run itself is the `phonesetup` stream
+        /// topic, because it reports stages. See `PhoneSetupProtocol`.
         case phoneSetupStatus = "/v1/phonesetup/status"
-        case phoneSetupRun = "/v1/phonesetup/run"
+        case phoneSetupOffer = "/v1/phonesetup/offer"
         /// Tailscale mode: the tailnet's Android phones, connecting one, and
         /// preparing a USB phone to be reached that way. See
         /// `TailscaleProtocol`.

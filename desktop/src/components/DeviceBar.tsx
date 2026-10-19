@@ -112,7 +112,7 @@ export function DeviceBar(props: DeviceBarProps) {
         sheet={sheet}
         devices={props.devices}
         onSelectDevice={props.onSelect}
-        onPhoneStatus={phoneSetup.report}
+        onPhoneOffer={phoneSetup.report}
         onPrepareForTailscale={tailscale.prepare}
         onDismiss={() => {
           setSheet(null)
@@ -167,10 +167,13 @@ function DeviceControl({
           onConnect={() => {
             onSheet({ kind: "wireless", mode: "connect" })
           }}
-          onPhoneSetup={
-            selected !== null && phoneSetup.needsSetup
-              ? () => {
-                  onSheet({ kind: "phone-setup", device: selected })
+          phoneSetup={
+            selected !== null && phoneSetup.offer !== null
+              ? {
+                  offer: phoneSetup.offer,
+                  onSelect: () => {
+                    onSheet({ kind: "phone-setup", device: selected })
+                  },
                 }
               : null
           }

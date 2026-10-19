@@ -250,8 +250,11 @@ extension DaemonBackend {
             grantedPermissions: [], shizukuInstalled: false, shizukuRunning: false)
     }
 
-    func setUpPhone(serial: String) async throws -> PhoneAppSetupOutcome {
-        PhoneAppSetupOutcome(status: try await phoneSetupStatus(serial: serial), failure: nil)
+    func phoneSetupOffer(serial: String) async -> PhoneAppOffer? { nil }
+
+    /// GitHub unreachable: a stub testing something else has no release to offer.
+    func latestPhoneAppRelease(maxAge: TimeInterval) async -> PhoneAppReleaseCheck.Lookup {
+        .failed("stub")
     }
 
     func tailscaleStatus() async -> TailscaleStatus? { nil }
@@ -369,6 +372,11 @@ extension StreamSource {
     func pull(
         serial: String, path: String, destination: String, asRoot: Bool
     ) async -> AsyncStream<PullProgressPayload> {
+        AsyncStream { $0.finish() }
+    }
+
+    /// An inert run, for `pull`'s reason.
+    func phoneSetup(serial: String) async -> AsyncStream<PhoneSetupProtocol.Progress> {
         AsyncStream { $0.finish() }
     }
 

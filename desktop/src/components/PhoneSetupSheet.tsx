@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Check, Circle, CircleCheck, CircleMinus, CircleX, LoaderCircle, Smartphone } from "lucide-react"
 import { Button } from "@/components/Controls"
-import { asDaemonError, phoneSetupStatus, setUpPhone } from "@/lib/daemon"
+import { asDaemonError, phoneSetupStatus, watchPhoneSetup, type Subscription } from "@/lib/daemon"
 import { cn } from "@/lib/cn"
-import { setupRows, type RowKind } from "@/lib/phone-setup"
-import type { PhoneSetupStatus } from "@/lib/wire"
+import { SUBTITLE, actionTitle, setupRows, streamedStatus, type RowKind } from "@/lib/phone-setup"
+import type { PhoneSetupOffer, PhoneSetupProgress, PhoneSetupStatus, StreamUpdate } from "@/lib/wire"
 
 interface Result {
   ok: boolean
@@ -14,24 +14,25 @@ interface Result {
 /**
  * One-click set-up of Droidective for Android — the Mac's `PhoneSetupSheet`.
  *
- * Three rows for what is done, and one button that grants the permissions
- * only adb can and starts Shizuku if it is stopped. The daemon does all of it
- * (`/v1/phonesetup/run` over ADBKit's `PhoneAppSetupService`); this shows its
- * answers, and adb's reason inline when a step fails.
+ * Three rows for what is done, and one button that installs or updates the
+ * app from its latest release when the phone needs it, grants the permissions
+ * only adb can, and starts Shizuku if it is stopped. The daemon does all of it
+ * (the `phonesetup` topic over ADBKit's `PhoneAppSetupService`); this shows its
+ * answers, each stage as it happens, and adb's reason inline when a step fails.
  */
 export function PhoneSetupSheet({
   serial,
   name,
-  onStatus,
+  onOffer,
   onDismiss,
 }: {
   serial: string
   name: string
-  /** Every status read, so the device menu stops offering set-up once it is done. */
-  onStatus: (status: PhoneSetupStatus) => void
+  /** What the device menu should offer after every read, so it changes at once. */
+  onOffer: (offer: PhoneSetupOffer | null) => void
   onDismiss: () => void
 }) {
-  const { status, checking, busy, result, run } = usePhoneSetup(serial, onStatus)
+  const { status, checking, busy, stage, result, run } = usePhoneSetup(serial, onOffer)
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -76,11 +77,11 @@ export function PhoneSetupSheet({
         <div className="h-px bg-border-subtle" />
 
         <div className="flex items-start gap-2">
-          <ResultLine busy={busy} checking={checking} result={result} status={status} />
+          <ResultLine busy={busy} stage={stage} checking={checking} result={result} status={status} />
           <span className="flex-1" />
           <Button onClick={onDismiss}>Close</Button>
-          <Button tone="primary" disabled={busy || status?.needsSetup !== true} onClick={run}>
-            Set Up
+          <Button tone="primary" disabled={busy || status?.hasWork !== true} onClick={run}>
+            {actionTitle(status)}
           </Button>
         </div>
       </dialog>
@@ -88,12 +89,21 @@ export function PhoneSetupSheet({
   )
 }
 
-/** The first read, then the one call, and what each said. */
-function usePhoneSetup(serial: string, onStatus: (status: PhoneSetupStatus) => void) {
+/** The first read, then the one run, and what each said. */
+function usePhoneSetup(serial: string, onOffer: (offer: PhoneSetupOffer | null) => void) {
   const [status, setStatus] = useState<PhoneSetupStatus | null>(null)
   const [checking, setChecking] = useState(true)
   const [busy, setBusy] = useState(false)
+  const [stage, setStage] = useState<string | null>(null)
   const [result, setResult] = useState<Result | null>(null)
+  // A run outlives the sheet, as the Mac's does; only its updates stop.
+  const mounted = useRef(true)
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
 
   useEffect(() => {
     let live = true
@@ -102,7 +112,7 @@ function usePhoneSetup(serial: string, onStatus: (status: PhoneSetupStatus) => v
         const read = await phoneSetupStatus(serial, false)
         if (!live) return
         setStatus(read)
-        onStatus(read)
+        onOffer(read.offer)
       } catch (thrown) {
         if (live) setResult({ ok: false, message: asDaemonError(thrown).message })
       } finally {
@@ -112,32 +122,57 @@ function usePhoneSetup(serial: string, onStatus: (status: PhoneSetupStatus) => v
     return () => {
       live = false
     }
-    // The sheet reads once per phone; `onStatus` is the bar's setter.
+    // The sheet reads once per phone; `onOffer` is the bar's setter.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [serial])
 
   const run = () => {
     setBusy(true)
+    setStage(null)
     setResult(null)
-    void (async () => {
-      try {
-        const outcome = await setUpPhone(serial)
-        setStatus(outcome.status)
-        onStatus(outcome.status)
-        setResult(
-          outcome.failure === null
-            ? { ok: true, message: "All set." }
-            : { ok: false, message: outcome.failure },
-        )
-      } catch (thrown) {
-        setResult({ ok: false, message: asDaemonError(thrown).message })
-      } finally {
-        setBusy(false)
+    let subscription: Subscription | null = null
+    let ended = false
+    const finish = (outcome: Result | null) => {
+      ended = true
+      void subscription?.stop()
+      if (!mounted.current) return
+      if (outcome !== null) setResult(outcome)
+      setBusy(false)
+    }
+    const onUpdate = (update: StreamUpdate<PhoneSetupProgress>) => {
+      if (update.event === "batch") {
+        for (const item of update.items) {
+          if (item.done === true) {
+            const read = item.status === undefined ? null : streamedStatus(item.status)
+            if (read !== null) onOffer(read.offer)
+            if (mounted.current && read !== null) setStatus(read)
+            finish(
+              item.failure === undefined
+                ? { ok: true, message: "All set." }
+                : { ok: false, message: item.failure },
+            )
+          } else if (item.stage !== undefined && mounted.current) {
+            setStage(item.stage)
+          }
+        }
+      } else if (update.event === "failed") {
+        finish({ ok: false, message: update.message })
+      } else if (update.event === "ended" && !ended) {
+        finish({ ok: false, message: "The set-up stopped before it finished." })
       }
-    })()
+    }
+    watchPhoneSetup(serial, onUpdate).then(
+      (started) => {
+        subscription = started
+        if (ended) void started.stop()
+      },
+      (thrown: unknown) => {
+        finish({ ok: false, message: asDaemonError(thrown).message })
+      },
+    )
   }
 
-  return { status, checking, busy, result, run }
+  return { status, checking, busy, stage, result, run }
 }
 
 function Header({ name }: { name: string }) {
@@ -148,9 +183,7 @@ function Header({ name }: { name: string }) {
       </span>
       <div className="min-w-0">
         <h2 className="text-[14px] font-medium text-text-primary">Set Up Droidective on {name}</h2>
-        <p className="mt-0.5 text-[12px] text-text-secondary">
-          Grants the app the permissions only adb can, and starts Shizuku if it&rsquo;s there.
-        </p>
+        <p className="mt-0.5 text-[12px] text-text-secondary">{SUBTITLE}</p>
       </div>
     </header>
   )
@@ -172,11 +205,13 @@ function RowGlyph({ kind }: { kind: RowKind }) {
 
 function ResultLine({
   busy,
+  stage,
   checking,
   result,
   status,
 }: {
   busy: boolean
+  stage: string | null
   checking: boolean
   result: Result | null
   status: PhoneSetupStatus | null
@@ -184,7 +219,7 @@ function ResultLine({
   if (busy || checking) {
     return (
       <span className="text-[12px] text-text-tertiary">
-        {busy ? "Setting up…" : "Checking the phone…"}
+        {busy ? (stage ?? "Setting up…") : "Checking the phone…"}
       </span>
     )
   }
@@ -204,7 +239,7 @@ function ResultLine({
       </p>
     )
   }
-  if (status !== null && status.appInstalled && !status.needsSetup) {
+  if (status !== null && status.appInstalled && !status.hasWork) {
     return (
       <span className="text-[12px] text-text-tertiary">Nothing to do — this phone is set up.</span>
     )

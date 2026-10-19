@@ -282,6 +282,7 @@ export interface CommandPreset {
 
 export type * from "@/lib/wire-apk"
 export type * from "@/lib/wire-diagnostics"
+export type * from "@/lib/wire-phone"
 export type * from "@/lib/wire-settings"
 export type * from "@/lib/wire-stream"
 

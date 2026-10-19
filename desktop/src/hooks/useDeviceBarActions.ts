@@ -8,7 +8,7 @@ import {
   disconnectWireless,
   emulatorAction,
   emulators,
-  phoneSetupStatus,
+  phoneSetupOffer,
   prepareForTailscale,
   tailscaleStatus,
 } from "@/lib/daemon"
@@ -17,7 +17,7 @@ import { isReady } from "@/lib/targets"
 import type {
   Avd,
   Device,
-  PhoneSetupStatus,
+  PhoneSetupOffer,
   TailscalePeer,
   TailscaleStatus,
 } from "@/lib/wire"
@@ -86,40 +86,40 @@ export function useDeviceBarActions(devices: readonly Device[]): {
 }
 
 export interface PhoneSetupProbe {
-  /** The selected phone has Droidective for Android with set-up still to do. */
-  needsSetup: boolean
+  /** What the menu offers the selected phone — install, update or set up — or null. */
+  offer: PhoneSetupOffer | null
   /** Ask again — the device menu does on every open, as the Mac's does. */
   reprobe: () => void
-  /** A status the sheet read, so the entry goes the moment set-up is done. */
-  report: (serial: string, status: PhoneSetupStatus) => void
+  /** What the sheet's last read says to offer, so the entry changes at once. */
+  report: (serial: string, offer: PhoneSetupOffer | null) => void
 }
 
 /**
- * Whether the device menu offers "Set Up Droidective on This Phone…" — the
- * Mac's `probePhoneSetup`.
+ * What the device menu offers for Droidective for Android — the Mac's
+ * `probePhoneSetup`.
  *
- * Marked background, so it stays out of the Command Log, and a failed read
- * just leaves the entry out: a menu is no place to report one. The answer is
- * kept with the serial it was asked about, so a reply for the previous device
- * can never put the entry under the next one.
+ * Background, so it stays out of the Command Log, and a failed read just
+ * leaves the entry out: a menu is no place to report one. The answer is kept
+ * with the serial it was asked about, so a reply for the previous device can
+ * never put the entry under the next one.
  */
 export function usePhoneSetupProbe(selected: Device | null): PhoneSetupProbe {
   const candidate =
     selected !== null && selected.platform === "android" && isReady(selected)
       ? selected.serial
       : null
-  const [needsFor, setNeedsFor] = useState<string | null>(null)
+  const [answer, setAnswer] = useState<{ serial: string; offer: PhoneSetupOffer } | null>(null)
   const [generation, setGeneration] = useState(0)
 
   useEffect(() => {
     if (candidate === null) return
     let live = true
-    phoneSetupStatus(candidate, true).then(
-      (status) => {
-        if (live) setNeedsFor(status.needsSetup ? candidate : null)
+    phoneSetupOffer(candidate).then(
+      (reply) => {
+        if (live) setAnswer(reply.offer === null ? null : { serial: candidate, offer: reply.offer })
       },
       () => {
-        if (live) setNeedsFor(null)
+        if (live) setAnswer(null)
       },
     )
     return () => {
@@ -131,11 +131,12 @@ export function usePhoneSetupProbe(selected: Device | null): PhoneSetupProbe {
     setGeneration((value) => value + 1)
   }, [])
 
-  const report = useCallback((serial: string, status: PhoneSetupStatus) => {
-    setNeedsFor(status.needsSetup ? serial : null)
+  const report = useCallback((serial: string, offer: PhoneSetupOffer | null) => {
+    setAnswer(offer === null ? null : { serial, offer })
   }, [])
 
-  return { needsSetup: candidate !== null && needsFor === candidate, reprobe, report }
+  const offer = candidate !== null && answer?.serial === candidate ? answer.offer : null
+  return { offer, reprobe, report }
 }
 
 export interface Tailscale {

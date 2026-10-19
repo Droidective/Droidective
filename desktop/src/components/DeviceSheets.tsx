@@ -2,7 +2,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { PhoneSetupSheet } from "@/components/PhoneSetupSheet"
 import { WirelessSheet, type WirelessMode } from "@/components/WirelessSheet"
 import { prepareTitle } from "@/lib/tailnet"
-import type { Device, PhoneSetupStatus } from "@/lib/wire"
+import type { Device, PhoneSetupOffer } from "@/lib/wire"
 
 /** The sheet the device bar has up — at most one, as on the Mac. */
 export type DeviceSheet =
@@ -21,15 +21,15 @@ export function DeviceSheets({
   sheet,
   devices,
   onSelectDevice,
-  onPhoneStatus,
+  onPhoneOffer,
   onPrepareForTailscale,
   onDismiss,
 }: {
   sheet: DeviceSheet | null
   devices: Device[]
   onSelectDevice: (serial: string) => void
-  /** What the set-up sheet read, so the menu entry goes once set-up is done. */
-  onPhoneStatus: (serial: string, status: PhoneSetupStatus) => void
+  /** What the set-up sheet's last read says to offer, so the menu entry changes at once. */
+  onPhoneOffer: (serial: string, offer: PhoneSetupOffer | null) => void
   /** `adb tcpip 5555`, once the warning has been confirmed. */
   onPrepareForTailscale: (device: Device) => void
   onDismiss: () => void
@@ -51,8 +51,8 @@ export function DeviceSheets({
         <PhoneSetupSheet
           serial={serial}
           name={label}
-          onStatus={(status) => {
-            onPhoneStatus(serial, status)
+          onOffer={(offer) => {
+            onPhoneOffer(serial, offer)
           }}
           onDismiss={onDismiss}
         />

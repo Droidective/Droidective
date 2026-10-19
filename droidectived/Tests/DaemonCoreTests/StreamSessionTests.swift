@@ -532,6 +532,11 @@ private enum StreamSessionTestError: Error { case unsupported }
                 // and an older "42%" is worthless once a newer one exists — so
                 // a progress strip can never be handed a `dropped` marker.
                 #expect(topic.isSnapshot)
+            case .phoneSetup:
+                // A snapshot for `pull`'s reason: each event is where one
+                // set-up run is now, and the last one is the outcome.
+                #expect(topic.needsSerial)
+                #expect(topic.isSnapshot)
             case .mirror:
                 #expect(topic.needsSerial)
                 // The strongest increment of the lot: an H.264 delta frame is
