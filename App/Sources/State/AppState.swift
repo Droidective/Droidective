@@ -17,12 +17,16 @@ enum NotificationAction: Equatable, Sendable {
     case relaunchToUpdate
     /// Open the changelog modal for the update that just installed.
     case showWhatsNew
+    /// Open Privacy & Security ▸ Microphone, for a recording whose microphone
+    /// was refused. Only offered when that list has a Droidective switch.
+    case openMicrophoneSettings
 
     var buttonTitle: String {
         switch self {
         case .updateNow: return "Update Now"
         case .relaunchToUpdate: return "Relaunch"
         case .showWhatsNew: return "What's New"
+        case .openMicrophoneSettings: return "Open Settings"
         }
     }
 }
@@ -1816,8 +1820,9 @@ final class AppState {
     /// Perform a notification's follow-up (the button on its toast / panel
     /// row).
     func performNotificationAction(_ action: NotificationAction) {
-        #if !APPSTORE
         switch action {
+        case .openMicrophoneSettings: MicrophoneAccess.openSettings()
+        #if !APPSTORE
         // No window needed for these — the download is silent and the
         // relaunch takes the app down anyway.
         case .updateNow: SparkleUpdater.shared.installAvailableUpdate()
@@ -1828,10 +1833,10 @@ final class AppState {
             // mode too).
             activateMainWindow()
             presentWhatsNew = true
-        }
         #else
-        _ = action
+        case .updateNow, .relaunchToUpdate, .showWhatsNew: break
         #endif
+        }
     }
 
     // MARK: - Bundles

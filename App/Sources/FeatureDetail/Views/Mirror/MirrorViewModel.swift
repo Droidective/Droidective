@@ -35,7 +35,7 @@ final class MirrorViewModel {
     /// Set when a recording stops; the view shows the Discard/Save/Edit prompt.
     var pendingRecording: URL?
     /// Set when recording fails to start; the view surfaces it as a toast.
-    var recordingError: String?
+    var recordingError: Toast?
 
     let renderer = MirrorRenderer()
 
@@ -348,10 +348,12 @@ final class MirrorViewModel {
             // that wouldn't start is reported once instead of going unnoticed
             // until playback.
             if let failure = recordAudioStatus?.microphoneFailure {
-                recordingError = failure
+                recordingError = Toast(
+                    message: failure.localizedDescription, ok: false,
+                    action: failure.isFixableInSettings ? .openMicrophoneSettings : nil)
             }
         } catch {
-            recordingError = error.localizedDescription
+            recordingError = Toast(message: error.localizedDescription, ok: false)
         }
     }
 
@@ -399,7 +401,7 @@ final class MirrorViewModel {
             try await recorder.resume()
             isPaused = false
         } catch {
-            recordingError = error.localizedDescription
+            recordingError = Toast(message: error.localizedDescription, ok: false)
         }
         recordBusy = false
     }

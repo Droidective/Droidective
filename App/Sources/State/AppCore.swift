@@ -1024,6 +1024,19 @@ final class AppCore {
 
     // MARK: - Quit
 
+    /// Set by `relaunch()` and read once quit is certain; a cancelled quit
+    /// clears it, so a quit the user backs out of never reopens anything later.
+    private var relaunchAfterQuit = false
+
+    /// Quit through the ordinary path — every window's leave prompt, the
+    /// awaited teardown — and open again. The microphone needs this: macOS hands
+    /// a running process the permission it had at launch, so a switch turned on
+    /// in System Settings only reaches a fresh one (see `AppRelaunch`).
+    func relaunch() {
+        relaunchAfterQuit = true
+        NSApp.terminate(nil)
+    }
+
     /// `applicationShouldTerminate`: true to quit now, false when some window
     /// holds losable work. Windows are prompted one at a time — each
     /// resolution calls back into `resumeQuit`, which moves to the next.
@@ -1068,6 +1081,7 @@ final class AppCore {
             // lose whatever this quit just recorded (the terminal-resume
             // snapshots above included).
             await flushLayout()
+            if relaunchAfterQuit { scheduleRelaunch() }
             NSApp.reply(toApplicationShouldTerminate: true)
         }
     }
@@ -1078,11 +1092,22 @@ final class AppCore {
     /// quit it requested that got cancelled here would otherwise leave its pill
     /// on "Installing…" forever (that phase's only exit was this quit).
     func cancelQuit() {
+        relaunchAfterQuit = false
         frontmost?.appDelegate?.isQuitting = false
         #if !APPSTORE
             SparkleUpdater.shared.noteQuitDeclined()
         #endif
         NSApp.reply(toApplicationShouldTerminate: false)
+    }
+
+    /// The quit still goes ahead if the helper can't start: the user asked to
+    /// leave, and reopening by hand is the fallback.
+    private func scheduleRelaunch() {
+        do {
+            try AppRelaunch.scheduleAfterExit()
+        } catch {
+            AppLog.write(.error, .window, "relaunch helper failed to start; quitting without it")
+        }
     }
 
     // MARK: - Bundles

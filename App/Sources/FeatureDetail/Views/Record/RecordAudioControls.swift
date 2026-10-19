@@ -6,8 +6,7 @@ import SwiftUI
 /// recording starts.
 enum MicrophoneAccess {
     @discardableResult
-    static func requestIfNeeded(forHostMicrophone on: Bool) async
-        -> MicrophoneCapture.Authorization {
+    static func requestIfNeeded(forHostMicrophone on: Bool) async -> MicrophoneAuthorization {
         guard on, MicrophoneCapture.authorization() == .notDetermined else {
             return MicrophoneCapture.authorization()
         }
@@ -16,6 +15,8 @@ enum MicrophoneAccess {
     }
 
     /// macOS only ever prompts once, so a denied app can only be fixed here.
+    /// Offer it only where `isFixableInSettings` says so: until the app has
+    /// asked, the Microphone list doesn't have a Droidective row to turn on.
     static func openSettings() {
         guard let url = URL(
             string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
@@ -133,7 +134,9 @@ struct RecordAudioOptionsRow: View {
         }
         .labelsHidden().pickerStyle(.menu)
         .frame(maxWidth: 210)
-        .disabled(authorization == .denied)
+        // Never disabled for a refused permission: a greyed-out picker can't
+        // be switched off, and with the microphone off it can't explain itself
+        // either. Choosing an input is what brings up the warning row.
     }
 
     private var microphoneChoice: Binding<MicrophoneChoice> {
@@ -165,7 +168,7 @@ struct RecordAudioOptionsRow: View {
                 isTesting ? stopTest() : startTest()
             }
             .controlSize(.small)
-            .disabled(authorization == .denied)
+            .disabled(authorization.recordingNotice != nil)
             .help("Listen to the selected input without recording")
         }
     }
@@ -189,25 +192,40 @@ struct RecordAudioOptionsRow: View {
     /// input that wouldn't start.
     private var warning: String? {
         guard usesHostMicrophone else { return nil }
-        if authorization == .denied {
-            return "Microphone access is off, so the recording won’t have mic audio."
-        }
-        return micError
+        return authorization.recordingNotice ?? micError
     }
 
     private func warningRow(_ message: String) -> some View {
-        HStack(spacing: 6) {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
-            Text(message)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(message)
+                    .font(.app(.footnote))
+                    .foregroundStyle(.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                if authorization.isFixableInSettings { settingsFix }
+            }
+        }
+    }
+
+    /// Turning the switch on is only half of it: macOS hands a running app the
+    /// permission it had at launch, and Droidective can't re-ask, so the change
+    /// lands only after a relaunch.
+    private var settingsFix: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Switch Droidective on in System Settings, then relaunch — macOS "
+                + "applies the change at launch.")
                 .font(.app(.footnote))
                 .foregroundStyle(.textMuted)
                 .fixedSize(horizontal: false, vertical: true)
-            if authorization == .denied {
+            HStack(spacing: 12) {
                 Button("Open Settings") { MicrophoneAccess.openSettings() }
-                    .buttonStyle(.link)
-                    .font(.app(.footnote))
+                Button("Relaunch Droidective") { AppCore.shared.relaunch() }
+                    .help("Quit and reopen, so the new permission applies")
             }
+            .buttonStyle(.link)
+            .font(.app(.footnote))
         }
     }
 
@@ -226,11 +244,15 @@ struct RecordAudioOptionsRow: View {
     }
 
     private func refreshInputs() {
-        authorization = MicrophoneCapture.authorization()
+        refreshAuthorization()
         inputs = MicrophoneCapture.availableInputs()
         // The chosen input can vanish (a headset unplugged between recordings);
         // fall back to the system default rather than failing at Record time.
         if !inputID.isEmpty, !inputs.contains(where: { $0.id == inputID }) { inputID = "" }
+    }
+
+    private func refreshAuthorization() {
+        authorization = MicrophoneCapture.authorization()
     }
 
     // MARK: - Level check
@@ -248,8 +270,10 @@ struct RecordAudioOptionsRow: View {
             do {
                 try await capture.start { sink.yield($0.level) }
             } catch {
-                micError = (error as? LocalizedError)?.errorDescription
-                    ?? error.localizedDescription
+                micError = error.localizedDescription
+                // A first test can be what prompts; a refusal there leaves the
+                // app denied, and the row should say so with its Settings link.
+                refreshAuthorization()
                 isTesting = false
                 sink.finish()
                 return
@@ -338,10 +362,15 @@ struct RecordAudioMuteChips: View {
                 ) { setMuted(status.deviceMuted, !status.microphoneMuted) }
             }
             if let failure = status.microphoneFailure {
-                Label(failure, systemImage: "exclamationmark.triangle.fill")
+                Label(failure.localizedDescription, systemImage: "exclamationmark.triangle.fill")
                     .font(.app(.caption))
                     .foregroundStyle(.orange)
                     .lineLimit(2)
+                if failure.isFixableInSettings {
+                    Button("Open Settings") { MicrophoneAccess.openSettings() }
+                        .buttonStyle(.link)
+                        .font(.app(.caption))
+                }
             }
         }
     }

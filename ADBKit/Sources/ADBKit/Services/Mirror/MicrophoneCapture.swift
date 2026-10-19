@@ -38,22 +38,25 @@ public final class MicrophoneCapture: NSObject, @unchecked Sendable {
         public let name: String
     }
 
-    public enum Authorization: Sendable, Equatable {
-        case notDetermined
-        case denied
-        case authorized
-    }
-
     public enum CaptureError: Error, LocalizedError, Equatable {
-        case notAuthorized
+        /// Carries where the permission stood, which decides whether System
+        /// Settings can fix it.
+        case notAuthorized(MicrophoneAuthorization)
         case noInputDevice
         case configurationFailed
         case unsupportedFormat(sampleRate: Int, channels: Int)
 
+        /// Whether turning on Droidective's switch in System Settings fixes it.
+        public var isFixableInSettings: Bool {
+            guard case let .notAuthorized(authorization) = self else { return false }
+            return authorization.isFixableInSettings
+        }
+
         public var errorDescription: String? {
             switch self {
-            case .notAuthorized:
-                return "Droidective doesn’t have microphone access."
+            case let .notAuthorized(authorization):
+                return authorization.recordingNotice
+                    ?? "Droidective doesn’t have microphone access."
             case .noInputDevice:
                 return "No microphone is available."
             case .configurationFailed:
@@ -92,11 +95,19 @@ public final class MicrophoneCapture: NSObject, @unchecked Sendable {
         return ordered
     }
 
-    public static func authorization() -> Authorization {
-        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+    public static func authorization() -> MicrophoneAuthorization {
+        authorization(for: AVCaptureDevice.authorizationStatus(for: .audio))
+    }
+
+    /// `.restricted` stays distinct from `.denied`: folding it in sent people
+    /// to System Settings for a switch that a restricted Mac doesn't have.
+    static func authorization(for status: AVAuthorizationStatus) -> MicrophoneAuthorization {
+        switch status {
         case .authorized: return .authorized
         case .notDetermined: return .notDetermined
-        default: return .denied
+        case .restricted: return .restricted
+        case .denied: return .denied
+        @unknown default: return .denied
         }
     }
 
@@ -130,25 +141,31 @@ public final class MicrophoneCapture: NSObject, @unchecked Sendable {
     /// asked: recordings start from several places (the Screen Record screen,
     /// the mirror's record button, a hotkey) and only one of them has a picker
     /// to hang the request off.
-    public func start(onChunk: @escaping @Sendable (MicrophoneChunk) -> Void) async throws {
-        switch Self.authorization() {
+    public func start(
+        onChunk: @escaping @Sendable (MicrophoneChunk) -> Void
+    ) async throws(CaptureError) {
+        let authorization = Self.authorization()
+        switch authorization {
         case .authorized:
             break
         case .notDetermined:
-            guard await Self.requestAccess() else { throw CaptureError.notAuthorized }
-        case .denied:
-            throw CaptureError.notAuthorized
+            // Re-read rather than assume `.denied`: a refusal that never
+            // reached the prompt leaves the app unlisted in System Settings.
+            guard await Self.requestAccess() else {
+                throw .notAuthorized(Self.authorization())
+            }
+        case .denied, .restricted:
+            throw .notAuthorized(authorization)
         }
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+        let configured = await withCheckedContinuation {
+            (continuation: CheckedContinuation<Result<Void, CaptureError>, Never>) in
             queue.async { [self] in
-                do {
+                continuation.resume(returning: Result { () throws(CaptureError) in
                     try configure(onChunk: onChunk)
-                    continuation.resume()
-                } catch {
-                    continuation.resume(throwing: error)
-                }
+                })
             }
         }
+        try configured.get()
     }
 
     public func stop() async {
@@ -170,7 +187,9 @@ public final class MicrophoneCapture: NSObject, @unchecked Sendable {
         }
     }
 
-    private func configure(onChunk: @escaping @Sendable (MicrophoneChunk) -> Void) throws {
+    private func configure(
+        onChunk: @escaping @Sendable (MicrophoneChunk) -> Void
+    ) throws(CaptureError) {
         guard !running else { return }
         let device = deviceID.flatMap { AVCaptureDevice(uniqueID: $0) }
             ?? AVCaptureDevice.default(for: .audio)
