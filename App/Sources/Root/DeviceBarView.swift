@@ -16,10 +16,11 @@ struct DeviceBarView: View {
     @State private var wirelessSheet: WirelessSheetMode?
     @State private var refreshSpin = 0.0
     @State private var phoneSetupSheet: PhoneSetupTarget?
-    /// The selected phone, once a probe has found Droidective for Android on it
-    /// with set-up still to do. Keyed by serial so a stale answer for the
-    /// previous device can never put the entry under the next one.
-    @State private var phoneSetupSerial: String?
+    /// What the device menu offers the selected phone for Droidective for
+    /// Android, once a probe has answered: install it, update it, or finish
+    /// setting it up. Keyed by serial so a stale answer for the previous
+    /// device can never put the entry under the next one.
+    @State private var phoneOffer: PhoneOfferEntry?
     /// The phone "Prepare for Tailscale" is asking about, while it asks.
     @State private var preparingForTailscale: Device?
 
@@ -126,8 +127,8 @@ struct DeviceBarView: View {
             WirelessConnectSheet(mode: mode)
         }
         .sheet(item: $phoneSetupSheet) { target in
-            PhoneSetupSheet(target: target) { status in
-                phoneSetupSerial = status.needsSetup ? target.serial : nil
+            PhoneSetupSheet(target: target) { offer in
+                phoneOffer = offer.map { PhoneOfferEntry(serial: target.serial, offer: $0) }
             }
         }
         .task(id: phoneSetupCandidate) {
@@ -186,35 +187,43 @@ struct DeviceBarView: View {
         return device.serial
     }
 
+    /// How long the menu trusts its answer about the latest release; the sheet
+    /// asks for a fresher one when it opens.
+    private static let releaseMaxAge: TimeInterval = 6 * 60 * 60
+
     /// Runs when the selected device changes or becomes ready, and on every
     /// dropdown open so an app installed while the phone is plugged in is
-    /// noticed. Background, so deliberately outside the Command Log: one
-    /// `pm list packages` when the app isn't there.
+    /// noticed. Background, so deliberately outside the Command Log: two
+    /// commands when the app isn't there, and GitHub is asked about the latest
+    /// release only when it is, at most every `releaseMaxAge`.
     ///
     /// The open-time probe is an unstructured task that a device switch does
     /// not cancel, hence the second look at the candidate after the await. It
     /// writes only on a change, so an open menu is not re-rendered for nothing.
     private func probePhoneSetup() async {
         let serial = phoneSetupCandidate
-        var needing: String?
-        if let serial, await state.env.engine.phoneAppSetup.needsSetup(serial: serial) {
-            needing = serial
+        let releases = state.env.engine.phoneAppReleases
+        var entry: PhoneOfferEntry?
+        if let serial, let offer = await state.env.engine.phoneAppSetup.offer(
+            serial: serial,
+            latest: { await releases.latest(maxAge: Self.releaseMaxAge).release })
+        {
+            entry = PhoneOfferEntry(serial: serial, offer: offer)
         }
-        guard !Task.isCancelled, serial == phoneSetupCandidate,
-              phoneSetupSerial != needing
+        guard !Task.isCancelled, serial == phoneSetupCandidate, phoneOffer != entry
         else { return }
-        phoneSetupSerial = needing
+        phoneOffer = entry
     }
 
     @ViewBuilder
     private var phoneSetupItem: some View {
-        if let device = selectedDevice, phoneSetupSerial == device.serial {
+        if let device = selectedDevice, let entry = phoneOffer, entry.serial == device.serial {
             Section {
                 Button {
                     phoneSetupSheet = PhoneSetupTarget(
                         serial: device.serial, name: state.deviceDisplayName(device))
                 } label: {
-                    Label("Set Up Droidective on This Phone…", systemImage: "checklist")
+                    Label(entry.offer.menuTitle, systemImage: entry.symbol)
                 }
             }
         }
@@ -620,5 +629,19 @@ private struct CapWidth: Layout {
         subviews.first?.place(
             at: CGPoint(x: bounds.minX, y: bounds.midY), anchor: .leading,
             proposal: ProposedViewSize(width: bounds.width, height: bounds.height))
+    }
+}
+
+/// The device menu's Droidective for Android entry for one phone.
+private struct PhoneOfferEntry: Equatable {
+    let serial: String
+    let offer: PhoneAppOffer
+
+    var symbol: String {
+        switch offer {
+        case .install: "arrow.down.circle"
+        case .update: "arrow.triangle.2.circlepath"
+        case .setUp: "checklist"
+        }
     }
 }

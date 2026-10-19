@@ -1,8 +1,8 @@
 import ADBKit
 import SwiftUI
 
-/// The phone the device menu's "Set Up Droidective on This Phone…" opens the
-/// sheet for — the `.sheet(item:)` payload.
+/// The phone the device menu's Droidective for Android entry (install, update
+/// or set up) opens the sheet for — the `.sheet(item:)` payload.
 struct PhoneSetupTarget: Identifiable {
     let serial: String
     let name: String
@@ -12,22 +12,29 @@ struct PhoneSetupTarget: Identifiable {
 
 /// One-click set-up of Droidective for Android on a connected phone, opened
 /// from the device dropdown: three rows for what is done, and one button that
-/// grants the permissions only adb can and starts Shizuku if it is
+/// installs or updates the app from its latest release when the phone needs
+/// it, grants the permissions only adb can, and starts Shizuku if it is
 /// stopped. The logic is `PhoneAppSetupService`; this only shows its answers.
 struct PhoneSetupSheet: View {
     @Environment(AppState.self) private var state
     @Environment(\.dismiss) private var dismiss
 
     let target: PhoneSetupTarget
-    /// Every status the sheet reads, so the device bar can stop offering
-    /// set-up the moment it is done.
-    let onStatus: (PhoneAppSetupStatus) -> Void
+    /// What the device menu should offer after every read, so it changes the
+    /// moment the phone is set up, or stops offering anything.
+    let onOffer: (PhoneAppOffer?) -> Void
 
     @State private var status: PhoneAppSetupStatus?
+    /// The latest release, asked of GitHub alongside the phone's first read.
+    @State private var lookup: PhoneAppReleaseCheck.Lookup?
     /// True until the first read answers, either way.
     @State private var checking = true
     @State private var busy = false
+    @State private var stage: PhoneAppSetupStage?
     @State private var result: Result?
+
+    /// Fresher than the menu's six hours: opening the sheet is asking.
+    private static let releaseMaxAge: TimeInterval = 10 * 60
 
     private struct Result: Equatable {
         let ok: Bool
@@ -51,10 +58,10 @@ struct PhoneSetupSheet: View {
                 Spacer()
                 Button("Close") { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button("Set Up") { runSetUp() }
+                Button(actionTitle) { runSetUp() }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
-                    .disabled(busy || status?.needsSetup != true)
+                    .disabled(busy || !hasWork)
             }
         }
         .padding(20)
@@ -63,7 +70,25 @@ struct PhoneSetupSheet: View {
     }
 
     private static let subtitle =
-        "Grants the app the permissions only adb can, and starts Shizuku if it's there."
+        "Installs or updates the app from GitHub, grants it the permissions only adb can, "
+        + "and starts Shizuku if it's there."
+
+    // MARK: - What a run will do
+
+    private var step: PhoneAppStep {
+        guard let status else { return .none }
+        return PhoneAppStep.decide(status: status, latest: lookup?.release)
+    }
+
+    private var hasWork: Bool { step != .none || status?.needsSetup == true }
+
+    private var actionTitle: String {
+        switch step {
+        case .install: "Install"
+        case .update: "Update"
+        case .none: "Set Up"
+        }
+    }
 
     private var header: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -92,11 +117,29 @@ struct PhoneSetupSheet: View {
 
     private var appRow: SetupRow.State {
         guard let status else { return unread }
-        guard status.appInstalled else {
-            return .todo("Install Droidective for Android on the phone first.")
+        switch step {
+        case .install(let release):
+            return .todo("Not installed. Install downloads \(release.version) from GitHub.")
+        case .update(let release):
+            let installed = status.appVersion ?? "An older version"
+            return .todo("\(installed) is installed. Update installs \(release.version).")
+        case .none:
+            break
         }
+        guard status.appInstalled else { return absentApp(sdk: status.sdk) }
         let name = "Droidective for Android"
         return .done(status.appVersion.map { "\(name) \($0)" } ?? name)
+    }
+
+    /// Why a phone without the app can't be given it from here.
+    private func absentApp(sdk: Int?) -> SetupRow.State {
+        if let sdk, sdk < PhoneAppReleases.minimumSdk {
+            return .unavailable("Not installed. Droidective for Android needs Android 11 or later.")
+        }
+        if case .failed(let reason) = lookup {
+            return .unavailable("Not installed, and the latest release couldn't be found: \(reason)")
+        }
+        return .todo("Not installed.")
     }
 
     private var permissionsRow: SetupRow.State {
@@ -126,7 +169,7 @@ struct PhoneSetupSheet: View {
         if busy || checking {
             ProgressView()
                 .controlSize(.small)
-            Text(busy ? "Setting up…" : "Checking the phone…")
+            Text(busy ? stage?.label ?? "Setting up…" : "Checking the phone…")
                 .font(.app(.callout))
                 .foregroundStyle(.textMuted)
         } else if let result {
@@ -137,7 +180,7 @@ struct PhoneSetupSheet: View {
                 .foregroundStyle(result.ok ? .textMain : Color.red)
                 .lineLimit(3)
                 .textSelection(.enabled)
-        } else if status?.needsSetup == false, status?.appInstalled == true {
+        } else if !hasWork, status?.appInstalled == true {
             Text("Nothing to do — this phone is set up.")
                 .font(.app(.callout))
                 .foregroundStyle(.textMuted)
@@ -148,27 +191,43 @@ struct PhoneSetupSheet: View {
 
     private func load() async {
         let service = state.env.engine.phoneAppSetup
+        let releases = state.env.engine.phoneAppReleases
         let serial = target.serial
-        await CommandLog.userInitiated {
+        async let latest = releases.latest(maxAge: Self.releaseMaxAge)
+        let read: Swift.Result<PhoneAppSetupStatus, any Error> = await CommandLog.userInitiated {
             do {
-                apply(try await service.status(serial: serial))
+                return .success(try await service.status(serial: serial))
             } catch {
-                guard !Task.isCancelled else { return }
-                result = Result(ok: false, message: error.localizedDescription)
+                return .failure(error)
             }
         }
-        checking = false
+        let found = await latest
+        defer { checking = false }
+        guard !Task.isCancelled else { return }
+        lookup = found
+        switch read {
+        case .success(let status): apply(status)
+        case .failure(let error): result = Result(ok: false, message: error.localizedDescription)
+        }
     }
 
     private func runSetUp() {
         let service = state.env.engine.phoneAppSetup
         let serial = target.serial
+        let release = lookup?.release
         busy = true
+        stage = nil
         result = nil
+        // Stages arrive off the main actor; the stream hands them over in order.
+        let (stages, sink) = AsyncStream.makeStream(of: PhoneAppSetupStage.self)
+        Task {
+            for await next in stages { stage = next }
+        }
         Task {
             await CommandLog.userInitiated {
                 do {
-                    let outcome = try await service.setUp(serial: serial)
+                    let outcome = try await service.setUp(
+                        serial: serial, release: release, onStage: { sink.yield($0) })
                     apply(outcome.status)
                     result = Result(
                         ok: outcome.failure == nil, message: outcome.failure ?? "All set.")
@@ -176,6 +235,7 @@ struct PhoneSetupSheet: View {
                     result = Result(ok: false, message: error.localizedDescription)
                 }
             }
+            sink.finish()
             busy = false
         }
     }
@@ -183,7 +243,7 @@ struct PhoneSetupSheet: View {
     private func apply(_ read: PhoneAppSetupStatus) {
         guard !Task.isCancelled else { return }
         status = read
-        onStatus(read)
+        onOffer(PhoneAppOffer.decide(status: read, latest: lookup?.release))
     }
 }
 

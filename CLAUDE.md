@@ -262,7 +262,16 @@ Node 22 in CI; scroll reveals and the hero palette demo must keep their
   mDNS instance name appearing, pairs, then connects. The name is the
   correlation key — the host cannot know the pairing port in advance — and is
   matched by *prefix*, since adb's mDNS backend decorates instance names),
-  CustomCommand (one free-typed line; a leading `adb` token infers the adb
+  PhoneAppSetup (the device menu's Install / Update / Set Up Droidective on
+  This Phone…, for Droidective for Android: `PhoneAppOffer.decide` picks the
+  entry, a phone without the app costs two commands and no network request,
+  and `PhoneAppReleaseCheck` caches the latest-release lookup, since the menu
+  asks on every open and anonymous GitHub API calls are capped. Unlike the
+  managed tools it follows *latest*, so what makes a download safe is the
+  signer: every v2/v3 signer in the APK's signing block (`ApkSigningBlock`)
+  must be the certificate pinned in `PhoneAppReleases`, because Android checks
+  the signer itself only on an update, never on a first install. A new release
+  key needs a Mac release with the new pin first), CustomCommand (one free-typed line; a leading `adb` token infers the adb
   kind → tokenized argv, never a shell; anything else — multi-line included —
   runs through `zsh -lc`, deliberately not device-scoped — `{serial}` targets
   the selection; a `runsInTerminal` command opens the in-app Terminal or the

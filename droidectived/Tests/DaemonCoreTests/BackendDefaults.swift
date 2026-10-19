@@ -246,7 +246,7 @@ extension DaemonBackend {
 
     func phoneSetupStatus(serial: String) async throws -> PhoneAppSetupStatus {
         PhoneAppSetupStatus(
-            appInstalled: false, appVersion: nil, requiredPermissions: [],
+            appInstalled: false, appVersion: nil, sdk: nil, requiredPermissions: [],
             grantedPermissions: [], shizukuInstalled: false, shizukuRunning: false)
     }
 
