@@ -36,7 +36,7 @@ private enum Captured {
             "    install permissions:",
             "      android.permission.INTERNET: granted=true",
         ]
-        for permission in PhoneAppSetupService.requiredPermissions where granted.contains(permission) {
+        for permission in granted.sorted() {
             lines.append("      \(permission): granted=true")
         }
         lines += [
@@ -63,7 +63,7 @@ private enum Captured {
 
     @Test func onlyGrantedTrueLinesCountAsGranted() {
         let granted = PhoneAppSetupService.parseGrantedPermissions(
-            Captured.dumpsys(granted: Set(PhoneAppSetupService.requiredPermissions)))
+            Captured.dumpsys(granted: Set(PhoneAppSetupService.requiredPermissions(sdk: 36))))
         #expect(granted.contains("android.permission.WRITE_SECURE_SETTINGS"))
         #expect(granted.contains("android.permission.DUMP"))
         #expect(!granted.contains("android.permission.POST_NOTIFICATIONS"))
@@ -183,21 +183,45 @@ private enum Captured {
     }
 
     @Test func needsSetupTreatsShizukuAsOptional() {
-        let all = PhoneAppSetupService.requiredPermissions
+        let all = PhoneAppSetupService.requiredPermissions(sdk: 36)
         func status(installed: Bool = true, granted: [String] = all, shizuku: Bool, running: Bool)
             -> PhoneAppSetupStatus
         {
             PhoneAppSetupStatus(
-                appInstalled: installed, appVersion: "0.1.0", grantedPermissions: granted,
-                shizukuInstalled: shizuku, shizukuRunning: running)
+                appInstalled: installed, appVersion: "0.1.0", requiredPermissions: all,
+                grantedPermissions: granted, shizukuInstalled: shizuku, shizukuRunning: running)
         }
         #expect(!status(shizuku: true, running: true).needsSetup)
         #expect(!status(shizuku: false, running: false).needsSetup)
         #expect(status(shizuku: true, running: false).needsSetup)
         #expect(status(granted: [all[0]], shizuku: false, running: false).needsSetup)
         #expect(!status(installed: false, granted: [], shizuku: true, running: false).needsSetup)
-        #expect(status(granted: [all[1]], shizuku: false, running: false).missingPermissions == [all[0]])
+        #expect(status(granted: [all[1]], shizuku: false, running: false).missingPermissions
+            == [all[0], all[2]])
         #expect(PhoneAppSetupService.shortName("android.permission.DUMP") == "DUMP")
+    }
+
+    @Test func crashReportsNeedReadLogsBeforeAndroid15() {
+        let granted = ["android.permission.WRITE_SECURE_SETTINGS", "android.permission.DUMP"]
+        #expect(PhoneAppSetupService.requiredPermissions(sdk: 34)
+            == granted + ["android.permission.READ_LOGS"])
+        #expect(PhoneAppSetupService.requiredPermissions(sdk: 35)
+            == granted + ["android.permission.READ_DROPBOX_DATA"])
+        #expect(PhoneAppSetupService.requiredPermissions(sdk: nil) == granted)
+    }
+
+    @Test func sdkComesFromGetprop() {
+        #expect(PhoneAppSetupService.parseSdk("36\n") == 36)
+        #expect(PhoneAppSetupService.parseSdk("34\r\n") == 34)
+        #expect(PhoneAppSetupService.parseSdk("") == nil)
+        #expect(PhoneAppSetupService.parseSdk("error: closed") == nil)
+    }
+
+    @Test func permissionNamesReadAsAList() {
+        #expect(PhoneAppSetupService.readableList([]) == "")
+        #expect(PhoneAppSetupService.readableList(["DUMP"]) == "DUMP")
+        #expect(PhoneAppSetupService.readableList(["A", "B"]) == "A and B")
+        #expect(PhoneAppSetupService.readableList(["A", "B", "C"]) == "A, B and C")
     }
 }
 
@@ -207,7 +231,8 @@ private enum Captured {
         runner.script(argsPrefix: ["-s", "S1"], stdout: "")
         let service = PhoneAppSetupService(client: await makeTestClient(runner: runner))
 
-        let result = try await service.grant(PhoneAppSetupService.requiredPermissions, serial: "S1")
+        let result = try await service.grant(
+            PhoneAppSetupService.requiredPermissions(sdk: 36), serial: "S1")
 
         #expect(result.ok)
         #expect(runner.invocations.map(\.arguments) == [
@@ -215,11 +240,14 @@ private enum Captured {
              "android.permission.WRITE_SECURE_SETTINGS"],
             ["-s", "S1", "shell", "pm", "grant", "'com.droidective.android'",
              "android.permission.DUMP"],
+            ["-s", "S1", "shell", "pm", "grant", "'com.droidective.android'",
+             "android.permission.READ_DROPBOX_DATA"],
         ])
         // What the device's shell receives once adb joins the words.
         #expect(runner.invocations.map { $0.arguments.dropFirst(3).joined(separator: " ") } == [
             "pm grant 'com.droidective.android' android.permission.WRITE_SECURE_SETTINGS",
             "pm grant 'com.droidective.android' android.permission.DUMP",
+            "pm grant 'com.droidective.android' android.permission.READ_DROPBOX_DATA",
         ])
     }
 
@@ -232,7 +260,8 @@ private enum Captured {
             exitCode: 255)
         let service = PhoneAppSetupService(client: await makeTestClient(runner: runner))
 
-        let result = try await service.grant(PhoneAppSetupService.requiredPermissions, serial: "S1")
+        let result = try await service.grant(
+            PhoneAppSetupService.requiredPermissions(sdk: 36), serial: "S1")
 
         #expect(!result.ok)
         #expect(result.message.hasPrefix("Couldn't grant WRITE_SECURE_SETTINGS: Package"))
@@ -309,6 +338,7 @@ private enum Captured {
         runner.script(
             argsPrefix: ["-s", "S1", "shell", "pm", "list", "packages", "'com.droidective.android'"],
             stdout: "package:com.droidective.android\n")
+        runner.script(argsPrefix: ["-s", "S1", "shell", "getprop", "ro.build.version.sdk"], stdout: "36\n")
         runner.script(
             argsPrefix: ["-s", "S1", "shell", "dumpsys", "package", "'com.droidective.android'"],
             stdout: Captured.dumpsys(granted: ["android.permission.DUMP"]))
@@ -321,9 +351,12 @@ private enum Captured {
         let status = try await service.status(serial: "S1")
 
         #expect(status == PhoneAppSetupStatus(
-            appInstalled: true, appVersion: "0.1.0", grantedPermissions: ["android.permission.DUMP"],
+            appInstalled: true, appVersion: "0.1.0",
+            requiredPermissions: PhoneAppSetupService.requiredPermissions(sdk: 36),
+            grantedPermissions: ["android.permission.DUMP"],
             shizukuInstalled: true, shizukuRunning: true))
-        #expect(status.missingPermissions == ["android.permission.WRITE_SECURE_SETTINGS"])
+        #expect(status.missingPermissions
+            == ["android.permission.WRITE_SECURE_SETTINGS", "android.permission.READ_DROPBOX_DATA"])
     }
 
     @Test func anUnreachableDeviceIsAnErrorNotANotInstalled() async throws {
@@ -344,6 +377,7 @@ private enum Captured {
 private final class FakePhone: ProcessRunning, @unchecked Sendable {
     private let lock = NSLock()
     private var appInstalled: Bool
+    private let sdk: String
     private var granted: Set<String>
     private let shizukuInstalled: Bool
     private var shizukuRunning: Bool
@@ -352,10 +386,12 @@ private final class FakePhone: ProcessRunning, @unchecked Sendable {
     private var recorded: [[String]] = []
 
     init(
-        appInstalled: Bool = true, granted: Set<String> = [], shizukuInstalled: Bool = true,
-        shizukuRunning: Bool = false, grantRefusal: String? = nil, starterFails: Bool = false
+        appInstalled: Bool = true, sdk: String = "36\n", granted: Set<String> = [],
+        shizukuInstalled: Bool = true, shizukuRunning: Bool = false, grantRefusal: String? = nil,
+        starterFails: Bool = false
     ) {
         self.appInstalled = appInstalled
+        self.sdk = sdk
         self.granted = granted
         self.shizukuInstalled = shizukuInstalled
         self.shizukuRunning = shizukuRunning
@@ -389,6 +425,8 @@ private final class FakePhone: ProcessRunning, @unchecked Sendable {
         switch line {
         case "pm list packages 'com.droidective.android'":
             return (appInstalled ? "package:com.droidective.android\n" : "", "", 0)
+        case "getprop ro.build.version.sdk":
+            return (sdk, "", 0)
         case "dumpsys package 'com.droidective.android'":
             return (Captured.dumpsys(granted: granted), "", 0)
         case "pm list packages 'moe.shizuku.privileged.api'":
@@ -417,6 +455,7 @@ private final class FakePhone: ProcessRunning, @unchecked Sendable {
     private let grantLines = [
         "pm grant 'com.droidective.android' android.permission.WRITE_SECURE_SETTINGS",
         "pm grant 'com.droidective.android' android.permission.DUMP",
+        "pm grant 'com.droidective.android' android.permission.READ_DROPBOX_DATA",
     ]
     private let starterLine = Captured.starterWord
 
@@ -437,7 +476,7 @@ private final class FakePhone: ProcessRunning, @unchecked Sendable {
         #expect(phone.commands.filter { $0.hasPrefix("pm grant") } == grantLines)
         #expect(phone.commands.filter { $0 == starterLine }.count == 1)
         // Granted before Shizuku is touched.
-        let lastGrant = try #require(phone.commands.lastIndex(of: grantLines[1]))
+        let lastGrant = try #require(phone.commands.lastIndex(of: grantLines[2]))
         let starter = try #require(phone.commands.firstIndex(of: starterLine))
         #expect(lastGrant < starter)
     }
@@ -447,7 +486,26 @@ private final class FakePhone: ProcessRunning, @unchecked Sendable {
         let outcome = try await service(phone).setUp(serial: "S1")
 
         #expect(outcome.failure == nil)
-        #expect(phone.commands.filter { $0.hasPrefix("pm grant") } == [grantLines[1]])
+        #expect(phone.commands.filter { $0.hasPrefix("pm grant") } == [grantLines[1], grantLines[2]])
+    }
+
+    @Test func anAndroid14PhoneGetsReadLogsForCrashReports() async throws {
+        let phone = FakePhone(sdk: "34\n", shizukuInstalled: false)
+        let outcome = try await service(phone).setUp(serial: "S1")
+
+        #expect(outcome.failure == nil)
+        #expect(phone.commands.filter { $0.hasPrefix("pm grant") }.last
+            == "pm grant 'com.droidective.android' android.permission.READ_LOGS")
+        #expect(outcome.status.grantedPermissions.contains("android.permission.READ_LOGS"))
+    }
+
+    @Test func anUnreadableSdkStillGrantsTheGrantedLevel() async throws {
+        let phone = FakePhone(sdk: "", shizukuInstalled: false)
+        let outcome = try await service(phone).setUp(serial: "S1")
+
+        #expect(outcome.failure == nil)
+        #expect(phone.commands.filter { $0.hasPrefix("pm grant") } == Array(grantLines.prefix(2)))
+        #expect(!outcome.status.needsSetup)
     }
 
     @Test func aRunningShizukuIsNeverRestarted() async throws {
@@ -506,7 +564,8 @@ private final class FakePhone: ProcessRunning, @unchecked Sendable {
 
         let fresh = FakePhone()
         #expect(await service(fresh).needsSetup(serial: "S1"))
-        let done = FakePhone(granted: Set(PhoneAppSetupService.requiredPermissions), shizukuRunning: true)
+        let done = FakePhone(
+            granted: Set(PhoneAppSetupService.requiredPermissions(sdk: 36)), shizukuRunning: true)
         #expect(await !service(done).needsSetup(serial: "S1"))
     }
 }

@@ -24,6 +24,7 @@ import Testing
         let log = CallLog()
         var status = PhoneAppSetupStatus(
             appInstalled: true, appVersion: "0.1.0",
+            requiredPermissions: PhoneAppSetupService.requiredPermissions(sdk: 36),
             grantedPermissions: ["android.permission.DUMP"],
             shizukuInstalled: true, shizukuRunning: false)
         var failure: String?
@@ -52,16 +53,17 @@ import Testing
         let status = try JSONDecoder().decode(PhoneSetupProtocol.Status.self, from: body)
         #expect(status.appInstalled)
         #expect(status.appVersion == "0.1.0")
-        #expect(status.missingPermissions == ["android.permission.WRITE_SECURE_SETTINGS"])
+        #expect(status.missingPermissions
+            == ["android.permission.WRITE_SECURE_SETTINGS", "android.permission.READ_DROPBOX_DATA"])
         #expect(status.needsSetup)
         #expect(await backend.log.calls == ["status S1"])
     }
 
     @Test func aPhoneWithoutShizukuIsDoneOnceGranted() async throws {
+        let all = PhoneAppSetupService.requiredPermissions(sdk: 36)
         let backend = StubBackend(status: PhoneAppSetupStatus(
-            appInstalled: true, appVersion: nil,
-            grantedPermissions: PhoneAppSetupService.requiredPermissions,
-            shizukuInstalled: false, shizukuRunning: false))
+            appInstalled: true, appVersion: nil, requiredPermissions: all,
+            grantedPermissions: all, shizukuInstalled: false, shizukuRunning: false))
         let (_, body) = await PhoneSetupRoutes.status(body: device, backend: backend)
 
         let status = try JSONDecoder().decode(PhoneSetupProtocol.Status.self, from: body)

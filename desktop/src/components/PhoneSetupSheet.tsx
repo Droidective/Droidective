@@ -14,7 +14,7 @@ interface Result {
 /**
  * One-click set-up of Droidective for Android — the Mac's `PhoneSetupSheet`.
  *
- * Three rows for what is done, and one button that grants the two permissions
+ * Three rows for what is done, and one button that grants the permissions
  * only adb can and starts Shizuku if it is stopped. The daemon does all of it
  * (`/v1/phonesetup/run` over ADBKit's `PhoneAppSetupService`); this shows its
  * answers, and adb's reason inline when a step fails.
@@ -149,7 +149,7 @@ function Header({ name }: { name: string }) {
       <div className="min-w-0">
         <h2 className="text-[14px] font-medium text-text-primary">Set Up Droidective on {name}</h2>
         <p className="mt-0.5 text-[12px] text-text-secondary">
-          Grants the app two permissions only adb can, and starts Shizuku if it&rsquo;s there.
+          Grants the app the permissions only adb can, and starts Shizuku if it&rsquo;s there.
         </p>
       </div>
     </header>

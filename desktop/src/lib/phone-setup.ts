@@ -19,6 +19,13 @@ export interface SetupRow {
 
 const APP_NAME = "Droidective for Android"
 
+/** "DUMP", "WRITE_SECURE_SETTINGS and DUMP", "A, B and C": ADBKit's `readableList`. */
+export function readableList(names: string[]): string {
+  const last = names.at(-1)
+  if (names.length < 2 || last === undefined) return names[0] ?? ""
+  return `${names.slice(0, -1).join(", ")} and ${last}`
+}
+
 /** `android.permission.DUMP` → `DUMP`. */
 export function shortPermission(permission: string): string {
   return permission.split(".").at(-1) ?? permission
@@ -58,10 +65,10 @@ function permissionsRow(status: PhoneSetupStatus): SetupRow {
   const title = "Permissions granted"
   if (!status.appInstalled) return { title, kind: "unavailable", detail: "Needs the app." }
   if (status.missingPermissions.length > 0) {
-    const missing = status.missingPermissions.map(shortPermission).join(" and ")
+    const missing = readableList(status.missingPermissions.map(shortPermission))
     return { title, kind: "todo", detail: `Missing ${missing}.` }
   }
-  const granted = status.grantedPermissions.map(shortPermission).join(" and ")
+  const granted = readableList(status.grantedPermissions.map(shortPermission))
   return { title, kind: "done", detail: granted }
 }
 
