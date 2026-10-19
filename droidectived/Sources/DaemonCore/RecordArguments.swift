@@ -79,16 +79,21 @@ public enum RecordArguments {
     /// decoding, resampling and interleaving it against the video's clock.
     /// `ScreenRecorder` does that on the Mac with AVFoundation. Until the same
     /// exists here the recording is video-only, and the screen says so.
+    ///
+    /// A phone reached over Tailscale records at the remote preset, for the
+    /// reason the mirror does: scrcpy doesn't slow down for a slow link.
     public static func serverParams(
-        scid: UInt32, options: ScreenRecordOptions
+        scid: UInt32, options: ScreenRecordOptions, serial: String
     ) -> ScrcpyServerParams {
-        ScrcpyServerParams(
-            scid: scid,
-            video: true,
-            audio: false,
-            control: false,
-            maxSize: options.maxSize,
-            videoBitRate: options.bitRateMbps > 0 ? options.bitRateMbps * 1_000_000 : 0,
-            maxFps: options.maxFps)
+        RemoteLink.mirrorParams(
+            ScrcpyServerParams(
+                scid: scid,
+                video: true,
+                audio: false,
+                control: false,
+                maxSize: options.maxSize,
+                videoBitRate: options.bitRateMbps > 0 ? options.bitRateMbps * 1_000_000 : 0,
+                maxFps: options.maxFps),
+            serial: serial)
     }
 }

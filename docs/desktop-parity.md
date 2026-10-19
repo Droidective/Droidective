@@ -599,7 +599,8 @@ the chrome and the device bar have not.
       to ask about today.
 - [x] **Remote mirror preset** — a tailnet serial's mirror runs at 2 Mbit/s,
       1280 px and 30 fps, capped daemon-side in `openMirror`, so the Mirror
-      screen and the Mirror Wall get it with no client change.
+      screen and the Mirror Wall get it with no client change. Screen Record
+      takes the same caps daemon-side (`RecordArguments.serverParams`).
 - [x] **Pull progress strip**, above the workspace where the Mac keeps it: a
       transfer outlives the screen that started it, so the strip cannot belong
       to a pane. The protocol grew the `pull` *topic* for it — a route that

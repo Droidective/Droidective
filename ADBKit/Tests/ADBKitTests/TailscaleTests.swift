@@ -394,6 +394,19 @@ import Testing
         #expect(RemoteLink.mirrorParams(params, serial: "192.168.1.20:5555") == params)
     }
 
+    #if canImport(AVFoundation) && canImport(Network)
+    /// The Screen Record feature records through its own session, not the
+    /// mirror's, so it takes the preset on its own: a recording at 12 Mbit/s
+    /// over a slow link falls behind the phone the same way a mirror does.
+    @Test func aTailnetRecordingIsCappedToo() {
+        let options = ScreenRecordOptions(maxSize: 1920, bitRateMbps: 12, maxFps: 60)
+        let remote = ScreenRecorder.serverParams(options: options, serial: tailnet, scid: 1)
+        #expect((remote.maxSize, remote.videoBitRate, remote.maxFps) == (1280, 2_000_000, 30))
+        let local = ScreenRecorder.serverParams(options: options, serial: "R58M123ABC", scid: 1)
+        #expect((local.maxSize, local.videoBitRate, local.maxFps) == (1920, 12_000_000, 60))
+    }
+    #endif
+
     @Test func aFlaggedFeatureAsksFirstOnlyOnATailnetDevice() {
         #expect(RemoteLink.asksFirst(featureID: "wifi", serials: [tailnet]))
         #expect(RemoteLink.asksFirst(featureID: "network-toggles", serials: ["R58M123ABC", tailnet]))

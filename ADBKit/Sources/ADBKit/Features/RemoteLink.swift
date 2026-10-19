@@ -6,9 +6,10 @@ import Foundation
 public enum RemoteLink {
     // MARK: - Mirror preset
 
-    /// The remote preset's caps: 2 Mbit/s, 1280 px, 30 fps. scrcpy's own
-    /// 8 Mbit/s default does not slow down for a slow link — it backs up, and
-    /// the mirror falls further behind the phone the longer it runs.
+    /// The remote preset's caps: 2 Mbit/s, 1280 px, 30 fps, for a mirror and
+    /// for a recording alike. scrcpy's own 8 Mbit/s default does not slow down
+    /// for a slow link — it backs up, and the stream falls further behind the
+    /// phone the longer it runs.
     public static let mirrorBitRate = 2_000_000
     public static let mirrorMaxSize = 1280
     public static let mirrorMaxFps = 30

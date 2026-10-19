@@ -173,15 +173,27 @@ public actor ScreenRecorder {
 
     // MARK: - Segments
 
+    /// scrcpy's knobs for one segment. A phone reached over Tailscale records
+    /// at the remote preset, for the reason the mirror does: scrcpy doesn't
+    /// slow down for a slow link.
+    static func serverParams(
+        options: ScreenRecordOptions, serial: String, scid: UInt32
+    ) -> ScrcpyServerParams {
+        RemoteLink.mirrorParams(
+            ScrcpyServerParams(
+                scid: scid,
+                audio: options.audio.deviceSource.isOn,
+                audioSource: options.audio.deviceSource.scrcpySource,
+                control: false,
+                maxSize: options.maxSize,
+                videoBitRate: options.bitRateMbps > 0 ? options.bitRateMbps * 1_000_000 : 0,
+                maxFps: options.maxFps),
+            serial: serial)
+    }
+
     private func startSegment() async throws {
-        let params = ScrcpyServerParams(
-            scid: UInt32.random(in: 1 ... 0x7fff_ffff),
-            audio: options.audio.deviceSource.isOn,
-            audioSource: options.audio.deviceSource.scrcpySource,
-            control: false,
-            maxSize: options.maxSize,
-            videoBitRate: options.bitRateMbps > 0 ? options.bitRateMbps * 1_000_000 : 0,
-            maxFps: options.maxFps)
+        let params = Self.serverParams(
+            options: options, serial: serial, scid: UInt32.random(in: 1 ... 0x7fff_ffff))
         let config = MirrorTransport.Configuration(
             serial: serial, params: params,
             serverVersion: server.version, localJarPath: server.jarPath)
