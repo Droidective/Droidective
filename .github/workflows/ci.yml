@@ -3,7 +3,11 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
+  # `ready_for_review` is not one of the default types, and the jobs below
+  # skip while a PR is a draft — without it, marking a draft ready would
+  # never trigger the run that produces its checks.
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   # Manual runs, mainly to redo the Pages deploy with a fresh artifact when a
   # GitHub-side "Deployment failed, try again later" outlasts job reruns.
   workflow_dispatch:
@@ -21,7 +25,13 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # A draft PR runs nothing: the whole matrix is four runners, two container
+  # builds and the Linux app smoke, which is a lot to spend on work that is
+  # still being pushed to. The event_name guard is load-bearing — on a push
+  # or a tag `github.event.pull_request` is null, and `null == false` is
+  # false, so the bare draft check would skip main and every release.
   test:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: macos-15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -44,6 +54,7 @@ jobs:
   # docs/cross-platform.md). Both Linux and Windows now run the full mock-driven
   # suite; ReactotronMCP is Apple-only and is not built on either.
   test-linux:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-24.04
     container: swift:6.2-noble
     steps:
@@ -64,6 +75,7 @@ jobs:
         run: cd droidectived && swift build -c release --product droidectived
 
   build-windows:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     # windows-2022, not -2025: the 2025 image ships MSVC 14.51, whose STL header
     # yvals_core.h hard-errors with "STL1000: Unexpected compiler version,
     # expected Clang 20 or newer". The Swift 6.2.4 toolchain bundles an older
@@ -107,6 +119,7 @@ jobs:
   # Split in two so a failure says which half broke: the web half needs only
   # Node, while the native half needs Swift, Rust and a webview toolchain.
   desktop-web:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -133,6 +146,7 @@ jobs:
         run: npx vite build
 
   desktop-native:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-24.04
     # The same image test-linux uses, so the daemon the app bundles is built
     # by the compiler its own suite ran under.
@@ -197,6 +211,7 @@ jobs:
   # rather than on a user's machine), and nesting one inside the job's own
   # image would need docker-in-docker for nothing.
   desktop-linux-smoke:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     needs: desktop-native
     runs-on: ubuntu-24.04
     steps:
@@ -221,6 +236,7 @@ jobs:
           if-no-files-found: warn
 
   build:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: macos-15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
