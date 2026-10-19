@@ -672,7 +672,6 @@ public enum FeatureRegistry {
         "wifi": "Turning Wi-Fi off or joining another network can take it off your tailnet.",
         "wireless-adb":
             "Switching adb to tcpip restarts adb on the phone, which drops every connection to it.",
-        "dev-settings": "Developer settings change how the phone runs, and are applied on the phone itself.",
     ]
 
     /// Curated, ordered catalog features per role — the focused set a newcomer

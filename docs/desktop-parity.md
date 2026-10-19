@@ -588,8 +588,8 @@ the chrome and the device bar have not.
       ADBKit's own).
 - [x] **Ask before cutting a tailnet link** — Network Toggles (its form and
       the Simulate hub's Network section), Wi-Fi (the radio and Connect), the
-      Wireless ADB tcpip button and the wireless sheet's USB-cable tab, and
-      Developer Settings ask first on a phone reached over Tailscale, with the
+      Wireless ADB tcpip button and the wireless sheet's USB-cable tab ask
+      first on a phone reached over Tailscale, with the
       Mac's title and the registry's own sentence (`remoteLinkWarning`, served
       in `/v1/features/list`). A `ConfirmDialog` everywhere a window can hold
       one; the Quick Actions panel arms instead, as the Mac's panel does — the

@@ -54,12 +54,11 @@ const { WifiPane } = await import("@/components/WifiPane")
 const { DevSettingsPane } = await import("@/components/DevSettingsPane")
 
 const WIFI_WARNING = "Turning Wi-Fi off or joining another network can take it off your tailnet."
-const DEV_WARNING =
-  "Developer settings change how the phone runs, and are applied on the phone itself."
 
 const features = [
   { id: "wifi", remoteLinkWarning: WIFI_WARNING },
-  { id: "dev-settings", remoteLinkWarning: DEV_WARNING },
+  // None of its settings can drop the link, so the registry gives it no warning.
+  { id: "dev-settings", remoteLinkWarning: null },
   { id: "screenshot", remoteLinkWarning: null },
 ] as FeatureSummary[]
 
@@ -150,26 +149,8 @@ describe("Wi-Fi on a tailnet phone", () => {
 })
 
 describe("Developer Settings on a tailnet phone", () => {
-  it("asks before a change, and a cancelled one leaves the row alone", () => {
+  it("applies at once, since none of its settings can drop the link", () => {
     inWindow(<DevSettingsPane device={remote} />)
-    const row = screen.getByRole("switch", { name: "Show taps" })
-    fireEvent.click(row)
-    expect(apply).not.toHaveBeenCalled()
-    expect(screen.getByRole("alertdialog").textContent).toContain(DEV_WARNING)
-
-    fireEvent.click(screen.getAllByRole("button", { name: "Cancel" })[1] as HTMLElement)
-    expect(apply).not.toHaveBeenCalled()
-    expect(screen.getByRole("switch", { name: "Show taps" }).getAttribute("aria-checked")).toBe(
-      "false",
-    )
-
-    fireEvent.click(screen.getByRole("switch", { name: "Show taps" }))
-    fireEvent.click(screen.getByRole("button", { name: "Change Setting" }))
-    expect(apply).toHaveBeenCalledOnce()
-  })
-
-  it("applies at once on a cabled phone", () => {
-    inWindow(<DevSettingsPane device={cabled} />)
     fireEvent.click(screen.getByRole("switch", { name: "Show taps" }))
     expect(screen.queryByRole("alertdialog")).toBeNull()
     expect(apply).toHaveBeenCalledOnce()

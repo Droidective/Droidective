@@ -1320,10 +1320,7 @@ mod tests {
             .filter(|feature| feature.remote_link_warning.is_some())
             .map(|feature| feature.id.as_str())
             .collect();
-        assert_eq!(
-            flagged,
-            ["wireless-adb", "wifi", "dev-settings", "network-toggles"]
-        );
+        assert_eq!(flagged, ["wireless-adb", "wifi", "network-toggles"]);
         Ok(())
     }
 

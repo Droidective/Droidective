@@ -758,7 +758,6 @@
             "kind": "view",
             "needsBundle": false,
             "needsDevice": true,
-            "remoteLinkWarning": "Developer settings change how the phone runs, and are applied on the phone itself.",
             "subtitle": "Layout bounds, overdraw, taps, animation scales & more",
             "supportsRunAll": false,
             "title": "Developer Settings"
