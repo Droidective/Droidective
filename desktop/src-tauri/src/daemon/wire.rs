@@ -78,6 +78,11 @@ pub struct FeatureSummary {
     pub needs_bundle: bool,
     #[serde(rename = "isDestructive")]
     pub is_destructive: bool,
+    /// How this feature can take a phone off the network, when it can. Set
+    /// means the UI asks before running it on a phone reached over Tailscale;
+    /// the sentence is the one the Mac's question carries.
+    #[serde(rename = "remoteLinkWarning", default)]
+    pub remote_link_warning: Option<String>,
     /// True when a hub screen owns this feature. Hubs are full-app views this
     /// UI does not have yet, so absorbed members are shown standalone here —
     /// but the flag has to survive the wire for that to stay a decision.
@@ -861,6 +866,38 @@ pub struct PhoneSetupRunResponse {
     pub failure: Option<String>,
 }
 
+// MARK: - Tailscale mode
+
+/// One Android phone on the user's tailnet — the daemon's `TailscalePeer`.
+///
+/// Sent back unchanged to connect it: the daemon refuses an `ipv4` that is not
+/// a tailnet address, so this side never decides which addresses count.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TailscalePeer {
+    pub id: String,
+    pub name: String,
+    pub ipv4: String,
+}
+
+/// The device menu's Tailscale section — `TailscaleProtocol.Status`.
+///
+/// Everything in it is the daemon's answer: which peers are worth offering,
+/// the line to show when there are none, and the warning "Prepare for
+/// Tailscale" confirms with, which is a security warning and so has one
+/// wording for both apps.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TailscaleStatus {
+    /// False when this machine has no Tailscale CLI: the menu has no section.
+    pub installed: bool,
+    pub flavor: Option<String>,
+    pub backend_state: Option<String>,
+    pub running: bool,
+    pub notice: Option<String>,
+    pub peers: Vec<TailscalePeer>,
+    pub prepare_warning: String,
+}
+
 // MARK: - deep links, the bug report, and the toolchain
 
 /// One saved deep link. `id` travels back unchanged so an edit updates rather
@@ -1220,7 +1257,7 @@ pub struct StreamEvent {
     reason = "an assertion is how a test reports failure; the Result is for decoding"
 )]
 mod tests {
-    use super::{FeaturesResponse, PhoneSetupRunResponse, StreamEvent};
+    use super::{FeaturesResponse, PhoneSetupRunResponse, StreamEvent, TailscaleStatus};
 
     /// Real `POST /v1/features/list` output, shared with the UI's own tests.
     ///
@@ -1273,6 +1310,17 @@ mod tests {
             .first()
             .ok_or_else(|| serde::de::Error::custom("no options"))?;
         assert_ne!(first.value, first.label, "a choice carries both halves");
+
+        // The flag the Tailscale prompt reads. Dropped here, it would never
+        // reach the webview, and a tailnet phone's Wi-Fi would switch off
+        // without a question.
+        let flagged: Vec<&str> = response
+            .features
+            .iter()
+            .filter(|feature| feature.remote_link_warning.is_some())
+            .map(|feature| feature.id.as_str())
+            .collect();
+        assert_eq!(flagged, ["wireless-adb", "wifi", "network-toggles"]);
         Ok(())
     }
 
@@ -1292,6 +1340,30 @@ mod tests {
             reply.status.missing_permissions,
             ["android.permission.WRITE_SECURE_SETTINGS"]
         );
+        Ok(())
+    }
+
+    #[test]
+    fn a_tailscale_status_decodes_with_its_optionals_absent() -> Result<(), serde_json::Error> {
+        // No CLI on this machine: Swift omits every nil, leaving only the
+        // fields that always have a value.
+        let missing: TailscaleStatus = serde_json::from_str(
+            r#"{"installed":false,"running":false,"peers":[],"prepareWarning":"w"}"#,
+        )?;
+        assert!(!missing.installed);
+        assert!(missing.notice.is_none() && missing.backend_state.is_none());
+
+        let running: TailscaleStatus = serde_json::from_str(
+            r#"{"installed":true,"flavor":"appBundle","backendState":"Running","running":true,
+                "peers":[{"id":"nGALAXY","name":"galaxy-s24","ipv4":"100.88.0.9"}],
+                "prepareWarning":"This runs adb tcpip 5555."}"#,
+        )?;
+        let peer = running
+            .peers
+            .first()
+            .ok_or_else(|| serde::de::Error::custom("no peer"))?;
+        assert_eq!(peer.ipv4, "100.88.0.9");
+        assert_eq!(running.flavor.as_deref(), Some("appBundle"));
         Ok(())
     }
 

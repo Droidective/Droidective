@@ -254,6 +254,16 @@ extension DaemonBackend {
         PhoneAppSetupOutcome(status: try await phoneSetupStatus(serial: serial), failure: nil)
     }
 
+    func tailscaleStatus() async -> TailscaleStatus? { nil }
+
+    func connectTailscale(_ peer: TailscalePeer) async throws -> FeatureResult {
+        FeatureResult(ok: true, message: "stub")
+    }
+
+    func prepareForTailscale(serial: String) async throws -> FeatureResult {
+        FeatureResult(ok: true, message: "stub")
+    }
+
     func deepLinks(packageId: String) async -> [DeepLink] { [] }
 
     func writeDeepLinks(packageId: String, links: [DeepLink]) async throws {}

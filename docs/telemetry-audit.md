@@ -106,7 +106,8 @@ PostHog's own `$geoip_*` (city-level, from the request IP — not stored by us),
 | `app_launched` | once per launch | launch count |
 | `feature_used` | a feature is opened or run | feature id, kind |
 | `feature_foreground` | the foreground feature changes | prior feature, dwell seconds |
-| `device_connected` | a device appears | `is_emulator`, `is_wireless` — no identity |
+| `device_connected` | a device appears | `is_emulator`, `is_wireless`, `is_tailnet` — no identity; `is_tailnet` is worked out on the Mac, so the 100.x address never leaves it |
+| `tailscale_action` | the device menu's Tailscale section is used | `action` (`connect` or `prepare`), `ok` — never the peer's name or address, which `TelemetryScrub` would not catch: it drops an IPv4 but lets a hostname through |
 | `role_selected` | role picked or changed | role, `is_change` |
 | `feature_perf` | a per-feature resource window closes | feature, seconds, samples, `avg_cpu`, `peak_cpu`, `avg_mem_mb`, `peak_mem_mb` |
 | `app_health` | every 5 min, when there is something to say | the full state block below |

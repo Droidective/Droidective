@@ -35,6 +35,7 @@ export function AppWindow({
     <WindowProviders
       devices={session.devices}
       selected={session.selected}
+      features={features}
       focusedFeature={focusedFeature}
       runOnAll={workspace.layout.runOnAll}
       openFeatures={openFeatures}

@@ -1,7 +1,26 @@
-import { Search } from "lucide-react"
+import { Search, TriangleAlert } from "lucide-react"
 import { iconForFeature } from "@/lib/icons"
 import { cn } from "@/lib/cn"
+import type { LinkCutQuestion } from "@/lib/tailnet"
 import type { Device, FeatureSummary } from "@/lib/wire"
+
+/**
+ * The link-cut question, in the panel — the Mac panel's armed warning: the
+ * title in the warning colour behind a triangle, the risk under it in caption
+ * text. A panel that never takes focus cannot hold a dialog, so a second press
+ * is the confirmation here.
+ */
+export function QuickLinkWarning({ question }: { question: LinkCutQuestion }) {
+  return (
+    <div role="alert" className="flex flex-col gap-0.5">
+      <span className="flex items-center gap-1.5 font-medium text-warn">
+        <TriangleAlert size={13} className="shrink-0" />
+        {question.title}
+      </span>
+      <span className="text-[11.5px] text-text-tertiary">{question.message}</span>
+    </div>
+  )
+}
 
 /** The search field and what it is pointed at — the Mac panel's header. */
 export function QuickHeader({

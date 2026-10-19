@@ -7,6 +7,7 @@ import {
   RunControls,
   runLabel,
 } from "@/components/ActionFormParts"
+import { useRemoteLinkGuard } from "@/hooks/useRemoteLink"
 import { useTargets } from "@/hooks/useTargets"
 import { asDaemonError, runAction } from "@/lib/daemon"
 import { initialValues, missingRequired, runFields, type FormValues } from "@/lib/fields"
@@ -33,6 +34,7 @@ export function ActionForm({
   const [error, setError] = useState<DaemonError | null>(null)
   const [confirming, setConfirming] = useState(false)
   const { serials, runningOnAll } = useTargets()
+  const remoteLink = useRemoteLinkGuard()
 
   const missing = useMemo(() => missingRequired(feature, values), [feature, values])
   // Something to run on, which is the device bar's answer rather than this
@@ -88,12 +90,14 @@ export function ActionForm({
           // used to arm the button for a second press — a different
           // interaction for the same irreversible thing, in an app whose other
           // destructive verbs had already been converted.
+          // A feature that can take a tailnet phone off the network asks too.
           if (feature.isDestructive) setConfirming(true)
-          else void run()
+          else remoteLink.ask(feature.id, serials, `Run ${feature.title}`, () => void run())
         }}
       />
 
       <Outcome error={error} result={result} />
+      {remoteLink.dialog}
 
       {confirming ? (
         <RunConfirmDialog

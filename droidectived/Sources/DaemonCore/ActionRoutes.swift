@@ -112,6 +112,10 @@ public enum ActionProtocol {
         /// kind of difference someone moving between them has to relearn.
         /// Nil means the Mac's own fallback, which the client reproduces.
         public let confirmLabel: String?
+        /// How this feature can take a phone off the network, when it can.
+        /// Set means "ask first on a phone reached over Tailscale"; the
+        /// sentence is the one the Mac's question carries.
+        public let remoteLinkWarning: String?
         /// True when a hub screen owns this feature on the Mac. Whether to
         /// show it standalone is the client's call, but it cannot make that
         /// call if the registry's answer never reaches it.
@@ -176,6 +180,7 @@ public enum ActionProtocol {
                     needsBundle: def.needsBundle,
                     isDestructive: def.isDestructive,
                     confirmLabel: def.confirmLabel,
+                    remoteLinkWarning: def.remoteLinkWarning,
                     isAbsorbedByHub: def.isAbsorbedByHub,
                     absorbedBy: def.absorbedByHub,
                     supportsRunAll: def.supportsRunAll,

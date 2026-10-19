@@ -15,6 +15,7 @@ struct WiFiView: View {
     @State private var newSSID = ""
     @State private var newSecurity = "wpa2"
     @State private var newPassword = ""
+    @State private var linkCut: RemoteLinkPrompt?
 
     private var serial: String { state.targetSerials.first ?? "" }
 
@@ -30,6 +31,14 @@ struct WiFiView: View {
             }
         }
         .task(id: state.targetSerials.first ?? "") { await load() }
+        .remoteLinkConfirmation($linkCut)
+    }
+
+    /// Both writes here can take the phone off the network it is reached
+    /// through, so on a phone reached over Tailscale they ask first.
+    private func askingFirst(_ confirmLabel: String, _ perform: @escaping @MainActor () -> Void) {
+        state.askingBeforeCuttingRemoteLink(
+            "wifi", serials: [serial], confirmLabel: confirmLabel, prompt: $linkCut, perform: perform)
     }
 
     private var content: some View {
@@ -65,7 +74,9 @@ struct WiFiView: View {
                 .buttonStyle(IconButtonStyle())
                 .help("Refresh")
                 .disabled(busy)
-            Toggle("", isOn: Binding(get: { status?.enabled ?? false }, set: { on in Task { await setWifi(on) } }))
+            Toggle("", isOn: Binding(get: { status?.enabled ?? false }, set: { on in
+                askingFirst(on ? "Turn Wi-Fi On" : "Turn Wi-Fi Off") { Task { await setWifi(on) } }
+            }))
                 .labelsHidden()
                 .disabled(busy || status == nil)
         }
@@ -100,7 +111,7 @@ struct WiFiView: View {
                     .font(.app(.caption))
                     .foregroundStyle(.textMuted)
                 Spacer()
-                Button("Connect") { Task { await connect() } }
+                Button("Connect") { askingFirst("Connect") { Task { await connect() } } }
                     .disabled(busy || newSSID.isEmpty)
             }
         }

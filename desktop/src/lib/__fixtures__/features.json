@@ -82,7 +82,10 @@
                 "pair",
                 "untethered",
                 "adb connect",
-                "connect"
+                "connect",
+                "qr",
+                "qr code",
+                "scan"
             ],
             "kind": "view",
             "needsBundle": false,
@@ -137,11 +140,15 @@
                 "tcpip",
                 "pair",
                 "connect",
-                "untethered"
+                "untethered",
+                "qr",
+                "qr code",
+                "scan"
             ],
             "kind": "view",
             "needsBundle": false,
             "needsDevice": false,
+            "remoteLinkWarning": "Switching adb to tcpip restarts adb on the phone, which drops every connection to it.",
             "subtitle": "Connect over Wi-Fi (tcpip + Android 11 pairing)",
             "supportsRunAll": false,
             "title": "Wireless ADB"
@@ -225,6 +232,7 @@
             "kind": "view",
             "needsBundle": false,
             "needsDevice": true,
+            "remoteLinkWarning": "Turning Wi-Fi off or joining another network can take it off your tailnet.",
             "subtitle": "Connection details, toggle, saved networks & passwords",
             "supportsRunAll": false,
             "title": "Wi-Fi"
@@ -1121,6 +1129,7 @@
             "kind": "formAction",
             "needsBundle": false,
             "needsDevice": true,
+            "remoteLinkWarning": "Turning off Wi-Fi or mobile data, or turning on airplane mode, can take it off your tailnet.",
             "subtitle": "Toggle Wi-Fi, mobile data, and airplane mode",
             "supportsRunAll": false,
             "title": "Network Toggles"
@@ -1610,6 +1619,7 @@
         },
         {
             "category": "appManagement",
+            "confirmLabel": "Send random taps, swipes, and keys to the app? They can press anything on screen, and a run can't be stopped midway.",
             "fields": [
                 {
                     "control": "number",

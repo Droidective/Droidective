@@ -8,6 +8,8 @@
 
 import { Button } from "@/components/Controls"
 import type { HubActions } from "@/hooks/useHubAction"
+import { useRemoteLinkGuard } from "@/hooks/useRemoteLink"
+import { useTargets } from "@/hooks/useTargets"
 
 
 /** SwiftUI's `Slider` with the value read out above it, as every section does. */
@@ -56,7 +58,13 @@ export function Field({ label, children }: { label: string; children: React.Reac
   )
 }
 
-/** The section's own Apply, disabled only while its own action is in flight. */
+/**
+ * The section's own Apply, disabled only while its own action is in flight.
+ *
+ * A feature that can take a phone off the network asks first when a target is
+ * reached over Tailscale — of this hub's sections, only Network's does, as on
+ * the Mac. Every other section's Apply runs at once.
+ */
 export function Apply({
   actions,
   featureId,
@@ -66,13 +74,18 @@ export function Apply({
   featureId: string
   fields: Parameters<HubActions["run"]>[1]
 }) {
+  const { serials } = useTargets()
+  const remoteLink = useRemoteLinkGuard()
   return (
     <div>
+      {remoteLink.dialog}
       <Button
         tone="primary"
         disabled={actions.runningId === featureId}
         onClick={() => {
-          actions.run(featureId, fields)
+          remoteLink.ask(featureId, serials, "Apply", () => {
+            actions.run(featureId, fields)
+          })
         }}
       >
         Apply

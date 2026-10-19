@@ -803,14 +803,17 @@ public struct LiveStreamSource: StreamSource {
                 localJarPath: server.jarPath,
                 // The quality is the client's to choose: the Mirror Wall steps
                 // it down as tiles are added, and only the client knows how
-                // many it is drawing.
-                params: ScrcpyServerParams(
-                    scid: ScrcpyServerParams.randomSCID(),
-                    // `raw` rather than the server's Opus default, which is
-                    // what lets the page play it with no decoder at all — see
-                    // `ScrcpySession.pumpAudio`.
-                    audio: audio,
-                    maxSize: quality.maxSize,
-                    maxFps: quality.maxFps)))
+                // many it is drawing. A phone reached over Tailscale is then
+                // capped to the remote preset, as the Mac's mirror is.
+                params: RemoteLink.mirrorParams(
+                    ScrcpyServerParams(
+                        scid: ScrcpyServerParams.randomSCID(),
+                        // `raw` rather than the server's Opus default, which is
+                        // what lets the page play it with no decoder at all —
+                        // see `ScrcpySession.pumpAudio`.
+                        audio: audio,
+                        maxSize: quality.maxSize,
+                        maxFps: quality.maxFps),
+                    serial: serial)))
     }
 }

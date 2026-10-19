@@ -122,7 +122,8 @@ import Testing
     /// build does not mux.
     @Test func theSessionRecordsWithoutControlOrAudio() {
         let params = RecordArguments.serverParams(
-            scid: 7, options: ScreenRecordOptions(maxSize: 1080, bitRateMbps: 12, maxFps: 30))
+            scid: 7, options: ScreenRecordOptions(maxSize: 1080, bitRateMbps: 12, maxFps: 30),
+            serial: "emulator-5554")
 
         #expect(params.video)
         #expect(!params.audio)
@@ -136,10 +137,32 @@ import Testing
     /// Zero means "the server's own default" on every one of these, so it has
     /// to pass through as zero rather than becoming a bit-rate of nothing.
     @Test func zeroOptionsStayZero() {
-        let params = RecordArguments.serverParams(scid: 1, options: ScreenRecordOptions())
+        let params = RecordArguments.serverParams(
+            scid: 1, options: ScreenRecordOptions(), serial: "emulator-5554")
         #expect(params.maxSize == 0)
         #expect(params.videoBitRate == 0)
         #expect(params.maxFps == 0)
+    }
+
+    /// A phone over Tailscale records at the remote preset, defaults included:
+    /// "the server's default" is scrcpy's 8 Mbit/s, which a slow link backs up on.
+    @Test func aTailnetPhoneRecordsAtTheRemotePreset() {
+        let tailnet = "100.101.102.103:5555"
+        let full = RecordArguments.serverParams(
+            scid: 1, options: ScreenRecordOptions(maxSize: 1920, bitRateMbps: 12, maxFps: 60),
+            serial: tailnet)
+        #expect(full.videoBitRate == RemoteLink.mirrorBitRate)
+        #expect(full.maxSize == RemoteLink.mirrorMaxSize)
+        #expect(full.maxFps == RemoteLink.mirrorMaxFps)
+        let defaults = RecordArguments.serverParams(
+            scid: 1, options: ScreenRecordOptions(), serial: tailnet)
+        #expect(defaults.videoBitRate == RemoteLink.mirrorBitRate)
+        let small = RecordArguments.serverParams(
+            scid: 1, options: ScreenRecordOptions(maxSize: 720, bitRateMbps: 1, maxFps: 24),
+            serial: tailnet)
+        #expect(small.maxSize == 720, "caps only ever lower")
+        #expect(small.videoBitRate == 1_000_000)
+        #expect(small.maxFps == 24)
     }
 
     // MARK: - Routes

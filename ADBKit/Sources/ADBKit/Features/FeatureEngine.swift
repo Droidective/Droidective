@@ -70,6 +70,7 @@ public struct FeatureEngine: Sendable {
     public let restrictions: RestrictionsService
     public let developerSettings: DeveloperSettingsService
     public let phoneAppSetup: PhoneAppSetupService
+    public let tailscale: TailscaleService
     public let simulators: SimulatorService
     public let httpClient: HttpClientService
     let textInput: TextInputService
@@ -120,6 +121,7 @@ public struct FeatureEngine: Sendable {
         self.restrictions = RestrictionsService(client: client)
         self.developerSettings = DeveloperSettingsService(client: client)
         self.phoneAppSetup = PhoneAppSetupService(client: client)
+        self.tailscale = TailscaleService(client: client, locator: locator, monitor: monitor)
         self.httpClient = HttpClientService()
         self.textInput = TextInputService(client: client)
         self.screenCapture = ScreenCaptureService(client: client)

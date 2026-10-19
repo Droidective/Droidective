@@ -23,6 +23,7 @@ struct SimulateView: View {
     @State private var pushTitle = "Test Notification"
     @State private var pushBody = "Hello from Droidective"
     @State private var pushBadge = ""
+    @State private var linkCut: RemoteLinkPrompt?
 
     private var isSimulator: Bool {
         state.selectedDevice?.platform == .iosSimulator
@@ -61,6 +62,7 @@ struct SimulateView: View {
             locale = "en-US"
             proxy = ""
         }
+        .remoteLinkConfirmation($linkCut)
     }
 
     /// Battery + appearance work on both platforms (adb and simctl runners).
@@ -184,8 +186,15 @@ struct SimulateView: View {
         FeatureRegistry.byID["locale"]?.fields.first?.options ?? []
     }
 
+    /// Every section's Apply/Set/Send. A section whose feature can take a
+    /// phone off the network (Network) asks first when a target is reached
+    /// over Tailscale; the rest run at once.
     private func run(_ id: String, _ params: [String: FeatureValue]) {
         guard let feature = FeatureRegistry.byID[id] else { return }
-        Task { await state.run(feature: feature, params: params) }
+        state.askingBeforeCuttingRemoteLink(
+            id, serials: state.targetSerials, confirmLabel: "Apply", prompt: $linkCut
+        ) {
+            Task { await state.run(feature: feature, params: params) }
+        }
     }
 }

@@ -1,6 +1,7 @@
 import { Cable } from "lucide-react"
 import { Button } from "@/components/Controls"
 import { EndpointField } from "@/components/EndpointField"
+import { useRemoteLinkGuard } from "@/hooks/useRemoteLink"
 import { looksLikeEndpoint } from "@/lib/endpoint"
 import type { Device } from "@/lib/wire"
 
@@ -62,6 +63,10 @@ export function UsbTab({
   const cabled = devices.filter(
     (device) => device.platform === "android" && !device.isWireless && device.state === "device",
   )
+  // The Connection hub's tcpip guard, here too: `adb tcpip` restarts adb on
+  // the phone. It asks only for a phone reached over Tailscale, which a list
+  // of cabled devices does not hold today — the Mac runs the same check.
+  const remoteLink = useRemoteLinkGuard()
   return (
     <div className="flex flex-col gap-2.5">
       <p className="text-[12px] text-text-secondary">
@@ -83,7 +88,9 @@ export function UsbTab({
               tone="primary"
               disabled={busy}
               onClick={() => {
-                onSwitch(device.serial)
+                remoteLink.ask("wireless-adb", [device.serial], "Switch to Wi-Fi", () => {
+                  onSwitch(device.serial)
+                })
               }}
             >
               Switch to Wi-Fi
@@ -91,6 +98,7 @@ export function UsbTab({
           </div>
         ))
       )}
+      {remoteLink.dialog}
     </div>
   )
 }

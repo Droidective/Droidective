@@ -267,7 +267,7 @@ public actor DeviceRecorder {
                 serverVersion: tools.scrcpyVersion,
                 localJarPath: tools.scrcpyJar,
                 params: RecordArguments.serverParams(
-                    scid: ScrcpyServerParams.randomSCID(), options: options)))
+                    scid: ScrcpyServerParams.randomSCID(), options: options, serial: serial)))
         let frames: AsyncThrowingStream<MirrorFramePayload, Error>
         do {
             frames = try await session.start()

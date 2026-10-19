@@ -12,6 +12,7 @@ struct WirelessAdbSection: View {
     @State private var connectionPort = "5555"
     @State private var busy = false
     @State private var showQrSheet = false
+    @State private var linkCut: RemoteLinkPrompt?
 
     private var usbDevices: [Device] {
         state.devices.filter { $0.platform == .android && !$0.isWireless && $0.isReady }
@@ -30,13 +31,21 @@ struct WirelessAdbSection: View {
                     HStack {
                         Text(device.label)
                         Spacer()
-                        Button("Enable Wi-Fi & Connect") { enableTcpip(device.serial) }
-                            .buttonStyle(.borderedProminent)
-                            .disabled(busy)
+                        Button("Enable Wi-Fi & Connect") {
+                            // tcpip restarts adb on the phone, dropping every
+                            // connection to it — a tailnet one included.
+                            state.askingBeforeCuttingRemoteLink(
+                                "wireless-adb", serials: [device.serial],
+                                confirmLabel: "Enable Wi-Fi & Connect", prompt: $linkCut
+                            ) { enableTcpip(device.serial) }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(busy)
                     }
                 }
             }
         }
+        .remoteLinkConfirmation($linkCut)
 
         HubSection("Pair a device", subtitle: "Android 11+ — scan a QR code, or pair with a code and connect.") {
             HStack(spacing: 10) {

@@ -64,6 +64,12 @@ export interface FeatureSummary {
    * wording — see `confirmPrompt` in `lib/fields`.
    */
   confirmLabel?: string | null
+  /**
+   * How this feature can take a phone off the network, when it can — the
+   * registry's `remoteLinkWarnings`. Set means "ask first on a phone reached
+   * over Tailscale"; see `lib/tailnet`.
+   */
+  remoteLinkWarning?: string | null
   isAbsorbedByHub: boolean
   /**
    * Which hub folded this feature in, if one did.

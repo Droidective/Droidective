@@ -570,6 +570,37 @@ the chrome and the device bar have not.
       `PhoneAppSetupService` (`/v1/phonesetup/status`, `/v1/phonesetup/run`),
       so the `pm grant` lines and the rule that Shizuku counts only when it is
       installed are one copy for both apps.
+- [x] **Tailscale mode** — the menu's Tailscale section, after set-up and
+      before Wireless debugging, present only when this machine has a
+      Tailscale CLI and only when it would hold a row: the daemon's notice
+      ("Tailscale is stopped", "No Android devices online in your tailnet"),
+      one "Connect <name>" per online Android peer that adb does not already
+      list, and "Prepare <phone> for Tailscale…" for a ready, cabled,
+      non-emulator Android phone. Prepare opens the Mac's question with the
+      warning the daemon serves (`prepareWarning`, so the two apps cannot word
+      a security warning differently) and runs `adb tcpip 5555` alone. The
+      status is re-read on every open and on every device change, always with
+      the background header. A tailnet phone's title ends "· Tailscale" in the
+      pill and the menu, as the Mac's does. All of it is ADBKit's
+      `TailscaleService` over `/v1/tailscale/status`, `/v1/tailscale/connect`
+      and `/v1/tailscale/prepare`; the only rule ported to TypeScript is
+      whether a serial is a tailnet `ip:port` (`lib/tailnet.ts`, its vectors
+      ADBKit's own).
+- [x] **Ask before cutting a tailnet link** — Network Toggles (its form and
+      the Simulate hub's Network section), Wi-Fi (the radio and Connect), the
+      Wireless ADB tcpip button and the wireless sheet's USB-cable tab ask
+      first on a phone reached over Tailscale, with the
+      Mac's title and the registry's own sentence (`remoteLinkWarning`, served
+      in `/v1/features/list`). A `ConfirmDialog` everywhere a window can hold
+      one; the Quick Actions panel arms instead, as the Mac's panel does — the
+      warning above Run, and a second Enter (or the same device picked again)
+      to run. A cancelled change leaves its control where it was. The tcpip
+      buttons list cabled devices only, so on both apps that guard has nothing
+      to ask about today.
+- [x] **Remote mirror preset** — a tailnet serial's mirror runs at 2 Mbit/s,
+      1280 px and 30 fps, capped daemon-side in `openMirror`, so the Mirror
+      screen and the Mirror Wall get it with no client change. Screen Record
+      takes the same caps daemon-side (`RecordArguments.serverParams`).
 - [x] **Pull progress strip**, above the workspace where the Mac keeps it: a
       transfer outlives the screen that started it, so the strip cannot belong
       to a pane. The protocol grew the `pull` *topic* for it — a route that
@@ -686,6 +717,9 @@ memory — the file each item names is the thing to replicate.
 - [x] **Phone set-up sheet** (`PhoneSetupSheet`) — Droidective for Android's
       grants and Shizuku, opened from the device dropdown; see the device
       bar's entry.
+- [x] **Prepare for Tailscale confirmation** — the device dropdown's question
+      before `adb tcpip 5555`, with the daemon's warning; see the device bar's
+      Tailscale entry.
 - [ ] **Installed-apps picker** (`InstalledAppsPickerView`) and the **bundle
       manager** (`BundleManagerView`). The picker is built, and the device
       bar's app pill with it — opened from there and from Logcat, as the Mac

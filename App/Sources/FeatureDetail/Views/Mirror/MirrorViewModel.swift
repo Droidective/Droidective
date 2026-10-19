@@ -132,10 +132,14 @@ final class MirrorViewModel {
         // restores that value when the session dies. A settings write here
         // would poison that snapshot and leave the dot stuck on after the
         // session — live writes are for mid-session flips (`setShowTouches`).
-        let params = ScrcpyServerParams(
-            scid: UInt32.random(in: 1 ... 0x7fff_ffff),
-            audio: requestAudio, control: true, maxSize: quality.maxSize,
-            maxFps: quality.maxFps, showTouches: requestShowTouches)
+        // A phone reached over Tailscale is capped to the remote preset, since
+        // scrcpy's default bit rate does not slow down for a slow link.
+        let params = RemoteLink.mirrorParams(
+            ScrcpyServerParams(
+                scid: UInt32.random(in: 1 ... 0x7fff_ffff),
+                audio: requestAudio, control: true, maxSize: quality.maxSize,
+                maxFps: quality.maxFps, showTouches: requestShowTouches),
+            serial: serial)
         let config = MirrorTransport.Configuration(
             serial: serial, params: params,
             serverVersion: server.version, localJarPath: server.jarPath)

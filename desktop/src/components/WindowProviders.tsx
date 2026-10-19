@@ -1,11 +1,12 @@
 import { DropTargetProvider } from "@/hooks/useDropTarget"
+import { RemoteLinkProvider } from "@/hooks/useRemoteLink"
 import { TargetsProvider } from "@/hooks/useTargets"
 import { TerminalCommandsProvider } from "@/hooks/useTerminalCommands"
 import { WindowsProvider } from "@/hooks/useWindows"
 import type { Device, FeatureSummary } from "@/lib/wire"
 
 /**
- * The three contexts a window's contents sit inside.
+ * The contexts a window's contents sit inside.
  *
  * Gathered so `AppWindow` stays a layout: which providers wrap it is a fact
  * about the app, and the nesting order matters in exactly one place — the
@@ -16,6 +17,7 @@ import type { Device, FeatureSummary } from "@/lib/wire"
 export function WindowProviders({
   devices,
   selected,
+  features,
   focusedFeature,
   runOnAll,
   openFeatures,
@@ -23,6 +25,8 @@ export function WindowProviders({
 }: {
   devices: Device[]
   selected: Device | null
+  /** The registry, for the features that ask first on a tailnet phone. */
+  features: FeatureSummary[]
   focusedFeature: FeatureSummary | null
   runOnAll: boolean
   openFeatures: string[]
@@ -36,9 +40,11 @@ export function WindowProviders({
         focusedFeature={focusedFeature}
         runOnAll={runOnAll}
       >
-        <TerminalCommandsProvider>
-          <DropTargetProvider>{children}</DropTargetProvider>
-        </TerminalCommandsProvider>
+        <RemoteLinkProvider features={features} devices={devices}>
+          <TerminalCommandsProvider>
+            <DropTargetProvider>{children}</DropTargetProvider>
+          </TerminalCommandsProvider>
+        </RemoteLinkProvider>
       </TargetsProvider>
     </WindowsProvider>
   )

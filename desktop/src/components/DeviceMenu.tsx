@@ -1,23 +1,21 @@
 import { useEffect } from "react"
+import { Check, ChevronDown, Layers, Link2, PlayCircle, Smartphone, Wifi } from "lucide-react"
 import {
-  Check,
-  ChevronDown,
-  Layers,
-  Link2,
-  ListChecks,
-  PlayCircle,
-  Smartphone,
-  Wifi,
-} from "lucide-react"
+  PhoneSetupEntry,
+  TailscaleGroup,
+  type TailscaleMenu,
+} from "@/components/DeviceMenuSections"
 import { WindowsGroup } from "@/components/DeviceMenuWindows"
 import { cn } from "@/lib/cn"
+import { deviceTitle } from "@/lib/tailnet"
 import type { Avd, Device } from "@/lib/wire"
 
 /**
  * The device dropdown — the Mac's `deviceControl` menu.
  *
  * Its sections, in its order: the devices, the AVDs that are not already
- * running, set-up for Droidective for Android when the phone needs it, the two
+ * running, set-up for Droidective for Android when the phone needs it, the
+ * Tailscale section when this machine has Tailscale, the two
  * wireless-debugging entries, then Manage emulators. A native
  * `<select>` cannot hold sections that *do* things, which is why this is a
  * popover: the Mac's menu is where an emulator gets launched and a device gets
@@ -33,6 +31,7 @@ export function DeviceMenu({
   onPair,
   onConnect,
   onPhoneSetup,
+  tailscale,
   onManageEmulators,
   onDismiss,
 }: {
@@ -47,6 +46,8 @@ export function DeviceMenu({
   onConnect: () => void
   /** Present only while the selected phone has the app with set-up to do. */
   onPhoneSetup: (() => void) | null
+  /** Null when this machine has no Tailscale CLI: no section at all. */
+  tailscale: TailscaleMenu | null
   onManageEmulators: () => void
   onDismiss: () => void
 }) {
@@ -100,6 +101,8 @@ export function DeviceMenu({
 
         {onPhoneSetup === null ? null : <PhoneSetupEntry onSelect={act(onPhoneSetup)} />}
 
+        {tailscale === null ? null : <TailscaleGroup menu={tailscale} onDismiss={onDismiss} />}
+
         <Group title="Wireless debugging">
           <Item icon={<Link2 size={13} />} onSelect={act(onPair)}>
             Pair new device…
@@ -151,7 +154,7 @@ function Devices({
             )
           }
         >
-          {device.state === "device" ? device.label : `${device.label} — ${device.state}`}
+          {deviceTitle(device)}
         </Item>
       ))}
     </>
@@ -174,21 +177,6 @@ function Launchable({ avds, onLaunch }: { avds: Avd[]; onLaunch: (avd: Avd) => v
         </Item>
       ))}
     </Group>
-  )
-}
-
-/**
- * Set-up for Droidective for Android, in its own unlabelled section as the
- * Mac's menu has it, just above Wireless debugging.
- */
-function PhoneSetupEntry({ onSelect }: { onSelect: () => void }) {
-  return (
-    <>
-      <div className="my-1 h-px bg-border-subtle" />
-      <Item icon={<ListChecks size={13} />} onSelect={onSelect}>
-        Set Up Droidective on This Phone…
-      </Item>
-    </>
   )
 }
 
@@ -260,7 +248,9 @@ export function DevicePill({
         disabled ? "" : "hover:bg-text-primary/[0.1]",
       )}
     >
-      <span className="min-w-0 truncate">{device?.label ?? "No device connected"}</span>
+      <span className="min-w-0 truncate">
+        {device === null ? "No device connected" : deviceTitle(device)}
+      </span>
       <ChevronDown size={13} className="shrink-0 text-text-secondary" />
     </button>
   )
