@@ -2,31 +2,35 @@ import Foundation
 
 /// Where Droidective for Android stands on one device.
 ///
-/// Shizuku is optional: a phone without it is set up once the two grants land,
+/// Shizuku is optional: a phone without it is set up once the grants land,
 /// and one with it installed also needs its server running — which it stops
 /// being after every reboot, since the adb-started server does not survive one.
 public struct PhoneAppSetupStatus: Sendable, Equatable, Codable {
     public let appInstalled: Bool
     /// `versionName` from `dumpsys package`, when the app is installed.
     public let appVersion: String?
+    /// What this phone's Android version needs granted
+    /// (`PhoneAppSetupService.requiredPermissions(sdk:)`).
+    public let requiredPermissions: [String]
     /// The required permissions Android reports as `granted=true`.
     public let grantedPermissions: [String]
     public let shizukuInstalled: Bool
     public let shizukuRunning: Bool
 
     public init(
-        appInstalled: Bool, appVersion: String?, grantedPermissions: [String],
-        shizukuInstalled: Bool, shizukuRunning: Bool
+        appInstalled: Bool, appVersion: String?, requiredPermissions: [String],
+        grantedPermissions: [String], shizukuInstalled: Bool, shizukuRunning: Bool
     ) {
         self.appInstalled = appInstalled
         self.appVersion = appVersion
+        self.requiredPermissions = requiredPermissions
         self.grantedPermissions = grantedPermissions
         self.shizukuInstalled = shizukuInstalled
         self.shizukuRunning = shizukuRunning
     }
 
     public var missingPermissions: [String] {
-        PhoneAppSetupService.requiredPermissions.filter { !grantedPermissions.contains($0) }
+        requiredPermissions.filter { !grantedPermissions.contains($0) }
     }
 
     public var permissionsGranted: Bool { missingPermissions.isEmpty }
@@ -61,7 +65,7 @@ public struct PhoneAppSetupError: Error, LocalizedError, Equatable, Sendable {
     public var errorDescription: String? { message }
 }
 
-/// Sets up Droidective for Android on a connected phone: grants the two
+/// Sets up Droidective for Android on a connected phone: grants the
 /// development permissions only a shell can grant, and starts Shizuku when it
 /// is installed but not running.
 ///
@@ -76,10 +80,18 @@ public struct PhoneAppSetupError: Error, LocalizedError, Equatable, Sendable {
 public struct PhoneAppSetupService: Sendable {
     public static let appPackage = "com.droidective.android"
     public static let shizukuPackage = "moe.shizuku.privileged.api"
-    public static let requiredPermissions = [
-        "android.permission.WRITE_SECURE_SETTINGS",
-        "android.permission.DUMP",
-    ]
+    /// WRITE_SECURE_SETTINGS and DUMP, which are the app's Granted level, and
+    /// the permission Android files crash reports under for its Crash Catcher:
+    /// READ_DROPBOX_DATA from Android 15 (API 35), READ_LOGS before it. The
+    /// Android app's `Grants.permissions(sdk)` is the same list. An unread SDK
+    /// asks for the two that don't depend on it.
+    public static func requiredPermissions(sdk: Int?) -> [String] {
+        let granted = ["android.permission.WRITE_SECURE_SETTINGS", "android.permission.DUMP"]
+        guard let sdk else { return granted }
+        let crashReports = sdk >= 35
+            ? "android.permission.READ_DROPBOX_DATA" : "android.permission.READ_LOGS"
+        return granted + [crashReports]
+    }
     static let shizukuServerProcess = "shizuku_server"
 
     let client: AdbClient
@@ -117,12 +129,15 @@ public struct PhoneAppSetupService: Sendable {
 
     private func status(serial: String, appListing: String) async throws -> PhoneAppSetupStatus {
         let installed = Self.listsPackage(appListing, package: Self.appPackage)
+        var required: [String] = []
         var granted: [String] = []
         var version: String?
         if installed {
+            let sdk = try await client.run(on: serial, Self.sdkArguments())
+            required = Self.requiredPermissions(sdk: Self.parseSdk(sdk.stdout))
             let dump = try await client.run(on: serial, Self.dumpsysArguments())
             let reported = Self.parseGrantedPermissions(dump.stdout)
-            granted = Self.requiredPermissions.filter(reported.contains)
+            granted = required.filter(reported.contains)
             version = Self.parseVersionName(dump.stdout)
         }
         let shizuku = try await client.run(on: serial, Self.listArguments(Self.shizukuPackage))
@@ -132,8 +147,9 @@ public struct PhoneAppSetupService: Sendable {
             running = Self.isRunning(try await client.run(on: serial, Self.pidofArguments()))
         }
         return PhoneAppSetupStatus(
-            appInstalled: installed, appVersion: version, grantedPermissions: granted,
-            shizukuInstalled: shizukuInstalled, shizukuRunning: running)
+            appInstalled: installed, appVersion: version, requiredPermissions: required,
+            grantedPermissions: granted, shizukuInstalled: shizukuInstalled,
+            shizukuRunning: running)
     }
 
     // MARK: - Set up
@@ -211,6 +227,10 @@ public struct PhoneAppSetupService: Sendable {
 
     static func listArguments(_ package: String) -> [String] {
         ["shell", "pm", "list", "packages", shellQuote(package)]
+    }
+
+    static func sdkArguments() -> [String] {
+        ["shell", "getprop", "ro.build.version.sdk"]
     }
 
     static func dumpsysArguments() -> [String] {
@@ -344,6 +364,17 @@ public struct PhoneAppSetupService: Sendable {
     static func isRunning(_ pidof: AdbResult) -> Bool {
         pidof.succeeded
             && pidof.stdout.split(whereSeparator: \.isWhitespace).contains { Int($0) != nil }
+    }
+
+    /// `getprop ro.build.version.sdk`'s answer, or nil when it isn't a number.
+    static func parseSdk(_ getprop: String) -> Int? {
+        Int(getprop.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    /// "DUMP", "WRITE_SECURE_SETTINGS and DUMP", "A, B and C".
+    public static func readableList(_ names: [String]) -> String {
+        guard names.count > 1, let last = names.last else { return names.first ?? "" }
+        return names.dropLast().joined(separator: ", ") + " and " + last
     }
 
     /// `android.permission.DUMP` → `DUMP`.

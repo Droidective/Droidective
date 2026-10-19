@@ -355,16 +355,19 @@ its rule that a substituted value is never re-scanned: a clipboard holding
 
 `/v1/phonesetup/status` and `/v1/phonesetup/run` are the device menu's "Set Up
 Droidective on This Phone…", over ADBKit's `PhoneAppSetupService`: grant
-Droidective for Android `WRITE_SECURE_SETTINGS` and `DUMP` with the two `pm
-grant` lines the Android app's own test vector pins, then start Shizuku from
-the native starter inside its APK when it is installed and stopped.
+Droidective for Android `WRITE_SECURE_SETTINGS`, `DUMP` and its Crash Catcher's
+permission — `READ_DROPBOX_DATA` from Android 15, `READ_LOGS` before it, read
+off the phone's `ro.build.version.sdk` — with the `pm grant` lines the Android
+app's own test vector pins, then start Shizuku from the native starter inside
+its APK when it is installed and stopped.
 
 ```jsonc
 // POST /v1/phonesetup/run  { "serial": "emulator-5554" }
 // → 200
 { "status": { "appInstalled": true, "appVersion": "0.1.0",
               "grantedPermissions": ["android.permission.WRITE_SECURE_SETTINGS",
-                                     "android.permission.DUMP"],
+                                     "android.permission.DUMP",
+                                     "android.permission.READ_DROPBOX_DATA"],
               "missingPermissions": [], "shizukuInstalled": true,
               "shizukuRunning": false, "needsSetup": true },
   "failure": "Shizuku didn't start: fatal: can't start server" }

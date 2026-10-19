@@ -12,7 +12,7 @@ struct PhoneSetupTarget: Identifiable {
 
 /// One-click set-up of Droidective for Android on a connected phone, opened
 /// from the device dropdown: three rows for what is done, and one button that
-/// grants the two permissions only adb can and starts Shizuku if it is
+/// grants the permissions only adb can and starts Shizuku if it is
 /// stopped. The logic is `PhoneAppSetupService`; this only shows its answers.
 struct PhoneSetupSheet: View {
     @Environment(AppState.self) private var state
@@ -63,7 +63,7 @@ struct PhoneSetupSheet: View {
     }
 
     private static let subtitle =
-        "Grants the app two permissions only adb can, and starts Shizuku if it's there."
+        "Grants the app the permissions only adb can, and starts Shizuku if it's there."
 
     private var header: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -102,12 +102,13 @@ struct PhoneSetupSheet: View {
     private var permissionsRow: SetupRow.State {
         guard let status else { return unread }
         guard status.appInstalled else { return .unavailable("Needs the app.") }
-        let names = PhoneAppSetupService.requiredPermissions.map(PhoneAppSetupService.shortName)
-        guard status.permissionsGranted else {
-            let missing = status.missingPermissions.map(PhoneAppSetupService.shortName)
-            return .todo("Missing \(missing.joined(separator: " and ")).")
+        func names(_ permissions: [String]) -> String {
+            PhoneAppSetupService.readableList(permissions.map(PhoneAppSetupService.shortName))
         }
-        return .done(names.joined(separator: " and "))
+        guard status.permissionsGranted else {
+            return .todo("Missing \(names(status.missingPermissions)).")
+        }
+        return .done(names(status.requiredPermissions))
     }
 
     private var shizukuRow: SetupRow.State {

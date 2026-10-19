@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { setupRows, shortPermission } from "@/lib/phone-setup"
+import { readableList, setupRows, shortPermission } from "@/lib/phone-setup"
 import type { PhoneSetupStatus } from "@/lib/wire"
 
 const BOTH = ["android.permission.WRITE_SECURE_SETTINGS", "android.permission.DUMP"]
@@ -85,5 +85,16 @@ describe("shortPermission", () => {
   it("keeps the constant's own name", () => {
     expect(shortPermission("android.permission.DUMP")).toBe("DUMP")
     expect(shortPermission("DUMP")).toBe("DUMP")
+  })
+})
+
+describe("readableList", () => {
+  it("reads like the Mac's list of permission names", () => {
+    expect(readableList([])).toBe("")
+    expect(readableList(["DUMP"])).toBe("DUMP")
+    expect(readableList(["A", "B"])).toBe("A and B")
+    expect(readableList(["WRITE_SECURE_SETTINGS", "DUMP", "READ_DROPBOX_DATA"])).toBe(
+      "WRITE_SECURE_SETTINGS, DUMP and READ_DROPBOX_DATA",
+    )
   })
 })
