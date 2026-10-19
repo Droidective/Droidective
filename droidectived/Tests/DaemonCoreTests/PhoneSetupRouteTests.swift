@@ -23,7 +23,7 @@ import Testing
     private struct StubBackend: DaemonBackend {
         let log = CallLog()
         var status = PhoneAppSetupStatus(
-            appInstalled: true, appVersion: "0.1.0",
+            appInstalled: true, appVersion: "0.1.0", sdk: 36,
             requiredPermissions: PhoneAppSetupService.requiredPermissions(sdk: 36),
             grantedPermissions: ["android.permission.DUMP"],
             shizukuInstalled: true, shizukuRunning: false)
@@ -62,7 +62,7 @@ import Testing
     @Test func aPhoneWithoutShizukuIsDoneOnceGranted() async throws {
         let all = PhoneAppSetupService.requiredPermissions(sdk: 36)
         let backend = StubBackend(status: PhoneAppSetupStatus(
-            appInstalled: true, appVersion: nil, requiredPermissions: all,
+            appInstalled: true, appVersion: nil, sdk: 36, requiredPermissions: all,
             grantedPermissions: all, shizukuInstalled: false, shizukuRunning: false))
         let (_, body) = await PhoneSetupRoutes.status(body: device, backend: backend)
 

@@ -22,13 +22,13 @@ private enum Captured {
         """
 
     /// The relevant slice of `dumpsys package com.droidective.android`.
-    static func dumpsys(granted: Set<String>) -> String {
+    static func dumpsys(granted: Set<String>, version: String = "0.1.0") -> String {
         var lines = [
             "Packages:",
             "  Package [com.droidective.android] (8c1e2d4):",
             "    appId=10215",
             "    versionCode=1 minSdk=26 targetSdk=36",
-            "    versionName=0.1.0",
+            "    versionName=\(version)",
             "    requested permissions:",
             "      android.permission.WRITE_SECURE_SETTINGS",
             "      android.permission.DUMP",
@@ -188,7 +188,7 @@ private enum Captured {
             -> PhoneAppSetupStatus
         {
             PhoneAppSetupStatus(
-                appInstalled: installed, appVersion: "0.1.0", requiredPermissions: all,
+                appInstalled: installed, appVersion: "0.1.0", sdk: 36, requiredPermissions: all,
                 grantedPermissions: granted, shizukuInstalled: shizuku, shizukuRunning: running)
         }
         #expect(!status(shizuku: true, running: true).needsSetup)
@@ -351,7 +351,7 @@ private enum Captured {
         let status = try await service.status(serial: "S1")
 
         #expect(status == PhoneAppSetupStatus(
-            appInstalled: true, appVersion: "0.1.0",
+            appInstalled: true, appVersion: "0.1.0", sdk: 36,
             requiredPermissions: PhoneAppSetupService.requiredPermissions(sdk: 36),
             grantedPermissions: ["android.permission.DUMP"],
             shizukuInstalled: true, shizukuRunning: true))
@@ -367,7 +367,7 @@ private enum Captured {
         await #expect(throws: PhoneAppSetupError(message: "Device is offline.")) {
             try await service.status(serial: "S1")
         }
-        #expect(await !service.needsSetup(serial: "S1"))
+        #expect(await service.offer(serial: "S1", latest: { nil }) == nil)
     }
 }
 
@@ -377,26 +377,45 @@ private enum Captured {
 private final class FakePhone: ProcessRunning, @unchecked Sendable {
     private let lock = NSLock()
     private var appInstalled: Bool
+    private var version: String
     private let sdk: String
     private var granted: Set<String>
     private let shizukuInstalled: Bool
     private var shizukuRunning: Bool
     private let grantRefusal: String?
     private let starterFails: Bool
+    /// What `adb install` prints, and the version a successful one leaves.
+    private let installOutput: String
+    private let installsVersion: String
     private var recorded: [[String]] = []
+    private var installedPaths: [String] = []
+    private var installedFileExisted: [Bool] = []
 
     init(
-        appInstalled: Bool = true, sdk: String = "36\n", granted: Set<String> = [],
-        shizukuInstalled: Bool = true, shizukuRunning: Bool = false, grantRefusal: String? = nil,
-        starterFails: Bool = false
+        appInstalled: Bool = true, version: String = "0.1.0", sdk: String = "36\n",
+        granted: Set<String> = [], shizukuInstalled: Bool = true, shizukuRunning: Bool = false,
+        grantRefusal: String? = nil, starterFails: Bool = false,
+        installOutput: String = "Performing Streamed Install\nSuccess\n",
+        installsVersion: String = "0.1.1"
     ) {
         self.appInstalled = appInstalled
+        self.version = version
         self.sdk = sdk
         self.granted = granted
         self.shizukuInstalled = shizukuInstalled
         self.shizukuRunning = shizukuRunning
         self.grantRefusal = grantRefusal
         self.starterFails = starterFails
+        self.installOutput = installOutput
+        self.installsVersion = installsVersion
+    }
+
+    /// The local paths `adb install -r` was handed, and whether each file was
+    /// there when it was.
+    var installs: [(path: String, existed: Bool)] {
+        lock.lock()
+        defer { lock.unlock() }
+        return Array(zip(installedPaths, installedFileExisted))
     }
 
     /// Each device-shell line, as the phone's `sh` receives it.
@@ -416,9 +435,23 @@ private final class FakePhone: ProcessRunning, @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         recorded.append(arguments)
+        if arguments.count == 5, Array(arguments[2...3]) == ["install", "-r"] {
+            return install(arguments[4])
+        }
         let (stdout, stderr, exit) = answer(arguments.dropFirst(3).joined(separator: " "))
         return ProcessOutput(
             stdout: Data(stdout.utf8), stderr: Data(stderr.utf8), exitCode: exit, timedOut: false)
+    }
+
+    private func install(_ path: String) -> ProcessOutput {
+        installedPaths.append(path)
+        installedFileExisted.append(FileManager.default.fileExists(atPath: path))
+        if installOutput.contains("Success") {
+            appInstalled = true
+            version = installsVersion
+        }
+        return ProcessOutput(
+            stdout: Data(installOutput.utf8), stderr: Data(), exitCode: 0, timedOut: false)
     }
 
     private func answer(_ line: String) -> (String, String, Int32) {
@@ -428,7 +461,7 @@ private final class FakePhone: ProcessRunning, @unchecked Sendable {
         case "getprop ro.build.version.sdk":
             return (sdk, "", 0)
         case "dumpsys package 'com.droidective.android'":
-            return (Captured.dumpsys(granted: granted), "", 0)
+            return (Captured.dumpsys(granted: granted, version: version), "", 0)
         case "pm list packages 'moe.shizuku.privileged.api'":
             return (shizukuInstalled ? "package:moe.shizuku.privileged.api\n" : "", "", 0)
         case "pidof shizuku_server":
@@ -557,15 +590,182 @@ private final class FakePhone: ProcessRunning, @unchecked Sendable {
         #expect(outcome.status.needsSetup)
     }
 
-    @Test func theBarsProbeCostsOneCommandWhenTheAppIsAbsent() async throws {
+    @Test func theBarsProbeNeverAsksGitHubAboutAPhoneWithoutTheApp() async throws {
         let phone = FakePhone(appInstalled: false)
-        #expect(await !service(phone).needsSetup(serial: "S1"))
-        #expect(phone.commands == ["pm list packages 'com.droidective.android'"])
+        let asked = Asked()
+        let offer = await service(phone).offer(serial: "S1") { await asked.note() }
+        #expect(offer == .install)
+        #expect(phone.commands
+            == ["pm list packages 'com.droidective.android'", "getprop ro.build.version.sdk"])
+        #expect(await asked.count == 0)
+
+        let android10 = FakePhone(appInstalled: false, sdk: "29\n")
+        #expect(await service(android10).offer(serial: "S1", latest: { nil }) == nil)
+    }
+
+    @Test func theBarsProbeOffersWhatThePhoneNeeds() async throws {
+        let all = Set(PhoneAppSetupService.requiredPermissions(sdk: 36))
+        let latest = TestRelease.make(version: "0.1.1")
 
         let fresh = FakePhone()
-        #expect(await service(fresh).needsSetup(serial: "S1"))
-        let done = FakePhone(
-            granted: Set(PhoneAppSetupService.requiredPermissions(sdk: 36)), shizukuRunning: true)
-        #expect(await !service(done).needsSetup(serial: "S1"))
+        #expect(await service(fresh).offer(serial: "S1", latest: { nil }) == .setUp)
+        let old = FakePhone(granted: all, shizukuRunning: true)
+        #expect(await service(old).offer(serial: "S1", latest: { latest })
+            == .update(from: "0.1.0", to: "0.1.1"))
+        let done = FakePhone(version: "0.1.1", granted: all, shizukuRunning: true)
+        #expect(await service(done).offer(serial: "S1", latest: { latest }) == nil)
+    }
+}
+
+/// Set-up runs that install or update the app from a release first. The
+/// "download" is the real release's signing block, which is what the signer
+/// check reads, so the pin is exercised against apksigner's own output.
+@Suite struct PhoneAppInstallRunTests {
+    private let grantLines = [
+        "pm grant 'com.droidective.android' android.permission.WRITE_SECURE_SETTINGS",
+        "pm grant 'com.droidective.android' android.permission.DUMP",
+        "pm grant 'com.droidective.android' android.permission.READ_DROPBOX_DATA",
+    ]
+
+    private func service(_ phone: FakePhone, host: ReleaseHost) async -> PhoneAppSetupService {
+        let locator = ToolLocator(runner: phone, environment: [:])
+        await locator.seed(.adb, path: "/fake/adb")
+        return PhoneAppSetupService(
+            client: AdbClient(locator: locator, runner: phone, log: CommandLog()), http: host)
+    }
+
+    private func genuine(version: String = "0.1.1") throws -> (ReleaseHost, PhoneAppRelease) {
+        let apk = try ReleaseFixture.bytes()
+        let release = TestRelease.make(version: version, digest: "sha256:" + ReleaseFixture.sha256(apk))
+        return (ReleaseHost(apk: apk), release)
+    }
+
+    /// Stages as the sheet sees them.
+    final class Stages: @unchecked Sendable {
+        private let lock = NSLock()
+        private var seen: [PhoneAppSetupStage] = []
+        var all: [PhoneAppSetupStage] {
+            lock.lock()
+            defer { lock.unlock() }
+            return seen
+        }
+        func record(_ stage: PhoneAppSetupStage) {
+            lock.lock()
+            defer { lock.unlock() }
+            seen.append(stage)
+        }
+    }
+
+    @Test func aPhoneWithoutTheAppGetsItInstalledThenSetUp() async throws {
+        let phone = FakePhone(appInstalled: false)
+        let (host, release) = try genuine()
+        let stages = Stages()
+
+        let outcome = try await service(phone, host: host)
+            .setUp(serial: "S1", release: release, onStage: stages.record)
+
+        #expect(outcome.failure == nil)
+        #expect(outcome.status.appInstalled)
+        #expect(outcome.status.appVersion == "0.1.1")
+        #expect(outcome.status.permissionsGranted)
+        #expect(host.downloads.map(\.absoluteString) == [release.apkURL])
+        let install = try #require(phone.installs.first)
+        #expect(phone.installs.count == 1)
+        #expect(install.existed)
+        #expect(install.path.hasSuffix("/droidective-android-0.1.1.apk"))
+        // The download goes once it's installed.
+        #expect(!FileManager.default.fileExists(atPath: install.path))
+        #expect(phone.commands.filter { $0.hasPrefix("pm grant") } == grantLines)
+        #expect(stages.all == [
+            .downloading(version: "0.1.1", fraction: nil),
+            .downloading(version: "0.1.1", fraction: 0.5),
+            .downloading(version: "0.1.1", fraction: 1),
+            .verifying, .installing(version: "0.1.1"), .granting, .startingShizuku,
+        ])
+    }
+
+    @Test func anOlderAppIsUpdatedInPlace() async throws {
+        let all = Set(PhoneAppSetupService.requiredPermissions(sdk: 36))
+        let phone = FakePhone(granted: all, shizukuRunning: true)
+        let (host, release) = try genuine()
+
+        let outcome = try await service(phone, host: host).setUp(serial: "S1", release: release)
+
+        #expect(outcome.failure == nil)
+        #expect(outcome.status.appVersion == "0.1.1")
+        #expect(phone.installs.count == 1)
+        #expect(!phone.commands.contains { $0.hasPrefix("pm grant") })
+    }
+
+    @Test func aCurrentAppIsNotDownloadedAgain() async throws {
+        let phone = FakePhone(version: "0.1.1")
+        let (host, release) = try genuine()
+
+        let outcome = try await service(phone, host: host).setUp(serial: "S1", release: release)
+
+        #expect(outcome.failure == nil)
+        #expect(host.downloads.isEmpty)
+        #expect(phone.installs.isEmpty)
+        #expect(phone.commands.filter { $0.hasPrefix("pm grant") } == grantLines)
+    }
+
+    @Test func aDownloadThatFailsItsChecksIsNeverInstalled() async throws {
+        let other = SyntheticApk.signed(by: [[Data("someone else".utf8)]])
+        let cases: [(ReleaseHost, PhoneAppRelease, String)] = [
+            (ReleaseHost(apk: try ReleaseFixture.bytes()),
+             TestRelease.make(version: "0.1.1", digest: "sha256:" + String(repeating: "0", count: 64)),
+             "The download doesn't match the release's checksum, so it wasn't installed."),
+            (ReleaseHost(apk: other),
+             TestRelease.make(version: "0.1.1", digest: "sha256:" + ReleaseFixture.sha256(other)),
+             "The download isn't signed with Droidective's release key, so it wasn't installed."),
+        ]
+        for (host, release, failure) in cases {
+            let phone = FakePhone(appInstalled: false)
+            let outcome = try await service(phone, host: host).setUp(serial: "S1", release: release)
+
+            #expect(outcome.failure == failure)
+            #expect(phone.installs.isEmpty)
+            #expect(!outcome.status.appInstalled)
+            #expect(!phone.commands.contains { $0.hasPrefix("pm grant") })
+        }
+    }
+
+    @Test func aRefusedInstallSaysWhyAndGrantsNothing() async throws {
+        let phone = FakePhone(
+            installOutput: "Performing Streamed Install\nadb: failed to install x.apk: Failure "
+                + "[INSTALL_FAILED_UPDATE_INCOMPATIBLE: Existing package com.droidective.android "
+                + "signatures do not match newer version; ignoring!]\n")
+        let (host, release) = try genuine()
+
+        let outcome = try await service(phone, host: host).setUp(serial: "S1", release: release)
+
+        #expect(outcome.failure == "Couldn't install 0.1.1: It conflicts with an installed copy "
+            + "(signature or permission mismatch) — uninstall it first.")
+        #expect(outcome.status.appVersion == "0.1.0")
+        #expect(!phone.commands.contains { $0.hasPrefix("pm grant") })
+    }
+
+    @Test func aFailedDownloadSaysWhy() async throws {
+        let phone = FakePhone(appInstalled: false)
+        let host = ReleaseHost(failure: ManagedToolStore.StoreError.http(404))
+
+        let outcome = try await service(phone, host: host)
+            .setUp(serial: "S1", release: TestRelease.make(version: "0.1.1"))
+
+        #expect(outcome.failure == "Couldn't download 0.1.1: Download failed (HTTP 404).")
+        #expect(phone.installs.isEmpty)
+    }
+
+    @Test func onlyAnHttpsAddressIsDownloaded() async throws {
+        let phone = FakePhone(appInstalled: false)
+        let host = ReleaseHost(apk: try ReleaseFixture.bytes())
+        let plain = PhoneAppRelease(
+            version: "0.1.1", apkName: "droidective-android-0.1.1.apk",
+            apkURL: "http://github.com/x.apk", apkSize: 1, apkDigest: nil)
+
+        let outcome = try await service(phone, host: host).setUp(serial: "S1", release: plain)
+
+        #expect(outcome.failure == "The release's download address isn't HTTPS.")
+        #expect(host.downloads.isEmpty)
     }
 }

@@ -70,6 +70,9 @@ public struct FeatureEngine: Sendable {
     public let restrictions: RestrictionsService
     public let developerSettings: DeveloperSettingsService
     public let phoneAppSetup: PhoneAppSetupService
+    /// The latest Droidective for Android release, shared so every window's
+    /// device menu reads one cached answer.
+    public let phoneAppReleases: PhoneAppReleaseCheck
     public let tailscale: TailscaleService
     public let simulators: SimulatorService
     public let httpClient: HttpClientService
@@ -121,6 +124,7 @@ public struct FeatureEngine: Sendable {
         self.restrictions = RestrictionsService(client: client)
         self.developerSettings = DeveloperSettingsService(client: client)
         self.phoneAppSetup = PhoneAppSetupService(client: client)
+        self.phoneAppReleases = PhoneAppReleaseCheck()
         self.tailscale = TailscaleService(client: client, locator: locator, monitor: monitor)
         self.httpClient = HttpClientService()
         self.textInput = TextInputService(client: client)

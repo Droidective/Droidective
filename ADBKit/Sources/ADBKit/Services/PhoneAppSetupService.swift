@@ -9,6 +9,9 @@ public struct PhoneAppSetupStatus: Sendable, Equatable, Codable {
     public let appInstalled: Bool
     /// `versionName` from `dumpsys package`, when the app is installed.
     public let appVersion: String?
+    /// `ro.build.version.sdk`, read whether or not the app is there: below
+    /// Android 11 it can't be installed at all.
+    public let sdk: Int?
     /// What this phone's Android version needs granted
     /// (`PhoneAppSetupService.requiredPermissions(sdk:)`).
     public let requiredPermissions: [String]
@@ -18,11 +21,12 @@ public struct PhoneAppSetupStatus: Sendable, Equatable, Codable {
     public let shizukuRunning: Bool
 
     public init(
-        appInstalled: Bool, appVersion: String?, requiredPermissions: [String],
+        appInstalled: Bool, appVersion: String?, sdk: Int?, requiredPermissions: [String],
         grantedPermissions: [String], shizukuInstalled: Bool, shizukuRunning: Bool
     ) {
         self.appInstalled = appInstalled
         self.appVersion = appVersion
+        self.sdk = sdk
         self.requiredPermissions = requiredPermissions
         self.grantedPermissions = grantedPermissions
         self.shizukuInstalled = shizukuInstalled
@@ -65,7 +69,8 @@ public struct PhoneAppSetupError: Error, LocalizedError, Equatable, Sendable {
     public var errorDescription: String? { message }
 }
 
-/// Sets up Droidective for Android on a connected phone: grants the
+/// Sets up Droidective for Android on a connected phone: installs or updates
+/// the app from its latest GitHub release when given one, grants the
 /// development permissions only a shell can grant, and starts Shizuku when it
 /// is installed but not running.
 ///
@@ -95,9 +100,11 @@ public struct PhoneAppSetupService: Sendable {
     static let shizukuServerProcess = "shizuku_server"
 
     let client: AdbClient
+    let http: any HTTPFetching
 
-    public init(client: AdbClient) {
+    public init(client: AdbClient, http: any HTTPFetching = URLSessionHTTP()) {
         self.client = client
+        self.http = http
     }
 
     // MARK: - Status
@@ -114,27 +121,38 @@ public struct PhoneAppSetupService: Sendable {
         return try await status(serial: serial, appListing: listing.stdout)
     }
 
-    /// Whether the device bar should offer set-up. One command when the app is
-    /// not on the phone — the common case — and false on any failure, since a
-    /// menu entry is no place to report one.
-    public func needsSetup(serial: String) async -> Bool {
+    /// What the device bar should offer for this phone, or nil, which is also
+    /// the answer to any failure, since a menu entry is no place to report one.
+    /// Two commands when the app is not on the phone, the common case, and
+    /// `latest` is asked only when it is, so a phone without the app never
+    /// costs a GitHub request.
+    public func offer(
+        serial: String, latest: @Sendable () async -> PhoneAppRelease?
+    ) async -> PhoneAppOffer? {
         let arguments = Self.listArguments(Self.appPackage)
-        guard let listing = try? await client.run(on: serial, arguments),
-              listing.succeeded,
-              Self.listsPackage(listing.stdout, package: Self.appPackage),
-              let status = try? await status(serial: serial, appListing: listing.stdout)
-        else { return false }
-        return status.needsSetup
+        guard let listing = try? await client.run(on: serial, arguments), listing.succeeded
+        else { return nil }
+        guard Self.listsPackage(listing.stdout, package: Self.appPackage) else {
+            let sdk = try? await client.run(on: serial, Self.sdkArguments())
+            let absent = PhoneAppSetupStatus(
+                appInstalled: false, appVersion: nil, sdk: sdk.flatMap { Self.parseSdk($0.stdout) },
+                requiredPermissions: [], grantedPermissions: [], shizukuInstalled: false,
+                shizukuRunning: false)
+            return PhoneAppOffer.decide(status: absent, latest: nil)
+        }
+        guard let status = try? await status(serial: serial, appListing: listing.stdout)
+        else { return nil }
+        return PhoneAppOffer.decide(status: status, latest: await latest())
     }
 
     private func status(serial: String, appListing: String) async throws -> PhoneAppSetupStatus {
         let installed = Self.listsPackage(appListing, package: Self.appPackage)
+        let sdk = Self.parseSdk(try await client.run(on: serial, Self.sdkArguments()).stdout)
         var required: [String] = []
         var granted: [String] = []
         var version: String?
         if installed {
-            let sdk = try await client.run(on: serial, Self.sdkArguments())
-            required = Self.requiredPermissions(sdk: Self.parseSdk(sdk.stdout))
+            required = Self.requiredPermissions(sdk: sdk)
             let dump = try await client.run(on: serial, Self.dumpsysArguments())
             let reported = Self.parseGrantedPermissions(dump.stdout)
             granted = required.filter(reported.contains)
@@ -147,23 +165,45 @@ public struct PhoneAppSetupService: Sendable {
             running = Self.isRunning(try await client.run(on: serial, Self.pidofArguments()))
         }
         return PhoneAppSetupStatus(
-            appInstalled: installed, appVersion: version, requiredPermissions: required,
+            appInstalled: installed, appVersion: version, sdk: sdk, requiredPermissions: required,
             grantedPermissions: granted, shizukuInstalled: shizukuInstalled,
             shizukuRunning: running)
     }
 
     // MARK: - Set up
 
-    /// Grants whatever is missing, then starts Shizuku if it is installed and
-    /// stopped. Stops at the first step that fails and says why; the status it
-    /// returns is always read back from the device, so a partial run shows what
-    /// did land.
-    public func setUp(serial: String) async throws -> PhoneAppSetupOutcome {
-        let before = try await status(serial: serial)
+    /// Installs or updates the app from `release` when the phone needs it,
+    /// then grants whatever is missing, then starts Shizuku if it is installed
+    /// and stopped. Stops at the first step that fails and says why; the status
+    /// it returns is always read back from the device, so a partial run shows
+    /// what did land. Without a release, a phone lacking the app is left alone.
+    public func setUp(
+        serial: String, release: PhoneAppRelease? = nil,
+        onStage: @escaping @Sendable (PhoneAppSetupStage) -> Void = { _ in }
+    ) async throws -> PhoneAppSetupOutcome {
+        var before = try await status(serial: serial)
+        switch PhoneAppStep.decide(status: before, latest: release) {
+        case .install(let release), .update(let release):
+            let installed = try await install(release, serial: serial, onStage: onStage)
+            before = try await status(serial: serial)
+            guard installed.ok else {
+                return PhoneAppSetupOutcome(status: before, failure: installed.message)
+            }
+        case .none:
+            break
+        }
         guard before.appInstalled else {
             return PhoneAppSetupOutcome(
                 status: before, failure: "Droidective for Android isn't installed on this phone.")
         }
+        return try await grantThenStartShizuku(before, serial: serial, onStage: onStage)
+    }
+
+    private func grantThenStartShizuku(
+        _ before: PhoneAppSetupStatus, serial: String,
+        onStage: @Sendable (PhoneAppSetupStage) -> Void
+    ) async throws -> PhoneAppSetupOutcome {
+        if !before.missingPermissions.isEmpty { onStage(.granting) }
         let grant = try await grant(before.missingPermissions, serial: serial)
         guard grant.ok else {
             let after = try await status(serial: serial)
@@ -178,9 +218,58 @@ public struct PhoneAppSetupService: Sendable {
         guard granted.shizukuInstalled, !granted.shizukuRunning else {
             return PhoneAppSetupOutcome(status: granted, failure: nil)
         }
+        onStage(.startingShizuku)
         let started = try await startShizuku(serial: serial)
         return PhoneAppSetupOutcome(
             status: try await status(serial: serial), failure: started.ok ? nil : started.message)
+    }
+
+    // MARK: - Install
+
+    /// Downloads `release`, checks its digest and signer
+    /// (`PhoneAppReleases.problem`), and installs it with `adb install -r`, so
+    /// an update keeps the app's data and grants. Nothing is installed unless
+    /// every check passes.
+    public func install(
+        _ release: PhoneAppRelease, serial: String,
+        onStage: @escaping @Sendable (PhoneAppSetupStage) -> Void = { _ in }
+    ) async throws(AdbError) -> FeatureResult {
+        let fileManager = FileManager.default
+        let work = fileManager.temporaryDirectory
+            .appendingPathComponent("droidective-android-\(UUID().uuidString)", isDirectory: true)
+        // The system purges its temporary directory, so a removal that fails
+        // here costs one APK's worth of disk until it does.
+        defer { try? fileManager.removeItem(at: work) }
+        // `apkName` is `droidective-android-X.Y.Z.apk` with X, Y and Z digits,
+        // checked by `PhoneAppReleases.release(from:)`, so it can't leave `work`.
+        let apk = work.appendingPathComponent(release.apkName)
+        guard let url = URL(string: release.apkURL), url.scheme == "https" else {
+            return FeatureResult(ok: false, message: "The release's download address isn't HTTPS.")
+        }
+        onStage(.downloading(version: release.version, fraction: nil))
+        do {
+            try fileManager.createDirectory(at: work, withIntermediateDirectories: true)
+            try await http.download(from: url, to: apk) { fraction in
+                onStage(.downloading(version: release.version, fraction: fraction))
+            }
+        } catch {
+            return FeatureResult(
+                ok: false,
+                message: "Couldn't download \(release.version): \(error.localizedDescription)")
+        }
+        onStage(.verifying)
+        if let problem = PhoneAppReleases.problem(apkAt: apk, release: release) {
+            return FeatureResult(ok: false, message: problem)
+        }
+        onStage(.installing(version: release.version))
+        let installed = try await AppInstallService(client: client)
+            .install(apkPath: apk.path, serial: serial)
+        guard installed.ok else {
+            return FeatureResult(
+                ok: false, message: "Couldn't install \(release.version): \(installed.message)",
+                copyText: installed.copyText)
+        }
+        return FeatureResult(ok: true, message: "Installed \(release.version).")
     }
 
     /// `pm grant` for each permission, in order, stopping at the first refusal.
