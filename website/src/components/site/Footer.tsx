@@ -19,6 +19,7 @@ const links = [
   { label: "Security", href: "/for-security-testers.html" },
   { label: "Support", href: "/for-support-teams.html" },
   { label: "scrcpy GUI", href: "/scrcpy-gui-mac.html" },
+  { label: "Android app", href: "/android-app.html" },
 ]
 
 export function Footer() {
