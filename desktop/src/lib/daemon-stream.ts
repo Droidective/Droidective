@@ -21,6 +21,7 @@ import type {
   MirrorFrame,
   NetSample,
   PerfSample,
+  PhoneSetupProgress,
   PtyChunk,
   ReactotronFrame,
   ReactotronReverseResponse,
@@ -63,6 +64,7 @@ async function subscribe<Item>(
     | "watch_mirror"
     | "watch_netspeed"
     | "watch_performance"
+    | "watch_phone_setup"
     | "watch_pull"
     | "watch_reactotron",
   args: Record<string, unknown>,
@@ -149,6 +151,21 @@ export function watchPull(
   onUpdate: (update: StreamUpdate<PullEvent>) => void,
 ): Promise<Subscription> {
   return subscribe("watch_pull", args, onUpdate)
+}
+
+/**
+ * One set-up run of Droidective for Android: install or update it from the
+ * latest release when the phone needs it, grant, start Shizuku.
+ *
+ * A subscription for `watchPull`'s reason: the sheet names each stage as it
+ * happens, the Mac's sheet does, and a call that answers once cannot. The last
+ * batch carries `done`; stopping it cancels the run.
+ */
+export function watchPhoneSetup(
+  serial: string,
+  onUpdate: (update: StreamUpdate<PhoneSetupProgress>) => void,
+): Promise<Subscription> {
+  return subscribe("watch_phone_setup", { serial }, onUpdate)
 }
 
 /**

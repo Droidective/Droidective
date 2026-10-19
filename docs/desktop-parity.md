@@ -559,17 +559,19 @@ the chrome and the device bar have not.
       re-read whenever the device set changes.
 - [x] **Disconnect a wireless device** from the bar, as the Mac offers beside a
       wireless device's pill.
-- [x] **Set up Droidective for Android** — the menu's "Set Up Droidective on
-      This Phone…", in its own section above Wireless debugging and shown only
-      while the selected phone has the app with set-up still to do. It is
-      asked again on every open, as the Mac's is, so an app installed while
-      the phone is plugged in is noticed; that probe is marked background and
-      stays out of the Command Log. The sheet is the Mac's `PhoneSetupSheet`:
-      three rows (app, permissions, Shizuku), one Set Up button, and the
+- [x] **Install, update and set up Droidective for Android** — the menu's
+      Install / Update / Set Up Droidective on This Phone…, in its own section
+      above Wireless debugging, with ADBKit's title and the Mac's icon for
+      each. It is asked again on every open, as the Mac's is, so an app
+      installed while the phone is plugged in is noticed; that probe
+      (`/v1/phonesetup/offer`) is background and asks GitHub only about a
+      phone that has the app. The sheet is the Mac's `PhoneSetupSheet`: three
+      rows (app, permissions, Shizuku), one button named Install, Update or
+      Set Up, each stage as it happens over the `phonesetup` topic, and the
       failing step's reason inline. Everything runs daemon-side over ADBKit's
-      `PhoneAppSetupService` (`/v1/phonesetup/status`, `/v1/phonesetup/run`),
-      so the `pm grant` lines and the rule that Shizuku counts only when it is
-      installed are one copy for both apps.
+      `PhoneAppSetupService`, so the release certificate pin, the `pm grant`
+      lines and the rule that Shizuku counts only when it is installed are
+      one copy for both apps.
 - [x] **Tailscale mode** — the menu's Tailscale section, after set-up and
       before Wireless debugging, present only when this machine has a
       Tailscale CLI and only when it would hold a row: the daemon's notice

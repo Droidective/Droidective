@@ -1,21 +1,21 @@
-import { fireEvent, render, screen } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 
 import { DeviceMenu, DevicePill } from "@/components/DeviceMenu"
-import type { TailscaleMenu } from "@/components/DeviceMenuSections"
-import type { Device } from "@/lib/wire"
+import type { PhoneSetupMenu, TailscaleMenu } from "@/components/DeviceMenuSections"
+import type { Device, PhoneSetupOffer } from "@/lib/wire"
 
 vi.mock("@/hooks/useWindows", () => ({
   useWindows: () => ({ others: false, claims: [], label: "Window 1", newWindow: vi.fn() }),
 }))
 
 function menu({
-  onPhoneSetup = null,
+  phoneSetup = null,
   tailscale = null,
   devices = [],
   onDismiss = vi.fn(),
 }: {
-  onPhoneSetup?: (() => void) | null
+  phoneSetup?: PhoneSetupMenu | null
   tailscale?: TailscaleMenu | null
   devices?: Device[]
   onDismiss?: () => void
@@ -30,7 +30,7 @@ function menu({
       onLaunchAvd={vi.fn()}
       onPair={vi.fn()}
       onConnect={vi.fn()}
-      onPhoneSetup={onPhoneSetup}
+      phoneSetup={phoneSetup}
       tailscale={tailscale}
       onManageEmulators={vi.fn()}
       onDismiss={onDismiss}
@@ -45,19 +45,34 @@ function tailnet(over: Partial<TailscaleMenu> = {}): TailscaleMenu {
 
 const PIXEL = { id: "nPIXEL", name: "pixel-7", ipv4: "100.101.102.103" }
 
-/** The Mac offers set-up only while the selected phone needs it. */
+const SET_UP: PhoneSetupOffer = {
+  kind: "setUp",
+  menuTitle: "Set Up Droidective on This Phone…",
+  from: null,
+  to: null,
+}
+
+/** The Mac offers the entry only while there is something to do for the phone. */
 describe("DeviceMenu phone set-up", () => {
-  it("is absent when there is nothing to set up", () => {
+  it("is absent when there is nothing to offer", () => {
     menu()
-    expect(screen.queryByRole("menuitem", { name: /Set Up Droidective/u })).toBeNull()
+    expect(screen.queryByRole("menuitem", { name: /Droidective on This Phone/u })).toBeNull()
   })
 
-  it("opens the sheet and closes the menu when the phone needs it", () => {
-    const onPhoneSetup = vi.fn()
-    const onDismiss = menu({ onPhoneSetup })
-    fireEvent.click(screen.getByRole("menuitem", { name: "Set Up Droidective on This Phone…" }))
-    expect(onPhoneSetup).toHaveBeenCalledOnce()
-    expect(onDismiss).toHaveBeenCalledOnce()
+  it("names what the daemon offers, and opens the sheet", () => {
+    const offers: PhoneSetupOffer[] = [
+      { ...SET_UP, kind: "install", menuTitle: "Install Droidective on This Phone…" },
+      { kind: "update", menuTitle: "Update Droidective on This Phone…", from: "0.1.0", to: "0.1.1" },
+      SET_UP,
+    ]
+    for (const offer of offers) {
+      const onSelect = vi.fn()
+      const onDismiss = menu({ phoneSetup: { offer, onSelect } })
+      fireEvent.click(screen.getByRole("menuitem", { name: offer.menuTitle }))
+      expect(onSelect).toHaveBeenCalledOnce()
+      expect(onDismiss).toHaveBeenCalledOnce()
+      cleanup()
+    }
   })
 })
 
@@ -104,7 +119,7 @@ describe("DeviceMenu Tailscale section", () => {
 
   it("sits after set-up and before Wireless debugging", () => {
     menu({
-      onPhoneSetup: vi.fn(),
+      phoneSetup: { offer: SET_UP, onSelect: vi.fn() },
       tailscale: tailnet({ peers: [PIXEL] }),
     })
     const items = screen.getAllByRole("menuitem").map((item) => item.textContent ?? "")

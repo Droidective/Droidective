@@ -26,7 +26,7 @@ function prepareSheet() {
       sheet={{ kind: "tailscale-prepare", device: phone, warning: WARNING }}
       devices={[phone]}
       onSelectDevice={vi.fn()}
-      onPhoneStatus={vi.fn()}
+      onPhoneOffer={vi.fn()}
       onPrepareForTailscale={onPrepare}
       onDismiss={onDismiss}
     />,

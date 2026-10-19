@@ -73,6 +73,7 @@ let server = DaemonServer(
         // to the topic and stops when the last subscriber goes.
         reactotron: ReactotronRelay(),
         client: client, locator: locator,
+        phoneAppSetup: engine.phoneAppSetup, phoneAppReleases: engine.phoneAppReleases,
         // Where the app put its copy of scrcpy-server, so a user needs no
         // separate scrcpy install — the promise the Mac's bundle already makes.
         bundledScrcpyServer: options.scrcpyServer))

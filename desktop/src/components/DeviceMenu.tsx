@@ -2,6 +2,7 @@ import { useEffect } from "react"
 import { Check, ChevronDown, Layers, Link2, PlayCircle, Smartphone, Wifi } from "lucide-react"
 import {
   PhoneSetupEntry,
+  type PhoneSetupMenu,
   TailscaleGroup,
   type TailscaleMenu,
 } from "@/components/DeviceMenuSections"
@@ -30,7 +31,7 @@ export function DeviceMenu({
   onLaunchAvd,
   onPair,
   onConnect,
-  onPhoneSetup,
+  phoneSetup,
   tailscale,
   onManageEmulators,
   onDismiss,
@@ -44,8 +45,8 @@ export function DeviceMenu({
   onLaunchAvd: (avd: Avd) => void
   onPair: () => void
   onConnect: () => void
-  /** Present only while the selected phone has the app with set-up to do. */
-  onPhoneSetup: (() => void) | null
+  /** Present only while there is something to offer the selected phone. */
+  phoneSetup: PhoneSetupMenu | null
   /** Null when this machine has no Tailscale CLI: no section at all. */
   tailscale: TailscaleMenu | null
   onManageEmulators: () => void
@@ -99,7 +100,7 @@ export function DeviceMenu({
 
         <WindowsGroup onDismiss={onDismiss} serial={selected?.serial ?? null} />
 
-        {onPhoneSetup === null ? null : <PhoneSetupEntry onSelect={act(onPhoneSetup)} />}
+        {phoneSetup === null ? null : <PhoneSetupEntry menu={phoneSetup} onDismiss={onDismiss} />}
 
         {tailscale === null ? null : <TailscaleGroup menu={tailscale} onDismiss={onDismiss} />}
 

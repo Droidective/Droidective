@@ -353,34 +353,50 @@ its rule that a substituted value is never re-scanned: a clipboard holding
 
 ### 4.7 Phone set-up
 
-`/v1/phonesetup/status` and `/v1/phonesetup/run` are the device menu's "Set Up
-Droidective on This Phone…", over ADBKit's `PhoneAppSetupService`: grant
-Droidective for Android `WRITE_SECURE_SETTINGS`, `DUMP` and its Crash Catcher's
-permission — `READ_DROPBOX_DATA` from Android 15, `READ_LOGS` before it, read
-off the phone's `ro.build.version.sdk` — with the `pm grant` lines the Android
-app's own test vector pins, then start Shizuku from the native starter inside
-its APK when it is installed and stopped.
+`/v1/phonesetup/offer` and `/v1/phonesetup/status` are the device menu's
+Install / Update / Set Up Droidective on This Phone…, over ADBKit's
+`PhoneAppSetupService`; the run itself is the `phonesetup` topic (§5.5),
+because it reports stages. A run installs or updates the app from its latest
+GitHub release when the phone needs it, refusing an APK unless every signer is
+the release certificate pinned in ADBKit, then grants `WRITE_SECURE_SETTINGS`,
+`DUMP` and its Crash Catcher's permission — `READ_DROPBOX_DATA` from Android
+15, `READ_LOGS` before it, read off the phone's `ro.build.version.sdk` — with
+the `pm grant` lines the Android app's own test vector pins, then starts
+Shizuku from the native starter inside its APK when it is installed and
+stopped.
 
 ```jsonc
-// POST /v1/phonesetup/run  { "serial": "emulator-5554" }
+// POST /v1/phonesetup/offer  { "serial": "emulator-5554" }   (always background)
 // → 200
-{ "status": { "appInstalled": true, "appVersion": "0.1.0",
-              "grantedPermissions": ["android.permission.WRITE_SECURE_SETTINGS",
-                                     "android.permission.DUMP",
-                                     "android.permission.READ_DROPBOX_DATA"],
-              "missingPermissions": [], "shizukuInstalled": true,
-              "shizukuRunning": false, "needsSetup": true },
-  "failure": "Shizuku didn't start: fatal: can't start server" }
+{ "offer": { "kind": "update", "menuTitle": "Update Droidective on This Phone…",
+             "from": "0.1.0", "to": "0.1.1" } }      // or {} — nothing to offer
+
+// POST /v1/phonesetup/status  { "serial": "emulator-5554" }
+// → 200
+{ "appInstalled": true, "appVersion": "0.1.0", "sdk": 36,
+  "grantedPermissions": ["android.permission.WRITE_SECURE_SETTINGS",
+                         "android.permission.DUMP",
+                         "android.permission.READ_DROPBOX_DATA"],
+  "missingPermissions": [], "shizukuInstalled": true, "shizukuRunning": true,
+  "needsSetup": false, "latestVersion": "0.1.1", "step": "update",
+  "hasWork": true,
+  "offer": { "kind": "update", "menuTitle": "Update Droidective on This Phone…",
+             "from": "0.1.0", "to": "0.1.1" } }
 ```
 
-**The derived answers travel.** `missingPermissions` and `needsSetup` are
-`PhoneAppSetupStatus`'s, because whether Shizuku counts is a rule — it does
-only when it is installed — and a client restating it would be a second
-opinion. **A step the phone refused is a 200** with `failure` set, beside the
-status read back afterwards, so a partial run still shows what landed. Only a
-device that cannot be read at all is a 502, carrying the service's own words
-("Device is offline."). `status` takes `X-Droidective-Background`: the device
-bar's probe sends it, the sheet's first read does not.
+**The derived answers travel.** `missingPermissions`, `needsSetup`, `step`,
+`hasWork` and `offer` are ADBKit's (`PhoneAppSetupStatus`, `PhoneAppStep`,
+`PhoneAppOffer`), because whether Shizuku counts and whether a version is older
+are rules, and a client restating them would be a second opinion — `offer` is
+on the status so the sheet can hand the menu its next entry without deciding
+it. **The latest release is cached** (`PhoneAppReleaseCheck`): `offer` asks at
+the menu's freshness (six hours) and only for a phone that has the app, so a
+phone without it costs two adb commands and no GitHub request; `status` asks at
+the sheet's (ten minutes), and a run reads the same cache. `latestProblem`
+says why GitHub couldn't answer. **`offer` is never an error**: a phone that
+couldn't be read has nothing to offer. Only `status` on a device that cannot be
+read at all is a 502, carrying the service's own words ("Device is offline.").
+`status` takes `X-Droidective-Background`; the sheet's read does not send it.
 
 ### 4.8 Tailscale mode
 
@@ -762,6 +778,27 @@ file serves every target. A daemon started by hand omits the flag and falls
 back to an installed scrcpy. A path that was given and is not there is an
 error rather than a fallback: using some other scrcpy's server instead is a
 version mismatch, and the device-side server aborts on one.
+
+### 5.5 The `phonesetup` topic — a set-up run that reports
+
+One run of §4.7's set-up on `serial`. A topic for `pull`'s reason: the Mac's
+sheet names each stage as it happens — "Downloading 0.1.1… 42%", "Checking the
+signature…", "Installing 0.1.1…", "Granting permissions…", "Starting
+Shizuku…" — and a request that answers once cannot. Each item is
+`PhoneSetupProtocol.Progress`: `{ "stage": "…" }` while it runs, then one
+`{ "done": true, "status": {…}, "failure": "…" }` with the status read back
+(§4.7's shape) and the first failing step's reason; a phone that could not be
+read at all is a `done` with only `failure`. The subscription then ends
+`completed`.
+
+It is a snapshot topic: a newer stage replaces an unsent older one, and the
+last event, `done`, is the one that always arrives. Two things the live source
+does that the routes get for free: it marks the run **user-initiated**, because
+stream topics never pass through the routes' Command Log scope and the install
+and grants belong in the client's log; and it awaits the run in the stream's
+own task, so unsubscribing cancels it and the adb child with it. The desktop
+sheet does not unsubscribe when it closes — the Mac's run outlives its sheet —
+and stops the subscription once it has ended.
 
 ## 6. Lifecycle
 

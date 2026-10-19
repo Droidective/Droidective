@@ -39,6 +39,9 @@ public protocol StreamSource: Sendable {
     func pull(
         serial: String, path: String, destination: String, asRoot: Bool
     ) async -> AsyncStream<PullProgressPayload>
+    /// One set-up run of Droidective for Android on `serial`, stage by stage,
+    /// ending with a `done` event. Unsubscribing cancels the run.
+    func phoneSetup(serial: String) async -> AsyncStream<PhoneSetupProtocol.Progress>
     /// Everything the Reactotron relay sees, from the moment it is listening.
     ///
     /// Starting the relay is part of subscribing: a client that asked for the
@@ -334,6 +337,18 @@ public actor StreamSession {
                 await self?.end(id, reason: .completed)
             })
 
+        case .phoneSetup:
+            guard let serial = command.params?.serial else { return }
+            let stream = await source.phoneSetup(serial: serial)
+            attach(to: id, Task { [weak self] in
+                for await progress in stream {
+                    await self?.enqueue(
+                        id: id,
+                        items: [try? DaemonProtocol.encode(progress)].compactMap { $0 })
+                }
+                await self?.end(id, reason: .completed)
+            })
+
         case .performance:
             guard let serial = command.params?.serial else { return }
             let stream = await source.performance(
@@ -522,13 +537,19 @@ public struct LiveStreamSource: StreamSource {
     private let locator: ToolLocator
     /// The app's bundled `scrcpy-server`, when it passed one.
     private let bundledScrcpyServer: String?
+    /// The engine's, so a run shares the release cache the routes read.
+    private let phoneAppSetup: PhoneAppSetupService
+    private let phoneAppReleases: PhoneAppReleaseCheck
 
     public init(
         monitor: DeviceMonitor, streamer: LogcatStreamer, performance: PerformanceService,
         networkSpeed: NetworkSpeedService, reactotron: ReactotronRelay,
         client: AdbClient, locator: ToolLocator,
+        phoneAppSetup: PhoneAppSetupService, phoneAppReleases: PhoneAppReleaseCheck,
         bundledScrcpyServer: String? = nil
     ) {
+        self.phoneAppSetup = phoneAppSetup
+        self.phoneAppReleases = phoneAppReleases
         self.monitor = monitor
         self.streamer = streamer
         performanceService = performance
@@ -677,6 +698,39 @@ public struct LiveStreamSource: StreamSource {
                     } else {
                         continuation.yield(PullProgressPayload(
                             copied: 0, total: total, done: true, failure: "\(error)"))
+                    }
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    /// One set-up run, as the Mac's sheet does it: the latest release at the
+    /// sheet's freshness (the sheet's own read just filled the cache), then
+    /// `PhoneAppSetupService.setUp` with each stage passed on.
+    ///
+    /// Marked user-initiated, because it is a button press: stream topics
+    /// never pass through the routes' Command Log scope, and without this the
+    /// install and the grants would be missing from the client's Command Log.
+    /// Awaited in the stream's own task, for `pull`'s reason: cancelling it is
+    /// what kills the adb child when the client unsubscribes.
+    public func phoneSetup(serial: String) async -> AsyncStream<PhoneSetupProtocol.Progress> {
+        let setup = phoneAppSetup
+        let releases = phoneAppReleases
+        return AsyncStream { continuation in
+            let task = Task {
+                let lookup = await releases.latest(maxAge: PhoneAppReleaseCheck.sheetMaxAge)
+                await CommandLog.userInitiated {
+                    do {
+                        let outcome = try await setup.setUp(
+                            serial: serial, release: lookup.release,
+                            onStage: { continuation.yield(.init(stage: $0.label)) })
+                        continuation.yield(.init(
+                            done: true, status: PhoneSetupProtocol.Status(outcome.status, latest: lookup),
+                            failure: outcome.failure))
+                    } catch {
+                        continuation.yield(.init(done: true, failure: error.localizedDescription))
                     }
                 }
                 continuation.finish()

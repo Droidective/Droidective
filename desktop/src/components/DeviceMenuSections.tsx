@@ -1,25 +1,51 @@
-import { Cable, ListChecks, Network } from "lucide-react"
+import { Cable, CircleArrowDown, ListChecks, Network, RefreshCw } from "lucide-react"
 
 import { Group, Item } from "@/components/DeviceMenu"
-import type { TailscalePeer } from "@/lib/wire"
+import type { PhoneSetupOffer, TailscalePeer } from "@/lib/wire"
 
 // The device menu's two sections between Windows and Wireless debugging: set-up
 // for Droidective for Android, and Tailscale mode. Both appear only when they
 // have something to offer, and they live here so `DeviceMenu` stays a layout.
 
 /**
- * Set-up for Droidective for Android, in its own unlabelled section as the
- * Mac's menu has it, just above Wireless debugging.
+ * Install, update or set up Droidective for Android, in its own unlabelled
+ * section as the Mac's menu has it, just above Wireless debugging. The title
+ * is ADBKit's (`PhoneAppOffer.menuTitle`), carried by the daemon.
  */
-export function PhoneSetupEntry({ onSelect }: { onSelect: () => void }) {
+export function PhoneSetupEntry({
+  menu,
+  onDismiss,
+}: {
+  menu: PhoneSetupMenu
+  onDismiss: () => void
+}) {
+  const { offer, onSelect } = menu
+  // The Mac's symbols: arrow.down.circle, arrow.triangle.2.circlepath, checklist.
+  const icons: Record<PhoneSetupOffer["kind"], React.ReactNode> = {
+    install: <CircleArrowDown size={13} />,
+    update: <RefreshCw size={13} />,
+    setUp: <ListChecks size={13} />,
+  }
   return (
     <>
       <div className="my-1 h-px bg-border-subtle" />
-      <Item icon={<ListChecks size={13} />} onSelect={onSelect}>
-        Set Up Droidective on This Phone…
+      <Item
+        icon={icons[offer.kind]}
+        onSelect={() => {
+          onSelect()
+          onDismiss()
+        }}
+      >
+        {offer.menuTitle}
       </Item>
     </>
   )
+}
+
+/** The menu's entry for Droidective for Android: what to offer, and opening the sheet. */
+export interface PhoneSetupMenu {
+  offer: PhoneSetupOffer
+  onSelect: () => void
 }
 
 /** What the menu's Tailscale section has to show, already decided. */

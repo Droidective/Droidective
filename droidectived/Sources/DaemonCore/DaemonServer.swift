@@ -135,9 +135,12 @@ public protocol DaemonBackend: Sendable {
     /// Where Droidective for Android stands on one phone. Throws only when the
     /// device cannot be read at all.
     func phoneSetupStatus(serial: String) async throws -> PhoneAppSetupStatus
-    /// Grants what is missing and starts Shizuku if it is stopped. A step the
-    /// phone refused comes back in the outcome, not as a throw.
-    func setUpPhone(serial: String) async throws -> PhoneAppSetupOutcome
+    /// What the device menu offers this phone, or nil, which is also the
+    /// answer to a phone that couldn't be read.
+    func phoneSetupOffer(serial: String) async -> PhoneAppOffer?
+    /// The latest Droidective for Android release, from the one cache the menu,
+    /// the sheet and a set-up run share (`PhoneAppReleaseCheck`).
+    func latestPhoneAppRelease(maxAge: TimeInterval) async -> PhoneAppReleaseCheck.Lookup
     /// The tailnet as the device menu shows it, or nil when this machine has
     /// no Tailscale CLI.
     func tailscaleStatus() async -> TailscaleStatus?
@@ -739,11 +742,18 @@ public struct LiveBackend: DaemonBackend {
     }
 
     public func phoneSetupStatus(serial: String) async throws -> PhoneAppSetupStatus {
-        try await PhoneAppSetupService(client: client).status(serial: serial)
+        try await engine.phoneAppSetup.status(serial: serial)
     }
 
-    public func setUpPhone(serial: String) async throws -> PhoneAppSetupOutcome {
-        try await PhoneAppSetupService(client: client).setUp(serial: serial)
+    public func phoneSetupOffer(serial: String) async -> PhoneAppOffer? {
+        let releases = engine.phoneAppReleases
+        return await engine.phoneAppSetup.offer(serial: serial) {
+            await releases.latest(maxAge: PhoneAppReleaseCheck.menuMaxAge).release
+        }
+    }
+
+    public func latestPhoneAppRelease(maxAge: TimeInterval) async -> PhoneAppReleaseCheck.Lookup {
+        await engine.phoneAppReleases.latest(maxAge: maxAge)
     }
 
     public func tailscaleStatus() async -> TailscaleStatus? {
@@ -1560,8 +1570,8 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
         case .phoneSetupStatus:
             return Self.answer(await PhoneSetupRoutes.status(
                 body: Data(body.readableBytesView), backend: backend))
-        case .phoneSetupRun:
-            return Self.answer(await PhoneSetupRoutes.run(
+        case .phoneSetupOffer:
+            return Self.answer(await PhoneSetupRoutes.offer(
                 body: Data(body.readableBytesView), backend: backend))
         case .tailscaleStatus:
             return Self.answer(await TailscaleRoutes.status(backend: backend))

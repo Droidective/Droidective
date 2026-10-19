@@ -33,9 +33,6 @@ struct PhoneSetupSheet: View {
     @State private var stage: PhoneAppSetupStage?
     @State private var result: Result?
 
-    /// Fresher than the menu's six hours: opening the sheet is asking.
-    private static let releaseMaxAge: TimeInterval = 10 * 60
-
     private struct Result: Equatable {
         let ok: Bool
         let message: String
@@ -193,7 +190,7 @@ struct PhoneSetupSheet: View {
         let service = state.env.engine.phoneAppSetup
         let releases = state.env.engine.phoneAppReleases
         let serial = target.serial
-        async let latest = releases.latest(maxAge: Self.releaseMaxAge)
+        async let latest = releases.latest(maxAge: PhoneAppReleaseCheck.sheetMaxAge)
         let read: Swift.Result<PhoneAppSetupStatus, any Error> = await CommandLog.userInitiated {
             do {
                 return .success(try await service.status(serial: serial))

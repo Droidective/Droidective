@@ -231,29 +231,6 @@ export interface ToolsResponse {
   tools: ToolReport[]
 }
 
-/**
- * Droidective for Android on one phone — `PhoneSetupProtocol.Status`.
- *
- * `missingPermissions` and `needsSetup` are the daemon's answers rather than
- * this side's: Shizuku counts only when it is installed, and that rule lives in
- * ADBKit's `PhoneAppSetupStatus` so the two apps cannot disagree about it.
- */
-export interface PhoneSetupStatus {
-  appInstalled: boolean
-  appVersion: string | null
-  grantedPermissions: string[]
-  missingPermissions: string[]
-  shizukuInstalled: boolean
-  shizukuRunning: boolean
-  needsSetup: boolean
-}
-
-/** A set-up run: the status read back afterwards, and why a step failed. */
-export interface PhoneSetupRun {
-  status: PhoneSetupStatus
-  failure: string | null
-}
-
 /** One Android phone on the user's tailnet — ADBKit's `TailscalePeer`. */
 export interface TailscalePeer {
   id: string

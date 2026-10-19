@@ -1,13 +1,14 @@
 /**
- * The phone set-up sheet's three rows — the Mac's `PhoneSetupSheet` rows,
- * with its wording.
+ * The phone set-up sheet's three rows, its button and its subtitle — the Mac's
+ * `PhoneSetupSheet`, with its wording.
  *
- * Only presentation lives here. What is missing and whether anything is left
- * to do arrive from the daemon (`PhoneSetupStatus`), so this decides how a row
- * reads, never what the phone's state is.
+ * Only presentation lives here. What is missing, what a run does about the
+ * app, and whether anything is left to do arrive from the daemon
+ * (`PhoneSetupStatus`), so this decides how a row reads, never what the
+ * phone's state is.
  */
 
-import type { PhoneSetupStatus } from "@/lib/wire"
+import type { PhoneSetupStatus, StreamedPhoneSetupStatus } from "@/lib/wire"
 
 export type RowKind = "checking" | "done" | "todo" | "unavailable"
 
@@ -19,6 +20,13 @@ export interface SetupRow {
 
 const APP_NAME = "Droidective for Android"
 
+export const SUBTITLE =
+  "Installs or updates the app from GitHub, grants it the permissions only adb can, " +
+  "and starts Shizuku if it’s there."
+
+/** The Mac's Android 11 floor, `PhoneAppReleases.minimumSdk`. */
+const MINIMUM_SDK = 30
+
 /** "DUMP", "WRITE_SECURE_SETTINGS and DUMP", "A, B and C": ADBKit's `readableList`. */
 export function readableList(names: string[]): string {
   const last = names.at(-1)
@@ -29,6 +37,47 @@ export function readableList(names: string[]): string {
 /** `android.permission.DUMP` → `DUMP`. */
 export function shortPermission(permission: string): string {
   return permission.split(".").at(-1) ?? permission
+}
+
+/** The button's verb: what pressing it does first. */
+export function actionTitle(status: PhoneSetupStatus | null): string {
+  switch (status?.step) {
+    case "install":
+      return "Install"
+    case "update":
+      return "Update"
+    default:
+      return "Set Up"
+  }
+}
+
+/**
+ * A streamed status in the shape the routes deliver.
+ *
+ * Route replies cross Rust's typed structs, which write a nil as `null`;
+ * stream items cross untyped, so Swift's omitted keys stay omitted. One place
+ * fills them in, so the rows never see `undefined`.
+ */
+export function streamedStatus(raw: StreamedPhoneSetupStatus): PhoneSetupStatus {
+  const offer = raw.offer
+  return {
+    appInstalled: raw.appInstalled,
+    appVersion: raw.appVersion ?? null,
+    sdk: raw.sdk ?? null,
+    grantedPermissions: raw.grantedPermissions ?? [],
+    missingPermissions: raw.missingPermissions ?? [],
+    shizukuInstalled: raw.shizukuInstalled ?? false,
+    shizukuRunning: raw.shizukuRunning ?? false,
+    needsSetup: raw.needsSetup ?? false,
+    latestVersion: raw.latestVersion ?? null,
+    latestProblem: raw.latestProblem ?? null,
+    step: raw.step ?? "none",
+    hasWork: raw.hasWork ?? false,
+    offer:
+      offer === undefined
+        ? null
+        : { kind: offer.kind, menuTitle: offer.menuTitle, from: offer.from ?? null, to: offer.to ?? null },
+  }
 }
 
 /**
@@ -54,11 +103,31 @@ export function setupRows(status: PhoneSetupStatus | null, checking: boolean): S
 
 function appRow(status: PhoneSetupStatus): SetupRow {
   const title = "App installed"
-  if (!status.appInstalled) {
-    return { title, kind: "todo", detail: `Install ${APP_NAME} on the phone first.` }
+  const latest = status.latestVersion ?? ""
+  if (status.step === "install") {
+    return { title, kind: "todo", detail: `Not installed. Install downloads ${latest} from GitHub.` }
   }
+  if (status.step === "update") {
+    const installed = status.appVersion ?? "An older version"
+    return { title, kind: "todo", detail: `${installed} is installed. Update installs ${latest}.` }
+  }
+  if (!status.appInstalled) return { title, ...absentApp(status) }
   const detail = status.appVersion === null ? APP_NAME : `${APP_NAME} ${status.appVersion}`
   return { title, kind: "done", detail }
+}
+
+/** Why a phone without the app can't be given it from here. */
+function absentApp(status: PhoneSetupStatus): Omit<SetupRow, "title"> {
+  if (status.sdk !== null && status.sdk < MINIMUM_SDK) {
+    return { kind: "unavailable", detail: `Not installed. ${APP_NAME} needs Android 11 or later.` }
+  }
+  if (status.latestProblem !== null) {
+    return {
+      kind: "unavailable",
+      detail: `Not installed, and the latest release couldn't be found: ${status.latestProblem}`,
+    }
+  }
+  return { kind: "todo", detail: "Not installed." }
 }
 
 function permissionsRow(status: PhoneSetupStatus): SetupRow {

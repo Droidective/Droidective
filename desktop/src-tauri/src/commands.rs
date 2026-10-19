@@ -30,7 +30,7 @@ use crate::daemon::wire::{
     FilePullResponse, FilesListRequest, FilesListResponse, ForegroundResponse, InstallRequest,
     InstallResponse, LaunchResponse, LogcatPidResponse, ManagedTools, MemInfoResponse,
     OverrideResetRequest, OverridesResponse, PairResponse, PermissionWriteRequest,
-    PermissionsResponse, PhoneSetupRunResponse, PhoneSetupStatus, ReactotronReverseRequest,
+    PermissionsResponse, PhoneSetupOfferResponse, PhoneSetupStatus, ReactotronReverseRequest,
     ReactotronReverseResponse, ReactotronSendRequest, ReactotronSendResponse,
     RestrictionWriteRequest, RestrictionsResponse, RolesResponse, RootStatusResponse, RunRequest,
     RunResponse, SandboxRequest, SandboxResponse, ScreenshotCaptureRequest,
@@ -1500,13 +1500,36 @@ pub async fn phone_setup_status(
         .await
 }
 
-/// Grants the app what it is missing and starts Shizuku if it is stopped.
+/// What the device menu offers the phone: install, update or set up
+/// Droidective for Android, or nothing. Always a background read.
 #[tauri::command]
-pub async fn set_up_phone(
+pub async fn phone_setup_offer(
     supervisor: State<'_, Supervisor>,
     serial: String,
-) -> Result<PhoneSetupRunResponse, DaemonError> {
-    supervisor.client().await?.set_up_phone(serial).await
+) -> Result<PhoneSetupOfferResponse, DaemonError> {
+    supervisor.client().await?.phone_setup_offer(serial).await
+}
+
+/// One set-up run — install or update from the latest release when the phone
+/// needs it, grant, start Shizuku — reporting each stage as it goes.
+///
+/// A subscription for `watch_pull`'s reason: the sheet names each stage, and a
+/// request answers once. Stopping it cancels the daemon's run.
+#[tauri::command]
+pub async fn watch_phone_setup(
+    supervisor: State<'_, Supervisor>,
+    serial: String,
+    on_event: Channel<StreamUpdate>,
+) -> Result<i64, DaemonError> {
+    let stream = supervisor.stream().await?;
+    stream.subscribe(
+        "phonesetup",
+        Some(StreamParams {
+            serial: Some(serial),
+            ..StreamParams::default()
+        }),
+        forward(on_event),
+    )
 }
 
 /// The tailnet's Android phones, as the device menu's Tailscale section shows

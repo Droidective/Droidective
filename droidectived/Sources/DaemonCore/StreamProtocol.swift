@@ -40,6 +40,13 @@ public enum StreamProtocol {
         /// body in `withTaskCancellationHandler`, so the adb child goes with
         /// the task rather than running on to its timeout.
         case pull
+        /// One set-up run of Droidective for Android: download, check and
+        /// install the latest release when the phone needs it, grant, start
+        /// Shizuku. A topic for `pull`'s reason — the Mac's sheet names each
+        /// stage as it happens, and a request that answers once cannot. Each
+        /// event is `PhoneSetupProtocol.Progress`, the last one `done`, and the
+        /// subscription ends `completed`.
+        case phoneSetup = "phonesetup"
     }
 
     // MARK: client → server
@@ -355,7 +362,7 @@ extension StreamProtocol.Topic {
     public var needsSerial: Bool {
         switch self {
         case .devices, .pty, .reactotron: return false
-        case .logcat, .performance, .netspeed, .mirror, .pull: return true
+        case .logcat, .performance, .netspeed, .mirror, .pull, .phoneSetup: return true
         }
     }
 
@@ -367,7 +374,8 @@ extension StreamProtocol.Topic {
     public var acceptsInput: Bool {
         switch self {
         case .pty, .mirror: return true
-        case .devices, .logcat, .performance, .netspeed, .reactotron, .pull: return false
+        case .devices, .logcat, .performance, .netspeed, .reactotron, .pull, .phoneSetup:
+            return false
         }
     }
 
@@ -382,7 +390,8 @@ extension StreamProtocol.Topic {
     public var acceptsResize: Bool {
         switch self {
         case .pty: return true
-        case .devices, .logcat, .performance, .netspeed, .reactotron, .mirror, .pull:
+        case .devices, .logcat, .performance, .netspeed, .reactotron, .mirror, .pull,
+             .phoneSetup:
             return false
         }
     }
@@ -426,7 +435,9 @@ extension StreamProtocol.Topic {
         // current state of one transfer, and an older "42% done" is worthless
         // once a newer one exists. It also means the strip can never be handed
         // a `dropped` marker, which for a progress bar would be noise.
-        case .devices, .pull: return true
+        // `phoneSetup` likewise: a newer stage replaces an unsent older one, and
+        // the last event, `done`, is the one that always arrives.
+        case .devices, .pull, .phoneSetup: return true
         case .logcat, .performance, .netspeed, .pty, .reactotron, .mirror: return false
         }
     }

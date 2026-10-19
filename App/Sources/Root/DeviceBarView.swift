@@ -187,15 +187,11 @@ struct DeviceBarView: View {
         return device.serial
     }
 
-    /// How long the menu trusts its answer about the latest release; the sheet
-    /// asks for a fresher one when it opens.
-    private static let releaseMaxAge: TimeInterval = 6 * 60 * 60
-
     /// Runs when the selected device changes or becomes ready, and on every
     /// dropdown open so an app installed while the phone is plugged in is
     /// noticed. Background, so deliberately outside the Command Log: two
     /// commands when the app isn't there, and GitHub is asked about the latest
-    /// release only when it is, at most every `releaseMaxAge`.
+    /// release only when it is, at most every `PhoneAppReleaseCheck.menuMaxAge`.
     ///
     /// The open-time probe is an unstructured task that a device switch does
     /// not cancel, hence the second look at the candidate after the await. It
@@ -206,7 +202,7 @@ struct DeviceBarView: View {
         var entry: PhoneOfferEntry?
         if let serial, let offer = await state.env.engine.phoneAppSetup.offer(
             serial: serial,
-            latest: { await releases.latest(maxAge: Self.releaseMaxAge).release })
+            latest: { await releases.latest(maxAge: PhoneAppReleaseCheck.menuMaxAge).release })
         {
             entry = PhoneOfferEntry(serial: serial, offer: offer)
         }
