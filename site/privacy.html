@@ -61,13 +61,13 @@
   <main>
     <div class="wrap">
       <h1>Privacy</h1>
-      <p class="updated">Last updated 27 June 2026</p>
+      <p class="updated">Last updated 25 October 2026</p>
 
       <div class="card tldr">
-        <strong>In short:</strong> Droidective collects a small amount of <em>anonymous</em> diagnostics to fix crashes and see which features get used. No device serials, file paths, IP addresses, or command contents ever leave your machine. You can turn it all off in <code>Settings → Privacy</code>, and this website honours “Do Not Track”.
+        <strong>In short:</strong> Droidective collects a small amount of <em>anonymous</em> diagnostics to fix crashes and see which features get used. No device serials, file paths, IP addresses, or command contents ever leave your machine. You can turn it all off in <code>Settings → Privacy</code>, and this website honours “Do Not Track”. Droidective for Android sends crash reports only, and <code>Setup → Crash reports</code> turns them off.
       </div>
 
-      <h2>The app</h2>
+      <h2>The Mac app</h2>
       <p>Droidective collects three kinds of anonymous data, all <strong>on by default</strong> and switchable off any time in <code>Settings → Privacy</code> (a first-run notice explains this):</p>
       <table>
         <tr><th>What</th><th>Tool</th><th>Why</th></tr>
@@ -82,6 +82,15 @@
         <li>sends no personal information to Sentry (<code>sendDefaultPii</code> is off).</li>
       </ul>
 
+      <h2>The Android app</h2>
+      <p>Droidective for Android sends one kind of data: <strong>crash reports</strong>, through Sentry, <strong>on by default</strong> and switchable off any time in <code>Setup → Crash reports</code>. A report is the stack trace of a crash or a freeze, with the phone’s model and Android version. It:</p>
+      <ul>
+        <li>has package and app IDs, file paths, IP addresses, email addresses, host names and URLs taken out of every message on the phone, before it is sent;</li>
+        <li>never captures what is on screen — no screenshots, view hierarchy or session replay — so nothing the app shows you, such as another app’s network traffic or files, leaves the phone;</li>
+        <li>sends no personal information to Sentry (<code>sendDefaultPii</code> is off), and no usage analytics at all.</li>
+      </ul>
+      <p>Only release builds report. A build you make yourself from the source sends nothing.</p>
+
       <h2>The website</h2>
       <p>This site (<code>droidective.com</code>) uses <strong>PostHog</strong> to understand how visitors use the page — pages viewed and interactions, captured automatically — purely to improve the site. It is anonymous (no person profiles), and it respects your browser’s <strong>Do Not Track</strong> setting. PostHog may store a random, non-identifying ID in your browser to tell sessions apart; no personal information is collected, and nothing is sold or shared for advertising.</p>
 
@@ -90,7 +99,8 @@
 
       <h2>Turning it off</h2>
       <ul>
-        <li><strong>App:</strong> <code>Settings → Privacy</code> — toggle off crash reporting and/or analytics.</li>
+        <li><strong>Mac app:</strong> <code>Settings → Privacy</code> — toggle off crash reporting and/or analytics.</li>
+        <li><strong>Android app:</strong> <code>Setup → Crash reports</code> — turn off Send crash reports.</li>
         <li><strong>Website:</strong> enable “Do Not Track” in your browser, or use any content blocker.</li>
       </ul>
 
