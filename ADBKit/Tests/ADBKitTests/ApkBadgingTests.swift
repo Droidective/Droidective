@@ -123,6 +123,38 @@ import Testing
         #expect(!fields.isDebuggable)
     }
 
+    @Test func readsNativeCodeAndTheLauncherActivity() {
+        // Captured shape from `aapt2 dump badging` (build-tools 36): every ABI
+        // on one `native-code` line, and a 64-bit APK's 32-bit ABIs on
+        // `alt-native-code`.
+        let output = """
+        package: name='com.x' versionCode='1' versionName='1.0'
+        launchable-activity: name='com.x.MainActivity'  label='X' icon=''
+        native-code: 'arm64-v8a' 'x86_64'
+        alt-native-code: 'armeabi-v7a' 'x86'
+        """
+        let fields = ApkBadging.parse(output)
+        #expect(fields.nativeCode == ["arm64-v8a", "x86_64", "armeabi-v7a", "x86"])
+        #expect(fields.launchableActivity == "com.x.MainActivity")
+    }
+
+    @Test func anApkWithoutNativeCodeOrALauncherSaysSo() {
+        let fields = ApkBadging.parse("package: name='com.x' versionCode='1' versionName='1.0'\r\n")
+        #expect(fields.nativeCode.isEmpty)
+        #expect(fields.launchableActivity == nil)
+    }
+
+    @Test func nativeCodeIsNotReadFromOtherQuotedLines() {
+        // Only the native-code lines count: a quoted value on any other line
+        // (a label, a permission) is not an ABI.
+        let output = """
+        application-label:'arm64-v8a'
+        native-code: 'x86_64'
+        native-code: 'x86_64'
+        """
+        #expect(ApkBadging.parse(output).nativeCode == ["x86_64"])
+    }
+
     @Test func duplicatePermissionsAreCollapsedPreservingOrder() {
         let output = """
         uses-permission: name='android.permission.CAMERA'

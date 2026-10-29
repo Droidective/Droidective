@@ -13,13 +13,13 @@ final class ApkOpenSession {
 
 /// The screen a double-clicked (or "Open With") app package lands on — a
 /// workspace tab, deliberately not a registry feature: it exists only when a
-/// file arrives. Shows what each package is (aapt2 badging for a plain APK,
-/// name and size for a split bundle), installs on the selected device(s) with
-/// live per-device status, and hands plain APKs to APK Studio, which works on
-/// one APK and can't read a bundle container.
+/// file arrives. Shows what each package is (`PackageDetailsCard`, the same
+/// card Install App shows), installs on the selected device(s) with live
+/// per-device status, and hands plain APKs to APK Studio, which works on one
+/// APK and can't read a bundle container.
 struct ApkOpenView: View {
     @Environment(AppState.self) private var state
-    @State private var apkInfos: [URL: ApkInfo] = [:]
+    @AppStorage(installOpensAppKey) private var opensApp = false
     @State private var dropTargeted = false
 
     private var urls: [URL] { state.apkOpen.urls }
@@ -35,8 +35,13 @@ struct ApkOpenView: View {
             } else {
                 ScrollView {
                     VStack(spacing: 14) {
-                        ForEach(urls, id: \.self) { apkCard($0) }
+                        ForEach(urls, id: \.self) { url in
+                            PackageDetailsCard(url: url) { actions(for: url) }
+                        }
                         if urls.count > 1 { installAll }
+                        Toggle("Open after installing", isOn: $opensApp)
+                            .toggleStyle(.checkbox)
+                            .font(.app(.callout))
                         targetSummary
                     }
                     .padding(24)
@@ -46,50 +51,22 @@ struct ApkOpenView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .task(id: urls) { await inspect() }
     }
 
     // MARK: - Cards
 
-    private func apkCard(_ url: URL) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: "arrow.down.app.fill")
-                    .font(.app(size: 30))
-                    .foregroundStyle(.brandAccent)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(apkInfos[url]?.label ?? url.lastPathComponent)
-                        .font(.app(.title3).weight(.medium))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    Text(subtitle(for: url))
-                        .font(.app(.caption))
-                        .foregroundStyle(.textMuted)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                Spacer()
+    private func actions(for url: URL) -> some View {
+        HStack(spacing: 10) {
+            Button("Install") { install([url]) }
+                .buttonStyle(.borderedProminent)
+                .disabled(targets.isEmpty || installing(url))
+            if AppPackageFormat.detect(fileName: url.lastPathComponent) == .apk {
+                Button("Open in APK Studio") { state.openInApkStudio(url) }
             }
-            InstallJobRows(urls: [url])
-            HStack(spacing: 10) {
-                Button("Install") { install([url]) }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(targets.isEmpty || installing(url))
-                if AppPackageFormat.detect(fileName: url.lastPathComponent) == .apk {
-                    Button("Open in APK Studio") { openStudio(url, tab: .inspect) }
-                }
-                Button("Reveal in Finder") {
-                    NSWorkspace.shared.activateFileViewerSelecting([url])
-                }
-                Spacer()
+            Button("Reveal in Finder") {
+                NSWorkspace.shared.activateFileViewerSelecting([url])
             }
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.bgSurface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(.borderSubtle, lineWidth: 1)
+            Spacer()
         }
     }
 
@@ -150,32 +127,6 @@ struct ApkOpenView: View {
     private func install(_ urls: [URL]) {
         let serials = targets.map(\.serial)
         guard !serials.isEmpty else { return }
-        state.startInstall(urls, onSerials: serials)
-    }
-
-    private func openStudio(_ url: URL, tab: ApkStudioTab) {
-        state.apkStudio.apk = url
-        state.apkStudio.signInput = nil
-        state.apkStudio.tab = tab
-        state.requestFeature("apk-studio")
-    }
-
-    private func inspect() async {
-        var resolved: [URL: ApkInfo] = [:]
-        for url in urls {
-            resolved[url] = await state.env.engine.appInstall.inspect(apkPath: url.path)
-        }
-        guard !Task.isCancelled else { return }
-        apkInfos = resolved
-    }
-
-    private func subtitle(for url: URL) -> String {
-        guard let info = apkInfos[url] else { return url.lastPathComponent }
-        var parts: [String] = [url.lastPathComponent]
-        if let package = info.packageName { parts.append(package) }
-        if let version = info.versionName { parts.append("v\(version)") }
-        if let target = info.targetSdk { parts.append("SDK \(target)") }
-        parts.append(ByteCountFormatter.string(fromByteCount: Int64(info.fileSizeBytes), countStyle: .file))
-        return parts.joined(separator: " · ")
+        state.startInstall(urls, onSerials: serials, opensApp: opensApp)
     }
 }

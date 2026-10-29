@@ -21,16 +21,14 @@ public struct ApkInspectionService: Sendable {
         self.runner = runner
     }
 
-    /// Inspect a local APK file.
-    public func inspect(apkPath: String) async -> ApkReport {
+    /// Inspect a local APK file. `readsSigning: false` skips apksigner, which
+    /// starts a JVM and hashes the whole file — worth it for a report someone
+    /// reads, not for a caller that only needs the package name.
+    public func inspect(apkPath: String, readsSigning: Bool = true) async -> ApkReport {
         let attrs = try? FileManager.default.attributesOfItem(atPath: apkPath)
         let size = (attrs?[.size] as? Int) ?? 0
-        var info = ApkInfo(fileName: URL(fileURLWithPath: apkPath).lastPathComponent, fileSizeBytes: size)
-        var permissions: [String] = []
-        var features: [String] = []
-        var isDebuggable = false
-        var schemes: [String] = []
-        var signers: [ApkSigner] = []
+        var report = ApkReport(
+            info: ApkInfo(fileName: URL(fileURLWithPath: apkPath).lastPathComponent, fileSizeBytes: size))
 
         if let aapt2 = await toolchain.aapt2() {
             let output = await runner.run(
@@ -38,32 +36,32 @@ public struct ApkInspectionService: Sendable {
                 timeout: .seconds(20), maxOutputBytes: 4 * 1024 * 1024)
             if output.exitCode == 0 {
                 let fields = ApkBadging.parse(output.stdoutText)
-                info.label = fields.label
-                info.packageName = fields.packageName
-                info.versionName = fields.versionName
-                info.versionCode = fields.versionCode
-                info.minSdk = fields.minSdk
-                info.targetSdk = fields.targetSdk
-                permissions = fields.permissions
-                features = fields.features
-                isDebuggable = fields.isDebuggable
+                report.info.label = fields.label
+                report.info.packageName = fields.packageName
+                report.info.versionName = fields.versionName
+                report.info.versionCode = fields.versionCode
+                report.info.minSdk = fields.minSdk
+                report.info.targetSdk = fields.targetSdk
+                report.permissions = fields.permissions
+                report.features = fields.features
+                report.isDebuggable = fields.isDebuggable
+                report.nativeCode = fields.nativeCode
+                report.launchableActivity = fields.launchableActivity
             }
         }
 
-        if let java = await toolchain.java(), let jar = await toolchain.apksignerJar() {
+        if readsSigning, let java = await toolchain.java(), let jar = await toolchain.apksignerJar() {
             // apksigner exits non-zero when verification fails but still prints
             // the certificate details, so parse stdout regardless of exit code.
             let output = await runner.run(
                 executable: java, arguments: ["-jar", jar, "verify", "-v", "--print-certs", apkPath],
                 timeout: .seconds(30), maxOutputBytes: 4 * 1024 * 1024)
             let signature = ApkSignature.parse(output.stdoutText)
-            schemes = signature.schemes
-            signers = signature.signers
+            report.signatureSchemes = signature.schemes
+            report.signers = signature.signers
         }
 
-        return ApkReport(
-            info: info, permissions: permissions, features: features,
-            isDebuggable: isDebuggable, signatureSchemes: schemes, signers: signers)
+        return report
     }
 
     /// On-device APK paths for an installed package (`base.apk` plus any split

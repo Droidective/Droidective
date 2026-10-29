@@ -249,12 +249,12 @@ extension AppState {
     /// why the prompt has to say it clears app data before the click, not
     /// after adb does.
     func installDropped(
-        _ paths: [String], serial: String, packageID: String?, replacingFirst: Bool
+        _ paths: [String], serial: String, packageID: String?, replacingFirst: Bool, opensApp: Bool
     ) {
         guard !paths.isEmpty else { return }
         let urls = paths.map { URL(fileURLWithPath: $0) }
         guard replacingFirst, let packageID else {
-            startInstall(urls, onSerials: [serial], packageID: packageID)
+            startInstall(urls, onSerials: [serial], packageID: packageID, opensApp: opensApp)
             return
         }
         Task { @MainActor in
@@ -268,7 +268,7 @@ extension AppState {
             if !result.ok, !result.message.localizedCaseInsensitiveContains("not installed") {
                 showToast(Toast(message: "Couldn't remove the installed copy — \(result.message)", ok: false))
             }
-            startInstall(urls, onSerials: [serial], packageID: packageID)
+            startInstall(urls, onSerials: [serial], packageID: packageID, opensApp: opensApp)
         }
     }
 
@@ -281,7 +281,7 @@ extension AppState {
         installJobs.removeAll { $0.id == job.id }
         installDropped(
             [job.packageURL.path], serial: job.serial,
-            packageID: packageID, replacingFirst: true)
+            packageID: packageID, replacingFirst: true, opensApp: job.opensApp)
     }
 
     /// Whether a finished install job should offer that recovery.
