@@ -1,3 +1,74 @@
+## Droidective v3.13.0
+
+Install App says what a package is and can open the app once it lands;
+Droidective for Android installs, updates and sets itself up from the device
+menu; and phones on your tailnet connect from the same menu.
+
+### Installing apps
+
+- **Open after installing.** Install App, the screen a package opens on from
+  Finder, and the prompt a package dropped on a mirror shows all have an
+  "Open after installing" box. With it ticked, the app is launched on every
+  device the install reached. The box keeps whatever you last left it at, and
+  all three places share it. When the app can't be opened — it has no launcher
+  activity, say — the install still counts and a second message says why.
+- **Install App shows what a package is.** Each package gets a card with the
+  app's name and package, its version, the Android version it needs and the
+  one it targets, what the file holds, its native code, the activity it opens
+  to, who signed it, and its permissions — with a Debuggable badge on a
+  debuggable build. Split bundles (`.apks`, `.xapk`, `.apkm`) are read through
+  their base APK, which is extracted on its own rather than unpacking the whole
+  archive. The screen a package opens on from Finder shows the same card.
+- **Open in APK Studio from Install App**, for a plain APK, as the
+  Finder-opened package screen already offered.
+- **APK Studio found no signer for most modern APKs.** Newer versions of
+  Android's `apksigner` label a v3 signature's certificate differently, so the
+  Inspect tab's Signing section came up empty. It reads both forms now, and so
+  does the new card.
+
+### Droidective for Android
+
+- **Install, update and set up the phone app from the device menu.** On an
+  Android 11+ phone without Droidective for Android, the device menu offers
+  Install Droidective on This Phone…; on an older version, Update…; and when
+  it's current but not set up, Set Up…. One button installs or updates, grants
+  the permissions only adb can — `WRITE_SECURE_SETTINGS`, `DUMP`, and the one
+  its Crash Catcher reads crash reports with (`READ_DROPBOX_DATA` on Android
+  15 and later, `READ_LOGS` before) — and starts Shizuku when it's installed.
+  Each step is named as it runs.
+- **A download is installed only if the app's release key signed it.** The
+  menu follows the latest GitHub release, so every signer in the APK must be
+  the certificate pinned in Droidective; Android itself checks the signer only
+  on an update, never on a first install. The release check is cached, and a
+  phone without the app costs no network request at all.
+
+### Tailscale
+
+- **Phones on your tailnet are in the device menu.** With the Tailscale CLI
+  installed — standalone, Homebrew, or the App Store app — the device menu
+  lists your tailnet's online Android devices that adb doesn't already have,
+  and connects to one with a click. When there's nothing to list it says why
+  (Tailscale stopped, logged out, or no Android devices online).
+- **Prepare a USB phone for Tailscale** runs `adb tcpip 5555` after saying what
+  that opens and for how long: the listener is plaintext, open on every
+  network the phone joins, and gone when the phone restarts.
+- **A tailnet phone mirrors at a lighter setting** — at most 2 Mbit/s, 1280 px
+  and 30 fps — and its name in the device bar ends in "· Tailscale".
+- **Anything that could cut the link asks first** on a tailnet phone: network
+  toggles, Wi-Fi, wireless adb, and Developer Settings.
+
+### Pulling files
+
+- **A pull can be stopped**, a folder pull included, and the half-written file
+  is removed rather than left looking finished. The progress strip shows how
+  much has landed in the same units as the File Explorer, and a pull you
+  stopped says "Cancelled" rather than reporting a failure.
+
+### Install
+
+Download the DMG from the release below, or use Droidective ▸ Check for
+Updates.
+
 ## Droidective v3.12.3
 
 A small bug-fix release. Recordings can use the Mac's microphone, which they

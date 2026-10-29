@@ -1170,7 +1170,27 @@ position in `RELEASE_NOTES.md`.
 ## Status
 
 Feature-complete across all planned milestones plus several UX rounds.
-(Latest release: **v3.12.3** — a small bug-fix release. **The Mac's microphone
+(Latest release: **v3.13.0** — the install screens and the phone app.
+**Open after installing** on Install App, the opened-package screen and the
+drop prompt, one remembered `@AppStorage("installOpensApp")`:
+`installAPKs(opensApp:)` reads the package name alongside the first install
+and launches through `AppControlService.control(.open)`, so opening never
+waits on aapt2. **`PackageDetails`/`PackageDetailsService`** (see Key types)
+fill a details card on both install screens, and Install App hands a plain APK
+to APK Studio through `AppState.openInApkStudio`. **`ApkSignature` found no
+signer for any v3-signed APK**: build-tools 37's apksigner prints `V3.0
+Signer:` lines and no `Signer #1` block, so APK Studio's Signing section was
+empty for most modern APKs. **Droidective for Android from the device menu** —
+Install / Update / Set Up (`PhoneAppSetupService`, `PhoneAppOffer`,
+`PhoneAppReleaseCheck`, and the `ApkSigningBlock` signer pin, since Android
+checks the signer only on an update), granting the Crash Catcher's DropBox
+permission too (`READ_DROPBOX_DATA` on API 35+, `READ_LOGS` before).
+**Tailscale mode** (`TailscalePeers`, `ToolLocator.tailscaleCLI()`,
+`RemoteLink.mirrorParams`, `FeatureRegistry.remoteLinkWarnings` — see the
+Tailscale convention). **Pulls can be cancelled**, folder pulls included
+(`AppState.runCancellableTransfer`, `PullProgress.caption`), and the partial
+file goes with them.)
+(Before that: **v3.12.3** — a small bug-fix release. **The Mac's microphone
 could never be switched on for a recording**, from v3.8.0 to v3.12.2: the app
 was signed with the hardened runtime and *no entitlements*, and without
 `com.apple.security.device.audio-input` that runtime refuses the microphone
@@ -1618,8 +1638,8 @@ jadx/apktool, recompile, and sign — with keystore creation) plus Frida setup, 
 custom accent color, launching emulators from the device bar, per-feature
 connect-a-device empty states, a live-preview hotkey recorder, and a Settings
 split into Appearance/Privacy; managed tools download from GitHub releases into
-Application Support and are sized/removable in Settings); 2196 ADBKit + 410
-droidectived + 99 ReactotronMCP + 134 AppTests green on macOS (ADBKit and the
+Application Support and are sized/removable in Settings); 2320 ADBKit + 514
+droidectived + 100 ReactotronMCP + 134 AppTests green on macOS (ADBKit and the
 daemon also run on Linux and Windows in CI, minus the Darwin-gated files), plus
 1267 vitest + 55 cargo on the desktop app;
 builds clean with zero warnings (enforced as errors in CI). Verified live against a
