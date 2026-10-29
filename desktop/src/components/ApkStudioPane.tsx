@@ -1,5 +1,5 @@
 import { FileArchive } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 import { ApkInspectorPane } from "@/components/ApkInspectorPane"
 import { ApkSignPane } from "@/components/ApkSignPane"
@@ -7,7 +7,12 @@ import { ApkStudioChooser } from "@/components/ApkStudioChooser"
 import { DecompilePane } from "@/components/DecompilePane"
 import { useNotifications } from "@/hooks/useNotifications"
 import { asDaemonError, pickFile } from "@/lib/daemon"
-import { STUDIO_TABS, type StudioTab } from "@/lib/apk-studio"
+import {
+  STUDIO_TABS,
+  listenForStudioApk,
+  pendingStudioApk,
+  type StudioTab,
+} from "@/lib/apk-studio"
 
 /**
  * APK Studio — the Mac's `ApkStudioView`.
@@ -24,12 +29,25 @@ import { STUDIO_TABS, type StudioTab } from "@/lib/apk-studio"
  */
 export function ApkStudioPane() {
   const { show } = useNotifications()
-  const [apk, setApk] = useState<string | null>(null)
+  // An APK another screen handed over before this mounted (Install App's
+  // Open in APK Studio) loads at once; one handed over later arrives below.
+  const [apk, setApk] = useState<string | null>(pendingStudioApk)
   const [tab, setTab] = useState<StudioTab>("inspect")
   // What the Sign tab is pointed at, when a rebuild has produced something
   // other than the studio's own APK. Cleared with the APK, or signing would
   // still be aimed at the last load's rebuild.
   const [signTarget, setSignTarget] = useState<string | null>(null)
+
+  // The Mac's `openInApkStudio`: the handed-over APK, on the Inspect tab.
+  useEffect(
+    () =>
+      listenForStudioApk((path) => {
+        setApk(path)
+        setSignTarget(null)
+        setTab("inspect")
+      }),
+    [],
+  )
 
   const choose = () => {
     void (async () => {

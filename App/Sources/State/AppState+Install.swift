@@ -217,8 +217,7 @@ extension AppState {
 
     private func openInstalledApp(_ packageID: String?, on serial: String) async -> FeatureResult {
         guard let packageID else {
-            return FeatureResult(
-                ok: false, message: "Couldn't open it — reading its package name needs the SDK build-tools.")
+            return FeatureResult(ok: false, message: PackageDetails.unreadableNameForOpening)
         }
         return (try? await env.engine.appControl.control(serial: serial, packageId: packageID, action: .open))
             ?? FeatureResult(ok: false, message: "Couldn't open it — adb not found.")

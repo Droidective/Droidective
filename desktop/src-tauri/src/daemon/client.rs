@@ -18,16 +18,17 @@ use crate::daemon::wire::{
     FileOperationRequest, FilePullRequest, FilePullResponse, FilesListRequest, FilesListResponse,
     ForegroundResponse, InstallFormatsResponse, InstallRequest, InstallResponse, LaunchResponse,
     LogcatPidResponse, ManagedToolRequest, ManagedTools, ManagedToolsListResponse, MemInfoResponse,
-    OverrideResetRequest, OverridesResponse, PairResponse, PermissionWriteRequest,
-    PermissionsResponse, PhoneSetupOfferResponse, PhoneSetupStatus, ReactotronReverseRequest,
-    ReactotronReverseResponse, ReactotronSendRequest, ReactotronSendResponse, RecordOptions,
-    RecordStartRequest, RecordStatusResponse, RecordStoppedResponse, RestrictionWriteRequest,
-    RestrictionsResponse, RolesResponse, RootStatusResponse, RunRequest, RunResponse,
-    SandboxRequest, SandboxResponse, ScreenshotCaptureRequest, ScreenshotCaptureResponse,
-    SnippetExpandRequest, SnippetExpandResponse, SnippetWriteRequest, SnippetsResponse,
-    TailscalePeer, TailscaleStatus, ToolInstallRequest, ToolInstallResponse, ToolsResponse,
-    VideoExportRequest, VideoFormatsResponse, VideoPathResponse, VideoProxyRequest,
-    VideoRemoveRequest, WifiResponse, WifiWriteRequest, WirelessActionRequest,
+    OverrideResetRequest, OverridesResponse, PackageDetails, PackageDetailsRequest, PairResponse,
+    PermissionWriteRequest, PermissionsResponse, PhoneSetupOfferResponse, PhoneSetupStatus,
+    ReactotronReverseRequest, ReactotronReverseResponse, ReactotronSendRequest,
+    ReactotronSendResponse, RecordOptions, RecordStartRequest, RecordStatusResponse,
+    RecordStoppedResponse, RestrictionWriteRequest, RestrictionsResponse, RolesResponse,
+    RootStatusResponse, RunRequest, RunResponse, SandboxRequest, SandboxResponse,
+    ScreenshotCaptureRequest, ScreenshotCaptureResponse, SnippetExpandRequest,
+    SnippetExpandResponse, SnippetWriteRequest, SnippetsResponse, TailscalePeer, TailscaleStatus,
+    ToolInstallRequest, ToolInstallResponse, ToolsResponse, VideoExportRequest,
+    VideoFormatsResponse, VideoPathResponse, VideoProxyRequest, VideoRemoveRequest, WifiResponse,
+    WifiWriteRequest, WirelessActionRequest,
 };
 use crate::error::DaemonError;
 
@@ -263,6 +264,13 @@ impl DaemonClient {
 
     pub async fn install(&self, request: &InstallRequest) -> Result<InstallResponse, DaemonError> {
         self.post("/v1/install/run", request).await
+    }
+
+    pub async fn package_details(
+        &self,
+        request: &PackageDetailsRequest,
+    ) -> Result<PackageDetails, DaemonError> {
+        self.post("/v1/install/details", request).await
     }
 
     pub async fn pull_apk(&self, request: &AppPullRequest) -> Result<AppPullResponse, DaemonError> {

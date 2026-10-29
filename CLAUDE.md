@@ -300,8 +300,10 @@ Node 22 in CI; scroll reveals and the hero palette demo must keep their
   a package *is* for the install screens' details card: an APK through
   aapt2 + apksigner, a bundle by listing the archive and extracting only its
   base APK (an `.xapk` can carry a gigabyte of OBBs) plus its manifest — and
-  `AndroidRelease` names API levels. The same identity read is what "Open
-  after installing" launches by. Newer `apksigner` prints a v3 signer as
+  `AndroidRelease` names API levels. It also words every line of the card
+  (`versionSummary`, `missingNote(hasAapt2:)`…), so the daemon's
+  `/v1/install/details` serves the Mac's text and the desktop restates none
+  of it. The same identity read is what "Open after installing" launches by. Newer `apksigner` prints a v3 signer as
   `V3.0 Signer:` with no `Signer #1` block, so `ApkSignature` reads both.
   The **`JSConsole/`** trio backs
   the `js-console` feature — a Hermes Chrome-DevTools-Protocol JS console for RN:

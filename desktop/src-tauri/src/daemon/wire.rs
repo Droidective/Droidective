@@ -775,15 +775,51 @@ pub struct InstallRequest {
     /// A host path, chosen by this process's file picker. The daemon never
     /// browses the filesystem on a caller's behalf.
     pub path: String,
+    /// Launch the app on each device it reached — "Open after installing".
+    #[serde(rename = "opensApp")]
+    pub opens_app: bool,
 }
 
 /// One device's outcome. Per device because installing onto three where one is
-/// out of space is a partial success, not a single verdict.
+/// out of space is a partial success, not a single verdict. Shared with a deep
+/// link's launch, which never opens anything afterwards, hence the defaults.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct InstallOutcome {
     pub serial: String,
     pub ok: bool,
     pub message: String,
+    #[serde(default)]
+    pub opened: bool,
+    #[serde(rename = "openFailure", default)]
+    pub open_failure: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PackageDetailsRequest {
+    pub path: String,
+}
+
+/// What a package is, every line already worded by the daemon — the Mac
+/// card's own text, so the pane lays it out rather than restating it.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PackageDetails {
+    pub format: String,
+    pub file_name: String,
+    pub file_size_bytes: u64,
+    pub label: Option<String>,
+    pub package_name: Option<String>,
+    pub is_debuggable: bool,
+    pub version: Option<String>,
+    pub requires: Option<String>,
+    pub targets: Option<String>,
+    pub contents: Option<String>,
+    pub native_code: Option<String>,
+    pub launcher: Option<String>,
+    pub has_no_launcher: bool,
+    pub signer: Option<String>,
+    pub permissions: Vec<String>,
+    pub note: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -1278,8 +1314,69 @@ pub struct StreamEvent {
 )]
 mod tests {
     use super::{
-        FeaturesResponse, PhoneSetupOfferResponse, PhoneSetupStatus, StreamEvent, TailscaleStatus,
+        FeaturesResponse, InstallRequest, InstallResponse, LaunchResponse, PackageDetails,
+        PhoneSetupOfferResponse, PhoneSetupStatus, StreamEvent, TailscaleStatus,
     };
+
+    /// `POST /v1/install/details` as the daemon sent it for an unsigned XAPK.
+    /// Swift's encoder *omits* a line nobody could know rather than writing
+    /// `null` — here `signer` and `note` — so a missing key must decode as
+    /// `None`, which is what reaches the pane as `null`.
+    #[test]
+    fn decodes_a_packages_details() -> Result<(), serde_json::Error> {
+        let details: PackageDetails = serde_json::from_str(
+            r#"{"contents":"1 APK","fileName":"ApiDemos.xapk","fileSizeBytes":3242709,
+                "format":"xapk","hasNoLauncher":false,"isDebuggable":true,
+                "label":"API Demos","launcher":"ApiDemos",
+                "nativeCode":"None — runs on any CPU","packageName":"io.appium.android.apis",
+                "permissions":["CAMERA"],"requires":"Android 4.2 (API 17) or later",
+                "targets":"Android 9 (API 28)","version":"3.1.0  (18)"}"#,
+        )?;
+        assert_eq!(details.file_size_bytes, 3_242_709);
+        assert_eq!(details.contents.as_deref(), Some("1 APK"));
+        assert!(details.signer.is_none());
+        assert!(details.note.is_none());
+        assert_eq!(details.permissions, vec!["CAMERA".to_owned()]);
+        Ok(())
+    }
+
+    /// An install's outcome carries whether the app was opened; a deep link's
+    /// launch shares the shape and never says, so the fields default.
+    #[test]
+    fn an_outcome_says_whether_it_opened_and_a_launch_need_not() -> Result<(), serde_json::Error> {
+        let install: InstallResponse = serde_json::from_str(
+            r#"{"fileName":"a.apk","outcomes":[
+                {"serial":"S1","ok":true,"message":"Installed","opened":false,
+                 "openFailure":"Couldn't open it — reading its package name needs the SDK build-tools."}]}"#,
+        )?;
+        let outcome = install
+            .outcomes
+            .first()
+            .ok_or_else(|| serde::de::Error::custom("no outcome"))?;
+        assert!(!outcome.opened);
+        assert!(outcome.open_failure.is_some());
+
+        let launch: LaunchResponse =
+            serde_json::from_str(r#"{"outcomes":[{"serial":"S1","ok":true,"message":"Opened"}]}"#)?;
+        let outcome = launch
+            .outcomes
+            .first()
+            .ok_or_else(|| serde::de::Error::custom("no outcome"))?;
+        assert!(!outcome.opened);
+        assert!(outcome.open_failure.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn an_install_request_asks_to_open_by_the_daemons_name() -> Result<(), serde_json::Error> {
+        let body = serde_json::to_value(InstallRequest {
+            serials: vec!["S1".to_owned()],
+            path: "/in/a.apk".to_owned(),
+            opens_app: true,
+        })?;
+        assert_eq!(body["opensApp"], serde_json::Value::Bool(true));
+        Ok(())
+    }
 
     /// Real `POST /v1/features/list` output, shared with the UI's own tests.
     ///

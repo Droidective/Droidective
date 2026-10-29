@@ -120,6 +120,12 @@ public protocol DaemonBackend: Sendable {
     /// file cannot be processed at all; an install adb *ran* and rejected
     /// comes back as a failed result carrying adb's own reason.
     func installPackage(path: String, serial: String) async throws -> FeatureResult
+    /// What a host-side package is, or nil for a file that isn't one.
+    /// `readsSigning: false` skips apksigner for a caller after the name only.
+    func packageDetails(path: String, readsSigning: Bool) async -> PackageDetails?
+    /// Whether the SDK build-tools' aapt2 is here — what separates "install
+    /// them" from "this package couldn't be read" on the details card.
+    func hasAapt2() async -> Bool
     /// Android 11+ pairing. `port` is the *pairing* port, which is not the
     /// connection port and changes every session.
     func pairWireless(host: String, port: String, code: String) async throws -> FeatureResult
@@ -696,6 +702,14 @@ public struct LiveBackend: DaemonBackend {
             client: client,
             toolchain: ApkToolchain(locator: locator, store: engine.managedTools)
         ).install(bundlePath: path, serial: serial)
+    }
+
+    public func packageDetails(path: String, readsSigning: Bool) async -> PackageDetails? {
+        await engine.packageDetails.details(packagePath: path, readsSigning: readsSigning)
+    }
+
+    public func hasAapt2() async -> Bool {
+        await engine.toolchain.aapt2() != nil
     }
 
     /// One value type over the client and the monitor, built per call like the
@@ -1562,6 +1576,9 @@ private final class RequestHandler: ChannelInboundHandler, RemovableChannelHandl
             return Self.answer(InstallRoutes.formats())
         case .installRun:
             return Self.answer(await InstallRoutes.install(
+                body: Data(body.readableBytesView), backend: backend))
+        case .installDetails:
+            return Self.answer(await InstallRoutes.details(
                 body: Data(body.readableBytesView), backend: backend))
 
         case .wirelessAction:

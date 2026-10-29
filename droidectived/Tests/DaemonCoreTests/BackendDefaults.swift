@@ -226,6 +226,10 @@ extension DaemonBackend {
         FeatureResult(ok: true, message: "stub")
     }
 
+    func packageDetails(path: String, readsSigning: Bool) async -> PackageDetails? { nil }
+
+    func hasAapt2() async -> Bool { true }
+
     func pairWireless(host: String, port: String, code: String) async throws -> FeatureResult {
         FeatureResult(ok: true, message: "stub")
     }

@@ -14,13 +14,13 @@ import type {
   DeepLink,
   EmulatorAction,
   EmulatorsResponse,
-  InstallResponse,
   AppPullResponse,
   DevSettingsResponse,
   DnsMode,
   DnsResponse,
   LaunchResponse,
   MemInfoResponse,
+  PackageDetails,
   PairResponse,
   PermissionsResponse,
   RestrictionKey,
@@ -208,13 +208,18 @@ export function emulatorAction(args: {
 // MARK: - installing an app package
 
 /**
- * Opens the file picker and installs what was chosen.
+ * Opens the file picker on the app package formats and answers the path.
  *
  * Null when the picker was dismissed — a choice, not a failure, and the UI
  * must not report it as one.
  */
-export function pickAndInstall(serials: string[]): Promise<InstallResponse | null> {
-  return invoke<InstallResponse | null>("pick_and_install", { serials })
+export function pickPackage(): Promise<string | null> {
+  return invoke<string | null>("pick_package")
+}
+
+/** What a package is, for the details card. */
+export function packageDetails(path: string): Promise<PackageDetails> {
+  return invoke<PackageDetails>("package_details", { path })
 }
 
 // MARK: - wireless adb

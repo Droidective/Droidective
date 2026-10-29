@@ -441,7 +441,45 @@ in `openMirror`, whatever the client asked for, as the Mac's mirror is. And
 phone off the network (`FeatureRegistry.remoteLinkWarnings`): a client asks
 before running one of those on a tailnet serial.
 
-### 4.9 Errors
+### 4.9 Installing a package
+
+`/v1/install/formats`, `/v1/install/run` and `/v1/install/details` are Install
+App, over ADBKit's `AppBundleInstallService` and `PackageDetailsService`. The
+path is a host path the client's own picker chose; the daemon never browses.
+
+```jsonc
+// POST /v1/install/details  { "path": "/Users/me/Downloads/app.xapk" }
+// → 200, a line nobody could know left out (here `note`)
+{ "format": "xapk", "fileName": "app.xapk", "fileSizeBytes": 3242709,
+  "label": "API Demos", "packageName": "io.appium.android.apis",
+  "isDebuggable": true, "version": "3.1.0  (18)",
+  "requires": "Android 4.2 (API 17) or later", "targets": "Android 9 (API 28)",
+  "contents": "1 APK", "nativeCode": "None — runs on any CPU",
+  "launcher": "ApiDemos", "hasNoLauncher": false,
+  "signer": "Android Debug · v1, v2, v3 schemes",
+  "permissions": ["CAMERA", "INTERNET"] }
+
+// POST /v1/install/run  { "serials": ["emulator-5554"], "path": "…", "opensApp": true }
+// → 200
+{ "fileName": "app.xapk",
+  "outcomes": [{ "serial": "emulator-5554", "ok": true, "message": "Installed",
+                 "opened": true }] }
+```
+
+**The details arrive worded.** Every line is `PackageDetails`'s own text — the
+sentences the Mac's card shows — so the client lays them out rather than
+restating them; a line that can't be known is absent, and `note` says why when
+the build-tools are missing or the package couldn't be read. A file that isn't
+an installable format is a 400 (`not_a_package`). The read runs apksigner, so it
+takes a second or two on a large APK.
+
+**`opensApp` launches the app on each device the install reached**, never on
+one it didn't. The package name is read alongside the first install, without
+the signer check. A launch that fails — no launcher activity, or no aapt2 to
+read a plain APK's name with — leaves the install `ok` and says why in
+`openFailure`. `opensApp` may be omitted, and then means no.
+
+### 4.10 Errors
 
 One shape everywhere, so the UI has one error path:
 

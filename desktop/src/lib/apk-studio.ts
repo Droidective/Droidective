@@ -32,3 +32,37 @@ export const STUDIO_TABS: readonly StudioTabDef[] = [
 
 /** The hub's own feature id. */
 export const APK_STUDIO_ID = "apk-studio"
+
+/**
+ * An APK another screen asked the studio to open — Install App's "Open in APK
+ * Studio", the Mac's `openInApkStudio`.
+ *
+ * The studio is a kept-alive tab, so it may already be mounted when the ask
+ * comes: a mounted studio listens, and one that mounts afterwards reads what
+ * was left for it. Reading does not consume — a render can run twice — so the
+ * studio clears it when it starts listening instead.
+ */
+let pendingApk: string | null = null
+const studioListeners = new Set<(path: string) => void>()
+
+export function openInStudio(path: string): void {
+  if (studioListeners.size === 0) {
+    pendingApk = path
+    return
+  }
+  for (const listener of studioListeners) listener(path)
+}
+
+/** What was handed over before any studio was mounted to hear it. */
+export function pendingStudioApk(): string | null {
+  return pendingApk
+}
+
+/** Hear every later hand-over; the pending one has been read by then. */
+export function listenForStudioApk(listener: (path: string) => void): () => void {
+  pendingApk = null
+  studioListeners.add(listener)
+  return () => {
+    studioListeners.delete(listener)
+  }
+}
