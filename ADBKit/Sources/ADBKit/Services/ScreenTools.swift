@@ -109,6 +109,40 @@ public enum RecordAudioInputs {
     }
 }
 
+/// Where the Mac's microphone permission stands. Reading it needs AVFoundation
+/// (`MicrophoneCapture.authorization()`); deciding what to tell the user about
+/// it doesn't, so that half lives here and is tested on every platform.
+public enum MicrophoneAuthorization: Sendable, Equatable {
+    /// Never asked. macOS adds an app to Privacy & Security ▸ Microphone only
+    /// once it has asked, so this is answered by asking — never by sending
+    /// anyone to a list Droidective isn't in yet.
+    case notDetermined
+    /// Refused at the prompt, or switched off since. macOS never prompts twice,
+    /// so the Droidective switch in System Settings is the only way back.
+    case denied
+    /// Blocked by Screen Time or a device-management profile. There is no
+    /// switch in System Settings for the user to turn on.
+    case restricted
+    case authorized
+
+    /// Whether System Settings holds a Droidective switch that would fix this.
+    public var isFixableInSettings: Bool { self == .denied }
+
+    /// Why a recording set to use the Mac's microphone won't get it, or nil
+    /// when it will (or can still ask).
+    public var recordingNotice: String? {
+        switch self {
+        case .notDetermined, .authorized:
+            return nil
+        case .denied:
+            return "Microphone access is off, so the recording won’t have mic audio."
+        case .restricted:
+            return "This Mac restricts microphone access (Screen Time or a management "
+                + "profile), so the recording won’t have mic audio."
+        }
+    }
+}
+
 /// The audio half of `ScreenRecordOptions`: what the device contributes, and
 /// which host input (if any) is mixed in alongside it.
 public struct RecordAudioOptions: Sendable, Equatable, Codable {

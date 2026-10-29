@@ -174,9 +174,9 @@ struct ScreenMirrorView: View {
         .onChange(of: model?.serial) { _, serial in
             publishClaims(serial)
         }
-        .onChange(of: model?.recordingError) { _, message in
-            guard let message else { return }
-            state.showToast(Toast(message: message, ok: false))
+        .onChange(of: model?.recordingError) { _, toast in
+            guard let toast else { return }
+            state.showToast(toast)
             model?.recordingError = nil
         }
         .onChange(of: model?.isRecording) { _, recording in

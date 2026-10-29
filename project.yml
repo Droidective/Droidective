@@ -308,6 +308,9 @@ targets:
     sources:
       - App/Tests
       - App/Sources/State/LaunchPrompt.swift
+      # The relaunch helper's shell — run for real, with `touch` standing in
+      # for `open`, so a quoting slip or a helper that doesn't wait fails here.
+      - App/Sources/State/AppRelaunch.swift
       # Whether an MCP reconcile may start the Reactotron relay. The relay
       # raises the change notification from inside its own start, so the rule
       # is what keeps a failed bind from restarting forever.

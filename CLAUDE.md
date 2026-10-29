@@ -945,6 +945,26 @@ table) is in `docs/reactotron-mcp-analysis.md`.
     entitlements wholesale; it never merges). The script asserts the sealed app
     carries the key rather than trusting either half. The deny is not
     persisted, so a fixed build just prompts normally — no `tccutil reset`.
+  - **"Open Settings" is offered only when Settings has a switch to flip.**
+    macOS lists an app under Privacy & Security ▸ Microphone only after it
+    has asked, and a `.restricted` Mac (Screen Time, an MDM profile) has no
+    switch at all — so `MicrophoneAuthorization` keeps the four states apart
+    and `isFixableInSettings` is true for `.denied` alone. A never-asked app
+    asks; it is never sent to the list. A `CaptureError.notAuthorized` carries
+    the state it hit, which is how the mirror's toast and the mute chips know
+    whether to offer the link.
+  - **A running app never sees the switch turned on.** AVFoundation keeps the
+    first answer for the life of the process and never asks TCC again —
+    measured: the switch was recorded `Allowed (System Set)`, and the same
+    process kept reading `.denied` with no further TCC request in `tccd`'s
+    log. So re-reading the status on reactivation does nothing; only a fresh
+    process sees it, which is why System Settings itself says to reopen the
+    app. The recording row offers **Relaunch Droidective** beside Open
+    Settings (`AppCore.relaunch()`): it goes through the ordinary quit — leave
+    prompts, awaited teardown — and only once quit is certain starts
+    `AppRelaunch`'s helper, which waits for the pid to exit and reopens through
+    `/usr/bin/open`, so the new process is its own app to TCC rather than a
+    child of the shell. A cancelled quit cancels the relaunch with it.
 - **Sparkle never starts in Debug builds** (`SparkleUpdater.updaterAllowed`).
   Silent staging + install-on-quit replaces the bundle at the app's own path —
   a dev build sharing the release bundle id gets the RELEASE app installed
