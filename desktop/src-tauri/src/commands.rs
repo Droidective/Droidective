@@ -29,15 +29,15 @@ use crate::daemon::wire::{
     FeatureSummary, FileInfoRequest, FileInfoResponse, FileOperationRequest, FilePullRequest,
     FilePullResponse, FilesListRequest, FilesListResponse, ForegroundResponse, InstallRequest,
     InstallResponse, LaunchResponse, LogcatPidResponse, ManagedTools, MemInfoResponse,
-    OverrideResetRequest, OverridesResponse, PairResponse, PermissionWriteRequest,
-    PermissionsResponse, PhoneSetupOfferResponse, PhoneSetupStatus, ReactotronReverseRequest,
-    ReactotronReverseResponse, ReactotronSendRequest, ReactotronSendResponse,
-    RestrictionWriteRequest, RestrictionsResponse, RolesResponse, RootStatusResponse, RunRequest,
-    RunResponse, SandboxRequest, SandboxResponse, ScreenshotCaptureRequest,
-    ScreenshotCaptureResponse, Snippet, SnippetExpandRequest, SnippetExpandResponse,
-    SnippetWriteRequest, StreamParams, TailscalePeer, TailscaleStatus, ToolInstallRequest,
-    ToolInstallResponse, ToolsResponse, VideoExportOptions, VideoExportRequest, VideoProxyRequest,
-    WifiResponse, WifiWriteRequest, WirelessActionRequest,
+    OverrideResetRequest, OverridesResponse, PackageDetails, PackageDetailsRequest, PairResponse,
+    PermissionWriteRequest, PermissionsResponse, PhoneSetupOfferResponse, PhoneSetupStatus,
+    ReactotronReverseRequest, ReactotronReverseResponse, ReactotronSendRequest,
+    ReactotronSendResponse, RestrictionWriteRequest, RestrictionsResponse, RolesResponse,
+    RootStatusResponse, RunRequest, RunResponse, SandboxRequest, SandboxResponse,
+    ScreenshotCaptureRequest, ScreenshotCaptureResponse, Snippet, SnippetExpandRequest,
+    SnippetExpandResponse, SnippetWriteRequest, StreamParams, TailscalePeer, TailscaleStatus,
+    ToolInstallRequest, ToolInstallResponse, ToolsResponse, VideoExportOptions, VideoExportRequest,
+    VideoProxyRequest, WifiResponse, WifiWriteRequest, WirelessActionRequest,
 };
 use crate::daemon::{DaemonStatus, Supervisor};
 use crate::error::DaemonError;
@@ -1283,28 +1283,47 @@ pub async fn watch_performance(
     )
 }
 
-/// Installs a package this app already knows the path of.
+/// Installs a package onto the given devices, and — when `opens_app` — opens
+/// it on each one it reached.
 ///
-/// Separate from `pick_and_install`, which opens a picker: a converted bundle
-/// or a signed APK has a path already, and routing it through a dialog would
-/// ask someone to find the file the app just made.
+/// The path comes from `pick_package` for Install App, or is one this app
+/// made (a converted bundle, a signed APK): routing that through a dialog
+/// would ask someone to find the file the app just wrote.
 #[tauri::command]
 pub async fn install_path(
     supervisor: State<'_, Supervisor>,
     serials: Vec<String>,
     path: String,
+    opens_app: bool,
 ) -> Result<InstallResponse, DaemonError> {
     supervisor
         .client()
         .await?
-        .install(&InstallRequest { serials, path })
+        .install(&InstallRequest {
+            serials,
+            path,
+            opens_app,
+        })
+        .await
+}
+
+/// What a package is, for Install App's details card.
+#[tauri::command]
+pub async fn package_details(
+    supervisor: State<'_, Supervisor>,
+    path: String,
+) -> Result<PackageDetails, DaemonError> {
+    supervisor
+        .client()
+        .await?
+        .package_details(&PackageDetailsRequest { path })
         .await
 }
 
 /// Picks one file, answering its path.
 ///
 /// The picker runs **here**, not in the webview, for the reason
-/// `pick_and_install` names: a webview drag hands over a `File` with no path,
+/// `pick_package` names: a webview drag hands over a `File` with no path,
 /// and every one of these tools needs a real one. `None` is a dismissed
 /// dialog, which is a choice rather than a failure.
 #[tauri::command]
@@ -1343,23 +1362,27 @@ pub async fn pick_folder(app: AppHandle) -> Result<Option<String>, DaemonError> 
     Ok(Some(path.to_string_lossy().into_owned()))
 }
 
-/// Picks a package and installs it onto the given devices.
+/// Picks one app package, answering its path.
 ///
 /// The picker runs **here**, not in the webview: a webview drag hands over a
 /// `File` with no path, and the daemon needs a real one. It is also why the
 /// dialog plugin is registered for its Rust API only — the page cannot open a
-/// dialog on its own.
+/// dialog on its own. The filter is the daemon's format list, so a format
+/// added to `AppPackageFormat` is offered here without a second edit.
 ///
 /// Answers `None` when the picker was dismissed, which is a choice rather than
 /// a failure and must not surface as an error.
 #[tauri::command]
-pub async fn pick_and_install(
+pub async fn pick_package(
     app: AppHandle,
     supervisor: State<'_, Supervisor>,
-    serials: Vec<String>,
-) -> Result<Option<InstallResponse>, DaemonError> {
-    let client = supervisor.client().await?;
-    let extensions = client.install_formats().await?.extensions;
+) -> Result<Option<String>, DaemonError> {
+    let extensions = supervisor
+        .client()
+        .await?
+        .install_formats()
+        .await?
+        .extensions;
     let filters: Vec<&str> = extensions.iter().map(String::as_str).collect();
 
     let picked = app
@@ -1370,17 +1393,10 @@ pub async fn pick_and_install(
     let Some(picked) = picked else {
         return Ok(None);
     };
-
     let path = picked
         .into_path()
         .map_err(|error| DaemonError::Host(format!("could not read that file: {error}")))?;
-    let response = client
-        .install(&InstallRequest {
-            serials,
-            path: path.to_string_lossy().into_owned(),
-        })
-        .await?;
-    Ok(Some(response))
+    Ok(Some(path.to_string_lossy().into_owned()))
 }
 
 /// Every AVD on this machine, and whether the emulator binary is here at all.

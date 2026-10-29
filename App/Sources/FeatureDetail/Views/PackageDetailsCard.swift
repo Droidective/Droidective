@@ -91,27 +91,19 @@ struct PackageDetailsCard<Actions: View>: View {
     @ViewBuilder private func facts(_ details: PackageDetails) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 14, verticalSpacing: 6) {
-                if details.versionName != nil || details.versionCode != nil {
-                    row("Version", InstallPlan.versionLabel(name: details.versionName, code: details.versionCode))
-                }
-                if let minSdk = details.report?.info.minSdk {
-                    row("Requires", "\(AndroidRelease.describe(apiLevel: minSdk)) or later")
-                }
-                if let targetSdk = details.report?.info.targetSdk {
-                    row("Targets", AndroidRelease.describe(apiLevel: targetSdk))
-                }
+                if let version = details.versionSummary { row("Version", version) }
+                if let requires = details.requiresSummary { row("Requires", requires) }
+                if let targets = details.targetsSummary { row("Targets", targets) }
                 row("File", "\(details.fileName) · \(Self.size(details.fileSizeBytes))")
-                if let contents = Self.contents(details) { row("Contains", contents) }
-                if let nativeCode = Self.nativeCode(details) { row("Native code", nativeCode) }
-                if details.hasBadging { launcherRow(details.report?.launchableActivity) }
-                if let signer = details.report?.signers.first {
-                    row("Signed by", Self.signature(signer, schemes: details.report?.signatureSchemes ?? []))
+                if let contents = details.contentsSummary { row("Contains", contents) }
+                if let nativeCode = details.nativeCodeSummary { row("Native code", nativeCode) }
+                if let launcher = details.launcherSummary {
+                    row("Opens", launcher, tint: details.hasNoLauncher ? .orange : nil)
                 }
+                if let signer = details.signerSummary { row("Signed by", signer) }
             }
-            if let permissions = details.report?.permissions, !permissions.isEmpty {
-                permissionList(permissions)
-            }
-            if let note = missingNote(details) {
+            if !details.permissionNames.isEmpty { permissionList(details.permissionNames) }
+            if let note = details.missingNote(hasAapt2: hasAapt2) {
                 Text(note)
                     .font(.app(.caption))
                     .foregroundStyle(.textMuted)
@@ -135,15 +127,6 @@ struct PackageDetailsCard<Actions: View>: View {
         }
     }
 
-    /// Which activity "open" starts — or that there is none, which is why
-    /// opening it after installing would fail.
-    private func launcherRow(_ activity: String?) -> some View {
-        guard let activity else {
-            return row("Opens", "No launcher activity — nothing to open", tint: .orange)
-        }
-        return row("Opens", activity.split(separator: ".").last.map(String.init) ?? activity)
-    }
-
     private func permissionList(_ permissions: [String]) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Button {
@@ -160,7 +143,7 @@ struct PackageDetailsCard<Actions: View>: View {
             }
             .buttonStyle(.plain)
             if showsPermissions {
-                Text(permissions.map(Self.shortPermission).joined(separator: "\n"))
+                Text(permissions.joined(separator: "\n"))
                     .font(.app(.caption).monospaced())
                     .textSelection(.enabled)
                     .padding(.leading, 14)
@@ -169,46 +152,10 @@ struct PackageDetailsCard<Actions: View>: View {
         }
     }
 
-    private func missingNote(_ details: PackageDetails) -> String? {
-        guard !details.hasBadging else { return nil }
-        if !hasAapt2 {
-            return "The SDK levels, permissions and native code need the Android SDK build-tools (aapt2)."
-        }
-        if details.format != .apk, details.report == nil {
-            return "Couldn't find the app's base APK inside this \(details.format.displayName)."
-        }
-        return "aapt2 couldn't read this package — it may be damaged."
-    }
-
     // MARK: - Formatting
 
     private static func size(_ bytes: Int) -> String {
         ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
-    }
-
-    private static func contents(_ details: PackageDetails) -> String? {
-        guard details.format != .apk, details.apkCount > 0 else { return nil }
-        var parts = ["\(details.apkCount) APK\(details.apkCount == 1 ? "" : "s")"]
-        if details.expansionCount > 0 {
-            parts.append("\(details.expansionCount) expansion file\(details.expansionCount == 1 ? "" : "s")")
-        }
-        return parts.joined(separator: ", ")
-    }
-
-    private static func nativeCode(_ details: PackageDetails) -> String? {
-        if !details.abis.isEmpty { return details.abis.joined(separator: ", ") }
-        return details.hasBadging ? "None — runs on any CPU" : nil
-    }
-
-    private static func signature(_ signer: ApkSigner, schemes: [String]) -> String {
-        let name = signer.commonName ?? "Unknown signer"
-        guard !schemes.isEmpty else { return name }
-        return "\(name) · \(schemes.joined(separator: ", ")) scheme\(schemes.count == 1 ? "" : "s")"
-    }
-
-    private static func shortPermission(_ permission: String) -> String {
-        let prefix = "android.permission."
-        return permission.hasPrefix(prefix) ? String(permission.dropFirst(prefix.count)) : permission
     }
 
     // MARK: - Loading

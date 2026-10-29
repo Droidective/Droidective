@@ -2712,6 +2712,8 @@ job, and the checklist now says which.
 - **macOS view** `InstallAppView` — `App/Sources/FeatureDetail/Views/InstallAppView.swift`
 - **Must replicate**
   - [x] button: Choose File…
+  - [x] button: Open in APK Studio
+  - [x] toggle: Open after installing
   - [x] label: Connect a device to install onto
 
 #### `meminfo` — Memory Usage  ·  ✅ ported

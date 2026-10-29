@@ -1,11 +1,19 @@
-import { useState } from "react"
-import { CheckCircle2, Download, XCircle } from "lucide-react"
+import { useRef, useState } from "react"
+import { Download } from "lucide-react"
 import { Button } from "@/components/Controls"
+import { PackageDetailsCard } from "@/components/PackageDetailsCard"
 import { useNotifications } from "@/hooks/useNotifications"
 import { useTargets } from "@/hooks/useTargets"
-import { asDaemonError, pickAndInstall } from "@/lib/daemon"
-import { summarise } from "@/lib/targets"
-import type { Device, InstallOutcome } from "@/lib/wire"
+import { APK_STUDIO_ID, openInStudio } from "@/lib/apk-studio"
+import { asDaemonError, installPath, packageDetails, pickPackage } from "@/lib/daemon"
+import {
+  installHeadline,
+  openFailure,
+  opensInStudio,
+  readOpensApp,
+  writeOpensApp,
+} from "@/lib/install-app"
+import type { Device, InstallOutcome, PackageDetails } from "@/lib/wire"
 
 /**
  * Install an app package — the Mac's `InstallAppView`.
@@ -19,61 +27,33 @@ import type { Device, InstallOutcome } from "@/lib/wire"
  *
  * It installs onto every targeted device, which with the bar's Run on all
  * switch off is the selected one — `install-app` is one of the four features
- * the registry marks `supportsRunAll`, and the outcome list below is per
- * device because installing onto three where one is out of space is a partial
- * success, not a single verdict.
+ * the registry marks `supportsRunAll`. The package gets the Mac's details card,
+ * with each device's outcome in it, because installing onto three where one
+ * is out of space is a partial success, not a single verdict.
+ *
+ * "Open after installing" is remembered as it was last left, as the Mac's
+ * `installOpensApp` is, and a plain APK can go on to APK Studio from the card.
  */
-export function InstallAppPane({ device }: { device: Device | null }) {
-  const { show, notifyIfBackgrounded } = useNotifications()
+export function InstallAppPane({
+  device,
+  onOpen,
+}: {
+  device: Device | null
+  onOpen: (id: string) => void
+}) {
   const { serials, runningOnAll } = useTargets()
-  const [installing, setInstalling] = useState(false)
-  const [outcomes, setOutcomes] = useState<InstallOutcome[]>([])
-  const [fileName, setFileName] = useState<string | null>(null)
-
-  const choose = () => {
-    if (serials.length === 0) {
-      show({ ok: false, message: "Connect a device first" })
-      return
-    }
-    setInstalling(true)
-    void (async () => {
-      try {
-        const response = await pickAndInstall(serials)
-        // Null means the picker was dismissed. Nothing happened, so nothing
-        // is reported — a toast there would be noise for a deliberate act.
-        if (response === null) return
-        setOutcomes(response.outcomes)
-        setFileName(response.fileName)
-        const summary = summarise(response.outcomes)
-        const message = summary.ok
-          ? `Installed ${response.fileName}`
-          : `${response.fileName} — ${summary.message}`
-        show(summary.ok ? { ok: true, message } : { ok: false, message })
-        // The one thing an install is most likely to outlast: attention. An
-        // `.xapk` is a minute of unpacking and pushing, and nobody watches it.
-        // The Mac posts the same two titles from `installAPKs`.
-        notifyIfBackgrounded(
-          summary.ok ? "Install finished" : "Install failed",
-          message,
-          !summary.ok,
-        )
-      } catch (thrown) {
-        show({ ok: false, message: asDaemonError(thrown).message })
-      } finally {
-        setInstalling(false)
-      }
-    })()
-  }
+  const [opensApp, setOpensApp] = useState(readOpensApp)
+  const flow = useInstallFlow(serials, opensApp)
 
   return (
     <div className="flex h-full flex-col items-center gap-4 overflow-y-auto p-6">
       <div className="flex w-full max-w-[560px] flex-col items-center gap-3 rounded-[14px] border border-dashed border-border-subtle bg-bg-surface px-6 py-10">
         <Download size={40} className="text-accent" />
         <p className="text-[17px] font-medium text-text-primary">
-          {installing ? "Installing…" : "Choose an app package"}
+          {flow.installing ? "Installing…" : "Choose an app package"}
         </p>
         <p className="text-[11.5px] text-text-tertiary">APK · APKS · XAPK · APKM</p>
-        <Button tone="primary" onClick={choose} disabled={installing}>
+        <Button tone="primary" onClick={flow.choose} disabled={flow.installing}>
           Choose File…
         </Button>
         <p className="max-w-sm text-center text-[11.5px] text-text-tertiary">
@@ -82,33 +62,135 @@ export function InstallAppPane({ device }: { device: Device | null }) {
         </p>
       </div>
 
-      {outcomes.length === 0 ? null : (
-        <div className="flex w-full max-w-[560px] flex-col gap-1.5">
-          {fileName === null ? null : (
-            <p className="text-[11.5px] text-text-tertiary">{fileName}</p>
-          )}
-          {outcomes.map((outcome) => (
-            <div
-              key={outcome.serial}
-              className="flex items-start gap-2 rounded-md bg-bg-surface px-3 py-2"
-            >
-              {outcome.ok ? (
-                <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-accent" />
-              ) : (
-                <XCircle size={14} className="mt-0.5 shrink-0 text-danger" />
-              )}
-              <div className="min-w-0">
-                <p className="text-text-primary">{outcome.serial}</p>
-                <p className="break-words text-[11.5px] text-text-tertiary" data-selectable>
-                  {outcome.message}
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+      <div className="flex flex-col items-center gap-2">
+        <OpensAppBox
+          on={opensApp}
+          onChange={(on) => {
+            setOpensApp(on)
+            writeOpensApp(on)
+          }}
+        />
+        <p className="text-[11.5px] text-text-tertiary">
+          {destination(device, serials, runningOnAll)}
+        </p>
+      </div>
 
-      <p className="text-[11.5px] text-text-tertiary">{destination(device, serials, runningOnAll)}</p>
+      {flow.path === null ? null : (
+        <PackageDetailsCard
+          path={flow.path}
+          details={flow.details}
+          failed={flow.detailsFailed}
+          outcomes={flow.outcomes}
+        >
+          {opensInStudio(flow.path) ? (
+            <StudioButton path={flow.path} onOpen={onOpen} />
+          ) : null}
+        </PackageDetailsCard>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Pick, then read the package and install it side by side — the card fills in
+ * while the install runs, as the Mac's does.
+ */
+function useInstallFlow(serials: string[], opensApp: boolean) {
+  const { show, notifyIfBackgrounded } = useNotifications()
+  const [installing, setInstalling] = useState(false)
+  const [path, setPath] = useState<string | null>(null)
+  const [details, setDetails] = useState<PackageDetails | null>(null)
+  const [detailsFailed, setDetailsFailed] = useState<string | null>(null)
+  const [outcomes, setOutcomes] = useState<InstallOutcome[]>([])
+  // The package the card is showing, so a slow answer for the last pick
+  // cannot land on this one.
+  const shown = useRef<string | null>(null)
+
+  const describe = (picked: string) => {
+    packageDetails(picked)
+      .then((read) => {
+        if (shown.current === picked) setDetails(read)
+      })
+      .catch((thrown: unknown) => {
+        if (shown.current === picked) setDetailsFailed(asDaemonError(thrown).message)
+      })
+  }
+
+  const install = async (picked: string) => {
+    const response = await installPath(serials, picked, opensApp)
+    if (shown.current === picked) setOutcomes(response.outcomes)
+    const headline = installHeadline(response.fileName, response.outcomes, opensApp)
+    show(headline)
+    const reason = opensApp ? openFailure(response.outcomes) : null
+    if (reason !== null) show({ ok: false, message: `Installed ${response.fileName}. ${reason}` })
+    // The one thing an install is most likely to outlast: attention. An
+    // `.xapk` is a minute of unpacking and pushing, and nobody watches it.
+    // The Mac posts the same two titles from `installAPKs`.
+    notifyIfBackgrounded(
+      headline.ok ? "Install finished" : "Install failed",
+      headline.message,
+      !headline.ok,
+    )
+  }
+
+  const choose = () => {
+    if (serials.length === 0) {
+      show({ ok: false, message: "Connect a device first" })
+      return
+    }
+    void (async () => {
+      try {
+        const picked = await pickPackage()
+        // Null means the picker was dismissed. Nothing happened, so nothing
+        // is reported — a toast there would be noise for a deliberate act.
+        if (picked === null) return
+        shown.current = picked
+        setPath(picked)
+        setDetails(null)
+        setDetailsFailed(null)
+        setOutcomes([])
+        describe(picked)
+        setInstalling(true)
+        await install(picked)
+      } catch (thrown) {
+        show({ ok: false, message: asDaemonError(thrown).message })
+      } finally {
+        setInstalling(false)
+      }
+    })()
+  }
+
+  return { installing, path, details, detailsFailed, outcomes, choose }
+}
+
+function OpensAppBox({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
+  return (
+    <label className="flex items-center gap-1.5 text-text-primary">
+      <input
+        type="checkbox"
+        checked={on}
+        onChange={(event) => {
+          onChange(event.target.checked)
+        }}
+        className="accent-accent"
+      />
+      Open after installing
+    </label>
+  )
+}
+
+/** The Mac's `openInApkStudio`: hand the APK over, then show the studio. */
+function StudioButton({ path, onOpen }: { path: string; onOpen: (id: string) => void }) {
+  return (
+    <div>
+      <Button
+        onClick={() => {
+          openInStudio(path)
+          onOpen(APK_STUDIO_ID)
+        }}
+      >
+        Open in APK Studio
+      </Button>
     </div>
   )
 }

@@ -64,6 +64,8 @@ public enum DaemonProtocol {
         case emulatorsAction = "/v1/emulators/action"
         case installFormats = "/v1/install/formats"
         case installRun = "/v1/install/run"
+        /// What an app package is, for the install screen's details card.
+        case installDetails = "/v1/install/details"
         /// Wireless adb — pair, connect, disconnect, and the USB→Wi-Fi
         /// bootstrap — with the verb in the body.
         case wirelessAction = "/v1/wireless/action"

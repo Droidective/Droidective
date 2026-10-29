@@ -82,13 +82,19 @@ export function pickFolder(): Promise<string | null> {
 }
 
 /**
- * Installs a package this app already knows the path of.
+ * Installs a package onto the given devices, and — with `opensApp` — opens it
+ * on each one it reached.
  *
- * Separate from `pickAndInstall`: a converted bundle has a path already, and a
- * dialog would ask someone to find the file the app just made.
+ * The path is one `pickPackage` answered, or one this app made: a converted
+ * bundle has a path already, and a dialog would ask someone to find the file
+ * the app just wrote.
  */
-export function installPath(serials: string[], path: string): Promise<InstallResponse> {
-  return invoke("install_path", { serials, path })
+export function installPath(
+  serials: string[],
+  path: string,
+  opensApp = false,
+): Promise<InstallResponse> {
+  return invoke("install_path", { serials, path, opensApp })
 }
 
 /**

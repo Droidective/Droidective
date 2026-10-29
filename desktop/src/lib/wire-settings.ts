@@ -177,11 +177,43 @@ export interface InstallOutcome {
   serial: string
   ok: boolean
   message: string
+  /** Whether the app was opened afterwards — only ever true when asked. */
+  opened?: boolean
+  /** Why it couldn't be opened, when that was asked and the install landed. */
+  openFailure?: string | null
 }
 
 export interface InstallResponse {
   outcomes: InstallOutcome[]
   fileName: string
+}
+
+/**
+ * What a package is, for Install App's details card — the Mac's
+ * `PackageDetailsCard`. Every line arrives worded by the daemon, from the same
+ * ADBKit text the Mac's card reads. The daemon leaves out a line nobody could
+ * know, and the Rust side hands that over as null.
+ */
+export interface PackageDetails {
+  /** `apk`, `apks`, `xapk` or `apkm` — APK Studio takes only the first. */
+  format: string
+  fileName: string
+  fileSizeBytes: number
+  label: string | null
+  packageName: string | null
+  isDebuggable: boolean
+  version: string | null
+  requires: string | null
+  targets: string | null
+  contents: string | null
+  nativeCode: string | null
+  launcher: string | null
+  /** The launcher line is a warning: there is nothing to open. */
+  hasNoLauncher: boolean
+  signer: string | null
+  permissions: string[]
+  /** Why lines are missing, when they are. */
+  note: string | null
 }
 
 // MARK: - deep links, the bug report, and the toolchain

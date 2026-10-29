@@ -66,6 +66,95 @@ import Testing
         #expect(details.hasBadging)
     }
 
+    // MARK: what the card says
+
+    @Test func versionAndSdkLinesReadAsTheCardShowsThem() {
+        var details = PackageDetails(format: .apk, fileName: "a.apk", fileSizeBytes: 1)
+        #expect(details.versionSummary == nil)
+        #expect(details.requiresSummary == nil)
+        details.report = ApkReport(info: ApkInfo(
+            fileName: "a.apk", fileSizeBytes: 1, packageName: "com.a",
+            versionName: "3.1.0", versionCode: "18", minSdk: "17", targetSdk: "35"))
+        #expect(details.versionSummary == "3.1.0  (18)")
+        #expect(details.requiresSummary == "Android 4.2 (API 17) or later")
+        #expect(details.targetsSummary == "Android 15 (API 35)")
+    }
+
+    @Test func theLauncherLineNamesTheActivityOrItsAbsence() {
+        var details = PackageDetails(format: .apk, fileName: "a.apk", fileSizeBytes: 1)
+        // Unread: unknown, not absent.
+        #expect(details.launcherSummary == nil)
+        #expect(!details.hasNoLauncher)
+        details.report = ApkReport(
+            info: ApkInfo(fileName: "a.apk", fileSizeBytes: 1, packageName: "com.a"),
+            launchableActivity: "io.appium.android.apis.ApiDemos")
+        #expect(details.launcherSummary == "ApiDemos")
+        #expect(!details.hasNoLauncher)
+        details.report?.launchableActivity = nil
+        #expect(details.launcherSummary == "No launcher activity — nothing to open")
+        #expect(details.hasNoLauncher)
+    }
+
+    @Test func contentsCountsABundlesApksAndExpansions() {
+        var bundle = PackageDetails(format: .xapk, fileName: "a.xapk", fileSizeBytes: 1)
+        #expect(bundle.contentsSummary == nil)  // a listing that couldn't be read
+        bundle.apkCount = 1
+        #expect(bundle.contentsSummary == "1 APK")
+        bundle.apkCount = 6
+        bundle.expansionCount = 1
+        #expect(bundle.contentsSummary == "6 APKs, 1 expansion file")
+        bundle.expansionCount = 2
+        #expect(bundle.contentsSummary == "6 APKs, 2 expansion files")
+
+        var apk = PackageDetails(format: .apk, fileName: "a.apk", fileSizeBytes: 1)
+        apk.apkCount = 3
+        #expect(apk.contentsSummary == nil)
+    }
+
+    @Test func noNativeCodeIsSaidOnlyWhenAapt2ReadThePackage() {
+        var details = PackageDetails(format: .apk, fileName: "a.apk", fileSizeBytes: 1)
+        #expect(details.nativeCodeSummary == nil)
+        details.report = ApkReport(info: ApkInfo(fileName: "a.apk", fileSizeBytes: 1, packageName: "com.a"))
+        #expect(details.nativeCodeSummary == "None — runs on any CPU")
+        details.abis = ["arm64-v8a", "x86_64"]
+        #expect(details.nativeCodeSummary == "arm64-v8a, x86_64")
+    }
+
+    @Test func theMissingNoteSaysWhichThingIsMissing() {
+        var apk = PackageDetails(format: .apk, fileName: "a.apk", fileSizeBytes: 1)
+        apk.report = ApkReport(info: ApkInfo(fileName: "a.apk", fileSizeBytes: 1))
+        #expect(apk.missingNote(hasAapt2: false)?.contains("build-tools (aapt2)") == true)
+        #expect(apk.missingNote(hasAapt2: true) == "aapt2 couldn't read this package — it may be damaged.")
+
+        let bundle = PackageDetails(format: .apkm, fileName: "a.apkm", fileSizeBytes: 1)
+        #expect(bundle.missingNote(hasAapt2: true) == "Couldn't find the app's base APK inside this APKM.")
+
+        apk.report?.info.packageName = "com.a"
+        #expect(apk.missingNote(hasAapt2: false) == nil)
+    }
+
+    @Test func theSignerLineNamesTheKeyAndItsSchemes() {
+        var details = PackageDetails(format: .apk, fileName: "a.apk", fileSizeBytes: 1)
+        #expect(details.signerSummary == nil)
+        details.report = ApkReport(
+            info: ApkInfo(fileName: "a.apk", fileSizeBytes: 1),
+            signatureSchemes: ["v2"],
+            signers: [ApkSigner(subjectDN: "C=US, O=Android, CN=Android Debug")])
+        #expect(details.signerSummary == "Android Debug · v2 scheme")
+        details.report?.signatureSchemes = ["v1", "v2", "v3"]
+        #expect(details.signerSummary == "Android Debug · v1, v2, v3 schemes")
+        details.report?.signatureSchemes = []
+        #expect(details.signerSummary == "Android Debug")
+    }
+
+    @Test func platformPermissionsLoseTheirPrefixAndOthersKeepTheirs() {
+        var details = PackageDetails(format: .apk, fileName: "a.apk", fileSizeBytes: 1)
+        details.report = ApkReport(
+            info: ApkInfo(fileName: "a.apk", fileSizeBytes: 1),
+            permissions: ["android.permission.CAMERA", "com.google.android.c2dm.permission.RECEIVE"])
+        #expect(details.permissionNames == ["CAMERA", "com.google.android.c2dm.permission.RECEIVE"])
+    }
+
     // MARK: archive commands
 
     @Test func listingDropsDirectoriesAndCarriageReturns() {

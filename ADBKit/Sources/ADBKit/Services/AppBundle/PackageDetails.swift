@@ -31,6 +31,11 @@ public struct PackageDetails: Sendable, Equatable {
         self.fileSizeBytes = fileSizeBytes
     }
 
+    /// Why an install asked to open the app couldn't: nothing could read the
+    /// package's name, which only aapt2 can for a plain APK.
+    public static let unreadableNameForOpening =
+        "Couldn't open it — reading its package name needs the SDK build-tools."
+
     public var label: String? { report?.info.label ?? manifest?.appName }
     public var packageName: String? { report?.info.packageName ?? manifest?.packageName }
     public var versionName: String? { report?.info.versionName ?? manifest?.versionName }
@@ -39,6 +44,88 @@ public struct PackageDetails: Sendable, Equatable {
     /// Whether aapt2 read the APK, which is what every SDK, permission,
     /// native-code and launcher fact depends on.
     public var hasBadging: Bool { report?.info.hasDetails ?? false }
+
+    /// "2.1.0  (42)", or nil when neither half is known.
+    public var versionSummary: String? {
+        guard versionName != nil || versionCode != nil else { return nil }
+        return InstallPlan.versionLabel(name: versionName, code: versionCode)
+    }
+
+    /// "Android 7.0 (API 24) or later".
+    public var requiresSummary: String? {
+        report?.info.minSdk.map { "\(AndroidRelease.describe(apiLevel: $0)) or later" }
+    }
+
+    /// "Android 15 (API 35)".
+    public var targetsSummary: String? {
+        report?.info.targetSdk.map { AndroidRelease.describe(apiLevel: $0) }
+    }
+
+    /// The activity "open" starts, by its class name — or that there is none,
+    /// which is why opening the app after installing it would fail. Nil when
+    /// aapt2 didn't read the package, since then nobody knows.
+    public var launcherSummary: String? {
+        guard hasBadging else { return nil }
+        guard let activity = report?.launchableActivity else { return "No launcher activity — nothing to open" }
+        return activity.split(separator: ".").last.map(String.init) ?? activity
+    }
+
+    /// Whether aapt2 read the package and found nothing to launch.
+    public var hasNoLauncher: Bool { hasBadging && report?.launchableActivity == nil }
+
+    /// "6 APKs, 1 expansion file" for a bundle; nil for a plain APK, which is
+    /// the one thing it holds, or a bundle whose listing couldn't be read.
+    public var contentsSummary: String? {
+        guard format != .apk, apkCount > 0 else { return nil }
+        var parts = [Self.count(apkCount, "APK")]
+        if expansionCount > 0 { parts.append(Self.count(expansionCount, "expansion file")) }
+        return parts.joined(separator: ", ")
+    }
+
+    /// The ABIs, or that there are none — said only when aapt2 read the APK,
+    /// since an unread one has unknown native code rather than none.
+    public var nativeCodeSummary: String? {
+        if !abis.isEmpty { return abis.joined(separator: ", ") }
+        return hasBadging ? "None — runs on any CPU" : nil
+    }
+
+    /// Why the SDK, permission and native-code facts are missing, or nil when
+    /// they aren't. `hasAapt2` separates "install the build-tools" from a
+    /// package aapt2 could not read.
+    public func missingNote(hasAapt2: Bool) -> String? {
+        guard !hasBadging else { return nil }
+        if !hasAapt2 {
+            return "The SDK levels, permissions and native code need the Android SDK build-tools (aapt2)."
+        }
+        if format != .apk, report == nil {
+            return "Couldn't find the app's base APK inside this \(format.displayName)."
+        }
+        return "aapt2 couldn't read this package — it may be damaged."
+    }
+
+    /// "Android Debug · v1, v2, v3 schemes": the first signer's common name and
+    /// the schemes it verified under. Nil when apksigner didn't run or found no
+    /// signer.
+    public var signerSummary: String? {
+        guard let signer = report?.signers.first else { return nil }
+        let name = signer.commonName ?? "Unknown signer"
+        let schemes = report?.signatureSchemes ?? []
+        guard !schemes.isEmpty else { return name }
+        return "\(name) · \(schemes.joined(separator: ", ")) scheme\(schemes.count == 1 ? "" : "s")"
+    }
+
+    /// The permissions as a list shows them: the platform's own without their
+    /// `android.permission.` prefix, anything else in full.
+    public var permissionNames: [String] {
+        let prefix = "android.permission."
+        return (report?.permissions ?? []).map {
+            $0.hasPrefix(prefix) ? String($0.dropFirst(prefix.count)) : $0
+        }
+    }
+
+    private static func count(_ value: Int, _ noun: String) -> String {
+        "\(value) \(noun)\(value == 1 ? "" : "s")"
+    }
 
     /// The APK in a bundle that identifies the app. Every producer names it
     /// differently: APKMirror `base.apk`, bundletool `splits/base-master.apk`

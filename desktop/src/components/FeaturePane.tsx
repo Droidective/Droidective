@@ -149,7 +149,7 @@ export function FeaturePane(props: FeaturePaneProps) {
     case "network-speed":
       return <NetspeedPane device={props.device} />
     case "install-app":
-      return <InstallAppPane device={props.device} />
+      return <InstallAppPane device={props.device} onOpen={props.onOpen} />
     case "simulate":
       return <SimulateHubPane device={props.device} features={props.features} />
     default:
