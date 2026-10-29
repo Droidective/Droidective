@@ -53,13 +53,20 @@ public enum ApkBadging {
         public var permissions: [String] = []
         public var features: [String] = []
         public var isDebuggable = false
+        /// The ABIs the APK ships native libraries for, in the platform's own
+        /// spelling (`arm64-v8a`). Empty for an APK with no native code.
+        public var nativeCode: [String] = []
+        /// The activity the launcher opens, or nil for an app with none — a
+        /// library, a service-only app, or a test APK.
+        public var launchableActivity: String?
     }
 
     /// Pull the fields out of badging text. Identity fields each live on their
     /// own line, e.g. `package: name='com.x' versionCode='1' versionName='1.0'`
     /// and `application-label:'My App'`; permissions/features repeat as
     /// `uses-permission: name='…'`; `application-debuggable` appears only when
-    /// the app is debuggable.
+    /// the app is debuggable. `native-code:` lists every ABI on one line, each
+    /// quoted, and `alt-native-code:` adds the ones a 64-bit device can also run.
     public static func parse(_ output: String) -> Fields {
         Fields(
             label: regexFirstGroup(output, #"application-label:'([^']*)'"#)
@@ -78,8 +85,21 @@ public enum ApkBadging {
             targetSdk: regexFirstGroup(output, #"targetSdkVersion:'([^']*)'"#),
             permissions: regexAllGroups(output, #"uses-permission(?:-sdk-\d+)?: name='([^']*)'"#),
             features: regexAllGroups(output, #"uses-feature(?:-not-required)?: name='([^']*)'"#),
-            isDebuggable: output.contains("application-debuggable")
+            isDebuggable: output.contains("application-debuggable"),
+            nativeCode: nativeCode(in: output),
+            launchableActivity: regexFirstGroup(output, #"launchable-activity: name='([^']*)'"#)
         )
+    }
+
+    private static func nativeCode(in output: String) -> [String] {
+        var abis: [String] = []
+        for line in output.components(separatedBy: .newlines)
+        where line.hasPrefix("native-code:") || line.hasPrefix("alt-native-code:") {
+            for abi in regexAllGroups(line, #"'([^']*)'"#) where !abis.contains(abi) {
+                abis.append(abi)
+            }
+        }
+        return abis
     }
 }
 
@@ -94,6 +114,15 @@ public struct ApkSigner: Sendable, Equatable {
         self.sha256 = sha256
         self.sha1 = sha1
     }
+
+    /// The certificate's `CN` — "Android Debug" for the SDK's debug key — or
+    /// the whole DN when it has none. A comma inside a value is escaped as
+    /// `\,`, so it is not a separator.
+    public var commonName: String? {
+        guard let subjectDN else { return nil }
+        guard let raw = regexFirstGroup(subjectDN, #"(?:^|,)\s*CN=((?:\\,|[^,])+)"#) else { return subjectDN }
+        return raw.replacingOccurrences(of: "\\,", with: ",").trimmingCharacters(in: .whitespaces)
+    }
 }
 
 /// Deep inspection of an APK — identity + permissions + signing — assembled by
@@ -106,6 +135,8 @@ public struct ApkReport: Sendable, Equatable {
     public var isDebuggable: Bool
     public var signatureSchemes: [String]
     public var signers: [ApkSigner]
+    public var nativeCode: [String]
+    public var launchableActivity: String?
 
     public init(
         info: ApkInfo,
@@ -113,7 +144,9 @@ public struct ApkReport: Sendable, Equatable {
         features: [String] = [],
         isDebuggable: Bool = false,
         signatureSchemes: [String] = [],
-        signers: [ApkSigner] = []
+        signers: [ApkSigner] = [],
+        nativeCode: [String] = [],
+        launchableActivity: String? = nil
     ) {
         self.info = info
         self.permissions = permissions
@@ -121,6 +154,8 @@ public struct ApkReport: Sendable, Equatable {
         self.isDebuggable = isDebuggable
         self.signatureSchemes = signatureSchemes
         self.signers = signers
+        self.nativeCode = nativeCode
+        self.launchableActivity = launchableActivity
     }
 }
 
@@ -148,22 +183,34 @@ public enum ApkSignature {
         }
     }
 
-    /// Lines tagged with a signer index — "Signer #1 certificate DN: …",
-    /// "…SHA-256 digest: …" — grouped into one `ApkSigner` per index.
+    /// Lines tagged with a signer — "Signer #1 certificate DN: …" for a v1/v2
+    /// signature, "V3.0 Signer: certificate DN: …" (or "V3.1 Signer (…): …")
+    /// for a v3 one, which newer apksigner prints instead of the numbered
+    /// form — grouped into one `ApkSigner` per tag, in the order they appear.
+    /// A certificate printed for two schemes is one signer.
     private static func parseSigners(_ output: String) -> [ApkSigner] {
-        var byIndex: [Int: ApkSigner] = [:]
+        var tags: [String] = []
+        var byTag: [String: ApkSigner] = [:]
         for line in output.components(separatedBy: .newlines) {
-            guard let indexText = regexFirstGroup(line, #"Signer #(\d+) certificate"#),
-                  let index = Int(indexText) else { continue }
-            var signer = byIndex[index] ?? ApkSigner()
+            guard let tag = regexFirstGroup(
+                line, #"^(Signer #\d+|V\d+(?:\.\d+)? Signer(?: \([^)]*\))?):? certificate"#)
+            else { continue }
+            if byTag[tag] == nil { tags.append(tag) }
+            var signer = byTag[tag] ?? ApkSigner()
             if let dn = regexFirstGroup(line, #"certificate DN:\s*(.+)$"#) {
                 signer.subjectDN = dn.trimmingCharacters(in: .whitespaces)
             }
             if let sha = regexFirstGroup(line, #"SHA-256 digest:\s*([0-9a-fA-F]+)"#) { signer.sha256 = sha }
             if let sha = regexFirstGroup(line, #"SHA-1 digest:\s*([0-9a-fA-F]+)"#) { signer.sha1 = sha }
-            byIndex[index] = signer
+            byTag[tag] = signer
         }
-        return byIndex.sorted { $0.key < $1.key }.map(\.value)
+        var signers: [ApkSigner] = []
+        for tag in tags {
+            guard let signer = byTag[tag] else { continue }
+            if let sha = signer.sha256, signers.contains(where: { $0.sha256 == sha }) { continue }
+            signers.append(signer)
+        }
+        return signers
     }
 }
 

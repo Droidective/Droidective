@@ -44,6 +44,7 @@ public struct FeatureEngine: Sendable {
     public let appInstall: AppInstallService
     public let bundleInstall: AppBundleInstallService
     public let apkInspection: ApkInspectionService
+    public let packageDetails: PackageDetailsService
     public let apkSigning: ApkSigningService
     public let decompile: DecompileService
     public let aabConvert: AabConvertService
@@ -98,6 +99,7 @@ public struct FeatureEngine: Sendable {
         self.bundleInstall = AppBundleInstallService(
             client: client, toolchain: toolchain, runner: client.runner)
         self.apkInspection = ApkInspectionService(client: client, toolchain: toolchain)
+        self.packageDetails = PackageDetailsService(inspection: apkInspection)
         self.apkSigning = ApkSigningService(toolchain: toolchain)
         self.decompile = DecompileService(toolchain: toolchain)
         self.aabConvert = AabConvertService(toolchain: toolchain)

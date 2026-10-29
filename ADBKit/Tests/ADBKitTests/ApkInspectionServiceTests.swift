@@ -90,6 +90,29 @@ import Testing
         })
     }
 
+    @Test func inspectCarriesNativeCodeAndCanSkipTheSigner() async throws {
+        let runner = MockProcessRunner()
+        let client = await makeTestClient(runner: runner)
+        let tools = try Self.makeBuildTools()
+        await client.locator.seedBuildToolsDir(tools.buildToolsDir)
+        await client.locator.seedJava(tools.java)
+        runner.script(
+            argsPrefix: ["dump", "badging"],
+            stdout: """
+            package: name='com.x' versionCode='7' versionName='1.2'
+            launchable-activity: name='com.x.Main'  label='X' icon=''
+            native-code: 'arm64-v8a'
+            """)
+
+        let report = await ApkInspectionService(client: client, toolchain: toolchain(client), runner: runner)
+            .inspect(apkPath: "/tmp/app.apk", readsSigning: false)
+
+        #expect(report.nativeCode == ["arm64-v8a"])
+        #expect(report.launchableActivity == "com.x.Main")
+        // No JVM for a caller that only wanted the identity.
+        #expect(!runner.invocations.contains { $0.executable == tools.java })
+    }
+
     @Test func inspectDegradesToFileNameAndSizeWithoutBuildToolsOrJdk() async {
         let runner = MockProcessRunner()
         let client = await makeTestClient(runner: runner)

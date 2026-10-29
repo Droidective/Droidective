@@ -19,6 +19,7 @@ struct InstallDropSheet: View {
     @State private var installed: [String: InstalledAppVersion] = [:]
     @State private var loaded = false
     @State private var replace = false
+    @AppStorage(installOpensAppKey) private var opensApp = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -30,6 +31,9 @@ struct InstallDropSheet: View {
                     packageRows
                 }
                 if loaded, offersChoice { choice }
+                Toggle("Open after installing", isOn: $opensApp)
+                    .toggleStyle(.checkbox)
+                    .font(.app(.callout))
             }
             .padding(20)
             Divider()
@@ -265,7 +269,7 @@ struct InstallDropSheet: View {
             state.installDropped(
                 [path], serial: request.serial,
                 packageID: infos[path]?.packageName,
-                replacingFirst: replace)
+                replacingFirst: replace, opensApp: opensApp)
         }
         dismiss()
     }

@@ -18,6 +18,18 @@ enum HostArchive {
         ["-xf", archive, "-C", dir]
     }
 
+    /// Every entry's name, one per line, through `unzipExecutable`.
+    static func listArguments(archive: String) -> [String] {
+        ["-tf", archive]
+    }
+
+    /// One entry, written under `dir` at its archive path. bsdtar reads a
+    /// member name as a pattern, which is why callers pass only names
+    /// `isPlainEntryName` accepts.
+    static func extractArguments(archive: String, entry: String, into dir: String) -> [String] {
+        ["-xf", archive, "-C", dir, entry]
+    }
+
     static var zipExecutable: String { systemTar }
 
     /// bsdtar picks the format from the archive's extension with `-a`, so this
@@ -32,6 +44,18 @@ enum HostArchive {
 
     static func unzipArguments(archive: String, into dir: String) -> [String] {
         ["-q", "-o", archive, "-d", dir]
+    }
+
+    /// `-Z1` is zipinfo's names-only mode: one entry per line, nothing else.
+    static func listArguments(archive: String) -> [String] {
+        ["-Z1", archive]
+    }
+
+    /// One entry, written under `dir` at its archive path. unzip reads a member
+    /// name as a wildcard pattern, which is why callers pass only names
+    /// `isPlainEntryName` accepts.
+    static func extractArguments(archive: String, entry: String, into dir: String) -> [String] {
+        ["-qq", "-o", archive, entry, "-d", dir]
     }
 
     static var zipExecutable: String { "/usr/bin/zip" }
@@ -52,5 +76,21 @@ enum HostArchive {
 
     static func tarGzArguments(archive: String, into dir: String) -> [String] {
         ["-xzf", archive, "-C", dir]
+    }
+
+    /// The entry names out of a listing, directories dropped. Split on
+    /// `.newlines`: bsdtar on Windows ends its lines with CRLF.
+    static func parseListing(_ output: String) -> [String] {
+        output.components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && !$0.hasSuffix("/") }
+    }
+
+    /// Whether `entry` can be named to the extractor as itself: a relative path
+    /// with no `..` (it becomes a path under the destination, which is then
+    /// read) and none of the characters both tools treat as a pattern.
+    static func isPlainEntryName(_ entry: String) -> Bool {
+        guard AppBundleManifest.safeRelativePath(entry) == entry else { return false }
+        return !entry.contains { "*?[]\\".contains($0) }
     }
 }

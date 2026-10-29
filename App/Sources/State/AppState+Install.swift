@@ -44,9 +44,21 @@ struct InstallJob: Identifiable, Equatable {
     /// friendly one-liner and the recovery check needs the `INSTALL_FAILED_*`
     /// code to tell a signature clash from a full disk.
     var failureOutput: String?
+    /// Whether the install was asked to open the app afterwards, so the
+    /// "Uninstall & Install" recovery asks the same.
+    var opensApp = false
 
     var packageName: String { packageURL.lastPathComponent }
     var isRunning: Bool { status == .running }
+}
+
+/// How one package's install went across its target devices.
+private struct PackageInstallOutcome {
+    var installed = 0
+    var failures: [(serial: String, result: FeatureResult)] = []
+    /// Why the app couldn't be opened on a device it installed on, when
+    /// opening was asked for — the first such reason, for one toast.
+    var openFailure: String?
 }
 
 // MARK: - Install center
@@ -61,6 +73,16 @@ extension AppState {
         apkOpen.urls = urls
         activateMainWindow()
         requestFeature("apk-open")
+    }
+
+    /// Load an APK into APK Studio on its Inspect tab — offered beside an
+    /// install, by the package screens, for plain APKs only: the studio works
+    /// on one APK and can't read a bundle container.
+    func openInApkStudio(_ url: URL) {
+        apkStudio.apk = url
+        apkStudio.signInput = nil
+        apkStudio.tab = .inspect
+        requestFeature("apk-studio")
     }
 
     /// Route a Finder-opened `.aab` to the AAB to APK feature. The converter
@@ -108,8 +130,10 @@ extension AppState {
     /// the panel, or closing the main window never kills an `adb install`
     /// mid-flight. Feedback arrives via `installJobs`, toasts, and a macOS
     /// notification when the batch finishes in the background.
-    func startInstall(_ urls: [URL], onSerials serials: [String], packageID: String? = nil) {
-        Task { await self.installAPKs(urls, onSerials: serials, packageID: packageID) }
+    func startInstall(
+        _ urls: [URL], onSerials serials: [String], packageID: String? = nil, opensApp: Bool = false
+    ) {
+        Task { await self.installAPKs(urls, onSerials: serials, packageID: packageID, opensApp: opensApp) }
     }
 
     /// Install one or more packages on the given device serials, one toast per
@@ -119,10 +143,12 @@ extension AppState {
     ///
     /// APKs go straight to `adb install`; `.apks`/`.xapk`/`.apkm` bundles are
     /// unpacked and narrowed to this device's splits first — see
-    /// `AppBundleInstallService`.
+    /// `AppBundleInstallService`. `opensApp` launches the app on each device
+    /// it landed on, which is what the install screens' "Open after
+    /// installing" box asks for.
     @discardableResult
     func installAPKs(
-        _ urls: [URL], onSerials serials: [String], packageID: String? = nil
+        _ urls: [URL], onSerials serials: [String], packageID: String? = nil, opensApp: Bool = false
     ) async -> (report: String, ok: Bool) {
         guard !urls.isEmpty, !serials.isEmpty else { return ("", false) }
         SystemNotifier.requestAuthorizationOnce()
@@ -131,19 +157,18 @@ extension AppState {
         await CommandLog.userInitiated {
             for url in urls {
                 let name = url.lastPathComponent
-                var ok = 0
-                var failures: [(serial: String, result: FeatureResult)] = []
-                for serial in serials {
-                    let jobID = beginInstallJob(url: url, serial: serial, packageID: packageID)
-                    let result = await install(url, on: serial, jobID: jobID)
-                    if result.ok { ok += 1 } else { failures.append((serial, result)) }
-                    finishInstallJob(jobID, result: result)
+                let outcome = await installPackage(
+                    url, onSerials: serials, packageID: packageID, opensApp: opensApp)
+                if !outcome.failures.isEmpty { allOK = false }
+                showToast(Self.installToast(
+                    name: name, ok: outcome.installed, total: serials.count, failures: outcome.failures,
+                    opened: opensApp && outcome.openFailure == nil))
+                if let reason = outcome.openFailure {
+                    showToast(Toast(message: "Installed \(name). \(reason)", ok: false))
                 }
-                if !failures.isEmpty { allOK = false }
-                showToast(Self.installToast(name: name, ok: ok, total: serials.count, failures: failures))
-                report.append(ok == serials.count
+                report.append(outcome.installed == serials.count
                     ? "Installed \(name)"
-                    : "Installed \(name) on \(ok) of \(serials.count) devices")
+                    : "Installed \(name) on \(outcome.installed) of \(serials.count) devices")
             }
         }
         let summary = report.joined(separator: "\n")
@@ -152,6 +177,51 @@ extension AppState {
             body: summary.isEmpty ? (allOK ? "The app was installed." : "The install didn't complete.") : summary,
             sound: !allOK)
         return (summary, allOK)
+    }
+
+    /// One package onto every target, then — when asked — opened on each one
+    /// it reached. The package name is read while the first install runs, so
+    /// opening never waits on aapt2 afterwards.
+    private func installPackage(
+        _ url: URL, onSerials serials: [String], packageID: String?, opensApp: Bool
+    ) async -> PackageInstallOutcome {
+        let identity = opensApp ? packageIdentity(of: url, known: packageID) : nil
+        var outcome = PackageInstallOutcome()
+        for serial in serials {
+            let jobID = beginInstallJob(url: url, serial: serial, packageID: packageID, opensApp: opensApp)
+            let result = await install(url, on: serial, jobID: jobID)
+            if result.ok {
+                outcome.installed += 1
+                if let identity {
+                    updateInstallJob(jobID, stage: "Opening the app…")
+                    let opened = await openInstalledApp(await identity.value, on: serial)
+                    if !opened.ok, outcome.openFailure == nil { outcome.openFailure = opened.message }
+                }
+            } else {
+                outcome.failures.append((serial, result))
+            }
+            finishInstallJob(jobID, result: result)
+        }
+        return outcome
+    }
+
+    /// The package a file installs: the one the caller already read, or read
+    /// now without the signer check, which only the details card shows.
+    private func packageIdentity(of url: URL, known: String?) -> Task<String?, Never> {
+        let reader = env.engine.packageDetails
+        return Task {
+            if let known { return known }
+            return await reader.details(packagePath: url.path, readsSigning: false)?.packageName
+        }
+    }
+
+    private func openInstalledApp(_ packageID: String?, on serial: String) async -> FeatureResult {
+        guard let packageID else {
+            return FeatureResult(
+                ok: false, message: "Couldn't open it — reading its package name needs the SDK build-tools.")
+        }
+        return (try? await env.engine.appControl.control(serial: serial, packageId: packageID, action: .open))
+            ?? FeatureResult(ok: false, message: "Couldn't open it — adb not found.")
     }
 
     /// One package onto one device, with the bundle installer's stage feeding
@@ -203,11 +273,12 @@ extension AppState {
         return OperationStatus(label: label)
     }
 
-    private func beginInstallJob(url: URL, serial: String, packageID: String? = nil) -> UUID {
+    private func beginInstallJob(url: URL, serial: String, packageID: String?, opensApp: Bool) -> UUID {
         var job = InstallJob(
             packageURL: url, serial: serial,
             deviceLabel: devices.first { $0.serial == serial }?.label ?? serial)
         job.packageID = packageID
+        job.opensApp = opensApp
         installJobs.append(job)
         // Bounded history: drop the oldest finished entries, never a live one.
         while installJobs.count > 60, let oldest = installJobs.firstIndex(where: { !$0.isRunning }) {
@@ -241,12 +312,13 @@ extension AppState {
     /// kept in `copyText` so the notifications panel carries the detail without
     /// dumping it into the transient toast.
     private static func installToast(
-        name: String, ok: Int, total: Int, failures: [(serial: String, result: FeatureResult)]
+        name: String, ok: Int, total: Int, failures: [(serial: String, result: FeatureResult)], opened: Bool
     ) -> Toast {
         // postsSystemNotification is off: the batch posts one summary
         // notification instead of one per APK.
         if failures.isEmpty {
-            let message = total == 1 ? "Installed \(name)" : "Installed \(name) on \(total) devices"
+            let verb = opened ? "Installed and opened" : "Installed"
+            let message = total == 1 ? "\(verb) \(name)" : "\(verb) \(name) on \(total) devices"
             return Toast(message: message, ok: true, postsSystemNotification: false)
         }
         let message = total == 1

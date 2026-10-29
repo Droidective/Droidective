@@ -144,8 +144,8 @@ opening it — verify those by hand.
 ## Build / test / run
 
 ```
-make test          # all three Swift packages — ADBKit 2196, droidectived 410,
-                   #   ReactotronMCP 99. Keep green.
+make test          # all three Swift packages — ADBKit 2320, droidectived 514,
+                   #   ReactotronMCP 100. Keep green.
 make test-app      # the AppTests logic bundle — 134 tests
 make verify        # tiers 0-1: warnings-as-errors + all four Swift bundles
 make test-linux    # the same suite on Linux (Apple `container` CLI; the port gate)
@@ -296,7 +296,14 @@ Node 22 in CI; scroll reveals and the hero palette demo must keep their
   reads the archive's own `toc.pb` targeting table — so it needs Java, and says
   so; `.xapk`/`.apkm` unpack to a temp dir, narrow to the device's splits, and
   land in one `adb install-multiple -r` transaction, then push any OBB
-  expansions). The **`JSConsole/`** trio backs
+  expansions). Beside them, `PackageDetails`/`PackageDetailsService` say what
+  a package *is* for the install screens' details card: an APK through
+  aapt2 + apksigner, a bundle by listing the archive and extracting only its
+  base APK (an `.xapk` can carry a gigabyte of OBBs) plus its manifest — and
+  `AndroidRelease` names API levels. The same identity read is what "Open
+  after installing" launches by. Newer `apksigner` prints a v3 signer as
+  `V3.0 Signer:` with no `Signer #1` block, so `ApkSignature` reads both.
+  The **`JSConsole/`** trio backs
   the `js-console` feature — a Hermes Chrome-DevTools-Protocol JS console for RN:
   `MetroInspector` (host-localhost `GET /json/list` + a pure `parseTargets`),
   `CDPProtocol` (pure CDP framing + `Runtime.evaluate`/`getProperties`/
